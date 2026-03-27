@@ -24,6 +24,12 @@ packages/
 # ASP.NET
 appsettings.Development.json
 
+# Database files
+*.db
+*.db-shm
+*.db-wal
+Todo.Web/data/
+
 # OS
 .DS_Store
 Thumbs.db
