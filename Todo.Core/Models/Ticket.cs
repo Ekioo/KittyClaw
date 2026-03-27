@@ -5,7 +5,7 @@ public class Ticket
     public int Id { get; set; }
     public required string Title { get; set; }
     public string Description { get; set; } = "";
-    public TicketStatus Status { get; set; } = TicketStatus.Backlog;
+    public string Status { get; set; } = "Backlog";
     public TicketPriority Priority { get; set; } = TicketPriority.NiceToHave;
     public int SortOrder { get; set; }
     public string? AssignedTo { get; set; }

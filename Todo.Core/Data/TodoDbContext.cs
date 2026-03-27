@@ -9,6 +9,7 @@ public class TodoDbContext : DbContext
     public DbSet<Comment> Comments => Set<Comment>();
     public DbSet<ActivityEntry> ActivityEntries => Set<ActivityEntry>();
     public DbSet<Label> Labels => Set<Label>();
+    public DbSet<BoardColumn> BoardColumns => Set<BoardColumn>();
 
     private readonly string _dbPath;
 
@@ -27,7 +28,6 @@ public class TodoDbContext : DbContext
         modelBuilder.Entity<Ticket>(e =>
         {
             e.HasKey(t => t.Id);
-            e.Property(t => t.Status).HasConversion<string>();
             e.HasMany(t => t.Comments).WithOne(c => c.Ticket).HasForeignKey(c => c.TicketId);
             e.HasMany(t => t.Activities).WithOne(a => a.Ticket).HasForeignKey(a => a.TicketId);
             e.HasMany(t => t.Labels).WithMany(l => l.Tickets).UsingEntity("TicketLabels");
@@ -46,6 +46,11 @@ public class TodoDbContext : DbContext
         modelBuilder.Entity<Label>(e =>
         {
             e.HasKey(l => l.Id);
+        });
+
+        modelBuilder.Entity<BoardColumn>(e =>
+        {
+            e.HasKey(c => c.Id);
         });
     }
 }

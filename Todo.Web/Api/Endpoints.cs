@@ -9,10 +9,22 @@ public static class Endpoints
     {
         var api = app.MapGroup("/api");
 
-        // Statuses
-        api.MapGet("/statuses", () =>
-            Results.Ok(Enum.GetNames<TicketStatus>()))
-            .WithTags("Statuses");
+        // Columns (per-project)
+        api.MapGet("/projects/{slug}/columns", async (string slug, ColumnService cs) =>
+            Results.Ok(await cs.ListColumnsAsync(slug)))
+            .WithTags("Columns");
+
+        api.MapPost("/projects/{slug}/columns", async (string slug, CreateColumnRequest req, ColumnService cs) =>
+        {
+            var column = await cs.CreateColumnAsync(slug, req.Name, req.Color);
+            return Results.Created($"/api/projects/{slug}/columns/{column.Id}", column);
+        }).WithTags("Columns");
+
+        api.MapDelete("/projects/{slug}/columns/{columnId:int}", async (string slug, int columnId, string moveTicketsTo, ColumnService cs) =>
+        {
+            var deleted = await cs.DeleteColumnAsync(slug, columnId, moveTicketsTo);
+            return deleted ? Results.NoContent() : Results.NotFound();
+        }).WithTags("Columns");
 
         // Projects
         api.MapGet("/projects", async (ProjectService ps) =>
@@ -38,7 +50,7 @@ public static class Endpoints
         }).WithTags("Projects");
 
         // Tickets
-        api.MapGet("/projects/{slug}/tickets", async (string slug, TicketStatus? status, TicketPriority? priority, string? assignedTo, string? createdBy, string? search, TicketService ts) =>
+        api.MapGet("/projects/{slug}/tickets", async (string slug, string? status, TicketPriority? priority, string? assignedTo, string? createdBy, string? search, TicketService ts) =>
             Results.Ok(await ts.ListTicketsAsync(slug, status, priority, assignedTo, createdBy, search)))
             .WithTags("Tickets");
 

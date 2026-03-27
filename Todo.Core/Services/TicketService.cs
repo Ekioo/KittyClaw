@@ -61,15 +61,16 @@ public class TicketService
         catch { /* column already exists */ }
     }
 
-    public async Task<List<Ticket>> ListTicketsAsync(string projectSlug, TicketStatus? statusFilter = null, TicketPriority? priorityFilter = null, string? assignedTo = null, string? createdBy = null, string? search = null)
+    public async Task<List<Ticket>> ListTicketsAsync(string projectSlug, string? statusFilter = null, TicketPriority? priorityFilter = null, string? assignedTo = null, string? createdBy = null, string? search = null)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureLabelTablesAsync(db);
         await EnsureSortOrderColumnAsync(db);
         await EnsureAssignedToColumnAsync(db);
+        await ColumnService.EnsureBoardColumnsTableAsync(db);
         var query = db.Tickets.Include(t => t.Labels).AsQueryable();
-        if (statusFilter.HasValue)
-            query = query.Where(t => t.Status == statusFilter.Value);
+        if (statusFilter is not null)
+            query = query.Where(t => t.Status == statusFilter);
         if (priorityFilter.HasValue)
             query = query.Where(t => t.Priority == priorityFilter.Value);
         if (assignedTo is not null)
@@ -93,7 +94,7 @@ public class TicketService
             .FirstOrDefaultAsync(t => t.Id == ticketId);
     }
 
-    public async Task<Ticket> CreateTicketAsync(string projectSlug, string title, string description = "", string createdBy = "owner", TicketStatus status = TicketStatus.Backlog, List<int>? labelIds = null, TicketPriority priority = TicketPriority.NiceToHave, string? assignedTo = null)
+    public async Task<Ticket> CreateTicketAsync(string projectSlug, string title, string description = "", string createdBy = "owner", string status = "Backlog", List<int>? labelIds = null, TicketPriority priority = TicketPriority.NiceToHave, string? assignedTo = null)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureActivityTableAsync(db);
@@ -127,7 +128,7 @@ public class TicketService
         return ticket;
     }
 
-    public async Task<Ticket?> MoveTicketAsync(string projectSlug, int ticketId, TicketStatus newStatus, string author = "owner")
+    public async Task<Ticket?> MoveTicketAsync(string projectSlug, int ticketId, string newStatus, string author = "owner")
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureActivityTableAsync(db);
@@ -140,7 +141,7 @@ public class TicketService
         {
             TicketId = ticketId,
             Author = author,
-            Text = $"a déplacé le ticket : {StatusLabel(oldStatus)} → {StatusLabel(newStatus)}"
+            Text = $"a déplacé le ticket : {oldStatus} → {newStatus}"
         });
         await db.SaveChangesAsync();
         return ticket;
@@ -281,7 +282,7 @@ public class TicketService
         return true;
     }
 
-    public async Task ReorderTicketAsync(string projectSlug, int ticketId, TicketStatus newStatus, int targetIndex)
+    public async Task ReorderTicketAsync(string projectSlug, int ticketId, string newStatus, int targetIndex)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureSortOrderColumnAsync(db);
@@ -316,23 +317,12 @@ public class TicketService
             {
                 TicketId = ticketId,
                 Author = "owner",
-                Text = $"a déplacé le ticket : {StatusLabel(oldStatus)} → {StatusLabel(newStatus)}"
+                Text = $"a déplacé le ticket : {oldStatus} → {newStatus}"
             });
         }
 
         await db.SaveChangesAsync();
     }
-
-    private static string StatusLabel(TicketStatus s) => s switch
-    {
-        TicketStatus.Backlog => "Backlog",
-        TicketStatus.Todo => "Todo",
-        TicketStatus.InProgress => "In Progress",
-        TicketStatus.Blocked => "Blocked",
-        TicketStatus.OwnerReview => "Owner Review",
-        TicketStatus.Done => "Done",
-        _ => s.ToString()
-    };
 
     private static string PriorityLabel(TicketPriority p) => p switch
     {

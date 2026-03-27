@@ -12,13 +12,7 @@
     --border: #202030;
     --border-strong: #2c2c42;
 
-    /* Status colors */
-    --s-backlog:    #5a6a80;
-    --s-todo:       #4a9eff;
-    --s-inprogress: #f59e42;
     --s-blocked:    #f06b6b;
-    --s-ownerreview:#a78bfa;
-    --s-done:       #3ecf8e;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -191,12 +185,7 @@ a:hover { color: var(--accent-hover); }
     flex-shrink: 0;
 }
 
-.status-backlog    { color: var(--s-backlog);    background: rgba(90, 106, 128, 0.12); }
-.status-todo       { color: var(--s-todo);       background: rgba(74, 158, 255, 0.12); }
-.status-inprogress { color: var(--s-inprogress); background: rgba(245, 158, 66, 0.12); }
-.status-blocked    { color: var(--s-blocked);    background: rgba(240, 107, 107, 0.12); }
-.status-ownerreview{ color: var(--s-ownerreview);background: rgba(167, 139, 250, 0.12); }
-.status-done       { color: var(--s-done);       background: rgba(62, 207, 142, 0.12); }
+/* Status pill colors are now inline via style attribute */
 
 .count {
     background: var(--surface3);
@@ -218,6 +207,109 @@ a:hover { color: var(--accent-hover); }
     gap: 0.4rem;
     scrollbar-width: thin;
     scrollbar-color: var(--border-strong) transparent;
+}
+
+/* Column header delete button */
+.column-header {
+    position: relative;
+}
+.column-delete-btn {
+    position: absolute;
+    right: 0.4rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s, background 0.15s, color 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.column:hover .column-delete-btn { opacity: 1; }
+.column-delete-btn:hover {
+    background: var(--s-blocked);
+    color: #fff;
+}
+.column-delete-confirm {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-left: auto;
+}
+.column-delete-confirm select {
+    background: var(--surface2);
+    border: 1px solid var(--border-strong);
+    color: var(--text);
+    padding: 0.15rem 0.35rem;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    max-width: 100px;
+}
+
+/* Add column */
+.column-add {
+    min-width: 230px;
+    max-width: 300px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: flex-start;
+    padding-top: 0;
+}
+.add-column-btn {
+    width: 100%;
+    padding: 0.7rem;
+    background: transparent;
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.add-column-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--surface);
+}
+.add-column-form {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.6rem;
+    width: 100%;
+}
+.add-column-form input[type="text"],
+.add-column-form input:not([type]) {
+    flex: 1;
+    min-width: 0;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.35rem 0.5rem;
+    color: var(--text);
+    font-size: 0.82rem;
+}
+.add-column-form input[type="color"] {
+    width: 32px;
+    height: 28px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0;
+    background: var(--surface2);
+    cursor: pointer;
+    flex-shrink: 0;
 }
 
 /* Drop indicator */

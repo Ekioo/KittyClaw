@@ -8,6 +8,7 @@
 @inject ProjectService ProjectService
 @inject TicketService TicketService
 @inject LabelService LabelService
+@inject ColumnService ColumnService
 @inject NavigationManager Navigation
 @rendermode InteractiveServer
 
@@ -25,23 +26,41 @@ else
     </div>
 
     <div class="board">
-        @foreach (var status in _statuses)
+        @foreach (var col in _columns)
         {
-            <div class="column column-@GetStatusClass(status)"
-                 @ondragover="(e) => OnDragOverColumn(status, e)"
+            <div class="column"
+                 style="--col-color: @col.Color"
+                 @ondragover="(e) => OnDragOverColumn(col.Name, e)"
                  @ondragover:preventDefault
-                 @ondrop="() => OnDrop(status)">
+                 @ondrop="() => OnDrop(col.Name)">
                 <div class="column-header">
-                    <span class="status-pill status-@GetStatusClass(status)">@GetStatusLabel(status)</span>
-                    <span class="count">@GetTickets(status).Count</span>
+                    <span class="status-pill" style="color: @col.Color; background: color-mix(in srgb, @col.Color 12%, transparent)">@col.Name</span>
+                    <span class="count">@GetTickets(col.Name).Count</span>
+                    @if (_confirmDeleteColumnId == col.Id)
+                    {
+                        <div class="column-delete-confirm">
+                            <select @bind="_deleteColumnMoveTo">
+                                @foreach (var other in _columns.Where(c => c.Id != col.Id))
+                                {
+                                    <option value="@other.Name">@other.Name</option>
+                                }
+                            </select>
+                            <button class="icon-btn save-btn" @onclick="() => DeleteColumn(col.Id)">&#10003;</button>
+                            <button class="icon-btn cancel-icon-btn" @onclick="() => _confirmDeleteColumnId = null">&#10005;</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <button class="column-delete-btn" title="Supprimer cette colonne" @onclick="() => StartDeleteColumn(col.Id)">&#10005;</button>
+                    }
                 </div>
                 <div class="column-body">
-                    @{ var columnTickets = GetTickets(status); }
+                    @{ var columnTickets = GetTickets(col.Name); }
                     @for (int i = 0; i < columnTickets.Count; i++)
                     {
                         var ticket = columnTickets[i];
                         var index = i;
-                        @if (_dragOverStatus == status && _dragInsertIndex == index && _draggedTicket is not null && _draggedTicket.Id != ticket.Id)
+                        @if (_dragOverStatus == col.Name && _dragInsertIndex == index && _draggedTicket is not null && _draggedTicket.Id != ticket.Id)
                         {
                             <div class="drop-indicator"></div>
                         }
@@ -49,7 +68,7 @@ else
                              draggable="true"
                              @ondragstart="() => OnDragStart(ticket)"
                              @ondragend="OnDragEnd"
-                             @ondragover="(e) => OnDragOverCard(status, index, e)"
+                             @ondragover="(e) => OnDragOverCard(col.Name, index, e)"
                              @ondragover:preventDefault
                              @onclick="() => SelectTicket(ticket)">
                             <div class="ticket-card-top">
@@ -69,12 +88,12 @@ else
                             <small class="ticket-author">@ticket.CreatedBy</small>
                         </div>
                     }
-                    @if (_dragOverStatus == status && _dragInsertIndex >= columnTickets.Count && _draggedTicket is not null)
+                    @if (_dragOverStatus == col.Name && _dragInsertIndex >= columnTickets.Count && _draggedTicket is not null)
                     {
                         <div class="drop-indicator"></div>
                     }
                 </div>
-                @if (status == TicketStatus.Backlog)
+                @if (col == _columns[0])
                 {
                     <div class="add-ticket">
                         <button class="add-ticket-btn" @onclick="OpenCreatePopup">+ Nouveau ticket</button>
@@ -82,6 +101,21 @@ else
                 }
             </div>
         }
+        <div class="column column-add">
+            @if (_showAddColumn)
+            {
+                <div class="add-column-form">
+                    <input @bind="_newColumnName" @bind:event="oninput" placeholder="Nom de la colonne..." />
+                    <input type="color" @bind="_newColumnColor" />
+                    <button class="icon-btn save-btn" @onclick="AddColumn" disabled="@string.IsNullOrWhiteSpace(_newColumnName)">&#10003;</button>
+                    <button class="icon-btn cancel-icon-btn" @onclick="() => _showAddColumn = false">&#10005;</button>
+                </div>
+            }
+            else
+            {
+                <button class="add-column-btn" @onclick="() => _showAddColumn = true">+ Colonne</button>
+            }
+        </div>
     </div>
 
     @* ── Create ticket popup ── *@
@@ -204,7 +238,7 @@ else
                 </div>
 
                 <div class="ticket-meta">
-                    <span>Statut&#160;: <strong>@GetStatusLabel(_selectedTicket.Status)</strong></span>
+                    <span>Statut&#160;: <strong>@_selectedTicket.Status</strong></span>
                     <span>Par&#160;: @_selectedTicket.CreatedBy</span>
                     <span>Cr&#233;&#233;&#160;: @_selectedTicket.CreatedAt.ToString("g")</span>
                 </div>
@@ -305,9 +339,10 @@ else
 
     private Project? _project;
     private List<Ticket> _tickets = [];
+    private List<BoardColumn> _columns = [];
     private Ticket? _selectedTicket;
     private Ticket? _draggedTicket;
-    private TicketStatus? _dragOverStatus;
+    private string? _dragOverStatus;
     private int _dragInsertIndex = -1;
     private string _newComment = "";
     private bool _confirmDelete = false;
@@ -323,6 +358,13 @@ else
     private string _newLabelName = "";
     private string _newLabelColor = "#6366f1";
 
+    // Column management
+    private bool _showAddColumn = false;
+    private string _newColumnName = "";
+    private string _newColumnColor = "#5a6a80";
+    private int? _confirmDeleteColumnId = null;
+    private string _deleteColumnMoveTo = "";
+
     // Inline editing state
     private bool _editingTitle = false;
     private string _editTitle = "";
@@ -331,7 +373,6 @@ else
     private int? _editingCommentId = null;
     private string _editComment = "";
 
-    private static readonly TicketStatus[] _statuses = Enum.GetValues<TicketStatus>();
     private MarkdownPipeline _mdPipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
 
     private void RebuildPipeline()
@@ -360,6 +401,7 @@ else
         _project = await ProjectService.GetProjectAsync(Slug);
         if (_project is not null)
         {
+            _columns = await ColumnService.ListColumnsAsync(Slug);
             _tickets = await TicketService.ListTicketsAsync(Slug);
             _allLabels = await LabelService.ListLabelsAsync(Slug);
             RebuildPipeline();
@@ -377,19 +419,8 @@ else
             _selectedTicket = null;
     }
 
-    private List<Ticket> GetTickets(TicketStatus status) =>
+    private List<Ticket> GetTickets(string status) =>
         _tickets.Where(t => t.Status == status).ToList();
-
-    private static string GetStatusLabel(TicketStatus status) => status switch
-    {
-        TicketStatus.Backlog => "Backlog",
-        TicketStatus.Todo => "Todo",
-        TicketStatus.InProgress => "In Progress",
-        TicketStatus.Blocked => "Blocked",
-        TicketStatus.OwnerReview => "Owner Review",
-        TicketStatus.Done => "Done",
-        _ => status.ToString()
-    };
 
     private static string GetPriorityLabel(TicketPriority p) => p switch
     {
@@ -417,17 +448,6 @@ else
         _tickets = await TicketService.ListTicketsAsync(Slug);
     }
 
-    private static string GetStatusClass(TicketStatus status) => status switch
-    {
-        TicketStatus.Backlog => "backlog",
-        TicketStatus.Todo => "todo",
-        TicketStatus.InProgress => "inprogress",
-        TicketStatus.Blocked => "blocked",
-        TicketStatus.OwnerReview => "ownerreview",
-        TicketStatus.Done => "done",
-        _ => "default"
-    };
-
     private void OnDragStart(Ticket ticket) => _draggedTicket = ticket;
 
     private void OnDragEnd()
@@ -437,26 +457,23 @@ else
         _dragInsertIndex = -1;
     }
 
-    private void OnDragOverCard(TicketStatus status, int cardIndex, DragEventArgs e)
+    private void OnDragOverCard(string status, int cardIndex, DragEventArgs e)
     {
         if (_draggedTicket is null) return;
-        // Use the vertical offset within the card to decide above/below
-        // OffsetY < half → insert before, else insert after
         _dragOverStatus = status;
         _dragInsertIndex = e.OffsetY < 40 ? cardIndex : cardIndex + 1;
     }
 
-    private void OnDragOverColumn(TicketStatus status, DragEventArgs e)
+    private void OnDragOverColumn(string status, DragEventArgs e)
     {
         if (_draggedTicket is null) return;
-        // Only set when not already over a card (fallback for empty area)
         _dragOverStatus = status;
         var count = GetTickets(status).Count;
         if (_dragInsertIndex < 0 || _dragOverStatus != status)
             _dragInsertIndex = count;
     }
 
-    private async Task OnDrop(TicketStatus newStatus)
+    private async Task OnDrop(string newStatus)
     {
         if (_draggedTicket is null) return;
 
@@ -607,5 +624,33 @@ else
         await TicketService.UpdateCommentAsync(Slug, _selectedTicket.Id, _editingCommentId.Value, _editComment.Trim());
         _editingCommentId = null;
         _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
+    }
+
+    // Column management
+    private async Task AddColumn()
+    {
+        if (string.IsNullOrWhiteSpace(_newColumnName)) return;
+        await ColumnService.CreateColumnAsync(Slug, _newColumnName.Trim(), _newColumnColor);
+        _columns = await ColumnService.ListColumnsAsync(Slug);
+        _newColumnName = "";
+        _newColumnColor = "#5a6a80";
+        _showAddColumn = false;
+    }
+
+    private void StartDeleteColumn(int columnId)
+    {
+        _confirmDeleteColumnId = columnId;
+        var first = _columns.FirstOrDefault(c => c.Id != columnId);
+        _deleteColumnMoveTo = first?.Name ?? "";
+    }
+
+    private async Task DeleteColumn(int columnId)
+    {
+        if (string.IsNullOrEmpty(_deleteColumnMoveTo)) return;
+        await ColumnService.DeleteColumnAsync(Slug, columnId, _deleteColumnMoveTo);
+        _confirmDeleteColumnId = null;
+        _columns = await ColumnService.ListColumnsAsync(Slug);
+        _tickets = await TicketService.ListTicketsAsync(Slug);
+        RebuildPipeline();
     }
 }

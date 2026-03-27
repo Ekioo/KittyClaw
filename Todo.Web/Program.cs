@@ -13,6 +13,7 @@ var dataDir = Path.Combine(
 builder.Services.AddSingleton(new ProjectService(dataDir));
 builder.Services.AddSingleton<TicketService>();
 builder.Services.AddSingleton<LabelService>();
+builder.Services.AddSingleton<ColumnService>();
 
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
