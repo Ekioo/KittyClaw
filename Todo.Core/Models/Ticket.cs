@@ -11,4 +11,6 @@ public class Ticket
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     public List<Comment> Comments { get; set; } = [];
+    public List<ActivityEntry> Activities { get; set; } = [];
+    public List<Label> Labels { get; set; } = [];
 }
