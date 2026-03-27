@@ -39,13 +39,13 @@ public static class Endpoints
 
         api.MapPost("/projects/{slug}/tickets", async (string slug, CreateTicketRequest req, TicketService ts) =>
         {
-            var ticket = await ts.CreateTicketAsync(slug, req.Title, req.Description, req.CreatedBy, req.Status, req.LabelIds);
+            var ticket = await ts.CreateTicketAsync(slug, req.Title, req.Description, req.CreatedBy, req.Status, req.LabelIds, req.Priority);
             return Results.Created($"/api/projects/{slug}/tickets/{ticket.Id}", ticket);
         }).WithTags("Tickets");
 
         api.MapPatch("/projects/{slug}/tickets/{id:int}", async (string slug, int id, UpdateTicketRequest req, TicketService ts) =>
         {
-            var ticket = await ts.UpdateTicketAsync(slug, id, req.Title, req.Description, req.Author);
+            var ticket = await ts.UpdateTicketAsync(slug, id, req.Title, req.Description, req.Author, req.Priority);
             return ticket is null ? Results.NotFound() : Results.Ok(ticket);
         }).WithTags("Tickets");
 

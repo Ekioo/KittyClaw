@@ -65,7 +65,7 @@ public class TicketService
             .FirstOrDefaultAsync(t => t.Id == ticketId);
     }
 
-    public async Task<Ticket> CreateTicketAsync(string projectSlug, string title, string description = "", string createdBy = "owner", TicketStatus status = TicketStatus.Backlog, List<int>? labelIds = null)
+    public async Task<Ticket> CreateTicketAsync(string projectSlug, string title, string description = "", string createdBy = "owner", TicketStatus status = TicketStatus.Backlog, List<int>? labelIds = null, TicketPriority priority = TicketPriority.NiceToHave)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureActivityTableAsync(db);
@@ -75,7 +75,8 @@ public class TicketService
             Title = title,
             Description = description,
             CreatedBy = createdBy,
-            Status = status
+            Status = status,
+            Priority = priority
         };
         if (labelIds is { Count: > 0 })
         {
@@ -113,7 +114,7 @@ public class TicketService
         return ticket;
     }
 
-    public async Task<Ticket?> UpdateTicketAsync(string projectSlug, int ticketId, string? title = null, string? description = null, string author = "owner")
+    public async Task<Ticket?> UpdateTicketAsync(string projectSlug, int ticketId, string? title = null, string? description = null, string author = "owner", TicketPriority? priority = null)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureActivityTableAsync(db);
@@ -139,6 +140,17 @@ public class TicketService
                 TicketId = ticketId,
                 Author = author,
                 Text = "a modifié la description"
+            });
+        }
+        if (priority is not null && priority != ticket.Priority)
+        {
+            var old = ticket.Priority;
+            ticket.Priority = priority.Value;
+            db.ActivityEntries.Add(new ActivityEntry
+            {
+                TicketId = ticketId,
+                Author = author,
+                Text = $"a changé la priorité : {PriorityLabel(old)} → {PriorityLabel(priority.Value)}"
             });
         }
         ticket.UpdatedAt = DateTime.UtcNow;
@@ -217,5 +229,14 @@ public class TicketService
         TicketStatus.OwnerReview => "Owner Review",
         TicketStatus.Done => "Done",
         _ => s.ToString()
+    };
+
+    private static string PriorityLabel(TicketPriority p) => p switch
+    {
+        TicketPriority.Idea => "Idea",
+        TicketPriority.NiceToHave => "Nice to have",
+        TicketPriority.Required => "Required",
+        TicketPriority.Critical => "Critical",
+        _ => p.ToString()
     };
 }

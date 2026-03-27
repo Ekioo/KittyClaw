@@ -42,6 +42,7 @@ else
                              @ondragstart="() => OnDragStart(ticket)"
                              @onclick="() => SelectTicket(ticket)">
                             <div class="ticket-card-top">
+                                <span class="priority-dot priority-@GetPriorityClass(ticket.Priority)" title="@GetPriorityLabel(ticket.Priority)"></span>
                                 <span class="ticket-id">#@ticket.Id</span>
                             </div>
                             <span class="ticket-title">@ticket.Title</span>
@@ -83,6 +84,18 @@ else
 
                     <label class="field-label">Description <span class="field-hint">(Markdown)</span></label>
                     <textarea class="create-textarea" @bind="_newTicketDescription" placeholder="Description..."></textarea>
+
+                    <label class="field-label">Priorit&#233;</label>
+                    <div class="priority-picker">
+                        @foreach (var p in Enum.GetValues<TicketPriority>())
+                        {
+                            <button class="priority-option @(_newTicketPriority == p ? "active" : "")"
+                                    @onclick="() => _newTicketPriority = p">
+                                <span class="priority-dot priority-@GetPriorityClass(p)"></span>
+                                @GetPriorityLabel(p)
+                            </button>
+                        }
+                    </div>
 
                     <label class="field-label">Labels</label>
                     <div class="label-picker">
@@ -191,6 +204,20 @@ else
                     <span>Cr&#233;&#233;&#160;: @_selectedTicket.CreatedAt.ToString("g")</span>
                 </div>
 
+                <div class="priority-row">
+                    <span class="section-label">Priorit&#233;</span>
+                    <div class="priority-picker">
+                        @foreach (var p in Enum.GetValues<TicketPriority>())
+                        {
+                            <button class="priority-option @(_selectedTicket.Priority == p ? "active" : "")"
+                                    @onclick="() => SetPriority(p)">
+                                <span class="priority-dot priority-@GetPriorityClass(p)"></span>
+                                @GetPriorityLabel(p)
+                            </button>
+                        }
+                    </div>
+                </div>
+
                 @if (_selectedTicket.Labels.Count > 0)
                 {
                     <div class="ticket-labels">
@@ -270,6 +297,7 @@ else
     private string _newTicketTitle = "";
     private string _newTicketDescription = "";
     private List<int> _newTicketLabelIds = [];
+    private TicketPriority _newTicketPriority = TicketPriority.NiceToHave;
     private List<Label> _allLabels = [];
     private bool _showNewLabelForm = false;
     private string _newLabelName = "";
@@ -343,6 +371,32 @@ else
         _ => status.ToString()
     };
 
+    private static string GetPriorityLabel(TicketPriority p) => p switch
+    {
+        TicketPriority.Idea => "Idea",
+        TicketPriority.NiceToHave => "Nice to have",
+        TicketPriority.Required => "Required",
+        TicketPriority.Critical => "Critical",
+        _ => p.ToString()
+    };
+
+    private static string GetPriorityClass(TicketPriority p) => p switch
+    {
+        TicketPriority.Idea => "idea",
+        TicketPriority.NiceToHave => "nice",
+        TicketPriority.Required => "required",
+        TicketPriority.Critical => "critical",
+        _ => "nice"
+    };
+
+    private async Task SetPriority(TicketPriority p)
+    {
+        if (_selectedTicket is null || _selectedTicket.Priority == p) return;
+        await TicketService.UpdateTicketAsync(Slug, _selectedTicket.Id, priority: p);
+        _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
+        _tickets = await TicketService.ListTicketsAsync(Slug);
+    }
+
     private static string GetStatusClass(TicketStatus status) => status switch
     {
         TicketStatus.Backlog => "backlog",
@@ -371,6 +425,7 @@ else
         _newTicketTitle = "";
         _newTicketDescription = "";
         _newTicketLabelIds = [];
+        _newTicketPriority = TicketPriority.NiceToHave;
         _showNewLabelForm = false;
         _showCreatePopup = true;
     }
@@ -397,7 +452,7 @@ else
     private async Task CreateTicket()
     {
         if (string.IsNullOrWhiteSpace(_newTicketTitle)) return;
-        await TicketService.CreateTicketAsync(Slug, _newTicketTitle.Trim(), _newTicketDescription.Trim(), labelIds: _newTicketLabelIds);
+        await TicketService.CreateTicketAsync(Slug, _newTicketTitle.Trim(), _newTicketDescription.Trim(), labelIds: _newTicketLabelIds, priority: _newTicketPriority);
         _showCreatePopup = false;
         _tickets = await TicketService.ListTicketsAsync(Slug);
         RebuildPipeline();

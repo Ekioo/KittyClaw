@@ -789,3 +789,58 @@ button:disabled { opacity: 0.35; cursor: default; }
     background: color-mix(in srgb, var(--accent) 28%, transparent);
     border-color: var(--accent);
 }
+
+/* Priority dots */
+.priority-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.priority-dot.priority-idea     { background: #6b7280; }
+.priority-dot.priority-nice     { background: #3b82f6; }
+.priority-dot.priority-required { background: #f59e0b; }
+.priority-dot.priority-critical { background: #ef4444; }
+
+.ticket-card-top {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+/* Priority picker (create popup + detail panel) */
+.priority-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+.priority-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text-muted);
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.priority-option:hover { border-color: var(--border-strong); color: var(--text); }
+.priority-option.active {
+    border-color: var(--border-strong);
+    background: var(--surface3);
+    color: var(--text);
+}
+
+/* Priority row in ticket detail */
+.priority-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--border);
+}
