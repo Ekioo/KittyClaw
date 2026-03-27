@@ -1,10 +1,14 @@
 @page "/board/{Slug}"
+@page "/board/{Slug}/ticket/{TicketId:int}"
 @using Markdig
 @using Microsoft.AspNetCore.Components
 @using Todo.Core.Models
 @using Todo.Core.Services
+@using Todo.Web.Extensions
 @inject ProjectService ProjectService
 @inject TicketService TicketService
+@inject LabelService LabelService
+@inject NavigationManager Navigation
 @rendermode InteractiveServer
 
 <PageTitle>@(_project?.Name ?? "Board")</PageTitle>
@@ -41,6 +45,15 @@ else
                                 <span class="ticket-id">#@ticket.Id</span>
                             </div>
                             <span class="ticket-title">@ticket.Title</span>
+                            @if (ticket.Labels.Count > 0)
+                            {
+                                <div class="label-list">
+                                    @foreach (var label in ticket.Labels)
+                                    {
+                                        <span class="label-pill" style="--lc: @label.Color">@label.Name</span>
+                                    }
+                                </div>
+                            }
                             <small class="ticket-author">@ticket.CreatedBy</small>
                         </div>
                     }
@@ -48,53 +61,189 @@ else
                 @if (status == TicketStatus.Backlog)
                 {
                     <div class="add-ticket">
-                        <input @bind="_newTicketTitle" @bind:event="oninput" placeholder="Nouveau ticket..."
-                               @onkeydown="HandleTicketKeyDown" />
-                        <button @onclick="CreateTicket" disabled="@string.IsNullOrWhiteSpace(_newTicketTitle)">+</button>
+                        <button class="add-ticket-btn" @onclick="OpenCreatePopup">+ Nouveau ticket</button>
                     </div>
                 }
             </div>
         }
     </div>
 
+    @* ── Create ticket popup ── *@
+    @if (_showCreatePopup)
+    {
+        <div class="ticket-modal-overlay" @onclick="CloseCreatePopup">
+            <div class="create-popup" @onclick:stopPropagation>
+                <div class="create-popup-header">
+                    <h2>Nouveau ticket</h2>
+                    <button class="close-btn" @onclick="CloseCreatePopup">&times;</button>
+                </div>
+                <div class="create-popup-body">
+                    <label class="field-label">Titre</label>
+                    <input class="create-input" @bind="_newTicketTitle" placeholder="Titre du ticket..." />
+
+                    <label class="field-label">Description <span class="field-hint">(Markdown)</span></label>
+                    <textarea class="create-textarea" @bind="_newTicketDescription" placeholder="Description..."></textarea>
+
+                    <label class="field-label">Labels</label>
+                    <div class="label-picker">
+                        @foreach (var label in _allLabels)
+                        {
+                            var selected = _newTicketLabelIds.Contains(label.Id);
+                            <button class="label-toggle @(selected ? "active" : "")"
+                                    style="--lc: @label.Color"
+                                    @onclick="() => ToggleLabel(label.Id)">
+                                @label.Name
+                            </button>
+                        }
+                        @if (_showNewLabelForm)
+                        {
+                            <div class="new-label-form">
+                                <input @bind="_newLabelName" placeholder="Nom du label" />
+                                <input type="color" @bind="_newLabelColor" />
+                                <button class="save-btn icon-btn" @onclick="CreateLabel">&#10003;</button>
+                                <button class="cancel-icon-btn icon-btn" @onclick="() => _showNewLabelForm = false">&#10005;</button>
+                            </div>
+                        }
+                        else
+                        {
+                            <button class="label-add-btn" @onclick="() => _showNewLabelForm = true">+ Label</button>
+                        }
+                    </div>
+                </div>
+                <div class="create-popup-footer">
+                    <button class="cancel-btn" @onclick="CloseCreatePopup">Annuler</button>
+                    <button @onclick="CreateTicket" disabled="@string.IsNullOrWhiteSpace(_newTicketTitle)">Cr&#233;er le ticket</button>
+                </div>
+            </div>
+        </div>
+    }
+
     @if (_selectedTicket is not null)
     {
         <div class="ticket-modal-overlay" @onclick="ClosePanel">
             <div class="ticket-panel" @onclick:stopPropagation>
             <div class="ticket-panel-header">
-                <h2>#@_selectedTicket.Id - @_selectedTicket.Title</h2>
-                <div>
-                    <button class="delete-btn" @onclick="DeleteSelectedTicket">Supprimer</button>
+                @if (_editingTitle)
+                {
+                    <div class="edit-title-row">
+                        <span class="ticket-id-prefix">#@_selectedTicket.Id &mdash;</span>
+                        <input class="edit-title-input" @bind="_editTitle" @onkeydown="HandleTitleKeyDown" />
+                        <button class="icon-btn save-btn" title="Enregistrer" @onclick="SaveTitle">&#10003;</button>
+                        <button class="icon-btn cancel-icon-btn" title="Annuler" @onclick="() => _editingTitle = false">&#10005;</button>
+                    </div>
+                }
+                else
+                {
+                    <div class="editable-field">
+                        <h2>#@_selectedTicket.Id &mdash; @_selectedTicket.Title</h2>
+                        <button class="icon-btn pencil-btn" title="Modifier le titre" @onclick="StartEditTitle">&#9998;</button>
+                    </div>
+                }
+                <div class="header-actions">
+                    @if (_confirmDelete)
+                    {
+                        <span class="confirm-delete-label">Supprimer ce ticket&#160;?</span>
+                        <button class="delete-btn" @onclick="DeleteSelectedTicket">Confirmer</button>
+                        <button class="cancel-btn" @onclick="() => _confirmDelete = false">Annuler</button>
+                    }
+                    else
+                    {
+                        <button class="delete-btn" @onclick="() => _confirmDelete = true">Supprimer</button>
+                    }
                     <button class="close-btn" @onclick="ClosePanel">&times;</button>
                 </div>
             </div>
             <div class="ticket-panel-body">
-                <div class="ticket-desc markdown">
-                    @if (_selectedTicket.Description is { Length: > 0 })
+                <div class="editable-section">
+                    <div class="section-header">
+                        <span class="section-label">Description</span>
+                        @if (!_editingDescription)
+                        {
+                            <button class="icon-btn pencil-btn" title="Modifier la description" @onclick="StartEditDescription">&#9998;</button>
+                        }
+                    </div>
+                    @if (_editingDescription)
                     {
-                        @((MarkupString)Markdown.ToHtml(_selectedTicket.Description, _mdPipeline))
+                        <textarea class="edit-textarea" @bind="_editDescription"></textarea>
+                        <div class="edit-actions">
+                            <button @onclick="SaveDescription">Enregistrer</button>
+                            <button class="cancel-btn" @onclick="() => _editingDescription = false">Annuler</button>
+                        </div>
                     }
                     else
                     {
-                        <p>Pas de description.</p>
-                    }
-                </div>
-                <div class="ticket-meta">
-                    <span>Statut: <strong>@GetStatusLabel(_selectedTicket.Status)</strong></span>
-                    <span>Par: @_selectedTicket.CreatedBy</span>
-                    <span>Créé: @_selectedTicket.CreatedAt.ToString("g")</span>
-                </div>
-
-                <h3>Commentaires</h3>
-                <div class="comments">
-                    @foreach (var comment in _selectedTicket.Comments)
-                    {
-                        <div class="comment">
-                            <strong>@comment.Author</strong> <small>@comment.CreatedAt.ToString("g")</small>
-                            <div class="markdown">@((MarkupString)Markdown.ToHtml(comment.Content, _mdPipeline))</div>
+                        <div class="ticket-desc markdown">
+                            @if (_selectedTicket.Description is { Length: > 0 })
+                            {
+                                @((MarkupString)Markdown.ToHtml(_selectedTicket.Description, _mdPipeline))
+                            }
+                            else
+                            {
+                                <p class="empty-hint">Aucune description &mdash; cliquez sur &#9998; pour en ajouter une.</p>
+                            }
                         </div>
                     }
                 </div>
+
+                <div class="ticket-meta">
+                    <span>Statut&#160;: <strong>@GetStatusLabel(_selectedTicket.Status)</strong></span>
+                    <span>Par&#160;: @_selectedTicket.CreatedBy</span>
+                    <span>Cr&#233;&#233;&#160;: @_selectedTicket.CreatedAt.ToString("g")</span>
+                </div>
+
+                @if (_selectedTicket.Labels.Count > 0)
+                {
+                    <div class="ticket-labels">
+                        @foreach (var label in _selectedTicket.Labels)
+                        {
+                            <span class="label-pill" style="--lc: @label.Color">@label.Name</span>
+                        }
+                    </div>
+                }
+
+                <h3>Activit&#233;</h3>
+                <div class="timeline">
+                    @foreach (var item in GetTimeline())
+                    {
+                        @if (item.IsComment)
+                        {
+                            <div class="timeline-comment">
+                                <div class="timeline-comment-header">
+                                    <strong>@item.Author</strong>
+                                    <small>@item.At.ToString("g")</small>
+                                    @if (_editingCommentId != item.Id)
+                                    {
+                                        <button class="icon-btn pencil-btn" title="Modifier" @onclick="() => StartEditComment(item.Id!.Value, item.Text)">&#9998;</button>
+                                    }
+                                </div>
+                                @if (_editingCommentId == item.Id)
+                                {
+                                    <textarea class="edit-textarea" @bind="_editComment"></textarea>
+                                    <div class="edit-actions">
+                                        <button @onclick="SaveComment">Enregistrer</button>
+                                        <button class="cancel-btn" @onclick="() => _editingCommentId = null">Annuler</button>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="markdown">@((MarkupString)Markdown.ToHtml(item.Text, _mdPipeline))</div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="timeline-event">
+                                <span class="event-dot"></span>
+                                <div class="event-content">
+                                    <span class="event-author">@item.Author</span>
+                                    <span class="event-text">@item.Text</span>
+                                    <small>@item.At.ToString("g")</small>
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+
                 <div class="add-comment">
                     <textarea @bind="_newComment" placeholder="Ajouter un commentaire..."></textarea>
                     <button @onclick="AddComment" disabled="@string.IsNullOrWhiteSpace(_newComment)">Envoyer</button>
@@ -107,22 +256,77 @@ else
 
 @code {
     [Parameter] public string Slug { get; set; } = "";
+    [Parameter] public int? TicketId { get; set; }
 
     private Project? _project;
     private List<Ticket> _tickets = [];
     private Ticket? _selectedTicket;
     private Ticket? _draggedTicket;
-    private string _newTicketTitle = "";
     private string _newComment = "";
+    private bool _confirmDelete = false;
+
+    // Create popup
+    private bool _showCreatePopup = false;
+    private string _newTicketTitle = "";
+    private string _newTicketDescription = "";
+    private List<int> _newTicketLabelIds = [];
+    private List<Label> _allLabels = [];
+    private bool _showNewLabelForm = false;
+    private string _newLabelName = "";
+    private string _newLabelColor = "#6366f1";
+
+    // Inline editing state
+    private bool _editingTitle = false;
+    private string _editTitle = "";
+    private bool _editingDescription = false;
+    private string _editDescription = "";
+    private int? _editingCommentId = null;
+    private string _editComment = "";
 
     private static readonly TicketStatus[] _statuses = Enum.GetValues<TicketStatus>();
-    private static readonly MarkdownPipeline _mdPipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+    private MarkdownPipeline _mdPipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+
+    private void RebuildPipeline()
+    {
+        var index = _tickets.ToDictionary(t => t.Id, t => t.Title);
+        _mdPipeline = new MarkdownPipelineBuilder()
+            .UseAdvancedExtensions()
+            .Use(new TicketReferenceExtension(Slug, index))
+            .Build();
+    }
+
+    private record TimelineItem(DateTime At, string Author, bool IsComment, string Text, int? Id);
+
+    private IEnumerable<TimelineItem> GetTimeline()
+    {
+        if (_selectedTicket is null) return [];
+        return _selectedTicket.Comments
+            .Select(c => new TimelineItem(c.CreatedAt, c.Author, true, c.Content, c.Id))
+            .Concat(_selectedTicket.Activities
+                .Select(a => new TimelineItem(a.CreatedAt, a.Author, false, a.Text, null)))
+            .OrderBy(x => x.At);
+    }
 
     protected override async Task OnInitializedAsync()
     {
         _project = await ProjectService.GetProjectAsync(Slug);
         if (_project is not null)
+        {
             _tickets = await TicketService.ListTicketsAsync(Slug);
+            _allLabels = await LabelService.ListLabelsAsync(Slug);
+            RebuildPipeline();
+        }
+        if (TicketId.HasValue)
+            _selectedTicket = await TicketService.GetTicketAsync(Slug, TicketId.Value);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_project is null) return; // handled by OnInitializedAsync
+        if (TicketId.HasValue && _selectedTicket?.Id != TicketId)
+            _selectedTicket = await TicketService.GetTicketAsync(Slug, TicketId.Value);
+        else if (!TicketId.HasValue && _selectedTicket is not null)
+            _selectedTicket = null;
     }
 
     private List<Ticket> GetTickets(TicketStatus status) =>
@@ -158,34 +362,76 @@ else
         await TicketService.MoveTicketAsync(Slug, _draggedTicket.Id, newStatus);
         _tickets = await TicketService.ListTicketsAsync(Slug);
         _draggedTicket = null;
+        RebuildPipeline();
+    }
+
+    // Create popup
+    private void OpenCreatePopup()
+    {
+        _newTicketTitle = "";
+        _newTicketDescription = "";
+        _newTicketLabelIds = [];
+        _showNewLabelForm = false;
+        _showCreatePopup = true;
+    }
+
+    private void CloseCreatePopup() => _showCreatePopup = false;
+
+    private void ToggleLabel(int id)
+    {
+        if (_newTicketLabelIds.Contains(id)) _newTicketLabelIds.Remove(id);
+        else _newTicketLabelIds.Add(id);
+    }
+
+    private async Task CreateLabel()
+    {
+        if (string.IsNullOrWhiteSpace(_newLabelName)) return;
+        var label = await LabelService.CreateLabelAsync(Slug, _newLabelName.Trim(), _newLabelColor);
+        _allLabels = await LabelService.ListLabelsAsync(Slug);
+        _newTicketLabelIds.Add(label.Id);
+        _newLabelName = "";
+        _newLabelColor = "#6366f1";
+        _showNewLabelForm = false;
     }
 
     private async Task CreateTicket()
     {
         if (string.IsNullOrWhiteSpace(_newTicketTitle)) return;
-        await TicketService.CreateTicketAsync(Slug, _newTicketTitle.Trim());
-        _newTicketTitle = "";
+        await TicketService.CreateTicketAsync(Slug, _newTicketTitle.Trim(), _newTicketDescription.Trim(), labelIds: _newTicketLabelIds);
+        _showCreatePopup = false;
         _tickets = await TicketService.ListTicketsAsync(Slug);
-    }
-
-    private async Task HandleTicketKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter") await CreateTicket();
+        RebuildPipeline();
     }
 
     private async Task SelectTicket(Ticket ticket)
     {
+        _confirmDelete = false;
+        _editingTitle = false;
+        _editingDescription = false;
+        _editingCommentId = null;
         _selectedTicket = await TicketService.GetTicketAsync(Slug, ticket.Id);
+        Navigation.NavigateTo($"/board/{Slug}/ticket/{ticket.Id}", replace: true);
     }
 
-    private void ClosePanel() => _selectedTicket = null;
+    private void ClosePanel()
+    {
+        _selectedTicket = null;
+        _confirmDelete = false;
+        _editingTitle = false;
+        _editingDescription = false;
+        _editingCommentId = null;
+        Navigation.NavigateTo($"/board/{Slug}", replace: true);
+    }
 
     private async Task DeleteSelectedTicket()
     {
         if (_selectedTicket is null) return;
         await TicketService.DeleteTicketAsync(Slug, _selectedTicket.Id);
         _selectedTicket = null;
+        _confirmDelete = false;
         _tickets = await TicketService.ListTicketsAsync(Slug);
+        RebuildPipeline();
+        Navigation.NavigateTo($"/board/{Slug}", replace: true);
     }
 
     private async Task AddComment()
@@ -193,6 +439,59 @@ else
         if (_selectedTicket is null || string.IsNullOrWhiteSpace(_newComment)) return;
         await TicketService.AddCommentAsync(Slug, _selectedTicket.Id, _newComment.Trim());
         _newComment = "";
+        _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
+    }
+
+    // Title editing
+    private void StartEditTitle()
+    {
+        _editTitle = _selectedTicket!.Title;
+        _editingTitle = true;
+    }
+
+    private async Task SaveTitle()
+    {
+        if (_selectedTicket is null || string.IsNullOrWhiteSpace(_editTitle)) return;
+        await TicketService.UpdateTicketAsync(Slug, _selectedTicket.Id, title: _editTitle.Trim());
+        _editingTitle = false;
+        _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
+        _tickets = await TicketService.ListTicketsAsync(Slug);
+        RebuildPipeline();
+    }
+
+    private async Task HandleTitleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SaveTitle();
+        else if (e.Key == "Escape") _editingTitle = false;
+    }
+
+    // Description editing
+    private void StartEditDescription()
+    {
+        _editDescription = _selectedTicket!.Description;
+        _editingDescription = true;
+    }
+
+    private async Task SaveDescription()
+    {
+        if (_selectedTicket is null) return;
+        await TicketService.UpdateTicketAsync(Slug, _selectedTicket.Id, description: _editDescription);
+        _editingDescription = false;
+        _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
+    }
+
+    // Comment editing
+    private void StartEditComment(int commentId, string currentContent)
+    {
+        _editComment = currentContent;
+        _editingCommentId = commentId;
+    }
+
+    private async Task SaveComment()
+    {
+        if (_selectedTicket is null || _editingCommentId is null) return;
+        await TicketService.UpdateCommentAsync(Slug, _selectedTicket.Id, _editingCommentId.Value, _editComment.Trim());
+        _editingCommentId = null;
         _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
     }
 }
