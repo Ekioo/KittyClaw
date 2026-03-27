@@ -9,6 +9,11 @@ public static class Endpoints
     {
         var api = app.MapGroup("/api");
 
+        // Statuses
+        api.MapGet("/statuses", () =>
+            Results.Ok(Enum.GetNames<TicketStatus>()))
+            .WithTags("Statuses");
+
         // Projects
         api.MapGet("/projects", async (ProjectService ps) =>
             Results.Ok(await ps.ListProjectsAsync()))
