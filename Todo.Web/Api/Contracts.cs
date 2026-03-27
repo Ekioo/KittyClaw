@@ -9,3 +9,4 @@ public record MoveTicketRequest(TicketStatus Status);
 public record AddCommentRequest(string Content, string Author = "owner");
 public record CreateLabelRequest(string Name, string Color = "#6366f1");
 public record SetTicketLabelsRequest(List<int> LabelIds);
+public record ReorderTicketRequest(TicketStatus Status, int Index);

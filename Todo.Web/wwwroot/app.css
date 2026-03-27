@@ -220,6 +220,16 @@ a:hover { color: var(--accent-hover); }
     scrollbar-color: var(--border-strong) transparent;
 }
 
+/* Drop indicator */
+.drop-indicator {
+    height: 3px;
+    background: var(--accent);
+    border-radius: 2px;
+    margin: -2px 0;
+    box-shadow: 0 0 6px rgba(124, 106, 241, 0.5);
+    flex-shrink: 0;
+}
+
 /* Ticket card */
 .ticket-card {
     background: var(--surface2);
@@ -237,6 +247,11 @@ a:hover { color: var(--accent-hover); }
     box-shadow: 0 2px 12px rgba(0,0,0,0.25);
 }
 .ticket-card:active { cursor: grabbing; transform: scale(0.985); }
+.ticket-card.dragging {
+    opacity: 0.35;
+    transform: scale(0.95);
+    box-shadow: none;
+}
 .ticket-card.selected {
     border-color: var(--accent);
     box-shadow: 0 0 0 1px var(--accent), 0 4px 16px rgba(124, 106, 241, 0.15);

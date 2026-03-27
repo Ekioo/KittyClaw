@@ -28,6 +28,7 @@ else
         @foreach (var status in _statuses)
         {
             <div class="column column-@GetStatusClass(status)"
+                 @ondragover="(e) => OnDragOverColumn(status, e)"
                  @ondragover:preventDefault
                  @ondrop="() => OnDrop(status)">
                 <div class="column-header">
@@ -35,11 +36,21 @@ else
                     <span class="count">@GetTickets(status).Count</span>
                 </div>
                 <div class="column-body">
-                    @foreach (var ticket in GetTickets(status))
+                    @{ var columnTickets = GetTickets(status); }
+                    @for (int i = 0; i < columnTickets.Count; i++)
                     {
-                        <div class="ticket-card @(_selectedTicket?.Id == ticket.Id ? "selected" : "")"
+                        var ticket = columnTickets[i];
+                        var index = i;
+                        @if (_dragOverStatus == status && _dragInsertIndex == index && _draggedTicket is not null && _draggedTicket.Id != ticket.Id)
+                        {
+                            <div class="drop-indicator"></div>
+                        }
+                        <div class="ticket-card @(_selectedTicket?.Id == ticket.Id ? "selected" : "") @(_draggedTicket?.Id == ticket.Id ? "dragging" : "")"
                              draggable="true"
                              @ondragstart="() => OnDragStart(ticket)"
+                             @ondragend="OnDragEnd"
+                             @ondragover="(e) => OnDragOverCard(status, index, e)"
+                             @ondragover:preventDefault
                              @onclick="() => SelectTicket(ticket)">
                             <div class="ticket-card-top">
                                 <span class="priority-dot priority-@GetPriorityClass(ticket.Priority)" title="@GetPriorityLabel(ticket.Priority)"></span>
@@ -57,6 +68,10 @@ else
                             }
                             <small class="ticket-author">@ticket.CreatedBy</small>
                         </div>
+                    }
+                    @if (_dragOverStatus == status && _dragInsertIndex >= columnTickets.Count && _draggedTicket is not null)
+                    {
+                        <div class="drop-indicator"></div>
                     }
                 </div>
                 @if (status == TicketStatus.Backlog)
@@ -292,6 +307,8 @@ else
     private List<Ticket> _tickets = [];
     private Ticket? _selectedTicket;
     private Ticket? _draggedTicket;
+    private TicketStatus? _dragOverStatus;
+    private int _dragInsertIndex = -1;
     private string _newComment = "";
     private bool _confirmDelete = false;
 
@@ -413,12 +430,51 @@ else
 
     private void OnDragStart(Ticket ticket) => _draggedTicket = ticket;
 
+    private void OnDragEnd()
+    {
+        _draggedTicket = null;
+        _dragOverStatus = null;
+        _dragInsertIndex = -1;
+    }
+
+    private void OnDragOverCard(TicketStatus status, int cardIndex, DragEventArgs e)
+    {
+        if (_draggedTicket is null) return;
+        // Use the vertical offset within the card to decide above/below
+        // OffsetY < half → insert before, else insert after
+        _dragOverStatus = status;
+        _dragInsertIndex = e.OffsetY < 40 ? cardIndex : cardIndex + 1;
+    }
+
+    private void OnDragOverColumn(TicketStatus status, DragEventArgs e)
+    {
+        if (_draggedTicket is null) return;
+        // Only set when not already over a card (fallback for empty area)
+        _dragOverStatus = status;
+        var count = GetTickets(status).Count;
+        if (_dragInsertIndex < 0 || _dragOverStatus != status)
+            _dragInsertIndex = count;
+    }
+
     private async Task OnDrop(TicketStatus newStatus)
     {
         if (_draggedTicket is null) return;
-        await TicketService.MoveTicketAsync(Slug, _draggedTicket.Id, newStatus);
+
+        var targetIndex = _dragInsertIndex >= 0 ? _dragInsertIndex : GetTickets(newStatus).Count;
+
+        // If dropping in the same column, adjust index for the dragged item's removal
+        if (_draggedTicket.Status == newStatus)
+        {
+            var currentIndex = GetTickets(newStatus).IndexOf(_draggedTicket);
+            if (currentIndex >= 0 && currentIndex < targetIndex)
+                targetIndex--;
+        }
+
+        await TicketService.ReorderTicketAsync(Slug, _draggedTicket.Id, newStatus, targetIndex);
         _tickets = await TicketService.ListTicketsAsync(Slug);
         _draggedTicket = null;
+        _dragOverStatus = null;
+        _dragInsertIndex = -1;
         RebuildPipeline();
     }
 

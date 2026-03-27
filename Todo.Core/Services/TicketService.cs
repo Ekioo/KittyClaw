@@ -43,14 +43,24 @@ public class TicketService
         """);
     }
 
+    private static async Task EnsureSortOrderColumnAsync(TodoDbContext db)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE Tickets ADD COLUMN SortOrder INTEGER NOT NULL DEFAULT 0");
+        }
+        catch { /* column already exists */ }
+    }
+
     public async Task<List<Ticket>> ListTicketsAsync(string projectSlug, TicketStatus? statusFilter = null)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureLabelTablesAsync(db);
+        await EnsureSortOrderColumnAsync(db);
         var query = db.Tickets.Include(t => t.Labels).AsQueryable();
         if (statusFilter.HasValue)
             query = query.Where(t => t.Status == statusFilter.Value);
-        return await query.OrderBy(t => t.CreatedAt).ToListAsync();
+        return await query.OrderBy(t => t.SortOrder).ThenBy(t => t.CreatedAt).ToListAsync();
     }
 
     public async Task<Ticket?> GetTicketAsync(string projectSlug, int ticketId)
@@ -70,13 +80,15 @@ public class TicketService
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureActivityTableAsync(db);
         await EnsureLabelTablesAsync(db);
+        var maxSort = await db.Tickets.Where(t => t.Status == status).Select(t => (int?)t.SortOrder).MaxAsync() ?? -1;
         var ticket = new Ticket
         {
             Title = title,
             Description = description,
             CreatedBy = createdBy,
             Status = status,
-            Priority = priority
+            Priority = priority,
+            SortOrder = maxSort + 1
         };
         if (labelIds is { Count: > 0 })
         {
@@ -218,6 +230,48 @@ public class TicketService
         });
         await db.SaveChangesAsync();
         return true;
+    }
+
+    public async Task ReorderTicketAsync(string projectSlug, int ticketId, TicketStatus newStatus, int targetIndex)
+    {
+        await using var db = _projectService.GetProjectDb(projectSlug);
+        await EnsureSortOrderColumnAsync(db);
+        await EnsureActivityTableAsync(db);
+
+        var ticket = await db.Tickets.FindAsync(ticketId);
+        if (ticket is null) return;
+
+        var oldStatus = ticket.Status;
+        var statusChanged = oldStatus != newStatus;
+        ticket.Status = newStatus;
+        ticket.UpdatedAt = DateTime.UtcNow;
+
+        // Get all tickets in the target column (excluding the moved ticket)
+        var columnTickets = await db.Tickets
+            .Where(t => t.Status == newStatus && t.Id != ticketId)
+            .OrderBy(t => t.SortOrder).ThenBy(t => t.CreatedAt)
+            .ToListAsync();
+
+        // Clamp target index
+        if (targetIndex < 0) targetIndex = 0;
+        if (targetIndex > columnTickets.Count) targetIndex = columnTickets.Count;
+
+        // Insert ticket at target position and reassign sort orders
+        columnTickets.Insert(targetIndex, ticket);
+        for (int i = 0; i < columnTickets.Count; i++)
+            columnTickets[i].SortOrder = i;
+
+        if (statusChanged)
+        {
+            db.ActivityEntries.Add(new ActivityEntry
+            {
+                TicketId = ticketId,
+                Author = "owner",
+                Text = $"a déplacé le ticket : {StatusLabel(oldStatus)} → {StatusLabel(newStatus)}"
+            });
+        }
+
+        await db.SaveChangesAsync();
     }
 
     private static string StatusLabel(TicketStatus s) => s switch

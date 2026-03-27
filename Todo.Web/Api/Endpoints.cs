@@ -118,5 +118,12 @@ public static class Endpoints
             var ok = await ts.SetTicketLabelsAsync(slug, id, req.LabelIds);
             return ok ? Results.NoContent() : Results.NotFound();
         }).WithTags("Labels");
+
+        // Reorder
+        api.MapPatch("/projects/{slug}/tickets/{id:int}/reorder", async (string slug, int id, ReorderTicketRequest req, TicketService ts) =>
+        {
+            await ts.ReorderTicketAsync(slug, id, req.Status, req.Index);
+            return Results.NoContent();
+        }).WithTags("Tickets");
     }
 }
