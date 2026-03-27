@@ -52,14 +52,32 @@ public class TicketService
         catch { /* column already exists */ }
     }
 
-    public async Task<List<Ticket>> ListTicketsAsync(string projectSlug, TicketStatus? statusFilter = null)
+    private static async Task EnsureAssignedToColumnAsync(TodoDbContext db)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE Tickets ADD COLUMN AssignedTo TEXT NULL");
+        }
+        catch { /* column already exists */ }
+    }
+
+    public async Task<List<Ticket>> ListTicketsAsync(string projectSlug, TicketStatus? statusFilter = null, TicketPriority? priorityFilter = null, string? assignedTo = null, string? createdBy = null, string? search = null)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureLabelTablesAsync(db);
         await EnsureSortOrderColumnAsync(db);
+        await EnsureAssignedToColumnAsync(db);
         var query = db.Tickets.Include(t => t.Labels).AsQueryable();
         if (statusFilter.HasValue)
             query = query.Where(t => t.Status == statusFilter.Value);
+        if (priorityFilter.HasValue)
+            query = query.Where(t => t.Priority == priorityFilter.Value);
+        if (assignedTo is not null)
+            query = query.Where(t => t.AssignedTo == assignedTo);
+        if (createdBy is not null)
+            query = query.Where(t => t.CreatedBy == createdBy);
+        if (search is not null)
+            query = query.Where(t => t.Title.Contains(search) || t.Description.Contains(search));
         return await query.OrderBy(t => t.SortOrder).ThenBy(t => t.CreatedAt).ToListAsync();
     }
 
@@ -75,11 +93,12 @@ public class TicketService
             .FirstOrDefaultAsync(t => t.Id == ticketId);
     }
 
-    public async Task<Ticket> CreateTicketAsync(string projectSlug, string title, string description = "", string createdBy = "owner", TicketStatus status = TicketStatus.Backlog, List<int>? labelIds = null, TicketPriority priority = TicketPriority.NiceToHave)
+    public async Task<Ticket> CreateTicketAsync(string projectSlug, string title, string description = "", string createdBy = "owner", TicketStatus status = TicketStatus.Backlog, List<int>? labelIds = null, TicketPriority priority = TicketPriority.NiceToHave, string? assignedTo = null)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureActivityTableAsync(db);
         await EnsureLabelTablesAsync(db);
+        await EnsureAssignedToColumnAsync(db);
         var maxSort = await db.Tickets.Where(t => t.Status == status).Select(t => (int?)t.SortOrder).MaxAsync() ?? -1;
         var ticket = new Ticket
         {
@@ -88,7 +107,8 @@ public class TicketService
             CreatedBy = createdBy,
             Status = status,
             Priority = priority,
-            SortOrder = maxSort + 1
+            SortOrder = maxSort + 1,
+            AssignedTo = assignedTo
         };
         if (labelIds is { Count: > 0 })
         {
@@ -126,10 +146,11 @@ public class TicketService
         return ticket;
     }
 
-    public async Task<Ticket?> UpdateTicketAsync(string projectSlug, int ticketId, string? title = null, string? description = null, string author = "owner", TicketPriority? priority = null)
+    public async Task<Ticket?> UpdateTicketAsync(string projectSlug, int ticketId, string? title = null, string? description = null, string author = "owner", TicketPriority? priority = null, string? assignedTo = null)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureActivityTableAsync(db);
+        await EnsureAssignedToColumnAsync(db);
         var ticket = await db.Tickets.FindAsync(ticketId);
         if (ticket is null) return null;
 
@@ -163,6 +184,17 @@ public class TicketService
                 TicketId = ticketId,
                 Author = author,
                 Text = $"a changé la priorité : {PriorityLabel(old)} → {PriorityLabel(priority.Value)}"
+            });
+        }
+        if (assignedTo is not null && assignedTo != ticket.AssignedTo)
+        {
+            var old = ticket.AssignedTo ?? "personne";
+            ticket.AssignedTo = assignedTo.Length == 0 ? null : assignedTo;
+            db.ActivityEntries.Add(new ActivityEntry
+            {
+                TicketId = ticketId,
+                Author = author,
+                Text = $"a assigné le ticket : {old} → {ticket.AssignedTo ?? "personne"}"
             });
         }
         ticket.UpdatedAt = DateTime.UtcNow;

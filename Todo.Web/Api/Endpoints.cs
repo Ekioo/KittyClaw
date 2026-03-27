@@ -38,19 +38,19 @@ public static class Endpoints
         }).WithTags("Projects");
 
         // Tickets
-        api.MapGet("/projects/{slug}/tickets", async (string slug, TicketStatus? status, TicketService ts) =>
-            Results.Ok(await ts.ListTicketsAsync(slug, status)))
+        api.MapGet("/projects/{slug}/tickets", async (string slug, TicketStatus? status, TicketPriority? priority, string? assignedTo, string? createdBy, string? search, TicketService ts) =>
+            Results.Ok(await ts.ListTicketsAsync(slug, status, priority, assignedTo, createdBy, search)))
             .WithTags("Tickets");
 
         api.MapPost("/projects/{slug}/tickets", async (string slug, CreateTicketRequest req, TicketService ts) =>
         {
-            var ticket = await ts.CreateTicketAsync(slug, req.Title, req.Description, req.CreatedBy, req.Status, req.LabelIds, req.Priority);
+            var ticket = await ts.CreateTicketAsync(slug, req.Title, req.Description, req.CreatedBy, req.Status, req.LabelIds, req.Priority, req.AssignedTo);
             return Results.Created($"/api/projects/{slug}/tickets/{ticket.Id}", ticket);
         }).WithTags("Tickets");
 
         api.MapPatch("/projects/{slug}/tickets/{id:int}", async (string slug, int id, UpdateTicketRequest req, TicketService ts) =>
         {
-            var ticket = await ts.UpdateTicketAsync(slug, id, req.Title, req.Description, req.Author, req.Priority);
+            var ticket = await ts.UpdateTicketAsync(slug, id, req.Title, req.Description, req.Author, req.Priority, req.AssignedTo);
             return ticket is null ? Results.NotFound() : Results.Ok(ticket);
         }).WithTags("Tickets");
 
