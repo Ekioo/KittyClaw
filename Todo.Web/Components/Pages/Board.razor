@@ -49,7 +49,7 @@ else
                         <div class="filter-hint-row"><code>priority:critical</code> par priorité</div>
                         <div class="filter-hint-row"><code>label:bug</code> par label</div>
                         <div class="filter-hint-row"><code>by:owner</code> créé par</div>
-                        <div class="filter-hint-row">Texte libre = recherche dans le titre</div>
+                        <div class="filter-hint-row">Texte libre = titre, description, commentaires</div>
                     </div>
                 }
             </div>
@@ -807,8 +807,10 @@ else
                 tickets = tickets.Where(t => t.CreatedBy.Contains(byVal, StringComparison.OrdinalIgnoreCase));
                 continue;
             }
-            // Free text — title search
-            tickets = tickets.Where(t => t.Title.Contains(token, StringComparison.OrdinalIgnoreCase));
+            // Free text — search in title, description & comments
+            tickets = tickets.Where(t => t.Title.Contains(token, StringComparison.OrdinalIgnoreCase)
+                || t.Description.Contains(token, StringComparison.OrdinalIgnoreCase)
+                || t.Comments.Any(c => c.Content.Contains(token, StringComparison.OrdinalIgnoreCase)));
         }
         return tickets;
     }
