@@ -63,9 +63,10 @@ public class TicketService
         catch { /* column already exists */ }
     }
 
-    public async Task<List<Ticket>> ListTicketsAsync(string projectSlug, string? statusFilter = null, TicketPriority? priorityFilter = null, string? assignedTo = null, string? createdBy = null, string? search = null)
+    public async Task<List<TicketSummary>> ListTicketsAsync(string projectSlug, string? statusFilter = null, TicketPriority? priorityFilter = null, string? assignedTo = null, string? createdBy = null, string? search = null)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
+        await EnsureActivityTableAsync(db);
         await EnsureLabelTablesAsync(db);
         await EnsureSortOrderColumnAsync(db);
         await EnsureAssignedToColumnAsync(db);
@@ -80,8 +81,16 @@ public class TicketService
         if (createdBy is not null)
             query = query.Where(t => t.CreatedBy == createdBy);
         if (search is not null)
-            query = query.Where(t => t.Title.Contains(search) || t.Description.Contains(search));
-        return await query.OrderBy(t => t.SortOrder).ThenBy(t => t.CreatedAt).ToListAsync();
+            query = query.Where(t => t.Title.Contains(search) || t.Description.Contains(search) || t.Comments.Any(c => c.Content.Contains(search)));
+        return await query
+            .OrderBy(t => t.SortOrder).ThenBy(t => t.CreatedAt)
+            .Select(t => new TicketSummary(
+                t.Id, t.Title, t.Description, t.Status, t.Priority, t.SortOrder,
+                t.AssignedTo, t.CreatedBy, t.CreatedAt, t.UpdatedAt,
+                t.Labels,
+                t.Comments.Count,
+                t.Activities.Max(a => (DateTime?)a.CreatedAt)))
+            .ToListAsync();
     }
 
     public async Task<Ticket?> GetTicketAsync(string projectSlug, int ticketId)

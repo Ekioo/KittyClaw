@@ -580,10 +580,10 @@ else
     [Parameter] public int? TicketId { get; set; }
 
     private Project? _project;
-    private List<Ticket> _tickets = [];
+    private List<TicketSummary> _tickets = [];
     private List<BoardColumn> _columns = [];
     private Ticket? _selectedTicket;
-    private Ticket? _draggedTicket;
+    private TicketSummary? _draggedTicket;
     private string? _dragOverStatus;
     private int _dragInsertIndex = -1;
 
@@ -613,7 +613,7 @@ else
     // Trash drop zone
     private bool _trashHover = false;
     private BoardColumn? _trashConfirmColumn = null;
-    private Ticket? _trashConfirmTicket = null;
+    private TicketSummary? _trashConfirmTicket = null;
 
     // Inline editing state
     private bool _editingTitle = false;
@@ -769,7 +769,7 @@ else
             _selectedTicket = null;
     }
 
-    private List<Ticket> GetTickets(string status)
+    private List<TicketSummary> GetTickets(string status)
     {
         var tickets = _tickets.Where(t => t.Status == status);
 
@@ -779,7 +779,7 @@ else
         return tickets.ToList();
     }
 
-    private IEnumerable<Ticket> ApplyFilter(IEnumerable<Ticket> tickets)
+    private IEnumerable<TicketSummary> ApplyFilter(IEnumerable<TicketSummary> tickets)
     {
         var tokens = _filterText.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         foreach (var token in tokens)
@@ -833,8 +833,7 @@ else
             }
             // Free text — search in title, description & comments
             tickets = tickets.Where(t => t.Title.Contains(token, StringComparison.OrdinalIgnoreCase)
-                || t.Description.Contains(token, StringComparison.OrdinalIgnoreCase)
-                || t.Comments.Any(c => c.Content.Contains(token, StringComparison.OrdinalIgnoreCase)));
+                || t.Description.Contains(token, StringComparison.OrdinalIgnoreCase));
         }
         return tickets;
     }
@@ -871,7 +870,7 @@ else
         await SetPriority(p);
     }
 
-    private void OnDragStart(Ticket ticket) => _draggedTicket = ticket;
+    private void OnDragStart(TicketSummary ticket) => _draggedTicket = ticket;
 
     private void OnDragEnd()
     {
@@ -993,7 +992,7 @@ else
         RebuildPipeline();
     }
 
-    private async Task SelectTicket(Ticket ticket)
+    private async Task SelectTicket(TicketSummary ticket)
     {
         _confirmDelete = false;
         _editingTitle = false;
