@@ -8,11 +8,13 @@
 @inject ProjectService ProjectService
 @inject TicketService TicketService
 @inject Todo.Web.Services.BoardFilterState FilterState
+@inject Todo.Web.Services.BoardUpdateNotifier BoardUpdateNotifier
 @inject LabelService LabelService
 @inject ColumnService ColumnService
 @inject MemberService MemberService
 @inject NavigationManager Navigation
 @rendermode InteractiveServer
+@implements IDisposable
 
 <PageTitle>@(_project?.Name ?? "Board")</PageTitle>
 
@@ -731,6 +733,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        BoardUpdateNotifier.OnProjectUpdated += OnProjectUpdatedExternal;
         _project = await ProjectService.GetProjectAsync(Slug);
         if (_project is not null)
         {
@@ -742,6 +745,27 @@ else
         }
         if (TicketId.HasValue)
             _selectedTicket = await TicketService.GetTicketAsync(Slug, TicketId.Value);
+    }
+
+    private void OnProjectUpdatedExternal(string slug)
+    {
+        if (slug != Slug) return;
+        InvokeAsync(async () =>
+        {
+            _columns = await ColumnService.ListColumnsAsync(Slug);
+            _tickets = await TicketService.ListTicketsAsync(Slug);
+            _allLabels = await LabelService.ListLabelsAsync(Slug);
+            _allMembers = await MemberService.ListMembersAsync(Slug);
+            if (_selectedTicket is not null)
+                _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
+            RebuildPipeline();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        BoardUpdateNotifier.OnProjectUpdated -= OnProjectUpdatedExternal;
     }
 
     protected override async Task OnParametersSetAsync()

@@ -1,5 +1,6 @@
 using Todo.Core.Models;
 using Todo.Core.Services;
+using Todo.Web.Services;
 
 namespace Todo.Web.Api;
 
@@ -14,21 +15,24 @@ public static class Endpoints
             Results.Ok(await cs.ListColumnsAsync(slug)))
             .WithTags("Columns");
 
-        api.MapPost("/projects/{slug}/columns", async (string slug, CreateColumnRequest req, ColumnService cs) =>
+        api.MapPost("/projects/{slug}/columns", async (string slug, CreateColumnRequest req, ColumnService cs, BoardUpdateNotifier notifier) =>
         {
             var column = await cs.CreateColumnAsync(slug, req.Name, req.Color);
+            notifier.NotifyProjectUpdated(slug);
             return Results.Created($"/api/projects/{slug}/columns/{column.Id}", column);
         }).WithTags("Columns");
 
-        api.MapDelete("/projects/{slug}/columns/{columnId:int}", async (string slug, int columnId, string moveTicketsTo, ColumnService cs) =>
+        api.MapDelete("/projects/{slug}/columns/{columnId:int}", async (string slug, int columnId, string moveTicketsTo, ColumnService cs, BoardUpdateNotifier notifier) =>
         {
             var deleted = await cs.DeleteColumnAsync(slug, columnId, moveTicketsTo);
+            if (deleted) notifier.NotifyProjectUpdated(slug);
             return deleted ? Results.NoContent() : Results.NotFound();
         }).WithTags("Columns");
 
-        api.MapPatch("/projects/{slug}/columns/reorder", async (string slug, ReorderColumnRequest req, ColumnService cs) =>
+        api.MapPatch("/projects/{slug}/columns/reorder", async (string slug, ReorderColumnRequest req, ColumnService cs, BoardUpdateNotifier notifier) =>
         {
             await cs.ReorderColumnAsync(slug, req.ColumnId, req.Index);
+            notifier.NotifyProjectUpdated(slug);
             return Results.NoContent();
         }).WithTags("Columns");
 
@@ -60,11 +64,12 @@ public static class Endpoints
             Results.Ok(await ts.ListTicketsAsync(slug, status, priority, assignedTo, createdBy, search)))
             .WithTags("Tickets");
 
-        api.MapPost("/projects/{slug}/tickets", async (string slug, CreateTicketRequest req, TicketService ts) =>
+        api.MapPost("/projects/{slug}/tickets", async (string slug, CreateTicketRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
         {
             try
             {
                 var ticket = await ts.CreateTicketAsync(slug, req.Title, req.Description, req.CreatedBy, req.Status, req.LabelIds, req.Priority, req.AssignedTo);
+                notifier.NotifyProjectUpdated(slug);
                 return Results.Created($"/api/projects/{slug}/tickets/{ticket.Id}", ticket);
             }
             catch (InvalidOperationException ex)
@@ -73,11 +78,12 @@ public static class Endpoints
             }
         }).WithTags("Tickets");
 
-        api.MapPatch("/projects/{slug}/tickets/{id:int}", async (string slug, int id, UpdateTicketRequest req, TicketService ts) =>
+        api.MapPatch("/projects/{slug}/tickets/{id:int}", async (string slug, int id, UpdateTicketRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
         {
             try
             {
                 var ticket = await ts.UpdateTicketAsync(slug, id, req.Title, req.Description, req.Author, req.Priority, req.AssignedTo);
+                if (ticket is not null) notifier.NotifyProjectUpdated(slug);
                 return ticket is null ? Results.NotFound() : Results.Ok(ticket);
             }
             catch (InvalidOperationException ex)
@@ -92,11 +98,12 @@ public static class Endpoints
             return ticket is null ? Results.NotFound() : Results.Ok(ticket);
         }).WithTags("Tickets");
 
-        api.MapPatch("/projects/{slug}/tickets/{id:int}/status", async (string slug, int id, MoveTicketRequest req, TicketService ts) =>
+        api.MapPatch("/projects/{slug}/tickets/{id:int}/status", async (string slug, int id, MoveTicketRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
         {
             try
             {
                 var ticket = await ts.MoveTicketAsync(slug, id, req.Status, req.Author);
+                if (ticket is not null) notifier.NotifyProjectUpdated(slug);
                 return ticket is null ? Results.NotFound() : Results.Ok(ticket);
             }
             catch (InvalidOperationException ex)
@@ -105,28 +112,32 @@ public static class Endpoints
             }
         }).WithTags("Tickets");
 
-        api.MapDelete("/projects/{slug}/tickets/{id:int}", async (string slug, int id, TicketService ts) =>
+        api.MapDelete("/projects/{slug}/tickets/{id:int}", async (string slug, int id, TicketService ts, BoardUpdateNotifier notifier) =>
         {
             var deleted = await ts.DeleteTicketAsync(slug, id);
+            if (deleted) notifier.NotifyProjectUpdated(slug);
             return deleted ? Results.NoContent() : Results.NotFound();
         }).WithTags("Tickets");
 
         // Comments
-        api.MapPost("/projects/{slug}/tickets/{id:int}/comments", async (string slug, int id, AddCommentRequest req, TicketService ts) =>
+        api.MapPost("/projects/{slug}/tickets/{id:int}/comments", async (string slug, int id, AddCommentRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
         {
             var comment = await ts.AddCommentAsync(slug, id, req.Content, req.Author);
+            if (comment is not null) notifier.NotifyProjectUpdated(slug);
             return comment is null ? Results.NotFound() : Results.Created($"/api/projects/{slug}/tickets/{id}", comment);
         }).WithTags("Comments");
 
-        api.MapPatch("/projects/{slug}/tickets/{id:int}/comments/{commentId:int}", async (string slug, int id, int commentId, UpdateCommentRequest req, TicketService ts) =>
+        api.MapPatch("/projects/{slug}/tickets/{id:int}/comments/{commentId:int}", async (string slug, int id, int commentId, UpdateCommentRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
         {
             var ok = await ts.UpdateCommentAsync(slug, id, commentId, req.Content, req.Author);
+            if (ok) notifier.NotifyProjectUpdated(slug);
             return ok ? Results.NoContent() : Results.NotFound();
         }).WithTags("Comments");
 
-        api.MapDelete("/projects/{slug}/tickets/{id:int}/comments/{commentId:int}", async (string slug, int id, int commentId, TicketService ts) =>
+        api.MapDelete("/projects/{slug}/tickets/{id:int}/comments/{commentId:int}", async (string slug, int id, int commentId, TicketService ts, BoardUpdateNotifier notifier) =>
         {
             var ok = await ts.DeleteCommentAsync(slug, id, commentId);
+            if (ok) notifier.NotifyProjectUpdated(slug);
             return ok ? Results.NoContent() : Results.NotFound();
         }).WithTags("Comments");
 
@@ -156,15 +167,17 @@ public static class Endpoints
             return Results.Created($"/api/projects/{slug}/labels/{label.Id}", label);
         }).WithTags("Labels");
 
-        api.MapDelete("/projects/{slug}/labels/{labelId:int}", async (string slug, int labelId, LabelService ls) =>
+        api.MapDelete("/projects/{slug}/labels/{labelId:int}", async (string slug, int labelId, LabelService ls, BoardUpdateNotifier notifier) =>
         {
             var deleted = await ls.DeleteLabelAsync(slug, labelId);
+            if (deleted) notifier.NotifyProjectUpdated(slug);
             return deleted ? Results.NoContent() : Results.NotFound();
         }).WithTags("Labels");
 
-        api.MapPatch("/projects/{slug}/labels/{labelId:int}", async (string slug, int labelId, UpdateLabelRequest req, LabelService ls) =>
+        api.MapPatch("/projects/{slug}/labels/{labelId:int}", async (string slug, int labelId, UpdateLabelRequest req, LabelService ls, BoardUpdateNotifier notifier) =>
         {
             var label = await ls.UpdateLabelAsync(slug, labelId, req.Name, req.Color);
+            if (label is not null) notifier.NotifyProjectUpdated(slug);
             return label is null ? Results.NotFound() : Results.Ok(label);
         }).WithTags("Labels");
 
@@ -175,16 +188,18 @@ public static class Endpoints
             return ticket is null ? Results.NotFound() : Results.Ok(ticket.Labels);
         }).WithTags("Labels");
 
-        api.MapPut("/projects/{slug}/tickets/{id:int}/labels", async (string slug, int id, SetTicketLabelsRequest req, TicketService ts) =>
+        api.MapPut("/projects/{slug}/tickets/{id:int}/labels", async (string slug, int id, SetTicketLabelsRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
         {
             var ok = await ts.SetTicketLabelsAsync(slug, id, req.LabelIds);
+            if (ok) notifier.NotifyProjectUpdated(slug);
             return ok ? Results.NoContent() : Results.NotFound();
         }).WithTags("Labels");
 
         // Reorder
-        api.MapPatch("/projects/{slug}/tickets/{id:int}/reorder", async (string slug, int id, ReorderTicketRequest req, TicketService ts) =>
+        api.MapPatch("/projects/{slug}/tickets/{id:int}/reorder", async (string slug, int id, ReorderTicketRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
         {
             await ts.ReorderTicketAsync(slug, id, req.Status, req.Index);
+            notifier.NotifyProjectUpdated(slug);
             return Results.NoContent();
         }).WithTags("Tickets");
 
@@ -193,21 +208,24 @@ public static class Endpoints
             Results.Ok(await ms.ListMembersAsync(slug)))
             .WithTags("Members");
 
-        api.MapPost("/projects/{slug}/members", async (string slug, CreateMemberRequest req, MemberService ms) =>
+        api.MapPost("/projects/{slug}/members", async (string slug, CreateMemberRequest req, MemberService ms, BoardUpdateNotifier notifier) =>
         {
             var member = await ms.CreateMemberAsync(slug, req.Name);
+            notifier.NotifyProjectUpdated(slug);
             return Results.Created($"/api/projects/{slug}/members/{member.Id}", member);
         }).WithTags("Members");
 
-        api.MapPatch("/projects/{slug}/members/{memberId:int}", async (string slug, int memberId, UpdateMemberRequest req, MemberService ms) =>
+        api.MapPatch("/projects/{slug}/members/{memberId:int}", async (string slug, int memberId, UpdateMemberRequest req, MemberService ms, BoardUpdateNotifier notifier) =>
         {
             var member = await ms.UpdateMemberAsync(slug, memberId, req.Name);
+            if (member is not null) notifier.NotifyProjectUpdated(slug);
             return member is null ? Results.NotFound() : Results.Ok(member);
         }).WithTags("Members");
 
-        api.MapDelete("/projects/{slug}/members/{memberId:int}", async (string slug, int memberId, MemberService ms) =>
+        api.MapDelete("/projects/{slug}/members/{memberId:int}", async (string slug, int memberId, MemberService ms, BoardUpdateNotifier notifier) =>
         {
             var deleted = await ms.DeleteMemberAsync(slug, memberId);
+            if (deleted) notifier.NotifyProjectUpdated(slug);
             return deleted ? Results.NoContent() : Results.NotFound();
         }).WithTags("Members");
 
