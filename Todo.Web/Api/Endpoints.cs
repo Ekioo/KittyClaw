@@ -122,16 +122,30 @@ public static class Endpoints
         // Comments
         api.MapPost("/projects/{slug}/tickets/{id:int}/comments", async (string slug, int id, AddCommentRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
         {
-            var comment = await ts.AddCommentAsync(slug, id, req.Content, req.Author);
-            if (comment is not null) notifier.NotifyProjectUpdated(slug);
-            return comment is null ? Results.NotFound() : Results.Created($"/api/projects/{slug}/tickets/{id}", comment);
+            try
+            {
+                var comment = await ts.AddCommentAsync(slug, id, req.Content, req.Author);
+                if (comment is not null) notifier.NotifyProjectUpdated(slug);
+                return comment is null ? Results.NotFound() : Results.Created($"/api/projects/{slug}/tickets/{id}", comment);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
         }).WithTags("Comments");
 
         api.MapPatch("/projects/{slug}/tickets/{id:int}/comments/{commentId:int}", async (string slug, int id, int commentId, UpdateCommentRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
         {
-            var ok = await ts.UpdateCommentAsync(slug, id, commentId, req.Content, req.Author);
-            if (ok) notifier.NotifyProjectUpdated(slug);
-            return ok ? Results.NoContent() : Results.NotFound();
+            try
+            {
+                var ok = await ts.UpdateCommentAsync(slug, id, commentId, req.Content, req.Author);
+                if (ok) notifier.NotifyProjectUpdated(slug);
+                return ok ? Results.NoContent() : Results.NotFound();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
         }).WithTags("Comments");
 
         api.MapDelete("/projects/{slug}/tickets/{id:int}/comments/{commentId:int}", async (string slug, int id, int commentId, TicketService ts, BoardUpdateNotifier notifier) =>
