@@ -107,6 +107,8 @@ public class TicketService
 
     public async Task<Ticket> CreateTicketAsync(string projectSlug, string title, string description = "", string createdBy = "owner", string status = "Backlog", List<int>? labelIds = null, TicketPriority priority = TicketPriority.NiceToHave, string? assignedTo = null)
     {
+        if (string.IsNullOrWhiteSpace(createdBy))
+            throw new InvalidOperationException("Le champ 'createdBy' est requis.");
         if (!string.IsNullOrEmpty(assignedTo) && !await _memberService.MemberExistsAsync(projectSlug, assignedTo))
             throw new InvalidOperationException($"Le membre '{assignedTo}' n'existe pas.");
         await using var db = _projectService.GetProjectDb(projectSlug);
