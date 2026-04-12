@@ -61,6 +61,7 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 5. **Track your work** — add comments on tickets to explain what you did or what you need. Use `@mentions` to notify members and `#id` to reference other tickets.
 6. **Labels & priority** — use `GET /api/projects/{slug}/labels` to discover available labels, and set priority to `Idea`, `NiceToHave`, `Required`, or `Critical`.
 7. **Check mentions** — call `GET /api/projects/{slug}/mentions/{your-handle}` to find tickets that mention you.
+8. **Sub-tickets** — set `parentId` when creating a ticket to make it a child. Use `PUT /api/projects/{slug}/tickets/{id}/parent` to reparent, or `DELETE` it to detach. List sub-tickets with `?parentId={id}`.
 
 ## Conventions
 
@@ -74,5 +75,15 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 - Ticket detail panel with comments and activity timeline
 - Markdown rendering with `@mention` and `#ticket` reference support
 - Advanced search syntax: `#42`, `@owner`, `>date`, `priority:critical`, `label:bug`, `by:owner`
+- Sub-tickets with parent/child relationships and progress tracking
+- Column management (create, reorder, customize colors)
 - Label and member management
 - Image upload in descriptions and comments
+
+---
+
+## More Projects & Contact
+
+Check out my other projects at **[ekioo.com](https://ekioo.com)**.
+
+Follow me on X: **[@DamienHOFFSCHIR](https://x.com/DamienHOFFSCHIR)**
