@@ -60,8 +60,8 @@ public static class Endpoints
         }).WithTags("Projects");
 
         // Tickets
-        api.MapGet("/projects/{slug}/tickets", async (string slug, string? status, TicketPriority? priority, string? assignedTo, string? createdBy, string? search, TicketService ts) =>
-            Results.Ok(await ts.ListTicketsAsync(slug, status, priority, assignedTo, createdBy, search)))
+        api.MapGet("/projects/{slug}/tickets", async (string slug, string? status, TicketPriority? priority, string? assignedTo, string? createdBy, string? search, int? parentId, TicketService ts) =>
+            Results.Ok(await ts.ListTicketsAsync(slug, status, priority, assignedTo, createdBy, search, parentId)))
             .WithTags("Tickets");
 
         api.MapPost("/projects/{slug}/tickets", async (string slug, CreateTicketRequest req, TicketService ts, BoardUpdateNotifier notifier) =>

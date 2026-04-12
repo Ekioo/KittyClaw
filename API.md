@@ -184,6 +184,7 @@ GET /api/projects/{slug}/tickets
 | `assignedTo` | query | string | No |
 | `createdBy` | query | string | No |
 | `search` | query | string | No |
+| `parentId` | query | integer (int32) | No |
 
 **Responses:**
 

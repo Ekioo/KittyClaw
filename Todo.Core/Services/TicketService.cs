@@ -72,7 +72,7 @@ public class TicketService
         catch { /* column already exists */ }
     }
 
-    public async Task<List<TicketSummary>> ListTicketsAsync(string projectSlug, string? statusFilter = null, TicketPriority? priorityFilter = null, string? assignedTo = null, string? createdBy = null, string? search = null)
+    public async Task<List<TicketSummary>> ListTicketsAsync(string projectSlug, string? statusFilter = null, TicketPriority? priorityFilter = null, string? assignedTo = null, string? createdBy = null, string? search = null, int? parentId = null)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureActivityTableAsync(db);
@@ -90,6 +90,8 @@ public class TicketService
             query = query.Where(t => t.AssignedTo == assignedTo);
         if (createdBy is not null)
             query = query.Where(t => t.CreatedBy == createdBy);
+        if (parentId is not null)
+            query = query.Where(t => t.ParentId == parentId.Value);
         if (search is not null)
             query = query.Where(t => t.Title.Contains(search) || t.Description.Contains(search) || t.Comments.Any(c => c.Content.Contains(search)));
 
@@ -109,7 +111,7 @@ public class TicketService
         var childrenByParent = allTickets
             .Where(t => t.ParentId is not null)
             .GroupBy(t => t.ParentId!.Value)
-            .ToDictionary(g => g.Key, g => g.Select(t => new SubTicketInfo(t.Id, t.Title, t.Status)).ToList());
+            .ToDictionary(g => g.Key, g => g.Select(t => new SubTicketInfo(t.Id, t.Title, t.Status, t.AssignedTo)).ToList());
 
         return allTickets.Select(t => childrenByParent.TryGetValue(t.Id, out var subs)
             ? t with { SubTickets = subs }
@@ -122,11 +124,19 @@ public class TicketService
         await EnsureActivityTableAsync(db);
         await EnsureLabelTablesAsync(db);
         await EnsureParentIdColumnAsync(db);
-        return await db.Tickets
+        await EnsureAssignedToColumnAsync(db);
+        var ticket = await db.Tickets
             .Include(t => t.Comments.OrderBy(c => c.CreatedAt))
             .Include(t => t.Activities.OrderBy(a => a.CreatedAt))
             .Include(t => t.Labels)
             .FirstOrDefaultAsync(t => t.Id == ticketId);
+        if (ticket is null) return null;
+        ticket.SubTickets = await db.Tickets
+            .Where(t => t.ParentId == ticketId)
+            .OrderBy(t => t.SortOrder).ThenBy(t => t.CreatedAt)
+            .Select(t => new SubTicketInfo(t.Id, t.Title, t.Status, t.AssignedTo))
+            .ToListAsync();
+        return ticket;
     }
 
     public async Task<Ticket> CreateTicketAsync(string projectSlug, string title, string description = "", string createdBy = "owner", string status = "Backlog", List<int>? labelIds = null, TicketPriority priority = TicketPriority.NiceToHave, string? assignedTo = null, int? parentId = null)

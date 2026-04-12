@@ -17,4 +17,6 @@ public class Ticket
     public List<Comment> Comments { get; set; } = [];
     public List<ActivityEntry> Activities { get; set; } = [];
     public List<Label> Labels { get; set; } = [];
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public List<SubTicketInfo> SubTickets { get; set; } = [];
 }

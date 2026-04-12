@@ -17,4 +17,4 @@ public record TicketSummary(
     int? ParentId,
     List<SubTicketInfo> SubTickets);
 
-public record SubTicketInfo(int Id, string Title, string Status);
+public record SubTicketInfo(int Id, string Title, string Status, string? AssignedTo);
