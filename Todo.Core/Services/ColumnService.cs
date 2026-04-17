@@ -74,6 +74,25 @@ public class ColumnService
         return column;
     }
 
+    public async Task<BoardColumn?> UpdateColumnAsync(string projectSlug, int columnId, string? name = null, string? color = null)
+    {
+        await using var db = _projectService.GetProjectDb(projectSlug);
+        await EnsureBoardColumnsTableAsync(db);
+        var column = await db.BoardColumns.FindAsync(columnId);
+        if (column is null) return null;
+        if (name is not null && name != column.Name)
+        {
+            // Rename: update tickets whose Status points at the old name.
+            var oldName = column.Name;
+            column.Name = name;
+            await db.Database.ExecuteSqlRawAsync(
+                "UPDATE Tickets SET Status = {0} WHERE Status = {1}", name, oldName);
+        }
+        if (color is not null) column.Color = color;
+        await db.SaveChangesAsync();
+        return column;
+    }
+
     public async Task<bool> DeleteColumnAsync(string projectSlug, int columnId, string moveTicketsTo)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);

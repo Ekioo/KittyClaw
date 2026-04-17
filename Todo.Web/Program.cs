@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Todo.Core.Automation;
 using Todo.Core.Services;
 using Todo.Web.Api;
 using Todo.Web.Components;
@@ -17,6 +18,22 @@ builder.Services.AddSingleton<ColumnService>();
 builder.Services.AddSingleton<MemberService>();
 builder.Services.AddSingleton<Todo.Web.Services.BoardFilterState>();
 builder.Services.AddSingleton<Todo.Web.Services.BoardUpdateNotifier>();
+
+// Automation engine
+builder.Services.AddSingleton<AutomationStore>();
+builder.Services.AddSingleton<SessionRegistry>();
+builder.Services.AddSingleton<AgentRunRegistry>();
+builder.Services.AddSingleton<ClaudeRunner>();
+builder.Services.AddSingleton<CostTracker>();
+builder.Services.AddSingleton<AutomationEngine>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomationEngine>());
+builder.Services.AddSingleton<Todo.Web.Services.AgentRunsState>();
+builder.Services.AddHttpClient();
+
+// Folder picker: only on Windows hosts (local or MAUI-Windows). Cloud deployments
+// register nothing, so the UI hides the Parcourir button.
+if (OperatingSystem.IsWindows())
+    builder.Services.AddSingleton<Todo.Core.Platform.IFolderPicker, Todo.Core.Platform.WindowsFolderPicker>();
 
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));

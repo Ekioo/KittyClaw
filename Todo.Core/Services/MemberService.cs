@@ -19,11 +19,17 @@ public class MemberService
             CREATE TABLE IF NOT EXISTS Members (
                 Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
                 Name TEXT NOT NULL,
-                Slug TEXT NOT NULL DEFAULT ''
+                Slug TEXT NOT NULL DEFAULT '',
+                IsAgent INTEGER NOT NULL DEFAULT 0
             )
         """);
         // Add Slug column if missing (migration for existing DBs)
         try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Members ADD COLUMN Slug TEXT NOT NULL DEFAULT ''"); }
+        catch { /* column already exists */ }
+        // Old Skill column, kept around for DBs that have it (unused now).
+        try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Members ADD COLUMN Skill TEXT NULL"); }
+        catch { /* column already exists */ }
+        try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Members ADD COLUMN IsAgent INTEGER NOT NULL DEFAULT 0"); }
         catch { /* column already exists */ }
     }
 
@@ -66,14 +72,17 @@ public class MemberService
         return member;
     }
 
-    public async Task<Member?> UpdateMemberAsync(string projectSlug, int memberId, string name)
+    public async Task<Member?> UpdateMemberAsync(string projectSlug, int memberId, string? name = null)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureMemberTableAsync(db);
         var member = await db.Members.FindAsync(memberId);
         if (member is null) return null;
-        member.Name = name;
-        member.Slug = Member.ToSlug(name);
+        if (name is not null)
+        {
+            member.Name = name;
+            member.Slug = Member.ToSlug(name);
+        }
         await db.SaveChangesAsync();
         return member;
     }

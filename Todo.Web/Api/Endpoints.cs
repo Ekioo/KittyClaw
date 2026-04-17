@@ -1,3 +1,6 @@
+using System.Text;
+using System.Text.Json;
+using Todo.Core.Automation;
 using Todo.Core.Models;
 using Todo.Core.Services;
 using Todo.Web.Services;
@@ -20,6 +23,13 @@ public static class Endpoints
             var column = await cs.CreateColumnAsync(slug, req.Name, req.Color);
             notifier.NotifyProjectUpdated(slug);
             return Results.Created($"/api/projects/{slug}/columns/{column.Id}", column);
+        }).WithTags("Columns");
+
+        api.MapPatch("/projects/{slug}/columns/{columnId:int}", async (string slug, int columnId, UpdateColumnRequest req, ColumnService cs, BoardUpdateNotifier notifier) =>
+        {
+            var column = await cs.UpdateColumnAsync(slug, columnId, req.Name, req.Color);
+            if (column is not null) notifier.NotifyProjectUpdated(slug);
+            return column is null ? Results.NotFound() : Results.Ok(column);
         }).WithTags("Columns");
 
         api.MapDelete("/projects/{slug}/columns/{columnId:int}", async (string slug, int columnId, string moveTicketsTo, ColumnService cs, BoardUpdateNotifier notifier) =>
@@ -57,6 +67,12 @@ public static class Endpoints
         {
             var deleted = await ps.DeleteProjectAsync(slug);
             return deleted ? Results.NoContent() : Results.NotFound();
+        }).WithTags("Projects");
+
+        api.MapPatch("/projects/{slug}", async (string slug, UpdateProjectRequest req, ProjectService ps) =>
+        {
+            var project = await ps.UpdateProjectAsync(slug, req.WorkspacePath);
+            return project is null ? Results.NotFound() : Results.Ok(project);
         }).WithTags("Projects");
 
         // Tickets
@@ -265,6 +281,139 @@ public static class Endpoints
             return Results.Ok(tickets);
         }).WithTags("Mentions");
 
+        // Capability probe — lets the UI hide the browse button when no picker is available
+        // (e.g. cloud-hosted deployment where the server has no desktop).
+        api.MapGet("/browse/capabilities", (Todo.Core.Platform.IFolderPicker? picker) =>
+            Results.Ok(new { folderPicker = picker?.IsAvailable == true }))
+            .WithTags("Browse");
+
+        api.MapPost("/browse/folder", async (BrowseFolderRequest? req, Todo.Core.Platform.IFolderPicker? picker, CancellationToken ct) =>
+        {
+            if (picker is null || !picker.IsAvailable)
+                return Results.StatusCode(StatusCodes.Status501NotImplemented);
+            try
+            {
+                var path = await picker.PickFolderAsync(req?.InitialPath, ct);
+                return string.IsNullOrEmpty(path)
+                    ? Results.NoContent()
+                    : Results.Ok(new { path });
+            }
+            catch (Exception ex) { return Results.Problem(ex.Message); }
+        }).WithTags("Browse");
+
+        // Available skills for a project (scanned from WorkspacePath/.agents/skills/*.md)
+        api.MapGet("/projects/{slug}/skills", async (string slug, ProjectService ps) =>
+        {
+            var project = await ps.GetProjectAsync(slug);
+            if (project is null) return Results.NotFound();
+            var dir = Path.Combine(ps.ResolveWorkspacePath(project), ".agents", "skills");
+            if (!Directory.Exists(dir)) return Results.Ok(Array.Empty<string>());
+            var skills = Directory.EnumerateFiles(dir, "*.md")
+                .Select(p => Path.GetFileNameWithoutExtension(p)!)
+                .OrderBy(s => s)
+                .ToList();
+            return Results.Ok(skills);
+        }).WithTags("Automations");
+
+        // Automations
+        api.MapGet("/projects/{slug}/automations", async (string slug, AutomationStore store) =>
+        {
+            var (config, workspace, path) = await store.LoadAsync(slug);
+            return Results.Ok(new { config, workspace, path });
+        }).WithTags("Automations");
+
+        api.MapPut("/projects/{slug}/automations", async (string slug, AutomationConfig config, AutomationStore store, AutomationEngine engine) =>
+        {
+            await store.SaveAsync(slug, config);
+            await engine.ReloadProjectAsync(slug);
+            return Results.NoContent();
+        }).WithTags("Automations");
+
+        api.MapPost("/projects/{slug}/automations/reload", async (string slug, AutomationEngine engine) =>
+        {
+            await engine.ReloadProjectAsync(slug);
+            return Results.NoContent();
+        }).WithTags("Automations");
+
+        api.MapPost("/projects/{slug}/automations/{id}/run", async (string slug, string id, AutomationEngine engine, CancellationToken ct) =>
+        {
+            try
+            {
+                var run = await engine.RunAutomationManuallyAsync(slug, id, ct);
+                return Results.Accepted($"/api/projects/{slug}/runs/{run.RunId}", new { runId = run.RunId });
+            }
+            catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
+        }).WithTags("Automations");
+
+        // Agent runs (live)
+        api.MapGet("/projects/{slug}/runs", (string slug, AgentRunRegistry reg) =>
+            Results.Ok(reg.ActiveForProject(slug).Select(r => new
+            {
+                r.RunId, r.AgentName, r.SkillFile, r.TicketId, r.ConcurrencyGroup,
+                r.StartedAt, r.SessionId, status = r.Status.ToString(),
+            })))
+            .WithTags("Runs");
+
+        api.MapGet("/projects/{slug}/runs/{runId}", (string slug, string runId, AgentRunRegistry reg) =>
+        {
+            var run = reg.Get(runId);
+            if (run is null || run.ProjectSlug != slug) return Results.NotFound();
+            return Results.Ok(new
+            {
+                run.RunId, run.AgentName, run.SkillFile, run.TicketId, run.ConcurrencyGroup,
+                run.StartedAt, run.EndedAt, run.SessionId, run.ExitCode,
+                status = run.Status.ToString(),
+                events = run.SnapshotBuffer(),
+            });
+        }).WithTags("Runs");
+
+        api.MapGet("/projects/{slug}/runs/{runId}/stream", async (string slug, string runId, HttpContext http, AgentRunRegistry reg, CancellationToken ct) =>
+        {
+            var run = reg.Get(runId);
+            if (run is null || run.ProjectSlug != slug) { http.Response.StatusCode = 404; return; }
+            http.Response.Headers.ContentType = "text/event-stream";
+            http.Response.Headers.CacheControl = "no-cache";
+            http.Response.Headers["X-Accel-Buffering"] = "no";
+
+            var queue = System.Threading.Channels.Channel.CreateUnbounded<StreamEvent>();
+            void handler(StreamEvent ev) => queue.Writer.TryWrite(ev);
+            run.OnEvent += handler;
+
+            try
+            {
+                foreach (var ev in run.SnapshotBuffer())
+                    await WriteSseAsync(http.Response, ev, ct);
+
+                while (!ct.IsCancellationRequested && run.Status == AgentRunStatus.Running)
+                {
+                    while (queue.Reader.TryRead(out var ev))
+                        await WriteSseAsync(http.Response, ev, ct);
+                    try { await Task.Delay(200, ct); } catch { break; }
+                }
+                while (queue.Reader.TryRead(out var ev))
+                    await WriteSseAsync(http.Response, ev, ct);
+                await WriteSseRawAsync(http.Response, "event: end\ndata: {}\n\n", ct);
+            }
+            finally { run.OnEvent -= handler; }
+        }).WithTags("Runs");
+
+        api.MapPost("/projects/{slug}/runs/{runId}/steer", async (string slug, string runId, SteerRunRequest req, AgentRunRegistry reg) =>
+        {
+            var run = reg.Get(runId);
+            if (run is null || run.ProjectSlug != slug) return Results.NotFound();
+            if (run.Status != AgentRunStatus.Running) return Results.BadRequest(new { error = "Run is not active." });
+            await run.SteeringQueue.Writer.WriteAsync(req.Text);
+            return Results.NoContent();
+        }).WithTags("Runs");
+
+        api.MapPost("/projects/{slug}/runs/{runId}/stop", (string slug, string runId, AgentRunRegistry reg) =>
+        {
+            var run = reg.Get(runId);
+            if (run is null || run.ProjectSlug != slug) return Results.NotFound();
+            run.Cancellation.Cancel();
+            return Results.NoContent();
+        }).WithTags("Runs");
+
         // Images
         api.MapPost("/images", async (HttpRequest req, ProjectService ps) =>
         {
@@ -283,5 +432,20 @@ public static class Endpoints
             await file.CopyToAsync(fs);
             return Results.Ok(new { url = $"/uploads/{filename}" });
         }).WithTags("Images").DisableAntiforgery();
+    }
+
+    private static readonly JsonSerializerOptions SseJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
+    private static async Task WriteSseAsync(HttpResponse res, StreamEvent ev, CancellationToken ct)
+    {
+        var payload = JsonSerializer.Serialize(ev, SseJson);
+        await WriteSseRawAsync(res, $"data: {payload}\n\n", ct);
+    }
+
+    private static async Task WriteSseRawAsync(HttpResponse res, string frame, CancellationToken ct)
+    {
+        var bytes = Encoding.UTF8.GetBytes(frame);
+        await res.Body.WriteAsync(bytes, ct);
+        await res.Body.FlushAsync(ct);
     }
 }
