@@ -1,0 +1,406 @@
+@page "/board/{Slug}/settings"
+@using Todo.Core.Models
+@using Todo.Core.Services
+@inject ProjectService ProjectService
+@inject MemberService MemberService
+@inject LabelService LabelService
+@inject ColumnService ColumnService
+@inject NavigationManager Nav
+@inject IHttpClientFactory HttpFactory
+@rendermode InteractiveServer
+
+<PageTitle>@(_project?.Name ?? "Projet") — Paramètres</PageTitle>
+
+@if (_project is null)
+{
+    <p>Projet introuvable.</p>
+}
+else
+{
+    <div class="page-header">
+        <a class="back-link" href="/board/@Slug">&larr; Board</a>
+        <h1>@_project.Name — Paramètres</h1>
+    </div>
+
+    <div class="settings-container">
+
+        <section class="settings-section">
+            <h2>Dossier de travail</h2>
+            <p class="settings-hint">
+                Chemin absolu vers le repo / dossier du projet. C'est là que sera chargé le
+                <code>.claude/</code> et que sera lu <code>.agents/automations.json</code>.
+            </p>
+            <div class="settings-row">
+                <input class="settings-input" placeholder="D:\Sources\…" @bind="_workspacePath" @bind:event="oninput" />
+                @if (_canBrowse)
+                {
+                    <button class="settings-browse" @onclick="BrowseWorkspace" disabled="@_browsing">
+                        @(_browsing ? "…" : "📁 Parcourir")
+                    </button>
+                }
+                <button class="settings-primary" @onclick="SaveWorkspace" disabled="@_savingWorkspace">
+                    @(_savingWorkspace ? "…" : "Enregistrer")
+                </button>
+            </div>
+            @if (_workspaceStatus is not null)
+            {
+                <div class="settings-status @_workspaceStatus.Value.css">@_workspaceStatus.Value.text</div>
+            }
+        </section>
+
+        <section class="settings-section">
+            <h2>Membres</h2>
+            <p class="settings-hint">
+                Les membres servent à assigner des tickets. Les automations ciblent un membre
+                par son <code>slug</code> (champ <code>assigneeSlug</code>).
+            </p>
+            <table class="settings-list">
+                <thead><tr><th>Nom</th><th>Slug</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var m in _members)
+                    {
+                        <tr>
+                            <td>
+                                @if (_editingMemberId == m.Id)
+                                {
+                                    <input @bind="_editingMemberName" @bind:event="oninput" />
+                                }
+                                else
+                                {
+                                    <span>@m.Name</span>
+                                }
+                            </td>
+                            <td><code>@m.Slug</code></td>
+                            <td class="row-actions">
+                                @if (_editingMemberId == m.Id)
+                                {
+                                    <button class="icon-btn save-btn" @onclick="() => SaveMember(m)">✓</button>
+                                    <button class="icon-btn cancel-icon-btn" @onclick="() => { _editingMemberId = null; }">✕</button>
+                                }
+                                else
+                                {
+                                    <button class="icon-btn" @onclick="() => { _editingMemberId = m.Id; _editingMemberName = m.Name; }">✎</button>
+                                    <button class="icon-btn delete-icon" @onclick="() => DeleteMember(m)">🗑</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    <tr class="add-row">
+                        <td><input placeholder="Nouveau membre…" @bind="_newMemberName" @bind:event="oninput" @onkeydown="OnMemberKey" /></td>
+                        <td></td>
+                        <td><button class="settings-primary" @onclick="CreateMember" disabled="@string.IsNullOrWhiteSpace(_newMemberName)">+ Ajouter</button></td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section class="settings-section">
+            <h2>Colonnes</h2>
+            <p class="settings-hint">
+                Colonnes du kanban. L'ordre est appliqué via la flèche haut/bas.
+            </p>
+            <table class="settings-list">
+                <thead><tr><th>Ordre</th><th>Nom</th><th>Couleur</th><th></th></tr></thead>
+                <tbody>
+                    @for (int i = 0; i < _columns.Count; i++)
+                    {
+                        var idx = i;
+                        var c = _columns[idx];
+                        <tr>
+                            <td>
+                                <button class="icon-btn" disabled="@(idx == 0)" @onclick="() => MoveColumn(idx, idx - 1)">↑</button>
+                                <button class="icon-btn" disabled="@(idx == _columns.Count - 1)" @onclick="() => MoveColumn(idx, idx + 1)">↓</button>
+                            </td>
+                            <td>
+                                @if (_editingColumnId == c.Id)
+                                {
+                                    <input @bind="_editingColumnName" @bind:event="oninput" />
+                                }
+                                else { <span>@c.Name</span> }
+                            </td>
+                            <td>
+                                @if (_editingColumnId == c.Id)
+                                {
+                                    <input type="color" class="color-input" @bind="_editingColumnColor" />
+                                }
+                                else { <span class="color-swatch" style="background:@c.Color"></span> <code>@c.Color</code> }
+                            </td>
+                            <td class="row-actions">
+                                @if (_editingColumnId == c.Id)
+                                {
+                                    <button class="icon-btn save-btn" @onclick="() => SaveColumn(c)">✓</button>
+                                    <button class="icon-btn cancel-icon-btn" @onclick="() => { _editingColumnId = null; }">✕</button>
+                                }
+                                else
+                                {
+                                    <button class="icon-btn" @onclick="() => StartEditColumn(c)">✎</button>
+                                    <button class="icon-btn delete-icon" @onclick="() => DeleteColumn(c)">🗑</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    <tr class="add-row">
+                        <td></td>
+                        <td><input placeholder="Nouvelle colonne…" @bind="_newColumnName" @bind:event="oninput" /></td>
+                        <td><input type="color" class="color-input" @bind="_newColumnColor" /></td>
+                        <td><button class="settings-primary" @onclick="CreateColumn" disabled="@string.IsNullOrWhiteSpace(_newColumnName)">+ Ajouter</button></td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section class="settings-section">
+            <h2>Labels</h2>
+            <p class="settings-hint">Tags réutilisables pour catégoriser les tickets.</p>
+            <table class="settings-list">
+                <thead><tr><th>Nom</th><th>Couleur</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var l in _labels)
+                    {
+                        <tr>
+                            <td>
+                                @if (_editingLabelId == l.Id)
+                                {
+                                    <input @bind="_editingLabelName" @bind:event="oninput" />
+                                }
+                                else { <span>@l.Name</span> }
+                            </td>
+                            <td>
+                                @if (_editingLabelId == l.Id)
+                                {
+                                    <input type="color" class="color-input" @bind="_editingLabelColor" />
+                                }
+                                else { <span class="color-swatch" style="background:@l.Color"></span> <code>@l.Color</code> }
+                            </td>
+                            <td class="row-actions">
+                                @if (_editingLabelId == l.Id)
+                                {
+                                    <button class="icon-btn save-btn" @onclick="() => SaveLabel(l)">✓</button>
+                                    <button class="icon-btn cancel-icon-btn" @onclick="() => { _editingLabelId = null; }">✕</button>
+                                }
+                                else
+                                {
+                                    <button class="icon-btn" @onclick="() => StartEditLabel(l)">✎</button>
+                                    <button class="icon-btn delete-icon" @onclick="() => DeleteLabel(l)">🗑</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    <tr class="add-row">
+                        <td><input placeholder="Nouveau label…" @bind="_newLabelName" @bind:event="oninput" /></td>
+                        <td><input type="color" class="color-input" @bind="_newLabelColor" /></td>
+                        <td><button class="settings-primary" @onclick="CreateLabel" disabled="@string.IsNullOrWhiteSpace(_newLabelName)">+ Ajouter</button></td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section class="settings-section">
+            <a class="settings-primary" href="/board/@Slug/automations">Ouvrir l'éditeur d'automations →</a>
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+
+    private Project? _project;
+    private string _workspacePath = "";
+    private bool _savingWorkspace, _browsing, _canBrowse;
+    private (string text, string css)? _workspaceStatus;
+
+    private List<Member> _members = new();
+    private int? _editingMemberId;
+    private string _editingMemberName = "";
+    private string _newMemberName = "";
+
+    private List<BoardColumn> _columns = new();
+    private int? _editingColumnId;
+    private string _editingColumnName = "";
+    private string _editingColumnColor = "#6366f1";
+    private string _newColumnName = "";
+    private string _newColumnColor = "#6366f1";
+
+    private List<Label> _labels = new();
+    private int? _editingLabelId;
+    private string _editingLabelName = "";
+    private string _editingLabelColor = "#6366f1";
+    private string _newLabelName = "";
+    private string _newLabelColor = "#6366f1";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _project = await ProjectService.GetProjectAsync(Slug);
+        if (_project is null) return;
+        _workspacePath = _project.WorkspacePath ?? "";
+        await ReloadAllAsync();
+        await ProbeBrowseAsync();
+    }
+
+    private async Task ReloadAllAsync()
+    {
+        _members = await MemberService.ListMembersAsync(Slug);
+        _columns = await ColumnService.ListColumnsAsync(Slug);
+        _labels = await LabelService.ListLabelsAsync(Slug);
+    }
+
+    private HttpClient NewHttp()
+    {
+        var h = HttpFactory.CreateClient();
+        h.BaseAddress = new Uri(Nav.BaseUri);
+        return h;
+    }
+
+    private async Task ProbeBrowseAsync()
+    {
+        try
+        {
+            var caps = await NewHttp().GetFromJsonAsync<BrowseCapabilities>("/api/browse/capabilities");
+            _canBrowse = caps?.FolderPicker == true;
+        }
+        catch { _canBrowse = false; }
+    }
+
+    private sealed record BrowseCapabilities(bool FolderPicker);
+    private sealed record BrowseResult(string Path);
+
+    private async Task BrowseWorkspace()
+    {
+        _browsing = true;
+        try
+        {
+            var resp = await NewHttp().PostAsJsonAsync("/api/browse/folder", new { initialPath = _workspacePath });
+            if (resp.StatusCode == System.Net.HttpStatusCode.OK)
+            {
+                var body = await resp.Content.ReadFromJsonAsync<BrowseResult>();
+                if (body?.Path is not null) _workspacePath = body.Path;
+            }
+        }
+        finally { _browsing = false; }
+    }
+
+    private async Task SaveWorkspace()
+    {
+        _savingWorkspace = true;
+        _workspaceStatus = null;
+        try
+        {
+            var body = new { workspacePath = string.IsNullOrWhiteSpace(_workspacePath) ? null : _workspacePath.Trim() };
+            var resp = await NewHttp().PatchAsJsonAsync($"/api/projects/{Slug}", body);
+            _workspaceStatus = resp.IsSuccessStatusCode
+                ? ("Enregistré.", "settings-status-ok")
+                : ($"Erreur: {resp.StatusCode}", "settings-status-err");
+            if (resp.IsSuccessStatusCode) _project = await ProjectService.GetProjectAsync(Slug);
+        }
+        finally { _savingWorkspace = false; }
+    }
+
+    private async Task OnMemberKey(KeyboardEventArgs e) { if (e.Key == "Enter") await CreateMember(); }
+
+    private async Task CreateMember()
+    {
+        if (string.IsNullOrWhiteSpace(_newMemberName)) return;
+        var resp = await NewHttp().PostAsJsonAsync($"/api/projects/{Slug}/members", new { name = _newMemberName.Trim() });
+        if (resp.IsSuccessStatusCode)
+        {
+            _newMemberName = "";
+            _members = await MemberService.ListMembersAsync(Slug);
+        }
+    }
+
+    private async Task SaveMember(Member m)
+    {
+        if (string.IsNullOrWhiteSpace(_editingMemberName)) { _editingMemberId = null; return; }
+        var resp = await NewHttp().PatchAsJsonAsync($"/api/projects/{Slug}/members/{m.Id}", new { name = _editingMemberName.Trim() });
+        if (resp.IsSuccessStatusCode)
+        {
+            _editingMemberId = null;
+            _members = await MemberService.ListMembersAsync(Slug);
+        }
+    }
+
+    private async Task DeleteMember(Member m)
+    {
+        var resp = await NewHttp().DeleteAsync($"/api/projects/{Slug}/members/{m.Id}");
+        if (resp.IsSuccessStatusCode) _members = await MemberService.ListMembersAsync(Slug);
+    }
+
+    private async Task CreateColumn()
+    {
+        if (string.IsNullOrWhiteSpace(_newColumnName)) return;
+        var resp = await NewHttp().PostAsJsonAsync($"/api/projects/{Slug}/columns", new { name = _newColumnName.Trim(), color = _newColumnColor });
+        if (resp.IsSuccessStatusCode)
+        {
+            _newColumnName = "";
+            _columns = await ColumnService.ListColumnsAsync(Slug);
+        }
+    }
+
+    private void StartEditColumn(BoardColumn c)
+    {
+        _editingColumnId = c.Id;
+        _editingColumnName = c.Name;
+        _editingColumnColor = c.Color;
+    }
+
+    private async Task SaveColumn(BoardColumn c)
+    {
+        var resp = await NewHttp().PatchAsJsonAsync($"/api/projects/{Slug}/columns/{c.Id}",
+            new { name = _editingColumnName, color = _editingColumnColor });
+        if (resp.IsSuccessStatusCode)
+        {
+            _editingColumnId = null;
+            _columns = await ColumnService.ListColumnsAsync(Slug);
+        }
+    }
+
+    private async Task DeleteColumn(BoardColumn c)
+    {
+        var fallback = _columns.FirstOrDefault(x => x.Id != c.Id)?.Name;
+        if (fallback is null) return;
+        var resp = await NewHttp().DeleteAsync($"/api/projects/{Slug}/columns/{c.Id}?moveTicketsTo={Uri.EscapeDataString(fallback)}");
+        if (resp.IsSuccessStatusCode) _columns = await ColumnService.ListColumnsAsync(Slug);
+    }
+
+    private async Task MoveColumn(int from, int to)
+    {
+        var c = _columns[from];
+        var resp = await NewHttp().PatchAsJsonAsync($"/api/projects/{Slug}/columns/reorder", new { columnId = c.Id, index = to });
+        if (resp.IsSuccessStatusCode) _columns = await ColumnService.ListColumnsAsync(Slug);
+    }
+
+    private void StartEditLabel(Label l)
+    {
+        _editingLabelId = l.Id;
+        _editingLabelName = l.Name;
+        _editingLabelColor = l.Color;
+    }
+
+    private async Task SaveLabel(Label l)
+    {
+        var resp = await NewHttp().PatchAsJsonAsync($"/api/projects/{Slug}/labels/{l.Id}",
+            new { name = _editingLabelName, color = _editingLabelColor });
+        if (resp.IsSuccessStatusCode)
+        {
+            _editingLabelId = null;
+            _labels = await LabelService.ListLabelsAsync(Slug);
+        }
+    }
+
+    private async Task CreateLabel()
+    {
+        if (string.IsNullOrWhiteSpace(_newLabelName)) return;
+        var resp = await NewHttp().PostAsJsonAsync($"/api/projects/{Slug}/labels", new { name = _newLabelName.Trim(), color = _newLabelColor });
+        if (resp.IsSuccessStatusCode)
+        {
+            _newLabelName = "";
+            _labels = await LabelService.ListLabelsAsync(Slug);
+        }
+    }
+
+    private async Task DeleteLabel(Label l)
+    {
+        var resp = await NewHttp().DeleteAsync($"/api/projects/{Slug}/labels/{l.Id}");
+        if (resp.IsSuccessStatusCode) _labels = await LabelService.ListLabelsAsync(Slug);
+    }
+}
