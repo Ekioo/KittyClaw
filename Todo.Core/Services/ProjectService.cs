@@ -20,10 +20,17 @@ public partial class ProjectService
         Directory.CreateDirectory(dataDir);
     }
 
+    private static async Task EnsureProjectColumnsAsync(RegistryDbContext db)
+    {
+        try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN WorkspacePath TEXT NULL"); }
+        catch { /* column already exists */ }
+    }
+
     public async Task<List<Project>> ListProjectsAsync()
     {
         await using var db = new RegistryDbContext(_registryPath);
         await db.Database.EnsureCreatedAsync();
+        await EnsureProjectColumnsAsync(db);
         return await db.Projects.OrderBy(p => p.Name).ToListAsync();
     }
 
@@ -34,6 +41,7 @@ public partial class ProjectService
 
         await using var registry = new RegistryDbContext(_registryPath);
         await registry.Database.EnsureCreatedAsync();
+        await EnsureProjectColumnsAsync(registry);
 
         // Ensure unique slug
         var existing = await registry.Projects.AnyAsync(p => p.Slug == slug);
@@ -60,8 +68,26 @@ public partial class ProjectService
     {
         await using var db = new RegistryDbContext(_registryPath);
         await db.Database.EnsureCreatedAsync();
+        await EnsureProjectColumnsAsync(db);
         return await db.Projects.FirstOrDefaultAsync(p => p.Slug == slug);
     }
+
+    public async Task<Project?> UpdateProjectAsync(string slug, string? workspacePath)
+    {
+        await using var db = new RegistryDbContext(_registryPath);
+        await db.Database.EnsureCreatedAsync();
+        await EnsureProjectColumnsAsync(db);
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Slug == slug);
+        if (project is null) return null;
+        project.WorkspacePath = string.IsNullOrWhiteSpace(workspacePath) ? null : workspacePath.Trim();
+        await db.SaveChangesAsync();
+        return project;
+    }
+
+    public string ResolveWorkspacePath(Project project) =>
+        string.IsNullOrWhiteSpace(project.WorkspacePath)
+            ? Path.Combine(_dataDir, "projects", project.Slug)
+            : project.WorkspacePath;
 
     public async Task<bool> DeleteProjectAsync(string slug)
     {
