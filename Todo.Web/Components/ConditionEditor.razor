@@ -1,0 +1,83 @@
+@using Todo.Core.Automation
+
+<div class="node-editor">
+    <label>Type
+        <select value="@CurrentType" @onchange="OnTypeChanged">
+            <option value="ticketInColumn">Ticket dans colonne</option>
+            <option value="noPendingTickets">Aucun ticket en cours</option>
+            <option value="minDescriptionLength">Longueur min. description</option>
+        </select>
+    </label>
+
+    @switch (Condition)
+    {
+        case TicketInColumnConditionSpec s:
+            <div class="column-picker">
+                <div class="column-picker-label">Colonnes (une ou plusieurs)</div>
+                @foreach (var c in Columns)
+                {
+                    var col = c;
+                    <label class="column-check"><input type="checkbox" checked="@s.Columns.Contains(col)"
+                               @onchange="e => ToggleColumn(s.Columns, col, (bool)e.Value!)" /><span>@col</span></label>
+                }
+            </div>
+            <label>Assigné (slug, optionnel)
+                <select value="@(s.AssigneeSlug ?? "")" @onchange="e => s.AssigneeSlug = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
+                    <option value="">— n'importe qui —</option>
+                    @foreach (var sk in Skills) { <option value="@sk">@sk</option> }
+                </select>
+            </label>
+            break;
+        case NoPendingTicketsConditionSpec s:
+            <label>Assigné (slug, laisser vide = tous)
+                <select value="@(s.AssigneeSlug ?? "")" @onchange="e => s.AssigneeSlug = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
+                    <option value="">— tous —</option>
+                    @foreach (var sk in Skills) { <option value="@sk">@sk</option> }
+                </select>
+            </label>
+            break;
+        case MinDescriptionLengthConditionSpec s:
+            <label>Longueur min.
+                <input type="number" @bind="s.Length" />
+            </label>
+            break;
+    }
+
+    <div class="node-editor-actions">
+        <button class="delete-btn" @onclick="OnDelete">Supprimer la condition</button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public ConditionSpec Condition { get; set; } = default!;
+    [Parameter] public List<string> Skills { get; set; } = new();
+    [Parameter] public List<string> Columns { get; set; } = new();
+    [Parameter] public EventCallback<ConditionSpec> OnReplace { get; set; }
+    [Parameter] public EventCallback OnDelete { get; set; }
+
+    private string CurrentType => Condition switch
+    {
+        TicketInColumnConditionSpec => "ticketInColumn",
+        NoPendingTicketsConditionSpec => "noPendingTickets",
+        MinDescriptionLengthConditionSpec => "minDescriptionLength",
+        _ => "ticketInColumn",
+    };
+
+    private async Task OnTypeChanged(ChangeEventArgs e)
+    {
+        ConditionSpec spec = (string?)e.Value switch
+        {
+            "ticketInColumn" => new TicketInColumnConditionSpec { Columns = new List<string> { Columns.FirstOrDefault() ?? "Todo" } },
+            "noPendingTickets" => new NoPendingTicketsConditionSpec(),
+            "minDescriptionLength" => new MinDescriptionLengthConditionSpec { Length = 50 },
+            _ => new TicketInColumnConditionSpec { Columns = new List<string> { "Todo" } },
+        };
+        await OnReplace.InvokeAsync(spec);
+    }
+
+    private void ToggleColumn(List<string> list, string col, bool on)
+    {
+        if (on) { if (!list.Contains(col)) list.Add(col); }
+        else { list.Remove(col); }
+    }
+}

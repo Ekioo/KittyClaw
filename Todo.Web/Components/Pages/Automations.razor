@@ -1,0 +1,479 @@
+@page "/board/{Slug}/automations"
+@using System.Text.Json
+@using Todo.Core.Automation
+@using Todo.Core.Models
+@using Todo.Core.Services
+@inject ProjectService ProjectService
+@inject ColumnService ColumnService
+@inject IHttpClientFactory HttpFactory
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+@rendermode InteractiveServer
+
+<PageTitle>@(_project?.Name ?? "Projet") — Automations</PageTitle>
+
+@if (_project is null)
+{
+    <p>Projet introuvable.</p>
+}
+else
+{
+    <div class="page-header">
+        @if (_editingIndex is null)
+        {
+            <a class="back-link" href="/board/@Slug">&larr; Board</a>
+        }
+        else
+        {
+            <button class="back-link" @onclick="CloseEditor">&larr; Automations</button>
+        }
+        <h1>@_project.Name — Automations</h1>
+        <div class="header-right">
+            @if (_editingIndex is null)
+            {
+                <button class="header-action-btn" @onclick="ReloadFromDisk" title="Relire automations.json depuis le disque">&#8635; Recharger</button>
+                <button class="header-action-btn" @onclick="AddAutomation">+ Automation</button>
+                <button class="header-action-btn settings-primary" @onclick="SaveAll" disabled="@_saving">
+                    @(_saving ? "…" : "Enregistrer")
+                </button>
+            }
+            else
+            {
+                <button class="header-action-btn settings-primary" @onclick="SaveAll" disabled="@_saving">
+                    @(_saving ? "…" : "Enregistrer")
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (_statusMessage is not null)
+    {
+        <div class="settings-status @_statusMessage.Value.css">@_statusMessage.Value.text</div>
+    }
+
+    @if (_editingIndex is null)
+    {
+        @* ── Cards grid ── *@
+        <div class="automations-grid">
+            @if (_config is null || _config.Automations.Count == 0)
+            {
+                <div class="automations-empty">
+                    Aucune automation. Clique sur "+ Automation" pour commencer.
+                </div>
+            }
+            else
+            {
+                @for (int i = 0; i < _config.Automations.Count; i++)
+                {
+                    var idx = i;
+                    var a = _config.Automations[idx];
+                    <div class="automation-tile @(a.Enabled ? "" : "disabled")" @onclick="() => OpenEditor(idx)">
+                        <div class="tile-header">
+                            <h3>@(string.IsNullOrWhiteSpace(a.Name) ? "(sans nom)" : a.Name)</h3>
+                            <label class="tile-toggle" @onclick:stopPropagation>
+                                <input type="checkbox" checked="@a.Enabled" @onchange="e => { a.Enabled = (bool)e.Value!; _ = SaveAll(); }" />
+                            </label>
+                        </div>
+                        <div class="tile-summary">
+                            <div class="tile-line"><span class="tile-badge badge-trigger">TRIGGER</span> @DescribeTrigger(a.Trigger)</div>
+                            @if (a.Conditions.Count > 0)
+                            {
+                                <div class="tile-line"><span class="tile-badge badge-condition">IF</span> @string.Join(", ", a.Conditions.Select(DescribeCondition))</div>
+                            }
+                            <div class="tile-line"><span class="tile-badge badge-action">DO</span> @string.Join(", ", a.Actions.Select(DescribeAction))</div>
+                        </div>
+                        <div class="tile-footer" @onclick:stopPropagation>
+                            <button class="auto-run-btn" @onclick="() => RunNow(a.Id)">▶ Exécuter</button>
+                            <button class="icon-btn delete-icon" @onclick="() => RemoveAutomation(idx)" title="Supprimer">🗑</button>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    }
+    else
+    {
+        @* ── Editor mode ── *@
+        var a = _config!.Automations[_editingIndex.Value];
+        <div class="automation-editor-wrap">
+            <NodePalette />
+            <div class="automation-editor-main">
+                <div class="automation-card selected">
+                    <div class="automation-card-header">
+                        <input class="automation-name" @bind="a.Name" @bind:event="oninput" placeholder="Nom de l'automation" />
+                        <label class="automation-toggle" title="Activé">
+                            <input type="checkbox" checked="@a.Enabled" @onchange="e => a.Enabled = (bool)e.Value!" />
+                        </label>
+                    </div>
+
+                    <div class="automation-flow">
+                        <div class="auto-node node-trigger @(IsSel(NodeKind.Trigger, 0) ? "active" : "")"
+                             data-dnd-target="trigger:0"
+                             @onclick="() => Select(NodeKind.Trigger, 0)">
+                            <div class="auto-node-kind">TRIGGER</div>
+                            <div class="auto-node-body">@DescribeTrigger(a.Trigger)</div>
+                        </div>
+
+                        @for (int c = 0; c < a.Conditions.Count; c++)
+                        {
+                            var ci = c;
+                            <DropSlot Kind="@KCondition" InsertIndex="ci" />
+                            <div class="auto-node node-condition @(IsSel(NodeKind.Condition, ci) ? "active" : "")"
+                                 data-dnd-source="@($"move:condition:{ci}")"
+                                 @onclick="() => Select(NodeKind.Condition, ci)">
+                                <div class="node-drag-handle" title="Glisser pour déplacer">⋮⋮</div>
+                                <div class="node-content">
+                                    <div class="auto-node-kind">IF</div>
+                                    <div class="auto-node-body">@DescribeCondition(a.Conditions[ci])</div>
+                                </div>
+                                <button class="node-remove-btn"
+                                        @onclick="() => RemoveCondition(a, ci)" @onclick:stopPropagation
+                                        title="Supprimer">×</button>
+                            </div>
+                        }
+                        <DropSlot Kind="@KCondition" InsertIndex="@a.Conditions.Count"
+                                  ClickLabel="+ IF" OnClick="AddCondition" />
+
+                        @for (int k = 0; k < a.Actions.Count; k++)
+                        {
+                            var ai = k;
+                            <DropSlot Kind="@KAction" InsertIndex="ai" />
+                            <div class="auto-node node-action @(IsSel(NodeKind.Action, ai) ? "active" : "")"
+                                 data-dnd-source="@($"move:action:{ai}")"
+                                 @onclick="() => Select(NodeKind.Action, ai)">
+                                <div class="node-drag-handle" title="Glisser pour déplacer">⋮⋮</div>
+                                <div class="node-content">
+                                    <div class="auto-node-kind">DO</div>
+                                    <div class="auto-node-body">@DescribeAction(a.Actions[ai])</div>
+                                </div>
+                                <button class="node-remove-btn"
+                                        @onclick="() => RemoveAction(a, ai)" @onclick:stopPropagation
+                                        title="Supprimer">×</button>
+                            </div>
+                        }
+                        <DropSlot Kind="@KAction" InsertIndex="@a.Actions.Count"
+                                  ClickLabel="+ DO" OnClick="AddAction" />
+                    </div>
+
+                    <div class="automation-footer">
+                        <button class="auto-run-btn" @onclick="() => RunNow(a.Id)">▶ Exécuter maintenant</button>
+                    </div>
+                </div>
+            </div>
+
+            <aside class="automations-inspector">
+                <h3>Éditer le nœud</h3>
+                @switch (_selectedKind)
+                {
+                    case NodeKind.Trigger:
+                        <TriggerEditor Automation="a" Skills="_skills" Columns="_columns"
+                                       OnReplace="spec => { a.Trigger = spec; StateHasChanged(); }" />
+                        break;
+                    case NodeKind.Condition:
+                        <ConditionEditor Condition="a.Conditions[_selectedSub]"
+                                         Skills="_skills" Columns="_columns"
+                                         OnReplace="spec => { a.Conditions[_selectedSub] = spec; StateHasChanged(); }"
+                                         OnDelete="() => { a.Conditions.RemoveAt(_selectedSub); _selectedSub = 0; _selectedKind = NodeKind.Trigger; StateHasChanged(); }" />
+                        break;
+                    case NodeKind.Action:
+                        <ActionEditor Action="a.Actions[_selectedSub]" Skills="_skills" Columns="_columns"
+                                      OnReplace="spec => { a.Actions[_selectedSub] = spec; StateHasChanged(); }"
+                                      OnDelete="() => { a.Actions.RemoveAt(_selectedSub); _selectedSub = 0; _selectedKind = NodeKind.Trigger; StateHasChanged(); }" />
+                        break;
+                }
+            </aside>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+
+    private Project? _project;
+    private AutomationConfig? _config;
+    private List<string> _skills = new();
+    private List<string> _columns = new();
+    private bool _saving;
+    private (string text, string css)? _statusMessage;
+
+    private int? _editingIndex;
+    public enum NodeKind { Trigger, Condition, Action }
+    private NodeKind _selectedKind = NodeKind.Trigger;
+    private int _selectedSub;
+
+    private bool IsSel(NodeKind k, int sub) => _selectedKind == k && _selectedSub == sub;
+    private void Select(NodeKind k, int sub) { _selectedKind = k; _selectedSub = sub; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _project = await ProjectService.GetProjectAsync(Slug);
+        if (_project is null) return;
+        var http = NewHttp();
+        var cols = await ColumnService.ListColumnsAsync(Slug);
+        _columns = cols.Select(c => c.Name).ToList();
+        _skills = await http.GetFromJsonAsync<List<string>>($"/api/projects/{Slug}/skills") ?? new();
+        await LoadConfigAsync(http);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotnetRef = DotNetObjectReference.Create(this);
+            _dndModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/flow-dnd.js");
+            await _dndModule.InvokeVoidAsync("init", _dotnetRef);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_dndModule is not null)
+        {
+            try { await _dndModule.InvokeVoidAsync("dispose"); } catch { }
+            try { await _dndModule.DisposeAsync(); } catch { }
+        }
+        _dotnetRef?.Dispose();
+    }
+
+    private HttpClient NewHttp()
+    {
+        var h = HttpFactory.CreateClient();
+        h.BaseAddress = new Uri(Nav.BaseUri);
+        return h;
+    }
+
+    private async Task LoadConfigAsync(HttpClient http)
+    {
+        var json = await http.GetStringAsync($"/api/projects/{Slug}/automations");
+        using var doc = JsonDocument.Parse(json);
+        if (doc.RootElement.TryGetProperty("config", out var cfg))
+            _config = JsonSerializer.Deserialize<AutomationConfig>(cfg.GetRawText(), AutomationStore.JsonOptions) ?? new();
+        else _config = new();
+    }
+
+    private async Task ReloadFromDisk()
+    {
+        var http = NewHttp();
+        await http.PostAsync($"/api/projects/{Slug}/automations/reload", null);
+        await LoadConfigAsync(http);
+        StateHasChanged();
+    }
+
+    private async Task SaveAll()
+    {
+        if (_config is null) return;
+        _saving = true;
+        try
+        {
+            var http = NewHttp();
+            var json = JsonSerializer.Serialize(_config, AutomationStore.JsonOptions);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var resp = await http.PutAsync($"/api/projects/{Slug}/automations", content);
+            _statusMessage = resp.IsSuccessStatusCode
+                ? ("Enregistré.", "settings-status-ok")
+                : ($"Erreur: {resp.StatusCode}", "settings-status-err");
+        }
+        finally { _saving = false; }
+    }
+
+    private void OpenEditor(int idx)
+    {
+        _editingIndex = idx;
+        _selectedKind = NodeKind.Trigger;
+        _selectedSub = 0;
+    }
+
+    private void CloseEditor() => _editingIndex = null;
+
+    private const string KTrigger = "trigger";
+    private const string KCondition = "condition";
+    private const string KAction = "action";
+
+    private IJSObjectReference? _dndModule;
+    private DotNetObjectReference<Automations>? _dotnetRef;
+
+    /// <summary>
+    /// Called by flow-dnd.js when the user drops a dragged node onto a target slot.
+    /// sourceSpec: "new:trigger:interval" or "move:action:2"
+    /// targetSpec: "condition:3" (kind + insertIndex, or "trigger:0" for replace)
+    /// </summary>
+    [JSInvokable]
+    public void HandleFlowDrop(string sourceSpec, string targetSpec)
+    {
+        if (_config is null || _editingIndex is null) return;
+        var a = _config.Automations[_editingIndex.Value];
+        var srcParts = sourceSpec.Split(':');
+        var tgtParts = targetSpec.Split(':');
+        if (srcParts.Length < 2 || tgtParts.Length < 2) return;
+
+        var origin = srcParts[0];              // "new" or "move"
+        var sourceKind = srcParts[1];
+        var targetKind = tgtParts[0];
+        if (sourceKind != targetKind) return;
+        if (!int.TryParse(tgtParts[1], out var targetIndex)) return;
+
+        if (origin == "new")
+        {
+            var type = srcParts[2];
+            switch (sourceKind)
+            {
+                case KTrigger:
+                    a.Trigger = BuildTrigger(type);
+                    Select(NodeKind.Trigger, 0);
+                    break;
+                case KCondition:
+                    a.Conditions.Insert(Math.Min(targetIndex, a.Conditions.Count), BuildCondition(type));
+                    Select(NodeKind.Condition, targetIndex);
+                    break;
+                case KAction:
+                    a.Actions.Insert(Math.Min(targetIndex, a.Actions.Count), BuildAction(type));
+                    Select(NodeKind.Action, targetIndex);
+                    break;
+            }
+        }
+        else if (origin == "move")
+        {
+            if (!int.TryParse(srcParts[2], out var fromIdx)) return;
+            switch (sourceKind)
+            {
+                case KCondition: ReorderList(a.Conditions, fromIdx, targetIndex); break;
+                case KAction:    ReorderList(a.Actions,    fromIdx, targetIndex); break;
+            }
+        }
+        StateHasChanged();
+    }
+
+    private void RemoveCondition(Automation a, int idx)
+    {
+        if (idx < 0 || idx >= a.Conditions.Count) return;
+        a.Conditions.RemoveAt(idx);
+        if (_selectedKind == NodeKind.Condition && _selectedSub >= a.Conditions.Count)
+        { _selectedKind = NodeKind.Trigger; _selectedSub = 0; }
+    }
+
+    private void RemoveAction(Automation a, int idx)
+    {
+        if (idx < 0 || idx >= a.Actions.Count) return;
+        a.Actions.RemoveAt(idx);
+        if (_selectedKind == NodeKind.Action && _selectedSub >= a.Actions.Count)
+        { _selectedKind = NodeKind.Trigger; _selectedSub = 0; }
+    }
+
+    private static void ReorderList<T>(List<T> list, int from, int to)
+    {
+        if (from < 0 || from >= list.Count) return;
+        var item = list[from];
+        list.RemoveAt(from);
+        if (to > from) to--;
+        if (to < 0) to = 0;
+        if (to > list.Count) to = list.Count;
+        list.Insert(to, item);
+    }
+
+    private TriggerSpec BuildTrigger(string type) => type switch
+    {
+        "interval" => new IntervalTriggerSpec { Seconds = 60 },
+        "ticketInColumn" => new TicketInColumnTriggerSpec {
+            Columns = new List<string> { _columns.FirstOrDefault() ?? "Todo" }, Seconds = 30 },
+        "gitCommit" => new GitCommitTriggerSpec { PollSeconds = 60 },
+        "statusChange" => new StatusChangeTriggerSpec { PollSeconds = 30 },
+        "subTicketStatus" => new SubTicketStatusTriggerSpec { PollSeconds = 30 },
+        "boardIdle" => new BoardIdleTriggerSpec { PollSeconds = 60 },
+        "agentInactivity" => new AgentInactivityTriggerSpec { PollSeconds = 60, MinutesIdle = 45 },
+        _ => new IntervalTriggerSpec { Seconds = 60 },
+    };
+
+    private ConditionSpec BuildCondition(string type) => type switch
+    {
+        "ticketInColumn" => new TicketInColumnConditionSpec {
+            Columns = new List<string> { _columns.FirstOrDefault() ?? "Todo" } },
+        "noPendingTickets" => new NoPendingTicketsConditionSpec(),
+        "minDescriptionLength" => new MinDescriptionLengthConditionSpec { Length = 50 },
+        _ => new TicketInColumnConditionSpec { Columns = new List<string> { "Todo" } },
+    };
+
+    private ActionSpec BuildAction(string type) => type switch
+    {
+        "runClaudeSkill" => new RunClaudeSkillActionSpec {
+            SkillFile = _skills.FirstOrDefault() is string sk ? $"skills/{sk}.md" : "skills/producer.md" },
+        "moveTicketStatus" => new MoveTicketStatusActionSpec { To = _columns.FirstOrDefault() ?? "Todo" },
+        _ => new RunClaudeSkillActionSpec { SkillFile = "skills/producer.md" },
+    };
+
+    private void AddAutomation()
+    {
+        _config ??= new();
+        var existing = new HashSet<string>(_config.Automations.Select(a => a.Id));
+        string id;
+        var i = 1;
+        do { id = $"auto-{i++}"; } while (existing.Contains(id));
+        _config.Automations.Add(new Automation
+        {
+            Id = id,
+            Name = "Nouvelle automation",
+            Enabled = true,
+            Trigger = new IntervalTriggerSpec { Seconds = 60 },
+            Actions = new List<ActionSpec> { new RunClaudeSkillActionSpec { SkillFile = "skills/producer.md" } },
+        });
+        OpenEditor(_config.Automations.Count - 1);
+    }
+
+    private void RemoveAutomation(int idx)
+    {
+        _config?.Automations.RemoveAt(idx);
+    }
+
+    private void AddCondition()
+    {
+        if (_config is null || _editingIndex is null) return;
+        var a = _config.Automations[_editingIndex.Value];
+        a.Conditions.Add(new TicketInColumnConditionSpec { Columns = new List<string> { _columns.FirstOrDefault() ?? "Todo" } });
+        Select(NodeKind.Condition, a.Conditions.Count - 1);
+    }
+
+    private void AddAction()
+    {
+        if (_config is null || _editingIndex is null) return;
+        var a = _config.Automations[_editingIndex.Value];
+        a.Actions.Add(new RunClaudeSkillActionSpec { SkillFile = "skills/producer.md" });
+        Select(NodeKind.Action, a.Actions.Count - 1);
+    }
+
+    private async Task RunNow(string id)
+    {
+        var http = NewHttp();
+        var resp = await http.PostAsync($"/api/projects/{Slug}/automations/{id}/run", null);
+        _statusMessage = resp.IsSuccessStatusCode
+            ? ($"Exécution de '{id}' lancée.", "settings-status-ok")
+            : ($"Erreur: {resp.StatusCode}", "settings-status-err");
+    }
+
+    private static string DescribeTrigger(TriggerSpec t) => t switch
+    {
+        IntervalTriggerSpec s when s.Cron is not null => $"cron {s.Cron}",
+        IntervalTriggerSpec s => $"toutes les {s.Seconds}s",
+        TicketInColumnTriggerSpec s => $"ticket dans [{string.Join(", ", s.Columns)}]" + (s.AssigneeSlug is not null ? $" · assigné={s.AssigneeSlug}" : ""),
+        GitCommitTriggerSpec s => $"après commit git ({s.PollSeconds}s)",
+        StatusChangeTriggerSpec s => $"statut {s.From ?? "*"} → {s.To ?? "*"}",
+        SubTicketStatusTriggerSpec s => $"sous-tickets changés ({s.ParentColumn ?? "*"})",
+        BoardIdleTriggerSpec => "board idle",
+        AgentInactivityTriggerSpec s => $"inactivité {s.MinutesIdle}min",
+        _ => t.GetType().Name,
+    };
+
+    private static string DescribeCondition(ConditionSpec c) => c switch
+    {
+        TicketInColumnConditionSpec s => $"dans [{string.Join(", ", s.Columns)}]" + (s.AssigneeSlug is not null ? $"/{s.AssigneeSlug}" : ""),
+        NoPendingTicketsConditionSpec s => $"aucun ticket en cours ({s.AssigneeSlug ?? "tous"})",
+        MinDescriptionLengthConditionSpec s => $"desc ≥ {s.Length} car.",
+        _ => c.GetType().Name,
+    };
+
+    private static string DescribeAction(ActionSpec a) => a switch
+    {
+        RunClaudeSkillActionSpec s => s.SkillFile,
+        MoveTicketStatusActionSpec s => $"→ {s.To}",
+        _ => a.GetType().Name,
+    };
+}

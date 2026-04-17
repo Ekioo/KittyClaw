@@ -1,0 +1,87 @@
+@using Todo.Core.Automation
+
+<div class="node-editor">
+    <label>Type
+        <select value="@CurrentType" @onchange="OnTypeChanged">
+            <option value="runClaudeSkill">Exécuter un skill Claude</option>
+            <option value="moveTicketStatus">Déplacer le ticket</option>
+        </select>
+    </label>
+
+    @switch (Action)
+    {
+        case RunClaudeSkillActionSpec s:
+            <label>Fichier skill (relatif à .agents/)
+                <select value="@s.SkillFile" @onchange="e => s.SkillFile = (string)e.Value!">
+                    @foreach (var sk in Skills) { <option value="@($"skills/{sk}.md")">@($"skills/{sk}.md")</option> }
+                    @if (!Skills.Contains(System.IO.Path.GetFileNameWithoutExtension(s.SkillFile)))
+                    {
+                        <option value="@s.SkillFile">@(s.SkillFile) (custom)</option>
+                    }
+                </select>
+            </label>
+            <label>Nom d'agent (par défaut = nom du fichier)
+                <input placeholder="(auto)" value="@(s.AgentName ?? "")"
+                       @onchange="e => s.AgentName = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!" />
+            </label>
+            <label>Max turns
+                <input type="number" @bind="s.MaxTurns" />
+            </label>
+            <label>Groupe de concurrence (exclusif)
+                <input placeholder="code, producer, ceo…" value="@(s.ConcurrencyGroup ?? "")"
+                       @onchange="e => s.ConcurrencyGroup = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!" />
+            </label>
+            <label>Exclusif avec (groupes, séparés par virgules)
+                <input value="@JoinGroups(s.MutuallyExclusiveWith)"
+                       @onchange="e => s.MutuallyExclusiveWith = SplitGroups((string?)e.Value)" />
+            </label>
+            <label>Modèle Claude (optionnel)
+                <input placeholder="claude-sonnet-4-6, opus-4-7, …" value="@(s.Model ?? "")"
+                       @onchange="e => s.Model = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!" />
+            </label>
+            break;
+        case MoveTicketStatusActionSpec s:
+            <label>Nouvelle colonne
+                <select @bind="s.To">
+                    @foreach (var c in Columns) { <option value="@c">@c</option> }
+                </select>
+            </label>
+            break;
+    }
+
+    <div class="node-editor-actions">
+        <button class="delete-btn" @onclick="OnDelete">Supprimer l'action</button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public ActionSpec Action { get; set; } = default!;
+    [Parameter] public List<string> Skills { get; set; } = new();
+    [Parameter] public List<string> Columns { get; set; } = new();
+    [Parameter] public EventCallback<ActionSpec> OnReplace { get; set; }
+    [Parameter] public EventCallback OnDelete { get; set; }
+
+    private string CurrentType => Action switch
+    {
+        RunClaudeSkillActionSpec => "runClaudeSkill",
+        MoveTicketStatusActionSpec => "moveTicketStatus",
+        _ => "runClaudeSkill",
+    };
+
+    private static string JoinGroups(List<string> items) => string.Join(", ", items);
+    private static List<string> SplitGroups(string? value) =>
+        (value ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+
+    private async Task OnTypeChanged(ChangeEventArgs e)
+    {
+        ActionSpec spec = (string?)e.Value switch
+        {
+            "runClaudeSkill" => new RunClaudeSkillActionSpec { SkillFile = Skills.FirstOrDefault() is string sk ? $"skills/{sk}.md" : "skills/producer.md" },
+            "moveTicketStatus" => new MoveTicketStatusActionSpec { To = Columns.FirstOrDefault() ?? "Todo" },
+            _ => new RunClaudeSkillActionSpec { SkillFile = "skills/producer.md" },
+        };
+        await OnReplace.InvokeAsync(spec);
+    }
+}

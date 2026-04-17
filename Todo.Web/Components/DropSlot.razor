@@ -1,0 +1,28 @@
+@* Drop zone tagged with data-dnd-target. The JS engine (flow-dnd.js) activates
+   matching slots during a drag. When `ClickLabel` is set, the slot doubles as a
+   clickable "add here" button (shown discreetly when idle). *@
+<div class="drop-slot drop-slot-@Kind @(ClickLabel is null ? "" : "drop-slot-button")"
+     data-dnd-target="@($"{Kind}:{InsertIndex}")"
+     @onclick="HandleClick">
+    @if (ClickLabel is not null)
+    {
+        <span class="drop-slot-label">@ClickLabel</span>
+    }
+    else
+    {
+        <span class="drop-slot-arrow">↓</span>
+    }
+    <span class="drop-slot-hint">Déposer ici</span>
+</div>
+
+@code {
+    [Parameter] public string Kind { get; set; } = "";
+    [Parameter] public int InsertIndex { get; set; }
+    [Parameter] public string? ClickLabel { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    private async Task HandleClick()
+    {
+        if (ClickLabel is not null && OnClick.HasDelegate) await OnClick.InvokeAsync();
+    }
+}

@@ -1,0 +1,165 @@
+@using Todo.Core.Automation
+
+<div class="node-editor">
+    <label>Type
+        <select value="@CurrentType" @onchange="OnTypeChanged">
+            <option value="interval">Intervalle / cron</option>
+            <option value="ticketInColumn">Ticket dans colonne</option>
+            <option value="gitCommit">Après commit git</option>
+            <option value="statusChange">Changement de statut</option>
+            <option value="subTicketStatus">Sous-tickets changés</option>
+            <option value="boardIdle">Board idle</option>
+            <option value="agentInactivity">Inactivité agents</option>
+        </select>
+    </label>
+
+    @switch (Automation.Trigger)
+    {
+        case IntervalTriggerSpec s:
+            <label>Intervalle (secondes)
+                <input type="number" value="@(s.Seconds?.ToString() ?? "")"
+                       @onchange="e => { s.Seconds = string.IsNullOrWhiteSpace((string?)e.Value) ? null : int.Parse((string)e.Value!); if (s.Seconds is not null) s.Cron = null; }" />
+            </label>
+            <label>Cron (prioritaire si défini)
+                <input placeholder="0 2 * * *" value="@(s.Cron ?? "")"
+                       @onchange="e => { s.Cron = string.IsNullOrWhiteSpace((string?)e.Value) ? null : (string)e.Value!; if (s.Cron is not null) s.Seconds = null; }" />
+            </label>
+            break;
+
+        case TicketInColumnTriggerSpec s:
+            <label>Poll (secondes)
+                <input type="number" @bind="s.Seconds" />
+            </label>
+            <div class="column-picker">
+                <div class="column-picker-label">Colonnes (une ou plusieurs)</div>
+                @foreach (var c in Columns)
+                {
+                    var col = c;
+                    <label class="column-check"><input type="checkbox" checked="@s.Columns.Contains(col)"
+                               @onchange="e => ToggleColumn(s.Columns, col, (bool)e.Value!)" /><span>@col</span></label>
+                }
+            </div>
+            <label>Assigné (optionnel — slug du membre)
+                <select value="@(s.AssigneeSlug ?? "")" @onchange="e => s.AssigneeSlug = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
+                    <option value="">— n'importe quel membre —</option>
+                    @foreach (var sk in Skills) { <option value="@sk">@sk</option> }
+                </select>
+            </label>
+            break;
+
+        case GitCommitTriggerSpec s:
+            <label>Poll (secondes)
+                <input type="number" @bind="s.PollSeconds" />
+            </label>
+            break;
+
+        case StatusChangeTriggerSpec s:
+            <label>Poll (secondes)
+                <input type="number" @bind="s.PollSeconds" />
+            </label>
+            <label>Depuis (optionnel)
+                <select value="@(s.From ?? "")" @onchange="e => s.From = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
+                    <option value="">— n'importe —</option>
+                    @foreach (var c in Columns) { <option value="@c">@c</option> }
+                </select>
+            </label>
+            <label>Vers (optionnel)
+                <select value="@(s.To ?? "")" @onchange="e => s.To = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
+                    <option value="">— n'importe —</option>
+                    @foreach (var c in Columns) { <option value="@c">@c</option> }
+                </select>
+            </label>
+            <label>Debounce (secondes, optionnel)
+                <input type="number" value="@(s.DebounceSeconds?.ToString() ?? "")"
+                       @onchange="e => s.DebounceSeconds = int.TryParse((string?)e.Value, out var v) ? v : null" />
+            </label>
+            break;
+
+        case SubTicketStatusTriggerSpec s:
+            <label>Poll (secondes)
+                <input type="number" @bind="s.PollSeconds" />
+            </label>
+            <label>Colonne des tickets parents (optionnel)
+                <select value="@(s.ParentColumn ?? "")" @onchange="e => s.ParentColumn = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
+                    <option value="">— toutes —</option>
+                    @foreach (var c in Columns) { <option value="@c">@c</option> }
+                </select>
+            </label>
+            <label>Debounce (secondes, optionnel)
+                <input type="number" value="@(s.DebounceSeconds?.ToString() ?? "")"
+                       @onchange="e => s.DebounceSeconds = int.TryParse((string?)e.Value, out var v) ? v : null" />
+            </label>
+            break;
+
+        case BoardIdleTriggerSpec s:
+            <label>Poll (secondes)
+                <input type="number" @bind="s.PollSeconds" />
+            </label>
+            <div class="column-picker">
+                <div class="column-picker-label">Colonnes considérées comme "idle" (le board est idle quand tous les tickets y sont)</div>
+                @foreach (var c in Columns)
+                {
+                    var col = c;
+                    <label class="column-check">
+                        <input type="checkbox" checked="@s.IdleColumns.Contains(col)"
+                               @onchange="e => ToggleColumn(s.IdleColumns, col, (bool)e.Value!)" />
+                        <span>@col</span>
+                    </label>
+                }
+            </div>
+            break;
+
+        case AgentInactivityTriggerSpec s:
+            <label>Poll (secondes)
+                <input type="number" @bind="s.PollSeconds" />
+            </label>
+            <label>Minutes d'inactivité avant déclenchement
+                <input type="number" @bind="s.MinutesIdle" />
+            </label>
+            break;
+    }
+</div>
+
+@code {
+    [Parameter] public Automation Automation { get; set; } = default!;
+    [Parameter] public List<string> Skills { get; set; } = new();
+    [Parameter] public List<string> Columns { get; set; } = new();
+    [Parameter] public EventCallback<TriggerSpec> OnReplace { get; set; }
+
+    private string CurrentType => Automation.Trigger switch
+    {
+        IntervalTriggerSpec => "interval",
+        TicketInColumnTriggerSpec => "ticketInColumn",
+        GitCommitTriggerSpec => "gitCommit",
+        StatusChangeTriggerSpec => "statusChange",
+        SubTicketStatusTriggerSpec => "subTicketStatus",
+        BoardIdleTriggerSpec => "boardIdle",
+        AgentInactivityTriggerSpec => "agentInactivity",
+        _ => "interval",
+    };
+
+    private async Task OnTypeChanged(ChangeEventArgs e)
+    {
+        TriggerSpec spec = (string?)e.Value switch
+        {
+            "interval" => new IntervalTriggerSpec { Seconds = 60 },
+            "ticketInColumn" => new TicketInColumnTriggerSpec {
+                Columns = new List<string> { Columns.FirstOrDefault() ?? "Todo" },
+                Seconds = 30
+            },
+            "gitCommit" => new GitCommitTriggerSpec { PollSeconds = 60 },
+            "statusChange" => new StatusChangeTriggerSpec { PollSeconds = 30 },
+            "subTicketStatus" => new SubTicketStatusTriggerSpec { PollSeconds = 30 },
+            "boardIdle" => new BoardIdleTriggerSpec { PollSeconds = 60 },
+            "agentInactivity" => new AgentInactivityTriggerSpec { PollSeconds = 60, MinutesIdle = 45 },
+            _ => new IntervalTriggerSpec { Seconds = 60 },
+        };
+        await OnReplace.InvokeAsync(spec);
+    }
+
+    private void ToggleColumn(List<string> list, string col, bool on)
+    {
+        if (on) { if (!list.Contains(col)) list.Add(col); }
+        else { list.Remove(col); }
+    }
+}

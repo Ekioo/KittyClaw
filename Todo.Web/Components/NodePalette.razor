@@ -1,0 +1,75 @@
+@* Palette of draggable nodes, grouped by category. Uses data-dnd-source for JS DnD. *@
+
+<aside class="automation-palette">
+    <div class="palette-section">
+        <h4 class="palette-heading trigger">Triggers</h4>
+        <div class="palette-items">
+            @foreach (var item in _triggers)
+            {
+                <div class="palette-item node-trigger"
+                     data-dnd-source="@($"new:trigger:{item.Key}")"
+                     title="@item.Value.Hint">
+                    <div class="palette-item-label">@item.Value.Label</div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="palette-section">
+        <h4 class="palette-heading condition">Conditions</h4>
+        <div class="palette-items">
+            @foreach (var item in _conditions)
+            {
+                <div class="palette-item node-condition"
+                     data-dnd-source="@($"new:condition:{item.Key}")"
+                     title="@item.Value.Hint">
+                    <div class="palette-item-label">@item.Value.Label</div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="palette-section">
+        <h4 class="palette-heading action">Actions</h4>
+        <div class="palette-items">
+            @foreach (var item in _actions)
+            {
+                <div class="palette-item node-action"
+                     data-dnd-source="@($"new:action:{item.Key}")"
+                     title="@item.Value.Hint">
+                    <div class="palette-item-label">@item.Value.Label</div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="palette-hint">Glisse un nœud vers le flow →</div>
+</aside>
+
+@code {
+    private record NodeDef(string Label, string Hint);
+
+    private static readonly Dictionary<string, NodeDef> _triggers = new()
+    {
+        ["interval"] = new("Intervalle / cron", "Déclenche à intervalle régulier ou selon un cron"),
+        ["ticketInColumn"] = new("Ticket dans colonne", "Déclenche quand un ticket est dans une colonne donnée"),
+        ["gitCommit"] = new("Après commit git", "Déclenche quand un nouveau commit est détecté"),
+        ["statusChange"] = new("Changement de statut", "Déclenche quand un ticket change de colonne"),
+        ["subTicketStatus"] = new("Sous-tickets changés", "Déclenche quand le CSV des statuts de sous-tickets change"),
+        ["boardIdle"] = new("Board idle", "Déclenche quand tous les tickets sont dans les colonnes 'idle'"),
+        ["agentInactivity"] = new("Inactivité agents", "Déclenche après N minutes sans dispatch"),
+    };
+
+    private static readonly Dictionary<string, NodeDef> _conditions = new()
+    {
+        ["ticketInColumn"] = new("Ticket dans colonne", "N'exécute que si le ticket est dans une colonne"),
+        ["noPendingTickets"] = new("Aucun ticket en cours", "N'exécute que si aucun ticket n'est en cours"),
+        ["minDescriptionLength"] = new("Longueur desc. min.", "N'exécute que si la description dépasse N caractères"),
+    };
+
+    private static readonly Dictionary<string, NodeDef> _actions = new()
+    {
+        ["runClaudeSkill"] = new("Exécuter un skill", "Lance claude avec un fichier skill"),
+        ["moveTicketStatus"] = new("Déplacer le ticket", "Change le statut du ticket"),
+    };
+}
