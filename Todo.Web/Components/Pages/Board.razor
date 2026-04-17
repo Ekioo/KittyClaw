@@ -11,6 +11,7 @@
 @inject TicketService TicketService
 @inject Todo.Web.Services.BoardFilterState FilterState
 @inject Todo.Web.Services.BoardUpdateNotifier BoardUpdateNotifier
+@inject Todo.Web.Services.AgentRunsState AgentRuns
 @inject LabelService LabelService
 @inject ColumnService ColumnService
 @inject MemberService MemberService
@@ -74,21 +75,8 @@ else
                     title="@(_undoStack.Any() ? $"Annuler : {_undoStack.Peek().Label}" : "Rien à annuler (Ctrl+Z)")">
                 &#8630;
             </button>
-            @if (_showAddColumn)
-            {
-                <div class="add-column-form">
-                    <input @bind="_newColumnName" @bind:event="oninput" placeholder="Nom de la colonne..." />
-                    <input type="color" @bind="_newColumnColor" />
-                    <button class="icon-btn save-btn" @onclick="AddColumn" disabled="@string.IsNullOrWhiteSpace(_newColumnName)">&#10003;</button>
-                    <button class="icon-btn cancel-icon-btn" @onclick="() => _showAddColumn = false">&#10005;</button>
-                </div>
-            }
-            else
-            {
-                <button class="header-action-btn" @onclick="() => _showAddColumn = true">+ Colonne</button>
-            }
-            <button class="header-action-btn" @onclick="() => _showLabelManager = true" title="Gérer les labels">&#127991; Labels</button>
-            <button class="header-action-btn" @onclick="() => _showMemberManager = true" title="Gérer les membres">&#128101; Membres</button>
+            <a class="header-action-btn" href="/board/@Slug/automations" title="Automations">&#9881; Automations</a>
+            <a class="header-action-btn" href="/board/@Slug/settings" title="Paramètres du projet">&#9881;&#65039; Paramètres</a>
         </div>
     </div>
 
@@ -154,6 +142,16 @@ else
                                 <div class="ticket-card-top">
                                     <span class="priority-dot priority-@GetPriorityClass(ticket.Priority)" title="@GetPriorityLabel(ticket.Priority)"></span>
                                     <span class="ticket-id">#@ticket.Id</span>
+                                    @{
+                                        var activeRun = AgentRuns.ActiveForTicket(Slug, ticket.Id);
+                                    }
+                                    @if (activeRun is not null)
+                                    {
+                                        <span class="agent-spinner"
+                                              title="@activeRun.AgentName en cours"
+                                              @onclick="() => OpenRunDrawer(activeRun.RunId)"
+                                              @onclick:stopPropagation></span>
+                                    }
                                 </div>
                                 <span class="ticket-title">@ticket.Title</span>
                                 @if (ticket.Labels.Count > 0)
@@ -637,6 +635,11 @@ else
     </div>
 }
 
+@if (_activeRunDrawerId is not null)
+{
+    <AgentRunDrawer RunId="_activeRunDrawerId" OnClose="CloseRunDrawer" />
+}
+
 @code {
     [Parameter] public string Slug { get; set; } = "";
     [Parameter] public int? TicketId { get; set; }
@@ -865,9 +868,15 @@ else
             .OrderByDescending(x => x.At);
     }
 
+    private string? _activeRunDrawerId;
+    private void OpenRunDrawer(string runId) { _activeRunDrawerId = runId; }
+    private void CloseRunDrawer() { _activeRunDrawerId = null; }
+    private void OnAgentRunsChanged() => InvokeAsync(StateHasChanged);
+
     protected override async Task OnInitializedAsync()
     {
         BoardUpdateNotifier.OnProjectUpdated += OnProjectUpdatedExternal;
+        AgentRuns.OnChange += OnAgentRunsChanged;
         _project = await ProjectService.GetProjectAsync(Slug);
         if (_project is not null)
         {
@@ -905,6 +914,7 @@ else
     public void Dispose()
     {
         BoardUpdateNotifier.OnProjectUpdated -= OnProjectUpdatedExternal;
+        AgentRuns.OnChange -= OnAgentRunsChanged;
         if (_undoHandler is not null)
             _ = JS.InvokeVoidAsync("unregisterUndoShortcut", _undoHandler);
         _dotNetRef?.Dispose();

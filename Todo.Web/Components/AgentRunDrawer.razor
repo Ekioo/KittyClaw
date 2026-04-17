@@ -1,0 +1,179 @@
+@using Todo.Core.Automation
+@using Todo.Web.Services
+@inject AgentRunsState RunsState
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@implements IAsyncDisposable
+
+@if (_run is not null)
+{
+    <div class="agent-drawer-overlay" @onclick="Close"></div>
+    <div class="agent-drawer" @onclick:stopPropagation>
+        <div class="agent-drawer-header">
+            <div class="agent-drawer-title">
+                <span class="agent-name">@_run.AgentName</span>
+                @if (_run.TicketId is not null)
+                {
+                    <span class="agent-ticket">#@_run.TicketId</span>
+                }
+                <span class="agent-status agent-status-@_run.Status.ToString().ToLowerInvariant()">@_run.Status</span>
+            </div>
+            <div class="agent-drawer-meta">
+                <span title="Skill">@_run.SkillFile</span>
+                <span title="Session">@(_run.SessionId?[..8] ?? "—")</span>
+                <span title="Group">@_run.ConcurrencyGroup</span>
+                <span>@FormatElapsed(_run.StartedAt)</span>
+            </div>
+            <div class="agent-drawer-actions">
+                @if (_run.Status == AgentRunStatus.Running)
+                {
+                    <button class="agent-stop-btn" @onclick="Stop" title="Arrêter l'agent">⏹ Stop</button>
+                }
+                <button class="agent-close-btn" @onclick="Close" title="Fermer">×</button>
+            </div>
+        </div>
+
+        <div class="agent-drawer-console" @ref="_consoleRef">
+            @foreach (var ev in _events)
+            {
+                <div class="console-line console-@ev.Kind">
+                    <span class="console-time">@ev.At.ToLocalTime().ToString("HH:mm:ss")</span>
+                    <span class="console-kind">@ev.Kind</span>
+                    <span class="console-text">@ev.Text</span>
+                </div>
+            }
+            @if (_events.Count == 0)
+            {
+                <div class="console-empty">En attente de la sortie…</div>
+            }
+        </div>
+
+        @if (_run.Status == AgentRunStatus.Running)
+        {
+            <div class="agent-drawer-steer">
+                <textarea @bind="_steerText" @bind:event="oninput"
+                          placeholder="Envoyer une instruction à l'agent…"
+                          @onkeydown="OnSteerKeyDown"></textarea>
+                <button @onclick="Steer" disabled="@string.IsNullOrWhiteSpace(_steerText)">Envoyer</button>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string? RunId { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private AgentRun? _run;
+    private readonly List<StreamEvent> _events = new();
+    private string _steerText = "";
+    private IJSObjectReference? _sseModule;
+    private DotNetObjectReference<AgentRunDrawer>? _dotnetRef;
+    private string? _activeStreamId;
+    private ElementReference _consoleRef;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (RunId == _activeStreamId) return;
+        await StopStream();
+        _events.Clear();
+        _run = RunId is null ? null : RunsState.Get(RunId);
+        if (_run is null) return;
+
+        _events.AddRange(_run.SnapshotBuffer());
+        _run.OnEvent += HandleEvent;
+
+        _sseModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/agent-sse.js");
+        _dotnetRef = DotNetObjectReference.Create(this);
+        _activeStreamId = RunId;
+        await _sseModule.InvokeVoidAsync("start", _dotnetRef, BuildStreamUrl(_run));
+    }
+
+    private string BuildStreamUrl(AgentRun run) =>
+        $"/api/projects/{run.ProjectSlug}/runs/{run.RunId}/stream";
+
+    [JSInvokable]
+    public Task ReceiveSse(string kind, string text)
+    {
+        if (_run is null) return Task.CompletedTask;
+        var ev = new StreamEvent(DateTime.UtcNow, kind, text);
+        _events.Add(ev);
+        while (_events.Count > 500) _events.RemoveAt(0);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task StreamEnded()
+    {
+        if (_run is not null && RunsState.Get(_run.RunId) is { } fresh) _run = fresh;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleEvent(StreamEvent ev)
+    {
+        _events.Add(ev);
+        while (_events.Count > 500) _events.RemoveAt(0);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Close()
+    {
+        await StopStream();
+        if (OnClose.HasDelegate) await OnClose.InvokeAsync();
+    }
+
+    private async Task StopStream()
+    {
+        if (_sseModule is not null && _activeStreamId is not null)
+        {
+            try { await _sseModule.InvokeVoidAsync("stop"); } catch { }
+        }
+        if (_run is not null) _run.OnEvent -= HandleEvent;
+        _activeStreamId = null;
+    }
+
+    private async Task OnSteerKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+        {
+            await Steer();
+        }
+    }
+
+    private async Task Steer()
+    {
+        if (_run is null || string.IsNullOrWhiteSpace(_steerText)) return;
+        var payload = new { text = _steerText };
+        using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+        try
+        {
+            await http.PostAsJsonAsync($"/api/projects/{_run.ProjectSlug}/runs/{_run.RunId}/steer", payload);
+            _events.Add(new StreamEvent(DateTime.UtcNow, "user", _steerText));
+            _steerText = "";
+        }
+        catch { }
+    }
+
+    private async Task Stop()
+    {
+        if (_run is null) return;
+        using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+        try { await http.PostAsync($"/api/projects/{_run.ProjectSlug}/runs/{_run.RunId}/stop", null); } catch { }
+    }
+
+    private static string FormatElapsed(DateTime start)
+    {
+        var d = DateTime.UtcNow - start;
+        return d.TotalHours >= 1 ? $"{(int)d.TotalHours}h{d.Minutes:D2}" : $"{d.Minutes:D2}:{d.Seconds:D2}";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await StopStream();
+        _dotnetRef?.Dispose();
+        if (_sseModule is not null)
+        {
+            try { await _sseModule.DisposeAsync(); } catch { }
+        }
+    }
+}
