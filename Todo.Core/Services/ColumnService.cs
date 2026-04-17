@@ -19,7 +19,7 @@ public class ColumnService
         ("Todo",         "#4a9eff"),
         ("InProgress",   "#f59e42"),
         ("Blocked",      "#f06b6b"),
-        ("OwnerReview",  "#a78bfa"),
+        ("Review",       "#a78bfa"),
         ("Done",         "#3ecf8e"),
     ];
 

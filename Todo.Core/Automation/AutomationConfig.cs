@@ -65,7 +65,7 @@ public sealed class SubTicketStatusTriggerSpec : TriggerSpec
 public sealed class BoardIdleTriggerSpec : TriggerSpec
 {
     public int PollSeconds { get; set; } = 60;
-    public List<string> IdleColumns { get; set; } = new() { "Done", "OwnerReview" };
+    public List<string> IdleColumns { get; set; } = new() { "Done", "Review" };
 }
 
 public sealed class AgentInactivityTriggerSpec : TriggerSpec
