@@ -35,3 +35,6 @@ Todo.Web/data/
 Thumbs.db
 .claude
 .vscode
+
+# Agent skills, automations config and runtime state — local to each workspace.
+.agents/
