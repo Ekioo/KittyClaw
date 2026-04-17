@@ -4,7 +4,7 @@
     {
       "name": "todo-web",
       "runtimeExecutable": "dotnet",
-      "runtimeArgs": ["run", "--project", "Todo.Web"],
+      "runtimeArgs": ["watch", "--project", "Todo.Web", "--non-interactive"],
       "port": 5230
     }
   ]
