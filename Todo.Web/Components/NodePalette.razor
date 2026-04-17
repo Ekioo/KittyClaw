@@ -1,75 +1,81 @@
 @* Palette of draggable nodes, grouped by category. Uses data-dnd-source for JS DnD. *@
+@inject LocalizationService L
 
 <aside class="automation-palette">
     <div class="palette-section">
-        <h4 class="palette-heading trigger">Triggers</h4>
+        <h4 class="palette-heading trigger">@L["PaletteTriggers"]</h4>
         <div class="palette-items">
-            @foreach (var item in _triggers)
-            {
-                <div class="palette-item node-trigger"
-                     data-dnd-source="@($"new:trigger:{item.Key}")"
-                     title="@item.Value.Hint">
-                    <div class="palette-item-label">@item.Value.Label</div>
-                </div>
-            }
+            <div class="palette-item node-trigger" data-dnd-source="new:trigger:interval" title="@L["PalTrigIntervalHint"]">
+                <div class="palette-item-label">@L["PalTrigInterval"]</div>
+            </div>
+            <div class="palette-item node-trigger" data-dnd-source="new:trigger:ticketInColumn" title="@L["PalTrigTicketInColumnHint"]">
+                <div class="palette-item-label">@L["PalTrigTicketInColumn"]</div>
+            </div>
+            <div class="palette-item node-trigger" data-dnd-source="new:trigger:gitCommit" title="@L["PalTrigGitCommitHint"]">
+                <div class="palette-item-label">@L["PalTrigGitCommit"]</div>
+            </div>
+            <div class="palette-item node-trigger" data-dnd-source="new:trigger:statusChange" title="@L["PalTrigStatusChangeHint"]">
+                <div class="palette-item-label">@L["PalTrigStatusChange"]</div>
+            </div>
+            <div class="palette-item node-trigger" data-dnd-source="new:trigger:subTicketStatus" title="@L["PalTrigSubTicketsHint"]">
+                <div class="palette-item-label">@L["PalTrigSubTickets"]</div>
+            </div>
+            <div class="palette-item node-trigger" data-dnd-source="new:trigger:boardIdle" title="@L["PalTrigBoardIdleHint"]">
+                <div class="palette-item-label">@L["PalTrigBoardIdle"]</div>
+            </div>
+            <div class="palette-item node-trigger" data-dnd-source="new:trigger:agentInactivity" title="@L["PalTrigAgentInactivityHint"]">
+                <div class="palette-item-label">@L["PalTrigAgentInactivity"]</div>
+            </div>
         </div>
     </div>
 
     <div class="palette-section">
-        <h4 class="palette-heading condition">Conditions</h4>
+        <h4 class="palette-heading condition">@L["PaletteConditions"]</h4>
         <div class="palette-items">
-            @foreach (var item in _conditions)
-            {
-                <div class="palette-item node-condition"
-                     data-dnd-source="@($"new:condition:{item.Key}")"
-                     title="@item.Value.Hint">
-                    <div class="palette-item-label">@item.Value.Label</div>
-                </div>
-            }
+            <div class="palette-item node-condition" data-dnd-source="new:condition:ticketInColumn" title="@L["PalCondTicketInColumnHint"]">
+                <div class="palette-item-label">@L["PalCondTicketInColumn"]</div>
+            </div>
+            <div class="palette-item node-condition" data-dnd-source="new:condition:noPendingTickets" title="@L["PalCondNoPendingHint"]">
+                <div class="palette-item-label">@L["PalCondNoPending"]</div>
+            </div>
+            <div class="palette-item node-condition" data-dnd-source="new:condition:fieldLength" title="@L["PalCondFieldLengthHint"]">
+                <div class="palette-item-label">@L["PalCondFieldLength"]</div>
+            </div>
+            <div class="palette-item node-condition" data-dnd-source="new:condition:priority" title="@L["PalCondPriorityHint"]">
+                <div class="palette-item-label">@L["PalCondPriority"]</div>
+            </div>
+            <div class="palette-item node-condition" data-dnd-source="new:condition:labels" title="@L["PalCondLabelsHint"]">
+                <div class="palette-item-label">@L["PalCondLabels"]</div>
+            </div>
+            <div class="palette-item node-condition" data-dnd-source="new:condition:assignedTo" title="@L["PalCondAssignedToHint"]">
+                <div class="palette-item-label">@L["PalCondAssignedTo"]</div>
+            </div>
+            <div class="palette-item node-condition" data-dnd-source="new:condition:ticketAge" title="@L["PalCondTicketAgeHint"]">
+                <div class="palette-item-label">@L["PalCondTicketAge"]</div>
+            </div>
         </div>
     </div>
 
     <div class="palette-section">
-        <h4 class="palette-heading action">Actions</h4>
+        <h4 class="palette-heading action">@L["PaletteActions"]</h4>
         <div class="palette-items">
-            @foreach (var item in _actions)
-            {
-                <div class="palette-item node-action"
-                     data-dnd-source="@($"new:action:{item.Key}")"
-                     title="@item.Value.Hint">
-                    <div class="palette-item-label">@item.Value.Label</div>
-                </div>
-            }
+            <div class="palette-item node-action" data-dnd-source="new:action:runClaudeSkill" title="@L["PalActRunSkillHint"]">
+                <div class="palette-item-label">@L["PalActRunSkill"]</div>
+            </div>
+            <div class="palette-item node-action" data-dnd-source="new:action:moveTicketStatus" title="@L["PalActMoveTicketHint"]">
+                <div class="palette-item-label">@L["PalActMoveTicket"]</div>
+            </div>
+            <div class="palette-item node-action" data-dnd-source="new:action:setLabels" title="@L["PalActSetLabelsHint"]">
+                <div class="palette-item-label">@L["PalActSetLabels"]</div>
+            </div>
+            <div class="palette-item node-action" data-dnd-source="new:action:assignTicket" title="@L["PalActAssignTicketHint"]">
+                <div class="palette-item-label">@L["PalActAssignTicket"]</div>
+            </div>
+            <div class="palette-item node-action" data-dnd-source="new:action:addComment" title="@L["PalActAddCommentHint"]">
+                <div class="palette-item-label">@L["PalActAddComment"]</div>
+            </div>
         </div>
     </div>
 
-    <div class="palette-hint">Glisse un nœud vers le flow →</div>
+    <div class="palette-hint">@L["PaletteDragHint"]</div>
 </aside>
-
-@code {
-    private record NodeDef(string Label, string Hint);
-
-    private static readonly Dictionary<string, NodeDef> _triggers = new()
-    {
-        ["interval"] = new("Intervalle / cron", "Déclenche à intervalle régulier ou selon un cron"),
-        ["ticketInColumn"] = new("Ticket dans colonne", "Déclenche quand un ticket est dans une colonne donnée"),
-        ["gitCommit"] = new("Après commit git", "Déclenche quand un nouveau commit est détecté"),
-        ["statusChange"] = new("Changement de statut", "Déclenche quand un ticket change de colonne"),
-        ["subTicketStatus"] = new("Sous-tickets changés", "Déclenche quand le CSV des statuts de sous-tickets change"),
-        ["boardIdle"] = new("Board idle", "Déclenche quand tous les tickets sont dans les colonnes 'idle'"),
-        ["agentInactivity"] = new("Inactivité agents", "Déclenche après N minutes sans dispatch"),
-    };
-
-    private static readonly Dictionary<string, NodeDef> _conditions = new()
-    {
-        ["ticketInColumn"] = new("Ticket dans colonne", "N'exécute que si le ticket est dans une colonne"),
-        ["noPendingTickets"] = new("Aucun ticket en cours", "N'exécute que si aucun ticket n'est en cours"),
-        ["minDescriptionLength"] = new("Longueur desc. min.", "N'exécute que si la description dépasse N caractères"),
-    };
-
-    private static readonly Dictionary<string, NodeDef> _actions = new()
-    {
-        ["runClaudeSkill"] = new("Exécuter un skill", "Lance claude avec un fichier skill"),
-        ["moveTicketStatus"] = new("Déplacer le ticket", "Change le statut du ticket"),
-    };
-}

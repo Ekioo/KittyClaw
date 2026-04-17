@@ -1,19 +1,28 @@
 @using Todo.Core.Automation
+@using Todo.Core.Models
+@inject LocalizationService L
 
 <div class="node-editor">
-    <label>Type
+    <label>@L["Type"]
         <select value="@CurrentType" @onchange="OnTypeChanged">
-            <option value="ticketInColumn">Ticket dans colonne</option>
-            <option value="noPendingTickets">Aucun ticket en cours</option>
-            <option value="minDescriptionLength">Longueur min. description</option>
+            <option value="ticketInColumn">@L["CondTypeTicketInColumn"]</option>
+            <option value="noPendingTickets">@L["CondTypeNoPending"]</option>
+            <option value="fieldLength">@L["CondTypeFieldLength"]</option>
+            <option value="priority">@L["CondTypePriority"]</option>
+            <option value="labels">@L["CondTypeLabels"]</option>
+            <option value="assignedTo">@L["CondTypeAssignedTo"]</option>
+            <option value="ticketAge">@L["CondTypeTicketAge"]</option>
         </select>
     </label>
+
+    <label class="column-check negate-toggle"><input type="checkbox" checked="@Condition.Negate"
+               @onchange="e => Condition.Negate = (bool)e.Value!" /><span>@L["Negate"]</span></label>
 
     @switch (Condition)
     {
         case TicketInColumnConditionSpec s:
             <div class="column-picker">
-                <div class="column-picker-label">Colonnes (une ou plusieurs)</div>
+                <div class="column-picker-label">@L["ColumnsOneOrMore"]</div>
                 @foreach (var c in Columns)
                 {
                     var col = c;
@@ -21,30 +30,92 @@
                                @onchange="e => ToggleColumn(s.Columns, col, (bool)e.Value!)" /><span>@col</span></label>
                 }
             </div>
-            <label>Assigné (slug, optionnel)
+            <label>@L["AssigneeOptional"]
                 <select value="@(s.AssigneeSlug ?? "")" @onchange="e => s.AssigneeSlug = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
-                    <option value="">— n'importe qui —</option>
+                    <option value="">@L["AnyMember"]</option>
                     @foreach (var sk in Skills) { <option value="@sk">@sk</option> }
                 </select>
             </label>
             break;
         case NoPendingTicketsConditionSpec s:
-            <label>Assigné (slug, laisser vide = tous)
+            <label>@L["AssigneeAll"]
                 <select value="@(s.AssigneeSlug ?? "")" @onchange="e => s.AssigneeSlug = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
-                    <option value="">— tous —</option>
+                    <option value="">@L["All"]</option>
                     @foreach (var sk in Skills) { <option value="@sk">@sk</option> }
                 </select>
             </label>
             break;
         case MinDescriptionLengthConditionSpec s:
-            <label>Longueur min.
+            <label>@L["MinLength"]
                 <input type="number" @bind="s.Length" />
+            </label>
+            break;
+        case FieldLengthConditionSpec s:
+            <label>@L["Field"]
+                <select value="@s.Field" @onchange="e => s.Field = (string)e.Value!">
+                    <option value="description">@L["FieldDescription"]</option>
+                    <option value="title">@L["FieldTitle"]</option>
+                </select>
+            </label>
+            <label>@L["Mode"]
+                <select value="@s.Mode" @onchange="e => s.Mode = (string)e.Value!">
+                    <option value="min">@L["ModeMin"]</option>
+                    <option value="max">@L["ModeMax"]</option>
+                </select>
+            </label>
+            <label>@L["CharCount"]
+                <input type="number" @bind="s.Length" />
+            </label>
+            break;
+        case PriorityConditionSpec s:
+            <div class="column-picker">
+                <div class="column-picker-label">@L["PrioritiesOneOrMore"]</div>
+                @foreach (var p in Enum.GetNames<TicketPriority>())
+                {
+                    var prio = p;
+                    <label class="column-check"><input type="checkbox" checked="@s.Priorities.Contains(prio)"
+                               @onchange="e => ToggleColumn(s.Priorities, prio, (bool)e.Value!)" /><span>@prio</span></label>
+                }
+            </div>
+            break;
+        case LabelsConditionSpec s:
+            <label>@L["LabelsCsv"]
+                <input type="text" value="@string.Join(", ", s.Labels)"
+                       @onchange="e => s.Labels = ((string)e.Value!).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()" />
+            </label>
+            break;
+        case AssignedToConditionSpec s:
+            <div class="column-picker">
+                <div class="column-picker-label">@L["AssignedToOneOrMore"]</div>
+                @foreach (var sk in Skills)
+                {
+                    var slug = sk;
+                    <label class="column-check"><input type="checkbox" checked="@s.Slugs.Contains(slug)"
+                               @onchange="e => ToggleColumn(s.Slugs, slug, (bool)e.Value!)" /><span>@slug</span></label>
+                }
+            </div>
+            break;
+        case TicketAgeConditionSpec s:
+            <label>@L["Field"]
+                <select value="@s.Field" @onchange="e => s.Field = (string)e.Value!">
+                    <option value="createdAt">@L["FieldCreatedAt"]</option>
+                    <option value="updatedAt">@L["FieldUpdatedAt"]</option>
+                </select>
+            </label>
+            <label>@L["Mode"]
+                <select value="@s.Mode" @onchange="e => s.Mode = (string)e.Value!">
+                    <option value="olderThan">@L["ModeOlderThan"]</option>
+                    <option value="newerThan">@L["ModeNewerThan"]</option>
+                </select>
+            </label>
+            <label>@L["Hours"]
+                <input type="number" @bind="s.Hours" min="1" />
             </label>
             break;
     }
 
     <div class="node-editor-actions">
-        <button class="delete-btn" @onclick="OnDelete">Supprimer la condition</button>
+        <button class="delete-btn" @onclick="OnDelete">@L["DeleteCondition"]</button>
     </div>
 </div>
 
@@ -59,7 +130,12 @@
     {
         TicketInColumnConditionSpec => "ticketInColumn",
         NoPendingTicketsConditionSpec => "noPendingTickets",
-        MinDescriptionLengthConditionSpec => "minDescriptionLength",
+        MinDescriptionLengthConditionSpec => "fieldLength",
+        FieldLengthConditionSpec => "fieldLength",
+        PriorityConditionSpec => "priority",
+        LabelsConditionSpec => "labels",
+        AssignedToConditionSpec => "assignedTo",
+        TicketAgeConditionSpec => "ticketAge",
         _ => "ticketInColumn",
     };
 
@@ -69,7 +145,11 @@
         {
             "ticketInColumn" => new TicketInColumnConditionSpec { Columns = new List<string> { Columns.FirstOrDefault() ?? "Todo" } },
             "noPendingTickets" => new NoPendingTicketsConditionSpec(),
-            "minDescriptionLength" => new MinDescriptionLengthConditionSpec { Length = 50 },
+            "fieldLength" => new FieldLengthConditionSpec(),
+            "priority" => new PriorityConditionSpec(),
+            "labels" => new LabelsConditionSpec(),
+            "assignedTo" => new AssignedToConditionSpec(),
+            "ticketAge" => new TicketAgeConditionSpec(),
             _ => new TicketInColumnConditionSpec { Columns = new List<string> { "Todo" } },
         };
         await OnReplace.InvokeAsync(spec);

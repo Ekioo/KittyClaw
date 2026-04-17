@@ -8,40 +8,42 @@
 @inject IHttpClientFactory HttpFactory
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject LocalizationService L
+@inject MemberService MemberService
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
-<PageTitle>@(_project?.Name ?? "Projet") — Automations</PageTitle>
+<PageTitle>@(_project?.Name ?? "Projet") — @L["Automations"]</PageTitle>
 
 @if (_project is null)
 {
-    <p>Projet introuvable.</p>
+    <p>@L["ProjectNotFound"]</p>
 }
 else
 {
     <div class="page-header">
         @if (_editingIndex is null)
         {
-            <a class="back-link" href="/board/@Slug">&larr; Board</a>
+            <a class="back-link" href="/board/@Slug">&larr; @L["Board"]</a>
         }
         else
         {
-            <button class="back-link" @onclick="CloseEditor">&larr; Automations</button>
+            <button class="back-link" @onclick="CloseEditor">&larr; @L["Automations"]</button>
         }
-        <h1>@_project.Name — Automations</h1>
+        <h1>@_project.Name — @L["Automations"]</h1>
         <div class="header-right">
             @if (_editingIndex is null)
             {
-                <button class="header-action-btn" @onclick="ReloadFromDisk" title="Relire automations.json depuis le disque">&#8635; Recharger</button>
-                <button class="header-action-btn" @onclick="AddAutomation">+ Automation</button>
+                <button class="header-action-btn" @onclick="ReloadFromDisk" title="@L["ReloadFromDisk"]">&#8635; @L["Reload"]</button>
+                <button class="header-action-btn" @onclick="AddAutomation">@L["NewAutomation"]</button>
                 <button class="header-action-btn settings-primary" @onclick="SaveAll" disabled="@_saving">
-                    @(_saving ? "…" : "Enregistrer")
+                    @(_saving ? "…" : L["Save"])
                 </button>
             }
             else
             {
                 <button class="header-action-btn settings-primary" @onclick="SaveAll" disabled="@_saving">
-                    @(_saving ? "…" : "Enregistrer")
+                    @(_saving ? "…" : L["Save"])
                 </button>
             }
         </div>
@@ -59,7 +61,7 @@ else
             @if (_config is null || _config.Automations.Count == 0)
             {
                 <div class="automations-empty">
-                    Aucune automation. Clique sur "+ Automation" pour commencer.
+                    @L["NoAutomations"]
                 </div>
             }
             else
@@ -70,7 +72,7 @@ else
                     var a = _config.Automations[idx];
                     <div class="automation-tile @(a.Enabled ? "" : "disabled")" @onclick="() => OpenEditor(idx)">
                         <div class="tile-header">
-                            <h3>@(string.IsNullOrWhiteSpace(a.Name) ? "(sans nom)" : a.Name)</h3>
+                            <h3>@(string.IsNullOrWhiteSpace(a.Name) ? L["Unnamed"] : a.Name)</h3>
                             <label class="tile-toggle" @onclick:stopPropagation>
                                 <input type="checkbox" checked="@a.Enabled" @onchange="e => { a.Enabled = (bool)e.Value!; _ = SaveAll(); }" />
                             </label>
@@ -84,8 +86,8 @@ else
                             <div class="tile-line"><span class="tile-badge badge-action">DO</span> @string.Join(", ", a.Actions.Select(DescribeAction))</div>
                         </div>
                         <div class="tile-footer" @onclick:stopPropagation>
-                            <button class="auto-run-btn" @onclick="() => RunNow(a.Id)">▶ Exécuter</button>
-                            <button class="icon-btn delete-icon" @onclick="() => RemoveAutomation(idx)" title="Supprimer">🗑</button>
+                            <button class="auto-run-btn" @onclick="() => RunNow(a.Id)">▶ @L["Run"]</button>
+                            <button class="icon-btn delete-icon" @onclick="() => RemoveAutomation(idx)" title="@L["Delete"]">🗑</button>
                         </div>
                     </div>
                 }
@@ -101,8 +103,8 @@ else
             <div class="automation-editor-main">
                 <div class="automation-card selected">
                     <div class="automation-card-header">
-                        <input class="automation-name" @bind="a.Name" @bind:event="oninput" placeholder="Nom de l'automation" />
-                        <label class="automation-toggle" title="Activé">
+                        <input class="automation-name" @bind="a.Name" @bind:event="oninput" placeholder="@L["AutomationNamePlaceholder"]" />
+                        <label class="automation-toggle" title="@L["Enabled"]">
                             <input type="checkbox" checked="@a.Enabled" @onchange="e => a.Enabled = (bool)e.Value!" />
                         </label>
                     </div>
@@ -122,14 +124,14 @@ else
                             <div class="auto-node node-condition @(IsSel(NodeKind.Condition, ci) ? "active" : "")"
                                  data-dnd-source="@($"move:condition:{ci}")"
                                  @onclick="() => Select(NodeKind.Condition, ci)">
-                                <div class="node-drag-handle" title="Glisser pour déplacer">⋮⋮</div>
+                                <div class="node-drag-handle" title="@L["DragToMove"]">⋮⋮</div>
                                 <div class="node-content">
                                     <div class="auto-node-kind">IF</div>
                                     <div class="auto-node-body">@DescribeCondition(a.Conditions[ci])</div>
                                 </div>
                                 <button class="node-remove-btn"
                                         @onclick="() => RemoveCondition(a, ci)" @onclick:stopPropagation
-                                        title="Supprimer">×</button>
+                                        title="@L["Delete"]">×</button>
                             </div>
                         }
                         <DropSlot Kind="@KCondition" InsertIndex="@a.Conditions.Count"
@@ -142,14 +144,14 @@ else
                             <div class="auto-node node-action @(IsSel(NodeKind.Action, ai) ? "active" : "")"
                                  data-dnd-source="@($"move:action:{ai}")"
                                  @onclick="() => Select(NodeKind.Action, ai)">
-                                <div class="node-drag-handle" title="Glisser pour déplacer">⋮⋮</div>
+                                <div class="node-drag-handle" title="@L["DragToMove"]">⋮⋮</div>
                                 <div class="node-content">
                                     <div class="auto-node-kind">DO</div>
                                     <div class="auto-node-body">@DescribeAction(a.Actions[ai])</div>
                                 </div>
                                 <button class="node-remove-btn"
                                         @onclick="() => RemoveAction(a, ai)" @onclick:stopPropagation
-                                        title="Supprimer">×</button>
+                                        title="@L["Delete"]">×</button>
                             </div>
                         }
                         <DropSlot Kind="@KAction" InsertIndex="@a.Actions.Count"
@@ -157,13 +159,13 @@ else
                     </div>
 
                     <div class="automation-footer">
-                        <button class="auto-run-btn" @onclick="() => RunNow(a.Id)">▶ Exécuter maintenant</button>
+                        <button class="auto-run-btn" @onclick="() => RunNow(a.Id)">▶ @L["RunNow"]</button>
                     </div>
                 </div>
             </div>
 
             <aside class="automations-inspector">
-                <h3>Éditer le nœud</h3>
+                <h3>@L["EditNode"]</h3>
                 @switch (_selectedKind)
                 {
                     case NodeKind.Trigger:
@@ -177,7 +179,7 @@ else
                                          OnDelete="() => { a.Conditions.RemoveAt(_selectedSub); _selectedSub = 0; _selectedKind = NodeKind.Trigger; StateHasChanged(); }" />
                         break;
                     case NodeKind.Action:
-                        <ActionEditor Action="a.Actions[_selectedSub]" Skills="_skills" Columns="_columns"
+                        <ActionEditor Action="a.Actions[_selectedSub]" Skills="_skills" Columns="_columns" Members="_members"
                                       OnReplace="spec => { a.Actions[_selectedSub] = spec; StateHasChanged(); }"
                                       OnDelete="() => { a.Actions.RemoveAt(_selectedSub); _selectedSub = 0; _selectedKind = NodeKind.Trigger; StateHasChanged(); }" />
                         break;
@@ -194,6 +196,7 @@ else
     private AutomationConfig? _config;
     private List<string> _skills = new();
     private List<string> _columns = new();
+    private List<string> _members = new();
     private bool _saving;
     private (string text, string css)? _statusMessage;
 
@@ -213,6 +216,7 @@ else
         var cols = await ColumnService.ListColumnsAsync(Slug);
         _columns = cols.Select(c => c.Name).ToList();
         _skills = await http.GetFromJsonAsync<List<string>>($"/api/projects/{Slug}/skills") ?? new();
+        _members = (await MemberService.ListMembersAsync(Slug)).Select(m => m.Slug).ToList();
         await LoadConfigAsync(http);
     }
 
@@ -271,8 +275,8 @@ else
             var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
             var resp = await http.PutAsync($"/api/projects/{Slug}/automations", content);
             _statusMessage = resp.IsSuccessStatusCode
-                ? ("Enregistré.", "settings-status-ok")
-                : ($"Erreur: {resp.StatusCode}", "settings-status-err");
+                ? (L["Saved"], "settings-status-ok")
+                : ($"{L["Error"]}: {resp.StatusCode}", "settings-status-err");
         }
         finally { _saving = false; }
     }
@@ -293,11 +297,6 @@ else
     private IJSObjectReference? _dndModule;
     private DotNetObjectReference<Automations>? _dotnetRef;
 
-    /// <summary>
-    /// Called by flow-dnd.js when the user drops a dragged node onto a target slot.
-    /// sourceSpec: "new:trigger:interval" or "move:action:2"
-    /// targetSpec: "condition:3" (kind + insertIndex, or "trigger:0" for replace)
-    /// </summary>
     [JSInvokable]
     public void HandleFlowDrop(string sourceSpec, string targetSpec)
     {
@@ -307,7 +306,7 @@ else
         var tgtParts = targetSpec.Split(':');
         if (srcParts.Length < 2 || tgtParts.Length < 2) return;
 
-        var origin = srcParts[0];              // "new" or "move"
+        var origin = srcParts[0];
         var sourceKind = srcParts[1];
         var targetKind = tgtParts[0];
         if (sourceKind != targetKind) return;
@@ -389,7 +388,11 @@ else
         "ticketInColumn" => new TicketInColumnConditionSpec {
             Columns = new List<string> { _columns.FirstOrDefault() ?? "Todo" } },
         "noPendingTickets" => new NoPendingTicketsConditionSpec(),
-        "minDescriptionLength" => new MinDescriptionLengthConditionSpec { Length = 50 },
+        "fieldLength" => new FieldLengthConditionSpec(),
+        "priority" => new PriorityConditionSpec(),
+        "labels" => new LabelsConditionSpec(),
+        "assignedTo" => new AssignedToConditionSpec(),
+        "ticketAge" => new TicketAgeConditionSpec(),
         _ => new TicketInColumnConditionSpec { Columns = new List<string> { "Todo" } },
     };
 
@@ -398,6 +401,9 @@ else
         "runClaudeSkill" => new RunClaudeSkillActionSpec {
             SkillFile = _skills.FirstOrDefault() is string sk ? $"skills/{sk}.md" : "skills/producer.md" },
         "moveTicketStatus" => new MoveTicketStatusActionSpec { To = _columns.FirstOrDefault() ?? "Todo" },
+        "setLabels" => new SetLabelsActionSpec(),
+        "assignTicket" => new AssignTicketActionSpec(),
+        "addComment" => new AddCommentActionSpec(),
         _ => new RunClaudeSkillActionSpec { SkillFile = "skills/producer.md" },
     };
 
@@ -411,7 +417,7 @@ else
         _config.Automations.Add(new Automation
         {
             Id = id,
-            Name = "Nouvelle automation",
+            Name = L["NewAutomationName"],
             Enabled = true,
             Trigger = new IntervalTriggerSpec { Seconds = 60 },
             Actions = new List<ActionSpec> { new RunClaudeSkillActionSpec { SkillFile = "skills/producer.md" } },
@@ -445,35 +451,45 @@ else
         var http = NewHttp();
         var resp = await http.PostAsync($"/api/projects/{Slug}/automations/{id}/run", null);
         _statusMessage = resp.IsSuccessStatusCode
-            ? ($"Exécution de '{id}' lancée.", "settings-status-ok")
-            : ($"Erreur: {resp.StatusCode}", "settings-status-err");
+            ? (string.Format(L["RunLaunched"], id), "settings-status-ok")
+            : ($"{L["Error"]}: {resp.StatusCode}", "settings-status-err");
     }
 
-    private static string DescribeTrigger(TriggerSpec t) => t switch
+    private string DescribeTrigger(TriggerSpec t) => t switch
     {
-        IntervalTriggerSpec s when s.Cron is not null => $"cron {s.Cron}",
-        IntervalTriggerSpec s => $"toutes les {s.Seconds}s",
-        TicketInColumnTriggerSpec s => $"ticket dans [{string.Join(", ", s.Columns)}]" + (s.AssigneeSlug is not null ? $" · assigné={s.AssigneeSlug}" : ""),
-        GitCommitTriggerSpec s => $"après commit git ({s.PollSeconds}s)",
-        StatusChangeTriggerSpec s => $"statut {s.From ?? "*"} → {s.To ?? "*"}",
-        SubTicketStatusTriggerSpec s => $"sous-tickets changés ({s.ParentColumn ?? "*"})",
-        BoardIdleTriggerSpec => "board idle",
-        AgentInactivityTriggerSpec s => $"inactivité {s.MinutesIdle}min",
+        IntervalTriggerSpec s when s.Cron is not null => string.Format(L["TrigCron"], s.Cron),
+        IntervalTriggerSpec s => string.Format(L["TrigInterval"], s.Seconds),
+        TicketInColumnTriggerSpec s => string.Format(L["TrigTicketInColumn"], string.Join(", ", s.Columns)) + (s.AssigneeSlug is not null ? $" · {string.Format(L["TrigTicketAssigned"], s.AssigneeSlug)}" : ""),
+        GitCommitTriggerSpec s => string.Format(L["TrigGitCommit"], s.PollSeconds),
+        StatusChangeTriggerSpec s => string.Format(L["TrigStatusChange"], s.From ?? "*", s.To ?? "*"),
+        SubTicketStatusTriggerSpec s => string.Format(L["TrigSubTickets"], s.ParentColumn ?? "*"),
+        BoardIdleTriggerSpec => L["TrigBoardIdle"],
+        AgentInactivityTriggerSpec s => string.Format(L["TrigAgentInactivity"], s.MinutesIdle),
         _ => t.GetType().Name,
     };
 
-    private static string DescribeCondition(ConditionSpec c) => c switch
+    private string DescribeCondition(ConditionSpec c)
     {
-        TicketInColumnConditionSpec s => $"dans [{string.Join(", ", s.Columns)}]" + (s.AssigneeSlug is not null ? $"/{s.AssigneeSlug}" : ""),
-        NoPendingTicketsConditionSpec s => $"aucun ticket en cours ({s.AssigneeSlug ?? "tous"})",
-        MinDescriptionLengthConditionSpec s => $"desc ≥ {s.Length} car.",
-        _ => c.GetType().Name,
-    };
+        var text = c switch
+        {
+            TicketInColumnConditionSpec s => string.Format(L["CondInColumn"], string.Join(", ", s.Columns)) + (s.AssigneeSlug is not null ? $"/{s.AssigneeSlug}" : ""),
+            NoPendingTicketsConditionSpec s => string.Format(L["CondNoPending"], s.AssigneeSlug ?? L["CondNoPendingAll"]),
+            MinDescriptionLengthConditionSpec s => string.Format(L["CondMinDesc"], s.Length),
+            FieldLengthConditionSpec s => string.Format(L["CondFieldLength"], s.Field, s.Mode == "min" ? "≥" : "≤", s.Length),
+            PriorityConditionSpec s => string.Format(L["CondPriority"], string.Join(", ", s.Priorities)),
+            LabelsConditionSpec s => string.Format(L["CondLabels"], string.Join(", ", s.Labels)),
+            AssignedToConditionSpec s => string.Format(L["CondAssignedTo"], string.Join(", ", s.Slugs)),
+            TicketAgeConditionSpec s => string.Format(L["CondTicketAge"], s.Field, s.Mode == "olderThan" ? "≥" : "<", s.Hours),
+            _ => c.GetType().Name,
+        };
+        return c.Negate ? $"NON {text}" : text;
+    }
 
-    private static string DescribeAction(ActionSpec a) => a switch
+    private string DescribeAction(ActionSpec a) => a switch
     {
         RunClaudeSkillActionSpec s => s.SkillFile,
-        MoveTicketStatusActionSpec s => $"→ {s.To}",
+        MoveTicketStatusActionSpec s => string.Format(L["ActionMoveTo"], s.To),
+        SetLabelsActionSpec s => string.Format(L["ActionSetLabelsDesc"], string.Join(", ", s.Add), string.Join(", ", s.Remove)),
         _ => a.GetType().Name,
     };
 }

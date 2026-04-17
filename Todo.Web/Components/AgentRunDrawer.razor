@@ -3,6 +3,7 @@
 @inject AgentRunsState RunsState
 @inject IJSRuntime JS
 @inject NavigationManager Nav
+@inject LocalizationService L
 @implements IAsyncDisposable
 
 @if (_run is not null)
@@ -27,9 +28,9 @@
             <div class="agent-drawer-actions">
                 @if (_run.Status == AgentRunStatus.Running)
                 {
-                    <button class="agent-stop-btn" @onclick="Stop" title="Arrêter l'agent">⏹ Stop</button>
+                    <button class="agent-stop-btn" @onclick="Stop" title="@L["StopAgent"]">⏹ @L["Stop"]</button>
                 }
-                <button class="agent-close-btn" @onclick="Close" title="Fermer">×</button>
+                <button class="agent-close-btn" @onclick="Close" title="@L["Close"]">×</button>
             </div>
         </div>
 
@@ -44,7 +45,7 @@
             }
             @if (_events.Count == 0)
             {
-                <div class="console-empty">En attente de la sortie…</div>
+                <div class="console-empty">@L["WaitingForOutput"]</div>
             }
         </div>
 
@@ -52,9 +53,9 @@
         {
             <div class="agent-drawer-steer">
                 <textarea @bind="_steerText" @bind:event="oninput"
-                          placeholder="Envoyer une instruction à l'agent…"
+                          placeholder="@L["SteerPlaceholder"]"
                           @onkeydown="OnSteerKeyDown"></textarea>
-                <button @onclick="Steer" disabled="@string.IsNullOrWhiteSpace(_steerText)">Envoyer</button>
+                <button @onclick="Steer" disabled="@string.IsNullOrWhiteSpace(_steerText)">@L["Send"]</button>
             </div>
         }
     </div>
@@ -71,6 +72,23 @@
     private DotNetObjectReference<AgentRunDrawer>? _dotnetRef;
     private string? _activeStreamId;
     private ElementReference _consoleRef;
+    private bool _needsInitScroll;
+    private bool _needsScroll;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_sseModule is null) return;
+        if (_needsInitScroll)
+        {
+            _needsInitScroll = false;
+            await _sseModule.InvokeVoidAsync("initAutoScroll", _consoleRef);
+        }
+        if (_needsScroll)
+        {
+            _needsScroll = false;
+            await _sseModule.InvokeVoidAsync("scrollIfNeeded");
+        }
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -86,7 +104,9 @@
         _sseModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/agent-sse.js");
         _dotnetRef = DotNetObjectReference.Create(this);
         _activeStreamId = RunId;
+        _needsInitScroll = true;
         await _sseModule.InvokeVoidAsync("start", _dotnetRef, BuildStreamUrl(_run));
+        StateHasChanged();
     }
 
     private string BuildStreamUrl(AgentRun run) =>
@@ -99,6 +119,7 @@
         var ev = new StreamEvent(DateTime.UtcNow, kind, text);
         _events.Add(ev);
         while (_events.Count > 500) _events.RemoveAt(0);
+        _needsScroll = true;
         return InvokeAsync(StateHasChanged);
     }
 
@@ -113,6 +134,7 @@
     {
         _events.Add(ev);
         while (_events.Count > 500) _events.RemoveAt(0);
+        _needsScroll = true;
         InvokeAsync(StateHasChanged);
     }
 
@@ -127,6 +149,7 @@
         if (_sseModule is not null && _activeStreamId is not null)
         {
             try { await _sseModule.InvokeVoidAsync("stop"); } catch { }
+            try { await _sseModule.InvokeVoidAsync("disposeAutoScroll"); } catch { }
         }
         if (_run is not null) _run.OnEvent -= HandleEvent;
         _activeStreamId = null;

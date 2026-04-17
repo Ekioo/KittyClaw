@@ -1,37 +1,39 @@
 @using Todo.Core.Automation
+@inject LocalizationService L
 
 <div class="node-editor">
-    <label>Type
+    <label>@L["Type"]
         <select value="@CurrentType" @onchange="OnTypeChanged">
-            <option value="interval">Intervalle / cron</option>
-            <option value="ticketInColumn">Ticket dans colonne</option>
-            <option value="gitCommit">Après commit git</option>
-            <option value="statusChange">Changement de statut</option>
-            <option value="subTicketStatus">Sous-tickets changés</option>
-            <option value="boardIdle">Board idle</option>
-            <option value="agentInactivity">Inactivité agents</option>
+            <option value="interval">@L["TrigTypeInterval"]</option>
+            <option value="ticketInColumn">@L["TrigTypeTicketInColumn"]</option>
+            <option value="gitCommit">@L["TrigTypeGitCommit"]</option>
+            <option value="statusChange">@L["TrigTypeStatusChange"]</option>
+            <option value="subTicketStatus">@L["TrigTypeSubTickets"]</option>
+            <option value="boardIdle">@L["TrigTypeBoardIdle"]</option>
+            <option value="agentInactivity">@L["TrigTypeAgentInactivity"]</option>
+            <option value="ticketCommentAdded">@L["TrigTypeCommentAdded"]</option>
         </select>
     </label>
 
     @switch (Automation.Trigger)
     {
         case IntervalTriggerSpec s:
-            <label>Intervalle (secondes)
+            <label>@L["IntervalSeconds"]
                 <input type="number" value="@(s.Seconds?.ToString() ?? "")"
                        @onchange="e => { s.Seconds = string.IsNullOrWhiteSpace((string?)e.Value) ? null : int.Parse((string)e.Value!); if (s.Seconds is not null) s.Cron = null; }" />
             </label>
-            <label>Cron (prioritaire si défini)
-                <input placeholder="0 2 * * *" value="@(s.Cron ?? "")"
+            <label>@L["CronLabel"]
+                <input placeholder="@L["CronPlaceholder"]" value="@(s.Cron ?? "")"
                        @onchange="e => { s.Cron = string.IsNullOrWhiteSpace((string?)e.Value) ? null : (string)e.Value!; if (s.Cron is not null) s.Seconds = null; }" />
             </label>
             break;
 
         case TicketInColumnTriggerSpec s:
-            <label>Poll (secondes)
+            <label>@L["PollSeconds"]
                 <input type="number" @bind="s.Seconds" />
             </label>
             <div class="column-picker">
-                <div class="column-picker-label">Colonnes (une ou plusieurs)</div>
+                <div class="column-picker-label">@L["ColumnsOneOrMore"]</div>
                 @foreach (var c in Columns)
                 {
                     var col = c;
@@ -39,64 +41,64 @@
                                @onchange="e => ToggleColumn(s.Columns, col, (bool)e.Value!)" /><span>@col</span></label>
                 }
             </div>
-            <label>Assigné (optionnel — slug du membre)
+            <label>@L["AssigneeMemberOptional"]
                 <select value="@(s.AssigneeSlug ?? "")" @onchange="e => s.AssigneeSlug = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
-                    <option value="">— n'importe quel membre —</option>
+                    <option value="">@L["AnyMemberOption"]</option>
                     @foreach (var sk in Skills) { <option value="@sk">@sk</option> }
                 </select>
             </label>
             break;
 
         case GitCommitTriggerSpec s:
-            <label>Poll (secondes)
+            <label>@L["PollSeconds"]
                 <input type="number" @bind="s.PollSeconds" />
             </label>
             break;
 
         case StatusChangeTriggerSpec s:
-            <label>Poll (secondes)
+            <label>@L["PollSeconds"]
                 <input type="number" @bind="s.PollSeconds" />
             </label>
-            <label>Depuis (optionnel)
+            <label>@L["FromOptional"]
                 <select value="@(s.From ?? "")" @onchange="e => s.From = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
-                    <option value="">— n'importe —</option>
+                    <option value="">@L["AnyOption"]</option>
                     @foreach (var c in Columns) { <option value="@c">@c</option> }
                 </select>
             </label>
-            <label>Vers (optionnel)
+            <label>@L["ToOptional"]
                 <select value="@(s.To ?? "")" @onchange="e => s.To = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
-                    <option value="">— n'importe —</option>
+                    <option value="">@L["AnyOption"]</option>
                     @foreach (var c in Columns) { <option value="@c">@c</option> }
                 </select>
             </label>
-            <label>Debounce (secondes, optionnel)
+            <label>@L["DebounceSeconds"]
                 <input type="number" value="@(s.DebounceSeconds?.ToString() ?? "")"
                        @onchange="e => s.DebounceSeconds = int.TryParse((string?)e.Value, out var v) ? v : null" />
             </label>
             break;
 
         case SubTicketStatusTriggerSpec s:
-            <label>Poll (secondes)
+            <label>@L["PollSeconds"]
                 <input type="number" @bind="s.PollSeconds" />
             </label>
-            <label>Colonne des tickets parents (optionnel)
+            <label>@L["ParentColumnOptional"]
                 <select value="@(s.ParentColumn ?? "")" @onchange="e => s.ParentColumn = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
-                    <option value="">— toutes —</option>
+                    <option value="">@L["AllColumns"]</option>
                     @foreach (var c in Columns) { <option value="@c">@c</option> }
                 </select>
             </label>
-            <label>Debounce (secondes, optionnel)
+            <label>@L["DebounceSeconds"]
                 <input type="number" value="@(s.DebounceSeconds?.ToString() ?? "")"
                        @onchange="e => s.DebounceSeconds = int.TryParse((string?)e.Value, out var v) ? v : null" />
             </label>
             break;
 
         case BoardIdleTriggerSpec s:
-            <label>Poll (secondes)
+            <label>@L["PollSeconds"]
                 <input type="number" @bind="s.PollSeconds" />
             </label>
             <div class="column-picker">
-                <div class="column-picker-label">Colonnes considérées comme "idle" (le board est idle quand tous les tickets y sont)</div>
+                <div class="column-picker-label">@L["IdleColumnsHint"]</div>
                 @foreach (var c in Columns)
                 {
                     var col = c;
@@ -110,11 +112,21 @@
             break;
 
         case AgentInactivityTriggerSpec s:
-            <label>Poll (secondes)
+            <label>@L["PollSeconds"]
                 <input type="number" @bind="s.PollSeconds" />
             </label>
-            <label>Minutes d'inactivité avant déclenchement
+            <label>@L["InactivityMinutes"]
                 <input type="number" @bind="s.MinutesIdle" />
+            </label>
+            break;
+
+        case TicketCommentAddedTriggerSpec s:
+            <label>@L["PollSeconds"]
+                <input type="number" @bind="s.PollSeconds" />
+            </label>
+            <label>@L["AuthorsFilterHint"]
+                <input placeholder="owner, programmer" value="@string.Join(", ", s.Authors)"
+                       @onchange="e => ParseAuthors(s, (string?)e.Value)" />
             </label>
             break;
     }
@@ -135,6 +147,7 @@
         SubTicketStatusTriggerSpec => "subTicketStatus",
         BoardIdleTriggerSpec => "boardIdle",
         AgentInactivityTriggerSpec => "agentInactivity",
+        TicketCommentAddedTriggerSpec => "ticketCommentAdded",
         _ => "interval",
     };
 
@@ -152,9 +165,17 @@
             "subTicketStatus" => new SubTicketStatusTriggerSpec { PollSeconds = 30 },
             "boardIdle" => new BoardIdleTriggerSpec { PollSeconds = 60 },
             "agentInactivity" => new AgentInactivityTriggerSpec { PollSeconds = 60, MinutesIdle = 45 },
+            "ticketCommentAdded" => new TicketCommentAddedTriggerSpec { PollSeconds = 30 },
             _ => new IntervalTriggerSpec { Seconds = 60 },
         };
         await OnReplace.InvokeAsync(spec);
+    }
+
+    private static void ParseAuthors(TicketCommentAddedTriggerSpec spec, string? value)
+    {
+        spec.Authors = (value ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
     }
 
     private void ToggleColumn(List<string> list, string col, bool on)

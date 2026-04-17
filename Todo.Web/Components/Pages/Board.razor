@@ -17,6 +17,7 @@
 @inject MemberService MemberService
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject LocalizationService L
 @rendermode InteractiveServer
 @implements IDisposable
 
@@ -24,17 +25,17 @@
 
 @if (_project is null)
 {
-    <p>Projet introuvable.</p>
+    <p>@L["ProjectNotFound"]</p>
 }
 else
 {
     <div class="page-header">
-        <a href="/" class="back-link">&larr; Projets</a>
+        <a href="/" class="back-link">&larr; @L["BackToProjects"]</a>
         <h1>@_project.Name</h1>
         @if (_subKanbanParentId is not null && _subKanbanParent is not null)
         {
             <div class="sub-kanban-breadcrumb">
-                <button class="breadcrumb-back" @onclick="ExitSubKanban">&larr; Board principal</button>
+                <button class="breadcrumb-back" @onclick="ExitSubKanban">&larr; @L["MainBoard"]</button>
                 <span class="breadcrumb-separator">/</span>
                 <span class="breadcrumb-parent">#@_subKanbanParent.Id &mdash; @_subKanbanParent.Title</span>
             </div>
@@ -43,7 +44,7 @@ else
             <div class="filter-input-wrapper">
                 <span class="filter-icon">&#128269;</span>
                 <input class="filter-input"
-                       placeholder="Filtrer…"
+                       placeholder="@L["Filter"]"
                        @bind="_filterText"
                        @bind:event="oninput"
                        @onfocus="() => _filterHintVisible = true"
@@ -55,15 +56,15 @@ else
                 @if (_filterHintVisible)
                 {
                     <div class="filter-hint-popup">
-                        <div class="filter-hint-title">Syntaxe de filtre</div>
-                        <div class="filter-hint-row"><code>#42</code> ticket par numéro</div>
-                        <div class="filter-hint-row"><code>@@owner</code> assigné à</div>
-                        <div class="filter-hint-row"><code>&gt;2026-03-01</code> modifié après</div>
-                        <div class="filter-hint-row"><code>&lt;2026-03-28</code> modifié avant</div>
-                        <div class="filter-hint-row"><code>priority:critical</code> par priorité</div>
-                        <div class="filter-hint-row"><code>label:bug</code> par label</div>
-                        <div class="filter-hint-row"><code>by:owner</code> créé par</div>
-                        <div class="filter-hint-row">Texte libre = titre, description, commentaires</div>
+                        <div class="filter-hint-title">@L["FilterSyntax"]</div>
+                        <div class="filter-hint-row"><code>#42</code> @L["FilterByNumber"]</div>
+                        <div class="filter-hint-row"><code>@@owner</code> @L["FilterAssignedTo"]</div>
+                        <div class="filter-hint-row"><code>&gt;2026-03-01</code> @L["FilterAfter"]</div>
+                        <div class="filter-hint-row"><code>&lt;2026-03-28</code> @L["FilterBefore"]</div>
+                        <div class="filter-hint-row"><code>priority:critical</code> @L["FilterByPriority"]</div>
+                        <div class="filter-hint-row"><code>label:bug</code> @L["FilterByLabel"]</div>
+                        <div class="filter-hint-row"><code>by:owner</code> @L["FilterCreatedBy"]</div>
+                        <div class="filter-hint-row">@L["FilterFreeText"]</div>
                     </div>
                 }
             </div>
@@ -72,11 +73,11 @@ else
             <button class="header-action-btn undo-btn"
                     @onclick="PerformUndo"
                     disabled="@(!_undoStack.Any())"
-                    title="@(_undoStack.Any() ? $"Annuler : {_undoStack.Peek().Label}" : "Rien à annuler (Ctrl+Z)")">
+                    title="@(_undoStack.Any() ? $"{L["UndoPrefix"]} : {_undoStack.Peek().Label}" : L["UndoNothing"])">
                 &#8630;
             </button>
-            <a class="header-action-btn" href="/board/@Slug/automations" title="Automations">&#9881; Automations</a>
-            <a class="header-action-btn" href="/board/@Slug/settings" title="Paramètres du projet">&#9881;&#65039; Paramètres</a>
+            <a class="header-action-btn" href="/board/@Slug/automations" title="@L["Automations"]">&#9881; @L["Automations"]</a>
+            <a class="header-action-btn" href="/board/@Slug/settings" title="@L["ProjectSettingsTooltip"]">&#9881;&#65039; @L["ProjectSettings"]</a>
         </div>
     </div>
 
@@ -120,7 +121,7 @@ else
                                  @ondrop="() => OnDropReorder(col.Name, slotIndex)"
                                  @ondrop:preventDefault
                                  @ondrop:stopPropagation>
-                                @if (isActiveSlot) { <span>Placer ici</span> }
+                                @if (isActiveSlot) { <span>@L["PlaceHere"]</span> }
                             </div>
                         }
                         @if (i < columnTickets.Count)
@@ -128,7 +129,7 @@ else
                             var ticket = columnTickets[i];
                             var index = i;
                             var isCardTarget = _draggedTicket is not null && _dragActiveSlot < 0 && _dragOverStatus == col.Name && _dragHoverIndex == index && _dropTargetTicketId == ticket.Id;
-                            <div class="ticket-card @(_selectedTicket?.Id == ticket.Id ? "selected" : "") @(_draggedTicket?.Id == ticket.Id ? "dragging" : "") @(isCardTarget ? "drop-target" : "")"
+                            <div class="ticket-card @(_selectedTicket?.Id == ticket.Id ? "selected" : "") @(_draggedTicket?.Id == ticket.Id ? "dragging" : "") @(isCardTarget ? "drop-target" : "") @(IsTicketUpdated(ticket) ? "ticket-updated" : "")"
                                  draggable="true"
                                  @ondragstart="() => OnDragStart(ticket)"
                                  @ondragend="OnDragEnd"
@@ -173,7 +174,7 @@ else
                                 }
                                 @if (ticket.SubTickets.Count > 0)
                                 {
-                                    <div class="sub-ticket-indicator" @onclick="() => EnterSubKanban(ticket)" @onclick:stopPropagation title="Voir les sous-tickets">
+                                    <div class="sub-ticket-indicator" @onclick="() => EnterSubKanban(ticket)" @onclick:stopPropagation title="@L["ViewSubTickets"]">
                                         <span class="sub-ticket-icon">&#128194;</span>
                                         <span>@ticket.SubTickets.Count(s => s.Status == _columns.LastOrDefault()?.Name)/@ticket.SubTickets.Count</span>
                                     </div>
@@ -192,7 +193,7 @@ else
                 @if (col == _columns[0])
                 {
                     <div class="add-ticket">
-                        <button class="add-ticket-btn" @onclick="OpenCreatePopup">+ Nouveau ticket</button>
+                        <button class="add-ticket-btn" @onclick="OpenCreatePopup">+ @L["NewTicket"]</button>
                     </div>
                 }
             </div>
@@ -213,7 +214,7 @@ else
                      @ondrop="OnUnparentDrop"
                      @ondrop:preventDefault>
                     <span class="unparent-icon">&#128279;</span>
-                    <span>Dissocier</span>
+                    <span>@L["Unparent"]</span>
                 </div>
             }
             <div class="trash-zone @(_trashHover ? "trash-zone-hover" : "")"
@@ -223,7 +224,7 @@ else
                  @ondrop="OnTrashDrop"
                  @ondrop:preventDefault>
                 <span class="trash-icon">&#128465;</span>
-                <span>Supprimer</span>
+                <span>@L["Delete"]</span>
             </div>
         </div>
     }
@@ -233,10 +234,10 @@ else
     {
         <div class="confirm-overlay">
             <div class="confirm-dialog">
-                <p>Supprimer la colonne «&#160;@_trashConfirmColumn.Name&#160;»&#160;?</p>
+                <p>@L["DeleteColumnConfirm"] «&#160;@_trashConfirmColumn.Name&#160;»&#160;?</p>
                 @if (_columns.Count > 1)
                 {
-                    <p class="confirm-warning">Les tickets seront déplacés vers&#160;:</p>
+                    <p class="confirm-warning">@L["MoveTicketsTo"]</p>
                     <select @bind="_deleteColumnMoveTo" style="margin-bottom:0.5rem;width:100%">
                         @foreach (var other in _columns.Where(c => c.Id != _trashConfirmColumn.Id))
                         {
@@ -245,8 +246,8 @@ else
                     </select>
                 }
                 <div class="confirm-actions">
-                    <button class="cancel-btn" @onclick="CancelTrash">Annuler</button>
-                    <button class="delete-btn" @onclick="ConfirmTrashColumn">Supprimer</button>
+                    <button class="cancel-btn" @onclick="CancelTrash">@L["Cancel"]</button>
+                    <button class="delete-btn" @onclick="ConfirmTrashColumn">@L["Delete"]</button>
                 </div>
             </div>
         </div>
@@ -255,10 +256,10 @@ else
     {
         <div class="confirm-overlay">
             <div class="confirm-dialog">
-                <p>Supprimer le ticket #@_trashConfirmTicket.Id «&#160;@_trashConfirmTicket.Title&#160;»&#160;?</p>
+                <p>@L["DeleteTicketConfirm"] #@_trashConfirmTicket.Id «&#160;@_trashConfirmTicket.Title&#160;»&#160;?</p>
                 <div class="confirm-actions">
-                    <button class="cancel-btn" @onclick="CancelTrash">Annuler</button>
-                    <button class="delete-btn" @onclick="ConfirmTrashTicket">Supprimer</button>
+                    <button class="cancel-btn" @onclick="CancelTrash">@L["Cancel"]</button>
+                    <button class="delete-btn" @onclick="ConfirmTrashTicket">@L["Delete"]</button>
                 </div>
             </div>
         </div>
@@ -270,17 +271,17 @@ else
         <div class="ticket-modal-overlay" @onmousedown="CloseCreatePopup">
             <div class="create-popup" @onmousedown:stopPropagation>
                 <div class="create-popup-header">
-                    <h2>Nouveau ticket</h2>
+                    <h2>@L["NewTicket"]</h2>
                     <button class="close-btn" @onclick="CloseCreatePopup">&times;</button>
                 </div>
                 <div class="create-popup-body">
-                    <label class="field-label">Titre</label>
-                    <input class="create-input" @bind="_newTicketTitle" @bind:event="oninput" placeholder="Titre du ticket..." />
+                    <label class="field-label">@L["Title"]</label>
+                    <input class="create-input" @bind="_newTicketTitle" @bind:event="oninput" placeholder="@L["TicketTitlePlaceholder"]" />
 
-                    <label class="field-label">Description <span class="field-hint">(Markdown)</span></label>
-                    <textarea class="create-textarea" @bind="_newTicketDescription" placeholder="Description..."></textarea>
+                    <label class="field-label">@L["DescriptionMarkdown"]</label>
+                    <textarea class="create-textarea" @bind="_newTicketDescription" placeholder="@L["DescriptionPlaceholder"]"></textarea>
 
-                    <label class="field-label">Priorit&#233;</label>
+                    <label class="field-label">@L["Priority"]</label>
                     <div class="priority-picker">
                         @foreach (var p in Enum.GetValues<TicketPriority>())
                         {
@@ -292,7 +293,7 @@ else
                         }
                     </div>
 
-                    <label class="field-label">Labels</label>
+                    <label class="field-label">@L["Labels"]</label>
                     <div class="label-picker">
                         @foreach (var label in _allLabels)
                         {
@@ -306,7 +307,7 @@ else
                         @if (_showNewLabelForm)
                         {
                             <div class="new-label-form">
-                                <input @bind="_newLabelName" placeholder="Nom du label" />
+                                <input @bind="_newLabelName" placeholder="@L["LabelNamePlaceholder"]" />
                                 <input type="color" @bind="_newLabelColor" />
                                 <button class="save-btn icon-btn" @onclick="CreateLabel">&#10003;</button>
                                 <button class="cancel-icon-btn icon-btn" @onclick="() => _showNewLabelForm = false">&#10005;</button>
@@ -318,10 +319,10 @@ else
                         }
                     </div>
 
-                    <label class="field-label">Assigner à</label>
+                    <label class="field-label">@L["AssignTo"]</label>
                     <div class="assignee-picker-wrapper">
                         <select class="assignee-select" @bind="_newTicketAssignedTo">
-                            <option value="">— Non assigné —</option>
+                            <option value="">@L["Unassigned"]</option>
                             @foreach (var member in _allMembers)
                             {
                                 <option value="@member.Slug">@member.Name (@member.Slug)</option>
@@ -330,8 +331,8 @@ else
                     </div>
                 </div>
                 <div class="create-popup-footer">
-                    <button class="cancel-btn" @onclick="CloseCreatePopup">Annuler</button>
-                    <button @onclick="CreateTicket" disabled="@string.IsNullOrWhiteSpace(_newTicketTitle)">Cr&#233;er le ticket</button>
+                    <button class="cancel-btn" @onclick="CloseCreatePopup">@L["Cancel"]</button>
+                    <button @onclick="CreateTicket" disabled="@string.IsNullOrWhiteSpace(_newTicketTitle)">@L["CreateTicket"]</button>
                 </div>
             </div>
         </div>
@@ -343,7 +344,7 @@ else
             <div class="ticket-panel" @onmousedown:stopPropagation>
             <div class="ticket-panel-header">
                 <div class="editable-field">
-                    <div class="priority-dot-btn" @onclick="() => _showPriorityPicker = !_showPriorityPicker" title="Changer la priorité">
+                    <div class="priority-dot-btn" @onclick="() => _showPriorityPicker = !_showPriorityPicker" title="@L["ChangePriority"]">
                         <span class="priority-dot priority-@GetPriorityClass(_selectedTicket.Priority)"></span>
                     </div>
                     @if (_showPriorityPicker)
@@ -363,13 +364,13 @@ else
                     {
                         <span class="ticket-id-prefix">#@_selectedTicket.Id &mdash;</span>
                         <input class="edit-title-input" @bind="_editTitle" @onkeydown="HandleTitleKeyDown" />
-                        <button class="icon-btn save-btn" title="Enregistrer" @onclick="SaveTitle">&#10003;</button>
-                        <button class="icon-btn cancel-icon-btn" title="Annuler" @onclick="() => _editingTitle = false">&#10005;</button>
+                        <button class="icon-btn save-btn" title="@L["Save"]" @onclick="SaveTitle">&#10003;</button>
+                        <button class="icon-btn cancel-icon-btn" title="@L["Cancel"]" @onclick="() => _editingTitle = false">&#10005;</button>
                     }
                     else
                     {
                         <h2>#@_selectedTicket.Id &mdash; @_selectedTicket.Title</h2>
-                        <button class="icon-btn pencil-btn" title="Modifier le titre" @onclick="StartEditTitle">&#9998;</button>
+                        <button class="icon-btn pencil-btn" title="@L["EditTitle"]" @onclick="StartEditTitle">&#9998;</button>
                     }
                 </div>
                 <div class="header-actions">
@@ -412,7 +413,7 @@ else
 
             @* ── Assignee row ── *@
             <div class="ticket-assignee-row">
-                <span class="section-label-sm">Assigné à&#160;:</span>
+                <span class="section-label-sm">@L["AssignedToLabel"]</span>
                 @if (!string.IsNullOrEmpty(_selectedTicket.AssignedTo))
                 {
                     <span class="assignee-pill">
@@ -422,7 +423,7 @@ else
                 }
                 <div class="label-autocomplete">
                     <input class="label-autocomplete-input"
-                           placeholder="@(string.IsNullOrEmpty(_selectedTicket.AssignedTo) ? "+ Assigner..." : "Changer...")"
+                           placeholder="@(string.IsNullOrEmpty(_selectedTicket.AssignedTo) ? L["AssignPlaceholder"] : L["ChangePlaceholder"])"
                            @bind="_assigneeSearch"
                            @bind:event="oninput"
                            @onfocus="() => _assigneeDropdownOpen = true"
@@ -454,8 +455,8 @@ else
             {
                 <div class="sub-tickets-section">
                     <div class="section-header">
-                        <span class="section-label">Sous-tickets (@selectedSummary.SubTickets.Count)</span>
-                        <button class="sub-kanban-btn" @onclick="() => EnterSubKanban(selectedSummary)">Voir tout &#8594;</button>
+                        <span class="section-label">@L["SubTickets"] (@selectedSummary.SubTickets.Count)</span>
+                        <button class="sub-kanban-btn" @onclick="() => EnterSubKanban(selectedSummary)">@L["ViewAll"] &#8594;</button>
                     </div>
                     <div class="sub-ticket-list">
                         @foreach (var sub in selectedSummary.SubTickets)
@@ -474,7 +475,7 @@ else
             {
                 var parentSummary = _tickets.FirstOrDefault(t => t.Id == _selectedTicket.ParentId);
                 <div class="parent-ticket-section">
-                    <span class="section-label-sm">Parent&#160;:</span>
+                    <span class="section-label-sm">@L["Parent"]</span>
                     <span class="parent-ticket-link">#@_selectedTicket.ParentId @(parentSummary?.Title ?? "")</span>
                 </div>
             }
@@ -482,8 +483,8 @@ else
             @* ── Ticket body (thread layout) ── *@
                 <div class="ticket-panel-thread">
                     <div class="section-header">
-                        <span class="section-label">Description</span>
-                        <button class="icon-btn pencil-btn" title="Modifier la description" @onclick="StartEditDescription">&#9998;</button>
+                        <span class="section-label">@L["Description"]</span>
+                        <button class="icon-btn pencil-btn" title="@L["EditDescription"]" @onclick="StartEditDescription">&#9998;</button>
                     </div>
                     <div class="ticket-desc markdown">
                         @if (_selectedTicket.Description is { Length: > 0 })
@@ -492,14 +493,14 @@ else
                         }
                         else
                         {
-                            <p class="empty-hint">Aucune description &mdash; cliquez sur &#9998; pour en ajouter une.</p>
+                            <p class="empty-hint">@L["NoDescription"]</p>
                         }
                     </div>
 
                     <div class="thread-section-divider">
                         <div class="activity-header">
-                            <span class="section-label">Activité</span>
-                            <button class="add-comment-btn-sm" @onclick="StartNewComment">+ Commentaire</button>
+                            <span class="section-label">@L["Activity"]</span>
+                            <button class="add-comment-btn-sm" @onclick="StartNewComment">@L["AddComment"]</button>
                         </div>
                         @foreach (var item in GetTimeline())
                         {
@@ -534,13 +535,13 @@ else
                     <div class="panel-footer-actions">
                         @if (_confirmDelete)
                         {
-                            <span class="confirm-delete-label">Supprimer ce ticket&#160;?</span>
-                            <button class="delete-btn" @onclick="DeleteSelectedTicket">Confirmer</button>
-                            <button class="cancel-btn" @onclick="() => _confirmDelete = false">Annuler</button>
+                            <span class="confirm-delete-label">@L["DeleteThisTicketConfirm"]</span>
+                            <button class="delete-btn" @onclick="DeleteSelectedTicket">@L["Confirm"]</button>
+                            <button class="cancel-btn" @onclick="() => _confirmDelete = false">@L["Cancel"]</button>
                         }
                         else
                         {
-                            <button class="delete-btn" @onclick="() => _confirmDelete = true">Supprimer ce ticket</button>
+                            <button class="delete-btn" @onclick="() => _confirmDelete = true">@L["DeleteThisTicket"]</button>
                         }
                     </div>
                 </div>
@@ -554,7 +555,7 @@ else
         <div class="ticket-modal-overlay" @onmousedown="() => _showLabelManager = false">
             <div class="label-manager-popup" @onmousedown:stopPropagation>
                 <div class="create-popup-header">
-                    <h2>Gestion des labels</h2>
+                    <h2>@L["LabelManagement"]</h2>
                     <button class="close-btn" @onclick="() => _showLabelManager = false">&times;</button>
                 </div>
                 <div class="label-manager-body">
@@ -578,7 +579,7 @@ else
                         </div>
                     }
                     <div class="label-manager-add">
-                        <input @bind="_managerNewName" placeholder="Nouveau label..." />
+                        <input @bind="_managerNewName" placeholder="@L["NewLabelPlaceholder"]" />
                         <input type="color" @bind="_managerNewColor" />
                         <button class="icon-btn save-btn" @onclick="CreateManagedLabel" disabled="@string.IsNullOrWhiteSpace(_managerNewName)">&#10003;</button>
                     </div>
@@ -593,7 +594,7 @@ else
         <div class="ticket-modal-overlay" @onmousedown="() => _showMemberManager = false">
             <div class="label-manager-popup" @onmousedown:stopPropagation>
                 <div class="create-popup-header">
-                    <h2>Gestion des membres</h2>
+                    <h2>@L["MemberManagement"]</h2>
                     <button class="close-btn" @onclick="() => _showMemberManager = false">&times;</button>
                 </div>
                 <div class="label-manager-body">
@@ -617,7 +618,7 @@ else
                         </div>
                     }
                     <div class="label-manager-add">
-                        <input @bind="_managerNewMemberName" placeholder="Nouveau membre..." />
+                        <input @bind="_managerNewMemberName" placeholder="@L["NewMemberPlaceholder"]" />
                         <button class="icon-btn save-btn" @onclick="CreateManagedMember" disabled="@string.IsNullOrWhiteSpace(_managerNewMemberName)">&#10003;</button>
                     </div>
                 </div>
@@ -631,13 +632,13 @@ else
     <div class="fullscreen-editor-overlay" @onclick="CancelFullscreen">
         <div class="fullscreen-editor" @onclick:stopPropagation>
             <div class="fullscreen-editor-header">
-                <span>@(_fullscreenTarget == "description" ? "Description" : "Commentaire")</span>
+                <span>@(_fullscreenTarget == "description" ? L["FullscreenDescription"] : L["FullscreenComment"])</span>
                 <button class="icon-btn cancel-icon-btn" @onclick="CancelFullscreen">&#10005;</button>
             </div>
             <textarea @ref="_editorTextarea" @bind="_fullscreenText" @bind:event="oninput"></textarea>
             <div class="fullscreen-editor-footer">
-                <button @onclick="SaveFullscreen">Enregistrer</button>
-                <button class="cancel-btn" @onclick="CancelFullscreen">Annuler</button>
+                <button @onclick="SaveFullscreen">@L["Save"]</button>
+                <button class="cancel-btn" @onclick="CancelFullscreen">@L["Cancel"]</button>
             </div>
         </div>
     </div>
@@ -737,6 +738,23 @@ else
     private bool _unparentHover = false;
     private int? _dropTargetTicketId = null;
 
+    // Last-visited tracking for "updated" badge
+    private DateTime? _lastVisitedAt;
+
+    private bool IsTicketUpdated(TicketSummary ticket)
+    {
+        if (_lastVisitedAt is null) return false;
+        var activity = ticket.LastActivityAt ?? ticket.UpdatedAt;
+        return activity > _lastVisitedAt.Value;
+    }
+
+    private async Task RefreshTicketsAndTouch()
+    {
+        _tickets = await TicketService.ListTicketsAsync(Slug);
+        _lastVisitedAt = DateTime.UtcNow;
+        await JS.InvokeVoidAsync("localStorage.setItem", $"board-last-visited-{Slug}", _lastVisitedAt.Value.ToString("O"));
+    }
+
     // Undo
     private record UndoAction(string Label, Func<Task> Undo);
     private readonly Stack<UndoAction> _undoStack = new();
@@ -764,7 +782,7 @@ else
         if (!_undoStack.Any()) return;
         var action = _undoStack.Pop();
         await action.Undo();
-        _tickets = await TicketService.ListTicketsAsync(Slug);
+        await RefreshTicketsAndTouch();
         _columns = await ColumnService.ListColumnsAsync(Slug);
         if (_selectedTicket is not null)
             _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
@@ -822,7 +840,7 @@ else
                     var oldDesc = _selectedTicket.Description;
                     var descTicketId = _selectedTicket.Id;
                     await TicketService.UpdateTicketAsync(Slug, descTicketId, description: text);
-                    PushUndo($"Description #{descTicketId}", async () =>
+                    PushUndo($"{L["UndoDescription"]} #{descTicketId}", async () =>
                         await TicketService.UpdateTicketAsync(Slug, descTicketId, description: oldDesc));
                     _selectedTicket = await TicketService.GetTicketAsync(Slug, descTicketId);
                 }
@@ -842,13 +860,15 @@ else
                     var commentId = _editingCommentId.Value;
                     var editTicketId = _selectedTicket.Id;
                     await TicketService.UpdateCommentAsync(Slug, editTicketId, commentId, text.Trim());
-                    PushUndo($"Commentaire #{editTicketId}", async () =>
+                    PushUndo($"{L["UndoComment"]} #{editTicketId}", async () =>
                         await TicketService.UpdateCommentAsync(Slug, editTicketId, commentId, oldComment));
                     _editingCommentId = null;
                     _selectedTicket = await TicketService.GetTicketAsync(Slug, editTicketId);
                 }
                 break;
         }
+
+        await RefreshTicketsAndTouch();
     }
 
     private MarkdownPipeline _mdPipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
@@ -956,6 +976,14 @@ else
         {
             _dotNetRef = DotNetObjectReference.Create(this);
             _undoHandler = await JS.InvokeAsync<IJSObjectReference>("registerUndoShortcut", _dotNetRef);
+
+            // Load last-visited timestamp, then save current time
+            var key = $"board-last-visited-{Slug}";
+            var stored = await JS.InvokeAsync<string?>("localStorage.getItem", key);
+            if (stored is not null && DateTime.TryParse(stored, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
+                _lastVisitedAt = parsed;
+            await JS.InvokeVoidAsync("localStorage.setItem", key, DateTime.UtcNow.ToString("O"));
+            StateHasChanged();
         }
         if (!string.IsNullOrEmpty(_fullscreenTarget) && !_pasteListenerAttached)
         {
@@ -1044,12 +1072,12 @@ else
         return tickets;
     }
 
-    private static string GetPriorityLabel(TicketPriority p) => p switch
+    private string GetPriorityLabel(TicketPriority p) => p switch
     {
-        TicketPriority.Idea => "Idea",
-        TicketPriority.NiceToHave => "Nice to have",
-        TicketPriority.Required => "Required",
-        TicketPriority.Critical => "Critical",
+        TicketPriority.Idea => L["PriorityIdea"],
+        TicketPriority.NiceToHave => L["PriorityNiceToHave"],
+        TicketPriority.Required => L["PriorityRequired"],
+        TicketPriority.Critical => L["PriorityCritical"],
         _ => p.ToString()
     };
 
@@ -1068,10 +1096,10 @@ else
         var oldPriority = _selectedTicket.Priority;
         var ticketId = _selectedTicket.Id;
         await TicketService.UpdateTicketAsync(Slug, ticketId, priority: p);
-        PushUndo($"Priorité #{ticketId}", async () =>
+        PushUndo($"{L["UndoPriority"]} #{ticketId}", async () =>
             await TicketService.UpdateTicketAsync(Slug, ticketId, priority: oldPriority));
         _selectedTicket = await TicketService.GetTicketAsync(Slug, ticketId);
-        _tickets = await TicketService.ListTicketsAsync(Slug);
+        await RefreshTicketsAndTouch();
     }
 
     private async Task SetPriorityAndClose(TicketPriority p)
@@ -1182,9 +1210,9 @@ else
         }
 
         await TicketService.ReorderTicketAsync(Slug, ticketId, newStatus, targetIndex);
-        PushUndo($"Déplacer #{ticketId}", async () =>
+        PushUndo($"{L["UndoMove"]} #{ticketId}", async () =>
             await TicketService.ReorderTicketAsync(Slug, ticketId, oldStatus, oldIndex));
-        _tickets = await TicketService.ListTicketsAsync(Slug);
+        await RefreshTicketsAndTouch();
         _draggedTicket = null;
         _dragOverStatus = null;
         _dragHoverIndex = -1;
@@ -1202,7 +1230,7 @@ else
         {
             var childId = _draggedTicket.Id;
             await TicketService.SetParentAsync(Slug, childId, target.Id);
-            PushUndo($"Associer #{childId} → #{target.Id}", async () =>
+            PushUndo($"{L["UndoAssociate"]} #{childId} → #{target.Id}", async () =>
                 await TicketService.UnparentAsync(Slug, childId));
             _tickets = await TicketService.ListTicketsAsync(Slug);
             _draggedTicket = null;
@@ -1247,9 +1275,9 @@ else
         var childId = _draggedTicket.Id;
         var oldParentId = _subKanbanParentId!.Value;
         await TicketService.UnparentAsync(Slug, childId);
-        PushUndo($"Dissocier #{childId}", async () =>
+        PushUndo($"{L["UndoUnparent"]} #{childId}", async () =>
             await TicketService.SetParentAsync(Slug, childId, oldParentId));
-        _tickets = await TicketService.ListTicketsAsync(Slug);
+        await RefreshTicketsAndTouch();
         _draggedTicket = null;
         _dragOverStatus = null;
         _dragHoverIndex = -1;
@@ -1294,10 +1322,10 @@ else
         var status = _columns[0].Name;
         var ticket = await TicketService.CreateTicketAsync(Slug, _newTicketTitle.Trim(), _newTicketDescription.Trim(), status: status, labelIds: _newTicketLabelIds, priority: _newTicketPriority, assignedTo: string.IsNullOrEmpty(_newTicketAssignedTo) ? null : _newTicketAssignedTo, parentId: _subKanbanParentId);
         if (ticket is not null)
-            PushUndo($"Créer #{ticket.Id}", async () =>
+            PushUndo($"{L["UndoCreate"]} #{ticket.Id}", async () =>
                 await TicketService.DeleteTicketAsync(Slug, ticket.Id));
         _showCreatePopup = false;
-        _tickets = await TicketService.ListTicketsAsync(Slug);
+        await RefreshTicketsAndTouch();
         RebuildPipeline();
     }
 
@@ -1337,11 +1365,11 @@ else
         var t = _selectedTicket;
         var labelIds = t.Labels.Select(l => l.Id).ToList();
         await TicketService.DeleteTicketAsync(Slug, t.Id);
-        PushUndo($"Supprimer #{t.Id}", async () =>
+        PushUndo($"{L["UndoDelete"]} #{t.Id}", async () =>
             await TicketService.CreateTicketAsync(Slug, t.Title, t.Description, t.CreatedBy, t.Status, labelIds, t.Priority, t.AssignedTo, t.ParentId));
         _selectedTicket = null;
         _confirmDelete = false;
-        _tickets = await TicketService.ListTicketsAsync(Slug);
+        await RefreshTicketsAndTouch();
         RebuildPipeline();
         Navigation.NavigateTo($"/board/{Slug}", replace: true);
     }
@@ -1353,6 +1381,7 @@ else
         _newComment = "";
         _addingComment = false;
         _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
+        await RefreshTicketsAndTouch();
     }
 
     private void CancelComment()
@@ -1379,11 +1408,11 @@ else
         var oldTitle = _selectedTicket.Title;
         var ticketId = _selectedTicket.Id;
         await TicketService.UpdateTicketAsync(Slug, ticketId, title: _editTitle.Trim());
-        PushUndo($"Renommer #{ticketId}", async () =>
+        PushUndo($"{L["UndoRename"]} #{ticketId}", async () =>
             await TicketService.UpdateTicketAsync(Slug, ticketId, title: oldTitle));
         _editingTitle = false;
         _selectedTicket = await TicketService.GetTicketAsync(Slug, ticketId);
-        _tickets = await TicketService.ListTicketsAsync(Slug);
+        await RefreshTicketsAndTouch();
         RebuildPipeline();
     }
 
@@ -1413,6 +1442,7 @@ else
         await TicketService.UpdateCommentAsync(Slug, _selectedTicket.Id, _editingCommentId.Value, _editComment.Trim());
         _editingCommentId = null;
         _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
+        await RefreshTicketsAndTouch();
     }
 
     // Column management
@@ -1421,7 +1451,7 @@ else
         if (string.IsNullOrWhiteSpace(_newColumnName)) return;
         var col = await ColumnService.CreateColumnAsync(Slug, _newColumnName.Trim(), _newColumnColor);
         if (col is not null)
-            PushUndo($"Colonne {col.Name}", async () =>
+            PushUndo($"{L["UndoColumn"]} {col.Name}", async () =>
             {
                 await ColumnService.DeleteColumnAsync(Slug, col.Id, _columns.FirstOrDefault(c => c.Id != col.Id)?.Name ?? "Backlog");
             });
@@ -1446,7 +1476,7 @@ else
         await ColumnService.DeleteColumnAsync(Slug, columnId, _deleteColumnMoveTo);
         _trashConfirmColumn = null;
         _columns = await ColumnService.ListColumnsAsync(Slug);
-        _tickets = await TicketService.ListTicketsAsync(Slug);
+        await RefreshTicketsAndTouch();
         RebuildPipeline();
     }
 
@@ -1496,10 +1526,10 @@ else
         var full = await TicketService.GetTicketAsync(Slug, t.Id);
         var labelIds = full?.Labels.Select(l => l.Id).ToList() ?? [];
         await TicketService.DeleteTicketAsync(Slug, t.Id);
-        PushUndo($"Supprimer #{t.Id}", async () =>
+        PushUndo($"{L["UndoDelete"]} #{t.Id}", async () =>
             await TicketService.CreateTicketAsync(Slug, t.Title, t.Description, t.CreatedBy, t.Status, labelIds, t.Priority, t.AssignedTo, t.ParentId));
         _trashConfirmTicket = null;
-        _tickets = await TicketService.ListTicketsAsync(Slug);
+        await RefreshTicketsAndTouch();
         RebuildPipeline();
     }
 
@@ -1523,10 +1553,10 @@ else
         var ids = oldIds.ToList();
         ids.Add(label.Id);
         await TicketService.SetTicketLabelsAsync(Slug, ticketId, ids);
-        PushUndo($"Label +{label.Name} #{ticketId}", async () =>
+        PushUndo($"{L["UndoLabel"]} +{label.Name} #{ticketId}", async () =>
             await TicketService.SetTicketLabelsAsync(Slug, ticketId, oldIds));
         _selectedTicket = await TicketService.GetTicketAsync(Slug, ticketId);
-        _tickets = await TicketService.ListTicketsAsync(Slug);
+        await RefreshTicketsAndTouch();
         _labelSearch = "";
         _labelDropdownOpen = false;
     }
@@ -1538,10 +1568,10 @@ else
         var ticketId = _selectedTicket.Id;
         var ids = oldIds.Where(id => id != labelId).ToList();
         await TicketService.SetTicketLabelsAsync(Slug, ticketId, ids);
-        PushUndo($"Label #{ticketId}", async () =>
+        PushUndo($"{L["UndoLabel"]} #{ticketId}", async () =>
             await TicketService.SetTicketLabelsAsync(Slug, ticketId, oldIds));
         _selectedTicket = await TicketService.GetTicketAsync(Slug, ticketId);
-        _tickets = await TicketService.ListTicketsAsync(Slug);
+        await RefreshTicketsAndTouch();
     }
 
     private async Task CreateAndAddLabel()
@@ -1553,7 +1583,7 @@ else
         ids.Add(label.Id);
         await TicketService.SetTicketLabelsAsync(Slug, _selectedTicket.Id, ids);
         _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
-        _tickets = await TicketService.ListTicketsAsync(Slug);
+        await RefreshTicketsAndTouch();
         _labelSearch = "";
         _labelDropdownOpen = false;
     }
@@ -1597,7 +1627,7 @@ else
         _allLabels = await LabelService.ListLabelsAsync(Slug);
         if (_selectedTicket is not null)
             _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
-        _tickets = await TicketService.ListTicketsAsync(Slug);
+        await RefreshTicketsAndTouch();
     }
 
     private async Task DeleteManagedLabel(int labelId)
@@ -1606,7 +1636,7 @@ else
         _allLabels = await LabelService.ListLabelsAsync(Slug);
         if (_selectedTicket is not null)
             _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
-        _tickets = await TicketService.ListTicketsAsync(Slug);
+        await RefreshTicketsAndTouch();
     }
 
     private async Task CreateManagedLabel()
@@ -1642,10 +1672,10 @@ else
         var oldAssignee = _selectedTicket.AssignedTo ?? "";
         var ticketId = _selectedTicket.Id;
         await TicketService.UpdateTicketAsync(Slug, ticketId, assignedTo: slug);
-        PushUndo($"Assigner #{ticketId}", async () =>
+        PushUndo($"{L["UndoAssign"]} #{ticketId}", async () =>
             await TicketService.UpdateTicketAsync(Slug, ticketId, assignedTo: oldAssignee));
         _selectedTicket = await TicketService.GetTicketAsync(Slug, ticketId);
-        _tickets = await TicketService.ListTicketsAsync(Slug);
+        await RefreshTicketsAndTouch();
         _assigneeSearch = "";
         _assigneeDropdownOpen = false;
     }
@@ -1656,10 +1686,10 @@ else
         var oldAssignee = _selectedTicket.AssignedTo ?? "";
         var ticketId = _selectedTicket.Id;
         await TicketService.UpdateTicketAsync(Slug, ticketId, assignedTo: "");
-        PushUndo($"Désassigner #{ticketId}", async () =>
+        PushUndo($"{L["UndoUnassign"]} #{ticketId}", async () =>
             await TicketService.UpdateTicketAsync(Slug, ticketId, assignedTo: oldAssignee));
         _selectedTicket = await TicketService.GetTicketAsync(Slug, ticketId);
-        _tickets = await TicketService.ListTicketsAsync(Slug);
+        await RefreshTicketsAndTouch();
     }
 
     private async Task CreateAndAssign()

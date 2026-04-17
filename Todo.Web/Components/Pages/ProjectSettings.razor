@@ -7,39 +7,49 @@
 @inject ColumnService ColumnService
 @inject NavigationManager Nav
 @inject IHttpClientFactory HttpFactory
+@inject LocalizationService L
+@inject AppSettingsService AppSettings
 @rendermode InteractiveServer
+@implements IDisposable
 
-<PageTitle>@(_project?.Name ?? "Projet") — Paramètres</PageTitle>
+<PageTitle>@(_project?.Name ?? "Projet") — @L["SettingsTitle"]</PageTitle>
 
 @if (_project is null)
 {
-    <p>Projet introuvable.</p>
+    <p>@L["ProjectNotFound"]</p>
 }
 else
 {
     <div class="page-header">
-        <a class="back-link" href="/board/@Slug">&larr; Board</a>
-        <h1>@_project.Name — Paramètres</h1>
+        <a class="back-link" href="/board/@Slug">&larr; @L["Board"]</a>
+        <h1>@_project.Name — @L["SettingsTitle"]</h1>
     </div>
 
     <div class="settings-container">
 
         <section class="settings-section">
-            <h2>Dossier de travail</h2>
-            <p class="settings-hint">
-                Chemin absolu vers le repo / dossier du projet. C'est là que sera chargé le
-                <code>.claude/</code> et que sera lu <code>.agents/automations.json</code>.
-            </p>
+            <h2>@L["Language"]</h2>
             <div class="settings-row">
-                <input class="settings-input" placeholder="D:\Sources\…" @bind="_workspacePath" @bind:event="oninput" />
+                <select class="settings-input" style="max-width:200px" value="@L.Lang" @onchange="OnLangChanged">
+                    <option value="fr">@L["LangFr"]</option>
+                    <option value="en">@L["LangEn"]</option>
+                </select>
+            </div>
+        </section>
+
+        <section class="settings-section">
+            <h2>@L["WorkspacePath"]</h2>
+            <p class="settings-hint">@L["WorkspaceHint"]</p>
+            <div class="settings-row">
+                <input class="settings-input" placeholder="@L["WorkspacePlaceholder"]" @bind="_workspacePath" @bind:event="oninput" />
                 @if (_canBrowse)
                 {
                     <button class="settings-browse" @onclick="BrowseWorkspace" disabled="@_browsing">
-                        @(_browsing ? "…" : "📁 Parcourir")
+                        @(_browsing ? "…" : $"📁 {L["Browse"]}")
                     </button>
                 }
                 <button class="settings-primary" @onclick="SaveWorkspace" disabled="@_savingWorkspace">
-                    @(_savingWorkspace ? "…" : "Enregistrer")
+                    @(_savingWorkspace ? "…" : L["Save"])
                 </button>
             </div>
             @if (_workspaceStatus is not null)
@@ -49,13 +59,10 @@ else
         </section>
 
         <section class="settings-section">
-            <h2>Membres</h2>
-            <p class="settings-hint">
-                Les membres servent à assigner des tickets. Les automations ciblent un membre
-                par son <code>slug</code> (champ <code>assigneeSlug</code>).
-            </p>
+            <h2>@L["Members"]</h2>
+            <p class="settings-hint">@L["MembersHint"]</p>
             <table class="settings-list">
-                <thead><tr><th>Nom</th><th>Slug</th><th></th></tr></thead>
+                <thead><tr><th>@L["Name"]</th><th>@L["Slug"]</th><th></th></tr></thead>
                 <tbody>
                     @foreach (var m in _members)
                     {
@@ -86,21 +93,19 @@ else
                         </tr>
                     }
                     <tr class="add-row">
-                        <td><input placeholder="Nouveau membre…" @bind="_newMemberName" @bind:event="oninput" @onkeydown="OnMemberKey" /></td>
+                        <td><input placeholder="@L["NewMemberSettingsPlaceholder"]" @bind="_newMemberName" @bind:event="oninput" @onkeydown="OnMemberKey" /></td>
                         <td></td>
-                        <td><button class="settings-primary" @onclick="CreateMember" disabled="@string.IsNullOrWhiteSpace(_newMemberName)">+ Ajouter</button></td>
+                        <td><button class="settings-primary" @onclick="CreateMember" disabled="@string.IsNullOrWhiteSpace(_newMemberName)">@L["Add"]</button></td>
                     </tr>
                 </tbody>
             </table>
         </section>
 
         <section class="settings-section">
-            <h2>Colonnes</h2>
-            <p class="settings-hint">
-                Colonnes du kanban. L'ordre est appliqué via la flèche haut/bas.
-            </p>
+            <h2>@L["Columns"]</h2>
+            <p class="settings-hint">@L["ColumnsHint"]</p>
             <table class="settings-list">
-                <thead><tr><th>Ordre</th><th>Nom</th><th>Couleur</th><th></th></tr></thead>
+                <thead><tr><th>@L["Order"]</th><th>@L["Name"]</th><th>@L["Color"]</th><th></th></tr></thead>
                 <tbody>
                     @for (int i = 0; i < _columns.Count; i++)
                     {
@@ -141,19 +146,19 @@ else
                     }
                     <tr class="add-row">
                         <td></td>
-                        <td><input placeholder="Nouvelle colonne…" @bind="_newColumnName" @bind:event="oninput" /></td>
+                        <td><input placeholder="@L["NewColumnPlaceholder"]" @bind="_newColumnName" @bind:event="oninput" /></td>
                         <td><input type="color" class="color-input" @bind="_newColumnColor" /></td>
-                        <td><button class="settings-primary" @onclick="CreateColumn" disabled="@string.IsNullOrWhiteSpace(_newColumnName)">+ Ajouter</button></td>
+                        <td><button class="settings-primary" @onclick="CreateColumn" disabled="@string.IsNullOrWhiteSpace(_newColumnName)">@L["Add"]</button></td>
                     </tr>
                 </tbody>
             </table>
         </section>
 
         <section class="settings-section">
-            <h2>Labels</h2>
-            <p class="settings-hint">Tags réutilisables pour catégoriser les tickets.</p>
+            <h2>@L["LabelsSection"]</h2>
+            <p class="settings-hint">@L["LabelsHint"]</p>
             <table class="settings-list">
-                <thead><tr><th>Nom</th><th>Couleur</th><th></th></tr></thead>
+                <thead><tr><th>@L["Name"]</th><th>@L["Color"]</th><th></th></tr></thead>
                 <tbody>
                     @foreach (var l in _labels)
                     {
@@ -187,16 +192,16 @@ else
                         </tr>
                     }
                     <tr class="add-row">
-                        <td><input placeholder="Nouveau label…" @bind="_newLabelName" @bind:event="oninput" /></td>
+                        <td><input placeholder="@L["NewLabelSettingsPlaceholder"]" @bind="_newLabelName" @bind:event="oninput" /></td>
                         <td><input type="color" class="color-input" @bind="_newLabelColor" /></td>
-                        <td><button class="settings-primary" @onclick="CreateLabel" disabled="@string.IsNullOrWhiteSpace(_newLabelName)">+ Ajouter</button></td>
+                        <td><button class="settings-primary" @onclick="CreateLabel" disabled="@string.IsNullOrWhiteSpace(_newLabelName)">@L["Add"]</button></td>
                     </tr>
                 </tbody>
             </table>
         </section>
 
         <section class="settings-section">
-            <a class="settings-primary" href="/board/@Slug/automations">Ouvrir l'éditeur d'automations →</a>
+            <a class="settings-primary" href="/board/@Slug/automations">@L["OpenAutomationsEditor"]</a>
         </section>
     </div>
 }
@@ -230,12 +235,17 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        L.OnLanguageChanged += OnLanguageChanged;
         _project = await ProjectService.GetProjectAsync(Slug);
         if (_project is null) return;
         _workspacePath = _project.WorkspacePath ?? "";
         await ReloadAllAsync();
         await ProbeBrowseAsync();
     }
+
+    private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
+    private void OnLangChanged(ChangeEventArgs e) => AppSettings.Language = (string?)e.Value ?? "fr";
+    public void Dispose() => L.OnLanguageChanged -= OnLanguageChanged;
 
     private async Task ReloadAllAsync()
     {
@@ -288,8 +298,8 @@ else
             var body = new { workspacePath = string.IsNullOrWhiteSpace(_workspacePath) ? null : _workspacePath.Trim() };
             var resp = await NewHttp().PatchAsJsonAsync($"/api/projects/{Slug}", body);
             _workspaceStatus = resp.IsSuccessStatusCode
-                ? ("Enregistré.", "settings-status-ok")
-                : ($"Erreur: {resp.StatusCode}", "settings-status-err");
+                ? (L["Saved"], "settings-status-ok")
+                : ($"{L["Error"]}: {resp.StatusCode}", "settings-status-err");
             if (resp.IsSuccessStatusCode) _project = await ProjectService.GetProjectAsync(Slug);
         }
         finally { _savingWorkspace = false; }

@@ -1,6 +1,8 @@
 @* Drop zone tagged with data-dnd-target. The JS engine (flow-dnd.js) activates
    matching slots during a drag. When `ClickLabel` is set, the slot doubles as a
    clickable "add here" button (shown discreetly when idle). *@
+@inject LocalizationService L
+
 <div class="drop-slot drop-slot-@Kind @(ClickLabel is null ? "" : "drop-slot-button")"
      data-dnd-target="@($"{Kind}:{InsertIndex}")"
      @onclick="HandleClick">
@@ -12,7 +14,7 @@
     {
         <span class="drop-slot-arrow">↓</span>
     }
-    <span class="drop-slot-hint">Déposer ici</span>
+    <span class="drop-slot-hint">@L["DropHere"]</span>
 </div>
 
 @code {

@@ -419,22 +419,21 @@ a:hover { color: var(--accent-hover); }
 
 /* Drop slot — always in DOM during drag, expands when active */
 .drop-slot {
-    height: 6px;
-    border-radius: 6px;
+    min-height: 32px;
+    border-radius: 8px;
     flex-shrink: 0;
-    overflow: hidden;
-    transition: height 0.1s ease, background 0.1s ease, border-color 0.1s ease, margin 0.1s ease;
-    border: 2px solid transparent;
-}
-.drop-slot.active {
-    height: 36px;
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: min-height 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+    border: 2px dashed var(--border);
+    background: color-mix(in srgb, var(--accent) 4%, transparent);
+    margin: 3px 0;
+}
+.drop-slot.active {
+    min-height: 40px;
     background: var(--accent-dim);
     border: 2px dashed var(--accent);
-    border-radius: 8px;
-    margin: 2px 0;
 }
 .drop-slot.active span {
     font-size: 0.75rem;
@@ -501,13 +500,21 @@ a:hover { color: var(--accent-hover); }
     border-color: var(--accent);
     box-shadow: 0 0 0 1px var(--accent), 0 4px 16px rgba(45, 212, 191, 0.15);
 }
-.ticket-card-top { display: flex; align-items: center; justify-content: space-between; }
+.ticket-card.ticket-updated {
+    border-left: 3px solid #f59e0b;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3), inset 3px 0 8px -4px rgba(245, 158, 11, 0.2);
+}
+.ticket-card-top { display: flex; align-items: center; }
 .ticket-id {
     font-size: 0.72rem;
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
     font-weight: 500;
+    margin-left: auto;
+    flex-shrink: 0;
 }
+.agent-spinner + .ticket-id,
+.agent-log-btn + .ticket-id { margin-left: 0; }
 .ticket-title { font-size: 0.88rem; color: var(--text); line-height: 1.4; }
 .ticket-card-bottom {
     display: flex;
@@ -1928,6 +1935,7 @@ button:disabled { opacity: 0.35; cursor: default; }
 
 .agent-drawer-console {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     padding: 0.8rem 1rem;
     font-family: 'Cascadia Code', 'Consolas', monospace;
@@ -2052,6 +2060,7 @@ button:disabled { opacity: 0.35; cursor: default; }
     border-radius: 4px; cursor: pointer; vertical-align: middle;
 }
 .settings-list .add-row td { background: #0c0f16; }
+.settings-list .add-row td:last-child { text-align: right; }
 .settings-list .row-actions { white-space: nowrap; text-align: right; }
 .settings-list .icon-btn {
     background: transparent; border: 1px solid var(--border, #333);
@@ -2330,7 +2339,7 @@ body.flow-dnd-active * { cursor: grabbing !important; }
     line-height: 1;
     letter-spacing: -2px;
     font-weight: 700;
-    pointer-events: none;
+    cursor: grab;
 }
 .auto-node[draggable="true"] { cursor: grab; }
 .auto-node[draggable="true"]:active { cursor: grabbing; }

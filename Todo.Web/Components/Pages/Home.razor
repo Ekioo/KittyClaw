@@ -2,12 +2,14 @@
 @using Todo.Core.Models
 @using Todo.Core.Services
 @inject ProjectService ProjectService
+@inject LocalizationService L
 @rendermode InteractiveServer
+@implements IDisposable
 
-<PageTitle>Todo - Projets</PageTitle>
+<PageTitle>@L["HomeTitle"]</PageTitle>
 
 <div class="page-header">
-    <h1>Projets</h1>
+    <h1>@L["Projects"]</h1>
 </div>
 
 <div class="project-list">
@@ -20,27 +22,27 @@
                     <h3>@project.Name</h3>
                     <small>@project.Slug</small>
                 </a>
-                <button class="project-delete-btn" title="Supprimer" @onclick="() => AskDelete(project)">&times;</button>
+                <button class="project-delete-btn" title="@L["Delete"]" @onclick="() => AskDelete(project)">&times;</button>
             </div>
         }
     }
 </div>
 
 <div class="create-project">
-    <input @bind="_newProjectName" @bind:event="oninput" placeholder="Nom du nouveau projet..."
+    <input @bind="_newProjectName" @bind:event="oninput" placeholder="@L["NewProjectPlaceholder"]"
            @onkeydown="HandleKeyDown" />
-    <button @onclick="CreateProject" disabled="@string.IsNullOrWhiteSpace(_newProjectName)">Cr&#233;er</button>
+    <button @onclick="CreateProject" disabled="@string.IsNullOrWhiteSpace(_newProjectName)">@L["Create"]</button>
 </div>
 
 @if (_deleteTarget is not null)
 {
     <div class="confirm-overlay" @onclick="CancelDelete">
         <div class="confirm-dialog" @onclick:stopPropagation>
-            <p>Supprimer le projet <strong>@_deleteTarget.Name</strong>&#160;?</p>
-            <p class="confirm-warning">Tous les tickets et donn&#233;es associ&#233;s seront d&#233;finitivement supprim&#233;s.</p>
+            <p>@L["DeleteProjectConfirm"] <strong>@_deleteTarget.Name</strong>&#160;?</p>
+            <p class="confirm-warning">@L["DeleteProjectWarning"]</p>
             <div class="confirm-actions">
-                <button class="cancel-btn" @onclick="CancelDelete">Annuler</button>
-                <button class="delete-btn" @onclick="ConfirmDelete">Supprimer</button>
+                <button class="cancel-btn" @onclick="CancelDelete">@L["Cancel"]</button>
+                <button class="delete-btn" @onclick="ConfirmDelete">@L["Delete"]</button>
             </div>
         </div>
     </div>
@@ -53,6 +55,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        L.OnLanguageChanged += OnLangChanged;
         _projects = await ProjectService.ListProjectsAsync();
     }
 
@@ -79,4 +82,7 @@
         _deleteTarget = null;
         _projects = await ProjectService.ListProjectsAsync();
     }
+
+    private void OnLangChanged() => InvokeAsync(StateHasChanged);
+    public void Dispose() => L.OnLanguageChanged -= OnLangChanged;
 }
