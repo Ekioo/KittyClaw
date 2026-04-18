@@ -53,6 +53,10 @@
             <label>@L["PollSeconds"]
                 <input type="number" @bind="s.PollSeconds" />
             </label>
+            <label>@L["IgnoreAuthorsHint"]
+                <input placeholder="noreply@anthropic.com, bot@example.com" value="@string.Join(", ", s.IgnoreAuthors)"
+                       @onchange="e => ParseIgnoreAuthors(s, (string?)e.Value)" />
+            </label>
             break;
 
         case StatusChangeTriggerSpec s:
@@ -169,6 +173,13 @@
             _ => new IntervalTriggerSpec { Seconds = 60 },
         };
         await OnReplace.InvokeAsync(spec);
+    }
+
+    private static void ParseIgnoreAuthors(GitCommitTriggerSpec spec, string? value)
+    {
+        spec.IgnoreAuthors = (value ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
     }
 
     private static void ParseAuthors(TicketCommentAddedTriggerSpec spec, string? value)

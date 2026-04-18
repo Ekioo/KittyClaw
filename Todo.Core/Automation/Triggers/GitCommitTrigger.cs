@@ -33,9 +33,28 @@ public sealed class GitCommitTrigger : ITrigger
             if (last == currentHead)
                 return Task.FromResult<IReadOnlyList<TriggerFiring>>(Array.Empty<TriggerFiring>());
 
+            // Enumerate new commits between last processed and HEAD
+            var firings = new List<TriggerFiring>();
+            var range = string.IsNullOrEmpty(last) ? currentHead : $"{last}..{currentHead}";
+            var logOutput = RunGit(ctx.WorkspacePath, $"log --format=%H|%ae {range}")?.Trim();
+
+            if (!string.IsNullOrEmpty(logOutput))
+            {
+                var ignoreSet = new HashSet<string>(_spec.IgnoreAuthors, StringComparer.OrdinalIgnoreCase);
+                foreach (var line in logOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var parts = line.Split('|', 2);
+                    if (parts.Length < 2) continue;
+                    var hash = parts[0].Trim();
+                    var email = parts[1].Trim();
+                    if (!ignoreSet.Contains(email))
+                        firings.Add(new TriggerFiring(null, $"commit {hash[..7]}", null));
+                }
+            }
+
+            // Always advance the pointer, even for ignored commits
             ctx.Sessions.SetLastProcessedCommit(ctx.WorkspacePath, currentHead);
-            IReadOnlyList<TriggerFiring> fire = new[] { new TriggerFiring(null, $"commit {currentHead[..7]}", null) };
-            return Task.FromResult(fire);
+            return Task.FromResult<IReadOnlyList<TriggerFiring>>(firings);
         }
         catch
         {
