@@ -184,6 +184,8 @@ public class LocalizationService
         ["CondAssignedTo"] = "assigné à [{0}]",
         ["CondNotAssignedTo"] = "non assigné à [{0}]",
         ["CondTicketAge"] = "{0} {1} {2}h",
+        ["CondHasParentTrue"] = "sous-ticket",
+        ["CondHasParentFalse"] = "racine",
 
         // ── Action descriptions ──
         ["ActionMoveTo"] = "→ {0}",
@@ -225,6 +227,8 @@ public class LocalizationService
         ["CondTypeLabels"] = "Labels",
         ["CondTypeAssignedTo"] = "Assigné à",
         ["CondTypeTicketAge"] = "Âge du ticket",
+        ["CondTypeHasParent"] = "Hiérarchie (racine/sous-ticket)",
+        ["HasParentLabel"] = "Est un sous-ticket",
         ["Negate"] = "Inverser (NOT)",
         ["ColumnsOneOrMore"] = "Colonnes (une ou plusieurs)",
         ["AssigneeOptional"] = "Assigné (slug, optionnel)",
@@ -498,6 +502,8 @@ public class LocalizationService
         ["CondAssignedTo"] = "assigned to [{0}]",
         ["CondNotAssignedTo"] = "not assigned to [{0}]",
         ["CondTicketAge"] = "{0} {1} {2}h",
+        ["CondHasParentTrue"] = "sub-ticket",
+        ["CondHasParentFalse"] = "root ticket",
 
         // ── Action descriptions ──
         ["ActionMoveTo"] = "→ {0}",
@@ -539,6 +545,8 @@ public class LocalizationService
         ["CondTypeLabels"] = "Labels",
         ["CondTypeAssignedTo"] = "Assigned to",
         ["CondTypeTicketAge"] = "Ticket age",
+        ["CondTypeHasParent"] = "Hierarchy (root/sub-ticket)",
+        ["HasParentLabel"] = "Is a sub-ticket",
         ["Negate"] = "Negate (NOT)",
         ["ColumnsOneOrMore"] = "Columns (one or more)",
         ["AssigneeOptional"] = "Assignee (slug, optional)",

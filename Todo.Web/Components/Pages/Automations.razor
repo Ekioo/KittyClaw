@@ -480,6 +480,7 @@ else
             LabelsConditionSpec s => string.Format(L["CondLabels"], string.Join(", ", s.Labels)),
             AssignedToConditionSpec s => string.Format(L["CondAssignedTo"], string.Join(", ", s.Slugs)),
             TicketAgeConditionSpec s => string.Format(L["CondTicketAge"], s.Field, s.Mode == "olderThan" ? "≥" : "<", s.Hours),
+            HasParentConditionSpec s => s.Value ? L["CondHasParentTrue"] : L["CondHasParentFalse"],
             _ => c.GetType().Name,
         };
         return c.Negate ? $"NON {text}" : text;
