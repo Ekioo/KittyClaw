@@ -12,6 +12,7 @@
             <option value="labels">@L["CondTypeLabels"]</option>
             <option value="assignedTo">@L["CondTypeAssignedTo"]</option>
             <option value="ticketAge">@L["CondTypeTicketAge"]</option>
+            <option value="hasParent">@L["CondTypeHasParent"]</option>
         </select>
     </label>
 
@@ -39,10 +40,16 @@
             break;
         case NoPendingTicketsConditionSpec s:
             <label>@L["AssigneeAll"]
-                <select value="@(s.AssigneeSlug ?? "")" @onchange="e => s.AssigneeSlug = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
+                <select value="@(s.AssigneeSlug ?? "")" disabled="@(!string.IsNullOrEmpty(s.ConcurrencyGroup))"
+                        @onchange="e => s.AssigneeSlug = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
                     <option value="">@L["All"]</option>
                     @foreach (var sk in Skills) { <option value="@sk">@sk</option> }
                 </select>
+            </label>
+            <label>@L["ConcurrencyGroup"]
+                <input type="text" value="@(s.ConcurrencyGroup ?? "")" placeholder="e.g. code-agents"
+                       disabled="@(!string.IsNullOrEmpty(s.AssigneeSlug))"
+                       @onchange="e => s.ConcurrencyGroup = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!" />
             </label>
             break;
         case MinDescriptionLengthConditionSpec s:
@@ -95,6 +102,10 @@
                 }
             </div>
             break;
+        case HasParentConditionSpec s:
+            <label class="column-check"><input type="checkbox" checked="@s.Value"
+                       @onchange="e => s.Value = (bool)e.Value!" /><span>@L["HasParentLabel"]</span></label>
+            break;
         case TicketAgeConditionSpec s:
             <label>@L["Field"]
                 <select value="@s.Field" @onchange="e => s.Field = (string)e.Value!">
@@ -136,6 +147,7 @@
         LabelsConditionSpec => "labels",
         AssignedToConditionSpec => "assignedTo",
         TicketAgeConditionSpec => "ticketAge",
+        HasParentConditionSpec => "hasParent",
         _ => "ticketInColumn",
     };
 
@@ -150,6 +162,7 @@
             "labels" => new LabelsConditionSpec(),
             "assignedTo" => new AssignedToConditionSpec(),
             "ticketAge" => new TicketAgeConditionSpec(),
+            "hasParent" => new HasParentConditionSpec(),
             _ => new TicketInColumnConditionSpec { Columns = new List<string> { "Todo" } },
         };
         await OnReplace.InvokeAsync(spec);

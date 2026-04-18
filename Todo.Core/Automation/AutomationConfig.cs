@@ -41,11 +41,13 @@ public sealed class TicketInColumnTriggerSpec : TriggerSpec
     public int Seconds { get; set; } = 30;
     public List<string> Columns { get; set; } = new();
     public string? AssigneeSlug { get; set; }
+    public int DebounceSeconds { get; set; } = 0;
 }
 
 public sealed class GitCommitTriggerSpec : TriggerSpec
 {
     public int PollSeconds { get; set; } = 60;
+    public List<string> IgnoreAuthors { get; set; } = new() { "noreply@anthropic.com" };
 }
 
 public sealed class StatusChangeTriggerSpec : TriggerSpec
@@ -90,6 +92,7 @@ public sealed class TicketCommentAddedTriggerSpec : TriggerSpec
 [JsonDerivedType(typeof(LabelsConditionSpec), "labels")]
 [JsonDerivedType(typeof(AssignedToConditionSpec), "assignedTo")]
 [JsonDerivedType(typeof(TicketAgeConditionSpec), "ticketAge")]
+[JsonDerivedType(typeof(HasParentConditionSpec), "hasParent")]
 public abstract class ConditionSpec
 {
     /// <summary>When true, the condition result is inverted (NOT logic).</summary>
@@ -105,6 +108,7 @@ public sealed class TicketInColumnConditionSpec : ConditionSpec
 public sealed class NoPendingTicketsConditionSpec : ConditionSpec
 {
     public string? AssigneeSlug { get; set; }
+    public string? ConcurrencyGroup { get; set; }
     public List<string>? Columns { get; set; }
 }
 
@@ -140,6 +144,12 @@ public sealed class AssignedToConditionSpec : ConditionSpec
     public List<string> Slugs { get; set; } = new();
 }
 
+public sealed class HasParentConditionSpec : ConditionSpec
+{
+    /// <summary>true = ticket must have a parent; false = ticket must be a root ticket.</summary>
+    public bool Value { get; set; }
+}
+
 public sealed class TicketAgeConditionSpec : ConditionSpec
 {
     /// <summary>"createdAt" or "updatedAt"</summary>
@@ -167,6 +177,7 @@ public sealed class RunClaudeSkillActionSpec : ActionSpec
     public string? Context { get; set; }
     public Dictionary<string, string> Env { get; set; } = new();
     public string? Model { get; set; }
+    public bool RestoreStatusOnFail { get; set; } = true;
 }
 
 public sealed class MoveTicketStatusActionSpec : ActionSpec

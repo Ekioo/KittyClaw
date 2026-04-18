@@ -166,16 +166,40 @@ public sealed class AutomationEngine : BackgroundService
                 return c.Columns.Count == 0 || c.Columns.Contains(firing.TicketStatus);
             case NoPendingTicketsConditionSpec c:
                 var cols = c.Columns ?? new List<string> { "Todo", "InProgress" };
+                // Build the set of slugs to check against.
+                HashSet<string>? slugsToCheck = null;
+                if (!string.IsNullOrEmpty(c.ConcurrencyGroup))
+                {
+                    // Collect all agentNames from runClaudeSkill actions sharing this concurrencyGroup.
+                    slugsToCheck = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    if (rt.Config is not null)
+                    {
+                        foreach (var auto in rt.Config.Automations)
+                        foreach (var act in auto.Actions)
+                        {
+                            if (act is RunClaudeSkillActionSpec rcs
+                                && string.Equals(rcs.ConcurrencyGroup, c.ConcurrencyGroup, StringComparison.OrdinalIgnoreCase)
+                                && rcs.AgentName is not null)
+                            {
+                                slugsToCheck.Add(rcs.AgentName);
+                            }
+                        }
+                    }
+                }
+                else if (c.AssigneeSlug is not null)
+                {
+                    slugsToCheck = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { c.AssigneeSlug };
+                }
                 foreach (var col in cols)
                 {
                     var list = await _tickets.ListTicketsAsync(rt.Slug, statusFilter: col);
-                    if (c.AssigneeSlug is null)
+                    if (slugsToCheck is null)
                     {
                         if (list.Count > 0) return false;
                     }
                     else
                     {
-                        if (list.Any(t => t.AssignedTo == c.AssigneeSlug)) return false;
+                        if (list.Any(t => t.AssignedTo is not null && slugsToCheck.Contains(t.AssignedTo))) return false;
                     }
                 }
                 return true;
@@ -206,6 +230,11 @@ public sealed class AutomationEngine : BackgroundService
                 return ac.Slugs.Count == 0
                     ? ticketAc.AssignedTo is null
                     : ac.Slugs.Contains(ticketAc.AssignedTo ?? "");
+            case HasParentConditionSpec hp:
+                if (firing.TicketId is null) return true;
+                var ticketHp = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
+                if (ticketHp is null) return false;
+                return hp.Value ? ticketHp.ParentId is not null : ticketHp.ParentId is null;
             case TicketAgeConditionSpec ta:
                 if (firing.TicketId is null) return true;
                 var ticketTa = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
@@ -229,13 +258,44 @@ public sealed class AutomationEngine : BackgroundService
             try { await trigger.CommitFiringAsync(tctx, firing); }
             catch (Exception ex) { _logger.LogWarning(ex, "CommitFiring failed for {Id}", automation.Id); }
         }
+        // Track the last moveTicketStatus so we can restore on agent failure.
+        string? statusBeforeMove = null;
+        string? statusAfterMove = null;
+        string? assigneeBeforeMove = null;
+
         foreach (var action in automation.Actions)
         {
             switch (action)
             {
                 case RunClaudeSkillActionSpec a:
                 {
-                    var agentName = a.AgentName ?? InferAgentName(a.SkillFile);
+                    // Resolve placeholders in skillFile.
+                    var skillFile = a.SkillFile;
+                    if (skillFile.Contains('{'))
+                    {
+                        if (skillFile.Contains("{assignee}"))
+                        {
+                            if (firing.TicketId is null)
+                            {
+                                _logger.LogWarning("Placeholder {{assignee}} in skillFile but no ticketId in firing — skipping");
+                                return null;
+                            }
+                            var t = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
+                            var assignee = t?.AssignedTo;
+                            if (string.IsNullOrEmpty(assignee))
+                            {
+                                _logger.LogWarning("Placeholder {{assignee}} in skillFile but ticket #{Id} has no assignee — skipping", firing.TicketId);
+                                return null;
+                            }
+                            skillFile = skillFile.Replace("{assignee}", assignee);
+                        }
+                        if (firing.TicketId is not null)
+                            skillFile = skillFile.Replace("{ticketId}", firing.TicketId.Value.ToString());
+                        if (a.AgentName is not null)
+                            skillFile = skillFile.Replace("{agent}", a.AgentName);
+                    }
+
+                    var agentName = a.AgentName ?? InferAgentName(skillFile);
                     var group = string.IsNullOrEmpty(a.ConcurrencyGroup) ? agentName : a.ConcurrencyGroup;
 
                     // Daily budget gate (non-CEO agents only — CEO can always run to react to budget).
@@ -277,7 +337,7 @@ public sealed class AutomationEngine : BackgroundService
                         ProjectSlug = rt.Slug,
                         WorkspacePath = rt.Workspace!,
                         AgentName = agentName,
-                        SkillFile = a.SkillFile,
+                        SkillFile = skillFile,
                         TicketId = firing.TicketId,
                         TicketTitle = firing.TicketTitle,
                         TicketStatus = firing.TicketStatus,
@@ -289,13 +349,44 @@ public sealed class AutomationEngine : BackgroundService
                     };
                     _sessions.SetLastDispatched(rt.Workspace!, agentName, DateTime.UtcNow);
                     lastRun = await _runner.RunAsync(runCtx, ct);
+
+                    // Restore ticket status if agent failed/stopped and a prior moveTicketStatus changed it.
+                    if (a.RestoreStatusOnFail
+                        && lastRun.Status is AgentRunStatus.Failed or AgentRunStatus.Stopped
+                        && statusBeforeMove is not null && statusAfterMove is not null
+                        && firing.TicketId is not null)
+                    {
+                        try
+                        {
+                            var ticket = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
+                            if (ticket is not null
+                                && string.Equals(ticket.Status, statusAfterMove, StringComparison.OrdinalIgnoreCase)
+                                && string.Equals(ticket.AssignedTo ?? "", assigneeBeforeMove ?? "", StringComparison.OrdinalIgnoreCase))
+                            {
+                                await _tickets.MoveTicketAsync(rt.Slug, firing.TicketId.Value, statusBeforeMove, "automation");
+                                _logger.LogInformation("Restored #{Id} to {Status} (run {Agent} failed)",
+                                    firing.TicketId, statusBeforeMove, agentName);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to restore ticket #{Id} status", firing.TicketId);
+                        }
+                    }
                     break;
                 }
                 case MoveTicketStatusActionSpec m when firing.TicketId is not null:
                 {
                     if (string.Equals(firing.TicketStatus, m.To, StringComparison.OrdinalIgnoreCase))
                         break; // already in target status
-                    try { await _tickets.MoveTicketAsync(rt.Slug, firing.TicketId.Value, m.To, "automation"); }
+                    try
+                    {
+                        var ticketBefore = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
+                        statusBeforeMove = ticketBefore?.Status;
+                        assigneeBeforeMove = ticketBefore?.AssignedTo;
+                        await _tickets.MoveTicketAsync(rt.Slug, firing.TicketId.Value, m.To, "automation");
+                        statusAfterMove = m.To;
+                    }
                     catch { }
                     break;
                 }
