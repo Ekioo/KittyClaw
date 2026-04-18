@@ -31,6 +31,8 @@ builder.Services.AddSingleton<ClaudeRunner>();
 builder.Services.AddSingleton<CostTracker>();
 builder.Services.AddSingleton<AutomationEngine>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomationEngine>());
+builder.Services.AddSingleton<GitRepositoryWatcher>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<GitRepositoryWatcher>());
 builder.Services.AddSingleton<Todo.Web.Services.AgentRunsState>();
 builder.Services.AddHttpClient();
 
