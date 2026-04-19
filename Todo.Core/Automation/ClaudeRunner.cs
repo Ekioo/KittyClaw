@@ -19,6 +19,8 @@ public sealed class ClaudeRunContext
     public IDictionary<string, string> Env { get; init; } = new Dictionary<string, string>();
     public string? Model { get; init; }
     public string? ExtraContext { get; init; }
+    public string? InlineSkillContent { get; init; }
+    public string? PresetRunId { get; init; }
 }
 
 public sealed class ClaudeRunner
@@ -36,13 +38,9 @@ public sealed class ClaudeRunner
 
     public async Task<AgentRun> RunAsync(ClaudeRunContext ctx, CancellationToken ct)
     {
-        var skillAbs = Path.IsPathRooted(ctx.SkillFile)
-            ? ctx.SkillFile
-            : Path.Combine(ctx.WorkspacePath, ".agents", ctx.SkillFile);
-
         var run = new AgentRun
         {
-            RunId = Guid.NewGuid().ToString("N"),
+            RunId = ctx.PresetRunId ?? Guid.NewGuid().ToString("N"),
             ProjectSlug = ctx.ProjectSlug,
             TicketId = ctx.TicketId,
             AgentName = ctx.AgentName,
@@ -52,11 +50,24 @@ public sealed class ClaudeRunner
         };
         _runs.Register(run);
 
-        if (!File.Exists(skillAbs))
+        string skillContent;
+        if (ctx.InlineSkillContent is not null)
         {
-            run.Push(new StreamEvent(DateTime.UtcNow, "error", $"Skill file not found: {skillAbs}"));
-            _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
-            return run;
+            skillContent = ctx.InlineSkillContent;
+        }
+        else
+        {
+            var skillAbs = Path.IsPathRooted(ctx.SkillFile)
+                ? ctx.SkillFile
+                : Path.Combine(ctx.WorkspacePath, ".agents", ctx.SkillFile);
+
+            if (!File.Exists(skillAbs))
+            {
+                run.Push(new StreamEvent(DateTime.UtcNow, "error", $"Skill file not found: {skillAbs}"));
+                _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
+                return run;
+            }
+            skillContent = await File.ReadAllTextAsync(skillAbs, ct);
         }
 
         // Session key matches the legacy dispatcher.mjs format ({agent}:{ticketId|sweep}).
@@ -67,8 +78,6 @@ public sealed class ClaudeRunner
         var isResume = existingSessionId is not null;
         run.SessionId = sessionId;
         _sessions.SetSessionId(ctx.WorkspacePath, ctx.AgentName, ctx.TicketId, sessionId);
-
-        var skillContent = await File.ReadAllTextAsync(skillAbs, ct);
         var prompt = BuildPrompt(ctx, skillContent, isResume);
         var sessionName = ctx.TicketId is not null ? $"{ctx.AgentName} #{ctx.TicketId}" : ctx.AgentName;
 
@@ -238,6 +247,10 @@ public sealed class ClaudeRunner
         if (e.ValueKind != JsonValueKind.Object) return e.ToString();
         var sb = new StringBuilder();
         if (e.TryGetProperty("type", out var t)) sb.Append('[').Append(t.GetString()).Append("] ");
+        if (e.TryGetProperty("delta", out var delta) && delta.ValueKind == JsonValueKind.Object)
+        {
+            if (delta.TryGetProperty("text", out var dtext)) sb.Append(dtext.GetString());
+        }
         if (e.TryGetProperty("message", out var m) && m.ValueKind == JsonValueKind.Object)
         {
             if (m.TryGetProperty("content", out var content))

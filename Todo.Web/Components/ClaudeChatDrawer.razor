@@ -1,0 +1,190 @@
+@using Todo.Core.Automation
+@using Todo.Web.Services
+@inject AgentRunsState RunsState
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject LocalizationService L
+@implements IAsyncDisposable
+
+<div class="chat-drawer-overlay" @onclick="Close"></div>
+<div class="chat-drawer" @onclick:stopPropagation>
+    <div class="chat-drawer-header">
+        <span class="chat-drawer-title">@L["NewInstruction"]</span>
+        <button class="agent-close-btn" @onclick="Close" title="@L["Close"]">×</button>
+    </div>
+
+    <div class="chat-messages" @ref="_messagesRef">
+        @foreach (var msg in _messages)
+        {
+            <div class="chat-message chat-message-@msg.Role">
+                <div class="chat-bubble">@msg.Text</div>
+            </div>
+        }
+        @if (_loading)
+        {
+            <div class="chat-message chat-message-assistant">
+                <div class="chat-bubble chat-bubble-loading">…</div>
+            </div>
+        }
+        @if (_messages.Count == 0 && !_loading)
+        {
+            <div class="chat-empty">@L["ChatEmpty"]</div>
+        }
+    </div>
+
+    <div class="chat-input-area">
+        <textarea @ref="_inputRef"
+                  @bind="_inputText"
+                  @bind:event="oninput"
+                  placeholder="@L["ChatPlaceholder"]"
+                  @onkeydown="OnKeyDown"
+                  disabled="@_loading"></textarea>
+        <button @onclick="Send" disabled="@(string.IsNullOrWhiteSpace(_inputText) || _loading)">@L["Send"]</button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string ProjectSlug { get; set; } = "";
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private readonly List<ChatMessage> _messages = [];
+    private string _inputText = "";
+    private bool _loading = false;
+    private ElementReference _messagesRef;
+    private ElementReference _inputRef;
+    private AgentRun? _activeRun;
+    private IJSObjectReference? _sseModule;
+    private DotNetObjectReference<ClaudeChatDrawer>? _dotnetRef;
+    private string? _activeStreamId;
+
+    private sealed record ChatMessage(string Role, string Text);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try { await _inputRef.FocusAsync(); } catch { }
+        }
+        try
+        {
+            await JS.InvokeVoidAsync("chatDrawerScrollToBottom", _messagesRef);
+        }
+        catch { }
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey) await Send();
+    }
+
+    private async Task Send()
+    {
+        var text = _inputText.Trim();
+        if (string.IsNullOrEmpty(text) || _loading) return;
+
+        _messages.Add(new ChatMessage("user", text));
+        _inputText = "";
+        _loading = true;
+        StateHasChanged();
+
+        await StopStream();
+
+        using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+        try
+        {
+            var resp = await http.PostAsJsonAsync($"/api/projects/{ProjectSlug}/chat/start",
+                new { message = text });
+            if (!resp.IsSuccessStatusCode)
+            {
+                _messages.Add(new ChatMessage("error", $"Error {resp.StatusCode}"));
+                _loading = false;
+                StateHasChanged();
+                return;
+            }
+            var body = await resp.Content.ReadFromJsonAsync<ChatStartResponse>();
+            if (body is null) { _loading = false; StateHasChanged(); return; }
+
+            _activeRun = RunsState.Get(body.RunId);
+            if (_activeRun is not null)
+            {
+                _activeRun.OnEvent += HandleEvent;
+                _sseModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/agent-sse.js");
+                _dotnetRef ??= DotNetObjectReference.Create(this);
+                _activeStreamId = body.RunId;
+                await _sseModule.InvokeVoidAsync("start", _dotnetRef, $"/api/projects/{ProjectSlug}/runs/{body.RunId}/stream");
+            }
+            else
+            {
+                _messages.Add(new ChatMessage("error", "Run not found"));
+                _loading = false;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            _messages.Add(new ChatMessage("error", ex.Message));
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    [JSInvokable]
+    public Task ReceiveSse(string kind, string text)
+    {
+        // FlattenJson produces "[assistant] <response text>" for assistant turn events
+        if (kind == "assistant")
+        {
+            const string prefix = "[assistant] ";
+            var reply = text.StartsWith(prefix) ? text[prefix.Length..] : text;
+            if (!string.IsNullOrWhiteSpace(reply))
+                _messages.Add(new ChatMessage("assistant", reply.Trim()));
+        }
+        return InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task StreamEnded()
+    {
+        _loading = false;
+        if (_activeRun is not null)
+            _activeRun.OnEvent -= HandleEvent;
+        _activeRun = null;
+        _activeStreamId = null;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleEvent(StreamEvent ev)
+    {
+        // Handled via SSE; no-op here to avoid duplicates
+    }
+
+    private async Task StopStream()
+    {
+        if (_sseModule is not null && _activeStreamId is not null)
+        {
+            try { await _sseModule.InvokeVoidAsync("stop"); } catch { }
+        }
+        if (_activeRun is not null)
+            _activeRun.OnEvent -= HandleEvent;
+        _activeRun = null;
+        _activeStreamId = null;
+    }
+
+    private async Task Close()
+    {
+        await StopStream();
+        if (OnClose.HasDelegate) await OnClose.InvokeAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await StopStream();
+        _dotnetRef?.Dispose();
+        if (_sseModule is not null)
+        {
+            try { await _sseModule.DisposeAsync(); } catch { }
+        }
+    }
+
+    private sealed record ChatStartResponse(string RunId);
+}

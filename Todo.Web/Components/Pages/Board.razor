@@ -81,6 +81,7 @@ else
                     title="@(_undoStack.Any() ? $"{L["UndoPrefix"]} : {_undoStack.Peek().Label}" : L["UndoNothing"])">
                 &#8630;
             </button>
+            <button class="header-action-btn new-instruction-btn" @onclick="OpenChatDrawer" title="@L["NewInstruction"]">&#128172; @L["NewInstruction"]</button>
             <a class="header-action-btn" href="/board/@Slug/automations" title="@L["Automations"]">&#9881; @L["Automations"]</a>
             <a class="header-action-btn" href="/board/@Slug/settings" title="@L["ProjectSettingsTooltip"]">&#9881;&#65039; @L["ProjectSettings"]</a>
         </div>
@@ -654,6 +655,22 @@ else
     <AgentRunDrawer RunId="@_activeRunDrawerId" OnClose="CloseRunDrawer" />
 }
 
+@if (_showChatDrawer)
+{
+    <ErrorBoundary>
+        <ChildContent>
+            <ClaudeChatDrawer ProjectSlug="@Slug" OnClose="CloseChatDrawer" />
+        </ChildContent>
+        <ErrorContent Context="ex">
+            <div class="chat-drawer-overlay" @onclick="CloseChatDrawer"></div>
+            <div class="chat-drawer" style="padding:1.5rem;color:#f06b6b">
+                <strong>Erreur : </strong>@ex.Message
+                <br/><button @onclick="CloseChatDrawer" style="margin-top:1rem">Fermer</button>
+            </div>
+        </ErrorContent>
+    </ErrorBoundary>
+}
+
 @code {
     [Parameter] public string Slug { get; set; } = "";
     [Parameter] public int? TicketId { get; set; }
@@ -695,6 +712,9 @@ else
     private bool _trashHover = false;
     private BoardColumn? _trashConfirmColumn = null;
     private TicketSummary? _trashConfirmTicket = null;
+
+    // Chat drawer
+    private bool _showChatDrawer = false;
 
     // Inline editing state
     private bool _editingTitle = false;
@@ -917,6 +937,8 @@ else
 
     private void OpenRunDrawer(string runId) => _activeRunDrawerId = runId;
     private void CloseRunDrawer() => _activeRunDrawerId = null;
+    private void OpenChatDrawer() => _showChatDrawer = true;
+    private void CloseChatDrawer() => _showChatDrawer = false;
     private void OnAgentRunsChanged() => InvokeAsync(StateHasChanged);
 
     protected override async Task OnInitializedAsync()

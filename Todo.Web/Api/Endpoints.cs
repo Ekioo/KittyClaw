@@ -420,6 +420,69 @@ public static class Endpoints
             return Results.NoContent();
         }).WithTags("Runs");
 
+        // Owner chat (ad-hoc Claude session)
+        api.MapPost("/projects/{slug}/chat/start", async (string slug, ChatStartRequest req, ProjectService ps, ClaudeRunner runner, HttpContext http) =>
+        {
+            var project = await ps.GetProjectAsync(slug);
+            if (project is null) return Results.NotFound();
+
+            var runId = Guid.NewGuid().ToString("N");
+            var workspacePath = ps.ResolveWorkspacePath(project);
+
+            // Build rich context for the session
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("# Context");
+            sb.AppendLine();
+            sb.AppendLine("You are an AI assistant embedded in the **Todo** application — a Blazor Server kanban board that orchestrates agentic Claude workflows.");
+            sb.AppendLine($"The owner is currently viewing the project **{project.Name}** (slug: `{slug}`).");
+            sb.AppendLine($"Project workspace: `{workspacePath}`");
+            sb.AppendLine();
+            sb.AppendLine("Respond concisely and helpfully. You can read and modify files in the workspace, create tickets via the API, or give advice.");
+            sb.AppendLine();
+
+            // CLAUDE.md
+            var claudeMd = Path.Combine(workspacePath, "CLAUDE.md");
+            if (File.Exists(claudeMd))
+            {
+                sb.AppendLine("## CLAUDE.md");
+                sb.AppendLine();
+                sb.AppendLine(await File.ReadAllTextAsync(claudeMd));
+                sb.AppendLine();
+            }
+
+            // API documentation
+            var baseUrl = $"{http.Request.Scheme}://{http.Request.Host}";
+            sb.AppendLine("## Todo App API");
+            sb.AppendLine();
+            sb.AppendLine($"Base URL: `{baseUrl}`");
+            sb.AppendLine($"Current project slug: `{slug}`");
+            sb.AppendLine();
+            sb.AppendLine("Key endpoints:");
+            sb.AppendLine($"- GET  {baseUrl}/api/projects/{slug}/tickets — list tickets");
+            sb.AppendLine($"- POST {baseUrl}/api/projects/{slug}/tickets — create ticket (body: {{title, createdBy, status, description, priority}})");
+            sb.AppendLine($"- GET  {baseUrl}/api/projects/{slug}/tickets/{{id}} — get ticket");
+            sb.AppendLine($"- POST {baseUrl}/api/projects/{slug}/tickets/{{id}}/comments — add comment (body: {{content, author}})");
+            sb.AppendLine($"- PATCH {baseUrl}/api/projects/{slug}/tickets/{{id}}/status — move ticket (body: {{status, author}})");
+            sb.AppendLine($"- GET  {baseUrl}/api/projects/{slug}/columns — list columns");
+            sb.AppendLine($"- Full API doc: {baseUrl}/api/docs");
+
+            var ctx = new ClaudeRunContext
+            {
+                ProjectSlug = slug,
+                WorkspacePath = workspacePath,
+                AgentName = "owner-chat",
+                SkillFile = "chat",
+                InlineSkillContent = sb.ToString(),
+                ExtraContext = req.Message,
+                MaxTurns = 20,
+                ConcurrencyGroup = $"owner-chat:{slug}",
+                PresetRunId = runId,
+            };
+
+            _ = runner.RunAsync(ctx, CancellationToken.None);
+            return Results.Ok(new { runId });
+        }).WithTags("Chat");
+
         // Images
         api.MapPost("/images", async (HttpRequest req, ProjectService ps) =>
         {

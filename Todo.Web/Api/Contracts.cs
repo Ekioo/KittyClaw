@@ -21,3 +21,4 @@ public record SetParentRequest(int ParentId);
 public record UpdateProjectRequest(string? WorkspacePath = null);
 public record SteerRunRequest(string Text);
 public record BrowseFolderRequest(string? InitialPath = null);
+public record ChatStartRequest(string Message);
