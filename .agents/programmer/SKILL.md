@@ -47,7 +47,12 @@ Two paths:
 
 6. **Comment on the ticket** with what you did, **the full list of modified file paths**, and any noteworthy points (trade-offs, TODOs, limitations). The QA tester and committer both rely on this list.
 
-7. **IMPERATIVE: leave `InProgress` at end of your turn.**
+7. **If dispatched on a ticket already in `Review`** (via owner-feedback): do NOT reopen the code. Two options:
+   - If the owner's feedback is substantive (actual bug, missing feature): post a comment acknowledging it and move the ticket back to `Todo` with `assignedTo` unchanged. The normal Todo→InProgress dispatch will bring you back.
+   - If the feedback is trivial and you can apply a one-liner fix instantly: do it, post a short comment, leave in `Review`.
+   - Never silently edit while the ticket is in Review without moving it.
+
+8. **IMPERATIVE: leave `InProgress` at end of your turn.**
    - Work finished (build OK, acceptance criteria met) → **`Review`**.
    - Ambiguous / non-actionable → **`Todo`** with a comment asking for clarification, reassign to `owner`.
    - Blocked (missing dependency, reproducible crash you cannot resolve) → **`Blocked`** + explanatory comment.

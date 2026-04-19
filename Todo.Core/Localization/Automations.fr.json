@@ -23,8 +23,6 @@
   "TrigBoardIdle": "board idle",
   "TrigAgentInactivity": "inactivité {0}min",
   "CondInColumn": "dans [{0}]",
-  "CondNoPending": "aucun ticket en cours ({0})",
-  "CondNoPendingAll": "tous",
   "CondMinDesc": "desc ≥ {0} car.",
   "CondFieldLength": "{0} {1} {2} car.",
   "CondPriority": "priorité ∈ [{0}]",

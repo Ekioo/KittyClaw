@@ -224,7 +224,6 @@ public sealed class AutomationEngine : BackgroundService
         cond switch
         {
             TicketInColumnConditionSpec c         => Task.FromResult(EvaluateTicketInColumn(c, firing)),
-            NoPendingTicketsConditionSpec c        => EvaluateNoPendingTicketsAsync(rt, c, firing),
             MinDescriptionLengthConditionSpec c    => EvaluateMinDescriptionLengthAsync(rt, c, firing),
             FieldLengthConditionSpec c             => EvaluateFieldLengthAsync(rt, c, firing),
             PriorityConditionSpec c                => EvaluatePriorityAsync(rt, c, firing),
@@ -241,49 +240,6 @@ public sealed class AutomationEngine : BackgroundService
     {
         if (firing.TicketStatus is null) return false;
         return c.Columns.Count == 0 || c.Columns.Contains(firing.TicketStatus);
-    }
-
-    private async Task<bool> EvaluateNoPendingTicketsAsync(ProjectRuntime rt, NoPendingTicketsConditionSpec c, TriggerFiring firing)
-    {
-        var cols = c.Columns ?? new List<string> { "Todo", "InProgress" };
-        HashSet<string>? slugsToCheck = null;
-        if (!string.IsNullOrEmpty(c.ConcurrencyGroup))
-        {
-            slugsToCheck = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (rt.Config is not null)
-            {
-                foreach (var auto in rt.Config.Automations)
-                foreach (var act in auto.Actions)
-                {
-                    if (act is RunAgentActionSpec rcs
-                        && string.Equals(rcs.ConcurrencyGroup, c.ConcurrencyGroup, StringComparison.OrdinalIgnoreCase))
-                        slugsToCheck.Add(rcs.Agent);
-                }
-            }
-        }
-        else if (c.SameAssignee && firing.TicketId is not null)
-        {
-            var firingTicket = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
-            if (firingTicket?.AssignedTo is not null)
-                slugsToCheck = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { firingTicket.AssignedTo };
-        }
-        else if (c.AssigneeSlug is not null)
-        {
-            slugsToCheck = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { c.AssigneeSlug };
-        }
-        foreach (var col in cols)
-        {
-            var list = await _tickets.ListTicketsAsync(rt.Slug, statusFilter: col);
-            if (slugsToCheck is null)
-            {
-                if (list.Count > 0) return false;
-            }
-            else
-            {
-                if (list.Any(t => t.AssignedTo is not null && slugsToCheck.Contains(t.AssignedTo))) return false;
-            }
-        }
-        return true;
     }
 
     private async Task<bool> EvaluateMinDescriptionLengthAsync(ProjectRuntime rt, MinDescriptionLengthConditionSpec c, TriggerFiring firing)

@@ -6,7 +6,6 @@
     <label>@L["Type"]
         <select value="@CurrentType" @onchange="OnTypeChanged">
             <option value="ticketInColumn">@L["CondTypeTicketInColumn"]</option>
-            <option value="noPendingTickets">@L["CondTypeNoPending"]</option>
             <option value="fieldLength">@L["CondTypeFieldLength"]</option>
             <option value="priority">@L["CondTypePriority"]</option>
             <option value="labels">@L["CondTypeLabels"]</option>
@@ -38,20 +37,6 @@
                     <option value="">@L["AnyMember"]</option>
                     @foreach (var sk in Skills) { <option value="@sk">@sk</option> }
                 </select>
-            </label>
-            break;
-        case NoPendingTicketsConditionSpec s:
-            <label>@L["AssigneeAll"]
-                <select value="@(s.AssigneeSlug ?? "")" disabled="@(!string.IsNullOrEmpty(s.ConcurrencyGroup))"
-                        @onchange="e => s.AssigneeSlug = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
-                    <option value="">@L["All"]</option>
-                    @foreach (var sk in Skills) { <option value="@sk">@sk</option> }
-                </select>
-            </label>
-            <label>@L["ConcurrencyGroup"]
-                <input type="text" value="@(s.ConcurrencyGroup ?? "")" placeholder="e.g. code-agents"
-                       disabled="@(!string.IsNullOrEmpty(s.AssigneeSlug))"
-                       @onchange="e => s.ConcurrencyGroup = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!" />
             </label>
             break;
         case MinDescriptionLengthConditionSpec s:
@@ -186,7 +171,6 @@
     private string CurrentType => Condition switch
     {
         TicketInColumnConditionSpec => "ticketInColumn",
-        NoPendingTicketsConditionSpec => "noPendingTickets",
         MinDescriptionLengthConditionSpec => "fieldLength",
         FieldLengthConditionSpec => "fieldLength",
         PriorityConditionSpec => "priority",
@@ -204,7 +188,6 @@
         ConditionSpec spec = (string?)e.Value switch
         {
             "ticketInColumn" => new TicketInColumnConditionSpec { Columns = new List<string> { Columns.FirstOrDefault() ?? "Todo" } },
-            "noPendingTickets" => new NoPendingTicketsConditionSpec(),
             "fieldLength" => new FieldLengthConditionSpec(),
             "priority" => new PriorityConditionSpec(),
             "labels" => new LabelsConditionSpec(),

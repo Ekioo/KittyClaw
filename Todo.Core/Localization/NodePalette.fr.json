@@ -19,8 +19,6 @@
   "PalTrigAgentInactivityHint": "Déclenche après N minutes sans dispatch",
   "PalCondTicketInColumn": "Ticket dans colonne",
   "PalCondTicketInColumnHint": "N'exécute que si le ticket est dans une colonne",
-  "PalCondNoPending": "Aucun ticket en cours",
-  "PalCondNoPendingHint": "N'exécute que si aucun ticket n'est en cours",
   "PalCondFieldLength": "Longueur de champ",
   "PalCondFieldLengthHint": "Vérifie la longueur du titre ou de la description (min/max)",
   "PalCondPriority": "Priorité",

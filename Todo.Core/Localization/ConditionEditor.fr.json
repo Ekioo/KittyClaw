@@ -1,6 +1,5 @@
 {
   "CondTypeTicketInColumn": "Ticket dans colonne",
-  "CondTypeNoPending": "Aucun ticket en cours",
   "CondTypeFieldLength": "Longueur de champ",
   "CondTypePriority": "Priorité",
   "CondTypeLabels": "Labels",

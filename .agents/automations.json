@@ -2,7 +2,7 @@
   "automations": [
     {
       "id": "assignee-dispatch",
-      "name": "Dispatch: ticket Todo -> InProgress + lance agent assigne",
+      "name": "Dispatch: Todo ticket -> InProgress + run assigned agent",
       "enabled": true,
       "trigger": {
         "type": "ticketInColumn",
@@ -14,11 +14,25 @@
       },
       "conditions": [
         {
-          "type": "noPendingTickets",
+          "type": "assignedTo",
+          "slugs": [
+            "programmer",
+            "producer",
+            "qa-tester",
+            "groomer",
+            "committer",
+            "code-janitor",
+            "evaluator"
+          ]
+        },
+        {
+          "type": "ticketCountInColumn",
           "columns": [
             "InProgress"
           ],
-          "sameAssignee": true
+          "sameAssignee": true,
+          "operator": "==",
+          "value": 0
         }
       ],
       "actions": [
@@ -44,7 +58,7 @@
     },
     {
       "id": "groomer",
-      "name": "Groomer: enrichir tickets Backlog assignes au groomer",
+      "name": "Groomer: enrich Backlog tickets assigned to groomer",
       "enabled": true,
       "trigger": {
         "type": "ticketInColumn",
@@ -75,7 +89,7 @@
     },
     {
       "id": "committer-on-done",
-      "name": "Committer — commit quand un ticket passe à Done",
+      "name": "Committer: commit changes when a ticket reaches Done",
       "enabled": true,
       "trigger": {
         "type": "statusChange",
@@ -91,7 +105,7 @@
           "concurrencyGroup": "git",
           "mutuallyExclusiveWith": [],
           "env": {},
-          "model": "claude-haiku-4-5",
+          "model": "claude-sonnet-4-6",
           "restoreStatusOnFail": true
         },
         {
@@ -102,13 +116,21 @@
     },
     {
       "id": "producer-on-subtick",
-      "name": "Producer — re-dispatch quand sous-tickets changent",
+      "name": "Producer: re-dispatch when sub-tickets change",
       "enabled": true,
       "trigger": {
         "type": "subTicketStatus",
-        "pollSeconds": 30
+        "pollSeconds": 30,
+        "parentColumn": "InProgress"
       },
-      "conditions": [],
+      "conditions": [
+        {
+          "type": "assignedTo",
+          "slugs": [
+            "producer"
+          ]
+        }
+      ],
       "actions": [
         {
           "type": "runAgent",
@@ -128,7 +150,7 @@
     },
     {
       "id": "evaluator-on-done",
-      "name": "Evaluator — vérifier les tickets passés à Done",
+      "name": "Evaluator: score tickets that reach Done",
       "enabled": true,
       "trigger": {
         "type": "statusChange",
@@ -155,11 +177,11 @@
     },
     {
       "id": "code-janitor-nightly",
-      "name": "Code Janitor — nettoyage périodique du codebase",
+      "name": "Code Janitor: periodic codebase hygiene",
       "enabled": true,
       "trigger": {
         "type": "interval",
-        "seconds": 10800
+        "seconds": 86400
       },
       "conditions": [],
       "actions": [
@@ -181,7 +203,7 @@
     },
     {
       "id": "auto-review-on-all-subs-done",
-      "name": "Passer parent en Review quand tous les sous-tickets sont Done",
+      "name": "Parent to Review when all sub-tickets are Done",
       "enabled": true,
       "trigger": {
         "type": "subTicketStatus",
@@ -211,7 +233,7 @@
     },
     {
       "id": "programmer-run",
-      "name": "Programmer: resume sur ticket InProgress",
+      "name": "Programmer: resume on InProgress tickets",
       "enabled": true,
       "trigger": {
         "type": "ticketInColumn",
@@ -271,6 +293,56 @@
         {
           "type": "commitAgentMemory",
           "agent": "qa-tester"
+        }
+      ]
+    },
+    {
+      "id": "owner-feedback",
+      "name": "Owner feedback: re-dispatch assignee when owner comments",
+      "enabled": true,
+      "trigger": {
+        "type": "ticketCommentAdded",
+        "pollSeconds": 30,
+        "authors": [
+          "owner"
+        ]
+      },
+      "conditions": [
+        {
+          "type": "assignedTo",
+          "slugs": [
+            "programmer",
+            "producer",
+            "qa-tester",
+            "groomer",
+            "committer",
+            "code-janitor",
+            "evaluator"
+          ]
+        },
+        {
+          "type": "ticketInColumn",
+          "columns": [
+            "Todo",
+            "InProgress",
+            "Blocked"
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "type": "runAgent",
+          "agent": "{assignee}",
+          "concurrencyGroup": "{assignee}",
+          "maxTurns": 100,
+          "mutuallyExclusiveWith": [],
+          "env": {},
+          "model": "claude-sonnet-4-6",
+          "restoreStatusOnFail": false
+        },
+        {
+          "type": "commitAgentMemory",
+          "agent": "{assignee}"
         }
       ]
     }

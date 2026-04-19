@@ -484,7 +484,6 @@ else
     {
         "ticketInColumn" => new TicketInColumnConditionSpec {
             Columns = new List<string> { _columns.FirstOrDefault() ?? "Todo" } },
-        "noPendingTickets" => new NoPendingTicketsConditionSpec(),
         "fieldLength" => new FieldLengthConditionSpec(),
         "priority" => new PriorityConditionSpec(),
         "labels" => new LabelsConditionSpec(),
@@ -578,7 +577,6 @@ else
         var text = c switch
         {
             TicketInColumnConditionSpec s => string.Format(L["CondInColumn"], string.Join(", ", s.Columns)) + (s.AssigneeSlug is not null ? $"/{s.AssigneeSlug}" : ""),
-            NoPendingTicketsConditionSpec s => string.Format(L["CondNoPending"], s.AssigneeSlug ?? L["CondNoPendingAll"]),
             MinDescriptionLengthConditionSpec s => string.Format(L["CondMinDesc"], s.Length),
             FieldLengthConditionSpec s => string.Format(L["CondFieldLength"], s.Field, s.Mode == "min" ? "≥" : "≤", s.Length),
             PriorityConditionSpec s => string.Format(L["CondPriority"], string.Join(", ", s.Priorities)),

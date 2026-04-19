@@ -23,8 +23,6 @@
   "TrigBoardIdle": "board idle",
   "TrigAgentInactivity": "inactivity {0}min",
   "CondInColumn": "in [{0}]",
-  "CondNoPending": "no pending tickets ({0})",
-  "CondNoPendingAll": "all",
   "CondMinDesc": "desc ≥ {0} chars",
   "CondFieldLength": "{0} {1} {2} chars",
   "CondPriority": "priority ∈ [{0}]",

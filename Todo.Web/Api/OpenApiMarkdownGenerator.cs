@@ -250,7 +250,7 @@ public static class OpenApiMarkdownGenerator
         sb.AppendLine("| Type | Params | Description |");
         sb.AppendLine("|------|--------|-------------|");
         sb.AppendLine("| `ticketInColumn` | `columns[]`, `assigneeSlug?`, `negate?` | Vérifie qu'un ticket est dans une colonne donnée |");
-        sb.AppendLine("| `noPendingTickets` | `assigneeSlug?`, `columns?` | Vérifie qu'aucun ticket n'est en attente |");
+        sb.AppendLine("| `ticketCountInColumn` | `columns[]`, `assigneeSlug?`, `sameAssignee?`, `operator`, `value` | Compte les tickets dans des colonnes et compare à un seuil (ex: `== 0` = no pending) |");
         sb.AppendLine("| `minDescriptionLength` | `length` | Vérifie que la description du ticket est assez longue |");
         sb.AppendLine("| `fieldLength` | `field`, `mode` (min/max), `length`, `negate?` | Vérifie la longueur d'un champ |");
         sb.AppendLine("| `assignedTo` | `slugs[]`, `negate?` | Vérifie l'assignation du ticket |");

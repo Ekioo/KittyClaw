@@ -19,8 +19,6 @@
   "PalTrigAgentInactivityHint": "Triggers after N minutes without dispatch",
   "PalCondTicketInColumn": "Ticket in column",
   "PalCondTicketInColumnHint": "Only runs if the ticket is in a column",
-  "PalCondNoPending": "No pending tickets",
-  "PalCondNoPendingHint": "Only runs if no tickets are in progress",
   "PalCondFieldLength": "Field length",
   "PalCondFieldLengthHint": "Checks title or description length (min/max)",
   "PalCondPriority": "Priority",
