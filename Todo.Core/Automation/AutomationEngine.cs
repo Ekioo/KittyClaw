@@ -137,6 +137,8 @@ public sealed class AutomationEngine : BackgroundService
         while (_urgentChannel.Reader.TryRead(out var entry))
         {
             if (ct.IsCancellationRequested) return;
+            var urgentProject = await _projects.GetProjectAsync(entry.Slug);
+            if (urgentProject?.IsPaused == true) continue;
             await EnsureLoadedAsync(entry.Slug);
             if (!_runtime.TryGetValue(entry.Slug, out var urt) || urt.Config is null) continue;
             if (!await ConditionsMatchAsync(urt, entry.Automation, entry.Firing)) continue;
@@ -158,6 +160,7 @@ public sealed class AutomationEngine : BackgroundService
         foreach (var project in projects)
         {
             if (ct.IsCancellationRequested) return;
+            if (project.IsPaused) continue;
             await EnsureLoadedAsync(project.Slug);
             var rt = _runtime[project.Slug];
             if (rt.ConfigDirty)
