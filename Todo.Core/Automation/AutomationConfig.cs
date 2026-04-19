@@ -93,6 +93,7 @@ public sealed class TicketCommentAddedTriggerSpec : TriggerSpec
 [JsonDerivedType(typeof(AssignedToConditionSpec), "assignedTo")]
 [JsonDerivedType(typeof(TicketAgeConditionSpec), "ticketAge")]
 [JsonDerivedType(typeof(HasParentConditionSpec), "hasParent")]
+[JsonDerivedType(typeof(AllSubTicketsInStatusConditionSpec), "allSubTicketsInStatus")]
 public abstract class ConditionSpec
 {
     /// <summary>When true, the condition result is inverted (NOT logic).</summary>
@@ -152,6 +153,15 @@ public sealed class HasParentConditionSpec : ConditionSpec
     public bool Value { get; set; }
 }
 
+/// <summary>
+/// Matches if the firing ticket has sub-tickets AND every sub-ticket's status is in <see cref="Statuses"/>.
+/// A ticket with zero sub-tickets does NOT match (safer default — otherwise every leaf ticket would match).
+/// </summary>
+public sealed class AllSubTicketsInStatusConditionSpec : ConditionSpec
+{
+    public List<string> Statuses { get; set; } = new() { "Done" };
+}
+
 public sealed class TicketAgeConditionSpec : ConditionSpec
 {
     /// <summary>"createdAt" or "updatedAt"</summary>
@@ -162,17 +172,20 @@ public sealed class TicketAgeConditionSpec : ConditionSpec
 }
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
-[JsonDerivedType(typeof(RunClaudeSkillActionSpec), "runClaudeSkill")]
+[JsonDerivedType(typeof(RunAgentActionSpec), "runAgent")]
 [JsonDerivedType(typeof(MoveTicketStatusActionSpec), "moveTicketStatus")]
 [JsonDerivedType(typeof(SetLabelsActionSpec), "setLabels")]
 [JsonDerivedType(typeof(AssignTicketActionSpec), "assignTicket")]
 [JsonDerivedType(typeof(AddCommentActionSpec), "addComment")]
 public abstract class ActionSpec { }
 
-public sealed class RunClaudeSkillActionSpec : ActionSpec
+public sealed class RunAgentActionSpec : ActionSpec
 {
-    public required string SkillFile { get; set; }
-    public string? AgentName { get; set; }
+    /// <summary>
+    /// Name of the agent to run. Must match a member slug in the project.
+    /// Resolved to <c>.agents/{Agent}/SKILL.md</c> at dispatch time.
+    /// </summary>
+    public required string Agent { get; set; }
     public int MaxTurns { get; set; } = 200;
     public string? ConcurrencyGroup { get; set; }
     public List<string> MutuallyExclusiveWith { get; set; } = new();

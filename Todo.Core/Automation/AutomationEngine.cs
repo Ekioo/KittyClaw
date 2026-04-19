@@ -230,18 +230,17 @@ public sealed class AutomationEngine : BackgroundService
                 HashSet<string>? slugsToCheck = null;
                 if (!string.IsNullOrEmpty(c.ConcurrencyGroup))
                 {
-                    // Collect all agentNames from runClaudeSkill actions sharing this concurrencyGroup.
+                    // Collect all agents from runAgent actions sharing this concurrencyGroup.
                     slugsToCheck = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     if (rt.Config is not null)
                     {
                         foreach (var auto in rt.Config.Automations)
                         foreach (var act in auto.Actions)
                         {
-                            if (act is RunClaudeSkillActionSpec rcs
-                                && string.Equals(rcs.ConcurrencyGroup, c.ConcurrencyGroup, StringComparison.OrdinalIgnoreCase)
-                                && rcs.AgentName is not null)
+                            if (act is RunAgentActionSpec rcs
+                                && string.Equals(rcs.ConcurrencyGroup, c.ConcurrencyGroup, StringComparison.OrdinalIgnoreCase))
                             {
-                                slugsToCheck.Add(rcs.AgentName);
+                                slugsToCheck.Add(rcs.Agent);
                             }
                         }
                     }
@@ -301,6 +300,11 @@ public sealed class AutomationEngine : BackgroundService
                 var ticketHp = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
                 if (ticketHp is null) return false;
                 return hp.Value ? ticketHp.ParentId is not null : ticketHp.ParentId is null;
+            case AllSubTicketsInStatusConditionSpec asub:
+                if (firing.TicketId is null) return false;
+                var ticketAsub = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
+                if (ticketAsub is null || ticketAsub.SubTickets.Count == 0) return false;
+                return ticketAsub.SubTickets.All(s => asub.Statuses.Contains(s.Status));
             case TicketAgeConditionSpec ta:
                 if (firing.TicketId is null) return true;
                 var ticketTa = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
@@ -333,35 +337,29 @@ public sealed class AutomationEngine : BackgroundService
         {
             switch (action)
             {
-                case RunClaudeSkillActionSpec a:
+                case RunAgentActionSpec a:
                 {
-                    // Resolve placeholders in skillFile.
-                    var skillFile = a.SkillFile;
-                    if (skillFile.Contains('{'))
+                    // Resolve {assignee} placeholder in Agent field (delegation pattern).
+                    var agentName = a.Agent;
+                    if (agentName.Contains("{assignee}"))
                     {
-                        if (skillFile.Contains("{assignee}"))
+                        if (firing.TicketId is null)
                         {
-                            if (firing.TicketId is null)
-                            {
-                                _logger.LogWarning("Placeholder {{assignee}} in skillFile but no ticketId in firing — skipping");
-                                return null;
-                            }
-                            var t = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
-                            var assignee = t?.AssignedTo;
-                            if (string.IsNullOrEmpty(assignee))
-                            {
-                                _logger.LogWarning("Placeholder {{assignee}} in skillFile but ticket #{Id} has no assignee — skipping", firing.TicketId);
-                                return null;
-                            }
-                            skillFile = skillFile.Replace("{assignee}", assignee);
+                            _logger.LogWarning("Placeholder {{assignee}} in Agent but no ticketId in firing — skipping");
+                            return null;
                         }
-                        if (firing.TicketId is not null)
-                            skillFile = skillFile.Replace("{ticketId}", firing.TicketId.Value.ToString());
-                        if (a.AgentName is not null)
-                            skillFile = skillFile.Replace("{agent}", a.AgentName);
+                        var t = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
+                        var assignee = t?.AssignedTo;
+                        if (string.IsNullOrEmpty(assignee))
+                        {
+                            _logger.LogWarning("Placeholder {{assignee}} in Agent but ticket #{Id} has no assignee — skipping", firing.TicketId);
+                            return null;
+                        }
+                        agentName = agentName.Replace("{assignee}", assignee);
                     }
 
-                    var agentName = a.AgentName ?? InferAgentName(skillFile);
+                    // Resolve skill file by convention: .agents/{agent}/SKILL.md
+                    var skillFile = $"{agentName}/SKILL.md";
                     var group = string.IsNullOrEmpty(a.ConcurrencyGroup) ? agentName : a.ConcurrencyGroup;
 
                     // Daily budget gate (non-CEO agents only — CEO can always run to react to budget).
@@ -550,9 +548,6 @@ public sealed class AutomationEngine : BackgroundService
         await CommitAsync();
         return lastRun;
     }
-
-    private static string InferAgentName(string skillFile) =>
-        Path.GetFileNameWithoutExtension(skillFile);
 
     private static Dictionary<string, ITrigger> BuildTriggers(AutomationConfig config)
     {

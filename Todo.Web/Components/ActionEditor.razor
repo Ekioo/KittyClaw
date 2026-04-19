@@ -4,7 +4,7 @@
 <div class="node-editor">
     <label>@L["ActionType"]
         <select value="@CurrentType" @onchange="OnTypeChanged">
-            <option value="runClaudeSkill">@L["ActionRunSkill"]</option>
+            <option value="runAgent">@L["ActionRunAgent"]</option>
             <option value="moveTicketStatus">@L["ActionMoveTicket"]</option>
             <option value="setLabels">@L["ActionSetLabels"]</option>
             <option value="assignTicket">@L["ActionAssignTicket"]</option>
@@ -14,19 +14,15 @@
 
     @switch (Action)
     {
-        case RunClaudeSkillActionSpec s:
-            <label>@L["SkillFile"]
-                <select value="@s.SkillFile" @onchange="e => s.SkillFile = (string)e.Value!">
-                    @foreach (var sk in Skills) { <option value="@($"skills/{sk}.md")">@($"skills/{sk}.md")</option> }
-                    @if (!Skills.Contains(System.IO.Path.GetFileNameWithoutExtension(s.SkillFile)))
+        case RunAgentActionSpec s:
+            <label>@L["Agent"]
+                <select value="@s.Agent" @onchange="e => s.Agent = (string)e.Value!">
+                    @foreach (var m in Members) { <option value="@m">@m</option> }
+                    @if (!Members.Contains(s.Agent) && !string.IsNullOrEmpty(s.Agent))
                     {
-                        <option value="@s.SkillFile">@(s.SkillFile) @L["ModelCustom"]</option>
+                        <option value="@s.Agent">@s.Agent @L["ModelCustom"]</option>
                     }
                 </select>
-            </label>
-            <label>@L["AgentName"]
-                <input placeholder="@L["AgentNamePlaceholder"]" value="@(s.AgentName ?? "")"
-                       @onchange="e => s.AgentName = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!" />
             </label>
             <label>@L["MaxTurns"]
                 <input type="number" @bind="s.MaxTurns" />
@@ -114,12 +110,12 @@
 
     private string CurrentType => Action switch
     {
-        RunClaudeSkillActionSpec => "runClaudeSkill",
+        RunAgentActionSpec => "runAgent",
         MoveTicketStatusActionSpec => "moveTicketStatus",
         SetLabelsActionSpec => "setLabels",
         AssignTicketActionSpec => "assignTicket",
         AddCommentActionSpec => "addComment",
-        _ => "runClaudeSkill",
+        _ => "runAgent",
     };
 
     private static string JoinGroups(List<string> items) => string.Join(", ", items);
@@ -132,12 +128,12 @@
     {
         ActionSpec spec = (string?)e.Value switch
         {
-            "runClaudeSkill" => new RunClaudeSkillActionSpec { SkillFile = Skills.FirstOrDefault() is string sk ? $"skills/{sk}.md" : "skills/producer.md" },
+            "runAgent" => new RunAgentActionSpec { Agent = Members.FirstOrDefault() ?? "producer" },
             "moveTicketStatus" => new MoveTicketStatusActionSpec { To = Columns.FirstOrDefault() ?? "Todo" },
             "setLabels" => new SetLabelsActionSpec(),
             "assignTicket" => new AssignTicketActionSpec(),
             "addComment" => new AddCommentActionSpec(),
-            _ => new RunClaudeSkillActionSpec { SkillFile = "skills/producer.md" },
+            _ => new RunAgentActionSpec { Agent = Members.FirstOrDefault() ?? "producer" },
         };
         await OnReplace.InvokeAsync(spec);
     }

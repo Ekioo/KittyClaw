@@ -261,7 +261,7 @@ public static class OpenApiMarkdownGenerator
         sb.AppendLine();
         sb.AppendLine("| Type | Params | Description |");
         sb.AppendLine("|------|--------|-------------|");
-        sb.AppendLine("| `runClaudeSkill` | `skillFile`, `agentName?`, `maxTurns?`, `concurrencyGroup?`, `mutuallyExclusiveWith[]`, `context?`, `env?`, `model?` | Lance un agent Claude avec le skill spécifié |");
+        sb.AppendLine("| `runAgent` | `agent`, `maxTurns?`, `concurrencyGroup?`, `mutuallyExclusiveWith[]`, `context?`, `env?`, `model?` | Lance l'agent nommé ; son skill est résolu par convention en `.agents/{agent}/SKILL.md` |");
         sb.AppendLine("| `moveTicketStatus` | `to` | Déplace le ticket vers la colonne indiquée |");
         sb.AppendLine();
         sb.AppendLine("### Concurrence");
@@ -298,9 +298,8 @@ public static class OpenApiMarkdownGenerator
         sb.AppendLine("      \"actions\": [");
         sb.AppendLine("        { \"type\": \"moveTicketStatus\", \"to\": \"InProgress\" },");
         sb.AppendLine("        {");
-        sb.AppendLine("          \"type\": \"runClaudeSkill\",");
-        sb.AppendLine("          \"skillFile\": \"skills/programmer.md\",");
-        sb.AppendLine("          \"agentName\": \"programmer\",");
+        sb.AppendLine("          \"type\": \"runAgent\",");
+        sb.AppendLine("          \"agent\": \"programmer\",");
         sb.AppendLine("          \"maxTurns\": 200,");
         sb.AppendLine("          \"concurrencyGroup\": \"code\"");
         sb.AppendLine("        }");

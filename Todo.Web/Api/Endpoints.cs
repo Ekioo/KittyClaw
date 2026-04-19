@@ -309,15 +309,16 @@ public static class Endpoints
             catch (Exception ex) { return Results.Problem(ex.Message); }
         }).WithTags("Browse");
 
-        // Available skills for a project (scanned from WorkspacePath/.agents/skills/*.md)
+        // Available skills for a project (scanned from WorkspacePath/.agents/<agent>/SKILL.md)
         api.MapGet("/projects/{slug}/skills", async (string slug, ProjectService ps) =>
         {
             var project = await ps.GetProjectAsync(slug);
             if (project is null) return Results.NotFound();
-            var dir = Path.Combine(ps.ResolveWorkspacePath(project), ".agents", "skills");
+            var dir = Path.Combine(ps.ResolveWorkspacePath(project), ".agents");
             if (!Directory.Exists(dir)) return Results.Ok(Array.Empty<string>());
-            var skills = Directory.EnumerateFiles(dir, "*.md")
-                .Select(p => Path.GetFileNameWithoutExtension(p)!)
+            var skills = Directory.EnumerateDirectories(dir)
+                .Where(d => File.Exists(Path.Combine(d, "SKILL.md")))
+                .Select(d => Path.GetFileName(d)!)
                 .OrderBy(s => s)
                 .ToList();
             return Results.Ok(skills);
@@ -432,7 +433,7 @@ public static class Endpoints
             var workspacePath = ps.ResolveWorkspacePath(project);
 
             // Build rich context for the session
-            var sb = new System.Text.StringBuilder();
+            var sb = new StringBuilder();
             sb.AppendLine("# Context");
             sb.AppendLine();
             sb.AppendLine("You are an AI assistant embedded in the **Todo** application — a Blazor Server kanban board that orchestrates agentic Claude workflows.");
@@ -494,8 +495,7 @@ public static class Endpoints
             if (!file.ContentType.StartsWith("image/"))
                 return Results.BadRequest(new { error = "File must be an image" });
             var ext = file.ContentType.Split('/')[1].Split('+')[0];
-            var allowed = new HashSet<string> { "png", "jpeg", "jpg", "gif", "webp", "svg" };
-            if (!allowed.Contains(ext)) ext = "png";
+            if (!AllowedImageExts.Contains(ext)) ext = "png";
             var filename = $"{Guid.NewGuid():N}.{ext}";
             var uploadsDir = Path.Combine(ps.DataDir, "uploads");
             Directory.CreateDirectory(uploadsDir);
@@ -507,6 +507,7 @@ public static class Endpoints
     }
 
     private static readonly JsonSerializerOptions SseJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    private static readonly HashSet<string> AllowedImageExts = ["png", "jpeg", "jpg", "gif", "webp", "svg"];
 
     private static async Task WriteSseAsync(HttpResponse res, StreamEvent ev, CancellationToken ct)
     {

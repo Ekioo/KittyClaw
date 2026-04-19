@@ -490,18 +490,19 @@ else
         "labels" => new LabelsConditionSpec(),
         "assignedTo" => new AssignedToConditionSpec(),
         "ticketAge" => new TicketAgeConditionSpec(),
+        "hasParent" => new HasParentConditionSpec(),
+        "allSubTicketsInStatus" => new AllSubTicketsInStatusConditionSpec { Statuses = new List<string> { "Done" } },
         _ => new TicketInColumnConditionSpec { Columns = new List<string> { "Todo" } },
     };
 
     private ActionSpec BuildAction(string type) => type switch
     {
-        "runClaudeSkill" => new RunClaudeSkillActionSpec {
-            SkillFile = _skills.FirstOrDefault() is string sk ? $"skills/{sk}.md" : "skills/producer.md" },
+        "runAgent" => new RunAgentActionSpec { Agent = _skills.FirstOrDefault() ?? "producer" },
         "moveTicketStatus" => new MoveTicketStatusActionSpec { To = _columns.FirstOrDefault() ?? "Todo" },
         "setLabels" => new SetLabelsActionSpec(),
         "assignTicket" => new AssignTicketActionSpec(),
         "addComment" => new AddCommentActionSpec(),
-        _ => new RunClaudeSkillActionSpec { SkillFile = "skills/producer.md" },
+        _ => new RunAgentActionSpec { Agent = "producer" },
     };
 
     private void AddAutomation()
@@ -517,7 +518,7 @@ else
             Name = L["NewAutomationName"],
             Enabled = true,
             Trigger = new IntervalTriggerSpec { Seconds = 60 },
-            Actions = new List<ActionSpec> { new RunClaudeSkillActionSpec { SkillFile = "skills/producer.md" } },
+            Actions = new List<ActionSpec> { new RunAgentActionSpec { Agent = "producer" } },
         });
         OpenEditor(_config.Automations.Count - 1);
     }
@@ -544,7 +545,7 @@ else
     {
         if (_config is null || _editingIndex is null) return;
         var a = _config.Automations[_editingIndex.Value];
-        a.Actions.Add(new RunClaudeSkillActionSpec { SkillFile = "skills/producer.md" });
+        a.Actions.Add(new RunAgentActionSpec { Agent = "producer" });
         Select(NodeKind.Action, a.Actions.Count - 1);
     }
 
@@ -583,6 +584,7 @@ else
             AssignedToConditionSpec s => string.Format(L["CondAssignedTo"], string.Join(", ", s.Slugs)),
             TicketAgeConditionSpec s => string.Format(L["CondTicketAge"], s.Field, s.Mode == "olderThan" ? "≥" : "<", s.Hours),
             HasParentConditionSpec s => s.Value ? L["CondHasParentTrue"] : L["CondHasParentFalse"],
+            AllSubTicketsInStatusConditionSpec s => string.Format(L["CondAllSubTicketsInStatus"], string.Join(", ", s.Statuses)),
             _ => c.GetType().Name,
         };
         return c.Negate ? $"NON {text}" : text;
@@ -590,7 +592,7 @@ else
 
     private string DescribeAction(ActionSpec a) => a switch
     {
-        RunClaudeSkillActionSpec s => s.SkillFile,
+        RunAgentActionSpec s => s.Agent,
         MoveTicketStatusActionSpec s => string.Format(L["ActionMoveTo"], s.To),
         SetLabelsActionSpec s => string.Format(L["ActionSetLabelsDesc"], string.Join(", ", s.Add), string.Join(", ", s.Remove)),
         _ => a.GetType().Name,

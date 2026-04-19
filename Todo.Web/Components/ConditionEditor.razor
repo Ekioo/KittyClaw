@@ -13,6 +13,7 @@
             <option value="assignedTo">@L["CondTypeAssignedTo"]</option>
             <option value="ticketAge">@L["CondTypeTicketAge"]</option>
             <option value="hasParent">@L["CondTypeHasParent"]</option>
+            <option value="allSubTicketsInStatus">@L["CondTypeAllSubTicketsInStatus"]</option>
         </select>
     </label>
 
@@ -106,6 +107,17 @@
             <label class="column-check"><input type="checkbox" checked="@s.Value"
                        @onchange="e => s.Value = (bool)e.Value!" /><span>@L["HasParentLabel"]</span></label>
             break;
+        case AllSubTicketsInStatusConditionSpec s:
+            <div class="column-picker">
+                <div class="column-picker-label">@L["AllSubTicketsStatusesLabel"]</div>
+                @foreach (var c in Columns)
+                {
+                    var col = c;
+                    <label class="column-check"><input type="checkbox" checked="@s.Statuses.Contains(col)"
+                               @onchange="e => ToggleColumn(s.Statuses, col, (bool)e.Value!)" /><span>@col</span></label>
+                }
+            </div>
+            break;
         case TicketAgeConditionSpec s:
             <label>@L["Field"]
                 <select value="@s.Field" @onchange="e => s.Field = (string)e.Value!">
@@ -148,6 +160,7 @@
         AssignedToConditionSpec => "assignedTo",
         TicketAgeConditionSpec => "ticketAge",
         HasParentConditionSpec => "hasParent",
+        AllSubTicketsInStatusConditionSpec => "allSubTicketsInStatus",
         _ => "ticketInColumn",
     };
 
@@ -163,6 +176,7 @@
             "assignedTo" => new AssignedToConditionSpec(),
             "ticketAge" => new TicketAgeConditionSpec(),
             "hasParent" => new HasParentConditionSpec(),
+            "allSubTicketsInStatus" => new AllSubTicketsInStatusConditionSpec { Statuses = new List<string> { "Done" } },
             _ => new TicketInColumnConditionSpec { Columns = new List<string> { "Todo" } },
         };
         await OnReplace.InvokeAsync(spec);
