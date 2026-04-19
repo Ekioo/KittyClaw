@@ -1991,7 +1991,7 @@ button:disabled { opacity: 0.35; cursor: default; }
     line-height: 1.5;
     background: #11141b;
 }
-.console-line { display: grid; grid-template-columns: 65px 80px 1fr; gap: 0.6rem; padding: 0.1rem 0; align-items: start; }
+.console-line { display: grid; grid-template-columns: 65px 80px 1fr; gap: 0.6rem; padding: 0.35rem 0; align-items: start; }
 .console-tool_use { grid-template-columns: 65px 1fr; }
 .console-time { color: #5a6a80; }
 .console-kind { color: #8a99b0; text-transform: uppercase; font-size: 0.7rem; }
@@ -2010,7 +2010,24 @@ details[open] .console-tool-summary::before { transform: rotate(90deg); }
 .console-tool-icon { font-size: 0.85rem; flex-shrink: 0; }
 .console-tool-name { font-weight: 600; color: #8ab4f8; flex-shrink: 0; }
 .console-tool-preview { color: #6a8aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 35ch; }
-.console-tool-detail { margin: 0; padding: 0.4rem 0.6rem; background: #11141b; border-top: 1px solid #2e3a50; color: #a0b4c8; font-size: 0.76rem; font-family: monospace; white-space: pre-wrap; word-break: break-all; max-height: 250px; overflow-y: auto; }
+.console-tool-detail { margin: 0; padding: 0.4rem 0.6rem; background: #11141b; border-top: 1px solid #2e3a50; color: #a0b4c8; font-size: 0.76rem; font-family: monospace; white-space: pre-wrap; overflow-wrap: break-word; max-height: 400px; overflow-y: auto; }
+
+.console-rate-limit-block { border-color: #3a3020; }
+.console-rate-limit-block .console-tool-summary { color: #f59e0b; }
+.console-rate-limit-block .console-tool-name { color: #f59e0b; }
+.console-result-block { border-color: #1a3020; }
+.console-result-block .console-tool-summary { color: #4ade80; }
+.console-result-block .console-tool-name { color: #4ade80; }
+
+/* JSON inside message blocks */
+.console-msg-json { border-top: none; max-height: 400px; }
+
+/* JSON syntax highlighting */
+.console-tool-detail .json-key    { color: #79b8ff; }
+.console-tool-detail .json-string { color: #9ecbff; }
+.console-tool-detail .json-number { color: #f8c555; }
+.console-tool-detail .json-bool   { color: #f97583; }
+.console-tool-detail .json-null   { color: #6a737d; }
 
 /* Message collapsible blocks (user/assistant/system) */
 .console-msg-block { background: #111827; border: 1px solid #2a3545; border-radius: 6px; overflow: hidden; grid-column: 2 / -1; min-width: 0; width: 100%; }

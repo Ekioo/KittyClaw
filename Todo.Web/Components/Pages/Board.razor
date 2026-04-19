@@ -659,7 +659,18 @@ else
 
 @if (_activeRunDrawerId is not null)
 {
-    <AgentRunDrawer RunId="@_activeRunDrawerId" OnClose="CloseRunDrawer" />
+    <ErrorBoundary>
+        <ChildContent>
+            <AgentRunDrawer RunId="@_activeRunDrawerId" OnClose="CloseRunDrawer" />
+        </ChildContent>
+        <ErrorContent Context="ex">
+            <div class="agent-drawer-overlay" @onclick="CloseRunDrawer"></div>
+            <div class="agent-drawer" style="padding:1.5rem;color:#f06b6b">
+                <strong>Error: </strong>@ex.Message
+                <br/><button @onclick="CloseRunDrawer" style="margin-top:1rem">Close</button>
+            </div>
+        </ErrorContent>
+    </ErrorBoundary>
 }
 
 @if (_showChatDrawer)

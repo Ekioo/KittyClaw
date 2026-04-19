@@ -144,27 +144,27 @@ public sealed class ClaudeRunner
         // When cancelled externally, kill the process.
         using var killReg = linked.Token.Register(() =>
         {
-            try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { }
+            try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { /* cleanup, process may already be exiting */ }
         });
 
         int? exit = null;
         try
         {
             // Close stdin so claude knows the prompt is complete.
-            try { proc.StandardInput.Close(); } catch { }
+            try { proc.StandardInput.Close(); } catch { /* stdin may already be closed */ }
             await proc.WaitForExitAsync(linked.Token);
             exit = proc.ExitCode;
         }
         catch (OperationCanceledException)
         {
-            try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { }
+            try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { /* cleanup on cancellation */ }
             _runs.Complete(run.RunId, AgentRunStatus.Stopped, null);
             AppendDebugLog(ctx, $"STOPPED {ctx.AgentName} run={run.RunId}");
             return run;
         }
 
         await Task.WhenAll(stdoutTask, stderrTask);
-        try { steerTask.Dispose(); } catch { }
+        try { steerTask.Dispose(); } catch { /* best-effort cleanup */ }
 
         _runs.Complete(run.RunId, exit == 0 ? AgentRunStatus.Completed : AgentRunStatus.Failed, exit);
         AppendDebugLog(ctx, $"FINISHED {ctx.AgentName} run={run.RunId} exit={exit}");
@@ -217,12 +217,13 @@ public sealed class ClaudeRunner
             {
                 using var doc = JsonDocument.Parse(line);
                 var kind = doc.RootElement.TryGetProperty("type", out var t) ? t.GetString() ?? "event" : "event";
-                // For assistant message events, emit separate tool_use events for each tool call in content
+                // For assistant message events: emit the assistant text first, then separate tool_use events
                 if (kind == "assistant" &&
                     doc.RootElement.TryGetProperty("message", out var msg) &&
                     msg.TryGetProperty("content", out var content) &&
                     content.ValueKind == JsonValueKind.Array)
                 {
+                    run.Push(new StreamEvent(DateTime.UtcNow, kind, FlattenJson(doc.RootElement)));
                     foreach (var part in content.EnumerateArray())
                     {
                         if (part.TryGetProperty("type", out var ptype) && ptype.GetString() == "tool_use")
@@ -233,7 +234,10 @@ public sealed class ClaudeRunner
                         }
                     }
                 }
-                run.Push(new StreamEvent(DateTime.UtcNow, kind, FlattenJson(doc.RootElement)));
+                else
+                {
+                    run.Push(new StreamEvent(DateTime.UtcNow, kind, FlattenJson(doc.RootElement)));
+                }
             }
             catch
             {
@@ -301,13 +305,13 @@ public sealed class ClaudeRunner
                 {
                     foreach (var part in content.EnumerateArray())
                     {
-                        if (part.TryGetProperty("text", out var text))
+                        if (part.TryGetProperty("type", out var pt2) && pt2.GetString() == "tool_use")
+                        {
+                            // tool_use parts are emitted as separate tool_use events — skip to avoid duplication
+                        }
+                        else if (part.TryGetProperty("text", out var text))
                         {
                             body.Append(text.GetString());
-                        }
-                        else if (part.TryGetProperty("name", out var name))
-                        {
-                            body.Append("tool:").Append(name.GetString()).Append(' ');
                         }
                         else if (part.TryGetProperty("type", out var pt) && pt.GetString() == "tool_result" &&
                                  part.TryGetProperty("content", out var tc))

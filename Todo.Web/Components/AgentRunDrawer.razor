@@ -48,7 +48,35 @@
                                 <span class="console-tool-name">@ev.Text</span>
                                 <span class="console-tool-preview">@GetToolPreview(ev.Text, ev.Detail)</span>
                             </summary>
-                            <pre class="console-tool-detail">@FormatJson(ev.Detail)</pre>
+                            <pre class="console-tool-detail">@((MarkupString)HighlightJson(ev.Detail))</pre>
+                        </details>
+                    </div>
+                }
+                else if (ev.Kind == "rate_limit_event")
+                {
+                    <div class="console-line console-tool_use">
+                        <span class="console-time">@ev.At.ToLocalTime().ToString("HH:mm:ss")</span>
+                        <details class="console-tool-block console-rate-limit-block">
+                            <summary class="console-tool-summary">
+                                <span class="console-tool-icon">⏳</span>
+                                <span class="console-tool-name">rate_limit_event</span>
+                                <span class="console-tool-preview">@GetRateLimitPreview(ev.Text)</span>
+                            </summary>
+                            <pre class="console-tool-detail">@((MarkupString)HighlightJson(ev.Text))</pre>
+                        </details>
+                    </div>
+                }
+                else if (ev.Kind == "result")
+                {
+                    <div class="console-line console-tool_use">
+                        <span class="console-time">@ev.At.ToLocalTime().ToString("HH:mm:ss")</span>
+                        <details class="console-tool-block console-result-block">
+                            <summary class="console-tool-summary">
+                                <span class="console-tool-icon">✓</span>
+                                <span class="console-tool-name">result</span>
+                                <span class="console-tool-preview">@GetResultPreview(ev.Text)</span>
+                            </summary>
+                            <pre class="console-tool-detail">@((MarkupString)HighlightJson(ev.Text))</pre>
                         </details>
                     </div>
                 }
@@ -69,7 +97,14 @@
                                         <span class="console-msg-preview">@msgPreview</span>
                                     }
                                 </summary>
-                                <div class="console-msg-detail markdown">@((MarkupString)RenderMarkdown(msgBody))</div>
+                                @if (IsJson(msgBody))
+                                {
+                                    <pre class="console-tool-detail console-msg-json">@((MarkupString)HighlightJson(msgBody))</pre>
+                                }
+                                else
+                                {
+                                    <div class="console-msg-detail markdown">@((MarkupString)RenderMarkdown(msgBody))</div>
+                                }
                             </details>
                         </div>
                     }
@@ -205,7 +240,7 @@
         try { await http.PostAsync($"/api/projects/{_run.ProjectSlug}/runs/{_run.RunId}/stop", null); } catch { }
     }
 
-    private static string GetMessageBody(string text)
+    private static string GetMessageBody(string? text)
     {
         var (_, body) = ParseBracketTag(text);
         return body;
@@ -214,14 +249,50 @@
     private static string Truncate(string text, int max) =>
         text.Length <= max ? text : text[..max] + "…";
 
-    private static (string? Tag, string Body) ParseBracketTag(string text)
+    private static (string? Tag, string Body) ParseBracketTag(string? text)
     {
+        if (string.IsNullOrEmpty(text)) return (null, "");
         if (!text.StartsWith('[')) return (null, text);
         var close = text.IndexOf(']');
         if (close < 1) return (null, text);
         var tag = text[1..close];
         var body = text[(close + 1)..].TrimStart();
         return (tag, body);
+    }
+
+    private static string GetResultPreview(string text)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(text);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("result", out var r) && r.ValueKind == System.Text.Json.JsonValueKind.String)
+                return Truncate(r.GetString() ?? "", 80);
+            if (root.TryGetProperty("subtype", out var s))
+                return s.GetString() ?? "result";
+        }
+        catch { }
+        return Truncate(text, 80);
+    }
+
+    private static string GetRateLimitPreview(string text)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(text);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("rate_limits", out var limits) && limits.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                var parts = limits.EnumerateArray()
+                    .Select(l => l.TryGetProperty("name", out var n) && l.TryGetProperty("remaining", out var r)
+                        ? $"{n.GetString()}={r}" : null)
+                    .Where(s => s is not null);
+                var preview = string.Join(", ", parts);
+                return preview.Length > 0 ? preview : text;
+            }
+        }
+        catch { }
+        return Truncate(text, 80);
     }
 
     private static string GetToolPreview(string toolName, string? detail)
@@ -248,22 +319,68 @@
         catch { return ""; }
     }
 
+    private static bool IsJson(string text)
+    {
+        var t = text.TrimStart();
+        if (t.Length == 0) return false;
+        if (t[0] != '{' && t[0] != '[') return false;
+        try { System.Text.Json.JsonDocument.Parse(t); return true; } catch { return false; }
+    }
+
     private static string FormatJson(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return "";
         try
         {
             using var doc = System.Text.Json.JsonDocument.Parse(json);
-            return System.Text.Json.JsonSerializer.Serialize(doc, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            return System.Text.Json.JsonSerializer.Serialize(doc.RootElement, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
         }
         catch { return json; }
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex _jsonTokenRe =
+        new(@"(""(?:[^""\\]|\\.)*"")\s*(:)|""(?:[^""\\]|\\.)*""|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|true|false|null",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static string HighlightJson(string? json)
+    {
+        var pretty = FormatJson(json);
+        if (string.IsNullOrWhiteSpace(pretty)) return "";
+        var sb = new System.Text.StringBuilder();
+        var pos = 0;
+        foreach (System.Text.RegularExpressions.Match m in _jsonTokenRe.Matches(pretty))
+        {
+            if (m.Index > pos)
+                sb.Append(System.Net.WebUtility.HtmlEncode(pretty[pos..m.Index]));
+            var encoded = System.Net.WebUtility.HtmlEncode(m.Value);
+            if (m.Groups[2].Success)
+            {
+                var keyEncoded = System.Net.WebUtility.HtmlEncode(m.Groups[1].Value);
+                sb.Append($"<span class=\"json-key\">{keyEncoded}</span>{m.Groups[2].Value}");
+            }
+            else if (m.Value.StartsWith('"'))
+                sb.Append($"<span class=\"json-string\">{encoded}</span>");
+            else if (m.Groups[3].Success)
+                sb.Append($"<span class=\"json-number\">{encoded}</span>");
+            else
+                sb.Append(m.Value switch
+                {
+                    "true" or "false" => $"<span class=\"json-bool\">{encoded}</span>",
+                    "null" => $"<span class=\"json-null\">{encoded}</span>",
+                    _ => encoded
+                });
+            pos = m.Index + m.Length;
+        }
+        if (pos < pretty.Length)
+            sb.Append(System.Net.WebUtility.HtmlEncode(pretty[pos..]));
+        return sb.ToString();
     }
 
     private static readonly MarkdownPipeline _mdPipeline =
         new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
 
-    private static string RenderMarkdown(string text) =>
-        Markdig.Markdown.ToHtml(text, _mdPipeline);
+    private static string RenderMarkdown(string? text) =>
+        string.IsNullOrEmpty(text) ? "" : Markdig.Markdown.ToHtml(text, _mdPipeline);
 
     private static string FormatElapsed(DateTime start)
     {

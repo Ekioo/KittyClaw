@@ -24,11 +24,21 @@ public class ClaudeRunnerFlattenJsonTests
     }
 
     [Fact]
-    public void AssistantWithToolUseContent_ExtractsToolName()
+    public void AssistantWithToolUseContent_SkipsToolUse()
     {
+        // tool_use parts are emitted as separate tool_use events — FlattenJson must not duplicate them
         var json = """{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{}}]}}""";
         var result = ClaudeRunner.FlattenJson(Parse(json));
-        Assert.Contains("tool:Read", result);
+        Assert.DoesNotContain("tool:Read", result);
+    }
+
+    [Fact]
+    public void AssistantWithTextAndToolUse_OnlyEmitsText()
+    {
+        var json = """{"type":"assistant","message":{"content":[{"type":"text","text":"Thinking…"},{"type":"tool_use","name":"Bash","input":{}}]}}""";
+        var result = ClaudeRunner.FlattenJson(Parse(json));
+        Assert.Contains("Thinking…", result);
+        Assert.DoesNotContain("tool:Bash", result);
     }
 
     [Fact]
