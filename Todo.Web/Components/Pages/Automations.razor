@@ -262,8 +262,12 @@ else
     {
         _healthChecking = true;
         _statusMessage = null;
+        var issues = new List<string>();
+        var fixes = new List<string>();
+
         try
         {
+            // ── 1. CLAUDE.md ──────────────────────────────────────────────
             var workspace = ProjectService.ResolveWorkspacePath(_project!);
             if (!Directory.Exists(workspace))
             {
@@ -288,7 +292,7 @@ else
 
                     Consult it before interacting with the API.
                     """);
-                _statusMessage = (L["WorkspaceHealthCheckCreated"], "settings-status-ok");
+                fixes.Add("CLAUDE.md créé");
             }
             else
             {
@@ -305,16 +309,49 @@ else
 
                     Consult it before interacting with the API.
                     """);
-                    _statusMessage = (L["WorkspaceHealthCheckEnriched"], "settings-status-ok");
-                }
-                else
-                {
-                    _statusMessage = (L["WorkspaceHealthCheckOk"], "settings-status-ok");
+                    fixes.Add("CLAUDE.md enrichi");
                 }
             }
+
+            // ── 2. Members référencés dans automations ────────────────────
+            if (_config is not null)
+            {
+                var http = NewHttp();
+                var members = await http.GetFromJsonAsync<List<MemberSlug>>($"/api/projects/{Slug}/members") ?? [];
+                var existingSlugs = members.Select(m => m.Slug).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                var referencedSlugs = _config.Automations
+                    .Select(a => a.Trigger)
+                    .OfType<TicketInColumnTriggerSpec>()
+                    .Where(t => t.AssigneeSlug is not null)
+                    .Select(t => t.AssigneeSlug!)
+                    .Distinct(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var slug in referencedSlugs)
+                {
+                    if (!existingSlugs.Contains(slug))
+                    {
+                        var resp = await http.PostAsJsonAsync($"/api/projects/{Slug}/members", new { name = slug });
+                        if (resp.IsSuccessStatusCode)
+                            fixes.Add($"Membre créé : {slug}");
+                        else
+                            issues.Add($"Membre manquant et non créé : {slug}");
+                    }
+                }
+            }
+
+            // ── Résultat ──────────────────────────────────────────────────
+            if (issues.Count > 0)
+                _statusMessage = ($"Problèmes : {string.Join(", ", issues)}", "settings-status-err");
+            else if (fixes.Count > 0)
+                _statusMessage = ($"Corrigé : {string.Join(", ", fixes)}", "settings-status-ok");
+            else
+                _statusMessage = (L["WorkspaceHealthCheckOk"], "settings-status-ok");
         }
         finally { _healthChecking = false; }
     }
+
+    private sealed record MemberSlug(int Id, string Name, string Slug);
 
     private async Task ReloadFromDisk()
     {
