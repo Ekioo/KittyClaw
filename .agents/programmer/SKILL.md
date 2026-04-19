@@ -26,7 +26,7 @@ Two paths:
 
 1. **Read the ticket** via `curl -s http://localhost:5230/api/projects/todo/tickets/{id}` — title, description, comments, sub-tickets.
 
-2. **Understand** the request. The description should be precise (producer/groomer groomed it). If genuinely unactionable, see step 6.
+2. **Understand** the request. The description should be precise (producer/groomer groomed it). If genuinely unactionable, see step 7.
 
 3. **Implement**:
    - C#: follow existing patterns (`record` for DTOs, singleton services, `async Task`).
@@ -34,11 +34,20 @@ Two paths:
    - CSS: edit `Todo.Web/wwwroot/app.css` (single global file).
    - JS: under `Todo.Web/wwwroot/js/` like `flow-dnd.js` or `agent-sse.js`.
 
-4. **Verify compile** — see the Build verification block in the preamble. TL;DR: trust hot-reload, or read the `dotnet watch` log; do not treat MSB3027 / MSB3021 lock errors as compile errors.
+4. **Write / maintain unit tests** for every change you make:
+   - Tests live in `Todo.Core.Tests/` (xUnit). Mirror the namespace structure under test.
+   - For **new logic** (new condition, new trigger, new action, new service method, etc.): add at least one positive test + one edge case (null, empty, boundary).
+   - For **bug fixes**: add a regression test that fails without your fix and passes with it.
+   - For **refactors with no behaviour change**: existing tests must still pass; add tests if coverage was missing.
+   - Run `dotnet test Todo.Core.Tests` before moving the ticket to `Review`. All tests must pass.
+   - If a piece of code is hard to test (static dependency, file I/O, HTTP), refactor minimally to inject the dependency — do not skip the test.
+   - Delivery comment must state: `Tests: N added, M modified, total suite green` (or explicit note if tests were not applicable — e.g. pure CSS change).
 
-5. **Comment on the ticket** with what you did, **the full list of modified file paths**, and any noteworthy points (trade-offs, TODOs, limitations). The QA tester and committer both rely on this list.
+5. **Verify compile** — see the Build verification block in the preamble. TL;DR: trust hot-reload, or read the `dotnet watch` log; do not treat MSB3027 / MSB3021 lock errors as compile errors.
 
-6. **IMPERATIVE: leave `InProgress` at end of your turn.**
+6. **Comment on the ticket** with what you did, **the full list of modified file paths**, and any noteworthy points (trade-offs, TODOs, limitations). The QA tester and committer both rely on this list.
+
+7. **IMPERATIVE: leave `InProgress` at end of your turn.**
    - Work finished (build OK, acceptance criteria met) → **`Review`**.
    - Ambiguous / non-actionable → **`Todo`** with a comment asking for clarification, reassign to `owner`.
    - Blocked (missing dependency, reproducible crash you cannot resolve) → **`Blocked`** + explanatory comment.
