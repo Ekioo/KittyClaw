@@ -21,6 +21,8 @@ public class LocalizationService
         return dict.TryGetValue(key, out var value) ? value : key;
     }
 
+    public string Get(string key, params object[] args) => string.Format(Get(key), args);
+
     private static readonly Dictionary<string, string> Fr = new()
     {
         // ── Common ──
