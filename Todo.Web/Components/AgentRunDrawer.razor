@@ -1,5 +1,6 @@
 @using Todo.Core.Automation
 @using Todo.Web.Services
+@using Markdig
 @inject AgentRunsState RunsState
 @inject IJSRuntime JS
 @inject NavigationManager Nav
@@ -37,11 +38,36 @@
         <div class="agent-drawer-console" @ref="_consoleRef">
             @foreach (var ev in _events)
             {
-                <div class="console-line console-@ev.Kind">
-                    <span class="console-time">@ev.At.ToLocalTime().ToString("HH:mm:ss")</span>
-                    <span class="console-kind">@ev.Kind</span>
-                    <span class="console-text">@ev.Text</span>
-                </div>
+                @if (ev.Kind == "tool_use")
+                {
+                    <div class="console-line console-tool_use">
+                        <span class="console-time">@ev.At.ToLocalTime().ToString("HH:mm:ss")</span>
+                        <details class="console-tool-block">
+                            <summary class="console-tool-summary">
+                                <span class="console-tool-icon">⚙</span>
+                                <span class="console-tool-name">@ev.Text</span>
+                                <span class="console-tool-preview">@GetToolPreview(ev.Text, ev.Detail)</span>
+                            </summary>
+                            <pre class="console-tool-detail">@FormatJson(ev.Detail)</pre>
+                        </details>
+                    </div>
+                }
+                else
+                {
+                    var (tag, body) = ParseBracketTag(ev.Text);
+                    <div class="console-line console-@ev.Kind">
+                        <span class="console-time">@ev.At.ToLocalTime().ToString("HH:mm:ss")</span>
+                        @if (tag is not null)
+                        {
+                            <span class="console-tag">@tag</span>
+                        }
+                        else
+                        {
+                            <span class="console-kind">@ev.Kind</span>
+                        }
+                        <span class="console-text markdown">@((MarkupString)RenderMarkdown(body))</span>
+                    </div>
+                }
             }
             @if (_events.Count == 0)
             {
@@ -69,7 +95,6 @@
     private readonly List<StreamEvent> _events = new();
     private string _steerText = "";
     private IJSObjectReference? _sseModule;
-    private DotNetObjectReference<AgentRunDrawer>? _dotnetRef;
     private string? _activeStreamId;
     private ElementReference _consoleRef;
     private bool _needsInitScroll;
@@ -102,32 +127,9 @@
         _run.OnEvent += HandleEvent;
 
         _sseModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/agent-sse.js");
-        _dotnetRef = DotNetObjectReference.Create(this);
         _activeStreamId = RunId;
         _needsInitScroll = true;
-        await _sseModule.InvokeVoidAsync("start", _dotnetRef, BuildStreamUrl(_run));
         StateHasChanged();
-    }
-
-    private string BuildStreamUrl(AgentRun run) =>
-        $"/api/projects/{run.ProjectSlug}/runs/{run.RunId}/stream";
-
-    [JSInvokable]
-    public Task ReceiveSse(string kind, string text)
-    {
-        if (_run is null) return Task.CompletedTask;
-        var ev = new StreamEvent(DateTime.UtcNow, kind, text);
-        _events.Add(ev);
-        while (_events.Count > 500) _events.RemoveAt(0);
-        _needsScroll = true;
-        return InvokeAsync(StateHasChanged);
-    }
-
-    [JSInvokable]
-    public Task StreamEnded()
-    {
-        if (_run is not null && RunsState.Get(_run.RunId) is { } fresh) _run = fresh;
-        return InvokeAsync(StateHasChanged);
     }
 
     private void HandleEvent(StreamEvent ev)
@@ -146,12 +148,9 @@
 
     private async Task StopStream()
     {
-        if (_sseModule is not null && _activeStreamId is not null)
-        {
-            try { await _sseModule.InvokeVoidAsync("stop"); } catch { }
-            try { await _sseModule.InvokeVoidAsync("disposeAutoScroll"); } catch { }
-        }
         if (_run is not null) _run.OnEvent -= HandleEvent;
+        if (_sseModule is not null && _activeStreamId is not null)
+            try { await _sseModule.InvokeVoidAsync("disposeAutoScroll"); } catch { }
         _activeStreamId = null;
     }
 
@@ -184,6 +183,57 @@
         try { await http.PostAsync($"/api/projects/{_run.ProjectSlug}/runs/{_run.RunId}/stop", null); } catch { }
     }
 
+    private static (string? Tag, string Body) ParseBracketTag(string text)
+    {
+        if (!text.StartsWith('[')) return (null, text);
+        var close = text.IndexOf(']');
+        if (close < 1) return (null, text);
+        var tag = text[1..close];
+        var body = text[(close + 1)..].TrimStart();
+        return (tag, body);
+    }
+
+    private static string GetToolPreview(string toolName, string? detail)
+    {
+        if (string.IsNullOrWhiteSpace(detail) || detail == "{}") return "";
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(detail);
+            var root = doc.RootElement;
+            string? val = toolName switch
+            {
+                "Bash" => root.TryGetProperty("command", out var c) ? c.GetString() : null,
+                "Read" => root.TryGetProperty("file_path", out var fp) ? fp.GetString() : null,
+                "Write" => root.TryGetProperty("file_path", out var fp2) ? fp2.GetString() : null,
+                "Edit" => root.TryGetProperty("file_path", out var fp3) ? fp3.GetString() : null,
+                "Glob" => root.TryGetProperty("pattern", out var p) ? p.GetString() : null,
+                "Grep" => root.TryGetProperty("pattern", out var gp) ? gp.GetString() : null,
+                "WebFetch" or "WebSearch" => root.TryGetProperty("url", out var u) ? u.GetString()
+                    : root.TryGetProperty("query", out var q) ? q.GetString() : null,
+                _ => root.EnumerateObject().Select(x => x.Value.GetString()).FirstOrDefault()
+            };
+            return val is null ? "" : val.Length <= 80 ? val : val[..80] + "…";
+        }
+        catch { return ""; }
+    }
+
+    private static string FormatJson(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return "";
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return System.Text.Json.JsonSerializer.Serialize(doc, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        }
+        catch { return json; }
+    }
+
+    private static readonly MarkdownPipeline _mdPipeline =
+        new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+
+    private static string RenderMarkdown(string text) =>
+        Markdig.Markdown.ToHtml(text, _mdPipeline);
+
     private static string FormatElapsed(DateTime start)
     {
         var d = DateTime.UtcNow - start;
@@ -193,7 +243,6 @@
     public async ValueTask DisposeAsync()
     {
         await StopStream();
-        _dotnetRef?.Dispose();
         if (_sseModule is not null)
         {
             try { await _sseModule.DisposeAsync(); } catch { }
