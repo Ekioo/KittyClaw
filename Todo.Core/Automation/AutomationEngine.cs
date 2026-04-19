@@ -722,7 +722,8 @@ public sealed class AutomationEngine : BackgroundService
                     return;
                 }
 
-                var msg = $"chore(memory): update {agent} memory";
+                var ticketSuffix = firing?.TicketId is int tid ? $" (#{tid})" : "";
+                var msg = $"chore(memory): {agent}{ticketSuffix}";
                 var commit = await RunGitAsync(workspace, $"commit --no-verify -m \"{msg}\" -- \"{memoryRel}\"");
                 if (commit.exitCode != 0)
                 {
