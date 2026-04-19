@@ -1,14 +1,14 @@
 ---
 name: evaluator
-description: Post-mortem ticket evaluator. Runs when a ticket lands in Done. Scores the delivery, updates a per-agent Performance table in the agent's memory.md, and posts a verdict comment on the ticket.
+description: Post-mortem ticket evaluator. Runs when a ticket lands in Done. Scores the delivery, updates the Performance table and Observations recentes block in the agent's memory.md. No comment posted on the ticket.
 ---
 
 # Evaluator skill — Todo
 
 Tu es l'agent **evaluator** du projet **Todo**. Tu tournes quand un ticket passe en `Done`. Pour chaque ticket livré tu :
 1. Calcules 4 scores qualité
-2. Postes un verdict en commentaire sur le ticket
-3. Mets à jour les métriques agrégées dans `.agents/{worker}/memory.md` (table **Performance** en haut du fichier)
+2. Mets à jour les métriques agrégées dans `.agents/{worker}/memory.md` (table **Performance** en haut du fichier)
+3. Ajoutes une entrée dans `## Observations recentes` en haut de memory.md du worker
 
 ## API
 
@@ -16,7 +16,6 @@ Base URL : `http://localhost:5230/api/projects/todo`
 
 - `GET /tickets/{id}` — ticket complet (description, commentaires, activités, sous-tickets)
 - `GET /tickets?status=Done` — tous les tickets validés
-- `POST /tickets/{id}/comments` — poster le verdict
 
 ## Colonnes Todo
 
@@ -88,31 +87,7 @@ Le cache sert uniquement à éviter de re-scorer un ticket inchangé (idempotenc
 
 Selon les définitions ci-dessus. Le résultat remplace l'entrée du ticket dans `scores.json`.
 
-### 4. Poster le verdict sur le ticket
-
-```bash
-curl -X POST http://localhost:5230/api/projects/todo/tickets/{id}/comments \
-  -H "Content-Type: application/json" \
-  -d @/tmp/verdict.json
-```
-
-Contenu :
-```markdown
-## Evaluation
-
-| Metrique | Score |
-|---|---|
-| First-pass | OUI / NON |
-| Feedback compliance | X/1.0 (ou N/A) |
-| Delivery quality | X/1.0 |
-| Passe par Blocked | OUI / NON |
-
-**Observations** : 1-3 phrases factuelles.
-
-**Lecon pour {worker}** : conseil concret actionnable, ou "RAS" si tout est bon.
-```
-
-### 5. Recalculer la Performance agrégée du worker
+### 4. Recalculer la Performance agrégée du worker
 
 Sur **tous les tickets du worker déjà dans `scores.json`** (y compris celui qui vient d'être ajouté) :
 
@@ -128,7 +103,7 @@ Comparer chaque valeur à la précédente table **Performance** du `memory.md` (
 - `→` inchangé ou première évaluation
 - `—` non applicable (compteur de tickets)
 
-### 6. Insérer / remplacer la table Performance dans `.agents/{worker}/memory.md`
+### 5. Insérer / remplacer la table Performance dans `.agents/{worker}/memory.md`
 
 Lire `.agents/{worker}/memory.md`. Si un bloc `## Performance` existe, le **remplacer intégralement**. Sinon, l'insérer **juste après la première ligne `# Title`**.
 
@@ -150,17 +125,31 @@ Format exact :
 - Métrique sans données → afficher `N/A`.
 - Pourcentages arrondis à l'entier.
 
-### 7. Ajouter une leçon ciblée si pertinente (optionnel)
+### 6. Mettre à jour `## Observations recentes` dans `.agents/{worker}/memory.md`
 
-Si le ticket a révélé un pattern concret (erreur répétée, bonne pratique, feedback owner fort), ajouter **une seule ligne** dans la section `## Lecons apprises` existante du memory du worker, avec compteur `[1]` :
+Toujours exécuter cette étape (pas optionnel). Formuler une leçon concrète et actionnnable sur ce ticket (même si "RAS", écrire une ligne positive).
 
+Format de chaque entrée :
 ```markdown
-- [1] <constat factuel, 1 phrase, avec reference #{ticketId}>
+- [#{ticketId}] <constat factuel, 1 phrase>
 ```
 
-Si la section n'existe pas, passer silencieusement (ne pas la créer ici — c'est au worker de structurer son propre memory).
+Procédure :
+1. Lire le bloc `## Observations recentes` existant (s'il existe).
+2. Prépendre la nouvelle ligne en tête de liste.
+3. Tronquer à 5 entrées max (supprimer les plus anciennes).
+4. Si le bloc n'existe pas, le créer juste après `## Performance`.
+5. **Ne jamais toucher** aux sections situées sous `## Observations recentes` (`## Lecons apprises`, `## Anti-patterns`, etc.).
 
-### 8. Écrire scores.json + memory evaluator
+Exemple de bloc résultant :
+```markdown
+## Observations recentes
+- [#72] Lesson from ticket 72.
+- [#67] Lors de l'ajout d'un node d'action, verifier NodePalette + ActionEditor + DnD + i18n avant Review.
+- [#58] Soigner le commentaire de livraison : une phrase par livrable, etapes de test explicites.
+```
+
+### 7. Écrire scores.json + memory evaluator
 
 - Sauvegarder `.agents/evaluator/scores.json` complet.
 - Mettre à jour `.agents/evaluator/memory.md` : date du run, 1-liner (ticket, worker, scores résumés), mise à jour du bloc "Per-agent last metrics" pour trend au run suivant.

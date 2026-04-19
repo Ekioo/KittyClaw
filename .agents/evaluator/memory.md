@@ -15,10 +15,14 @@
 
 ## Métriques
 
-- tickets_évalués [3]
-- tickets_approuvés [3]
+- tickets_évalués [5]
+- tickets_approuvés [5]
 - tickets_rejetés [0]
-- feedbacks_donnés [2]
+- feedbacks_donnés [4]
+
+## Per-agent last metrics (2026-04-19)
+- programmer: first-pass 67%, compliance 1.0, quality 70%, block 0%, tickets 3
+- producer: first-pass 100%, compliance N/A, quality 50%, block 0%, tickets 1
 
 ## Scores cache
 
