@@ -44,5 +44,9 @@
   "PalActAssignTicket": "Assign ticket",
   "PalActAssignTicketHint": "Changes the ticket assignee",
   "PalActAddComment": "Post a comment",
-  "PalActAddCommentHint": "Adds a comment to the ticket without invoking Claude"
+  "PalActAddCommentHint": "Adds a comment to the ticket without invoking Claude",
+  "PalActCommitAgentMemory": "Commit agent memory",
+  "PalActCommitAgentMemoryHint": "Persists the agent memory.md file atomically after a run",
+  "PalActExecutePowerShell": "Execute PowerShell",
+  "PalActExecutePowerShellHint": "Runs a PowerShell script on the server"
 }

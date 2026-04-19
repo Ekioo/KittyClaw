@@ -9,6 +9,8 @@
             <option value="setLabels">@L["ActionSetLabels"]</option>
             <option value="assignTicket">@L["ActionAssignTicket"]</option>
             <option value="addComment">@L["ActionAddComment"]</option>
+            <option value="commitAgentMemory">@L["ActionCommitAgentMemory"]</option>
+            <option value="executePowerShell">@L["ActionExecutePowerShell"]</option>
         </select>
     </label>
 
@@ -85,6 +87,37 @@
                 </select>
             </label>
             break;
+        case CommitAgentMemoryActionSpec s:
+            <label>@L["Agent"]
+                <select value="@s.Agent" @onchange="e => s.Agent = (string)e.Value!">
+                    @foreach (var m in Members) { <option value="@m">@m</option> }
+                    @if (!Members.Contains(s.Agent) && !string.IsNullOrEmpty(s.Agent))
+                    {
+                        <option value="@s.Agent">@s.Agent @L["ModelCustom"]</option>
+                    }
+                </select>
+            </label>
+            break;
+        case ExecutePowerShellActionSpec s:
+            <label>@L["PsScript"]
+                <textarea @bind="s.Script" placeholder="@L["PsScriptPlaceholder"]" rows="5"></textarea>
+            </label>
+            <label>@L["PsScriptFile"]
+                <input placeholder="@L["PsScriptFilePlaceholder"]" value="@(s.ScriptFile ?? "")"
+                       @onchange="e => s.ScriptFile = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!" />
+            </label>
+            <label>@L["PsArguments"]
+                <input placeholder="@L["PsArgumentsPlaceholder"]" value="@JoinGroups(s.Arguments)"
+                       @onchange="e => s.Arguments = SplitGroups((string?)e.Value)" />
+            </label>
+            <label>@L["PsTimeout"]
+                <input type="number" @bind="s.TimeoutSeconds" />
+            </label>
+            <label class="checkbox-label">
+                <input type="checkbox" @bind="s.AbortOnFailure" />
+                @L["PsAbortOnFailure"]
+            </label>
+            break;
     }
 
     <div class="node-editor-actions">
@@ -115,6 +148,8 @@
         SetLabelsActionSpec => "setLabels",
         AssignTicketActionSpec => "assignTicket",
         AddCommentActionSpec => "addComment",
+        CommitAgentMemoryActionSpec => "commitAgentMemory",
+        ExecutePowerShellActionSpec => "executePowerShell",
         _ => "runAgent",
     };
 
@@ -133,6 +168,8 @@
             "setLabels" => new SetLabelsActionSpec(),
             "assignTicket" => new AssignTicketActionSpec(),
             "addComment" => new AddCommentActionSpec(),
+            "commitAgentMemory" => new CommitAgentMemoryActionSpec { Agent = Members.FirstOrDefault() ?? "programmer" },
+            "executePowerShell" => new ExecutePowerShellActionSpec(),
             _ => new RunAgentActionSpec { Agent = Members.FirstOrDefault() ?? "producer" },
         };
         await OnReplace.InvokeAsync(spec);

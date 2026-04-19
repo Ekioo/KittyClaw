@@ -502,6 +502,8 @@ else
         "setLabels" => new SetLabelsActionSpec(),
         "assignTicket" => new AssignTicketActionSpec(),
         "addComment" => new AddCommentActionSpec(),
+        "commitAgentMemory" => new CommitAgentMemoryActionSpec { Agent = _skills.FirstOrDefault() ?? "programmer" },
+        "executePowerShell" => new ExecutePowerShellActionSpec(),
         _ => new RunAgentActionSpec { Agent = "producer" },
     };
 

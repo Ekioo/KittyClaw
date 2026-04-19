@@ -23,5 +23,15 @@
   "ModelDefault": "(défaut)",
   "ModelCustom": "(custom)",
   "NewColumn": "Nouvelle colonne",
-  "DeleteAction": "Supprimer l'action"
+  "DeleteAction": "Supprimer l'action",
+  "ActionCommitAgentMemory": "Persister la mémoire de l'agent",
+  "ActionExecutePowerShell": "Exécuter PowerShell",
+  "PsScript": "Script inline",
+  "PsScriptPlaceholder": "Write-Output 'Bonjour depuis l'automation'",
+  "PsScriptFile": "Fichier script (relatif au workspace, optionnel)",
+  "PsScriptFilePlaceholder": "scripts/mon-script.ps1",
+  "PsArguments": "Arguments (séparés par virgule)",
+  "PsArgumentsPlaceholder": "arg1, arg2",
+  "PsTimeout": "Timeout (secondes)",
+  "PsAbortOnFailure": "Abandonner les actions suivantes si exit code != 0"
 }
