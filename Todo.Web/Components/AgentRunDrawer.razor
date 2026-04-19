@@ -55,21 +55,24 @@
                 else if (ev.Kind is "user" or "assistant" or "system")
                 {
                     var msgBody = GetMessageBody(ev.Text);
-                    var isShortMsg = msgBody.Length <= 300;
-                    var msgPreview = string.IsNullOrWhiteSpace(msgBody) ? "(no content)" : Truncate(msgBody, 200);
-                    <div class="console-line console-@ev.Kind">
-                        <span class="console-time">@ev.At.ToLocalTime().ToString("HH:mm:ss")</span>
-                        <details class="console-msg-block" open="@(isShortMsg ? "open" : null)">
-                            <summary class="console-msg-summary">
-                                <span class="console-msg-role console-msg-role-@ev.Kind">@ev.Kind</span>
-                                @if (!isShortMsg)
-                                {
-                                    <span class="console-msg-preview">@msgPreview</span>
-                                }
-                            </summary>
-                            <div class="console-msg-detail markdown">@((MarkupString)RenderMarkdown(msgBody))</div>
-                        </details>
-                    </div>
+                    if (!string.IsNullOrWhiteSpace(msgBody))
+                    {
+                        var isShortMsg = msgBody.Length <= 300;
+                        var msgPreview = Truncate(msgBody, 200);
+                        <div class="console-line console-@ev.Kind">
+                            <span class="console-time">@ev.At.ToLocalTime().ToString("HH:mm:ss")</span>
+                            <details class="console-msg-block" open="@(isShortMsg ? "open" : null)">
+                                <summary class="console-msg-summary">
+                                    <span class="console-msg-role console-msg-role-@ev.Kind">@ev.Kind</span>
+                                    @if (!isShortMsg)
+                                    {
+                                        <span class="console-msg-preview">@msgPreview</span>
+                                    }
+                                </summary>
+                                <div class="console-msg-detail markdown">@((MarkupString)RenderMarkdown(msgBody))</div>
+                            </details>
+                        </div>
+                    }
                 }
                 else
                 {

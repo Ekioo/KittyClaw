@@ -282,15 +282,16 @@ public sealed class ClaudeRunner
         catch (OperationCanceledException) { }
     }
 
-    private static string FlattenJson(JsonElement e)
+    internal static string FlattenJson(JsonElement e)
     {
         // Produce a short human-readable line per event.
         if (e.ValueKind != JsonValueKind.Object) return e.ToString();
-        var sb = new StringBuilder();
-        if (e.TryGetProperty("type", out var t)) sb.Append('[').Append(t.GetString()).Append("] ");
+        var typePrefix = new StringBuilder();
+        if (e.TryGetProperty("type", out var t)) typePrefix.Append('[').Append(t.GetString()).Append("] ");
+        var body = new StringBuilder();
         if (e.TryGetProperty("delta", out var delta) && delta.ValueKind == JsonValueKind.Object)
         {
-            if (delta.TryGetProperty("text", out var dtext)) sb.Append(dtext.GetString());
+            if (delta.TryGetProperty("text", out var dtext)) body.Append(dtext.GetString());
         }
         if (e.TryGetProperty("message", out var m) && m.ValueKind == JsonValueKind.Object)
         {
@@ -300,15 +301,33 @@ public sealed class ClaudeRunner
                 {
                     foreach (var part in content.EnumerateArray())
                     {
-                        if (part.TryGetProperty("text", out var text)) sb.Append(text.GetString());
-                        else if (part.TryGetProperty("name", out var name)) sb.Append("tool:").Append(name.GetString()).Append(' ');
+                        if (part.TryGetProperty("text", out var text))
+                        {
+                            body.Append(text.GetString());
+                        }
+                        else if (part.TryGetProperty("name", out var name))
+                        {
+                            body.Append("tool:").Append(name.GetString()).Append(' ');
+                        }
+                        else if (part.TryGetProperty("type", out var pt) && pt.GetString() == "tool_result" &&
+                                 part.TryGetProperty("content", out var tc))
+                        {
+                            if (tc.ValueKind == JsonValueKind.String)
+                                body.Append(tc.GetString());
+                            else if (tc.ValueKind == JsonValueKind.Array)
+                                foreach (var tcp in tc.EnumerateArray())
+                                    if (tcp.TryGetProperty("text", out var tt)) body.Append(tt.GetString());
+                        }
                     }
                 }
-                else if (content.ValueKind == JsonValueKind.String) sb.Append(content.GetString());
+                else if (content.ValueKind == JsonValueKind.String)
+                {
+                    body.Append(content.GetString());
+                }
             }
         }
-        if (sb.Length == 0) sb.Append(e.ToString());
-        return sb.ToString();
+        if (body.Length == 0) return e.ToString();
+        return typePrefix.Append(body).ToString();
     }
 
     private static void AppendDebugLog(ClaudeRunContext ctx, string line)

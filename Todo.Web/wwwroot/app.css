@@ -1988,7 +1988,7 @@ button:disabled { opacity: 0.35; cursor: default; }
 .console-steer .console-kind,  .console-user   .console-kind { color: #4a9eff; }
 .console-steer .console-text,  .console-user   .console-text { color: #9cc4ff; font-style: italic; }
 .console-empty { color: #5a6a80; font-style: italic; padding: 1rem; }
-.console-tool-block { background: #1a1f2e; border: 1px solid #2e3a50; border-radius: 6px; font-size: 0.82rem; overflow: hidden; }
+.console-tool-block { background: #1a1f2e; border: 1px solid #2e3a50; border-radius: 6px; font-size: 0.82rem; overflow: hidden; grid-column: 2 / -1; min-width: 0; }
 .console-tool-summary { display: flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.6rem; cursor: pointer; user-select: none; list-style: none; color: #8ab4f8; }
 .console-tool-summary::-webkit-details-marker { display: none; }
 .console-tool-summary::before { content: "▶"; font-size: 0.6rem; color: #5a7a9a; transition: transform 0.15s; flex-shrink: 0; }
@@ -1999,7 +1999,7 @@ details[open] .console-tool-summary::before { transform: rotate(90deg); }
 .console-tool-detail { margin: 0; padding: 0.4rem 0.6rem; background: #11141b; border-top: 1px solid #2e3a50; color: #a0b4c8; font-size: 0.76rem; font-family: monospace; white-space: pre-wrap; word-break: break-all; max-height: 250px; overflow-y: auto; }
 
 /* Message collapsible blocks (user/assistant/system) */
-.console-msg-block { background: #111827; border: 1px solid #2a3545; border-radius: 6px; overflow: hidden; width: 100%; }
+.console-msg-block { background: #111827; border: 1px solid #2a3545; border-radius: 6px; overflow: hidden; grid-column: 2 / -1; min-width: 0; width: 100%; }
 .console-msg-summary { display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.9rem; cursor: pointer; user-select: none; list-style: none; }
 .console-msg-summary::-webkit-details-marker { display: none; }
 .console-msg-summary::before { content: "▶"; font-size: 0.65rem; color: #5a7a9a; transition: transform 0.15s; flex-shrink: 0; }
