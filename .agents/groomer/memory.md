@@ -1,16 +1,16 @@
 # Memory — groomer
 
-## Leçons apprises
+## Learned lessons
 
-## Patterns de succès
+## Success patterns
+
+- Tickets with noisy/transcript content: extract core intent, restructure into clean format, post trace comment [1]
 
 ## Anti-patterns
 
-## Préférences owner
+## Owner preferences
 
-## Métriques
+## Metrics
 
-- tickets_enrichis [0]
-- tickets_retournés_todo [0]
-- tickets_splittés [0]
-- critères_acceptation_ajoutés [0]
+- tickets_returned_to_todo [0]
+- tickets_split [0]

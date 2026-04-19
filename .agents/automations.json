@@ -88,7 +88,7 @@
           "type": "runAgent",
           "agent": "committer",
           "maxTurns": 50,
-          "concurrencyGroup": "committer",
+          "concurrencyGroup": "git",
           "mutuallyExclusiveWith": [],
           "env": {},
           "model": "claude-haiku-4-5",
@@ -241,25 +241,28 @@
       ]
     },
     {
-      "id": "qa-tester-run",
-      "name": "QA tester: resume sur ticket InProgress",
+      "id": "qa-on-review",
+      "name": "QA: validate work moved to Review",
       "enabled": true,
       "trigger": {
-        "type": "ticketInColumn",
-        "seconds": 60,
-        "columns": [
-          "InProgress"
-        ],
-        "assigneeSlug": "qa-tester",
-        "debounceSeconds": 0
+        "type": "statusChange",
+        "pollSeconds": 30,
+        "to": "Review"
       },
-      "conditions": [],
+      "conditions": [
+        {
+          "type": "assignedTo",
+          "slugs": [
+            "programmer"
+          ]
+        }
+      ],
       "actions": [
         {
           "type": "runAgent",
           "agent": "qa-tester",
-          "concurrencyGroup": "qa-tester",
           "maxTurns": 100,
+          "concurrencyGroup": "qa-tester",
           "mutuallyExclusiveWith": [],
           "env": {},
           "model": "claude-sonnet-4-6",

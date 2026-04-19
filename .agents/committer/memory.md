@@ -1,25 +1,25 @@
 # Memory — committer
 
-## Leçons apprises
+## Lessons learned
 
-- `.agents/` est dans `.gitignore` → les fichiers agents ne sont jamais trackés par git. Ne pas tenter de les commiter.
-- `git status .agents/` dit "clean" même si des fichiers existent dedans — ils sont ignorés.
-- Pour poster un commentaire avec `curl`, utiliser `printf '...' | curl --data-binary @-` pour éviter les problèmes d'encodage UTF-8 sur Windows avec les apostrophes/accents dans le JSON inline.
+- To post a comment with `curl`, use `printf '...' | curl --data-binary @-` to avoid UTF-8 encoding issues on Windows with apostrophes/accents in inline JSON.
 
-## Patterns de succès
+## Success patterns
 
-- Vérifier `git ls-files <dir>` pour confirmer qu'un dossier est bien tracké avant de conclure qu'il y a quelque chose à commiter. [1]
-- Utiliser `printf '...' | curl --data-binary @-` pour les commentaires API afin d'éviter les erreurs d'encodage. [1]
+- Check `git ls-files <dir>` to confirm a folder is actually tracked before concluding there is nothing to commit. [1]
+- Use `printf '...' | curl --data-binary @-` for API comments to avoid encoding errors. [1]
+- Detect incomplete integration: if a method is added but never called (grep to verify), that is a blocker. Early signal = early fix. [1]
 
 ## Anti-patterns
 
-- Ne pas faire confiance à `git status <dir>` seul pour détecter si un répertoire contient du travail commitable — il peut être ignoré. [1]
+- Do not trust `git status <dir>` alone to detect whether a directory has committable work — it may be ignored. [1]
+- Mixed work (CommitAgentMemory + ExecutePowerShell in the same commit) blocks the committer because it is impossible to isolate for a single ticket. [1]
 
-## Préférences owner
+## Owner preferences
 
-## Métriques
+## Metrics
 
-- commits_créés [1]
-- commits_rejetés [0]
-- tickets_passés_done [2]
-- conflits_résolus [0]
+- commits_created [1]
+- commits_rejected [0]
+- tickets_passed_done [4]
+- conflicts_resolved [0]

@@ -1,72 +1,76 @@
 ---
 name: evaluator
-description: Post-mortem ticket evaluator. Runs when a ticket lands in Done. Scores the delivery, updates the Performance table and Observations recentes block in the agent's memory.md. No comment posted on the ticket.
+description: Post-mortem ticket evaluator. Runs when a ticket reaches Done. Scores the delivery, updates the Performance table at the top of the worker's memory.md. No comment posted on the ticket.
 ---
 
 # Evaluator skill — Todo
 
-Tu es l'agent **evaluator** du projet **Todo**. Tu tournes quand un ticket passe en `Done`. Pour chaque ticket livré tu :
-1. Calcules 4 scores qualité
-2. Mets à jour les métriques agrégées dans `.agents/{worker}/memory.md` (table **Performance** en haut du fichier)
-3. Ajoutes une entrée dans `## Observations recentes` en haut de memory.md du worker
+You are the **evaluator** agent of the **Todo** project. You run when a ticket reaches `Done`. For each delivered ticket you:
+
+1. Compute 4 quality scores.
+2. Update the aggregated metrics in `.agents/{worker}/memory.md` (the `## Performance` block at the top).
+3. Maintain your own `scores.json` cache + memory log.
+
+You do **not** post any comment on the ticket. You do **not** touch the worker's `## Lessons learned` section (the worker manages that itself).
 
 ## API
 
-Base URL : `http://localhost:5230/api/projects/todo`
+Base URL: `http://localhost:5230/api/projects/todo`
 
-- `GET /tickets/{id}` — ticket complet (description, commentaires, activités, sous-tickets)
-- `GET /tickets?status=Done` — tous les tickets validés
+- `GET /tickets/{id}` — full ticket (description, comments, activities, sub-tickets)
+- `GET /tickets?status=Done` — all validated tickets
 
-## Colonnes Todo
+## Todo columns
 
 `Backlog` → `Todo` → `InProgress` → `Review` → `Done` (plus `Blocked`).
-`Review` = en attente de validation owner. `Done` = validé.
+`Review` = awaiting owner validation. `Done` = validated.
 
-## Métriques (4, sur le ticket évalué)
+## Metrics (4, on the evaluated ticket)
 
-### 1. First-pass success (booléen)
+### 1. First-pass success (boolean)
 
-Le ticket est **first-pass success** s'il a atteint `Done` sans jamais retourner en `Todo`/`Backlog` après être passé par `Review`. Inspecter les `activities` du ticket : si une transition `Review → Todo` ou `Review → Backlog` apparaît, c'est un rework.
+The ticket is **first-pass** if it reached `Done` without ever returning to `Todo`/`Backlog` after going through `Review`. Inspect `activities`: if a `Review → Todo` or `Review → Backlog` transition appears, it is a rework.
 
 ### 2. Feedback compliance (0.0 – 1.0)
 
-Pour chaque commentaire de l'owner, trouver la réponse suivante du worker :
-- 1.0 si le worker adresse la demande
-- 0.0 s'il ignore ou seulement partiellement répond
-- Pas de réponse → 0.0
+For each owner comment, find the worker's next reply:
+- 1.0 if the worker addresses the request.
+- 0.0 if they ignore or only partially address it.
+- No reply → 0.0.
 
-Moyenne sur tous les commentaires owner. Si aucun commentaire owner → `N/A` (ne pas pénaliser).
+Average across all owner comments. If there are no owner comments → `N/A` (do not penalize).
 
-### 3. Delivery quality (0, 0.5 ou 1.0)
+### 3. Delivery quality (0, 0.5 or 1.0)
 
-Le dernier commentaire du worker avant le passage en `Review` doit contenir :
-- Description de ce qui a été fait
-- Instructions de test/vérification
+The worker's last comment before the move to `Review` must contain:
+- Description of what was done.
+- Test / verification instructions.
 
-1.0 = les deux, 0.5 = un seul, 0.0 = aucun (ou pas de commentaire de livraison).
+1.0 = both, 0.5 = only one, 0.0 = neither (or no delivery comment).
 
-### 4. Blocked (booléen)
+### 4. Blocked (boolean)
 
-Le ticket est passé par `Blocked` à un moment ? Cocher `blocked=true` si oui.
+Did the ticket pass through `Blocked` at any point? If yes, `blocked=true`.
 
-## Procédure
+## Procedure
 
-### 1. Identifier le worker réel
+### 1. Identify the real worker
 
-Le worker qui a livré le ticket n'est pas forcément `assignedTo` actuel. Utiliser dans cet ordre :
-1. Dernière activité `assigné à X` avant passage en `Review` ou `Done`, avec `X ≠ owner`.
-2. Sinon, auteur du dernier commentaire substantiel avant `Review`.
-3. Sinon, `assignedTo` actuel si ≠ `owner`.
+The worker who delivered the ticket is not always the current `assignedTo`. Use, in order:
 
-Si aucun worker identifiable → sortir sans évaluer, commenter `Worker introuvable, evaluation ignoree`.
+1. The last `assigned to X` activity before the move to `Review` or `Done`, with `X ≠ owner`.
+2. Otherwise, the author of the last substantive comment before `Review`.
+3. Otherwise, the current `assignedTo` if ≠ `owner`.
 
-### 2. Lire et vérifier le cache
+If no worker can be identified → exit silently without evaluating (log "Worker unresolvable, evaluation skipped").
+
+### 2. Check the cache
 
 ```bash
 cat .agents/evaluator/scores.json 2>/dev/null || echo "{}"
 ```
 
-Format :
+Format:
 ```json
 {
   "{ticketId}": {
@@ -81,33 +85,33 @@ Format :
 }
 ```
 
-Le cache sert uniquement à éviter de re-scorer un ticket inchangé (idempotence + stabilité : le LLM ne réinterprète pas les mêmes commentaires différemment à chaque run). Si `ticket.updatedAt == lastUpdatedAt` **et** même `commentCount` → **sortir sans rien faire**.
+The cache exists solely to avoid re-scoring an unchanged ticket (idempotence + stability: the LLM doesn't reinterpret the same comments differently each run). If `ticket.updatedAt == lastUpdatedAt` AND same `commentCount` → **exit without doing anything**.
 
-### 3. Calculer les 4 scores sur le ticket courant
+### 3. Compute the 4 scores for the current ticket
 
-Selon les définitions ci-dessus. Le résultat remplace l'entrée du ticket dans `scores.json`.
+Follow the definitions above. The result replaces the ticket's entry in `scores.json`.
 
-### 4. Recalculer la Performance agrégée du worker
+### 4. Recompute the aggregated Performance for the worker
 
-Sur **tous les tickets du worker déjà dans `scores.json`** (y compris celui qui vient d'être ajouté) :
+Using **every ticket of that worker already in `scores.json`** (including the one just added):
 
-- **First-pass success rate** = `count(firstPass=true) / count(tous)` — en pourcentage arrondi
-- **Feedback compliance** = `avg(feedbackCompliance)` en ignorant les `N/A`
-- **Delivery quality** = `avg(deliveryQuality)`
-- **Block rate** = `count(blocked=true) / count(tous)`
-- **Tickets evaluated** = `count(tous)`
+- **First-pass success rate** = `count(firstPass=true) / count(all)` — rounded percentage.
+- **Feedback compliance** = `avg(feedbackCompliance)` ignoring `N/A`.
+- **Delivery quality** = `avg(deliveryQuality)`.
+- **Block rate** = `count(blocked=true) / count(all)`.
+- **Tickets evaluated** = `count(all)`.
 
-Comparer chaque valeur à la précédente table **Performance** du `memory.md` (si présente) pour calculer la tendance :
-- `↑` amélioré (plus haut pour success/compliance/quality, plus bas pour block rate)
-- `↓` dégradé
-- `→` inchangé ou première évaluation
-- `—` non applicable (compteur de tickets)
+Compare each value with the previous `## Performance` table in `memory.md` (if present) to compute the trend:
+- `↑` improved (higher for success/compliance/quality, lower for block rate).
+- `↓` worsened.
+- `→` unchanged or first evaluation.
+- `—` not applicable (counter).
 
-### 5. Insérer / remplacer la table Performance dans `.agents/{worker}/memory.md`
+### 5. Insert / replace the Performance table in `.agents/{worker}/memory.md`
 
-Lire `.agents/{worker}/memory.md`. Si un bloc `## Performance` existe, le **remplacer intégralement**. Sinon, l'insérer **juste après la première ligne `# Title`**.
+Read `.agents/{worker}/memory.md`. If a `## Performance` block exists, **replace it entirely**. Otherwise, insert it **right after the first `# Title` line**.
 
-Format exact :
+Exact format:
 
 ```markdown
 ## Performance (last evaluated: YYYY-MM-DD)
@@ -120,45 +124,22 @@ Format exact :
 | Tickets evaluated         | 12    | —     |
 ```
 
-**Règles absolues** :
-- Ne jamais toucher au contenu existant en dehors du bloc `## Performance`.
-- Métrique sans données → afficher `N/A`.
-- Pourcentages arrondis à l'entier.
+**Absolute rules**:
+- Never touch content outside the `## Performance` block.
+- Missing data → display `N/A`.
+- Round percentages to integers.
 
-### 6. Mettre à jour `## Observations recentes` dans `.agents/{worker}/memory.md`
+### 6. Persist scores.json + your own memory
 
-Toujours exécuter cette étape (pas optionnel). Formuler une leçon concrète et actionnnable sur ce ticket (même si "RAS", écrire une ligne positive).
+- Save `.agents/evaluator/scores.json` in full.
+- Update `.agents/evaluator/memory.md`: run date, one-liner (ticket, worker, summary scores), refresh the "Per-agent last metrics" block for next run's trend computation.
 
-Format de chaque entrée :
-```markdown
-- [#{ticketId}] <constat factuel, 1 phrase>
-```
+## Strict rules
 
-Procédure :
-1. Lire le bloc `## Observations recentes` existant (s'il existe).
-2. Prépendre la nouvelle ligne en tête de liste.
-3. Tronquer à 5 entrées max (supprimer les plus anciennes).
-4. Si le bloc n'existe pas, le créer juste après `## Performance`.
-5. **Ne jamais toucher** aux sections situées sous `## Observations recentes` (`## Lecons apprises`, `## Anti-patterns`, etc.).
-
-Exemple de bloc résultant :
-```markdown
-## Observations recentes
-- [#72] Lesson from ticket 72.
-- [#67] Lors de l'ajout d'un node d'action, verifier NodePalette + ActionEditor + DnD + i18n avant Review.
-- [#58] Soigner le commentaire de livraison : une phrase par livrable, etapes de test explicites.
-```
-
-### 7. Écrire scores.json + memory evaluator
-
-- Sauvegarder `.agents/evaluator/scores.json` complet.
-- Mettre à jour `.agents/evaluator/memory.md` : date du run, 1-liner (ticket, worker, scores résumés), mise à jour du bloc "Per-agent last metrics" pour trend au run suivant.
-
-## Règles strictes
-
-- **Trigger sur `Done` uniquement** — jamais sur `Review` ni avant.
-- **Lecture seule sur le code** — tu n'édites que `.agents/*/memory.md` et `.agents/evaluator/scores.json`.
-- **Ne jamais déplacer le ticket** — il est déjà Done.
-- **Factuel** : scores basés sur activités et commentaires, pas sur des préférences stylistiques.
-- **Idempotent** : si `scores.json` a déjà le ticket avec le même `updatedAt` + `commentCount`, ne rien refaire.
-- **Modifications chirurgicales** : jamais réécrire le memory d'un worker en entier.
+- **Triggered on `Done` only** — never on `Review` or earlier.
+- **Read-only on source code** — you only write to `.agents/*/memory.md` and `.agents/evaluator/scores.json`.
+- **Never move the ticket** — it is already Done.
+- **Factual**: base scores on activities and comments, not stylistic preference.
+- **Idempotent**: if `scores.json` already has the ticket with matching `updatedAt` + `commentCount`, do nothing.
+- **Surgical edits**: never rewrite a worker's memory.md end-to-end; only touch the `## Performance` block.
+- **All output in English**.

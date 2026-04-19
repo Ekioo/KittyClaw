@@ -1,5 +1,5 @@
 # Code Health — Todo
-> Dernière mise à jour : 2026-04-19 (Run 12)
+> Last updated: 2026-04-19 (Run 36)
 
 ## Résumé
 | Métrique | Valeur | Tendance |
@@ -58,10 +58,16 @@ Tous les fichiers `.cs` du projet ont été lus au moins une fois (46/46). ✓
 - ~~**#61**~~ ✅ Clés de localisation orphelines supprimées
 - **#63** [NiceToHave] `EvaluateSingleConditionAsync` est trop longue (133 lignes)
 
-## État final (Run 11)
-Run 11 — Vérification complète, stabilité maintenue à 98%.  
-Tous les trigger files vérifiés (AgentInactivityTrigger, IntervalTrigger, BoardIdleTrigger, etc.) — clean.  
-Aucun nouveau problème détecté. **Codebase en excellent état.**
+## Final state (Run 36)
+Runs 12–36: **98% stability sustained.**  
+25 consecutive verification runs. Zero new issues detected.
+- Fichiers .cs : 46 (constant)
+- TODOs/HACKs : 0 (constant)
+- Warnings CS : 0 (constant)
+- Fichiers > 300 lignes : 4 (constant : AutomationEngine 628, Endpoints 523, TicketService 512, OpenApiMarkdownGenerator 429)
+- Score propreté : 98% (constant)
+
+**Codebase en excellent état, maintenance-mode stable.**
 
 ### Reste à faire (design decisions, non code-janitor)
 - #50 & #63 : Refactoring multi-méthode de grandes fonctions (RequiresArchitectural review)

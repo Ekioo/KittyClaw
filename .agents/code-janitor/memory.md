@@ -1,36 +1,55 @@
 # Memory — code-janitor
 
-## Leçons apprises
+## Lessons learned
 
-- **Vérifier l'état réel du code en début de run** : les sessions précédentes peuvent avoir partiellement appliqué des changements. Toujours grep avant d'éditer pour éviter de dupliquer un fix déjà fait.
-- **Clés de localisation** : aucune construction dynamique de clés dans ce projet. Toutes les clés sont des string literals — grep sur `L["key"]` et `.Get("key")` est suffisant pour confirmer qu'une clé est orpheline.
-- **Compte des fichiers .cs** : utiliser `find . -name "*.cs" | grep -v "/obj/" | grep -v "/bin/" | wc -l` — le rapport indiquait 55, la réalité est 46.
-- **MSB3021** : erreur de build courante quand l'app est en cours d'exécution (DLL verrouillée). Ce n'est pas une erreur de compilation — vérifier `grep "warning CS|error CS"` séparément.
-- **Dead properties** : une propriété initialisée (en constructor) mais jamais lue est dead — safe à supprimer (run 9).
-- **Cleanup catches** : les `catch {}` dans `Dispose` et `DisposeAsync` sont best-effort cleanup (non-blocking) — doivent être documentées.
-- **All catch blocks are now documented** : grep "catch {}" finds 0 results — all catches across the codebase are properly documented (run 10).
-- **Project health plateau** : après run 11, codebase stabilisé à 98%, aucune nouvelle issue détectée. Les only remaining issues (#50, #63) requièrent des décisions architecturales hors du scope code-janitor.
+- **Check the real code state at run start**: previous sessions may have partially applied changes. Always grep before editing to avoid duplicating a fix already done.
+- **Localization keys**: no dynamic key construction in this project. Every key is a string literal — `grep L["key"]` and `.Get("key")` is enough to confirm an orphan key.
+- **`.cs` file count**: use `find . -name "*.cs" | grep -v "/obj/" | grep -v "/bin/" | wc -l` — the report said 55, actual is 46.
+- **MSB3021 / MSB3027**: common `dotnet build` error when the app is running (DLL locked). Not a compile error — check `error CS` separately.
+- **Dead properties**: a property initialized (in ctor) but never read is dead — safe to remove (run 9).
+- **Cleanup catches**: `catch {}` blocks in `Dispose` / `DisposeAsync` are best-effort cleanup (non-blocking) — must be documented.
+- **All catch blocks are now documented**: `grep "catch {}"` finds 0 results — all catches across the codebase are properly documented (run 10).
+- **Project health plateau**: after run 11, codebase stabilized at 98%, no new issues detected. Only remaining issues (#50, #63) require architectural decisions outside code-janitor scope.
 
-## Patterns de succès
+## Success patterns
 
-- Documenter les `catch {}` avec `/* comment */` est accepté (runs 6, 7, 9, 10).
-- Supprimer les dead fields Blazor (run 7) — safe si grep confirme zéro lecture.
-- Supprimer les clés JSON de localisation orphelines (run 8) — safe car aucune construction dynamique.
-- Supprimer les dead properties des classes internes (run 9) — safe si grep confirme zéro lecture.
+- Documenting `catch {}` with `/* comment */` is accepted (runs 6, 7, 9, 10).
+- Removing dead Blazor fields (run 7) — safe when grep confirms zero reads.
+- Removing orphan localization JSON keys (run 8) — safe since no dynamic construction.
+- Removing dead properties from internal classes (run 9) — safe when grep confirms zero reads.
 
 ## Anti-patterns
 
-- Ne pas éditer un fichier sans avoir d'abord grep pour confirmer l'état actuel (sessions multiples).
-- Ne pas se fier au rapport de santé pour l'état du code : il peut être en retard d'un run.
+- Do not edit a file without first grepping to confirm current state (multiple concurrent sessions).
+- Do not trust the health report for current code state: it may be one run behind.
 
-## Préférences owner
+## Owner preferences
 
-- Tickets créés via PowerShell `Invoke-RestMethod` (UTF-8 safe sur Windows) — pas `curl`.
-- Priorités valides : `Idea`, `NiceToHave`, `Required`, `Critical`.
+- Tickets created via PowerShell `Invoke-RestMethod` (UTF-8 safe on Windows) — not `curl`.
+- Valid priorities: `Idea`, `NiceToHave`, `Required`, `Critical`.
 
-## Métriques
+## Metrics
 
-- nettoyages_effectués [17]
-- fichiers_supprimés [0]
-- dépendances_nettoyées [1]
-- tickets_créés [5]
+- cleanups_done [17]
+- files_deleted [0]
+- dependencies_cleaned [1]
+- tickets_created [5]
+- total_runs [36]
+- verification_runs [25] (runs 12–36: all metrics stable, zero new issues)
+
+## Final state (Run 36)
+
+**Project stabilized at 98% cleanliness.** No actionable code-janitor work remaining.
+
+Final metric confirmed over 25 consecutive runs (12–36):
+- `.cs` files analyzed: 46 ✓
+- TODOs / HACKs detected: 0 ✓
+- CS warnings: 0 ✓
+- Files > 300 lines: 4 (steady: AutomationEngine 628, Endpoints 523, TicketService 512, OpenApiMarkdownGenerator 429) ✓
+- Cleanliness score: 98% (unchanged)
+
+Remaining tickets (design-level, outside code-janitor scope):
+- #50: `ExecuteAutomationAsync` (~240 lines) — requires multi-method refactor
+- #63: `EvaluateSingleConditionAsync` (~133 lines) — requires multi-method refactor
+
+**Conclusion**: all zero-risk cleanups applied. The codebase has reached a sustainable state. Future runs should continue verification to prevent drift.

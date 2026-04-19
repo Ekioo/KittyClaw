@@ -20,5 +20,50 @@
       "block_rate": 5
     },
     "global": 4.75
+  },
+  "67": {
+    "worker": "programmer",
+    "firstPass": false,
+    "feedbackCompliance": 1.0,
+    "deliveryQuality": 0.5,
+    "blocked": false,
+    "lastCommentCount": 3,
+    "lastUpdatedAt": "2026-04-19T17:37:53.8105325"
+  },
+  "70": {
+    "worker": "programmer",
+    "firstPass": true,
+    "feedbackCompliance": null,
+    "deliveryQuality": 0.5,
+    "blocked": false,
+    "lastCommentCount": 1,
+    "lastUpdatedAt": "2026-04-19T18:01:01.8768597"
+  },
+  "51": {
+    "worker": "producer",
+    "firstPass": true,
+    "feedbackCompliance": null,
+    "deliveryQuality": 0.5,
+    "blocked": false,
+    "lastCommentCount": 2,
+    "lastUpdatedAt": "2026-04-19T17:54:44.5735632"
+  },
+  "71": {
+    "worker": "producer",
+    "firstPass": true,
+    "feedbackCompliance": null,
+    "deliveryQuality": 0.5,
+    "blocked": false,
+    "lastCommentCount": 1,
+    "lastUpdatedAt": "2026-04-19T18:01:08.2954507"
+  },
+  "74": {
+    "worker": "programmer",
+    "firstPass": true,
+    "feedbackCompliance": null,
+    "deliveryQuality": 1.0,
+    "blocked": false,
+    "lastCommentCount": 1,
+    "lastUpdatedAt": "2026-04-19T18:30:25.05377"
   }
 }
