@@ -65,5 +65,14 @@
     "blocked": false,
     "lastCommentCount": 1,
     "lastUpdatedAt": "2026-04-19T18:30:25.05377"
+  },
+  "79": {
+    "worker": "programmer",
+    "firstPass": false,
+    "feedbackCompliance": 1.0,
+    "deliveryQuality": 0.5,
+    "blocked": false,
+    "lastCommentCount": 5,
+    "lastUpdatedAt": "2026-04-19T19:19:54.4134948"
   }
 }

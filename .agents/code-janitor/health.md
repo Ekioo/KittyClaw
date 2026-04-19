@@ -1,5 +1,5 @@
 # Code Health — Todo
-> Last updated: 2026-04-19 (Run 36)
+> Last updated: 2026-04-19 (Run 49)
 
 ## Résumé
 | Métrique | Valeur | Tendance |
@@ -50,6 +50,7 @@ Tous les fichiers `.cs` du projet ont été lus au moins une fois (46/46). ✓
 | 9 | `Todo.Web/Components/Pages/Automations.razor` | Deux `catch {}` documentés dans `DisposeAsync` |
 | 10 | `Todo.Core/Automation/CostTracker.cs` | `catch {}` documenté dans `SumUsdForDay` |
 | 10 | `Todo.Core/Services/AppSettingsService.cs` | `catch {}` documenté dans `Load` |
+| 47 | `Todo.Core/Automation/ClaudeRunner.cs` | 4 `catch {}` documentés dans `RunAsync` |
 
 ## Tickets créés
 - **#50** [NiceToHave] `ExecuteAutomationAsync` est trop longue (237 lignes)
@@ -58,12 +59,13 @@ Tous les fichiers `.cs` du projet ont été lus au moins une fois (46/46). ✓
 - ~~**#61**~~ ✅ Clés de localisation orphelines supprimées
 - **#63** [NiceToHave] `EvaluateSingleConditionAsync` est trop longue (133 lignes)
 
-## Final state (Run 36)
-Runs 12–36: **98% stability sustained.**  
-25 consecutive verification runs. Zero new issues detected.
-- Fichiers .cs : 46 (constant)
+## Final state (Run 49)
+Runs 12–49: **98% stability sustained (file count stable at 55).**  
+38 consecutive verification runs. Run 49: verification pass, all metrics stable.
+- Fichiers .cs : 55 (constant)
 - TODOs/HACKs : 0 (constant)
 - Warnings CS : 0 (constant)
+- Catch blocks undocumented : 0 ✓ (4 fixed in Run 47)
 - Fichiers > 300 lignes : 4 (constant : AutomationEngine 628, Endpoints 523, TicketService 512, OpenApiMarkdownGenerator 429)
 - Score propreté : 98% (constant)
 
