@@ -432,7 +432,7 @@ public sealed class AutomationEngine : BackgroundService
                     await ExecuteAssignTicketActionAsync(rt, firing, at);
                     break;
                 case CommitAgentMemoryActionSpec cm:
-                    await ExecuteCommitAgentMemoryActionAsync(rt, cm);
+                    await ExecuteCommitAgentMemoryActionAsync(rt, cm, firing);
                     break;
                 case ExecutePowerShellActionSpec ps:
                 {
@@ -610,7 +610,7 @@ public sealed class AutomationEngine : BackgroundService
             {
                 switch (post)
                 {
-                    case CommitAgentMemoryActionSpec cm: await ExecuteCommitAgentMemoryActionAsync(rt, cm); break;
+                    case CommitAgentMemoryActionSpec cm: await ExecuteCommitAgentMemoryActionAsync(rt, cm, firing); break;
                     case AddCommentActionSpec ac when firing.TicketId is not null: await ExecuteAddCommentActionAsync(rt, firing, ac); break;
                     case SetLabelsActionSpec sl when firing.TicketId is not null: await ExecuteSetLabelsActionAsync(rt, firing, sl); break;
                     case AssignTicketActionSpec at when firing.TicketId is not null: await ExecuteAssignTicketActionAsync(rt, firing, at); break;
@@ -705,14 +705,32 @@ public sealed class AutomationEngine : BackgroundService
         catch (Exception ex) { _logger.LogWarning(ex, "assignTicket failed for ticket #{Id} in project {Project}", firing.TicketId, rt.Slug); }
     }
 
-    private async Task ExecuteCommitAgentMemoryActionAsync(ProjectRuntime rt, CommitAgentMemoryActionSpec cm)
+    private async Task ExecuteCommitAgentMemoryActionAsync(ProjectRuntime rt, CommitAgentMemoryActionSpec cm, TriggerFiring? firing = null)
     {
         try
         {
-            var memoryPath = Path.Combine(rt.Workspace!, ".agents", cm.Agent, "memory.md");
+            // Resolve {assignee} placeholder (same pattern as RunAgent).
+            var agent = cm.Agent;
+            if (agent.Contains("{assignee}"))
+            {
+                if (firing?.TicketId is null)
+                {
+                    _logger.LogInformation("commitAgentMemory: {{assignee}} placeholder but no firing ticket — skipping");
+                    return;
+                }
+                var t = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
+                if (string.IsNullOrEmpty(t?.AssignedTo))
+                {
+                    _logger.LogInformation("commitAgentMemory: {{assignee}} placeholder but ticket #{Id} has no assignee — skipping", firing.TicketId);
+                    return;
+                }
+                agent = agent.Replace("{assignee}", t.AssignedTo);
+            }
+
+            var memoryPath = Path.Combine(rt.Workspace!, ".agents", agent, "memory.md");
             if (!File.Exists(memoryPath))
             {
-                _logger.LogInformation("commitAgentMemory: no memory file found for {Agent} at {Path}", cm.Agent, memoryPath);
+                _logger.LogInformation("commitAgentMemory: no memory file found for {Agent} at {Path}", agent, memoryPath);
                 return;
             }
             var content = await File.ReadAllTextAsync(memoryPath);
@@ -720,7 +738,7 @@ public sealed class AutomationEngine : BackgroundService
             var tempPath = memoryPath + ".tmp";
             await File.WriteAllTextAsync(tempPath, content);
             File.Move(tempPath, memoryPath, overwrite: true);
-            _logger.LogInformation("commitAgentMemory: persisted {Agent} memory ({Lines} lines)", cm.Agent, lineCount);
+            _logger.LogInformation("commitAgentMemory: persisted {Agent} memory ({Lines} lines)", agent, lineCount);
         }
         catch (Exception ex)
         {
