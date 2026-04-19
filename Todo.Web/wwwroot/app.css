@@ -1998,6 +1998,22 @@ details[open] .console-tool-summary::before { transform: rotate(90deg); }
 .console-tool-preview { color: #6a8aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 35ch; }
 .console-tool-detail { margin: 0; padding: 0.4rem 0.6rem; background: #11141b; border-top: 1px solid #2e3a50; color: #a0b4c8; font-size: 0.76rem; font-family: monospace; white-space: pre-wrap; word-break: break-all; max-height: 250px; overflow-y: auto; }
 
+/* Message collapsible blocks (user/assistant/system) */
+.console-msg-block { background: #111827; border: 1px solid #2a3545; border-radius: 6px; overflow: hidden; width: 100%; }
+.console-msg-summary { display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.9rem; cursor: pointer; user-select: none; list-style: none; }
+.console-msg-summary::-webkit-details-marker { display: none; }
+.console-msg-summary::before { content: "▶"; font-size: 0.65rem; color: #5a7a9a; transition: transform 0.15s; flex-shrink: 0; }
+details[open] .console-msg-summary::before { transform: rotate(90deg); }
+.console-msg-role { font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.2rem 0.55rem; border-radius: 3px; flex-shrink: 0; }
+.console-msg-role-user      { background: #1a3a2a; color: #4ade80; }
+.console-msg-role-assistant { background: #1a2a3a; color: #60a5fa; }
+.console-msg-role-system    { background: #2a2a1a; color: #facc15; }
+.console-msg-preview { color: #8a9ab0; font-size: 0.875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+.console-msg-detail { padding: 0.75rem 1.1rem; background: #0d1117; border-top: 1px solid #2e3a50; color: #c9d1d9; font-size: 0.9rem; white-space: pre-wrap; max-height: 500px; overflow-y: auto; line-height: 1.55; }
+.console-msg-detail.markdown p { margin: 0.4rem 0; }
+.console-msg-detail.markdown p:first-child { margin-top: 0; }
+.console-msg-detail.markdown p:last-child { margin-bottom: 0; }
+
 .agent-drawer-steer {
     border-top: 1px solid var(--border, #333);
     padding: 0.6rem 1rem;

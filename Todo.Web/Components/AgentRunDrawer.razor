@@ -52,6 +52,25 @@
                         </details>
                     </div>
                 }
+                else if (ev.Kind is "user" or "assistant" or "system")
+                {
+                    var msgBody = GetMessageBody(ev.Text);
+                    var isShortMsg = msgBody.Length <= 300;
+                    var msgPreview = string.IsNullOrWhiteSpace(msgBody) ? "(no content)" : Truncate(msgBody, 200);
+                    <div class="console-line console-@ev.Kind">
+                        <span class="console-time">@ev.At.ToLocalTime().ToString("HH:mm:ss")</span>
+                        <details class="console-msg-block" open="@(isShortMsg ? "open" : null)">
+                            <summary class="console-msg-summary">
+                                <span class="console-msg-role console-msg-role-@ev.Kind">@ev.Kind</span>
+                                @if (!isShortMsg)
+                                {
+                                    <span class="console-msg-preview">@msgPreview</span>
+                                }
+                            </summary>
+                            <div class="console-msg-detail markdown">@((MarkupString)RenderMarkdown(msgBody))</div>
+                        </details>
+                    </div>
+                }
                 else
                 {
                     var (tag, body) = ParseBracketTag(ev.Text);
@@ -182,6 +201,15 @@
         using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
         try { await http.PostAsync($"/api/projects/{_run.ProjectSlug}/runs/{_run.RunId}/stop", null); } catch { }
     }
+
+    private static string GetMessageBody(string text)
+    {
+        var (_, body) = ParseBracketTag(text);
+        return body;
+    }
+
+    private static string Truncate(string text, int max) =>
+        text.Length <= max ? text : text[..max] + "…";
 
     private static (string? Tag, string Body) ParseBracketTag(string text)
     {
