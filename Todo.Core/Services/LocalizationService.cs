@@ -152,6 +152,11 @@ public class LocalizationService
         ["LabelsHint"] = "Tags réutilisables pour catégoriser les tickets.",
         ["NewLabelSettingsPlaceholder"] = "Nouveau label…",
         ["OpenAutomationsEditor"] = "Ouvrir l'éditeur d'automations →",
+        ["WorkspaceHealthCheck"] = "Health check",
+        ["WorkspaceHealthCheckHint"] = "Vérifie que CLAUDE.md existe et contient la référence à la documentation de l'API. Le crée ou l'enrichit si nécessaire.",
+        ["WorkspaceHealthCheckCreated"] = "CLAUDE.md créé.",
+        ["WorkspaceHealthCheckEnriched"] = "CLAUDE.md enrichi avec la référence à l'API.",
+        ["WorkspaceHealthCheckOk"] = "CLAUDE.md est déjà à jour.",
 
         // ── Automations ──
         ["ReloadFromDisk"] = "Relire automations.json depuis le disque",
@@ -476,6 +481,11 @@ public class LocalizationService
         ["LabelsHint"] = "Reusable tags to categorize tickets.",
         ["NewLabelSettingsPlaceholder"] = "New label…",
         ["OpenAutomationsEditor"] = "Open automations editor →",
+        ["WorkspaceHealthCheck"] = "Health check",
+        ["WorkspaceHealthCheckHint"] = "Checks that CLAUDE.md exists and contains a reference to the API documentation. Creates or enriches it if needed.",
+        ["WorkspaceHealthCheckCreated"] = "CLAUDE.md created.",
+        ["WorkspaceHealthCheckEnriched"] = "CLAUDE.md enriched with the API reference.",
+        ["WorkspaceHealthCheckOk"] = "CLAUDE.md is already up to date.",
 
         // ── Automations ──
         ["ReloadFromDisk"] = "Reload automations.json from disk",

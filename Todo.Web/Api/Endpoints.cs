@@ -501,6 +501,7 @@ public static class Endpoints
             await file.CopyToAsync(fs);
             return Results.Ok(new { url = $"/uploads/{filename}" });
         }).WithTags("Images").DisableAntiforgery();
+
     }
 
     private static readonly JsonSerializerOptions SseJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
