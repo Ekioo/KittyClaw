@@ -18,6 +18,7 @@ public sealed class AutomationEngine : BackgroundService
     private readonly AgentRunRegistry _runs;
     private readonly ClaudeRunner _runner;
     private readonly CostTracker _cost;
+    private readonly LocalizationService _loc;
     private readonly ILogger<AutomationEngine> _logger;
 
     private readonly ConcurrentDictionary<string, ProjectRuntime> _runtime = new();
@@ -38,6 +39,7 @@ public sealed class AutomationEngine : BackgroundService
         AgentRunRegistry runs,
         ClaudeRunner runner,
         CostTracker cost,
+        LocalizationService loc,
         ILogger<AutomationEngine> logger)
     {
         _projects = projects;
@@ -49,6 +51,7 @@ public sealed class AutomationEngine : BackgroundService
         _runs = runs;
         _runner = runner;
         _cost = cost;
+        _loc = loc;
         _logger = logger;
 
         _store.OnConfigChangedOnDisk += slug =>
@@ -243,6 +246,12 @@ public sealed class AutomationEngine : BackgroundService
                         }
                     }
                 }
+                else if (c.SameAssignee && firing.TicketId is not null)
+                {
+                    var firingTicket = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
+                    if (firingTicket?.AssignedTo is not null)
+                        slugsToCheck = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { firingTicket.AssignedTo };
+                }
                 else if (c.AssigneeSlug is not null)
                 {
                     slugsToCheck = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { c.AssigneeSlug };
@@ -407,21 +416,21 @@ public sealed class AutomationEngine : BackgroundService
                     _sessions.SetLastDispatched(rt.Workspace!, agentName, DateTime.UtcNow);
                     if (firing.TicketId is not null)
                     {
-                        try { await _tickets.AddActivityAsync(rt.Slug, firing.TicketId.Value, $"a démarré l'agent {agentName}", "automation"); }
+                        try { await _tickets.AddActivityAsync(rt.Slug, firing.TicketId.Value, _loc.Get("ActAgentStarted", agentName), "automation"); }
                         catch { /* non-blocking */ }
                     }
                     lastRun = await _runner.RunAsync(runCtx, ct);
 
                     if (firing.TicketId is not null)
                     {
-                        var statusText = lastRun.Status switch
+                        var statusKey = lastRun.Status switch
                         {
-                            AgentRunStatus.Completed => $"a terminé l'agent {agentName}",
-                            AgentRunStatus.Failed    => $"l'agent {agentName} a échoué",
-                            AgentRunStatus.Stopped   => $"l'agent {agentName} a été arrêté",
-                            _                        => $"l'agent {agentName} s'est terminé ({lastRun.Status})",
+                            AgentRunStatus.Completed => "ActAgentCompleted",
+                            AgentRunStatus.Failed    => "ActAgentFailed",
+                            AgentRunStatus.Stopped   => "ActAgentStopped",
+                            _                        => "ActAgentCompleted",
                         };
-                        try { await _tickets.AddActivityAsync(rt.Slug, firing.TicketId.Value, statusText, "automation"); }
+                        try { await _tickets.AddActivityAsync(rt.Slug, firing.TicketId.Value, _loc.Get(statusKey, agentName), "automation"); }
                         catch { /* non-blocking */ }
                     }
 
@@ -478,10 +487,10 @@ public sealed class AutomationEngine : BackgroundService
                         var newIds = allLabels.Where(l => currentNames.Contains(l.Name)).Select(l => l.Id).ToList();
                         await _tickets.SetTicketLabelsAsync(rt.Slug, firing.TicketId.Value, newIds);
                         var parts = new List<string>();
-                        if (s.Add.Count > 0) parts.Add($"ajouté : {string.Join(", ", s.Add)}");
-                        if (s.Remove.Count > 0) parts.Add($"retiré : {string.Join(", ", s.Remove)}");
+                        if (s.Add.Count > 0) parts.Add(_loc.Get("ActLabelsAdded", string.Join(", ", s.Add)));
+                        if (s.Remove.Count > 0) parts.Add(_loc.Get("ActLabelsRemoved", string.Join(", ", s.Remove)));
                         if (parts.Count > 0)
-                            try { await _tickets.AddActivityAsync(rt.Slug, firing.TicketId.Value, $"a modifié les labels ({string.Join(" / ", parts)})", "automation"); }
+                            try { await _tickets.AddActivityAsync(rt.Slug, firing.TicketId.Value, _loc.Get("ActLabelsChanged", string.Join(" / ", parts)), "automation"); }
                             catch { /* non-blocking */ }
                     }
                     catch { }
@@ -499,7 +508,7 @@ public sealed class AutomationEngine : BackgroundService
                             var ticket = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId!.Value);
                             content = content.Replace("{assignee}", ticket?.AssignedTo ?? "");
                         }
-                        await _tickets.AddCommentAsync(rt.Slug, firing.TicketId.Value, content, ac.Author);
+                        await _tickets.AddCommentAsync(rt.Slug, firing.TicketId!.Value, content, ac.Author);
                     }
                     catch { }
                     break;

@@ -110,6 +110,8 @@ public sealed class NoPendingTicketsConditionSpec : ConditionSpec
     public string? AssigneeSlug { get; set; }
     public string? ConcurrencyGroup { get; set; }
     public List<string>? Columns { get; set; }
+    /// <summary>When true, checks for pending tickets assigned to the same assignee as the firing ticket.</summary>
+    public bool SameAssignee { get; set; }
 }
 
 /// <summary>Kept for backward-compat with existing automations.json files.</summary>
