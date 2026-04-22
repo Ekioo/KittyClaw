@@ -44,12 +44,16 @@ a:hover { color: var(--accent-hover); }
 .back-link {
     font-size: 0.85rem;
     color: var(--text-muted);
+    background: transparent;
+    border: none;
+    padding: 0.25rem 0.5rem;
     display: flex;
     align-items: center;
     gap: 0.3rem;
     transition: color 0.15s;
+    cursor: pointer;
 }
-.back-link:hover { color: var(--text); }
+.back-link:hover { color: var(--text); background: transparent; }
 
 /* Filter bar */
 .filter-bar {
@@ -763,19 +767,19 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
 
 button {
     background: var(--accent);
-    color: white;
+    color: #0a1f1c;
     border: none;
     padding: 0.45rem 0.9rem;
     border-radius: 6px;
     cursor: pointer;
     font-size: 0.83rem;
-    font-weight: 500;
+    font-weight: 600;
     white-space: nowrap;
     font-family: inherit;
-    transition: background 0.15s, opacity 0.15s;
+    transition: background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s;
 }
-button:hover { background: var(--accent-hover); }
-button:disabled { opacity: 0.35; cursor: default; }
+button:hover { background: var(--accent-hover); color: #0a1f1c; }
+button:disabled { opacity: 0.4; cursor: default; }
 
 /* Ticket detail modal */
 .ticket-modal-overlay {
@@ -1484,12 +1488,13 @@ button:disabled { opacity: 0.35; cursor: default; }
     gap: 0.5rem;
 }
 .header-action-btn {
-    padding: 0.3rem 0.7rem;
+    padding: 0.35rem 0.8rem;
     border-radius: 6px;
-    font-size: 0.78rem;
-    background: var(--surface3);
-    color: var(--text-muted);
-    border: 1px solid var(--border);
+    font-size: 0.8rem;
+    font-weight: 500;
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
 }
 .header-action-btn:hover {
     border-color: var(--accent);
@@ -2110,6 +2115,8 @@ details[open] .console-msg-summary::before { transform: rotate(90deg); }
     border-radius: 4px; cursor: pointer;
     text-decoration: none; display: inline-block;
 }
+.settings-primary,
+.settings-primary:hover { color: white; border-color: transparent; }
 .settings-primary:hover { background: #60afff; }
 .settings-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .settings-browse {
@@ -2774,4 +2781,27 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     gap: 0.5rem;
     justify-content: flex-end;
     margin-top: 0.5rem;
+}
+
+.onboarding-check {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    margin: 0.35rem 0;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    background: var(--surface2, #2a2a30);
+}
+
+.onboarding-check.ok {
+    color: #7ed957;
+}
+
+.onboarding-check.missing {
+    color: #ff6b6b;
+}
+
+.onboarding-check a.header-action-btn {
+    text-decoration: none;
 }

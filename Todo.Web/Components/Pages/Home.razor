@@ -6,6 +6,7 @@
 @inject AgentsTemplateService AgentsTemplate
 @inject AutomationEngine AutomationEngine
 @inject MemberService MemberService
+@inject AppSettingsService AppSettings
 @inject LocalizationService L
 @inject IHttpClientFactory HttpFactory
 @inject NavigationManager Nav
@@ -14,6 +15,8 @@
 
 <PageTitle>@L["HomeTitle"]</PageTitle>
 
+@if (!_showOnboarding)
+{
 <div class="page-header">
     <h1>@L["Projects"]</h1>
 </div>
@@ -49,6 +52,7 @@
            @onkeydown="HandleKeyDown" />
     <button @onclick="CreateProject" disabled="@string.IsNullOrWhiteSpace(_newProjectName)">@L["Create"]</button>
 </div>
+}
 
 @if (_deleteTarget is not null)
 {
@@ -59,6 +63,43 @@
             <div class="confirm-actions">
                 <button class="cancel-btn" @onclick="CancelDelete">@L["Cancel"]</button>
                 <button class="delete-btn" @onclick="ConfirmDelete">@L["Delete"]</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showOnboarding)
+{
+    <div class="modal-backdrop">
+        <div class="modal-dialog" @onclick:stopPropagation>
+            <h2>@L["OnboardingTitle"]</h2>
+            <p>@L["OnboardingIntro1"]</p>
+            <p>@L["OnboardingIntro2"]</p>
+
+            <h3 style="margin-top:1rem;font-size:0.95rem">@L["OnboardingRequirements"]</h3>
+            <div class="onboarding-check @(_claudeInstalled ? "ok" : "missing")">
+                <span>@(_claudeInstalled ? "✓" : "✗") Claude Code</span>
+                @if (!_claudeInstalled)
+                {
+                    <a class="header-action-btn" href="https://docs.claude.com/en/docs/claude-code/overview" target="_blank" rel="noopener">@L["OnboardingInstall"]</a>
+                }
+            </div>
+            <div class="onboarding-check @(_gitInstalled ? "ok" : "missing")">
+                <span>@(_gitInstalled ? "✓" : "✗") Git</span>
+                @if (!_gitInstalled)
+                {
+                    <a class="header-action-btn" href="https://git-scm.com/downloads" target="_blank" rel="noopener">@L["OnboardingInstall"]</a>
+                }
+            </div>
+
+            @if (!_claudeInstalled || !_gitInstalled)
+            {
+                <p class="settings-status settings-status-err" style="margin-top:0.75rem">@L["OnboardingMissingWarning"]</p>
+            }
+
+            <div class="modal-actions">
+                <button class="header-action-btn" @onclick="RecheckTools">@L["Recheck"]</button>
+                <button class="header-action-btn settings-primary" @onclick="DismissOnboarding">@L["Continue"]</button>
             </div>
         </div>
     </div>
@@ -138,14 +179,48 @@
     private bool _initializing;
     private bool _creatingFolder;
     private bool? _workspaceExists;
+    private bool _showOnboarding;
+    private bool _onboardingEvaluated;
+    private bool _claudeInstalled;
+    private bool _gitInstalled;
     private List<string>? _initConflicts;
     private (string text, string css)? _creationStatus;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         L.OnLanguageChanged += OnLangChanged;
+        RecheckTools();
+        _showOnboarding = !AppSettings.OnboardingSeen || !_claudeInstalled || !_gitInstalled;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _onboardingEvaluated) return;
+        _onboardingEvaluated = true;
+        if (!_showOnboarding)
+        {
+            await LoadProjectsAsync();
+        }
+    }
+
+    private async Task LoadProjectsAsync()
+    {
         _projects = await ProjectService.ListProjectsAsync();
         await ProbeBrowseAsync();
+        StateHasChanged();
+    }
+
+    private void RecheckTools()
+    {
+        _claudeInstalled = AgentsTemplate.IsClaudeAvailable();
+        _gitInstalled = AgentsTemplate.IsGitAvailable();
+    }
+
+    private async Task DismissOnboarding()
+    {
+        AppSettings.OnboardingSeen = true;
+        _showOnboarding = false;
+        await LoadProjectsAsync();
     }
 
     private HttpClient NewHttp()

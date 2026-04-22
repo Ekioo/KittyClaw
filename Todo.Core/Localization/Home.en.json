@@ -11,5 +11,13 @@
   "OpenBoard": "Open board",
   "WorkspaceMissing": "This folder does not exist.",
   "CreateFolder": "Create folder",
-  "FolderCreated": "Folder created."
+  "FolderCreated": "Folder created.",
+  "OnboardingTitle": "Welcome to Todo",
+  "OnboardingIntro1": "Todo is a kanban that orchestrates agentic projects. Each column is a stage, tickets flow between stages, and LLM agents (programmer, groomer, producer, QA, committer, code-janitor, evaluator) pick up and process them automatically based on triggers you configure.",
+  "OnboardingIntro2": "You create a project, point it at a workspace folder, initialize the agent templates, and the background engine dispatches Claude Code subprocesses to work on your tickets.",
+  "OnboardingRequirements": "Required external tools",
+  "OnboardingInstall": "Install",
+  "OnboardingMissingWarning": "Todo can run without these, but agent dispatch and git commits will fail. Install the missing tools and make sure they are on your PATH (environment variables), then click Recheck.",
+  "Recheck": "Recheck",
+  "Continue": "Continue"
 }

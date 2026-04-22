@@ -28,6 +28,17 @@ public class AppSettingsService
 
     public event Action? OnLanguageChanged;
 
+    public bool OnboardingSeen
+    {
+        get => _data.OnboardingSeen;
+        set
+        {
+            if (_data.OnboardingSeen == value) return;
+            _data.OnboardingSeen = value;
+            Save();
+        }
+    }
+
     private void Load()
     {
         if (!File.Exists(_settingsPath)) return;
@@ -48,5 +59,6 @@ public class AppSettingsService
     private class AppSettingsData
     {
         public string Language { get; set; } = "fr";
+        public bool OnboardingSeen { get; set; } = false;
     }
 }
