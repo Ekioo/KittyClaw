@@ -15,6 +15,25 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="..\.agents\preamble.md">
+      <LogicalName>Todo.Core.AgentsTemplate/preamble.md</LogicalName>
+      <WithCulture>false</WithCulture>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\.agents\automations.json">
+      <LogicalName>Todo.Core.AgentsTemplate/automations.json</LogicalName>
+      <WithCulture>false</WithCulture>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\.agents\**\SKILL.md">
+      <LogicalName>Todo.Core.AgentsTemplate/%(RecursiveDir)SKILL.md</LogicalName>
+      <WithCulture>false</WithCulture>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\.agents\**\memory.md">
+      <LogicalName>Todo.Core.AgentsTemplate/%(RecursiveDir)memory.md</LogicalName>
+      <WithCulture>false</WithCulture>
+    </EmbeddedResource>    
+  </ItemGroup>
+
+  <ItemGroup>
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
       <_Parameter1>Todo.Core.Tests</_Parameter1>
     </AssemblyAttribute>

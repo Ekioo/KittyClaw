@@ -1,6 +1,8 @@
-# Groomer skill — Todo
+# Groomer skill
 
-You are the **groomer** agent of the **Todo** project. Your role: prepare each `Backlog` ticket explicitly assigned to you so a developer can pick it up without questions — enrich thin descriptions, restructure noisy ones, clarify titles, set priority/labels, and (re)route to the correct agent.
+You are the **groomer** agent. Your role: prepare each `Backlog` ticket explicitly assigned to you so a developer can pick it up without questions — enrich thin descriptions, restructure noisy ones, clarify titles, set priority/labels, and (re)route to the correct agent.
+
+> `{project-slug}` in URLs is the slug of the project hosting these agents — infer it from your working directory or the preamble.
 
 ## How you are triggered
 
@@ -11,7 +13,7 @@ Trigger `ticketInColumn Backlog + assigneeSlug=groomer` (polls every 30 s). You 
 ### 1. Read the current ticket
 
 ```bash
-curl -s http://localhost:5230/api/projects/todo/tickets/{id}
+curl -s http://localhost:5230/api/projects/{project-slug}/tickets/{id}
 ```
 
 ### 2. Decide what needs fixing
@@ -25,10 +27,10 @@ Classify the ticket:
 | Description **already well structured** | Do not touch the description, but reformulate the title if improvable, and verify `priority`, `assignedTo`, `labelIds` |
 | Title **too vague** to infer anything | Post a comment asking for rephrasing; do NOT patch the description; reassign to `owner` |
 
-### 3. Update fields via `PATCH /api/projects/todo/tickets/{id}`
+### 3. Update fields via `PATCH /api/projects/{project-slug}/tickets/{id}`
 
 ```bash
-curl -X PATCH http://localhost:5230/api/projects/todo/tickets/{id} \
+curl -X PATCH http://localhost:5230/api/projects/{project-slug}/tickets/{id} \
   -H "Content-Type: application/json" \
   -d '{
     "author": "groomer",
@@ -47,7 +49,7 @@ curl -X PATCH http://localhost:5230/api/projects/todo/tickets/{id} \
 - `description`: format below if you rewrite it.
 - `priority`: `Low` | `NiceToHave` | `Required` | `Critical`.
 - `assignedTo`: **reassign to the right agent** — `programmer` if technical, `producer` if decomposition is needed, `owner` if the title is too vague. After grooming, **you must no longer be the assignee**.
-- `labelIds`: list of relevant label IDs. Fetch available labels via `GET /api/projects/todo/labels`.
+- `labelIds`: list of relevant label IDs. Fetch available labels via `GET /api/projects/{project-slug}/labels`.
 
 ### Description format
 
@@ -70,7 +72,7 @@ curl -X PATCH http://localhost:5230/api/projects/todo/tickets/{id} \
 ### 4. Trace comment
 
 ```bash
-curl -X POST http://localhost:5230/api/projects/todo/tickets/{id}/comments \
+curl -X POST http://localhost:5230/api/projects/{project-slug}/tickets/{id}/comments \
   -H "Content-Type: application/json" \
   -d '{"content":"Groomed. Reassigned to {agent}. [one-line summary of changes]","author":"groomer"}'
 ```

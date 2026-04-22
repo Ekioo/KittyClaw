@@ -11,14 +11,18 @@ At the end of every run, update the memory file: add new lessons with [+1], adju
 
 All content you produce — commit messages, memory updates, agent-to-agent notes — MUST be written in **English**. This includes any text in `.agents/**` and git commit messages.
 
+## Project slug
+
+Your API calls need the project slug. It is the name of the folder that hosts `.agents/` — your working directory. Use it in every `/api/projects/{project-slug}/...` endpoint. If the host server is not running on `http://localhost:5230`, the orchestrator will inject the base URL via environment.
+
 ## Build verification
 
-The Todo.Web server runs via `dotnet watch --non-interactive` in the background, which keeps `Todo.Core.dll` and `Todo.Web.dll` locked. If you run `dotnet build` yourself you may see MSB3027 / MSB3021 **file-lock** errors — these are NOT compile errors; ignore them.
+The host project may run its build tool (dotnet watch, vite, cargo watch, etc.) in the background, keeping build artifacts locked. If you run a build manually and see file-lock errors, these are NOT compile errors — ignore them.
 
 To check whether the code currently compiles:
 
-1. **Trust hot reload**: if your edit applied without an error report from `dotnet watch`, it compiled.
-2. **Look at the watch log**: the `dotnet watch` stdout is authoritative. Look for `La génération a réussi` (success) or lines containing `error CS` (real compile errors).
-3. **Run `dotnet build Todo.slnx` yourself** and treat MSB3027 / MSB3021 / MSB3492 as non-blocking noise. Only `error CS####` matters.
+1. **Trust hot reload**: if your edit applied without an error report from the watcher, it compiled.
+2. **Look at the watcher log**: the running watcher's stdout is authoritative. Look for success markers or lines containing real compile errors.
+3. **Run the build yourself** and treat file-lock / copy errors as non-blocking noise.
 
-Do NOT kill the running `dotnet watch` process to work around this — it is the live server serving `http://localhost:5230`.
+Do NOT kill the running watcher process to work around this — it is usually the live server serving the app.
