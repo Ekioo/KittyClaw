@@ -3,9 +3,12 @@
     --surface: #191928;
     --surface2: #232338;
     --surface3: #2e2e48;
-    --accent: #2dd4bf;
-    --accent-dim: rgba(45, 212, 191, 0.12);
-    --accent-hover: #5eead4;
+    --accent: #22c55e;
+    --accent-dim: rgba(34, 197, 94, 0.15);
+    --accent-hover: #4ade80;
+    --accent-info: #3b82f6;
+    --accent-info-hover: #60a5fa;
+    --accent-success: #22c55e;
     --text: #e4e4f0;
     --text-muted: #7a7a96;
     --text-dim: #46466a;
@@ -767,7 +770,7 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
 
 button {
     background: var(--accent);
-    color: #0a1f1c;
+    color: #052e16;
     border: none;
     padding: 0.45rem 0.9rem;
     border-radius: 6px;
@@ -778,7 +781,7 @@ button {
     font-family: inherit;
     transition: background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s;
 }
-button:hover { background: var(--accent-hover); color: #0a1f1c; }
+button:hover { background: var(--accent-hover); color: #052e16; }
 button:disabled { opacity: 0.4; cursor: default; }
 
 /* Ticket detail modal */
@@ -973,12 +976,14 @@ button:disabled { opacity: 0.4; cursor: default; }
 .delete-btn {
     background: rgba(240, 107, 107, 0.15);
     color: var(--s-blocked);
-    border: 1px solid rgba(240, 107, 107, 0.25);
+    border: 1px solid rgba(240, 107, 107, 0.4);
     font-size: 0.78rem;
     padding: 0.3rem 0.65rem;
     border-radius: 6px;
+    font-weight: 600;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
-.delete-btn:hover { background: rgba(240, 107, 107, 0.3); }
+.delete-btn:hover { background: var(--s-blocked); color: #2a0808; border-color: var(--s-blocked); }
 .cancel-btn {
     background: var(--surface3);
     color: var(--text-muted);
@@ -1495,10 +1500,17 @@ button:disabled { opacity: 0.4; cursor: default; }
     background: var(--surface2);
     color: var(--text);
     border: 1px solid var(--border-strong);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 .header-action-btn:hover {
+    background: var(--accent-dim);
     border-color: var(--accent);
-    color: var(--accent);
+    color: var(--accent-hover);
+}
+.header-action-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
 }
 .ticket-desc {
     color: var(--text);
@@ -2071,15 +2083,18 @@ details[open] .console-msg-summary::before { transform: rotate(90deg); }
     font-size: 0.85rem;
 }
 .agent-drawer-steer button {
-    background: #4a9eff;
-    color: white;
+    background: var(--accent);
+    color: #052e16;
     border: none;
     padding: 0.5rem 1rem;
-    border-radius: 4px;
+    border-radius: 6px;
     cursor: pointer;
+    font-weight: 600;
     height: 40px;
+    transition: background 0.15s, color 0.15s;
 }
-.agent-drawer-steer button:disabled { opacity: 0.4; cursor: not-allowed; }
+.agent-drawer-steer button:hover { background: var(--accent-hover); color: #052e16; }
+.agent-drawer-steer button:disabled { background: var(--surface3); color: var(--text-muted); opacity: 1; cursor: not-allowed; }
 
 /* ─── Settings page ────────────────────────────────────────────────── */
 .settings-container {
@@ -2110,23 +2125,26 @@ details[open] .console-msg-summary::before { transform: rotate(90deg); }
     font-family: monospace;
 }
 .settings-primary {
-    background: #4a9eff; color: white;
-    border: none; padding: 0.5rem 1rem;
-    border-radius: 4px; cursor: pointer;
+    background: var(--accent); color: #052e16;
+    border: 1px solid transparent; padding: 0.45rem 0.9rem;
+    border-radius: 6px; cursor: pointer;
+    font-weight: 600;
     text-decoration: none; display: inline-block;
+    transition: background 0.15s, color 0.15s;
 }
 .settings-primary,
-.settings-primary:hover { color: white; border-color: transparent; }
-.settings-primary:hover { background: #60afff; }
-.settings-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.settings-primary:hover { color: #052e16; border-color: transparent; }
+.settings-primary:hover { background: var(--accent-hover); }
+.settings-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 .settings-browse {
-    background: #11141b; color: #c8d0e0;
-    border: 1px solid var(--border, #333);
-    padding: 0.5rem 0.8rem;
-    border-radius: 4px; cursor: pointer;
+    background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border-strong);
+    padding: 0.45rem 0.8rem;
+    border-radius: 6px; cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
-.settings-browse:hover { border-color: #4a9eff; color: #60afff; }
-.settings-browse:disabled { opacity: 0.5; cursor: not-allowed; }
+.settings-browse:hover { background: var(--accent-dim); border-color: var(--accent); color: var(--accent-hover); }
+.settings-browse:disabled { opacity: 0.4; cursor: not-allowed; }
 .settings-status { margin-top: 0.6rem; padding: 0.4rem 0.7rem; border-radius: 4px; font-size: 0.9rem; }
 .settings-status-ok { background: #3ecf8e22; color: #3ecf8e; }
 .settings-status-err { background: #f06b6b22; color: #f06b6b; }
@@ -2661,22 +2679,23 @@ body.flow-dnd-active * { cursor: grabbing !important; }
     font-size: 0.9rem;
     line-height: 1.4;
 }
-.chat-input-area textarea:focus { outline: none; border-color: #4a9eff66; }
+.chat-input-area textarea:focus { outline: none; border-color: var(--accent); }
 .chat-input-area button {
-    background: #4a9eff;
-    color: #fff;
+    background: var(--accent);
+    color: #052e16;
     border: none;
     border-radius: 6px;
     padding: 0.5rem 1rem;
+    font-weight: 600;
     cursor: pointer;
     font-size: 0.9rem;
     white-space: nowrap;
     align-self: flex-end;
 }
-.chat-input-area button:hover { background: #3a8eef; }
-.chat-input-area button:disabled { background: #2a3040; color: #5a6a80; cursor: default; }
-.new-instruction-btn { background: #4a9eff22; color: #4a9eff; border-color: #4a9eff44; }
-.new-instruction-btn:hover { background: #4a9eff33; }
+.chat-input-area button:hover { background: var(--accent-hover); color: #052e16; }
+.chat-input-area button:disabled { background: var(--surface3); color: var(--text-muted); cursor: default; }
+.new-instruction-btn { background: var(--accent-dim); color: var(--accent-hover); border-color: var(--accent); }
+.new-instruction-btn:hover { background: var(--accent); color: #052e16; border-color: var(--accent-hover); }
 
 /* ─── Tool call blocks in chat drawer ──────────────────────────────────── */
 .chat-message-tool { justify-content: flex-start; }

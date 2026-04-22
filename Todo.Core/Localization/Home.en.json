@@ -3,7 +3,7 @@
   "Projects": "Projects",
   "NewProjectPlaceholder": "New project name...",
   "DeleteProjectConfirm": "Delete project",
-  "DeleteProjectWarning": "All tickets and associated data will be permanently deleted.",
+  "DeleteProjectWarning": "All tickets and associated data will be permanently deleted. The workspace folder on disk is NOT deleted.",
   "Pause": "Pause",
   "Resume": "Resume",
   "Paused": "Paused",

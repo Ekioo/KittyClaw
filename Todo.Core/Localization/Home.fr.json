@@ -3,7 +3,7 @@
   "Projects": "Projets",
   "NewProjectPlaceholder": "Nom du nouveau projet...",
   "DeleteProjectConfirm": "Supprimer le projet",
-  "DeleteProjectWarning": "Tous les tickets et données associés seront définitivement supprimés.",
+  "DeleteProjectWarning": "Tous les tickets et données associés seront définitivement supprimés. Le dossier de workspace sur le disque N'EST PAS supprimé.",
   "Pause": "Mettre en pause",
   "Resume": "Reprendre",
   "Paused": "En pause",
