@@ -1,5 +1,5 @@
 # Code Health — Todo
-> Last updated: 2026-04-22 (Run 74)
+> Last updated: 2026-04-22 (Run 75)
 
 ## Résumé
 | Métrique | Valeur | Tendance |
@@ -59,9 +59,9 @@ Tous les fichiers `.cs` du projet ont été lus au moins une fois (46/46). ✓
 - ~~**#61**~~ ✅ Clés de localisation orphelines supprimées
 - **#63** [NiceToHave] `EvaluateSingleConditionAsync` est trop longue (133 lignes)
 
-## Final state (Run 74)
+## Final state (Run 75)
 Runs 12–71: **98% stability sustained (file count stable at 55).**  
-Run 72: 1 new file detected (55→56), all clean. Runs 73–74: file count stable at 56. 63 consecutive verification runs total.
+Run 72: 1 new file detected (55→56), all clean. Runs 73–75: file count stable at 56. 64 consecutive verification runs total.
 - Fichiers .cs : 56 (constant)
 - TODOs/HACKs : 0 (constant)
 - Warnings CS : 0 (constant)
