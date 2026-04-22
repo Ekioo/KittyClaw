@@ -35,7 +35,18 @@
   "CondTicketCountInColumn": "{0} tickets [{1}] {2} {3}",
   "ActionMoveTo": "→ {0}",
   "ActionSetLabelsDesc": "+[{0}] −[{1}]",
-  "WorkspaceHealthCheck": "Health check",
-  "WorkspaceHealthCheckHint": "Check workspace health and auto-create missing members",
-  "WorkspaceHealthCheckOk": "Workspace is healthy."
+  "Initialize": "Initialize",
+  "InitializeHint": "Copy the .agents/ template (skills, preamble, automations.json) into this project's workspace",
+  "InitializeConfirmTitle": "Overwrite existing files?",
+  "InitializeConfirmIntro": "Some files already exist in the target .agents/ folder. Choose how to proceed:",
+  "InitializeOverwrite": "Overwrite",
+  "InitializeSkip": "Skip existing",
+  "InitializeDone": "Initialization done — {0} file(s) written, {1} skipped.",
+  "InitializeDoneGit": " Git: {0}.",
+  "GitMissingWarning": "Git is not available on this host. The workspace will be initialized but no git repository will be created. Install Git from https://git-scm.com/downloads and retry if you want version tracking.",
+  "GitInit_Created": "repository created",
+  "GitInit_AlreadyExists": "repository already present",
+  "GitInit_GitMissing": "git not installed, skipped",
+  "GitInit_Failed": "git init failed",
+  "GitInit_NotAttempted": "not attempted"
 }

@@ -6,5 +6,10 @@
   "DeleteProjectWarning": "All tickets and associated data will be permanently deleted.",
   "Pause": "Pause",
   "Resume": "Resume",
-  "Paused": "Paused"
+  "Paused": "Paused",
+  "CreationSetupIntro": "Configure the workspace for this new project, then click Initialize to create it and install the agent templates.",
+  "OpenBoard": "Open board",
+  "WorkspaceMissing": "This folder does not exist.",
+  "CreateFolder": "Create folder",
+  "FolderCreated": "Folder created."
 }

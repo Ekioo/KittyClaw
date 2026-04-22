@@ -3,7 +3,7 @@
   "Board": "Board",
   "WorkspacePath": "Dossier de travail",
   "WorkspaceHint": "Chemin absolu vers le repo / dossier du projet. C'est là que sera chargé le .claude/ et que sera lu .agents/automations.json.",
-  "WorkspacePlaceholder": "D:\\Sources\\…",
+  "WorkspacePlaceholder": "%USERPROFILE%\\source\\repos\\…",
   "Browse": "Parcourir",
   "Members": "Membres",
   "MembersHint": "Les membres servent à assigner des tickets. Les automations ciblent un membre par son slug (champ assigneeSlug).",
@@ -15,8 +15,5 @@
   "LabelsSection": "Labels",
   "LabelsHint": "Tags réutilisables pour catégoriser les tickets.",
   "NewLabelSettingsPlaceholder": "Nouveau label\u2026",
-  "OpenAutomationsEditor": "Ouvrir l'éditeur d'automations →",
-  "WorkspaceHealthCheck": "Health check",
-  "WorkspaceHealthCheckHint": "Vérifie que CLAUDE.md existe et contient la référence à la documentation de l'API. Le crée ou l'enrichit si nécessaire.",
-  "WorkspaceHealthCheckOk": "CLAUDE.md est déjà à jour."
+  "OpenAutomationsEditor": "Ouvrir l'éditeur d'automations →"
 }

@@ -35,7 +35,18 @@
   "CondTicketCountInColumn": "{0} tickets [{1}] {2} {3}",
   "ActionMoveTo": "→ {0}",
   "ActionSetLabelsDesc": "+[{0}] −[{1}]",
-  "WorkspaceHealthCheck": "Vérif. workspace",
-  "WorkspaceHealthCheckHint": "Vérifier le workspace et créer les membres manquants",
-  "WorkspaceHealthCheckOk": "Workspace en bonne santé."
+  "Initialize": "Initialiser",
+  "InitializeHint": "Copier le gabarit .agents/ (skills, preamble, automations.json) dans le workspace de ce projet",
+  "InitializeConfirmTitle": "Écraser les fichiers existants ?",
+  "InitializeConfirmIntro": "Certains fichiers existent déjà dans le dossier .agents/ cible. Choisissez comment procéder :",
+  "InitializeOverwrite": "Écraser",
+  "InitializeSkip": "Ignorer les existants",
+  "InitializeDone": "Initialisation terminée — {0} fichier(s) écrit(s), {1} ignoré(s).",
+  "InitializeDoneGit": " Git : {0}.",
+  "GitMissingWarning": "Git n'est pas disponible sur cette machine. Le workspace sera initialisé mais aucun dépôt git ne sera créé. Installe Git depuis https://git-scm.com/downloads puis réessaie si tu veux le versionnage.",
+  "GitInit_Created": "dépôt créé",
+  "GitInit_AlreadyExists": "dépôt déjà présent",
+  "GitInit_GitMissing": "git non installé, ignoré",
+  "GitInit_Failed": "échec de git init",
+  "GitInit_NotAttempted": "non tenté"
 }

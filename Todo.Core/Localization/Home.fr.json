@@ -6,5 +6,10 @@
   "DeleteProjectWarning": "Tous les tickets et données associés seront définitivement supprimés.",
   "Pause": "Mettre en pause",
   "Resume": "Reprendre",
-  "Paused": "En pause"
+  "Paused": "En pause",
+  "CreationSetupIntro": "Configure le workspace de ce nouveau projet, puis clique sur Initialiser pour le créer et installer le gabarit d'agents.",
+  "OpenBoard": "Ouvrir le board",
+  "WorkspaceMissing": "Ce dossier n'existe pas.",
+  "CreateFolder": "Créer le dossier",
+  "FolderCreated": "Dossier créé."
 }

@@ -4,6 +4,8 @@
 @using Todo.Core.Models
 @using Todo.Core.Services
 @inject ProjectService ProjectService
+@inject AgentsTemplateService AgentsTemplate
+@inject AutomationEngine AutomationEngine
 @inject ColumnService ColumnService
 @inject IHttpClientFactory HttpFactory
 @inject NavigationManager Nav
@@ -34,7 +36,7 @@ else
         <div class="header-right">
             @if (_editingIndex is null)
             {
-                <button class="header-action-btn" @onclick="RunHealthCheck" disabled="@_healthChecking" title="@L["WorkspaceHealthCheckHint"]">@(_healthChecking ? "…" : L["WorkspaceHealthCheck"])</button>
+                <button class="header-action-btn" @onclick="StartInitialize" disabled="@_initializing" title="@L["InitializeHint"]">@(_initializing ? "…" : L["Initialize"])</button>
                 <button class="header-action-btn" @onclick="ReloadFromDisk" title="@L["ReloadFromDisk"]">&#8635; @L["Reload"]</button>
                 <button class="header-action-btn" @onclick="AddAutomation">@L["NewAutomation"]</button>
                 <button class="header-action-btn settings-primary" @onclick="SaveAll" disabled="@_saving">
@@ -53,6 +55,27 @@ else
     @if (_statusMessage is not null)
     {
         <div class="settings-status @_statusMessage.Value.css">@_statusMessage.Value.text</div>
+    }
+
+    @if (_initConflicts is not null)
+    {
+        <div class="modal-backdrop" @onclick="CancelInitialize">
+            <div class="modal-dialog" @onclick:stopPropagation>
+                <h2>@L["InitializeConfirmTitle"]</h2>
+                <p>@L["InitializeConfirmIntro"]</p>
+                <ul class="init-conflict-list">
+                    @foreach (var f in _initConflicts)
+                    {
+                        <li><code>.agents/@f</code></li>
+                    }
+                </ul>
+                <div class="modal-actions">
+                    <button class="header-action-btn" @onclick="CancelInitialize">@L["Cancel"]</button>
+                    <button class="header-action-btn" @onclick="() => RunInitialize(false)">@L["InitializeSkip"]</button>
+                    <button class="header-action-btn settings-primary" @onclick="() => RunInitialize(true)">@L["InitializeOverwrite"]</button>
+                </div>
+            </div>
+        </div>
     }
 
     @if (_editingIndex is null)
@@ -199,7 +222,8 @@ else
     private List<string> _columns = new();
     private List<string> _members = new();
     private bool _saving;
-    private bool _healthChecking;
+    private bool _initializing;
+    private List<string>? _initConflicts;
     private (string text, string css)? _statusMessage;
 
     private int? _editingIndex;
@@ -258,100 +282,54 @@ else
         else _config = new();
     }
 
-    private async Task RunHealthCheck()
+    private async Task StartInitialize()
     {
-        _healthChecking = true;
+        if (_initializing || _project is null) return;
+        _initializing = true;
         _statusMessage = null;
-        var issues = new List<string>();
-        var fixes = new List<string>();
-
         try
         {
-            // ── 1. CLAUDE.md ──────────────────────────────────────────────
-            var workspace = ProjectService.ResolveWorkspacePath(_project!);
-            if (!Directory.Exists(workspace))
+            var workspace = ProjectService.ResolveWorkspacePath(_project);
+            if (!AgentsTemplate.IsGitAvailable())
             {
-                _statusMessage = ($"{L["Error"]}: workspace directory does not exist.", "settings-status-err");
-                return;
+                _statusMessage = (L["GitMissingWarning"], "settings-status-err");
             }
-
-            const string apiDocMarker = "/api/docs";
-            var claudeMdPath = Path.Combine(workspace, "CLAUDE.md");
-
-            if (!File.Exists(claudeMdPath))
+            var conflicts = AgentsTemplate.DetectConflicts(workspace);
+            if (conflicts.Count == 0)
             {
-                await File.WriteAllTextAsync(claudeMdPath, $"""
-                    # Todo Workspace
-
-                    This workspace is managed by the **Todo** application.
-
-                    ## API
-
-                    The full and up-to-date API documentation is available at:
-                    http://localhost:5230{apiDocMarker}
-
-                    Consult it before interacting with the API.
-                    """);
-                fixes.Add("CLAUDE.md créé");
+                await RunInitialize(false);
             }
             else
             {
-                var existing = await File.ReadAllTextAsync(claudeMdPath);
-                if (!existing.Contains(apiDocMarker))
-                {
-                    await File.AppendAllTextAsync(claudeMdPath, $"""
-
-
-                    ## Todo API
-
-                    The full and up-to-date API documentation is available at:
-                    http://localhost:5230{apiDocMarker}
-
-                    Consult it before interacting with the API.
-                    """);
-                    fixes.Add("CLAUDE.md enrichi");
-                }
+                _initConflicts = conflicts;
             }
-
-            // ── 2. Members référencés dans automations ────────────────────
-            if (_config is not null)
-            {
-                var http = NewHttp();
-                var members = await http.GetFromJsonAsync<List<MemberSlug>>($"/api/projects/{Slug}/members") ?? [];
-                var existingSlugs = members.Select(m => m.Slug).ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-                var referencedSlugs = _config.Automations
-                    .Select(a => a.Trigger)
-                    .OfType<TicketInColumnTriggerSpec>()
-                    .Where(t => t.AssigneeSlug is not null)
-                    .Select(t => t.AssigneeSlug!)
-                    .Distinct(StringComparer.OrdinalIgnoreCase);
-
-                foreach (var slug in referencedSlugs)
-                {
-                    if (!existingSlugs.Contains(slug))
-                    {
-                        var resp = await http.PostAsJsonAsync($"/api/projects/{Slug}/members", new { name = slug });
-                        if (resp.IsSuccessStatusCode)
-                            fixes.Add($"Membre créé : {slug}");
-                        else
-                            issues.Add($"Membre manquant et non créé : {slug}");
-                    }
-                }
-            }
-
-            // ── Résultat ──────────────────────────────────────────────────
-            if (issues.Count > 0)
-                _statusMessage = ($"Problèmes : {string.Join(", ", issues)}", "settings-status-err");
-            else if (fixes.Count > 0)
-                _statusMessage = ($"Corrigé : {string.Join(", ", fixes)}", "settings-status-ok");
-            else
-                _statusMessage = (L["WorkspaceHealthCheckOk"], "settings-status-ok");
         }
-        finally { _healthChecking = false; }
+        finally { _initializing = false; }
     }
 
-    private sealed record MemberSlug(int Id, string Name, string Slug);
+    private void CancelInitialize() => _initConflicts = null;
+
+    private async Task RunInitialize(bool overwrite)
+    {
+        if (_project is null) return;
+        _initConflicts = null;
+        _initializing = true;
+        try
+        {
+            var workspace = ProjectService.ResolveWorkspacePath(_project);
+            var result = await AgentsTemplate.InitializeAsync(workspace, overwrite);
+            foreach (var agentSlug in AgentsTemplate.AgentSlugs())
+            {
+                if (!await MemberService.MemberExistsAsync(Slug, agentSlug))
+                    await MemberService.CreateMemberAsync(Slug, agentSlug);
+            }
+            await AutomationEngine.ReloadProjectAsync(Slug);
+            var gitMsg = string.Format(L["InitializeDoneGit"], L[$"GitInit_{result.GitInit}"]);
+            _statusMessage = (string.Format(L["InitializeDone"], result.Written.Count, result.Skipped.Count) + gitMsg, "settings-status-ok");
+            await LoadConfigAsync(NewHttp());
+        }
+        finally { _initializing = false; }
+    }
 
     private async Task ReloadFromDisk()
     {

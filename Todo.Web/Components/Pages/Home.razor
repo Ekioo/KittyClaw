@@ -1,8 +1,14 @@
 @page "/"
 @using Todo.Core.Models
 @using Todo.Core.Services
+@using Todo.Core.Automation
 @inject ProjectService ProjectService
+@inject AgentsTemplateService AgentsTemplate
+@inject AutomationEngine AutomationEngine
+@inject MemberService MemberService
 @inject LocalizationService L
+@inject IHttpClientFactory HttpFactory
+@inject NavigationManager Nav
 @rendermode InteractiveServer
 @implements IDisposable
 
@@ -58,28 +64,233 @@
     </div>
 }
 
+@if (_pendingName is not null)
+{
+    <div class="modal-backdrop">
+        <div class="modal-dialog" @onclick:stopPropagation>
+            <h2>@_pendingName</h2>
+            <p>@L["CreationSetupIntro"]</p>
+
+            <label class="settings-label">@L["WorkspacePath"] *</label>
+            <p class="settings-hint">@L["WorkspaceHint"]</p>
+            <div class="settings-row">
+                <input class="settings-input" placeholder="@L["WorkspacePlaceholder"]" @bind="_newWorkspacePath" @bind:event="oninput" @bind:after="OnWorkspaceChanged" />
+                @if (_canBrowse)
+                {
+                    <button class="settings-browse" @onclick="BrowseWorkspace" disabled="@_browsing">
+                        @(_browsing ? "…" : $"📁 {L["Browse"]}")
+                    </button>
+                }
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_newWorkspacePath) && _workspaceExists == false)
+            {
+                <div class="settings-status settings-status-err">
+                    <span>@L["WorkspaceMissing"]</span>
+                    <button class="header-action-btn" @onclick="CreateWorkspaceFolder" disabled="@_creatingFolder" style="margin-left:0.75rem">
+                        @(_creatingFolder ? "…" : L["CreateFolder"])
+                    </button>
+                </div>
+            }
+
+            @if (_creationStatus is not null)
+            {
+                <div class="settings-status @_creationStatus.Value.css">@_creationStatus.Value.text</div>
+            }
+
+            @if (_initConflicts is not null)
+            {
+                <div class="init-conflict-block">
+                    <p><strong>@L["InitializeConfirmTitle"]</strong></p>
+                    <p>@L["InitializeConfirmIntro"]</p>
+                    <ul class="init-conflict-list">
+                        @foreach (var f in _initConflicts)
+                        {
+                            <li><code>.agents/@f</code></li>
+                        }
+                    </ul>
+                    <div class="modal-actions">
+                        <button class="header-action-btn" @onclick="() => _initConflicts = null">@L["Cancel"]</button>
+                        <button class="header-action-btn" @onclick="() => CreateAndInitialize(false)">@L["InitializeSkip"]</button>
+                        <button class="header-action-btn settings-primary" @onclick="() => CreateAndInitialize(true)">@L["InitializeOverwrite"]</button>
+                    </div>
+                </div>
+            }
+
+            <div class="modal-actions">
+                <button class="header-action-btn" @onclick="CancelCreation" disabled="@_initializing">@L["Cancel"]</button>
+                <button class="header-action-btn settings-primary" @onclick="StartInitialize" disabled="@(_initializing || _initConflicts is not null || string.IsNullOrWhiteSpace(_newWorkspacePath) || _workspaceExists != true)">
+                    @(_initializing ? "…" : L["Initialize"])
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private List<Project>? _projects;
     private string _newProjectName = "";
     private Project? _deleteTarget;
 
+    private string? _pendingName;
+    private string _newWorkspacePath = "";
+    private bool _browsing, _canBrowse;
+    private bool _initializing;
+    private bool _creatingFolder;
+    private bool? _workspaceExists;
+    private List<string>? _initConflicts;
+    private (string text, string css)? _creationStatus;
+
     protected override async Task OnInitializedAsync()
     {
         L.OnLanguageChanged += OnLangChanged;
         _projects = await ProjectService.ListProjectsAsync();
+        await ProbeBrowseAsync();
     }
 
-    private async Task CreateProject()
+    private HttpClient NewHttp()
+    {
+        var h = HttpFactory.CreateClient();
+        h.BaseAddress = new Uri(Nav.BaseUri);
+        return h;
+    }
+
+    private async Task ProbeBrowseAsync()
+    {
+        try
+        {
+            var caps = await NewHttp().GetFromJsonAsync<BrowseCapabilities>("/api/browse/capabilities");
+            _canBrowse = caps?.FolderPicker == true;
+        }
+        catch { _canBrowse = false; }
+    }
+
+    private sealed record BrowseCapabilities(bool FolderPicker);
+    private sealed record BrowseResult(string Path);
+
+    private void CreateProject()
     {
         if (string.IsNullOrWhiteSpace(_newProjectName)) return;
-        await ProjectService.CreateProjectAsync(_newProjectName.Trim());
-        _newProjectName = "";
-        _projects = await ProjectService.ListProjectsAsync();
+        _pendingName = _newProjectName.Trim();
+        _newWorkspacePath = "";
+        _workspaceExists = null;
+        _creationStatus = null;
+        _initConflicts = null;
     }
 
-    private async Task HandleKeyDown(KeyboardEventArgs e)
+    private void OnWorkspaceChanged()
     {
-        if (e.Key == "Enter") await CreateProject();
+        var path = _newWorkspacePath?.Trim();
+        _workspaceExists = string.IsNullOrEmpty(path) ? (bool?)null : Directory.Exists(path);
+    }
+
+    private void CreateWorkspaceFolder()
+    {
+        if (string.IsNullOrWhiteSpace(_newWorkspacePath)) return;
+        _creatingFolder = true;
+        _creationStatus = null;
+        try
+        {
+            Directory.CreateDirectory(_newWorkspacePath.Trim());
+            _workspaceExists = true;
+            _creationStatus = (L["FolderCreated"], "settings-status-ok");
+        }
+        catch (Exception ex)
+        {
+            _creationStatus = ($"{L["Error"]}: {ex.Message}", "settings-status-err");
+        }
+        finally { _creatingFolder = false; }
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") CreateProject();
+    }
+
+    private async Task BrowseWorkspace()
+    {
+        _browsing = true;
+        try
+        {
+            var resp = await NewHttp().PostAsJsonAsync("/api/browse/folder", new { initialPath = _newWorkspacePath });
+            if (resp.StatusCode == System.Net.HttpStatusCode.OK)
+            {
+                var body = await resp.Content.ReadFromJsonAsync<BrowseResult>();
+                if (body?.Path is not null)
+                {
+                    _newWorkspacePath = body.Path;
+                    OnWorkspaceChanged();
+                }
+            }
+        }
+        finally { _browsing = false; }
+    }
+
+    private async Task StartInitialize()
+    {
+        if (_pendingName is null || _initializing) return;
+        _initializing = true;
+        _creationStatus = null;
+        try
+        {
+            var workspace = _newWorkspacePath.Trim();
+            if (!AgentsTemplate.IsGitAvailable())
+            {
+                _creationStatus = (L["GitMissingWarning"], "settings-status-err");
+            }
+            var conflicts = AgentsTemplate.DetectConflicts(workspace);
+            if (conflicts.Count == 0)
+            {
+                await CreateAndInitialize(false);
+            }
+            else
+            {
+                _initConflicts = conflicts;
+            }
+        }
+        finally { _initializing = false; }
+    }
+
+    private async Task CreateAndInitialize(bool overwrite)
+    {
+        if (_pendingName is null) return;
+        _initConflicts = null;
+        _initializing = true;
+        try
+        {
+            var project = await ProjectService.CreateProjectAsync(_pendingName);
+            await ProjectService.UpdateProjectAsync(project.Slug, _newWorkspacePath.Trim());
+            _newProjectName = "";
+            _projects = await ProjectService.ListProjectsAsync();
+
+            await AgentsTemplate.InitializeAsync(_newWorkspacePath.Trim(), overwrite);
+            await EnsureAgentMembersAsync(project.Slug);
+            await AutomationEngine.ReloadProjectAsync(project.Slug);
+
+            _pendingName = null;
+            Nav.NavigateTo($"/board/{project.Slug}");
+        }
+        catch (Exception ex)
+        {
+            _creationStatus = ($"{L["Error"]}: {ex.Message}", "settings-status-err");
+        }
+        finally { _initializing = false; }
+    }
+
+    private void CancelCreation()
+    {
+        _pendingName = null;
+        _initConflicts = null;
+        _creationStatus = null;
+    }
+
+    private async Task EnsureAgentMembersAsync(string projectSlug)
+    {
+        foreach (var slug in AgentsTemplate.AgentSlugs())
+        {
+            if (!await MemberService.MemberExistsAsync(projectSlug, slug))
+                await MemberService.CreateMemberAsync(projectSlug, slug);
+        }
     }
 
     private async Task TogglePause(Project project)

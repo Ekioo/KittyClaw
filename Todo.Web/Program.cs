@@ -19,6 +19,7 @@ builder.Services.AddSingleton<TicketService>();
 builder.Services.AddSingleton<LabelService>();
 builder.Services.AddSingleton<ColumnService>();
 builder.Services.AddSingleton<MemberService>();
+builder.Services.AddSingleton<AgentsTemplateService>();
 builder.Services.AddSingleton<Todo.Web.Services.BoardFilterState>();
 builder.Services.AddSingleton<Todo.Web.Services.BoardUpdateNotifier>();
 
