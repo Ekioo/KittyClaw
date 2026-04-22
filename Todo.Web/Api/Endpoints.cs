@@ -344,15 +344,6 @@ public static class Endpoints
             return Results.NoContent();
         }).WithTags("Automations");
 
-        api.MapPost("/projects/{slug}/automations/{id}/run", async (string slug, string id, AutomationEngine engine, CancellationToken ct) =>
-        {
-            try
-            {
-                var run = await engine.RunAutomationManuallyAsync(slug, id, ct);
-                return Results.Accepted($"/api/projects/{slug}/runs/{run.RunId}", new { runId = run.RunId });
-            }
-            catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
-        }).WithTags("Automations");
 
         // Agent runs (live)
         api.MapGet("/projects/{slug}/runs", (string slug, AgentRunRegistry reg) =>

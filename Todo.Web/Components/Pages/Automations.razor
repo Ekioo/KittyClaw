@@ -110,7 +110,6 @@ else
                             <div class="tile-line"><span class="tile-badge badge-action">DO</span> @string.Join(", ", a.Actions.Select(DescribeAction))</div>
                         </div>
                         <div class="tile-footer" @onclick:stopPropagation>
-                            <button class="auto-run-btn" @onclick="() => RunNow(a.Id)">▶ @L["Run"]</button>
                             <button class="icon-btn delete-icon" @onclick="() => RemoveAutomation(idx)" title="@L["Delete"]">🗑</button>
                         </div>
                     </div>
@@ -182,9 +181,6 @@ else
                                   ClickLabel="+ DO" OnClick="AddAction" />
                     </div>
 
-                    <div class="automation-footer">
-                        <button class="auto-run-btn" @onclick="() => RunNow(a.Id)">▶ @L["RunNow"]</button>
-                    </div>
                 </div>
             </div>
 
@@ -526,15 +522,6 @@ else
         var a = _config.Automations[_editingIndex.Value];
         a.Actions.Add(new RunAgentActionSpec { Agent = "producer" });
         Select(NodeKind.Action, a.Actions.Count - 1);
-    }
-
-    private async Task RunNow(string id)
-    {
-        var http = NewHttp();
-        var resp = await http.PostAsync($"/api/projects/{Slug}/automations/{id}/run", null);
-        _statusMessage = resp.IsSuccessStatusCode
-            ? (string.Format(L["RunLaunched"], id), "settings-status-ok")
-            : ($"{L["Error"]}: {resp.StatusCode}", "settings-status-err");
     }
 
     private string DescribeTrigger(TriggerSpec t) => t switch

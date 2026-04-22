@@ -84,17 +84,6 @@ public sealed class AutomationEngine : BackgroundService
         }
     }
 
-    public async Task<AgentRun> RunAutomationManuallyAsync(string slug, string automationId, CancellationToken ct)
-    {
-        await EnsureLoadedAsync(slug);
-        var rt = _runtime[slug];
-        var automation = rt.Config?.Automations.FirstOrDefault(a => a.Id == automationId)
-            ?? throw new InvalidOperationException($"Automation '{automationId}' introuvable.");
-        var firing = new TriggerFiring(null, $"manual:{automationId}", null);
-        var run = await ExecuteAutomationAsync(rt, automation, firing, ct);
-        return run ?? throw new InvalidOperationException("Aucun run créé (concurrence ou action invalide).");
-    }
-
     /// <summary>
     /// Push an external signal to all enabled automations of <paramref name="projectSlug"/>.
     /// Each trigger that implements <see cref="ITrigger.TryHandleExternalSignal"/> can produce
