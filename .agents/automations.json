@@ -297,6 +297,27 @@
       ]
     },
     {
+      "id": "weekly-ticket-example",
+      "name": "Example: create a weekly review ticket every Monday",
+      "enabled": false,
+      "trigger": {
+        "type": "interval",
+        "cron": "0 9 * * MON"
+      },
+      "conditions": [],
+      "actions": [
+        {
+          "type": "createTicket",
+          "title": "Weekly review {monday}",
+          "description": "Automated weekly review ticket for the week starting {monday}.",
+          "status": "Todo",
+          "priority": "NiceToHave",
+          "createdBy": "automation",
+          "skipIfExists": true
+        }
+      ]
+    },
+    {
       "id": "owner-feedback",
       "name": "Owner feedback: re-dispatch assignee when owner comments",
       "enabled": true,

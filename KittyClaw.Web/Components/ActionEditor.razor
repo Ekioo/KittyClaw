@@ -11,6 +11,7 @@
             <option value="addComment">@L["ActionAddComment"]</option>
             <option value="commitAgentMemory">@L["ActionCommitAgentMemory"]</option>
             <option value="executePowerShell">@L["ActionExecutePowerShell"]</option>
+            <option value="createTicket">@L["ActionCreateTicket"]</option>
         </select>
     </label>
 
@@ -98,6 +99,44 @@
                 </select>
             </label>
             break;
+        case CreateTicketActionSpec s:
+            <label>@L["CtTitle"]
+                <input placeholder="@L["CtTitlePlaceholder"]" @bind="s.Title" />
+            </label>
+            <label>@L["CtDescription"]
+                <textarea placeholder="@L["CtDescriptionPlaceholder"]" @bind="s.Description" rows="3"></textarea>
+            </label>
+            <label>@L["CtStatus"]
+                <select @bind="s.Status">
+                    @foreach (var c in Columns) { <option value="@c">@c</option> }
+                </select>
+            </label>
+            <label>@L["AssignTo"]
+                <select value="@(s.AssignedTo ?? "")" @onchange="e => s.AssignedTo = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
+                    <option value="">— @L["Nobody"] —</option>
+                    @foreach (var m in Members) { <option value="@m">@m</option> }
+                </select>
+            </label>
+            <label>@L["CtPriority"]
+                <select @bind="s.Priority">
+                    <option value="Idea">Idea</option>
+                    <option value="NiceToHave">NiceToHave</option>
+                    <option value="Required">Required</option>
+                    <option value="Critical">Critical</option>
+                </select>
+            </label>
+            <label>@L["CtLabels"]
+                <input placeholder="@L["LabelsCsvPlaceholder"]" value="@JoinGroups(s.Labels)"
+                       @onchange="e => s.Labels = SplitGroups((string?)e.Value)" />
+            </label>
+            <label>@L["CtCreatedBy"]
+                <input placeholder="automation" @bind="s.CreatedBy" />
+            </label>
+            <label class="checkbox-label">
+                <input type="checkbox" @bind="s.SkipIfExists" />
+                @L["CtSkipIfExists"]
+            </label>
+            break;
         case ExecutePowerShellActionSpec s:
             <label>@L["PsScript"]
                 <textarea @bind="s.Script" placeholder="@L["PsScriptPlaceholder"]" rows="5"></textarea>
@@ -150,6 +189,7 @@
         AddCommentActionSpec => "addComment",
         CommitAgentMemoryActionSpec => "commitAgentMemory",
         ExecutePowerShellActionSpec => "executePowerShell",
+        CreateTicketActionSpec => "createTicket",
         _ => "runAgent",
     };
 
@@ -170,6 +210,7 @@
             "addComment" => new AddCommentActionSpec(),
             "commitAgentMemory" => new CommitAgentMemoryActionSpec { Agent = Members.FirstOrDefault() ?? "programmer" },
             "executePowerShell" => new ExecutePowerShellActionSpec(),
+            "createTicket" => new CreateTicketActionSpec(),
             _ => new RunAgentActionSpec { Agent = Members.FirstOrDefault() ?? "producer" },
         };
         await OnReplace.InvokeAsync(spec);

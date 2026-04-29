@@ -46,5 +46,7 @@
   "PalActCommitAgentMemory": "Persister la mémoire de l'agent",
   "PalActCommitAgentMemoryHint": "Sauvegarde atomiquement le fichier memory.md de l'agent après une exécution",
   "PalActExecutePowerShell": "Exécuter PowerShell",
-  "PalActExecutePowerShellHint": "Exécute un script PowerShell sur le serveur"
+  "PalActExecutePowerShellHint": "Exécute un script PowerShell sur le serveur",
+  "PalActCreateTicket": "Créer un ticket",
+  "PalActCreateTicketHint": "Crée un nouveau ticket ; supporte les placeholders de date et le contrôle d'idempotence"
 }

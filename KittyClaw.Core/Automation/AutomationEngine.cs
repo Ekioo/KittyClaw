@@ -385,6 +385,9 @@ public sealed class AutomationEngine : BackgroundService
                     if (abort) return state.LastRun;
                     break;
                 }
+                case CreateTicketActionSpec cta:
+                    await ExecuteCreateTicketActionAsync(rt, cta);
+                    break;
             }
         }
         // No runClaudeSkill gate was hit (automation made of move/comment/label/assign only, or the
@@ -654,6 +657,65 @@ public sealed class AutomationEngine : BackgroundService
     // External git activity (committer agent's claude CLI, owner commits) is outside this lock —
     // we handle those races by retrying on index.lock transient failures.
     private static readonly SemaphoreSlim _gitLock = new(1, 1);
+
+    private async Task ExecuteCreateTicketActionAsync(ProjectRuntime rt, CreateTicketActionSpec cta)
+    {
+        try
+        {
+            var today = DateTime.Today;
+            var monday = today.AddDays(-(((int)today.DayOfWeek + 6) % 7));
+            var firstOfMonth = new DateTime(today.Year, today.Month, 1);
+            string Resolve(string s) => s
+                .Replace("{date}", today.ToString("yyyy-MM-dd"))
+                .Replace("{monday}", monday.ToString("yyyy-MM-dd"))
+                .Replace("{firstOfMonth}", firstOfMonth.ToString("yyyy-MM-dd"));
+
+            var title = Resolve(cta.Title);
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                _logger.LogWarning("createTicket: resolved title is empty — skipping");
+                return;
+            }
+
+            if (cta.SkipIfExists)
+            {
+                var existing = await _tickets.ListTicketsAsync(rt.Slug);
+                var openStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Backlog", "Todo", "InProgress", "Blocked", "Review" };
+                if (existing.Any(t => openStatuses.Contains(t.Status) && string.Equals(t.Title, title, StringComparison.OrdinalIgnoreCase)))
+                {
+                    _logger.LogInformation("createTicket: open ticket with title '{Title}' already exists — skipping", title);
+                    return;
+                }
+            }
+
+            List<int>? labelIds = null;
+            if (cta.Labels.Count > 0)
+            {
+                var allLabels = await _labels.ListLabelsAsync(rt.Slug);
+                labelIds = allLabels
+                    .Where(l => cta.Labels.Any(n => string.Equals(n, l.Name, StringComparison.OrdinalIgnoreCase)))
+                    .Select(l => l.Id)
+                    .ToList();
+            }
+
+            var priority = Enum.TryParse<KittyClaw.Core.Models.TicketPriority>(cta.Priority, ignoreCase: true, out var p)
+                ? p : KittyClaw.Core.Models.TicketPriority.NiceToHave;
+
+            var ticket = await _tickets.CreateTicketAsync(
+                rt.Slug,
+                title,
+                description: Resolve(cta.Description),
+                createdBy: string.IsNullOrWhiteSpace(cta.CreatedBy) ? "automation" : cta.CreatedBy,
+                status: cta.Status,
+                labelIds: labelIds,
+                priority: priority,
+                assignedTo: string.IsNullOrWhiteSpace(cta.AssignedTo) ? null : cta.AssignedTo,
+                parentId: cta.ParentId);
+
+            _logger.LogInformation("createTicket: created ticket #{Id} '{Title}' in project {Project}", ticket.Id, ticket.Title, rt.Slug);
+        }
+        catch (Exception ex) { _logger.LogWarning(ex, "createTicket failed in project {Project}", rt.Slug); }
+    }
 
     private async Task ExecuteCommitAgentMemoryActionAsync(ProjectRuntime rt, CommitAgentMemoryActionSpec cm, TriggerFiring? firing = null)
     {

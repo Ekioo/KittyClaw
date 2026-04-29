@@ -186,6 +186,7 @@ public sealed class TicketAgeConditionSpec : ConditionSpec
 [JsonDerivedType(typeof(AddCommentActionSpec), "addComment")]
 [JsonDerivedType(typeof(CommitAgentMemoryActionSpec), "commitAgentMemory")]
 [JsonDerivedType(typeof(ExecutePowerShellActionSpec), "executePowerShell")]
+[JsonDerivedType(typeof(CreateTicketActionSpec), "createTicket")]
 public abstract class ActionSpec { }
 
 public sealed class RunAgentActionSpec : ActionSpec
@@ -235,6 +236,28 @@ public sealed class AddCommentActionSpec : ActionSpec
 public sealed class CommitAgentMemoryActionSpec : ActionSpec
 {
     public required string Agent { get; set; }
+}
+
+/// <summary>
+/// Creates a new ticket in the project. Works without a triggering ticket (interval, cron, board-idle, …).
+/// Supports date placeholders in Title and Description: {date} (today), {monday} (Monday of current week), {firstOfMonth}.
+/// When <see cref="SkipIfExists"/> is true (default), creation is skipped if an open ticket with the resolved title already exists.
+/// </summary>
+public sealed class CreateTicketActionSpec : ActionSpec
+{
+    /// <summary>Ticket title. Supports {date}, {monday}, {firstOfMonth}.</summary>
+    public string Title { get; set; } = "";
+    /// <summary>Ticket description (optional). Supports {date}, {monday}, {firstOfMonth}.</summary>
+    public string Description { get; set; } = "";
+    public string Status { get; set; } = "Todo";
+    public string? AssignedTo { get; set; }
+    public string Priority { get; set; } = "NiceToHave";
+    /// <summary>Label names to attach to the new ticket.</summary>
+    public List<string> Labels { get; set; } = new();
+    public int? ParentId { get; set; }
+    public string CreatedBy { get; set; } = "automation";
+    /// <summary>Skip creation if an open ticket with the same resolved title already exists.</summary>
+    public bool SkipIfExists { get; set; } = true;
 }
 
 /// <summary>Runs a PowerShell script or file with optional arguments and timeout.</summary>

@@ -33,5 +33,15 @@
   "PsArguments": "Arguments (comma-separated)",
   "PsArgumentsPlaceholder": "arg1, arg2",
   "PsTimeout": "Timeout (seconds)",
-  "PsAbortOnFailure": "Abort remaining actions on non-zero exit"
+  "PsAbortOnFailure": "Abort remaining actions on non-zero exit",
+  "ActionCreateTicket": "Create ticket",
+  "CtTitle": "Title (required)",
+  "CtTitlePlaceholder": "Weekly review {date}\u2026",
+  "CtDescription": "Description (optional)",
+  "CtDescriptionPlaceholder": "Week of {monday}\u2026",
+  "CtStatus": "Initial status",
+  "CtPriority": "Priority",
+  "CtLabels": "Labels (names, comma-separated)",
+  "CtCreatedBy": "Created by",
+  "CtSkipIfExists": "Skip if an open ticket with the same title already exists"
 }

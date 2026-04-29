@@ -33,5 +33,15 @@
   "PsArguments": "Arguments (séparés par virgule)",
   "PsArgumentsPlaceholder": "arg1, arg2",
   "PsTimeout": "Timeout (secondes)",
-  "PsAbortOnFailure": "Abandonner les actions suivantes si exit code != 0"
+  "PsAbortOnFailure": "Abandonner les actions suivantes si exit code != 0",
+  "ActionCreateTicket": "Créer un ticket",
+  "CtTitle": "Titre (requis)",
+  "CtTitlePlaceholder": "Revue hebdo {date}\u2026",
+  "CtDescription": "Description (optionnel)",
+  "CtDescriptionPlaceholder": "Semaine du {monday}\u2026",
+  "CtStatus": "Statut initial",
+  "CtPriority": "Priorité",
+  "CtLabels": "Labels (noms, séparés par virgule)",
+  "CtCreatedBy": "Créé par",
+  "CtSkipIfExists": "Ne pas créer si un ticket ouvert avec le même titre existe déjà"
 }
