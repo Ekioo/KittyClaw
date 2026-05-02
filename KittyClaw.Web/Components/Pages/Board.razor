@@ -783,14 +783,33 @@ else
         return true;
     }
 
-    // Last-visited tracking for "updated" badge
+    // "Updated since you last looked" tracking. Per-ticket timestamps are the
+    // source of truth (so opening one ticket only clears its own badge).
+    // _lastVisitedAt is a board-wide fallback used only for tickets the user has
+    // never explicitly opened — that way users with no per-ticket data still see
+    // sensible "what changed since last activity" behavior.
     private DateTime? _lastVisitedAt;
+    private Dictionary<int, DateTime> _viewedAt = new();
 
     private bool IsTicketUpdated(TicketSummary ticket)
     {
-        if (_lastVisitedAt is null) return false;
         var activity = ticket.LastActivityAt ?? ticket.UpdatedAt;
+        if (_viewedAt.TryGetValue(ticket.Id, out var viewed))
+            return activity > viewed;
+        if (_lastVisitedAt is null) return false;
         return activity > _lastVisitedAt.Value;
+    }
+
+    private async Task MarkTicketViewedAsync(int ticketId)
+    {
+        _viewedAt[ticketId] = DateTime.UtcNow;
+        try
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(
+                _viewedAt.ToDictionary(kv => kv.Key.ToString(), kv => kv.Value.ToString("O")));
+            await JS.InvokeVoidAsync("localStorage.setItem", $"board-viewed-{Slug}", json);
+        }
+        catch { /* localStorage unavailable */ }
     }
 
     private async Task RefreshTicketsAndTouch()
@@ -1029,12 +1048,33 @@ else
             _dotNetRef = DotNetObjectReference.Create(this);
             _undoHandler = await JS.InvokeAsync<IJSObjectReference>("registerUndoShortcut", _dotNetRef);
 
-            // Load last-visited timestamp, then save current time
+            // Load board-wide fallback timestamp. Do NOT write the current time here —
+            // indicators must persist across reloads until the user actually opens
+            // a ticket (or performs any other action that calls RefreshTicketsAndTouch).
             var key = $"board-last-visited-{Slug}";
             var stored = await JS.InvokeAsync<string?>("localStorage.getItem", key);
             if (stored is not null && DateTime.TryParse(stored, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
                 _lastVisitedAt = parsed;
-            await JS.InvokeVoidAsync("localStorage.setItem", key, DateTime.UtcNow.ToString("O"));
+
+            // Load per-ticket viewed timestamps.
+            var viewedJson = await JS.InvokeAsync<string?>("localStorage.getItem", $"board-viewed-{Slug}");
+            if (!string.IsNullOrWhiteSpace(viewedJson))
+            {
+                try
+                {
+                    var raw = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(viewedJson);
+                    if (raw is not null)
+                    {
+                        _viewedAt = raw
+                            .Select(kv => (Id: int.TryParse(kv.Key, out var id) ? id : -1,
+                                          At: DateTime.TryParse(kv.Value, null, System.Globalization.DateTimeStyles.RoundtripKind, out var at) ? at : DateTime.MinValue))
+                            .Where(t => t.Id >= 0 && t.At != DateTime.MinValue)
+                            .ToDictionary(t => t.Id, t => t.At);
+                    }
+                }
+                catch { /* corrupt JSON — ignore, will be overwritten on next view */ }
+            }
+
             StateHasChanged();
         }
         if (!string.IsNullOrEmpty(_fullscreenTarget) && !_pasteListenerAttached)
@@ -1407,6 +1447,10 @@ else
         _editingCommentId = null;
         _fullscreenTarget = "";
         _selectedTicket = await TicketService.GetTicketAsync(Slug, ticket.Id);
+
+        // Clear the "updated" indicator only for the ticket actually opened.
+        await MarkTicketViewedAsync(ticket.Id);
+
         if (_subKanbanParentId is not null)
             Navigation.NavigateTo($"/board/{Slug}/sub/{_subKanbanParentId}/ticket/{ticket.Id}", replace: true);
         else
