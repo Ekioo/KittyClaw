@@ -89,4 +89,7 @@ public sealed class StatusChangeTrigger : ITrigger
         }
         return Task.CompletedTask;
     }
+
+    public DateTime? GetNextRunAt(DateTime now) =>
+        _lastPolled == DateTime.MinValue ? now : _lastPolled.AddSeconds(_spec.PollSeconds);
 }

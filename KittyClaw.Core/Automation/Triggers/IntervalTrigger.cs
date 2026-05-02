@@ -36,4 +36,15 @@ public sealed class IntervalTrigger : ITrigger
         IReadOnlyList<TriggerFiring> one = new[] { new TriggerFiring(null, null, null) };
         return Task.FromResult(one);
     }
+
+    public DateTime? GetNextRunAt(DateTime now)
+    {
+        if (_schedule is not null)
+        {
+            var baseline = _lastFired == DateTime.MinValue ? now.AddSeconds(-1) : _lastFired;
+            return _schedule.GetNextOccurrence(baseline);
+        }
+        var seconds = _spec.Seconds ?? 60;
+        return _lastFired == DateTime.MinValue ? now : _lastFired.AddSeconds(seconds);
+    }
 }

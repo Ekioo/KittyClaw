@@ -80,6 +80,9 @@ public sealed class GitCommitTrigger : ITrigger
         return false;
     }
 
+    public DateTime? GetNextRunAt(DateTime now) =>
+        _lastPolled == DateTime.MinValue ? now : _lastPolled.AddSeconds(_spec.PollSeconds);
+
     private static string? RunGit(string cwd, string args)
     {
         try

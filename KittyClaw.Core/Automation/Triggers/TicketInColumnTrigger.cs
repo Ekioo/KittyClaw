@@ -74,6 +74,9 @@ public sealed class TicketInColumnTrigger : ITrigger
         return Task.CompletedTask;
     }
 
+    public DateTime? GetNextRunAt(DateTime now) =>
+        _lastEvaluated == DateTime.MinValue ? now : _lastEvaluated.AddSeconds(_spec.Seconds);
+
     private static JsonObject GetLastFiredBucket(JsonObject state, string autoId)
     {
         var autoNode = state[autoId] as JsonObject;

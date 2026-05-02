@@ -113,6 +113,10 @@ else
                             <div class="tile-line"><span class="tile-badge badge-action">DO</span> @string.Join(", ", a.Actions.Select(DescribeAction))</div>
                         </div>
                         <div class="tile-footer" @onclick:stopPropagation>
+                            @if (FormatNextRunIn(a.Id) is string nextRunLabel)
+                            {
+                                <span class="tile-next-run">@nextRunLabel</span>
+                            }
                             <button class="icon-btn delete-icon" @onclick="() => RemoveAutomation(idx)" title="@L["Delete"]">🗑</button>
                         </div>
                     </div>
@@ -280,6 +284,9 @@ else
     private int _historyCount = 30;
     private string? _activeRunDrawerId;
 
+    private Dictionary<string, DateTime?> _nextRunTimes = new();
+    private Timer? _nextRunTimer;
+
     private void OpenRun(string runId)
     {
         _showHistory = false;
@@ -304,6 +311,17 @@ else
         _skills = await http.GetFromJsonAsync<List<string>>($"/api/projects/{Slug}/skills") ?? new();
         _members = (await MemberService.ListMembersAsync(Slug)).Select(m => m.Slug).ToList();
         await LoadConfigAsync(http);
+        RefreshNextRunTimes();
+        _nextRunTimer = new Timer(_ => InvokeAsync(() =>
+        {
+            RefreshNextRunTimes();
+            StateHasChanged();
+        }), null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5));
+    }
+
+    private void RefreshNextRunTimes()
+    {
+        _nextRunTimes = AutomationEngine.GetNextRunTimes(Slug);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -318,6 +336,7 @@ else
 
     public async ValueTask DisposeAsync()
     {
+        _nextRunTimer?.Dispose();
         if (_dndModule is not null)
         {
             try { await _dndModule.InvokeVoidAsync("dispose"); } catch { }
@@ -440,6 +459,16 @@ else
                 : ($"{L["Error"]}: {resp.StatusCode}", "settings-status-err");
         }
         finally { _saving = false; }
+    }
+
+    private string? FormatNextRunIn(string automationId)
+    {
+        if (!_nextRunTimes.TryGetValue(automationId, out var next) || next is null) return null;
+        var diff = next.Value - DateTime.UtcNow;
+        if (diff.TotalSeconds <= 0) return L["NextRunNow"];
+        if (diff.TotalHours >= 1) return string.Format(L["NextRunInH"], (int)diff.TotalHours, diff.Minutes);
+        if (diff.TotalMinutes >= 1) return string.Format(L["NextRunInM"], (int)diff.TotalMinutes, diff.Seconds);
+        return string.Format(L["NextRunInS"], (int)diff.TotalSeconds);
     }
 
     private void OpenEditor(int idx)

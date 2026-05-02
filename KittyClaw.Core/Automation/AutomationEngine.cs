@@ -104,6 +104,28 @@ public sealed class AutomationEngine : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Returns the next predicted UTC fire time for each automation in the project,
+    /// keyed by automation ID. Returns null for event-driven triggers with no predictable schedule.
+    /// Triggers a background load if the project runtime is not yet initialized.
+    /// </summary>
+    public Dictionary<string, DateTime?> GetNextRunTimes(string projectSlug)
+    {
+        if (!_runtime.TryGetValue(projectSlug, out var rt) || rt.Config is null)
+        {
+            _ = EnsureLoadedAsync(projectSlug);
+            return new Dictionary<string, DateTime?>();
+        }
+        var result = new Dictionary<string, DateTime?>();
+        var now = DateTime.UtcNow;
+        foreach (var a in rt.Config.Automations)
+        {
+            if (!rt.Triggers.TryGetValue(a.Id, out var trigger)) continue;
+            result[a.Id] = trigger.GetNextRunAt(now);
+        }
+        return result;
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("AutomationEngine started");

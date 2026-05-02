@@ -48,5 +48,9 @@
   "GitInit_NotAttempted": "non tenté",
   "History": "Historique",
   "NoRunHistory": "Aucun run pour l'instant.",
-  "LoadMore": "Charger plus…"
+  "LoadMore": "Charger plus…",
+  "NextRunNow": "maintenant",
+  "NextRunInH": "dans {0}h{1:D2}m",
+  "NextRunInM": "dans {0}m{1:D2}s",
+  "NextRunInS": "dans {0}s"
 }

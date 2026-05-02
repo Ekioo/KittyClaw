@@ -29,4 +29,7 @@ public sealed class BoardIdleTrigger : ITrigger
             ? new[] { new TriggerFiring(null, "board-idle", null) }
             : Array.Empty<TriggerFiring>();
     }
+
+    public DateTime? GetNextRunAt(DateTime now) =>
+        _lastPolled == DateTime.MinValue ? now : _lastPolled.AddSeconds(_spec.PollSeconds);
 }

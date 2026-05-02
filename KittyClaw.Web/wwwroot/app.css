@@ -2355,6 +2355,10 @@ details[open] .console-msg-summary::before { transform: rotate(90deg); }
     color: #c8d0e0; padding: 0.3rem 0.5rem; border-radius: 4px; cursor: pointer;
 }
 .tile-footer .icon-btn.delete-icon:hover { border-color: #f06b6b; color: #f06b6b; }
+.tile-next-run {
+    flex: 1; font-size: 0.72rem; color: var(--text-muted, #8892a4);
+    display: flex; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 
 /* ─── Automation editor (detail view) ────────────────────────────────── */
 .automation-editor-wrap {

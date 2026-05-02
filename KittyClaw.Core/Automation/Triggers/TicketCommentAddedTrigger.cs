@@ -88,6 +88,9 @@ public sealed class TicketCommentAddedTrigger : ITrigger
         return true;
     }
 
+    public DateTime? GetNextRunAt(DateTime now) =>
+        _lastPolled == DateTime.MinValue ? now : _lastPolled.AddSeconds(_spec.PollSeconds);
+
     private static void SaveLastCommentIds(TriggerContext ctx, Dictionary<int, int> ids)
     {
         var state = ctx.Sessions.Load(ctx.WorkspacePath);
