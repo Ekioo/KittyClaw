@@ -21,7 +21,7 @@ public record SetParentRequest(int ParentId);
 public record UpdateProjectRequest(string? WorkspacePath = null);
 public record SteerRunRequest(string Text);
 public record BrowseFolderRequest(string? InitialPath = null);
-public record ChatStartRequest(string Message, string Target = "owner-chat", bool ForceNew = false);
+public record ChatStartRequest(string Message, string Target = "owner-chat", bool ForceNew = false, int? TicketId = null);
 public record ChatTargetDto(string Slug, string Name, string Kind);
 public record ChatTargetsResponse(string? LastTarget, List<ChatTargetDto> Targets);
 public record ChatMessageDto(string Role, string Text, string? ToolName, string? Detail, string CreatedAt);

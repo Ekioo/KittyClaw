@@ -1059,6 +1059,31 @@ button:disabled { opacity: 0.4; cursor: default; }
     color: var(--accent);
     background: var(--surface2);
 }
+.activity-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.chat-with-agent-btn {
+    padding: 0.2rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    background: var(--surface3);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    cursor: pointer;
+}
+.chat-with-agent-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--surface2);
+}
+.chat-drawer-ticket-ref {
+    font-size: 0.8em;
+    opacity: 0.75;
+    margin-left: 0.4rem;
+    font-weight: 400;
+}
 .inline-comment-form {
     flex-shrink: 0;
     margin-bottom: 0.75rem;

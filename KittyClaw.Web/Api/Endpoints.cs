@@ -460,7 +460,7 @@ public static class Endpoints
             return Results.NoContent();
         }).WithTags("Chat");
 
-        api.MapPost("/projects/{slug}/chat/start", async (string slug, ChatStartRequest req, ProjectService ps, MemberService ms, ChatService cs, ClaudeRunner runner, SessionRegistry sessions, HttpContext http) =>
+        api.MapPost("/projects/{slug}/chat/start", async (string slug, ChatStartRequest req, ProjectService ps, MemberService ms, ChatService cs, TicketService ts, ClaudeRunner runner, SessionRegistry sessions, HttpContext http) =>
         {
             var project = await ps.GetProjectAsync(slug);
             if (project is null) return Results.NotFound();
@@ -469,13 +469,59 @@ public static class Endpoints
             var runId = Guid.NewGuid().ToString("N");
             var workspacePath = ps.ResolveWorkspacePath(project);
 
+            // A ticket-scoped chat target looks like "{agent}#ticket-{id}". The hash-suffix
+            // namespaces ChatService rows so each ticket has its own thread with the agent.
+            // We pass the parsed ticketId to ClaudeRunContext.TicketId so the underlying
+            // claude session is also per-ticket (session key "chat:{agent}:{ticketId}").
+            var (baseAgent, parsedTicketId) = ParseChatTarget(target);
+            var effectiveTicketId = req.TicketId ?? parsedTicketId;
+
             if (req.ForceNew)
             {
                 await cs.ClearAsync(slug, target);
-                sessions.Clear(workspacePath, $"chat:{target}", null);
+                sessions.Clear(workspacePath, $"chat:{baseAgent}", effectiveTicketId);
             }
 
             await cs.AppendAsync(slug, target, "user", req.Message);
+
+            // Build ticket-context block when this chat is scoped to a ticket.
+            string? ticketContext = null;
+            if (effectiveTicketId is int tid)
+            {
+                var ticket = await ts.GetTicketAsync(slug, tid);
+                if (ticket is not null)
+                {
+                    var tb = new StringBuilder();
+                    tb.AppendLine($"## Current ticket: #{ticket.Id} — {ticket.Title}");
+                    tb.AppendLine();
+                    tb.AppendLine($"- Status: `{ticket.Status}`");
+                    tb.AppendLine($"- Priority: `{ticket.Priority}`");
+                    if (!string.IsNullOrWhiteSpace(ticket.AssignedTo))
+                        tb.AppendLine($"- Assigned to: `{ticket.AssignedTo}`");
+                    if (ticket.ParentId is int pid)
+                        tb.AppendLine($"- Parent ticket: #{pid}");
+                    if (ticket.Labels.Count > 0)
+                        tb.AppendLine($"- Labels: {string.Join(", ", ticket.Labels.Select(l => l.Name))}");
+                    tb.AppendLine();
+                    tb.AppendLine("### Description");
+                    tb.AppendLine(string.IsNullOrWhiteSpace(ticket.Description) ? "_(empty)_" : ticket.Description);
+                    if (ticket.Comments.Count > 0)
+                    {
+                        tb.AppendLine();
+                        tb.AppendLine("### Comments");
+                        foreach (var c in ticket.Comments.OrderBy(c => c.CreatedAt))
+                            tb.AppendLine($"- **{c.Author}** ({c.CreatedAt:g}): {c.Content}");
+                    }
+                    if (ticket.SubTickets.Count > 0)
+                    {
+                        tb.AppendLine();
+                        tb.AppendLine("### Sub-tickets");
+                        foreach (var st in ticket.SubTickets)
+                            tb.AppendLine($"- #{st.Id} [{st.Status}] {st.Title}");
+                    }
+                    ticketContext = tb.ToString();
+                }
+            }
 
             ClaudeRunContext ctx;
             if (target == "owner-chat")
@@ -520,37 +566,71 @@ public static class Endpoints
                     WorkspacePath = workspacePath,
                     AgentName = "owner-chat",
                     SkillFile = "chat",
-                    InlineSkillContent = sb.ToString(),
+                    InlineSkillContent = ticketContext is null ? sb.ToString() : sb.ToString() + "\n" + ticketContext,
                     ExtraContext = req.Message,
                     MaxTurns = 20,
-                    ConcurrencyGroup = $"chat:{slug}:owner-chat",
+                    ConcurrencyGroup = $"chat:{slug}:{target}",
                     PresetRunId = runId,
                     SessionScope = "chat",
+                    TicketId = effectiveTicketId,
                     RetryOnResumeFailure = true,
                     OnEventHook = ev => PersistChatEvent(cs, slug, target, ev),
                 };
             }
             else
             {
-                var member = (await ms.ListMembersAsync(slug)).FirstOrDefault(m => m.Slug == target);
-                var memberName = member?.Name ?? target;
+                var member = (await ms.ListMembersAsync(slug)).FirstOrDefault(m => m.Slug == baseAgent);
+                var memberName = member?.Name ?? baseAgent;
 
-                var skillPath = Path.Combine(workspacePath, ".agents", target, "SKILL.md");
+                var skillPath = Path.Combine(workspacePath, ".agents", baseAgent, "SKILL.md");
                 var hasSkillFile = File.Exists(skillPath);
+
+                // Chat mode preamble overrides the automation-style instructions a SKILL.md
+                // typically carries (e.g. "the brief lives in ticket comments"). In a live
+                // chat the owner's request is in the user turn, not on the ticket — say so
+                // explicitly so the agent doesn't go fishing for missing comments.
+                var chatPreamble = new StringBuilder();
+                chatPreamble.AppendLine("# Interactive chat mode");
+                chatPreamble.AppendLine();
+                chatPreamble.AppendLine($"You are **{memberName}**, talking live with the owner through an in-app chat — NOT running an automation.");
+                chatPreamble.AppendLine();
+                chatPreamble.AppendLine("Rules for this mode:");
+                chatPreamble.AppendLine("- The owner's request is the **user message in this conversation**. Act on it directly.");
+                chatPreamble.AppendLine("- Do NOT ask the owner to post their request as a ticket comment — they are speaking to you here.");
+                chatPreamble.AppendLine("- Do NOT search ticket comments for instructions; treat the chat itself as the source of truth.");
+                chatPreamble.AppendLine("- Respond conversationally and concisely. Use tools (Bash, Edit, etc.) when the owner asks you to perform an action.");
+                if (ticketContext is not null)
+                    chatPreamble.AppendLine($"- The current ticket below is the topic of this thread. Modify it via the API (PATCH `/api/projects/{slug}/tickets/{effectiveTicketId}`) or other tools when asked.");
+                chatPreamble.AppendLine();
+
+                // The chat-mode preamble applies to every chat session (ticket-scoped or not).
+                // SKILL.md, when present, is appended after the preamble as background context
+                // about the agent's specialty — not as operational instructions.
+                var skillSection = "";
+                if (hasSkillFile)
+                {
+                    var skillText = await File.ReadAllTextAsync(skillPath);
+                    skillSection = "\n## Background — your specialty (from SKILL.md)\n\n" + skillText + "\n";
+                }
+                else
+                {
+                    skillSection = $"\nYou are {memberName}, an LLM member of project {project.Name}.\n";
+                }
+                var inlineContent = chatPreamble.ToString() + skillSection + (ticketContext is null ? "" : "\n" + ticketContext);
 
                 ctx = new ClaudeRunContext
                 {
                     ProjectSlug = slug,
                     WorkspacePath = workspacePath,
-                    AgentName = target,
-                    SkillFile = hasSkillFile ? $"{target}/SKILL.md" : "(inline)",
-                    InlineSkillContent = hasSkillFile ? null
-                        : $"You are {memberName}, an LLM member of project {project.Name}. Engage helpfully with the owner.",
+                    AgentName = baseAgent,
+                    SkillFile = hasSkillFile ? $"{baseAgent}/SKILL.md" : "(inline)",
+                    InlineSkillContent = inlineContent,
                     ExtraContext = req.Message,
                     MaxTurns = 20,
                     ConcurrencyGroup = $"chat:{slug}:{target}",
                     PresetRunId = runId,
                     SessionScope = "chat",
+                    TicketId = effectiveTicketId,
                     RetryOnResumeFailure = true,
                     OnEventHook = ev => PersistChatEvent(cs, slug, target, ev),
                 };
@@ -594,6 +674,23 @@ public static class Endpoints
         var bytes = Encoding.UTF8.GetBytes(frame);
         await res.Body.WriteAsync(bytes, ct);
         await res.Body.FlushAsync(ct);
+    }
+
+    /// <summary>
+    /// Parses a chat target slug. A bare slug like "programmer" or "owner-chat" is returned
+    /// as (slug, null). A ticket-scoped target like "programmer#ticket-42" returns
+    /// ("programmer", 42). Unknown suffix shapes are passed through as bare.
+    /// </summary>
+    private static (string BaseAgent, int? TicketId) ParseChatTarget(string target)
+    {
+        var hashIdx = target.IndexOf('#');
+        if (hashIdx < 0) return (target, null);
+        var head = target[..hashIdx];
+        var tail = target[(hashIdx + 1)..];
+        const string prefix = "ticket-";
+        if (tail.StartsWith(prefix) && int.TryParse(tail.AsSpan(prefix.Length), out var id))
+            return (head, id);
+        return (target, null);
     }
 
     private static void PersistChatEvent(ChatService cs, string slug, string target, StreamEvent ev)

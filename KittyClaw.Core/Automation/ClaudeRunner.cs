@@ -215,12 +215,18 @@ public sealed class ClaudeRunner
 
     private static async Task<string> BuildPromptAsync(ClaudeRunContext ctx, string skillContent, bool isResume, CancellationToken ct)
     {
+        // Chat resume: each turn just sends the user's message. The skill/preamble was
+        // injected when the session was created and is preserved across resumes by claude.
+        if (ctx.SessionScope == "chat" && isResume)
+            return ctx.ExtraContext ?? "";
+
+        // Automation resume on a ticket: ping the agent that the owner posted new feedback.
         if (isResume && ctx.TicketId is not null)
             return $"The owner has posted feedback on ticket #{ctx.TicketId}: {ctx.TicketTitle}\nRead ALL owner comments on this ticket and address them.";
 
         var prefix = await BuildPreambleAsync(ctx, ct);
 
-        if (ctx.TicketId is not null)
+        if (ctx.TicketId is not null && ctx.SessionScope != "chat")
             return $"{prefix}{skillContent}\n\nFocus on ticket #{ctx.TicketId}: {ctx.TicketTitle}";
         return ctx.ExtraContext is null ? $"{prefix}{skillContent}" : $"{prefix}{skillContent}\n\n{ctx.ExtraContext}";
     }

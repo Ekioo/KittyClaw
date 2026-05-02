@@ -34,8 +34,17 @@
     else
     {
         <div class="chat-drawer-header">
-            <button class="chat-back-btn" @onclick="BackToSelection" title="@L["Back"]">‹</button>
-            <span class="chat-drawer-title">@_activeTarget!.Name</span>
+            @if (TicketId is null)
+            {
+                <button class="chat-back-btn" @onclick="BackToSelection" title="@L["Back"]">‹</button>
+            }
+            <span class="chat-drawer-title">
+                @_activeTarget!.Name
+                @if (TicketId is int tid)
+                {
+                    <span class="chat-drawer-ticket-ref" title="@TicketTitle">· #@tid @(string.IsNullOrEmpty(TicketTitle) ? "" : "— " + Truncate(TicketTitle!, 40))</span>
+                }
+            </span>
             <button class="chat-newsession-btn" @onclick="StartNewSession" title="@L["NewSession"]">＋</button>
             <button class="agent-close-btn" @onclick="Close" title="@L["Close"]">×</button>
         </div>
@@ -100,6 +109,15 @@
     [Parameter] public string ProjectSlug { get; set; } = "";
     [Parameter] public EventCallback OnClose { get; set; }
 
+    /// <summary>Optional. When set, skip the target picker and start a chat with this agent slug.</summary>
+    [Parameter] public string? InitialAgent { get; set; }
+    /// <summary>Optional. Display name for the InitialAgent (falls back to slug).</summary>
+    [Parameter] public string? InitialAgentName { get; set; }
+    /// <summary>Optional. When set together with InitialAgent, scopes the chat to a specific ticket.</summary>
+    [Parameter] public int? TicketId { get; set; }
+    /// <summary>Optional. Title of the scoped ticket, shown in the drawer header.</summary>
+    [Parameter] public string? TicketTitle { get; set; }
+
     private enum View { Selection, Conversation }
     private View _view = View.Selection;
 
@@ -124,6 +142,17 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Ticket-scoped or pre-targeted chat: skip the picker entirely.
+        if (!string.IsNullOrWhiteSpace(InitialAgent))
+        {
+            var slug = TicketId is int id ? $"{InitialAgent}#ticket-{id}" : InitialAgent!;
+            var name = string.IsNullOrWhiteSpace(InitialAgentName) ? InitialAgent! : InitialAgentName!;
+            var target = new ChatTarget(slug, name, "member");
+            await EnterConversationAsync(target);
+            _ready = true;
+            return;
+        }
+
         using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
         try
         {
@@ -180,6 +209,13 @@
 
     private async Task SelectTarget(ChatTarget t)
     {
+        // When the drawer is ticket-scoped but no agent was preselected, re-key the
+        // chosen target into the per-ticket composite slug so this conversation
+        // gets its own thread.
+        if (TicketId is int id && !t.Slug.Contains('#'))
+        {
+            t = t with { Slug = $"{t.Slug}#ticket-{id}" };
+        }
         await EnterConversationAsync(t);
     }
 
@@ -205,8 +241,12 @@
         catch { /* best-effort */ }
         _messages.Clear();
         _loading = false;
-        _view = View.Selection;
-        _activeTarget = null;
+        // Ticket-scoped chats stay on the same target after a reset; only the picker mode falls back to selection.
+        if (string.IsNullOrWhiteSpace(InitialAgent))
+        {
+            _view = View.Selection;
+            _activeTarget = null;
+        }
         StateHasChanged();
     }
 
@@ -253,7 +293,7 @@
         try
         {
             var resp = await http.PostAsJsonAsync($"/api/projects/{ProjectSlug}/chat/start",
-                new { message = text, target = _activeTarget.Slug });
+                new { message = text, target = _activeTarget.Slug, ticketId = TicketId });
             if (!resp.IsSuccessStatusCode)
             {
                 _messages.Add(new ChatMessage("error", $"Error {resp.StatusCode}"));

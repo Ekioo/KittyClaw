@@ -513,7 +513,16 @@ else
                     <div class="thread-section-divider">
                         <div class="activity-header">
                             <span class="section-label">@L["Activity"]</span>
-                            <button class="add-comment-btn-sm" @onclick="StartNewComment">@L["AddComment"]</button>
+                            <div class="activity-header-actions">
+                                <button class="add-comment-btn-sm" @onclick="StartNewComment">@L["AddComment"]</button>
+                                <button class="chat-with-agent-btn"
+                                        @onclick="OpenTicketChat"
+                                        title="@(CanChatWithAssignee()
+                                            ? L.Get("ChatWithAssigneeTooltip", _chatInitialAgentNameForTooltip())
+                                            : L["ChatPickAgentTooltip"])">
+                                    💬 @L["ChatWithAssignee"]
+                                </button>
+                            </div>
                         </div>
                         @foreach (var item in GetTimeline())
                         {
@@ -677,7 +686,12 @@ else
 {
     <ErrorBoundary>
         <ChildContent>
-            <ClaudeChatDrawer ProjectSlug="@Slug" OnClose="CloseChatDrawer" />
+            <ClaudeChatDrawer ProjectSlug="@Slug"
+                              InitialAgent="@_chatInitialAgent"
+                              InitialAgentName="@_chatInitialAgentName"
+                              TicketId="_chatTicketId"
+                              TicketTitle="@_chatTicketTitle"
+                              OnClose="CloseChatDrawer" />
         </ChildContent>
         <ErrorContent Context="ex">
             <div class="chat-drawer-overlay" @onclick="CloseChatDrawer"></div>
@@ -732,6 +746,10 @@ else
 
     // Chat drawer
     private bool _showChatDrawer = false;
+    private string? _chatInitialAgent;
+    private string? _chatInitialAgentName;
+    private int? _chatTicketId;
+    private string? _chatTicketTitle;
 
     // Inline editing state
     private bool _editingTitle = false;
@@ -970,8 +988,59 @@ else
 
     private void OpenRunDrawer(string runId) => _activeRunDrawerId = runId;
     private void CloseRunDrawer() => _activeRunDrawerId = null;
-    private void OpenChatDrawer() => _showChatDrawer = true;
-    private void CloseChatDrawer() => _showChatDrawer = false;
+    private void OpenChatDrawer()
+    {
+        _chatInitialAgent = null;
+        _chatInitialAgentName = null;
+        _chatTicketId = null;
+        _chatTicketTitle = null;
+        _showChatDrawer = true;
+    }
+
+    private void CloseChatDrawer()
+    {
+        _showChatDrawer = false;
+        _chatInitialAgent = null;
+        _chatInitialAgentName = null;
+        _chatTicketId = null;
+        _chatTicketTitle = null;
+    }
+
+    private void OpenTicketChat()
+    {
+        if (_selectedTicket is null) return;
+        var assignee = _selectedTicket.AssignedTo;
+        // With an assignee: jump straight into the conversation with that agent.
+        // Without: leave InitialAgent null so the drawer shows the picker — the ticket
+        // context still propagates because we set _chatTicketId.
+        if (!string.IsNullOrWhiteSpace(assignee) && assignee != "owner")
+        {
+            var member = _allMembers.FirstOrDefault(m => m.Slug == assignee);
+            _chatInitialAgent = assignee;
+            _chatInitialAgentName = member?.Name ?? assignee;
+        }
+        else
+        {
+            _chatInitialAgent = null;
+            _chatInitialAgentName = null;
+        }
+        _chatTicketId = _selectedTicket.Id;
+        _chatTicketTitle = _selectedTicket.Title;
+        _showChatDrawer = true;
+    }
+
+    private bool CanChatWithAssignee()
+    {
+        var a = _selectedTicket?.AssignedTo;
+        return !string.IsNullOrWhiteSpace(a) && a != "owner";
+    }
+
+    private string _chatInitialAgentNameForTooltip()
+    {
+        var a = _selectedTicket?.AssignedTo;
+        if (string.IsNullOrWhiteSpace(a)) return "";
+        return _allMembers.FirstOrDefault(m => m.Slug == a)?.Name ?? a;
+    }
     private void OnAgentRunsChanged() => InvokeAsync(StateHasChanged);
 
     protected override async Task OnInitializedAsync()
