@@ -794,10 +794,12 @@ else
     private bool IsTicketUpdated(TicketSummary ticket)
     {
         var activity = ticket.LastActivityAt ?? ticket.UpdatedAt;
+        var lastSeen = _lastVisitedAt ?? DateTime.MinValue;
         if (_viewedAt.TryGetValue(ticket.Id, out var viewed))
-            return activity > viewed;
-        if (_lastVisitedAt is null) return false;
-        return activity > _lastVisitedAt.Value;
+            lastSeen = viewed > lastSeen ? viewed : lastSeen;
+        else if (_lastVisitedAt is null)
+            return false;
+        return activity > lastSeen;
     }
 
     private async Task MarkTicketViewedAsync(int ticketId)
