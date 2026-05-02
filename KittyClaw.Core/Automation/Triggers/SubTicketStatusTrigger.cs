@@ -114,6 +114,9 @@ public sealed class SubTicketStatusTrigger : ITrigger
         ctx.Sessions.Save(ctx.WorkspacePath, state);
     }
 
+    public DateTime? GetNextRunAt(DateTime now) =>
+        _lastPolled == DateTime.MinValue ? now : _lastPolled.AddSeconds(_spec.PollSeconds);
+
     private static string ComputeCsv(IEnumerable<SubTicketInfo> subs) =>
         string.Join(",", subs.OrderBy(s => s.Id).Select(s => $"{s.Id}:{s.Status}"));
 }

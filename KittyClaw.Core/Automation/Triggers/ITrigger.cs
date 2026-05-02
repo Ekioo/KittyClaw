@@ -39,6 +39,12 @@ public interface ITrigger
         firings = Array.Empty<TriggerFiring>();
         return false;
     }
+
+    /// <summary>
+    /// Returns the next UTC time this trigger is expected to fire, or null for purely
+    /// event-driven triggers where the next occurrence cannot be predicted.
+    /// </summary>
+    DateTime? GetNextRunAt(DateTime now) => null;
 }
 
 public sealed class TriggerContext

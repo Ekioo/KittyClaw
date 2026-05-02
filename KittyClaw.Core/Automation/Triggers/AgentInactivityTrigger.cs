@@ -43,4 +43,7 @@ public sealed class AgentInactivityTrigger : ITrigger
         IReadOnlyList<TriggerFiring> one = new[] { new TriggerFiring(null, "agent-inactive", null) };
         return Task.FromResult(one);
     }
+
+    public DateTime? GetNextRunAt(DateTime now) =>
+        _lastPolled == DateTime.MinValue ? now : _lastPolled.AddSeconds(_spec.PollSeconds);
 }
