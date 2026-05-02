@@ -33,4 +33,6 @@ public sealed class AgentRunsState
             .FirstOrDefault();
 
     public AgentRun? Get(string runId) => _registry.Get(runId);
+
+    public IEnumerable<AgentRun> AllForProject(string slug) => _registry.AllForProject(slug);
 }

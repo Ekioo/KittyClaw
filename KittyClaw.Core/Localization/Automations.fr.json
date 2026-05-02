@@ -45,5 +45,8 @@
   "GitInit_AlreadyExists": "dépôt déjà présent",
   "GitInit_GitMissing": "git non installé, ignoré",
   "GitInit_Failed": "échec de git init",
-  "GitInit_NotAttempted": "non tenté"
+  "GitInit_NotAttempted": "non tenté",
+  "History": "Historique",
+  "NoRunHistory": "Aucun run pour l'instant.",
+  "LoadMore": "Charger plus…"
 }

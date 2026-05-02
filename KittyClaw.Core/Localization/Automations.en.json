@@ -45,5 +45,8 @@
   "GitInit_AlreadyExists": "repository already present",
   "GitInit_GitMissing": "git not installed, skipped",
   "GitInit_Failed": "git init failed",
-  "GitInit_NotAttempted": "not attempted"
+  "GitInit_NotAttempted": "not attempted",
+  "History": "History",
+  "NoRunHistory": "No runs yet.",
+  "LoadMore": "Load more…"
 }

@@ -3,6 +3,7 @@
 @using KittyClaw.Core.Automation
 @using KittyClaw.Core.Models
 @using KittyClaw.Core.Services
+@using KittyClaw.Web.Services
 @inject ProjectService ProjectService
 @inject AgentsTemplateService AgentsTemplate
 @inject AutomationEngine AutomationEngine
@@ -12,6 +13,7 @@
 @inject IJSRuntime JS
 @inject LocalizationService L
 @inject MemberService MemberService
+@inject AgentRunsState RunsState
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -38,6 +40,7 @@ else
             {
                 <button class="header-action-btn" @onclick="StartInitialize" disabled="@_initializing" title="@L["InitializeHint"]">@(_initializing ? "…" : L["Initialize"])</button>
                 <button class="header-action-btn" @onclick="ReloadFromDisk" title="@L["ReloadFromDisk"]">&#8635; @L["Reload"]</button>
+                <button class="header-action-btn" @onclick="() => { _showHistory = true; _historyCount = 30; }"><span aria-hidden="true">🕒</span> @L["History"]</button>
                 <button class="header-action-btn" @onclick="AddAutomation">@L["NewAutomation"]</button>
                 <button class="header-action-btn settings-primary" @onclick="SaveAll" disabled="@(_saving || _configLoadError)">
                     @(_saving ? "…" : L["Save"])
@@ -207,6 +210,56 @@ else
             </aside>
         </div>
     }
+
+    @if (_showHistory)
+    {
+        <div class="run-history-overlay" @onclick="() => _showHistory = false"></div>
+        <div class="run-history-drawer" @onclick:stopPropagation>
+            <div class="run-history-header">
+                <span class="run-history-title">@L["History"]</span>
+                <button class="agent-close-btn" @onclick="() => _showHistory = false" title="@L["Close"]">×</button>
+            </div>
+            <div class="run-history-list">
+                @{
+                    var allRuns = RunsState.AllForProject(Slug)
+                        .Where(r => !(r.ConcurrencyGroup?.StartsWith("chat:") ?? false))
+                        .OrderByDescending(r => r.StartedAt)
+                        .ToList();
+                    var visibleRuns = allRuns.Take(_historyCount).ToList();
+                    var hasMore = allRuns.Count > _historyCount;
+                }
+                @if (allRuns.Count == 0)
+                {
+                    <div class="run-history-empty">@L["NoRunHistory"]</div>
+                }
+                @foreach (var run in visibleRuns)
+                {
+                    var statusCss = run.Status.ToString().ToLowerInvariant();
+                    var duration = (run.EndedAt ?? DateTime.UtcNow) - run.StartedAt;
+                    var durationStr = duration.TotalHours >= 1
+                        ? $"{(int)duration.TotalHours}h{duration.Minutes:D2}m"
+                        : duration.TotalMinutes >= 1
+                            ? $"{(int)duration.TotalMinutes}m{duration.Seconds:D2}s"
+                            : $"{duration.Seconds}s";
+                    <button class="run-history-item" @onclick="() => OpenRun(run.RunId)">
+                        <span class="run-history-agent">@run.AgentName</span>
+                        @if (run.TicketId is not null)
+                        {
+                            <span class="run-history-ticket">#@run.TicketId</span>
+                        }
+                        <span class="agent-status agent-status-@statusCss run-history-status">@run.Status</span>
+                        <span class="run-history-meta">@run.StartedAt.ToLocalTime().ToString("dd/MM HH:mm") · @durationStr</span>
+                    </button>
+                }
+                @if (hasMore)
+                {
+                    <button class="run-history-load-more" @onclick="() => _historyCount += 30">@L["LoadMore"]</button>
+                }
+            </div>
+        </div>
+    }
+
+    <AgentRunDrawer RunId="@_activeRunDrawerId" OnClose="() => { _activeRunDrawerId = null; _showHistory = true; }" />
 }
 
 @code {
@@ -222,6 +275,16 @@ else
     private List<string>? _initConflicts;
     private (string text, string css)? _statusMessage;
     private bool _configLoadError;
+
+    private bool _showHistory;
+    private int _historyCount = 30;
+    private string? _activeRunDrawerId;
+
+    private void OpenRun(string runId)
+    {
+        _showHistory = false;
+        _activeRunDrawerId = runId;
+    }
 
     private int? _editingIndex;
     public enum NodeKind { Trigger, Condition, Action }

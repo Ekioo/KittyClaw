@@ -174,10 +174,15 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        if (RunId is null)
+        {
+            if (_run is not null) { await StopStream(); _events.Clear(); _run = null; }
+            return;
+        }
         if (RunId == _activeStreamId) return;
         await StopStream();
         _events.Clear();
-        _run = RunId is null ? null : RunsState.Get(RunId);
+        _run = RunsState.Get(RunId);
         if (_run is null) return;
 
         _events.AddRange(_run.SnapshotBuffer());
