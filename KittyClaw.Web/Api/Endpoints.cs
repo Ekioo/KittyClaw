@@ -415,63 +415,135 @@ public static class Endpoints
         }).WithTags("Runs");
 
         // Owner chat (ad-hoc Claude session)
-        api.MapPost("/projects/{slug}/chat/start", async (string slug, ChatStartRequest req, ProjectService ps, ClaudeRunner runner, HttpContext http) =>
+        api.MapGet("/projects/{slug}/chat/targets", async (string slug, ProjectService ps, MemberService ms, ChatService cs) =>
         {
             var project = await ps.GetProjectAsync(slug);
             if (project is null) return Results.NotFound();
 
+            var targets = new List<ChatTargetDto>
+            {
+                new("owner-chat", "Claude", "claude"),
+            };
+            var members = await ms.ListMembersAsync(slug);
+            foreach (var m in members)
+                targets.Add(new ChatTargetDto(m.Slug, m.Name, "member"));
+
+            var lastTarget = await cs.LastTargetAsync(slug);
+            return Results.Ok(new ChatTargetsResponse(lastTarget, targets));
+        }).WithTags("Chat");
+
+        api.MapGet("/projects/{slug}/chat/messages", async (string slug, string target, ChatService cs) =>
+        {
+            var rows = await cs.ListAsync(slug, target);
+            var dtos = rows.Select(r => new ChatMessageDto(r.Role, r.Text, r.ToolName, r.Detail, r.CreatedAt)).ToList();
+            return Results.Ok(dtos);
+        }).WithTags("Chat");
+
+        api.MapDelete("/projects/{slug}/chat/session", async (string slug, string target, ProjectService ps, ChatService cs, SessionRegistry sessions) =>
+        {
+            var project = await ps.GetProjectAsync(slug);
+            if (project is null) return Results.NotFound();
+            var workspacePath = ps.ResolveWorkspacePath(project);
+            await cs.ClearAsync(slug, target);
+            sessions.Clear(workspacePath, $"chat:{target}", null);
+            return Results.NoContent();
+        }).WithTags("Chat");
+
+        api.MapPost("/projects/{slug}/chat/start", async (string slug, ChatStartRequest req, ProjectService ps, MemberService ms, ChatService cs, ClaudeRunner runner, SessionRegistry sessions, HttpContext http) =>
+        {
+            var project = await ps.GetProjectAsync(slug);
+            if (project is null) return Results.NotFound();
+
+            var target = string.IsNullOrWhiteSpace(req.Target) ? "owner-chat" : req.Target;
             var runId = Guid.NewGuid().ToString("N");
             var workspacePath = ps.ResolveWorkspacePath(project);
 
-            // Build rich context for the session
-            var sb = new StringBuilder();
-            sb.AppendLine("# Context");
-            sb.AppendLine();
-            sb.AppendLine("You are an AI assistant embedded in the **Todo** application — a Blazor Server kanban board that orchestrates agentic Claude workflows.");
-            sb.AppendLine($"The owner is currently viewing the project **{project.Name}** (slug: `{slug}`).");
-            sb.AppendLine($"Project workspace: `{workspacePath}`");
-            sb.AppendLine();
-            sb.AppendLine("Respond concisely and helpfully. You can read and modify files in the workspace, create tickets via the API, or give advice.");
-            sb.AppendLine();
-
-            // CLAUDE.md
-            var claudeMd = Path.Combine(workspacePath, "CLAUDE.md");
-            if (File.Exists(claudeMd))
+            if (req.ForceNew)
             {
-                sb.AppendLine("## CLAUDE.md");
-                sb.AppendLine();
-                sb.AppendLine(await File.ReadAllTextAsync(claudeMd));
-                sb.AppendLine();
+                await cs.ClearAsync(slug, target);
+                sessions.Clear(workspacePath, $"chat:{target}", null);
             }
 
-            // API documentation
-            var baseUrl = $"{http.Request.Scheme}://{http.Request.Host}";
-            sb.AppendLine("## Todo App API");
-            sb.AppendLine();
-            sb.AppendLine($"Base URL: `{baseUrl}`");
-            sb.AppendLine($"Current project slug: `{slug}`");
-            sb.AppendLine();
-            sb.AppendLine("Key endpoints:");
-            sb.AppendLine($"- GET  {baseUrl}/api/projects/{slug}/tickets — list tickets");
-            sb.AppendLine($"- POST {baseUrl}/api/projects/{slug}/tickets — create ticket (body: {{title, createdBy, status, description, priority}})");
-            sb.AppendLine($"- GET  {baseUrl}/api/projects/{slug}/tickets/{{id}} — get ticket");
-            sb.AppendLine($"- POST {baseUrl}/api/projects/{slug}/tickets/{{id}}/comments — add comment (body: {{content, author}})");
-            sb.AppendLine($"- PATCH {baseUrl}/api/projects/{slug}/tickets/{{id}}/status — move ticket (body: {{status, author}})");
-            sb.AppendLine($"- GET  {baseUrl}/api/projects/{slug}/columns — list columns");
-            sb.AppendLine($"- Full API doc: {baseUrl}/api/docs");
+            await cs.AppendAsync(slug, target, "user", req.Message);
 
-            var ctx = new ClaudeRunContext
+            ClaudeRunContext ctx;
+            if (target == "owner-chat")
             {
-                ProjectSlug = slug,
-                WorkspacePath = workspacePath,
-                AgentName = "owner-chat",
-                SkillFile = "chat",
-                InlineSkillContent = sb.ToString(),
-                ExtraContext = req.Message,
-                MaxTurns = 20,
-                ConcurrencyGroup = $"owner-chat:{slug}",
-                PresetRunId = runId,
-            };
+                var sb = new StringBuilder();
+                sb.AppendLine("# Context");
+                sb.AppendLine();
+                sb.AppendLine("You are an AI assistant embedded in the **KittyClaw** application — a Blazor Server kanban board that orchestrates agentic Claude workflows.");
+                sb.AppendLine($"The owner is currently viewing the project **{project.Name}** (slug: `{slug}`).");
+                sb.AppendLine($"Project workspace: `{workspacePath}`");
+                sb.AppendLine();
+                sb.AppendLine("Respond concisely and helpfully. You can read and modify files in the workspace, create tickets via the API, or give advice.");
+                sb.AppendLine();
+
+                var claudeMd = Path.Combine(workspacePath, "CLAUDE.md");
+                if (File.Exists(claudeMd))
+                {
+                    sb.AppendLine("## CLAUDE.md");
+                    sb.AppendLine();
+                    sb.AppendLine(await File.ReadAllTextAsync(claudeMd));
+                    sb.AppendLine();
+                }
+
+                var baseUrl = $"{http.Request.Scheme}://{http.Request.Host}";
+                sb.AppendLine("## KittyClaw App API");
+                sb.AppendLine();
+                sb.AppendLine($"Base URL: `{baseUrl}`");
+                sb.AppendLine($"Current project slug: `{slug}`");
+                sb.AppendLine();
+                sb.AppendLine("Key endpoints:");
+                sb.AppendLine($"- GET  {baseUrl}/api/projects/{slug}/tickets — list tickets");
+                sb.AppendLine($"- POST {baseUrl}/api/projects/{slug}/tickets — create ticket (body: {{title, createdBy, status, description, priority}})");
+                sb.AppendLine($"- GET  {baseUrl}/api/projects/{slug}/tickets/{{id}} — get ticket");
+                sb.AppendLine($"- POST {baseUrl}/api/projects/{slug}/tickets/{{id}}/comments — add comment (body: {{content, author}})");
+                sb.AppendLine($"- PATCH {baseUrl}/api/projects/{slug}/tickets/{{id}}/status — move ticket (body: {{status, author}})");
+                sb.AppendLine($"- GET  {baseUrl}/api/projects/{slug}/columns — list columns");
+                sb.AppendLine($"- Full API doc: {baseUrl}/api/docs");
+
+                ctx = new ClaudeRunContext
+                {
+                    ProjectSlug = slug,
+                    WorkspacePath = workspacePath,
+                    AgentName = "owner-chat",
+                    SkillFile = "chat",
+                    InlineSkillContent = sb.ToString(),
+                    ExtraContext = req.Message,
+                    MaxTurns = 20,
+                    ConcurrencyGroup = $"chat:{slug}:owner-chat",
+                    PresetRunId = runId,
+                    SessionScope = "chat",
+                    RetryOnResumeFailure = true,
+                    OnEventHook = ev => PersistChatEvent(cs, slug, target, ev),
+                };
+            }
+            else
+            {
+                var member = (await ms.ListMembersAsync(slug)).FirstOrDefault(m => m.Slug == target);
+                var memberName = member?.Name ?? target;
+
+                var skillPath = Path.Combine(workspacePath, ".agents", target, "SKILL.md");
+                var hasSkillFile = File.Exists(skillPath);
+
+                ctx = new ClaudeRunContext
+                {
+                    ProjectSlug = slug,
+                    WorkspacePath = workspacePath,
+                    AgentName = target,
+                    SkillFile = hasSkillFile ? $"{target}/SKILL.md" : "(inline)",
+                    InlineSkillContent = hasSkillFile ? null
+                        : $"You are {memberName}, an LLM member of project {project.Name}. Engage helpfully with the owner.",
+                    ExtraContext = req.Message,
+                    MaxTurns = 20,
+                    ConcurrencyGroup = $"chat:{slug}:{target}",
+                    PresetRunId = runId,
+                    SessionScope = "chat",
+                    RetryOnResumeFailure = true,
+                    OnEventHook = ev => PersistChatEvent(cs, slug, target, ev),
+                };
+            }
 
             _ = runner.RunAsync(ctx, CancellationToken.None);
             return Results.Ok(new { runId });
@@ -511,6 +583,27 @@ public static class Endpoints
         var bytes = Encoding.UTF8.GetBytes(frame);
         await res.Body.WriteAsync(bytes, ct);
         await res.Body.FlushAsync(ct);
+    }
+
+    private static void PersistChatEvent(ChatService cs, string slug, string target, StreamEvent ev)
+    {
+        // Only persist what the drawer actually renders to the user.
+        if (ev.Kind == "assistant")
+        {
+            const string prefix = "[assistant] ";
+            var text = ev.Text.StartsWith(prefix) ? ev.Text[prefix.Length..] : ev.Text;
+            text = text.Trim();
+            if (string.IsNullOrEmpty(text) || text.StartsWith("tool:")) return;
+            _ = cs.AppendAsync(slug, target, "assistant", text);
+        }
+        else if (ev.Kind == "tool_use")
+        {
+            _ = cs.AppendAsync(slug, target, "tool_use", ev.Text, toolName: ev.Text, detail: ev.Detail);
+        }
+        else if (ev.Kind == "reset")
+        {
+            _ = cs.AppendAsync(slug, target, "reset", ev.Text);
+        }
     }
 }
 

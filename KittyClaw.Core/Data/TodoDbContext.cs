@@ -11,6 +11,7 @@ public class TodoDbContext : DbContext
     public DbSet<Label> Labels => Set<Label>();
     public DbSet<BoardColumn> BoardColumns => Set<BoardColumn>();
     public DbSet<Member> Members => Set<Member>();
+    public DbSet<ChatMessageRow> ChatMessages => Set<ChatMessageRow>();
 
     private readonly string _dbPath;
 
@@ -55,6 +56,11 @@ public class TodoDbContext : DbContext
         });
 
         modelBuilder.Entity<Member>(e =>
+        {
+            e.HasKey(m => m.Id);
+        });
+
+        modelBuilder.Entity<ChatMessageRow>(e =>
         {
             e.HasKey(m => m.Id);
         });

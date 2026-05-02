@@ -21,6 +21,15 @@ public sealed class ClaudeRunContext
     public string? ExtraContext { get; init; }
     public string? InlineSkillContent { get; init; }
     public string? PresetRunId { get; init; }
+
+    /// <summary>Optional namespace prefix for the SessionRegistry key (e.g. "chat" → "chat:agent:sweep"). Keeps chat sessions isolated from automation sessions for the same agent.</summary>
+    public string? SessionScope { get; init; }
+
+    /// <summary>If true and the run was a --resume that produced no assistant output and exited non-zero, the runner will silently invalidate the session and respawn with a fresh one in the same AgentRun.</summary>
+    public bool RetryOnResumeFailure { get; init; }
+
+    /// <summary>Callback invoked for every StreamEvent pushed onto the AgentRun. Wired before any event is emitted, so no race with subscribers attaching after the fact.</summary>
+    public Action<StreamEvent>? OnEventHook { get; init; }
 }
 
 public sealed class ClaudeRunner
@@ -48,6 +57,7 @@ public sealed class ClaudeRunner
             ConcurrencyGroup = string.IsNullOrEmpty(ctx.ConcurrencyGroup) ? ctx.AgentName : ctx.ConcurrencyGroup,
             StartedAt = DateTime.UtcNow,
         };
+        if (ctx.OnEventHook is not null) run.OnEvent += ctx.OnEventHook;
         _runs.Register(run);
 
         string skillContent;
@@ -73,11 +83,42 @@ public sealed class ClaudeRunner
         // Session key matches the legacy dispatcher.mjs format ({agent}:{ticketId|sweep}).
         // We persist sessions for ALL runs — even those without a ticket (groomer,
         // documentalist, code-janitor, evaluator) — so they keep their context across restarts.
-        var existingSessionId = _sessions.GetSessionId(ctx.WorkspacePath, ctx.AgentName, ctx.TicketId);
+        // SessionScope optionally namespaces the key (e.g. "chat:agent:sweep") so chat
+        // sessions don't collide with automation sessions for the same agent.
+        var scopedAgent = ctx.SessionScope is null ? ctx.AgentName : $"{ctx.SessionScope}:{ctx.AgentName}";
+        var existingSessionId = _sessions.GetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId);
         var sessionId = existingSessionId ?? Guid.NewGuid().ToString();
         var isResume = existingSessionId is not null;
         run.SessionId = sessionId;
-        _sessions.SetSessionId(ctx.WorkspacePath, ctx.AgentName, ctx.TicketId, sessionId);
+        _sessions.SetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId, sessionId);
+
+        var attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume, ct);
+        if (attempt.Cancelled) return run;
+
+        if (ctx.RetryOnResumeFailure && isResume && (attempt.Exit ?? -1) != 0 && attempt.AssistantEventCount == 0)
+        {
+            run.Push(new StreamEvent(DateTime.UtcNow, "reset",
+                "Previous session expired, starting a new one"));
+            _sessions.Clear(ctx.WorkspacePath, scopedAgent, ctx.TicketId);
+            sessionId = Guid.NewGuid().ToString();
+            run.SessionId = sessionId;
+            _sessions.SetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId, sessionId);
+
+            attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume: false, ct);
+            if (attempt.Cancelled) return run;
+        }
+
+        _runs.Complete(run.RunId, attempt.Exit == 0 ? AgentRunStatus.Completed : AgentRunStatus.Failed, attempt.Exit);
+        AppendDebugLog(ctx, $"FINISHED {ctx.AgentName} run={run.RunId} exit={attempt.Exit}");
+        return run;
+    }
+
+    private readonly record struct SpawnResult(int? Exit, int AssistantEventCount, bool Cancelled);
+
+    private async Task<SpawnResult> SpawnAndWaitAsync(
+        ClaudeRunContext ctx, AgentRun run, string skillContent,
+        string sessionId, bool isResume, CancellationToken ct)
+    {
         var prompt = await BuildPromptAsync(ctx, skillContent, isResume, ct);
         var sessionName = ctx.TicketId is not null ? $"{ctx.AgentName} #{ctx.TicketId}" : ctx.AgentName;
 
@@ -119,12 +160,16 @@ public sealed class ClaudeRunner
         catch (Exception ex)
         {
             run.Push(new StreamEvent(DateTime.UtcNow, "error", $"spawn failed: {ex.Message}"));
-            _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
-            return run;
+            return new SpawnResult(-1, 0, false);
         }
 
         run.Push(new StreamEvent(DateTime.UtcNow, "launch",
             $"{ctx.AgentName} {(isResume ? "(resume)" : "(new)")} session={sessionId[..8]} cwd={ctx.WorkspacePath} skill={ctx.SkillFile}"));
+
+        // Count assistant events emitted during THIS attempt only.
+        var assistantCount = 0;
+        Action<StreamEvent> counter = ev => { if (ev.Kind == "assistant") Interlocked.Increment(ref assistantCount); };
+        run.OnEvent += counter;
 
         try
         {
@@ -141,16 +186,14 @@ public sealed class ClaudeRunner
         var stderrTask = PumpStderrAsync(proc, run, linked.Token);
         var steerTask = PumpSteeringAsync(proc, run, linked.Token);
 
-        // When cancelled externally, kill the process.
         using var killReg = linked.Token.Register(() =>
         {
             try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { /* cleanup, process may already be exiting */ }
         });
 
-        int? exit = null;
+        int? exit;
         try
         {
-            // Close stdin so claude knows the prompt is complete.
             try { proc.StandardInput.Close(); } catch { /* stdin may already be closed */ }
             await proc.WaitForExitAsync(linked.Token);
             exit = proc.ExitCode;
@@ -160,15 +203,14 @@ public sealed class ClaudeRunner
             try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { /* cleanup on cancellation */ }
             _runs.Complete(run.RunId, AgentRunStatus.Stopped, null);
             AppendDebugLog(ctx, $"STOPPED {ctx.AgentName} run={run.RunId}");
-            return run;
+            run.OnEvent -= counter;
+            return new SpawnResult(null, assistantCount, true);
         }
 
         await Task.WhenAll(stdoutTask, stderrTask);
         try { steerTask.Dispose(); } catch { /* best-effort cleanup */ }
-
-        _runs.Complete(run.RunId, exit == 0 ? AgentRunStatus.Completed : AgentRunStatus.Failed, exit);
-        AppendDebugLog(ctx, $"FINISHED {ctx.AgentName} run={run.RunId} exit={exit}");
-        return run;
+        run.OnEvent -= counter;
+        return new SpawnResult(exit, assistantCount, false);
     }
 
     private static async Task<string> BuildPromptAsync(ClaudeRunContext ctx, string skillContent, bool isResume, CancellationToken ct)

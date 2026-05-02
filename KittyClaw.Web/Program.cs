@@ -22,6 +22,7 @@ builder.Services.AddSingleton<TicketService>();
 builder.Services.AddSingleton<LabelService>();
 builder.Services.AddSingleton<ColumnService>();
 builder.Services.AddSingleton<MemberService>();
+builder.Services.AddSingleton<ChatService>();
 builder.Services.AddSingleton<AgentsTemplateService>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.BoardFilterState>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.BoardUpdateNotifier>();

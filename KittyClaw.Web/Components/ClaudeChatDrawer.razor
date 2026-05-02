@@ -9,61 +9,103 @@
 
 <div class="chat-drawer-overlay" @onclick="Close"></div>
 <div class="chat-drawer" @onclick:stopPropagation>
-    <div class="chat-drawer-header">
-        <span class="chat-drawer-title">@L["NewInstruction"]</span>
-        <button class="agent-close-btn" @onclick="Close" title="@L["Close"]">×</button>
-    </div>
-
-    <div class="chat-messages" @ref="_messagesRef">
-        @foreach (var msg in _messages)
-        {
-            if (msg.Role == "tool_use")
+    @if (_view == View.Selection)
+    {
+        <div class="chat-drawer-header">
+            <span class="chat-drawer-title">@L["NewInstruction"]</span>
+            <button class="agent-close-btn" @onclick="Close" title="@L["Close"]">×</button>
+        </div>
+        <div class="chat-target-list">
+            <h3>@L["ChatPickTarget"]</h3>
+            @foreach (var t in _targets)
             {
-                var toolMsg = (ToolCallMessage)msg;
-                <div class="chat-message chat-message-tool">
-                    <details class="tool-call-block">
-                        <summary class="tool-call-summary">
-                            <span class="tool-call-icon">⚙</span>
-                            <span class="tool-call-name">@toolMsg.ToolName</span>
-                            <span class="tool-call-preview">@toolMsg.Preview</span>
-                        </summary>
-                        <pre class="tool-call-detail">@toolMsg.Detail</pre>
-                    </details>
+                <button class="chat-target-item @(t.Kind == "claude" ? "claude-direct" : "")"
+                        @onclick="() => SelectTarget(t)">
+                    <span class="chat-target-name">@t.Name</span>
+                    <span class="chat-target-kind">@(t.Kind == "claude" ? L["ChatTalkToClaude"] : L["ChatMember"])</span>
+                </button>
+            }
+            @if (_targets.Count == 0 && _ready)
+            {
+                <div class="chat-empty">@L["ChatPickTarget"]</div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="chat-drawer-header">
+            <button class="chat-back-btn" @onclick="BackToSelection" title="@L["Back"]">‹</button>
+            <span class="chat-drawer-title">@_activeTarget!.Name</span>
+            <button class="chat-newsession-btn" @onclick="StartNewSession" title="@L["NewSession"]">＋</button>
+            <button class="agent-close-btn" @onclick="Close" title="@L["Close"]">×</button>
+        </div>
+
+        <div class="chat-messages" @ref="_messagesRef">
+            @foreach (var msg in _messages)
+            {
+                if (msg.Role == "tool_use")
+                {
+                    var toolMsg = (ToolCallMessage)msg;
+                    <div class="chat-message chat-message-tool">
+                        <details class="tool-call-block">
+                            <summary class="tool-call-summary">
+                                <span class="tool-call-icon">⚙</span>
+                                <span class="tool-call-name">@toolMsg.ToolName</span>
+                                <span class="tool-call-preview">@toolMsg.Preview</span>
+                            </summary>
+                            <pre class="tool-call-detail">@toolMsg.Detail</pre>
+                        </details>
+                    </div>
+                }
+                else if (msg.Role == "reset")
+                {
+                    <div class="chat-message chat-message-reset">@L["ChatSessionReset"]</div>
+                }
+                else
+                {
+                    <div class="chat-message chat-message-@msg.Role">
+                        <div class="chat-bubble markdown-body">@((MarkupString)RenderMarkdown(msg.Text))</div>
+                    </div>
+                }
+            }
+            @if (_loading)
+            {
+                <div class="chat-message chat-message-assistant">
+                    <div class="chat-bubble chat-bubble-loading">…</div>
                 </div>
             }
-            else
+            @if (_messages.Count == 0 && !_loading)
             {
-                <div class="chat-message chat-message-@msg.Role">
-                    <div class="chat-bubble markdown-body">@((MarkupString)RenderMarkdown(msg.Text))</div>
+                <div class="chat-empty">
+                    @(_activeTarget!.Kind == "member"
+                        ? L.Get("ChatEmptyMember", _activeTarget.Name)
+                        : L["ChatEmpty"])
                 </div>
             }
-        }
-        @if (_loading)
-        {
-            <div class="chat-message chat-message-assistant">
-                <div class="chat-bubble chat-bubble-loading">…</div>
-            </div>
-        }
-        @if (_messages.Count == 0 && !_loading)
-        {
-            <div class="chat-empty">@L["ChatEmpty"]</div>
-        }
-    </div>
+        </div>
 
-    <div class="chat-input-area">
-        <textarea @ref="_inputRef"
-                  @bind="_inputText"
-                  @bind:event="oninput"
-                  placeholder="@L["ChatPlaceholder"]"
-                  @onkeydown="OnKeyDown"
-                  disabled="@_loading"></textarea>
-        <button @onclick="Send" disabled="@(string.IsNullOrWhiteSpace(_inputText) || _loading)">@L["Send"]</button>
-    </div>
+        <div class="chat-input-area">
+            <textarea @ref="_inputRef"
+                      value="@_inputText"
+                      @oninput="OnInput"
+                      placeholder="@L["ChatPlaceholder"]"
+                      @onkeydown="OnKeyDown"
+                      disabled="@_loading"></textarea>
+            <button @onclick="Send" disabled="@(string.IsNullOrWhiteSpace(_inputText) || _loading)">@L["Send"]</button>
+        </div>
+    }
 </div>
 
 @code {
     [Parameter] public string ProjectSlug { get; set; } = "";
     [Parameter] public EventCallback OnClose { get; set; }
+
+    private enum View { Selection, Conversation }
+    private View _view = View.Selection;
+
+    private readonly List<ChatTarget> _targets = [];
+    private ChatTarget? _activeTarget;
+    private bool _ready = false;
 
     private readonly List<ChatMessage> _messages = [];
     private string _inputText = "";
@@ -78,12 +120,105 @@
     private record ChatMessage(string Role, string Text);
     private sealed record ToolCallMessage(string ToolName, string Preview, string Detail)
         : ChatMessage("tool_use", ToolName);
+    private sealed record ChatTarget(string Slug, string Name, string Kind);
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+        try
+        {
+            var resp = await http.GetFromJsonAsync<TargetsResponse>($"/api/projects/{ProjectSlug}/chat/targets");
+            if (resp is not null)
+            {
+                _targets.Clear();
+                foreach (var t in resp.Targets)
+                    _targets.Add(new ChatTarget(t.Slug, t.Name, t.Kind));
+
+                if (!string.IsNullOrEmpty(resp.LastTarget))
+                {
+                    var last = _targets.FirstOrDefault(t => t.Slug == resp.LastTarget);
+                    if (last is not null)
+                    {
+                        await EnterConversationAsync(last);
+                    }
+                }
+            }
+        }
+        catch { /* leave _view = Selection */ }
+        finally { _ready = true; }
+    }
+
+    private async Task EnterConversationAsync(ChatTarget target)
+    {
+        _activeTarget = target;
+        _messages.Clear();
+        try
+        {
+            using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+            var msgs = await http.GetFromJsonAsync<List<ServerChatMessage>>(
+                $"/api/projects/{ProjectSlug}/chat/messages?target={Uri.EscapeDataString(target.Slug)}");
+            if (msgs is not null)
+            {
+                foreach (var m in msgs)
+                {
+                    if (m.Role == "tool_use")
+                    {
+                        var preview = GetToolPreview(m.ToolName ?? m.Text, m.Detail);
+                        _messages.Add(new ToolCallMessage(m.ToolName ?? m.Text, preview, m.Detail ?? "{}"));
+                    }
+                    else
+                    {
+                        _messages.Add(new ChatMessage(m.Role, m.Text));
+                    }
+                }
+            }
+        }
+        catch { /* show empty conversation */ }
+        _view = View.Conversation;
+        StateHasChanged();
+    }
+
+    private async Task SelectTarget(ChatTarget t)
+    {
+        await EnterConversationAsync(t);
+    }
+
+    private async Task BackToSelection()
+    {
+        await StopStream();
+        _view = View.Selection;
+        _activeTarget = null;
+        _messages.Clear();
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private async Task StartNewSession()
+    {
+        if (_activeTarget is null) return;
+        await StopStream();
+        try
+        {
+            using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+            await http.DeleteAsync($"/api/projects/{ProjectSlug}/chat/session?target={Uri.EscapeDataString(_activeTarget.Slug)}");
+        }
+        catch { /* best-effort */ }
+        _messages.Clear();
+        _loading = false;
+        _view = View.Selection;
+        _activeTarget = null;
+        StateHasChanged();
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
             try { await _inputRef.FocusAsync(); } catch { }
+        }
+        if (_view == View.Conversation)
+        {
+            try { await JS.InvokeVoidAsync("chatDrawerInstallEnterGuard", _inputRef); } catch { }
         }
         try
         {
@@ -97,10 +232,15 @@
         if (e.Key == "Enter" && !e.ShiftKey) await Send();
     }
 
+    private void OnInput(ChangeEventArgs e)
+    {
+        _inputText = e.Value?.ToString() ?? "";
+    }
+
     private async Task Send()
     {
         var text = _inputText.Trim();
-        if (string.IsNullOrEmpty(text) || _loading) return;
+        if (string.IsNullOrEmpty(text) || _loading || _activeTarget is null) return;
 
         _messages.Add(new ChatMessage("user", text));
         _inputText = "";
@@ -113,7 +253,7 @@
         try
         {
             var resp = await http.PostAsJsonAsync($"/api/projects/{ProjectSlug}/chat/start",
-                new { message = text });
+                new { message = text, target = _activeTarget.Slug });
             if (!resp.IsSuccessStatusCode)
             {
                 _messages.Add(new ChatMessage("error", $"Error {resp.StatusCode}"));
@@ -155,6 +295,10 @@
         {
             var preview = GetToolPreview(text, detail);
             _messages.Add(new ToolCallMessage(text, preview, detail ?? "{}"));
+        }
+        else if (kind == "reset")
+        {
+            _messages.Add(new ChatMessage("reset", text));
         }
         else if (kind == "assistant")
         {
@@ -243,4 +387,7 @@
         Markdig.Markdown.ToHtml(text, new MarkdownPipelineBuilder().UseAdvancedExtensions().Build());
 
     private sealed record ChatStartResponse(string RunId);
+    private sealed record TargetsResponse(string? LastTarget, List<ServerChatTarget> Targets);
+    private sealed record ServerChatTarget(string Slug, string Name, string Kind);
+    private sealed record ServerChatMessage(string Role, string Text, string? ToolName, string? Detail, string CreatedAt);
 }

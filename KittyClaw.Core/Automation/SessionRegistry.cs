@@ -57,6 +57,17 @@ public sealed class SessionRegistry
         Save(workspacePath, s);
     }
 
+    public void Clear(string workspacePath, string agent, int? ticketId)
+    {
+        var key = SessionKey(agent, ticketId);
+        var s = Load(workspacePath);
+        if (s["_sessions"] is JsonObject sessions && sessions.ContainsKey(key))
+        {
+            sessions.Remove(key);
+            Save(workspacePath, s);
+        }
+    }
+
     /// <summary>
     /// Session key identical to the legacy dispatcher.mjs: `{agent}:{ticketId}` when
     /// bound to a ticket, or `{agent}:sweep` for global/stateless agents like groomer.
