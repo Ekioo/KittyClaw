@@ -87,7 +87,7 @@ else
                                 else
                                 {
                                     <button class="icon-btn" @onclick="() => { _editingMemberId = m.Id; _editingMemberName = m.Name; }">✎</button>
-                                    <button class="icon-btn delete-icon" @onclick="() => DeleteMember(m)">🗑</button>
+                                    <button class="icon-btn delete-icon" @onclick="() => _deleteConfirmMember = m">🗑</button>
                                 }
                             </td>
                         </tr>
@@ -139,7 +139,7 @@ else
                                 else
                                 {
                                     <button class="icon-btn" @onclick="() => StartEditColumn(c)">✎</button>
-                                    <button class="icon-btn delete-icon" @onclick="() => DeleteColumn(c)">🗑</button>
+                                    <button class="icon-btn delete-icon" @onclick="() => _deleteConfirmColumn = c">🗑</button>
                                 }
                             </td>
                         </tr>
@@ -186,7 +186,7 @@ else
                                 else
                                 {
                                     <button class="icon-btn" @onclick="() => StartEditLabel(l)">✎</button>
-                                    <button class="icon-btn delete-icon" @onclick="() => DeleteLabel(l)">🗑</button>
+                                    <button class="icon-btn delete-icon" @onclick="() => _deleteConfirmLabel = l">🗑</button>
                                 }
                             </td>
                         </tr>
@@ -204,6 +204,47 @@ else
             <a class="settings-primary" href="/board/@Slug/automations">@L["OpenAutomationsEditor"]</a>
         </section>
     </div>
+
+    @if (_deleteConfirmMember is not null)
+    {
+        <div class="confirm-overlay">
+            <div class="confirm-dialog">
+                <p>@L["DeleteMemberConfirm"] «&#160;@_deleteConfirmMember.Name&#160;»&#160;?</p>
+                <div class="confirm-actions">
+                    <button class="cancel-btn" @onclick="() => _deleteConfirmMember = null">@L["Cancel"]</button>
+                    <button class="delete-btn" @onclick="ConfirmDeleteMember">@L["Delete"]</button>
+                </div>
+            </div>
+        </div>
+    }
+    @if (_deleteConfirmColumn is not null)
+    {
+        <div class="confirm-overlay">
+            <div class="confirm-dialog">
+                <p>@L["DeleteColumnConfirm"] «&#160;@_deleteConfirmColumn.Name&#160;»&#160;?</p>
+                @if (_columns.Count > 1)
+                {
+                    <p class="confirm-warning">@L["MoveTicketsTo"]</p>
+                }
+                <div class="confirm-actions">
+                    <button class="cancel-btn" @onclick="() => _deleteConfirmColumn = null">@L["Cancel"]</button>
+                    <button class="delete-btn" @onclick="ConfirmDeleteColumn">@L["Delete"]</button>
+                </div>
+            </div>
+        </div>
+    }
+    @if (_deleteConfirmLabel is not null)
+    {
+        <div class="confirm-overlay">
+            <div class="confirm-dialog">
+                <p>@L["DeleteLabelConfirm"] «&#160;@_deleteConfirmLabel.Name&#160;»&#160;?</p>
+                <div class="confirm-actions">
+                    <button class="cancel-btn" @onclick="() => _deleteConfirmLabel = null">@L["Cancel"]</button>
+                    <button class="delete-btn" @onclick="ConfirmDeleteLabel">@L["Delete"]</button>
+                </div>
+            </div>
+        </div>
+    }
 }
 
 @code {
@@ -218,6 +259,7 @@ else
     private int? _editingMemberId;
     private string _editingMemberName = "";
     private string _newMemberName = "";
+    private Member? _deleteConfirmMember;
 
     private List<BoardColumn> _columns = new();
     private int? _editingColumnId;
@@ -225,6 +267,7 @@ else
     private string _editingColumnColor = "#6366f1";
     private string _newColumnName = "";
     private string _newColumnColor = "#6366f1";
+    private BoardColumn? _deleteConfirmColumn;
 
     private List<Label> _labels = new();
     private int? _editingLabelId;
@@ -232,6 +275,7 @@ else
     private string _editingLabelColor = "#6366f1";
     private string _newLabelName = "";
     private string _newLabelColor = "#6366f1";
+    private Label? _deleteConfirmLabel;
 
     protected override async Task OnInitializedAsync()
     {
@@ -329,8 +373,11 @@ else
         }
     }
 
-    private async Task DeleteMember(Member m)
+    private async Task ConfirmDeleteMember()
     {
+        if (_deleteConfirmMember is null) return;
+        var m = _deleteConfirmMember;
+        _deleteConfirmMember = null;
         var resp = await NewHttp().DeleteAsync($"/api/projects/{Slug}/members/{m.Id}");
         if (resp.IsSuccessStatusCode) _members = await MemberService.ListMembersAsync(Slug);
     }
@@ -364,8 +411,11 @@ else
         }
     }
 
-    private async Task DeleteColumn(BoardColumn c)
+    private async Task ConfirmDeleteColumn()
     {
+        if (_deleteConfirmColumn is null) return;
+        var c = _deleteConfirmColumn;
+        _deleteConfirmColumn = null;
         var fallback = _columns.FirstOrDefault(x => x.Id != c.Id)?.Name;
         if (fallback is null) return;
         var resp = await NewHttp().DeleteAsync($"/api/projects/{Slug}/columns/{c.Id}?moveTicketsTo={Uri.EscapeDataString(fallback)}");
@@ -408,8 +458,11 @@ else
         }
     }
 
-    private async Task DeleteLabel(Label l)
+    private async Task ConfirmDeleteLabel()
     {
+        if (_deleteConfirmLabel is null) return;
+        var l = _deleteConfirmLabel;
+        _deleteConfirmLabel = null;
         var resp = await NewHttp().DeleteAsync($"/api/projects/{Slug}/labels/{l.Id}");
         if (resp.IsSuccessStatusCode) _labels = await LabelService.ListLabelsAsync(Slug);
     }

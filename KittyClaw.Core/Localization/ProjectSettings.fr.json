@@ -15,5 +15,7 @@
   "LabelsSection": "Labels",
   "LabelsHint": "Tags réutilisables pour catégoriser les tickets.",
   "NewLabelSettingsPlaceholder": "Nouveau label\u2026",
-  "OpenAutomationsEditor": "Ouvrir l'éditeur d'automations →"
+  "OpenAutomationsEditor": "Ouvrir l'éditeur d'automations →",
+  "DeleteMemberConfirm": "Supprimer le membre",
+  "DeleteLabelConfirm": "Supprimer le label"
 }
