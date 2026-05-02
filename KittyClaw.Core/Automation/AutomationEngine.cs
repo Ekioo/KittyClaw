@@ -496,6 +496,11 @@ public sealed class AutomationEngine : BackgroundService
             Env = a.Env,
             Model = a.Model,
             ExtraContext = a.Context,
+            // If the stored session ID is no longer known to claude ("No conversation
+            // found with session ID: …"), wipe it and start a fresh session in the same
+            // run. Without this the run would error out on every trigger firing until
+            // the dispatch-state.json is manually edited.
+            RetryOnResumeFailure = true,
         };
         _sessions.SetLastDispatched(rt.Workspace!, agentName, DateTime.UtcNow);
         if (firing.TicketId is not null)
