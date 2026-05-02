@@ -378,13 +378,24 @@ public static class Endpoints
             });
         }).WithTags("Runs");
 
-        api.MapGet("/projects/{slug}/runs/{runId}/stream", async (string slug, string runId, HttpContext http, AgentRunRegistry reg, CancellationToken ct) =>
+        api.MapGet("/projects/{slug}/runs/{runId}/stream", async (string slug, string runId, string? since, HttpContext http, AgentRunRegistry reg, CancellationToken ct) =>
         {
             var run = reg.Get(runId);
             if (run is null || run.ProjectSlug != slug) { http.Response.StatusCode = 404; return; }
             http.Response.Headers.ContentType = "text/event-stream";
             http.Response.Headers.CacheControl = "no-cache";
             http.Response.Headers["X-Accel-Buffering"] = "no";
+
+            // Optional ?since=<ISO timestamp> filter: replay only buffer events strictly after that
+            // instant. Used when a chat drawer reattaches mid-run and already has all events up to
+            // its latest persisted message — without this, the buffered events would re-render as
+            // duplicates.
+            DateTime? sinceUtc = null;
+            if (!string.IsNullOrWhiteSpace(since)
+                && DateTime.TryParse(since, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
+            {
+                sinceUtc = parsed.ToUniversalTime();
+            }
 
             var queue = System.Threading.Channels.Channel.CreateUnbounded<StreamEvent>();
             void handler(StreamEvent ev) => queue.Writer.TryWrite(ev);
@@ -393,7 +404,10 @@ public static class Endpoints
             try
             {
                 foreach (var ev in run.SnapshotBuffer())
+                {
+                    if (sinceUtc is not null && ev.At <= sinceUtc.Value) continue;
                     await WriteSseAsync(http.Response, ev, ct);
+                }
 
                 while (!ct.IsCancellationRequested && run.Status == AgentRunStatus.Running)
                 {
@@ -448,6 +462,18 @@ public static class Endpoints
             var rows = await cs.ListAsync(slug, target);
             var dtos = rows.Select(r => new ChatMessageDto(r.Role, r.Text, r.ToolName, r.Detail, r.CreatedAt)).ToList();
             return Results.Ok(dtos);
+        }).WithTags("Chat");
+
+        // Returns the runId of an in-flight chat run for (slug, target), or null.
+        // Used by the drawer to reattach the SSE stream when reopened mid-run, so that
+        // assistant turns emitted while the drawer was closed (and any subsequent ones)
+        // surface in the UI.
+        api.MapGet("/projects/{slug}/chat/active", (string slug, string target, AgentRunRegistry reg) =>
+        {
+            var group = $"chat:{slug}:{target}";
+            var active = reg.ActiveForProject(slug)
+                .FirstOrDefault(r => r.ConcurrencyGroup == group);
+            return Results.Ok(new { runId = active?.RunId });
         }).WithTags("Chat");
 
         api.MapDelete("/projects/{slug}/chat/session", async (string slug, string target, ProjectService ps, ChatService cs, SessionRegistry sessions) =>

@@ -181,6 +181,7 @@
     {
         _activeTarget = target;
         _messages.Clear();
+        string? latestMessageAt = null;
         try
         {
             using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
@@ -199,12 +200,42 @@
                     {
                         _messages.Add(new ChatMessage(m.Role, m.Text));
                     }
+                    latestMessageAt = m.CreatedAt;
                 }
             }
         }
         catch { /* show empty conversation */ }
         _view = View.Conversation;
         StateHasChanged();
+
+        // If a chat run is still in flight server-side (drawer was closed mid-stream
+        // and the backend kept emitting events), reattach the SSE stream so the
+        // remaining and future events surface in the UI. The `since` cursor avoids
+        // replaying buffered events already persisted before this reopen.
+        await TryReattachActiveRunAsync(target, latestMessageAt);
+    }
+
+    private async Task TryReattachActiveRunAsync(ChatTarget target, string? sinceIso)
+    {
+        try
+        {
+            using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+            var resp = await http.GetFromJsonAsync<ActiveResponse>(
+                $"/api/projects/{ProjectSlug}/chat/active?target={Uri.EscapeDataString(target.Slug)}");
+            if (resp?.RunId is not string runId) return;
+
+            _activeRun = RunsState.Get(runId);
+            _loading = true;
+            _sseModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/agent-sse.js");
+            _dotnetRef ??= DotNetObjectReference.Create(this);
+            _activeStreamId = runId;
+            var url = $"/api/projects/{ProjectSlug}/runs/{runId}/stream";
+            if (!string.IsNullOrEmpty(sinceIso))
+                url += $"?since={Uri.EscapeDataString(sinceIso)}";
+            await _sseModule.InvokeVoidAsync("start", _dotnetRef, url);
+            StateHasChanged();
+        }
+        catch { /* best-effort */ }
     }
 
     private async Task SelectTarget(ChatTarget t)
@@ -427,6 +458,7 @@
         Markdig.Markdown.ToHtml(text, new MarkdownPipelineBuilder().UseAdvancedExtensions().Build());
 
     private sealed record ChatStartResponse(string RunId);
+    private sealed record ActiveResponse(string? RunId);
     private sealed record TargetsResponse(string? LastTarget, List<ServerChatTarget> Targets);
     private sealed record ServerChatTarget(string Slug, string Name, string Kind);
     private sealed record ServerChatMessage(string Role, string Text, string? ToolName, string? Detail, string CreatedAt);
