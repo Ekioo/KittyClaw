@@ -327,8 +327,19 @@ public static class Endpoints
         // Automations
         api.MapGet("/projects/{slug}/automations", async (string slug, AutomationStore store) =>
         {
-            var (config, workspace, path) = await store.LoadAsync(slug);
-            return Results.Ok(new { config, workspace, path });
+            try
+            {
+                var (config, workspace, path) = await store.LoadAsync(slug);
+                return Results.Ok(new { config, workspace, path });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.NotFound(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.Problem(ex.Message);
+            }
         }).WithTags("Automations");
 
         api.MapPut("/projects/{slug}/automations", async (string slug, AutomationConfig config, AutomationStore store, AutomationEngine engine) =>

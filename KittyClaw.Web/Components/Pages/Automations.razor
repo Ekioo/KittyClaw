@@ -39,13 +39,13 @@ else
                 <button class="header-action-btn" @onclick="StartInitialize" disabled="@_initializing" title="@L["InitializeHint"]">@(_initializing ? "…" : L["Initialize"])</button>
                 <button class="header-action-btn" @onclick="ReloadFromDisk" title="@L["ReloadFromDisk"]">&#8635; @L["Reload"]</button>
                 <button class="header-action-btn" @onclick="AddAutomation">@L["NewAutomation"]</button>
-                <button class="header-action-btn settings-primary" @onclick="SaveAll" disabled="@_saving">
+                <button class="header-action-btn settings-primary" @onclick="SaveAll" disabled="@(_saving || _configLoadError)">
                     @(_saving ? "…" : L["Save"])
                 </button>
             }
             else
             {
-                <button class="header-action-btn settings-primary" @onclick="SaveAll" disabled="@_saving">
+                <button class="header-action-btn settings-primary" @onclick="SaveAll" disabled="@(_saving || _configLoadError)">
                     @(_saving ? "…" : L["Save"])
                 </button>
             }
@@ -221,6 +221,7 @@ else
     private bool _initializing;
     private List<string>? _initConflicts;
     private (string text, string css)? _statusMessage;
+    private bool _configLoadError;
 
     private int? _editingIndex;
     public enum NodeKind { Trigger, Condition, Action }
@@ -271,11 +272,37 @@ else
 
     private async Task LoadConfigAsync(HttpClient http)
     {
-        var json = await http.GetStringAsync($"/api/projects/{Slug}/automations");
-        using var doc = JsonDocument.Parse(json);
-        if (doc.RootElement.TryGetProperty("config", out var cfg))
-            _config = JsonSerializer.Deserialize<AutomationConfig>(cfg.GetRawText(), AutomationStore.JsonOptions) ?? new();
-        else _config = new();
+        _configLoadError = false;
+        try
+        {
+            var resp = await http.GetAsync($"/api/projects/{Slug}/automations");
+            if (!resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                string msg;
+                try
+                {
+                    using var err = JsonDocument.Parse(body);
+                    msg = err.RootElement.TryGetProperty("detail", out var d) ? d.GetString() ?? body
+                        : err.RootElement.TryGetProperty("error", out var e) ? e.GetString() ?? body
+                        : body;
+                }
+                catch { msg = body; }
+                _configLoadError = true;
+                _statusMessage = ($"automations.json — {msg}", "settings-status-err");
+                return;
+            }
+            var json = await resp.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("config", out var cfg))
+                _config = JsonSerializer.Deserialize<AutomationConfig>(cfg.GetRawText(), AutomationStore.JsonOptions) ?? new();
+            else _config = new();
+        }
+        catch (Exception ex)
+        {
+            _configLoadError = true;
+            _statusMessage = ($"automations.json — {ex.Message}", "settings-status-err");
+        }
     }
 
     private async Task StartInitialize()
