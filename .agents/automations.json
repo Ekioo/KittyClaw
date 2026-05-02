@@ -232,8 +232,8 @@
       ]
     },
     {
-      "id": "programmer-run",
-      "name": "Programmer: resume on InProgress tickets",
+      "id": "assignee-resume",
+      "name": "Resume assigned agent on InProgress tickets",
       "enabled": true,
       "trigger": {
         "type": "ticketInColumn",
@@ -241,15 +241,27 @@
         "columns": [
           "InProgress"
         ],
-        "assigneeSlug": "programmer",
         "debounceSeconds": 0
       },
-      "conditions": [],
+      "conditions": [
+        {
+          "type": "assignedTo",
+          "slugs": [
+            "programmer",
+            "producer",
+            "qa-tester",
+            "groomer",
+            "committer",
+            "code-janitor",
+            "evaluator"
+          ]
+        }
+      ],
       "actions": [
         {
           "type": "runAgent",
-          "agent": "programmer",
-          "concurrencyGroup": "programmer",
+          "agent": "{assignee}",
+          "concurrencyGroup": "{assignee}",
           "maxTurns": 200,
           "mutuallyExclusiveWith": [],
           "env": {},
@@ -258,7 +270,7 @@
         },
         {
           "type": "commitAgentMemory",
-          "agent": "programmer"
+          "agent": "{assignee}"
         }
       ]
     },
