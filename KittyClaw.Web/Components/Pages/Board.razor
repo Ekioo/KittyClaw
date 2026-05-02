@@ -292,7 +292,7 @@ else
                     <input class="create-input" @bind="_newTicketTitle" @bind:event="oninput" placeholder="@L["TicketTitlePlaceholder"]" />
 
                     <label class="field-label">@L["DescriptionMarkdown"]</label>
-                    <textarea class="create-textarea" @bind="_newTicketDescription" placeholder="@L["DescriptionPlaceholder"]"></textarea>
+                    <textarea @ref="_createTicketDescTextarea" class="create-textarea" @bind="_newTicketDescription" @bind:event="oninput" placeholder="@L["DescriptionPlaceholder"]"></textarea>
 
                     <label class="field-label">@L["Priority"]</label>
                     <div class="priority-picker">
@@ -878,6 +878,7 @@ else
     private string _fullscreenTarget = ""; // "description", "newComment", "editComment"
     private string _fullscreenText = "";
     private ElementReference _editorTextarea;
+    private ElementReference _createTicketDescTextarea;
     private bool _pasteListenerAttached = false;
 
     // Filter bar
@@ -1152,6 +1153,15 @@ else
         {
             _pasteListenerAttached = true;
             await JS.InvokeVoidAsync("attachImagePaste", _editorTextarea, "/api/images");
+        }
+        // Wire up image paste on the create-ticket description textarea every time
+        // the popup is shown. The JS handler guards against double-attaching, and the
+        // textarea element is recreated by the @if block when the popup reopens, so a
+        // fresh attach per show is the right semantics.
+        if (_showCreatePopup)
+        {
+            try { await JS.InvokeVoidAsync("attachImagePaste", _createTicketDescTextarea, "/api/images"); }
+            catch { /* element may not be in DOM yet on the very first frame */ }
         }
     }
 
