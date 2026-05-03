@@ -158,6 +158,11 @@ public sealed class ClaudeRunner
             "--dangerously-skip-permissions",
             "--max-turns", ctx.MaxTurns.ToString(),
             "--remote-control",
+            // KittyClaw owns the agent memory layer (.agents/{agent}/memory.md committed to
+            // the workspace repo). Disable claude's built-in Memory tool so agents don't
+            // also write to their per-host memory store and end up with two divergent
+            // sources of truth.
+            "--disallowed-tools", "Memory",
         };
         if (isResume) { args.Add("--resume"); args.Add(sessionId); }
         else { args.Add("-n"); args.Add(sessionName); args.Add("--session-id"); args.Add(sessionId); }
