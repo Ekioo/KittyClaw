@@ -31,6 +31,15 @@ public class MemberService
         catch { /* column already exists */ }
         try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Members ADD COLUMN IsAgent INTEGER NOT NULL DEFAULT 0"); }
         catch { /* column already exists */ }
+
+        // Owner is the human user — referenced by string literal "owner" throughout the
+        // codebase (createdBy default, mention rendering, assignee dropdown). Seed it here
+        // so it exists on every project (new ones AND legacy DBs created before this fix).
+        if (!await db.Members.AnyAsync(m => m.Slug == "owner"))
+        {
+            db.Members.Add(new Member { Name = "Owner", Slug = "owner" });
+            await db.SaveChangesAsync();
+        }
     }
 
     public async Task<List<Member>> ListMembersAsync(string projectSlug)
