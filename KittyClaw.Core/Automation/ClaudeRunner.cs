@@ -36,12 +36,14 @@ public sealed class ClaudeRunner
 {
     private readonly SessionRegistry _sessions;
     private readonly AgentRunRegistry _runs;
+    private readonly RunConcurrencyGate _gate;
     private readonly ILogger<ClaudeRunner> _logger;
 
-    public ClaudeRunner(SessionRegistry sessions, AgentRunRegistry runs, ILogger<ClaudeRunner> logger)
+    public ClaudeRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<ClaudeRunner> logger)
     {
         _sessions = sessions;
         _runs = runs;
+        _gate = gate;
         _logger = logger;
     }
 
@@ -92,25 +94,52 @@ public sealed class ClaudeRunner
         run.SessionId = sessionId;
         _sessions.SetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId, sessionId);
 
-        var attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume, ct);
-        if (attempt.Cancelled) return run;
-
-        if (ctx.RetryOnResumeFailure && isResume && (attempt.Exit ?? -1) != 0 && attempt.AssistantEventCount == 0)
+        // Global concurrency gate: cap simultaneous claude subprocesses across all projects
+        // so the host doesn't OOM under heavy automation. Chats bypass entirely.
+        var isChat = ctx.SessionScope == "chat";
+        IDisposable slot;
+        var snap = _gate.Snapshot();
+        if (!isChat && snap.Active >= snap.Max)
         {
-            run.Push(new StreamEvent(DateTime.UtcNow, "reset",
-                "Previous session expired, starting a new one"));
-            _sessions.Clear(ctx.WorkspacePath, scopedAgent, ctx.TicketId);
-            sessionId = Guid.NewGuid().ToString();
-            run.SessionId = sessionId;
-            _sessions.SetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId, sessionId);
-
-            attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume: false, ct);
-            if (attempt.Cancelled) return run;
+            run.Push(new StreamEvent(DateTime.UtcNow, "queued",
+                $"Waiting for a free agent slot ({snap.Active}/{snap.Max} active, {snap.Queued} queued ahead)"));
+        }
+        try
+        {
+            slot = await _gate.AcquireAsync(isChat, ctx.AgentName, run.Cancellation.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            _runs.Complete(run.RunId, AgentRunStatus.Stopped, null);
+            return run;
         }
 
-        _runs.Complete(run.RunId, attempt.Exit == 0 ? AgentRunStatus.Completed : AgentRunStatus.Failed, attempt.Exit);
-        AppendDebugLog(ctx, $"FINISHED {ctx.AgentName} run={run.RunId} exit={attempt.Exit}");
-        return run;
+        try
+        {
+            var attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume, ct);
+            if (attempt.Cancelled) return run;
+
+            if (ctx.RetryOnResumeFailure && isResume && (attempt.Exit ?? -1) != 0 && attempt.AssistantEventCount == 0)
+            {
+                run.Push(new StreamEvent(DateTime.UtcNow, "reset",
+                    "Previous session expired, starting a new one"));
+                _sessions.Clear(ctx.WorkspacePath, scopedAgent, ctx.TicketId);
+                sessionId = Guid.NewGuid().ToString();
+                run.SessionId = sessionId;
+                _sessions.SetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId, sessionId);
+
+                attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume: false, ct);
+                if (attempt.Cancelled) return run;
+            }
+
+            _runs.Complete(run.RunId, attempt.Exit == 0 ? AgentRunStatus.Completed : AgentRunStatus.Failed, attempt.Exit);
+            AppendDebugLog(ctx, $"FINISHED {ctx.AgentName} run={run.RunId} exit={attempt.Exit}");
+            return run;
+        }
+        finally
+        {
+            slot.Dispose();
+        }
     }
 
     private readonly record struct SpawnResult(int? Exit, int AssistantEventCount, bool Cancelled);
