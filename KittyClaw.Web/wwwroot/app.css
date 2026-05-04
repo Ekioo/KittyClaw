@@ -2789,38 +2789,51 @@ body.flow-dnd-active * { cursor: grabbing !important; }
     border-top: 1px solid var(--border, #333);
     padding: 0.6rem 1rem;
     display: flex;
-    gap: 0.5rem;
-    align-items: flex-end;
+    align-items: stretch;
+    background: #0d1017;
+    border: 1px solid var(--border, #333);
+    border-radius: 8px;
+    margin: 0.6rem 1rem;
+    transition: border-color 120ms ease;
 }
+.chat-input-area:focus-within { border-color: var(--accent); }
 .chat-input-area textarea {
     flex: 1;
-    min-height: 50px;
+    min-height: 44px;
     max-height: 160px;
-    resize: vertical;
-    background: #11141b;
+    resize: none;
+    background: transparent;
     color: #c8d0e0;
-    border: 1px solid var(--border, #333);
-    border-radius: 6px;
-    padding: 0.5rem;
+    border: none;
+    padding: 0.5rem 0.25rem 0.5rem 0;
     font-family: inherit;
     font-size: 0.9rem;
     line-height: 1.4;
 }
-.chat-input-area textarea:focus { outline: none; border-color: var(--accent); }
+.chat-input-area textarea:focus { outline: none; box-shadow: none; border-color: transparent; }
 .chat-input-area button {
+    align-self: stretch;
+    min-width: 44px;
     background: var(--accent);
     color: #052e16;
     border: none;
     border-radius: 6px;
-    padding: 0.5rem 1rem;
+    padding: 0 0.9rem;
     font-weight: 600;
     cursor: pointer;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
     white-space: nowrap;
-    align-self: flex-end;
+    margin-left: 0.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    transition: background 120ms ease;
 }
 .chat-input-area button:hover { background: var(--accent-hover); color: #052e16; }
-.chat-input-area button:disabled { background: var(--surface3); color: var(--text-muted); cursor: default; }
+.chat-input-area button:disabled { background: transparent; color: var(--text-muted); cursor: default; }
+.chat-input-area .chat-stop-btn { background: #c44; color: #fff; }
+.chat-input-area .chat-stop-btn:hover { background: #d55; color: #fff; }
 .new-instruction-btn { background: var(--accent-dim); color: var(--accent-hover); border-color: var(--accent); }
 .new-instruction-btn:hover { background: var(--accent); color: #052e16; border-color: var(--accent-hover); }
 

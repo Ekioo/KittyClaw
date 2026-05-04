@@ -100,7 +100,14 @@
                       placeholder="@L["ChatPlaceholder"]"
                       @onkeydown="OnKeyDown"
                       disabled="@_loading"></textarea>
-            <button @onclick="Send" disabled="@(string.IsNullOrWhiteSpace(_inputText) || _loading)">@L["Send"]</button>
+            @if (_loading && !string.IsNullOrEmpty(_activeStreamId))
+            {
+                <button class="chat-stop-btn" @onclick="StopActiveRun" title="@L["Stop"]">⏹ @L["Stop"]</button>
+            }
+            else
+            {
+                <button @onclick="Send" disabled="@(string.IsNullOrWhiteSpace(_inputText) || _loading)">@L["Send"]</button>
+            }
         </div>
     }
 </div>
@@ -436,6 +443,25 @@
             _activeRun.OnEvent -= HandleEvent;
         _activeRun = null;
         _activeStreamId = null;
+    }
+
+    /// <summary>
+    /// Cancel the in-flight chat run server-side (kills the claude subprocess), then close
+    /// the local SSE stream. Wired to the Stop button surfaced while a turn is streaming.
+    /// </summary>
+    private async Task StopActiveRun()
+    {
+        var runId = _activeStreamId;
+        if (string.IsNullOrEmpty(runId)) return;
+        try
+        {
+            using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+            await http.PostAsync($"/api/projects/{ProjectSlug}/runs/{runId}/stop", content: null);
+        }
+        catch { /* best-effort: if the stop call fails the SSE will still detach below */ }
+        await StopStream();
+        _loading = false;
+        StateHasChanged();
     }
 
     private async Task Close()
