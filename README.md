@@ -8,6 +8,10 @@
   <video src="https://github.com/user-attachments/assets/7c3085af-e98e-4424-9962-247467d9cc4d" controls muted loop></video>
 </p>
 
+<p align="center">
+  <a href="https://kittyclaw.dev">kittyclaw.dev</a> · <a href="https://kittyclaw.dev/#waitlist">Get early access</a>
+</p>
+
 A kanban board that **orchestrates agentic projects**. Each column is a workflow stage (`Backlog`, `Todo`, `InProgress`, `Review`, `Done`, `Blocked`). Each project has members that can be human owners or **LLM agents** (programmer, groomer, producer, qa-tester, committer, code-janitor, evaluator). A background `AutomationEngine` dispatches these agents based on triggers (column changes, comments, intervals, git commits, …), running them as `claude` CLI subprocesses whose output streams into an in-app drawer.
 
 ## Tech Stack
@@ -123,6 +127,8 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 ---
 
 ## More Projects & Contact
+
+→ **Site + demo:** [kittyclaw.dev](https://kittyclaw.dev)
 
 Check out my other projects at **[ekioo.com](https://ekioo.com)**.
 
