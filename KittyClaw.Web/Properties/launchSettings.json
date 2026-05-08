@@ -18,6 +18,16 @@
         "environmentVariables": {
           "ASPNETCORE_ENVIRONMENT": "Development"
         }
+      },
+      "qa": {
+        "commandName": "Project",
+        "dotnetRunMessages": true,
+        "launchBrowser": true,
+        "applicationUrl": "http://localhost:5231",
+        "environmentVariables": {
+          "ASPNETCORE_ENVIRONMENT": "Development",
+          "KITTYCLAW_DATA_DIR": "%APPDATA%\\KittyClaw-qa"
+        }
       }
     }
   }
