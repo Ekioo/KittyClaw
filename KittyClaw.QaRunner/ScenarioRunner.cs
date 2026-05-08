@@ -77,7 +77,7 @@ public sealed class ScenarioRunner
             case "togglePause":
                 {
                     var slug = SlugOf(action.Project ?? "qa-test");
-                    var resp = await _http.PostAsync($"{_instanceApiUrl}/api/projects/{slug}/toggle-pause", null, ct);
+                    var resp = await _http.PostAsync($"{_instanceApiUrl}/api/projects/{slug}/pause", null, ct);
                     resp.EnsureSuccessStatusCode();
                     break;
                 }
