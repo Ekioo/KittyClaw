@@ -275,6 +275,12 @@ public sealed class ClaudeRunner
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
+            // Force UTF-8 on all three streams. .NET's default on Windows is the OEM code
+            // page (CP850/CP1252), which mangles every accented character in chat prompts
+            // sent to claude and every accented character in claude's reply going back.
+            StandardInputEncoding = Encoding.UTF8,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
         };
         foreach (var a in args) psi.ArgumentList.Add(a);
         psi.Environment["CLAUDE_AGENT"] = ctx.AgentName;
