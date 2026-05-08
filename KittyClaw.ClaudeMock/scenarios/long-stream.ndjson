@@ -1,0 +1,13 @@
+{"type":"system","subtype":"init","session_id":"{{session_id}}","model":"mock"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Step 1 of many."}]},"_delay_ms":100}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Step 2 of many."}]},"_delay_ms":100}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Step 3 of many."}]},"_delay_ms":100}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Step 4 of many."}]},"_delay_ms":100}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Step 5 of many."}]},"_delay_ms":100}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Step 6 of many."}]},"_delay_ms":100}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Step 7 of many."}]},"_delay_ms":100}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Step 8 of many."}]},"_delay_ms":100}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Step 9 of many."}]},"_delay_ms":100}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Final step."}]}}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":1000,"num_turns":1}
+{"_meta":{"exit":0}}

@@ -39,6 +39,44 @@ public sealed class ClaudeRunner
     private readonly RunConcurrencyGate _gate;
     private readonly ILogger<ClaudeRunner> _logger;
 
+    // Resolved once per process. Search order:
+    //   0. KITTYCLAW_CLAUDE_BIN env var (escape hatch)
+    //   1. Sibling of host exe: <baseDir>/claude(.exe)
+    //   2. <baseDir>/tools/claude(.exe)
+    //   3. Walk up to a repo root and look for KittyClaw.ClaudeMock/bin/<config>/net10.0/claude(.exe) (dev)
+    //   4. "claude" — resolved via PATH (production default)
+    private static readonly Lazy<string> _claudeBinary = new(ResolveClaudeBinary);
+
+    private static string ResolveClaudeBinary()
+    {
+        var fromEnv = Environment.GetEnvironmentVariable("KITTYCLAW_CLAUDE_BIN");
+        if (!string.IsNullOrWhiteSpace(fromEnv) && File.Exists(fromEnv))
+            return fromEnv;
+
+        var exe = OperatingSystem.IsWindows() ? "claude.exe" : "claude";
+        var baseDir = AppContext.BaseDirectory;
+
+        var sibling = Path.Combine(baseDir, exe);
+        if (File.Exists(sibling)) return sibling;
+
+        var tools = Path.Combine(baseDir, "tools", exe);
+        if (File.Exists(tools)) return tools;
+
+        // Walk up looking for KittyClaw.ClaudeMock/bin/**/claude(.exe) (dev mode)
+        var dir = new DirectoryInfo(baseDir);
+        for (int i = 0; i < 6 && dir is not null; i++, dir = dir.Parent)
+        {
+            var mockProj = Path.Combine(dir.FullName, "KittyClaw.ClaudeMock", "bin");
+            if (Directory.Exists(mockProj))
+            {
+                var found = Directory.EnumerateFiles(mockProj, exe, SearchOption.AllDirectories).FirstOrDefault();
+                if (found is not null) return found;
+            }
+        }
+
+        return "claude";
+    }
+
     public ClaudeRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<ClaudeRunner> logger)
     {
         _sessions = sessions;
@@ -170,7 +208,7 @@ public sealed class ClaudeRunner
 
         var psi = new ProcessStartInfo
         {
-            FileName = "claude",
+            FileName = _claudeBinary.Value,
             WorkingDirectory = ctx.WorkspacePath,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -183,8 +221,8 @@ public sealed class ClaudeRunner
         foreach (var kv in ctx.Env) psi.Environment[kv.Key] = kv.Value;
 
         AppendDebugLog(ctx, $"LAUNCHING {ctx.AgentName} {(isResume ? "(resume)" : "(new)")} ticket=#{ctx.TicketId} session={sessionId}");
-        _logger.LogInformation("LAUNCH {Agent} {Mode} ticket=#{TicketId} session={SessionId} cmd=claude {Args}",
-            ctx.AgentName, isResume ? "(resume)" : "(new)", ctx.TicketId, sessionId, string.Join(" ", args));
+        _logger.LogInformation("LAUNCH {Agent} {Mode} ticket=#{TicketId} session={SessionId} cmd={Bin} {Args}",
+            ctx.AgentName, isResume ? "(resume)" : "(new)", ctx.TicketId, sessionId, _claudeBinary.Value, string.Join(" ", args));
 
         Process proc;
         try
