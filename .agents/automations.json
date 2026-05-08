@@ -295,7 +295,7 @@
         {
           "type": "runAgent",
           "agent": "qa-tester",
-          "maxTurns": 100,
+          "maxTurns": 150,
           "concurrencyGroup": "qa-tester",
           "mutuallyExclusiveWith": [],
           "env": {},
