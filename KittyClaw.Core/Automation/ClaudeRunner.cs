@@ -47,6 +47,21 @@ public sealed class ClaudeRunner
     //   4. "claude" — resolved via PATH (production default)
     private static readonly Lazy<string> _claudeBinary = new(ResolveClaudeBinary);
 
+    private static string ResolveApiUrl()
+    {
+        // Pick the first http(s) URL the host process is listening on, falling back to the
+        // historical default (5230). Stripped of trailing slashes so skills can append paths.
+        var urls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS");
+        if (!string.IsNullOrWhiteSpace(urls))
+        {
+            var first = urls.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .FirstOrDefault(u => u.StartsWith("http://", StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrEmpty(first))
+                return first.TrimEnd('/');
+        }
+        return "http://localhost:5230";
+    }
+
     private static string ResolveClaudeBinary()
     {
         var fromEnv = Environment.GetEnvironmentVariable("KITTYCLAW_CLAUDE_BIN");
@@ -218,6 +233,10 @@ public sealed class ClaudeRunner
         };
         foreach (var a in args) psi.ArgumentList.Add(a);
         psi.Environment["CLAUDE_AGENT"] = ctx.AgentName;
+        // Tell skills which API URL to talk to. Skills resolve `${KITTYCLAW_API_URL:-http://localhost:5230}`
+        // so they hit the *current* host instance even when running on a non-default port (e.g. an
+        // isolated test instance spawned by KittyClaw.QaRunner).
+        psi.Environment["KITTYCLAW_API_URL"] = ResolveApiUrl();
         foreach (var kv in ctx.Env) psi.Environment[kv.Key] = kv.Value;
 
         AppendDebugLog(ctx, $"LAUNCHING {ctx.AgentName} {(isResume ? "(resume)" : "(new)")} ticket=#{ctx.TicketId} session={sessionId}");

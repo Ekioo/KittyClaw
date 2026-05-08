@@ -18,13 +18,22 @@ Never add `Co-Authored-By`, `Generated-By`, or any AI-attribution trailer to com
 ## KittyClaw API
 
 The full and up-to-date API documentation is available at:
-http://localhost:5230/api/docs
+${KITTYCLAW_API_URL:-http://localhost:5230}/api/docs
 
 Consult it before interacting with the API.
 
+**Always reference the API as `${KITTYCLAW_API_URL:-http://localhost:5230}`** in your bash invocations — never hardcode `http://localhost:5230`. The orchestrator injects `KITTYCLAW_API_URL` to point at the *current* host instance, which may not be on the default port (e.g. when running inside an isolated test instance spawned by a QA tool).
+
+For convenience, define a local at the start of any block that does several calls:
+
+```bash
+api="${KITTYCLAW_API_URL:-http://localhost:5230}"
+curl -s "$api/api/projects/{project-slug}/tickets/{id}"
+```
+
 ## Project slug
 
-Your API calls need the project slug. It is the name of the folder that hosts `.agents/` — your working directory. Use it in every `/api/projects/{project-slug}/...` endpoint. If the host server is not running on `http://localhost:5230`, the orchestrator will inject the base URL via environment.
+Your API calls need the project slug. It is the name of the folder that hosts `.agents/` — your working directory. Use it in every `/api/projects/{project-slug}/...` endpoint.
 
 ## Build verification
 
