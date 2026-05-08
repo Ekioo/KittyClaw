@@ -18,7 +18,7 @@ public record ReorderColumnRequest(int ColumnId, int Index);
 public record CreateMemberRequest(string Name);
 public record UpdateMemberRequest(string? Name = null);
 public record SetParentRequest(int ParentId);
-public record UpdateProjectRequest(string? WorkspacePath = null);
+public record UpdateProjectRequest(string? WorkspacePath = null, string? FallbackModel = null, bool UpdateFallbackModel = false);
 public record SteerRunRequest(string Text);
 public record BrowseFolderRequest(string? InitialPath = null);
 public record ChatStartRequest(string Message, string Target = "owner-chat", bool ForceNew = false, int? TicketId = null);

@@ -63,18 +63,18 @@ When unsure about a hunk â†’ **do not include it**. Prefer a partial commit
 
 `git add -p` is not usable non-interactively. Do this instead:
 
-1. Extract the full diff:
+1. Extract the full diff into a workspace file (not `/tmp`, which doesn't exist on Windows):
    ```bash
-   git diff -- <file> > /tmp/full.patch
+   git diff -- <file> > full.patch
    ```
-2. Open `/tmp/full.patch`. A unified patch is a header followed by `@@ -old,N +new,M @@ â€¦` hunks. Create `/tmp/ticket.patch` containing:
+2. Open `full.patch`. A unified patch is a header followed by `@@ -old,N +new,M @@ …` hunks. Create `ticket.patch` containing:
    - The header (`diff --git`, `index`, `---`, `+++` lines).
    - **Only the hunks** you want to commit.
 3. Apply the patch to the staging area:
    ```bash
-   git apply --cached /tmp/ticket.patch
+   git apply --cached ticket.patch
    ```
-   If it fails (offsets, missing context), try `git apply --cached --recount /tmp/ticket.patch`. If it still fails, **do not improvise** â€” comment the ticket explaining the block and exit without committing.
+   If it fails (offsets, missing context), try `git apply --cached --recount ticket.patch`. If it still fails, **do not improvise** — comment the ticket explaining the block and exit without committing. Delete `full.patch` and `ticket.patch` once done.
 4. Verify the staging:
    ```bash
    git diff --cached -- <file>

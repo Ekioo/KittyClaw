@@ -31,6 +31,10 @@ api="${KITTYCLAW_API_URL:-http://localhost:5230}"
 curl -s "$api/api/projects/{project-slug}/tickets/{id}"
 ```
 
+## Cross-platform paths
+
+Never use `/tmp` or other Linux-only filesystem paths — they do not exist on Windows. If you need a scratch file (patch, JSON body, …), write it in the current workspace (e.g. `body.json`, `full.patch`) and delete it once you are done.
+
 ## Project slug
 
 Your API calls need the project slug. It is the name of the folder that hosts `.agents/` — your working directory. Use it in every `/api/projects/{project-slug}/...` endpoint.
