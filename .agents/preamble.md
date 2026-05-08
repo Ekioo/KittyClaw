@@ -37,7 +37,7 @@ Never use `/tmp` or other Linux-only filesystem paths — they do not exist on W
 
 ## Project slug
 
-Your API calls need the project slug. It is the name of the folder that hosts `.agents/` — your working directory. Use it in every `/api/projects/{project-slug}/...` endpoint.
+Your API calls need the project slug. It is the name of the folder that hosts `.agents/` — your working directory. Use it in every `/api/projects/{project-slug}/...` endpoint. If the host server is not running on `${KITTYCLAW_API_URL:-http://localhost:5230}`, the orchestrator will inject the base URL via environment.
 
 ## Build verification
 
