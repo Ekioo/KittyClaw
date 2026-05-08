@@ -191,7 +191,7 @@ a:hover { color: var(--accent-hover); }
 .project-card-wrap:hover .project-pause-btn { opacity: 1; }
 .project-card-wrap .project-pause-btn:hover { background: var(--surface2); color: var(--text); }
 .project-card-wrap.project-paused .project-card { opacity: 0.55; }
-.project-card-wrap.project-paused .project-pause-btn { opacity: 1; color: var(--accent); }
+.project-card-wrap.project-paused .project-pause-btn { opacity: 1; color: #f59e0b; }
 .project-paused-badge {
     display: inline-block;
     margin-left: 0.4rem;
@@ -204,7 +204,7 @@ a:hover { color: var(--accent-hover); }
     font-weight: 500;
 }
 .pause-btn { font-size: 0.82rem; }
-.pause-btn--paused { color: var(--accent) !important; }
+.pause-btn--paused { color: #f59e0b !important; }
 .project-card {
     background: var(--surface);
     border: 1px solid var(--border);
