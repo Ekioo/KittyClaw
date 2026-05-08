@@ -73,4 +73,4 @@ Downloads Chromium (~150 MB) into `%LOCALAPPDATA%\ms-playwright`. One-time per m
 
 ## Scope
 
-This is internal tooling for the KittyClaw self-development workflow. Skill files referencing it (e2e qa-tester) are versioned at `tools/kittyclaw-self/` and not embedded into the third-party project template.
+This is internal tooling for the KittyClaw self-development workflow. The agent SKILLs that invoke it are not embedded into the third-party project template — each KittyClaw self-dev installation maintains its own qa-tester SKILL override locally (typically in `%APPDATA%\KittyClaw\projects\<slug>\.agents\qa-tester\`).
