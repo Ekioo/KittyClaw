@@ -2,5 +2,6 @@
   <Project Path="KittyClaw.ClaudeMock/KittyClaw.ClaudeMock.csproj" />
   <Project Path="KittyClaw.Core/KittyClaw.Core.csproj" />
   <Project Path="KittyClaw.Core.Tests/KittyClaw.Core.Tests.csproj" />
+  <Project Path="KittyClaw.QaRunner/KittyClaw.QaRunner.csproj" />
   <Project Path="KittyClaw.Web/KittyClaw.Web.csproj" />
 </Solution>

@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\KittyClaw.Core\KittyClaw.Core.csproj" />
+    <ProjectReference Include="..\KittyClaw.QaRunner\KittyClaw.QaRunner.csproj" />
   </ItemGroup>
 
   <ItemGroup>
