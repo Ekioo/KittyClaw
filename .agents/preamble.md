@@ -22,6 +22,10 @@ http://localhost:5230/api/docs
 
 Consult it before interacting with the API.
 
+## Cross-platform paths
+
+Never use `/tmp` or other Linux-only filesystem paths — they do not exist on Windows. If you need a scratch file (patch, JSON body, …), write it in the current workspace (e.g. `body.json`, `full.patch`) and delete it once you are done.
+
 ## Project slug
 
 Your API calls need the project slug. It is the name of the folder that hosts `.agents/` — your working directory. Use it in every `/api/projects/{project-slug}/...` endpoint. If the host server is not running on `http://localhost:5230`, the orchestrator will inject the base URL via environment.
