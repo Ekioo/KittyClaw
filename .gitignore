@@ -1,6 +1,8 @@
 # Build outputs
 bin/
 obj/
+publish/
+publish-*/
 
 # User-specific files
 *.user
