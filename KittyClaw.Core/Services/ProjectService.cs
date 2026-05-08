@@ -35,6 +35,8 @@ public partial class ProjectService
             catch { /* column already exists */ }
             try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN IsPaused INTEGER NOT NULL DEFAULT 0"); }
             catch { /* column already exists */ }
+            try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN FallbackModel TEXT NULL"); }
+            catch { /* column already exists */ }
             _dbInitialized = true;
         }
         finally
@@ -98,13 +100,17 @@ public partial class ProjectService
         return project;
     }
 
-    public async Task<Project?> UpdateProjectAsync(string slug, string? workspacePath)
+    public async Task<Project?> UpdateProjectAsync(string slug, string? workspacePath, string? fallbackModel = null, bool updateFallback = false)
     {
         await EnsureRegistryInitializedAsync();
         await using var db = new RegistryDbContext(_registryPath);
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Slug == slug);
         if (project is null) return null;
         project.WorkspacePath = string.IsNullOrWhiteSpace(workspacePath) ? null : workspacePath.Trim();
+        if (updateFallback)
+        {
+            project.FallbackModel = string.IsNullOrWhiteSpace(fallbackModel) ? null : fallbackModel.Trim();
+        }
         await db.SaveChangesAsync();
         return project;
     }

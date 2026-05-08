@@ -18,6 +18,11 @@ public sealed class ClaudeRunContext
     public string ConcurrencyGroup { get; init; } = "";
     public IDictionary<string, string> Env { get; init; } = new Dictionary<string, string>();
     public string? Model { get; init; }
+
+    /// <summary>Project-wide fallback model. If a run hits a quota / usage-limit error from the claude CLI,
+    /// the runner retries once with this model in the same AgentRun. Null disables the fallback.</summary>
+    public string? FallbackModel { get; init; }
+
     public string? ExtraContext { get; init; }
     public string? InlineSkillContent { get; init; }
     public string? PresetRunId { get; init; }
@@ -116,7 +121,7 @@ public sealed class ClaudeRunner
 
         try
         {
-            var attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume, ct);
+            var attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume, modelOverride: null, ct);
             if (attempt.Cancelled) return run;
 
             if (ctx.RetryOnResumeFailure && isResume && (attempt.Exit ?? -1) != 0 && attempt.AssistantEventCount == 0)
@@ -128,7 +133,22 @@ public sealed class ClaudeRunner
                 run.SessionId = sessionId;
                 _sessions.SetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId, sessionId);
 
-                attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume: false, ct);
+                attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume: false, modelOverride: null, ct);
+                if (attempt.Cancelled) return run;
+            }
+
+            // Quota / usage-limit fallback: if the CLI signalled a rate-limit or weekly quota
+            // error and the project has a FallbackModel configured (and it differs from the
+            // primary model that just failed), retry the run once with the fallback model.
+            if (attempt.HitQuota
+                && !string.IsNullOrWhiteSpace(ctx.FallbackModel)
+                && !string.Equals(ctx.FallbackModel, ctx.Model, StringComparison.OrdinalIgnoreCase))
+            {
+                run.Push(new StreamEvent(DateTime.UtcNow, "fallback",
+                    $"Quota reached on {(ctx.Model ?? "default model")} — retrying with fallback model {ctx.FallbackModel}"));
+                _logger.LogWarning("Quota hit for {Agent} (model={Model}); falling back to {Fallback}",
+                    ctx.AgentName, ctx.Model, ctx.FallbackModel);
+                attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume: false, modelOverride: ctx.FallbackModel, ct);
                 if (attempt.Cancelled) return run;
             }
 
@@ -142,11 +162,35 @@ public sealed class ClaudeRunner
         }
     }
 
-    private readonly record struct SpawnResult(int? Exit, int AssistantEventCount, bool Cancelled);
+    private readonly record struct SpawnResult(int? Exit, int AssistantEventCount, bool Cancelled, bool HitQuota);
+
+    // Heuristic patterns matching quota / usage-limit / rate-limit messages emitted by the
+    // claude CLI (via stream-json result events or stderr). Kept broad on purpose — false
+    // positives only cause one extra retry on the fallback model, which is recoverable.
+    private static readonly string[] QuotaMarkers =
+    {
+        "usage limit reached",
+        "claude ai usage limit",
+        "rate_limit_error",
+        "rate limit",
+        "quota exceeded",
+        "weekly limit",
+        "5-hour limit",
+    };
+
+    private static bool LooksLikeQuotaError(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return false;
+        foreach (var marker in QuotaMarkers)
+        {
+            if (text.Contains(marker, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
 
     private async Task<SpawnResult> SpawnAndWaitAsync(
         ClaudeRunContext ctx, AgentRun run, string skillContent,
-        string sessionId, bool isResume, CancellationToken ct)
+        string sessionId, bool isResume, string? modelOverride, CancellationToken ct)
     {
         var prompt = await BuildPromptAsync(ctx, skillContent, isResume, ct);
         var sessionName = ctx.TicketId is not null ? $"{ctx.AgentName} #{ctx.TicketId}" : ctx.AgentName;
@@ -166,7 +210,8 @@ public sealed class ClaudeRunner
         };
         if (isResume) { args.Add("--resume"); args.Add(sessionId); }
         else { args.Add("-n"); args.Add(sessionName); args.Add("--session-id"); args.Add(sessionId); }
-        if (ctx.Model is not null) { args.Add("--model"); args.Add(ctx.Model); }
+        var effectiveModel = modelOverride ?? ctx.Model;
+        if (effectiveModel is not null) { args.Add("--model"); args.Add(effectiveModel); }
 
         var psi = new ProcessStartInfo
         {
@@ -194,15 +239,26 @@ public sealed class ClaudeRunner
         catch (Exception ex)
         {
             run.Push(new StreamEvent(DateTime.UtcNow, "error", $"spawn failed: {ex.Message}"));
-            return new SpawnResult(-1, 0, false);
+            return new SpawnResult(-1, 0, false, false);
         }
 
         run.Push(new StreamEvent(DateTime.UtcNow, "launch",
             $"{ctx.AgentName} {(isResume ? "(resume)" : "(new)")} session={sessionId[..8]} cwd={ctx.WorkspacePath} skill={ctx.SkillFile}"));
 
-        // Count assistant events emitted during THIS attempt only.
+        // Count assistant events emitted during THIS attempt only, and watch for quota
+        // markers in stream-json events / stderr so the outer RunAsync can decide whether
+        // to retry with a fallback model.
         var assistantCount = 0;
-        Action<StreamEvent> counter = ev => { if (ev.Kind == "assistant") Interlocked.Increment(ref assistantCount); };
+        var hitQuota = 0;
+        Action<StreamEvent> counter = ev =>
+        {
+            if (ev.Kind == "assistant") Interlocked.Increment(ref assistantCount);
+            if (hitQuota == 0 && (ev.Kind == "stderr" || ev.Kind == "result" || ev.Kind == "raw" || ev.Kind == "error"))
+            {
+                if (LooksLikeQuotaError(ev.Detail) || LooksLikeQuotaError(ev.Text))
+                    Interlocked.Exchange(ref hitQuota, 1);
+            }
+        };
         run.OnEvent += counter;
 
         try
@@ -238,13 +294,13 @@ public sealed class ClaudeRunner
             _runs.Complete(run.RunId, AgentRunStatus.Stopped, null);
             AppendDebugLog(ctx, $"STOPPED {ctx.AgentName} run={run.RunId}");
             run.OnEvent -= counter;
-            return new SpawnResult(null, assistantCount, true);
+            return new SpawnResult(null, assistantCount, true, hitQuota == 1);
         }
 
         await Task.WhenAll(stdoutTask, stderrTask);
         try { steerTask.Dispose(); } catch { /* best-effort cleanup */ }
         run.OnEvent -= counter;
-        return new SpawnResult(exit, assistantCount, false);
+        return new SpawnResult(exit, assistantCount, false, hitQuota == 1);
     }
 
     private static async Task<string> BuildPromptAsync(ClaudeRunContext ctx, string skillContent, bool isResume, CancellationToken ct)

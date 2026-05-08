@@ -482,6 +482,11 @@ public sealed class AutomationEngine : BackgroundService
         // All transient gates passed — let the trigger persist its "seen" marker.
         await commitAsync();
 
+        // Project-wide quota fallback model (configured in ProjectSettings). When set and
+        // the primary model run hits a usage-limit error, ClaudeRunner retries once with it.
+        var project = await _projects.GetProjectAsync(rt.Slug);
+        var fallbackModel = project?.FallbackModel;
+
         var runCtx = new ClaudeRunContext
         {
             ProjectSlug = rt.Slug,
@@ -495,6 +500,7 @@ public sealed class AutomationEngine : BackgroundService
             ConcurrencyGroup = group,
             Env = a.Env,
             Model = a.Model,
+            FallbackModel = fallbackModel,
             ExtraContext = a.Context,
             // If the stored session ID is no longer known to claude ("No conversation
             // found with session ID: …"), wipe it and start a fresh session in the same
