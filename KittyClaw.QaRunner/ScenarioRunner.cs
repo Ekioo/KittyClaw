@@ -93,7 +93,10 @@ public sealed class ScenarioRunner
             case "navigate":
                 {
                     var target = action.Url is null ? _instanceApiUrl : Combine(_instanceApiUrl, action.Url);
-                    await page.GotoAsync(target, new() { WaitUntil = WaitUntilState.NetworkIdle });
+                    // Use Load (waits for the `load` event) rather than NetworkIdle: Blazor Server's
+                    // SignalR keepalive pings prevent the network from ever becoming idle, so
+                    // NetworkIdle would always time out.
+                    await page.GotoAsync(target, new() { WaitUntil = WaitUntilState.Load });
                     break;
                 }
             case "click":
