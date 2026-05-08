@@ -36,6 +36,12 @@ public sealed class TestInstance : IAsyncDisposable
         var dataDir = Path.Combine(Path.GetTempPath(), "kittyclaw-qa-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dataDir);
 
+        // Pre-seed AppSettings to skip the onboarding splash on first launch — fresh data dir
+        // means OnboardingSeen=false by default, which blocks the home page behind a modal.
+        await File.WriteAllTextAsync(
+            Path.Combine(dataDir, "settings.json"),
+            """{"OnboardingSeen":true,"Language":"en"}""", ct);
+
         var psi = new ProcessStartInfo
         {
             FileName = webExePath,
@@ -49,7 +55,15 @@ public sealed class TestInstance : IAsyncDisposable
         psi.ArgumentList.Add($"http://localhost:{port}");
         psi.Environment["ASPNETCORE_URLS"] = $"http://localhost:{port}";
         psi.Environment["KITTYCLAW_DATA_DIR"] = dataDir;
-        psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
+        // Development: skips HSTS (no HTTPS configured here, HSTS would break HTTP requests)
+        // and gives the dev-time static-asset path resolution.
+        psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        // Point content root at the source dir so MapStaticAssets / static web assets manifest
+        // can resolve wwwroot paths (the bin/Debug build doesn't copy wwwroot, only references it
+        // through KittyClaw.Web.staticwebassets.runtime.json).
+        var contentRoot = FindContentRoot(webExePath);
+        if (contentRoot is not null)
+            psi.Environment["ASPNETCORE_CONTENTROOT"] = contentRoot;
 
         var proc = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start KittyClaw.Web for QA");
@@ -74,6 +88,19 @@ public sealed class TestInstance : IAsyncDisposable
         }
 
         return new TestInstance(proc, port, dataDir, ownsDataDir: true);
+    }
+
+    private static string? FindContentRoot(string webExePath)
+    {
+        // Walk up from the exe directory to find the nearest ancestor with a wwwroot folder.
+        // bin/Debug/net10.0/ is the exe location; KittyClaw.Web/ (with wwwroot/) is 3 levels up.
+        var dir = new DirectoryInfo(Path.GetDirectoryName(webExePath)!);
+        for (int i = 0; i < 6 && dir is not null; i++, dir = dir.Parent)
+        {
+            if (Directory.Exists(Path.Combine(dir.FullName, "wwwroot")))
+                return dir.FullName;
+        }
+        return null;
     }
 
     private static int PickFreePort()
