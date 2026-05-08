@@ -7,8 +7,12 @@ using KittyClaw.Web.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// KITTYCLAW_DATA_DIR overrides the default %APPDATA%/KittyClaw location.
+// Used by isolated test instances (KittyClaw.QaRunner) and anyone running
+// multiple parallel KittyClaw processes that must not share registry/projects.
 var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-var dataDir = Path.Combine(appData, "KittyClaw");
+var dataDir = Environment.GetEnvironmentVariable("KITTYCLAW_DATA_DIR")
+    ?? Path.Combine(appData, "KittyClaw");
 var legacyDataDir = Path.Combine(appData, "TodoApp");
 if (!Directory.Exists(dataDir) && Directory.Exists(legacyDataDir))
 {
