@@ -45,6 +45,8 @@ public sealed class TestInstance : IAsyncDisposable
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
+        psi.ArgumentList.Add("--urls");
+        psi.ArgumentList.Add($"http://localhost:{port}");
         psi.Environment["ASPNETCORE_URLS"] = $"http://localhost:{port}";
         psi.Environment["KITTYCLAW_DATA_DIR"] = dataDir;
         psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
