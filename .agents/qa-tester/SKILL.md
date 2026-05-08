@@ -24,7 +24,7 @@ You do **not** change the `assignedTo` on PASS — the programmer stays as the w
 ### 1. Read the ticket
 
 ```bash
-curl -s http://localhost:5230/api/projects/{project-slug}/tickets/{id}
+curl -s ${KITTYCLAW_API_URL:-http://localhost:5230}/api/projects/{project-slug}/tickets/{id}
 ```
 
 Read: description, acceptance criteria, all comments (especially programmer's delivery comment listing modified files).
@@ -78,7 +78,7 @@ Write JSON bodies and curl response files in the **current workspace** — never
 
 # 2) POST and check the status
 http=$(curl -s -o ./qa-resp.json -w "%{http_code}" \
-  -X POST http://localhost:5230/api/projects/{project-slug}/tickets/{id}/comments \
+  -X POST ${KITTYCLAW_API_URL:-http://localhost:5230}/api/projects/{project-slug}/tickets/{id}/comments \
   -H "Content-Type: application/json" \
   -d @./qa-report.json)
 [[ "$http" =~ ^2 ]] || { echo "POST failed http=$http"; cat ./qa-resp.json; exit 1; }
@@ -94,13 +94,13 @@ http=$(curl -s -o ./qa-resp.json -w "%{http_code}" \
 
 ```bash
 http=$(curl -s -o ./qa-resp.json -w "%{http_code}" \
-  -X PATCH http://localhost:5230/api/projects/{project-slug}/tickets/{id} \
+  -X PATCH ${KITTYCLAW_API_URL:-http://localhost:5230}/api/projects/{project-slug}/tickets/{id} \
   -H "Content-Type: application/json" \
   -d @./qa-assign.json)   # {"assignedTo":"programmer","author":"qa-tester"}
 [[ "$http" =~ ^2 ]] || { echo "PATCH assignedTo failed http=$http"; cat ./qa-resp.json; exit 1; }
 
 http=$(curl -s -o ./qa-resp.json -w "%{http_code}" \
-  -X PATCH http://localhost:5230/api/projects/{project-slug}/tickets/{id}/status \
+  -X PATCH ${KITTYCLAW_API_URL:-http://localhost:5230}/api/projects/{project-slug}/tickets/{id}/status \
   -H "Content-Type: application/json" \
   -d @./qa-status.json)   # {"status":"Todo","author":"qa-tester"}
 [[ "$http" =~ ^2 ]] || { echo "PATCH status failed http=$http"; cat ./qa-resp.json; exit 1; }

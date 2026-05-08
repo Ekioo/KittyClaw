@@ -13,7 +13,7 @@ Trigger `ticketInColumn Backlog + assigneeSlug=groomer` (polls every 30 s). You 
 ### 1. Read the current ticket
 
 ```bash
-curl -s http://localhost:5230/api/projects/{project-slug}/tickets/{id}
+curl -s ${KITTYCLAW_API_URL:-http://localhost:5230}/api/projects/{project-slug}/tickets/{id}
 ```
 
 ### 2. Decide what needs fixing
@@ -30,7 +30,7 @@ Classify the ticket:
 ### 3. Update fields via `PATCH /api/projects/{project-slug}/tickets/{id}`
 
 ```bash
-curl -X PATCH http://localhost:5230/api/projects/{project-slug}/tickets/{id} \
+curl -X PATCH ${KITTYCLAW_API_URL:-http://localhost:5230}/api/projects/{project-slug}/tickets/{id} \
   -H "Content-Type: application/json" \
   -d '{
     "author": "groomer",
@@ -72,7 +72,7 @@ curl -X PATCH http://localhost:5230/api/projects/{project-slug}/tickets/{id} \
 ### 4. Trace comment
 
 ```bash
-curl -X POST http://localhost:5230/api/projects/{project-slug}/tickets/{id}/comments \
+curl -X POST ${KITTYCLAW_API_URL:-http://localhost:5230}/api/projects/{project-slug}/tickets/{id}/comments \
   -H "Content-Type: application/json" \
   -d '{"content":"Groomed. Reassigned to {agent}. [one-line summary of changes]","author":"groomer"}'
 ```

@@ -1,0 +1,4 @@
+{"type":"system","subtype":"init","session_id":"{{session_id}}","model":"mock"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Something went wrong."}]}}
+{"type":"result","subtype":"error","is_error":true,"duration_ms":30}
+{"_meta":{"exit":1}}

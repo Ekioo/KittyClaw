@@ -20,7 +20,7 @@ You are NOT invoked periodically on `InProgress` tickets whose subs have not cha
 The ticket is already in `InProgress` thanks to `assignee-dispatch`. Read the full ticket:
 
 ```bash
-curl -s http://localhost:5230/api/projects/{project-slug}/tickets/{id}
+curl -s ${KITTYCLAW_API_URL:-http://localhost:5230}/api/projects/{project-slug}/tickets/{id}
 ```
 
 1. If the ticket is **ambiguous** (description too short, goal unclear): post a question comment addressed to `@owner`, move the parent to `Blocked`, and stop.
@@ -28,7 +28,7 @@ curl -s http://localhost:5230/api/projects/{project-slug}/tickets/{id}
    - `Todo` if it can start immediately.
    - `Backlog` if it depends on another sub (note the dependency in its description).
    ```bash
-   curl -X POST http://localhost:5230/api/projects/{project-slug}/tickets \
+   curl -X POST ${KITTYCLAW_API_URL:-http://localhost:5230}/api/projects/{project-slug}/tickets \
      -H "Content-Type: application/json" \
      -d '{"title":"...","description":"...","assignedTo":"programmer","createdBy":"producer","status":"Todo","priority":"Required","parentId":{ID}}'
    ```
@@ -40,7 +40,7 @@ curl -s http://localhost:5230/api/projects/{project-slug}/tickets/{id}
 Fetch the parent and look at its sub-tickets AND its recent comments:
 
 ```bash
-curl -s http://localhost:5230/api/projects/{project-slug}/tickets/{id}
+curl -s ${KITTYCLAW_API_URL:-http://localhost:5230}/api/projects/{project-slug}/tickets/{id}
 # → fields subTickets: [...], comments: [...], activities: [...]
 ```
 
@@ -78,7 +78,7 @@ Rare. Treat it like Case B.
 ## API examples
 
 ```bash
-curl -X PATCH http://localhost:5230/api/projects/{project-slug}/tickets/{id}/status \
+curl -X PATCH ${KITTYCLAW_API_URL:-http://localhost:5230}/api/projects/{project-slug}/tickets/{id}/status \
   -H "Content-Type: application/json" \
   -d '{"status":"Review","author":"producer"}'
 ```

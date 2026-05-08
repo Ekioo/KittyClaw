@@ -1,0 +1,6 @@
+{"type":"system","subtype":"init","session_id":"{{session_id}}","model":"mock"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Running a quick check."},{"type":"tool_use","id":"toolu_mock_1","name":"Bash","input":{"command":"echo hello"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_mock_1","content":"hello\n"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Done."}]}}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":120,"num_turns":2}
+{"_meta":{"exit":0}}

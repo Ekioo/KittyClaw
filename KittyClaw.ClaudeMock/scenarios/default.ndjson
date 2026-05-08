@@ -1,0 +1,4 @@
+{"type":"system","subtype":"init","session_id":"{{session_id}}","model":"mock"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Hello from mock claude. Scenario=default."}]}}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":42,"num_turns":1}
+{"_meta":{"exit":0}}
