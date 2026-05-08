@@ -71,7 +71,7 @@ public static class Endpoints
 
         api.MapPatch("/projects/{slug}", async (string slug, UpdateProjectRequest req, ProjectService ps) =>
         {
-            var project = await ps.UpdateProjectAsync(slug, req.WorkspacePath);
+            var project = await ps.UpdateProjectAsync(slug, req.WorkspacePath, req.FallbackModel, req.UpdateFallbackModel);
             return project is null ? Results.NotFound() : Results.Ok(project);
         }).WithTags("Projects");
 

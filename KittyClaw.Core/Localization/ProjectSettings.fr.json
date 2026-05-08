@@ -15,6 +15,10 @@
   "LabelsSection": "Labels",
   "LabelsHint": "Tags réutilisables pour catégoriser les tickets.",
   "NewLabelSettingsPlaceholder": "Nouveau label\u2026",
+  "FallbackModel": "Modèle de repli (quota)",
+  "FallbackModelHint": "Si une automation atteint la limite d'usage de son modèle (Sonnet par ex.), le run est automatiquement relancé avec ce modèle. Laisser désactivé pour ne pas faire de repli.",
+  "FallbackDisabled": "Désactivé",
+  "FallbackOpus47": "Opus 4.7 (claude-opus-4-7)",
   "OpenAutomationsEditor": "Ouvrir l'éditeur d'automations →",
   "DeleteMemberConfirm": "Supprimer le membre",
   "DeleteLabelConfirm": "Supprimer le label"

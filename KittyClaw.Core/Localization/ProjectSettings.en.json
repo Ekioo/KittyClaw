@@ -15,6 +15,10 @@
   "LabelsSection": "Labels",
   "LabelsHint": "Reusable tags to categorize tickets.",
   "NewLabelSettingsPlaceholder": "New label\u2026",
+  "FallbackModel": "Fallback model (quota)",
+  "FallbackModelHint": "When an automation hits its model's usage limit (e.g. Sonnet weekly cap), the run is automatically retried with this model. Leave disabled to skip the fallback.",
+  "FallbackDisabled": "Disabled",
+  "FallbackOpus47": "Opus 4.7 (claude-opus-4-7)",
   "OpenAutomationsEditor": "Open automations editor →",
   "DeleteMemberConfirm": "Delete member",
   "DeleteLabelConfirm": "Delete label"

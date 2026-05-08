@@ -59,6 +59,24 @@ else
         </section>
 
         <section class="settings-section">
+            <h2>@L["FallbackModel"]</h2>
+            <p class="settings-hint">@L["FallbackModelHint"]</p>
+            <div class="settings-row">
+                <select class="settings-input" style="max-width:340px" @bind="_fallbackModel">
+                    <option value="">@L["FallbackDisabled"]</option>
+                    <option value="claude-opus-4-7">@L["FallbackOpus47"]</option>
+                </select>
+                <button class="settings-primary" @onclick="SaveFallbackModel" disabled="@_savingFallback">
+                    @(_savingFallback ? "…" : L["Save"])
+                </button>
+            </div>
+            @if (_fallbackStatus is not null)
+            {
+                <div class="settings-status @_fallbackStatus.Value.css">@_fallbackStatus.Value.text</div>
+            }
+        </section>
+
+        <section class="settings-section">
             <h2>@L["Members"]</h2>
             <p class="settings-hint">@L["MembersHint"]</p>
             <table class="settings-list">
@@ -255,6 +273,10 @@ else
     private bool _savingWorkspace, _browsing, _canBrowse;
     private (string text, string css)? _workspaceStatus;
 
+    private string _fallbackModel = "";
+    private bool _savingFallback;
+    private (string text, string css)? _fallbackStatus;
+
     private List<Member> _members = new();
     private int? _editingMemberId;
     private string _editingMemberName = "";
@@ -283,6 +305,7 @@ else
         _project = await ProjectService.GetProjectAsync(Slug);
         if (_project is null) return;
         _workspacePath = _project.WorkspacePath ?? "";
+        _fallbackModel = _project.FallbackModel ?? "";
         await ReloadAllAsync();
         await ProbeBrowseAsync();
     }
@@ -347,6 +370,27 @@ else
             if (resp.IsSuccessStatusCode) _project = await ProjectService.GetProjectAsync(Slug);
         }
         finally { _savingWorkspace = false; }
+    }
+
+    private async Task SaveFallbackModel()
+    {
+        _savingFallback = true;
+        _fallbackStatus = null;
+        try
+        {
+            var body = new
+            {
+                workspacePath = string.IsNullOrWhiteSpace(_workspacePath) ? null : _workspacePath.Trim(),
+                fallbackModel = string.IsNullOrWhiteSpace(_fallbackModel) ? null : _fallbackModel.Trim(),
+                updateFallbackModel = true,
+            };
+            var resp = await NewHttp().PatchAsJsonAsync($"/api/projects/{Slug}", body);
+            _fallbackStatus = resp.IsSuccessStatusCode
+                ? (L["Saved"], "settings-status-ok")
+                : ($"{L["Error"]}: {resp.StatusCode}", "settings-status-err");
+            if (resp.IsSuccessStatusCode) _project = await ProjectService.GetProjectAsync(Slug);
+        }
+        finally { _savingFallback = false; }
     }
 
     private async Task OnMemberKey(KeyboardEventArgs e) { if (e.Key == "Enter") await CreateMember(); }
