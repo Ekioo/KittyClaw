@@ -27,6 +27,8 @@ api="${KITTYCLAW_API_URL}"
 curl -s "$api/api/projects/{project-slug}/tickets/{id}"
 ```
 
+**Always check the HTTP status of write calls** (`POST`, `PATCH`, `PUT`, `DELETE`). `curl -s` swallows errors silently — a 4xx/5xx looks identical to success. Use `-w "\n%{http_code}"` (or `--fail-with-body`) and verify the code is 2xx before relying on the result. If a write fails, do not act as if it succeeded.
+
 ## Cross-platform paths
 
 Never use `/tmp` or other Linux-only filesystem paths — they do not exist on Windows. If you need a scratch file (patch, JSON body, …), write it in the current workspace (e.g. `body.json`, `full.patch`) and delete it once you are done.
