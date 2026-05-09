@@ -93,7 +93,7 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 2. **Identify yourself** — `author` is **required** on every mutating endpoint; omitting it returns HTTP 400. Use your plain agent name (e.g. `"programmer"`, `"groomer"`). The human user is `"owner"`.
 3. **Discover the board** — call `GET /api/projects` first, then `GET /api/projects/{slug}/columns` to learn the workflow stages and `GET /api/projects/{slug}/members` for assignable members.
 4. **Use the right status** — ticket statuses must match existing column names. Fetch columns before moving tickets.
-5. **Track your work** — add comments on tickets to explain what you did or what you need. Use `@mentions` to notify members and `#id` to reference other tickets.
+5. **Track your work** — add comments on tickets to explain what you did or what you need. Use `@mentions` to notify members, `#id` to reference tickets in the same project, and `#{slug}:{id}` to reference tickets in another project.
 6. **Labels & priority** — use `GET /api/projects/{slug}/labels` to discover available labels, and set priority to `Idea`, `NiceToHave`, `Required`, or `Critical`.
 7. **Check mentions** — call `GET /api/projects/{slug}/mentions/{your-handle}` to find tickets that mention you.
 8. **Sub-tickets** — set `parentId` when creating a ticket to make it a child. Use `PUT /api/projects/{slug}/tickets/{id}/parent` to reparent, or `DELETE` it to detach. List sub-tickets with `?parentId={id}`.
@@ -113,7 +113,7 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 - Live agent run drawer (SSE stream of Claude Code output, steer + stop controls)
 - New-instruction chat drawer to send an ad-hoc prompt to an agent
 - Automations page: list, enable/disable, edit (triggers / conditions / actions), reload from disk, re-initialize agent template
-- Markdown rendering with `@mention` and `#ticket` reference support
+- Markdown rendering with `@mention`, `#id`, and `#{slug}:{id}` cross-project ticket reference support
 - Advanced search syntax: `#42`, `@owner`, `>date`, `priority:critical`, `label:bug`, `by:owner`
 - Sub-tickets with parent/child relationships and progress tracking
 - Column management (create, reorder, customize colors)
