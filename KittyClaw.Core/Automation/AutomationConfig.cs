@@ -28,16 +28,21 @@ public sealed class Automation
 [JsonDerivedType(typeof(BoardIdleTriggerSpec), "boardIdle")]
 [JsonDerivedType(typeof(AgentInactivityTriggerSpec), "agentInactivity")]
 [JsonDerivedType(typeof(TicketCommentAddedTriggerSpec), "ticketCommentAdded")]
-public abstract class TriggerSpec { }
+public abstract class TriggerSpec
+{
+    public abstract string UiTypeKey { get; }
+}
 
 public sealed class IntervalTriggerSpec : TriggerSpec
 {
+    public override string UiTypeKey => "interval";
     public int? Seconds { get; set; }
     public string? Cron { get; set; }
 }
 
 public sealed class TicketInColumnTriggerSpec : TriggerSpec
 {
+    public override string UiTypeKey => "ticketInColumn";
     public int Seconds { get; set; } = 30;
     public List<string> Columns { get; set; } = new();
     public string? AssigneeSlug { get; set; }
@@ -46,12 +51,14 @@ public sealed class TicketInColumnTriggerSpec : TriggerSpec
 
 public sealed class GitCommitTriggerSpec : TriggerSpec
 {
+    public override string UiTypeKey => "gitCommit";
     public int PollSeconds { get; set; } = 60;
     public List<string> IgnoreAuthors { get; set; } = new() { "noreply@anthropic.com" };
 }
 
 public sealed class StatusChangeTriggerSpec : TriggerSpec
 {
+    public override string UiTypeKey => "statusChange";
     public int PollSeconds { get; set; } = 30;
     public string? From { get; set; }
     public string? To { get; set; }
@@ -60,6 +67,7 @@ public sealed class StatusChangeTriggerSpec : TriggerSpec
 
 public sealed class SubTicketStatusTriggerSpec : TriggerSpec
 {
+    public override string UiTypeKey => "subTicketStatus";
     public int PollSeconds { get; set; } = 30;
     public string? ParentColumn { get; set; }
     public int? DebounceSeconds { get; set; }
@@ -67,18 +75,21 @@ public sealed class SubTicketStatusTriggerSpec : TriggerSpec
 
 public sealed class BoardIdleTriggerSpec : TriggerSpec
 {
+    public override string UiTypeKey => "boardIdle";
     public int PollSeconds { get; set; } = 60;
     public List<string> IdleColumns { get; set; } = new() { "Done", "Review" };
 }
 
 public sealed class AgentInactivityTriggerSpec : TriggerSpec
 {
+    public override string UiTypeKey => "agentInactivity";
     public int PollSeconds { get; set; } = 60;
     public int MinutesIdle { get; set; } = 45;
 }
 
 public sealed class TicketCommentAddedTriggerSpec : TriggerSpec
 {
+    public override string UiTypeKey => "ticketCommentAdded";
     public int PollSeconds { get; set; } = 30;
     public List<string> Authors { get; set; } = new();
 }
@@ -96,12 +107,14 @@ public sealed class TicketCommentAddedTriggerSpec : TriggerSpec
 [JsonDerivedType(typeof(TicketCountInColumnConditionSpec), "ticketCountInColumn")]
 public abstract class ConditionSpec
 {
+    public abstract string UiTypeKey { get; }
     /// <summary>When true, the condition result is inverted (NOT logic).</summary>
     public bool Negate { get; set; }
 }
 
 public sealed class TicketInColumnConditionSpec : ConditionSpec
 {
+    public override string UiTypeKey => "ticketInColumn";
     public List<string> Columns { get; set; } = new();
     public string? AssigneeSlug { get; set; }
 }
@@ -109,11 +122,13 @@ public sealed class TicketInColumnConditionSpec : ConditionSpec
 /// <summary>Kept for backward-compat with existing automations.json files.</summary>
 public sealed class MinDescriptionLengthConditionSpec : ConditionSpec
 {
+    public override string UiTypeKey => "minDescriptionLength";
     public int Length { get; set; } = 50;
 }
 
 public sealed class FieldLengthConditionSpec : ConditionSpec
 {
+    public override string UiTypeKey => "fieldLength";
     /// <summary>"title" or "description"</summary>
     public string Field { get; set; } = "description";
     /// <summary>"min" or "max"</summary>
@@ -123,23 +138,27 @@ public sealed class FieldLengthConditionSpec : ConditionSpec
 
 public sealed class PriorityConditionSpec : ConditionSpec
 {
+    public override string UiTypeKey => "priority";
     public List<string> Priorities { get; set; } = new();
 }
 
 public sealed class LabelsConditionSpec : ConditionSpec
 {
+    public override string UiTypeKey => "labels";
     /// <summary>Ticket must have at least one of these labels.</summary>
     public List<string> Labels { get; set; } = new();
 }
 
 public sealed class AssignedToConditionSpec : ConditionSpec
 {
+    public override string UiTypeKey => "assignedTo";
     /// <summary>Matches if ticket is assigned to one of these slugs. Empty = unassigned.</summary>
     public List<string> Slugs { get; set; } = new();
 }
 
 public sealed class HasParentConditionSpec : ConditionSpec
 {
+    public override string UiTypeKey => "hasParent";
     /// <summary>true = ticket must have a parent; false = ticket must be a root ticket.</summary>
     public bool Value { get; set; }
 }
@@ -150,6 +169,7 @@ public sealed class HasParentConditionSpec : ConditionSpec
 /// </summary>
 public sealed class AllSubTicketsInStatusConditionSpec : ConditionSpec
 {
+    public override string UiTypeKey => "allSubTicketsInStatus";
     public List<string> Statuses { get; set; } = new() { "Done" };
 }
 
@@ -161,6 +181,7 @@ public sealed class AllSubTicketsInStatusConditionSpec : ConditionSpec
 /// </summary>
 public sealed class TicketCountInColumnConditionSpec : ConditionSpec
 {
+    public override string UiTypeKey => "ticketCountInColumn";
     public List<string> Columns { get; set; } = new();
     public string? AssigneeSlug { get; set; }
     public bool SameAssignee { get; set; }
@@ -171,6 +192,7 @@ public sealed class TicketCountInColumnConditionSpec : ConditionSpec
 
 public sealed class TicketAgeConditionSpec : ConditionSpec
 {
+    public override string UiTypeKey => "ticketAge";
     /// <summary>"createdAt" or "updatedAt"</summary>
     public string Field { get; set; } = "createdAt";
     /// <summary>"olderThan" or "newerThan"</summary>
@@ -188,10 +210,14 @@ public sealed class TicketAgeConditionSpec : ConditionSpec
 [JsonDerivedType(typeof(ConsolidateAgentMemoryActionSpec), "consolidateAgentMemory")]
 [JsonDerivedType(typeof(ExecutePowerShellActionSpec), "executePowerShell")]
 [JsonDerivedType(typeof(CreateTicketActionSpec), "createTicket")]
-public abstract class ActionSpec { }
+public abstract class ActionSpec
+{
+    public abstract string UiTypeKey { get; }
+}
 
 public sealed class RunAgentActionSpec : ActionSpec
 {
+    public override string UiTypeKey => "runAgent";
     /// <summary>
     /// Name of the agent to run. Must match a member slug in the project.
     /// Resolved to <c>.agents/{Agent}/SKILL.md</c> at dispatch time.
@@ -208,11 +234,13 @@ public sealed class RunAgentActionSpec : ActionSpec
 
 public sealed class MoveTicketStatusActionSpec : ActionSpec
 {
+    public override string UiTypeKey => "moveTicketStatus";
     public required string To { get; set; }
 }
 
 public sealed class SetLabelsActionSpec : ActionSpec
 {
+    public override string UiTypeKey => "setLabels";
     /// <summary>Label names to add to the ticket.</summary>
     public List<string> Add { get; set; } = new();
     /// <summary>Label names to remove from the ticket.</summary>
@@ -221,12 +249,14 @@ public sealed class SetLabelsActionSpec : ActionSpec
 
 public sealed class AssignTicketActionSpec : ActionSpec
 {
+    public override string UiTypeKey => "assignTicket";
     /// <summary>Member slug to assign. Empty or null to unassign. Supports {previousAssignee} placeholder.</summary>
     public string? Slug { get; set; }
 }
 
 public sealed class AddCommentActionSpec : ActionSpec
 {
+    public override string UiTypeKey => "addComment";
     /// <summary>Comment content. Supports placeholders: {ticketId}, {ticketTitle}, {assignee}.</summary>
     public string Content { get; set; } = "";
     /// <summary>Author of the comment (member slug).</summary>
@@ -236,6 +266,7 @@ public sealed class AddCommentActionSpec : ActionSpec
 /// <summary>Persists the given agent's memory.md (touch / flush). No-op placeholder for now.</summary>
 public sealed class CommitAgentMemoryActionSpec : ActionSpec
 {
+    public override string UiTypeKey => "commitAgentMemory";
     public required string Agent { get; set; }
 }
 
@@ -246,6 +277,7 @@ public sealed class CommitAgentMemoryActionSpec : ActionSpec
 /// </summary>
 public sealed class ConsolidateAgentMemoryActionSpec : ActionSpec
 {
+    public override string UiTypeKey => "consolidateAgentMemory";
     /// <summary>Agent slug. Supports {assignee} placeholder.</summary>
     public required string Agent { get; set; }
     /// <summary>Max turns for the consolidation pass.</summary>
@@ -261,6 +293,7 @@ public sealed class ConsolidateAgentMemoryActionSpec : ActionSpec
 /// </summary>
 public sealed class CreateTicketActionSpec : ActionSpec
 {
+    public override string UiTypeKey => "createTicket";
     /// <summary>Ticket title. Supports {date}, {monday}, {firstOfMonth}.</summary>
     public string Title { get; set; } = "";
     /// <summary>Ticket description (optional). Supports {date}, {monday}, {firstOfMonth}.</summary>
@@ -279,6 +312,7 @@ public sealed class CreateTicketActionSpec : ActionSpec
 /// <summary>Runs a PowerShell script or file with optional arguments and timeout.</summary>
 public sealed class ExecutePowerShellActionSpec : ActionSpec
 {
+    public override string UiTypeKey => "executePowerShell";
     public string Script { get; set; } = "";
     public string? ScriptFile { get; set; }
     public List<string> Arguments { get; set; } = new();

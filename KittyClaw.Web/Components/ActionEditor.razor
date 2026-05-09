@@ -209,7 +209,7 @@
         ConsolidateAgentMemoryActionSpec => "consolidateAgentMemory",
         ExecutePowerShellActionSpec => "executePowerShell",
         CreateTicketActionSpec => "createTicket",
-        _ => "runAgent",
+        _ => throw new NotSupportedException($"No UI mapping for action type {Action.GetType().Name}. Register it in ActionEditor.razor."),
     };
 
     private static string JoinGroups(List<string> items) => string.Join(", ", items);
@@ -231,7 +231,7 @@
             "consolidateAgentMemory" => new ConsolidateAgentMemoryActionSpec { Agent = Members.FirstOrDefault() ?? "programmer" },
             "executePowerShell" => new ExecutePowerShellActionSpec(),
             "createTicket" => new CreateTicketActionSpec(),
-            _ => new RunAgentActionSpec { Agent = Members.FirstOrDefault() ?? "producer" },
+            _ => throw new NotSupportedException($"Unknown action type key '{e.Value}'. Register it in ActionEditor.razor."),
         };
         await OnReplace.InvokeAsync(spec);
     }

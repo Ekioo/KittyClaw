@@ -155,7 +155,7 @@
         BoardIdleTriggerSpec => "boardIdle",
         AgentInactivityTriggerSpec => "agentInactivity",
         TicketCommentAddedTriggerSpec => "ticketCommentAdded",
-        _ => "interval",
+        _ => throw new NotSupportedException($"No UI mapping for trigger type {Automation.Trigger.GetType().Name}. Register it in TriggerEditor.razor."),
     };
 
     private async Task OnTypeChanged(ChangeEventArgs e)
@@ -173,7 +173,7 @@
             "boardIdle" => new BoardIdleTriggerSpec { PollSeconds = 60 },
             "agentInactivity" => new AgentInactivityTriggerSpec { PollSeconds = 60, MinutesIdle = 45 },
             "ticketCommentAdded" => new TicketCommentAddedTriggerSpec { PollSeconds = 30 },
-            _ => new IntervalTriggerSpec { Seconds = 60 },
+            _ => throw new NotSupportedException($"Unknown trigger type key '{e.Value}'. Register it in TriggerEditor.razor."),
         };
         await OnReplace.InvokeAsync(spec);
     }

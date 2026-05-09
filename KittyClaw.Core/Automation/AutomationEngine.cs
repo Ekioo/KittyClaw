@@ -413,10 +413,12 @@ public sealed class AutomationEngine : BackgroundService
                 case CreateTicketActionSpec cta:
                     await ExecuteCreateTicketActionAsync(rt, cta);
                     break;
+                default:
+                    throw new NotSupportedException($"Unhandled action type {action.GetType().Name}. Register it in AutomationEngine.ExecuteAutomationAsync.");
             }
         }
-        // No runClaudeSkill gate was hit (automation made of move/comment/label/assign only, or the
-        // runClaudeSkill action was skipped due to a non-transient reason). Commit now to avoid
+        // No runAgent gate was hit (automation made of move/comment/label/assign only, or the
+        // runAgent action was skipped due to a non-transient reason). Commit now to avoid
         // re-firing every poll.
         await CommitAsync();
         return state.LastRun;

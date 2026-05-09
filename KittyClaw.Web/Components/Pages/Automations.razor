@@ -597,7 +597,8 @@ else
         "commitAgentMemory" => new CommitAgentMemoryActionSpec { Agent = _skills.FirstOrDefault() ?? "programmer" },
         "consolidateAgentMemory" => new ConsolidateAgentMemoryActionSpec { Agent = _skills.FirstOrDefault() ?? "programmer" },
         "executePowerShell" => new ExecutePowerShellActionSpec(),
-        _ => new RunAgentActionSpec { Agent = "producer" },
+        "createTicket" => new CreateTicketActionSpec(),
+        _ => throw new NotSupportedException($"Unknown action type key '{type}'. Register it in Automations.razor BuildAction."),
     };
 
     private void AddAutomation()
@@ -654,7 +655,8 @@ else
         SubTicketStatusTriggerSpec s => string.Format(L["TrigSubTickets"], s.ParentColumn ?? "*"),
         BoardIdleTriggerSpec => L["TrigBoardIdle"],
         AgentInactivityTriggerSpec s => string.Format(L["TrigAgentInactivity"], s.MinutesIdle),
-        _ => t.GetType().Name,
+        TicketCommentAddedTriggerSpec s => string.Format(L["TrigCommentAdded"], string.Join(", ", s.Authors)),
+        _ => throw new NotSupportedException($"No UI description for trigger type {t.GetType().Name}. Register it in Automations.razor DescribeTrigger."),
     };
 
     private string DescribeCondition(ConditionSpec c)
@@ -671,7 +673,7 @@ else
             HasParentConditionSpec s => s.Value ? L["CondHasParentTrue"] : L["CondHasParentFalse"],
             AllSubTicketsInStatusConditionSpec s => string.Format(L["CondAllSubTicketsInStatus"], string.Join(", ", s.Statuses)),
             TicketCountInColumnConditionSpec s => string.Format(L["CondTicketCountInColumn"], s.SameAssignee ? "~same" : (s.AssigneeSlug ?? "*"), string.Join(", ", s.Columns), s.Operator, s.Value),
-            _ => c.GetType().Name,
+            _ => throw new NotSupportedException($"No UI description for condition type {c.GetType().Name}. Register it in Automations.razor DescribeCondition."),
         };
         return c.Negate ? $"NON {text}" : text;
     }
@@ -687,6 +689,6 @@ else
         AssignTicketActionSpec s => string.Format(L["ActionAssignTicketDesc"], s.Slug ?? "—"),
         CreateTicketActionSpec s => s.Title,
         ExecutePowerShellActionSpec => L["ActionExecutePowerShell"],
-        _ => a.GetType().Name,
+        _ => throw new NotSupportedException($"No UI description for action type {a.GetType().Name}. Register it in Automations.razor DescribeAction."),
     };
 }

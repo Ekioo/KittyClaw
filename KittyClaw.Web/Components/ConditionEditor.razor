@@ -180,7 +180,7 @@
         HasParentConditionSpec => "hasParent",
         AllSubTicketsInStatusConditionSpec => "allSubTicketsInStatus",
         TicketCountInColumnConditionSpec => "ticketCountInColumn",
-        _ => "ticketInColumn",
+        _ => throw new NotSupportedException($"No UI mapping for condition type {Condition.GetType().Name}. Register it in ConditionEditor.razor."),
     };
 
     private async Task OnTypeChanged(ChangeEventArgs e)
@@ -196,7 +196,7 @@
             "hasParent" => new HasParentConditionSpec(),
             "allSubTicketsInStatus" => new AllSubTicketsInStatusConditionSpec { Statuses = new List<string> { "Done" } },
             "ticketCountInColumn" => new TicketCountInColumnConditionSpec { Columns = new List<string> { "InProgress" }, SameAssignee = true, Operator = "==", Value = 0 },
-            _ => new TicketInColumnConditionSpec { Columns = new List<string> { "Todo" } },
+            _ => throw new NotSupportedException($"Unknown condition type key '{e.Value}'. Register it in ConditionEditor.razor."),
         };
         await OnReplace.InvokeAsync(spec);
     }
