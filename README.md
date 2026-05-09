@@ -90,7 +90,7 @@ All endpoints are under `/api`. The documentation is auto-generated from the liv
 This app is designed to be operated by AI agents through its REST API. Here's how to get started:
 
 1. **Read the live API docs** at `http://localhost:5230/api/docs` — every endpoint, request/response example, and schema, always up to date with the running server.
-2. **Identify yourself** — `author` is **required** on every mutating endpoint; omitting it returns HTTP 400. Use `"agent:{your-name}"` (e.g. `"agent:claude"`). The human user is `"owner"`.
+2. **Identify yourself** — `author` is **required** on every mutating endpoint; omitting it returns HTTP 400. Use your plain agent name (e.g. `"programmer"`, `"groomer"`). The human user is `"owner"`.
 3. **Discover the board** — call `GET /api/projects` first, then `GET /api/projects/{slug}/columns` to learn the workflow stages and `GET /api/projects/{slug}/members` for assignable members.
 4. **Use the right status** — ticket statuses must match existing column names. Fetch columns before moving tickets.
 5. **Track your work** — add comments on tickets to explain what you did or what you need. Use `@mentions` to notify members and `#id` to reference other tickets.
@@ -100,7 +100,7 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 
 ## Conventions
 
-- **Author format**: `"owner"` for the human user, `"agent:{name}"` for AI agents
+- **Author format**: `"owner"` for the human user, plain agent name (e.g. `"programmer"`) for AI agents
 - **Priority levels**: `Idea`, `NiceToHave`, `Required`, `Critical`
 - **Default column**: `Backlog`
 
