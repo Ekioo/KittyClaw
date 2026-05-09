@@ -21,6 +21,10 @@
          are kept stable so AgentsTemplateService doesn't need to know about the on-disk
          layout — it discovers resources by prefix, not by source path. The destination at
          Initialize time is still `<workspace>/.agents/`. -->
+    <EmbeddedResource Include="..\ProjectTemplate\Agents\memory-consolidation.md">
+      <LogicalName>KittyClaw.Core.AgentsTemplate/memory-consolidation.md</LogicalName>
+      <WithCulture>false</WithCulture>
+    </EmbeddedResource>
     <EmbeddedResource Include="..\ProjectTemplate\Agents\preamble.md">
       <LogicalName>KittyClaw.Core.AgentsTemplate/preamble.md</LogicalName>
       <WithCulture>false</WithCulture>

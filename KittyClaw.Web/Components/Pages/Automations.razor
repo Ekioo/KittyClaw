@@ -595,6 +595,7 @@ else
         "assignTicket" => new AssignTicketActionSpec(),
         "addComment" => new AddCommentActionSpec(),
         "commitAgentMemory" => new CommitAgentMemoryActionSpec { Agent = _skills.FirstOrDefault() ?? "programmer" },
+        "consolidateAgentMemory" => new ConsolidateAgentMemoryActionSpec { Agent = _skills.FirstOrDefault() ?? "programmer" },
         "executePowerShell" => new ExecutePowerShellActionSpec(),
         _ => new RunAgentActionSpec { Agent = "producer" },
     };
@@ -680,6 +681,12 @@ else
         RunAgentActionSpec s => s.Agent,
         MoveTicketStatusActionSpec s => string.Format(L["ActionMoveTo"], s.To),
         SetLabelsActionSpec s => string.Format(L["ActionSetLabelsDesc"], string.Join(", ", s.Add), string.Join(", ", s.Remove)),
+        CommitAgentMemoryActionSpec s => string.Format(L["ActionCommitAgentMemoryDesc"], s.Agent),
+        ConsolidateAgentMemoryActionSpec s => string.Format(L["ActionConsolidateAgentMemoryDesc"], s.Agent),
+        AddCommentActionSpec => L["ActionAddComment"],
+        AssignTicketActionSpec s => string.Format(L["ActionAssignTicketDesc"], s.Slug ?? "—"),
+        CreateTicketActionSpec s => s.Title,
+        ExecutePowerShellActionSpec => L["ActionExecutePowerShell"],
         _ => a.GetType().Name,
     };
 }

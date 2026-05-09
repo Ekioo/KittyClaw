@@ -51,6 +51,10 @@
           "restoreStatusOnFail": true
         },
         {
+          "type": "consolidateAgentMemory",
+          "agent": "{assignee}"
+        },
+        {
           "type": "commitAgentMemory",
           "agent": "{assignee}"
         }
@@ -82,6 +86,10 @@
           "restoreStatusOnFail": true
         },
         {
+          "type": "consolidateAgentMemory",
+          "agent": "groomer"
+        },
+        {
           "type": "commitAgentMemory",
           "agent": "groomer"
         }
@@ -107,6 +115,10 @@
           "env": {},
           "model": "claude-sonnet-4-6",
           "restoreStatusOnFail": true
+        },
+        {
+          "type": "consolidateAgentMemory",
+          "agent": "committer"
         },
         {
           "type": "commitAgentMemory",
@@ -143,6 +155,10 @@
           "restoreStatusOnFail": true
         },
         {
+          "type": "consolidateAgentMemory",
+          "agent": "producer"
+        },
+        {
           "type": "commitAgentMemory",
           "agent": "producer"
         }
@@ -170,6 +186,10 @@
           "restoreStatusOnFail": true
         },
         {
+          "type": "consolidateAgentMemory",
+          "agent": "evaluator"
+        },
+        {
           "type": "commitAgentMemory",
           "agent": "evaluator"
         }
@@ -194,6 +214,10 @@
           "env": {},
           "model": "claude-haiku-4-5",
           "restoreStatusOnFail": true
+        },
+        {
+          "type": "consolidateAgentMemory",
+          "agent": "code-janitor"
         },
         {
           "type": "commitAgentMemory",
@@ -269,6 +293,10 @@
           "restoreStatusOnFail": false
         },
         {
+          "type": "consolidateAgentMemory",
+          "agent": "{assignee}"
+        },
+        {
           "type": "commitAgentMemory",
           "agent": "{assignee}"
         }
@@ -301,6 +329,10 @@
           "env": {},
           "model": "claude-sonnet-4-6",
           "restoreStatusOnFail": false
+        },
+        {
+          "type": "consolidateAgentMemory",
+          "agent": "qa-tester"
         },
         {
           "type": "commitAgentMemory",
@@ -353,6 +385,10 @@
           "restoreStatusOnFail": true
         },
         {
+          "type": "consolidateAgentMemory",
+          "agent": "documentalist"
+        },
+        {
           "type": "commitAgentMemory",
           "agent": "documentalist"
         }
@@ -401,6 +437,10 @@
           "env": {},
           "model": "claude-sonnet-4-6",
           "restoreStatusOnFail": false
+        },
+        {
+          "type": "consolidateAgentMemory",
+          "agent": "{assignee}"
         },
         {
           "type": "commitAgentMemory",

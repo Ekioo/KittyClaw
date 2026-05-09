@@ -45,6 +45,8 @@
   "PalActAddCommentHint": "Adds a comment to the ticket without invoking Claude",
   "PalActCommitAgentMemory": "Commit agent memory",
   "PalActCommitAgentMemoryHint": "Persists the agent memory.md file atomically after a run",
+  "PalActConsolidateAgentMemory": "Consolidate agent memory",
+  "PalActConsolidateAgentMemoryHint": "Spawns a focused pass to distil lessons from the parent run into memory.md",
   "PalActExecutePowerShell": "Execute PowerShell",
   "PalActExecutePowerShellHint": "Runs a PowerShell script on the server",
   "PalActCreateTicket": "Create ticket",

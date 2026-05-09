@@ -185,6 +185,7 @@ public sealed class TicketAgeConditionSpec : ConditionSpec
 [JsonDerivedType(typeof(AssignTicketActionSpec), "assignTicket")]
 [JsonDerivedType(typeof(AddCommentActionSpec), "addComment")]
 [JsonDerivedType(typeof(CommitAgentMemoryActionSpec), "commitAgentMemory")]
+[JsonDerivedType(typeof(ConsolidateAgentMemoryActionSpec), "consolidateAgentMemory")]
 [JsonDerivedType(typeof(ExecutePowerShellActionSpec), "executePowerShell")]
 [JsonDerivedType(typeof(CreateTicketActionSpec), "createTicket")]
 public abstract class ActionSpec { }
@@ -236,6 +237,21 @@ public sealed class AddCommentActionSpec : ActionSpec
 public sealed class CommitAgentMemoryActionSpec : ActionSpec
 {
     public required string Agent { get; set; }
+}
+
+/// <summary>
+/// Spawns a focused claude pass whose only job is to distill lessons from the parent run
+/// into the agent's memory.md. Instructions are read from an external markdown file so they
+/// can be tweaked without rebuilding.
+/// </summary>
+public sealed class ConsolidateAgentMemoryActionSpec : ActionSpec
+{
+    /// <summary>Agent slug. Supports {assignee} placeholder.</summary>
+    public required string Agent { get; set; }
+    /// <summary>Max turns for the consolidation pass.</summary>
+    public int MaxTurns { get; set; } = 5;
+    /// <summary>Path to the instruction markdown file, relative to workspace root.</summary>
+    public string InstructionFile { get; set; } = ".agents/memory-consolidation.md";
 }
 
 /// <summary>

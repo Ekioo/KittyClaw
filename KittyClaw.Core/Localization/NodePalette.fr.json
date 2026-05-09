@@ -45,6 +45,8 @@
   "PalActAddCommentHint": "Ajoute un commentaire au ticket sans invoquer Claude",
   "PalActCommitAgentMemory": "Persister la mémoire de l'agent",
   "PalActCommitAgentMemoryHint": "Sauvegarde atomiquement le fichier memory.md de l'agent après une exécution",
+  "PalActConsolidateAgentMemory": "Consolider la mémoire de l'agent",
+  "PalActConsolidateAgentMemoryHint": "Lance un pass focalisé pour distiller les leçons de la dernière exécution dans memory.md",
   "PalActExecutePowerShell": "Exécuter PowerShell",
   "PalActExecutePowerShellHint": "Exécute un script PowerShell sur le serveur",
   "PalActCreateTicket": "Créer un ticket",

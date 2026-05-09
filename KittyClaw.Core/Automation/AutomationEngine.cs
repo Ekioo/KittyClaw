@@ -401,6 +401,9 @@ public sealed class AutomationEngine : BackgroundService
                 case CommitAgentMemoryActionSpec cm:
                     await ExecuteCommitAgentMemoryActionAsync(rt, cm, firing);
                     break;
+                case ConsolidateAgentMemoryActionSpec csm:
+                    await ExecuteConsolidateAgentMemoryActionAsync(rt, csm, firing, parentRun: null, ct);
+                    break;
                 case ExecutePowerShellActionSpec ps:
                 {
                     var abort = await ExecutePowerShellAsync(ps, rt.Workspace!, ct);
@@ -592,6 +595,7 @@ public sealed class AutomationEngine : BackgroundService
                 switch (post)
                 {
                     case CommitAgentMemoryActionSpec cm: await ExecuteCommitAgentMemoryActionAsync(rt, cm, firing); break;
+                    case ConsolidateAgentMemoryActionSpec csm: await ExecuteConsolidateAgentMemoryActionAsync(rt, csm, firing, run, ct); break;
                     case AddCommentActionSpec ac when firing.TicketId is not null: await ExecuteAddCommentActionAsync(rt, firing, ac); break;
                     case SetLabelsActionSpec sl when firing.TicketId is not null: await ExecuteSetLabelsActionAsync(rt, firing, sl); break;
                     case AssignTicketActionSpec at when firing.TicketId is not null: await ExecuteAssignTicketActionAsync(rt, firing, at); break;
@@ -684,6 +688,121 @@ public sealed class AutomationEngine : BackgroundService
             }
         }
         catch (Exception ex) { _logger.LogWarning(ex, "assignTicket failed for ticket #{Id} in project {Project}", firing.TicketId, rt.Slug); }
+    }
+
+    private async Task ExecuteConsolidateAgentMemoryActionAsync(
+        ProjectRuntime rt,
+        ConsolidateAgentMemoryActionSpec spec,
+        TriggerFiring? firing,
+        AgentRun? parentRun,
+        CancellationToken ct)
+    {
+        try
+        {
+            var agent = spec.Agent;
+            if (agent.Contains("{assignee}"))
+            {
+                if (firing?.TicketId is null)
+                {
+                    _logger.LogInformation("consolidateAgentMemory: {{assignee}} placeholder but no firing ticket — skipping");
+                    return;
+                }
+                var t = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
+                if (string.IsNullOrEmpty(t?.AssignedTo))
+                {
+                    _logger.LogInformation("consolidateAgentMemory: {{assignee}} placeholder but ticket #{Id} has no assignee — skipping", firing.TicketId);
+                    return;
+                }
+                agent = agent.Replace("{assignee}", t.AssignedTo);
+            }
+
+            // Skip if the parent run failed catastrophically (nothing useful to consolidate).
+            if (parentRun?.Status == AgentRunStatus.Failed && (parentRun.ExitCode ?? 0) < 0)
+            {
+                _logger.LogInformation("consolidateAgentMemory: parent run {Id} failed (exit {Exit}) — skipping", parentRun.RunId, parentRun.ExitCode);
+                return;
+            }
+
+            var instructionPath = Path.Combine(
+                rt.Workspace!,
+                spec.InstructionFile.Replace('/', Path.DirectorySeparatorChar));
+
+            if (!File.Exists(instructionPath))
+            {
+                _logger.LogWarning("consolidateAgentMemory: instruction file not found: {Path}", instructionPath);
+                return;
+            }
+
+            var instructionContent = (await File.ReadAllTextAsync(instructionPath, ct))
+                .Replace("{agentSlug}", agent);
+
+            var eventsSummary = BuildEventsSummary(parentRun);
+
+            // Use an isolated session scope so consolidation runs never resume a normal agent session.
+            const string scope = "consolidate";
+            _sessions.Clear(rt.Workspace!, $"{scope}:{agent}", ticketId: null);
+
+            var runCtx = new ClaudeRunContext
+            {
+                ProjectSlug = rt.Slug,
+                WorkspacePath = rt.Workspace!,
+                AgentName = agent,
+                SkillFile = $"{agent}/SKILL.md",
+                MaxTurns = spec.MaxTurns,
+                ConcurrencyGroup = $"consolidate-{agent}",
+                InlineSkillContent = instructionContent,
+                ExtraContext = string.IsNullOrWhiteSpace(eventsSummary)
+                    ? "No events were recorded for this run."
+                    : eventsSummary,
+                SessionScope = scope,
+                Model = null,
+            };
+
+            var run = await _runner.RunAsync(runCtx, ct);
+
+            // Determine lines changed via git diff for the log entry.
+            var memoryRel = $".agents/{agent}/memory.md";
+            var diff = await RunGitAsync(rt.Workspace!, $"diff --shortstat HEAD -- \"{memoryRel}\"");
+            var diffSummary = diff.stdout.Trim();
+            _logger.LogInformation("consolidate {Agent}: run {Status} (exit {Exit}){Diff}",
+                agent, run.Status, run.ExitCode,
+                string.IsNullOrWhiteSpace(diffSummary) ? "" : $" — {diffSummary}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "consolidateAgentMemory: failed for {Agent}", spec.Agent);
+        }
+    }
+
+    private static string BuildEventsSummary(AgentRun? run)
+    {
+        if (run is null) return "";
+        var lines = new List<string>();
+        foreach (var ev in run.SnapshotBuffer())
+        {
+            if (ev.Kind is "assistant" or "tool_use" or "result")
+            {
+                var text = ev.Kind == "tool_use"
+                    ? $"[tool_use] {ev.Text}: {TruncateDetail(ev.Detail, 120)}"
+                    : $"[{ev.Kind}] {TruncateLine(ev.Text, 200)}";
+                lines.Add(text);
+            }
+            if (lines.Count >= 80) break;
+        }
+        return lines.Count == 0 ? "" : string.Join("\n", lines);
+    }
+
+    private static string TruncateLine(string? s, int max)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        s = s.Replace('\n', ' ').Replace('\r', ' ');
+        return s.Length <= max ? s : s[..max] + "…";
+    }
+
+    private static string TruncateDetail(string? s, int max)
+    {
+        if (string.IsNullOrEmpty(s)) return "{}";
+        return s.Length <= max ? s : s[..max] + "…";
     }
 
     // Serializes in-process git operations (commitAgentMemory runs across multiple automations).

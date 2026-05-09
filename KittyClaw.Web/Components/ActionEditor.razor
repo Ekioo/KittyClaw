@@ -10,6 +10,7 @@
             <option value="assignTicket">@L["ActionAssignTicket"]</option>
             <option value="addComment">@L["ActionAddComment"]</option>
             <option value="commitAgentMemory">@L["ActionCommitAgentMemory"]</option>
+            <option value="consolidateAgentMemory">@L["ActionConsolidateAgentMemory"]</option>
             <option value="executePowerShell">@L["ActionExecutePowerShell"]</option>
             <option value="createTicket">@L["ActionCreateTicket"]</option>
         </select>
@@ -97,6 +98,23 @@
                         <option value="@s.Agent">@s.Agent @L["ModelCustom"]</option>
                     }
                 </select>
+            </label>
+            break;
+        case ConsolidateAgentMemoryActionSpec s:
+            <label>@L["Agent"]
+                <select value="@s.Agent" @onchange="e => s.Agent = (string)e.Value!">
+                    @foreach (var m in Members) { <option value="@m">@m</option> }
+                    @if (!Members.Contains(s.Agent) && !string.IsNullOrEmpty(s.Agent))
+                    {
+                        <option value="@s.Agent">@s.Agent @L["ModelCustom"]</option>
+                    }
+                </select>
+            </label>
+            <label>@L["MaxTurns"]
+                <input type="number" @bind="s.MaxTurns" />
+            </label>
+            <label>@L["CsmInstructionFile"]
+                <input placeholder=".agents/memory-consolidation.md" @bind="s.InstructionFile" />
             </label>
             break;
         case CreateTicketActionSpec s:
@@ -188,6 +206,7 @@
         AssignTicketActionSpec => "assignTicket",
         AddCommentActionSpec => "addComment",
         CommitAgentMemoryActionSpec => "commitAgentMemory",
+        ConsolidateAgentMemoryActionSpec => "consolidateAgentMemory",
         ExecutePowerShellActionSpec => "executePowerShell",
         CreateTicketActionSpec => "createTicket",
         _ => "runAgent",
@@ -209,6 +228,7 @@
             "assignTicket" => new AssignTicketActionSpec(),
             "addComment" => new AddCommentActionSpec(),
             "commitAgentMemory" => new CommitAgentMemoryActionSpec { Agent = Members.FirstOrDefault() ?? "programmer" },
+            "consolidateAgentMemory" => new ConsolidateAgentMemoryActionSpec { Agent = Members.FirstOrDefault() ?? "programmer" },
             "executePowerShell" => new ExecutePowerShellActionSpec(),
             "createTicket" => new CreateTicketActionSpec(),
             _ => new RunAgentActionSpec { Agent = Members.FirstOrDefault() ?? "producer" },

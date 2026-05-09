@@ -141,14 +141,3 @@ End every run with a short summary (post as a workspace-side log, not as a ticke
 
 If you made no changes (nothing in the commits required doc work), say so explicitly — silence is ambiguous.
 
-## Memory
-
-Read `.agents/documentalist/memory.md` at the start of each run, append lessons at the end. Keep it under 100 lines.
-
-**Relevance counter** — every lesson line starts with `[N]`:
-- New lesson → `[1]`.
-- At end of each run, increment `[N]` → `[N+1]` if the lesson helped this run; decrement if not relevant; leave alone if neutral.
-- `[0]` → drop the line.
-- `[5]+` → candidate to promote into this skill file.
-
-Example: `[3] When a commit touches automations.json, also check that README's Automation model section still lists every trigger/condition/action type.`
