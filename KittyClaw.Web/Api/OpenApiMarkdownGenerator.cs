@@ -172,9 +172,10 @@ public static class OpenApiMarkdownGenerator
         sb.AppendLine();
         sb.AppendLine("## Conventions");
         sb.AppendLine();
-        sb.AppendLine("- `createdBy` / `author`: `\"owner\"` pour l'utilisateur, `\"agent:{name}\"` pour les agents (ex: `\"agent:claude\"`)");
+        sb.AppendLine("- `author` **(required on all mutating endpoints)**: identifies who is performing the action. Use `\"owner\"` for the human user, `\"agent:{name}\"` for agents (e.g. `\"agent:claude\"`). Omitting it returns HTTP 400.");
+        sb.AppendLine("- Fields marked `// required` in request body examples must be present; fields marked `// optional` may be omitted.");
         sb.AppendLine("- OpenAPI JSON: `GET /openapi/v1.json`");
-        sb.AppendLine("- Cette doc est auto-générée depuis la spec OpenAPI.");
+        sb.AppendLine("- This documentation is auto-generated from the OpenAPI spec.");
         sb.AppendLine();
 
         // Automations guide
@@ -388,7 +389,7 @@ public static class OpenApiMarkdownGenerator
         {
             var example = GetExampleValue(prop.Name, prop.Value, root);
             var required = requiredProps.Contains(prop.Name);
-            var comment = required ? "" : "  // optional";
+            var comment = required ? "  // required" : "  // optional";
             entries.Add($"  \"{prop.Name}\": {example}{comment}");
         }
         sb.AppendLine(string.Join(",\n", entries));
