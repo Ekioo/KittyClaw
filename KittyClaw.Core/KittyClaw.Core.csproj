@@ -16,27 +16,30 @@
 
   <ItemGroup>
     <!-- Template files for new project initialization. Source of truth lives under
-         ProjectTemplate/ at the repo root; LogicalName prefixes are kept stable so
-         AgentsTemplateService doesn't need to know about the on-disk relocation. -->
-    <EmbeddedResource Include="..\ProjectTemplate\.agents\preamble.md">
+         ProjectTemplate/Agents/ at the repo root (Agents/ without the dot to avoid the
+         workspace .gitignore that hides any `.agents/` runtime data). LogicalName prefixes
+         are kept stable so AgentsTemplateService doesn't need to know about the on-disk
+         layout — it discovers resources by prefix, not by source path. The destination at
+         Initialize time is still `<workspace>/.agents/`. -->
+    <EmbeddedResource Include="..\ProjectTemplate\Agents\preamble.md">
       <LogicalName>KittyClaw.Core.AgentsTemplate/preamble.md</LogicalName>
       <WithCulture>false</WithCulture>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\ProjectTemplate\.agents\automations.json">
+    <EmbeddedResource Include="..\ProjectTemplate\Agents\automations.json">
       <LogicalName>KittyClaw.Core.AgentsTemplate/automations.json</LogicalName>
       <WithCulture>false</WithCulture>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\ProjectTemplate\.agents\**\SKILL.md">
+    <EmbeddedResource Include="..\ProjectTemplate\Agents\**\SKILL.md">
       <LogicalName>KittyClaw.Core.AgentsTemplate/%(RecursiveDir)SKILL.md</LogicalName>
       <WithCulture>false</WithCulture>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\ProjectTemplate\.agents\**\memory.md">
+    <EmbeddedResource Include="..\ProjectTemplate\Agents\**\memory.md">
       <LogicalName>KittyClaw.Core.AgentsTemplate/%(RecursiveDir)memory.md</LogicalName>
       <WithCulture>false</WithCulture>
     </EmbeddedResource>
     <!-- Files copied to the workspace root on Initialize (e.g. CLAUDE.md). The glob excludes
-         .agents/ since those go through the AgentsTemplate prefix above. -->
-    <EmbeddedResource Include="..\ProjectTemplate\**\*.*" Exclude="..\ProjectTemplate\.agents\**\*.*">
+         the Agents/ subtree since those go through the AgentsTemplate prefix above. -->
+    <EmbeddedResource Include="..\ProjectTemplate\**\*.*" Exclude="..\ProjectTemplate\Agents\**\*.*">
       <LogicalName>KittyClaw.Core.AgentsTemplateRoot/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
       <WithCulture>false</WithCulture>
     </EmbeddedResource>
