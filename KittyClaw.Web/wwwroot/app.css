@@ -1998,6 +1998,15 @@ button:disabled { opacity: 0.4; cursor: default; }
     color: var(--muted, #8a99b0);
     font-size: 0.8rem;
 }
+.agent-drawer-model {
+    background: var(--surface2, #1e2736);
+    border: 1px solid var(--border, #333);
+    border-radius: 4px;
+    padding: 0 0.4rem;
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: var(--muted, #8a99b0);
+}
 .agent-drawer-actions {
     grid-row: 1;
     grid-column: 2;
@@ -2702,6 +2711,17 @@ body.flow-dnd-active * { cursor: grabbing !important; }
 .chat-drawer-title {
     font-weight: 600;
     font-size: 1rem;
+}
+.chat-drawer-model {
+    background: var(--surface2, #1e2736);
+    border: 1px solid var(--border, #333);
+    border-radius: 4px;
+    padding: 0 0.4rem;
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: var(--muted, #8a99b0);
+    margin-left: auto;
+    margin-right: 0.5rem;
 }
 .chat-messages {
     flex: 1;

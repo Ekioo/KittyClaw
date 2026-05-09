@@ -141,6 +141,7 @@ public sealed class ClaudeRunner
             SkillFile = ctx.SkillFile,
             ConcurrencyGroup = string.IsNullOrEmpty(ctx.ConcurrencyGroup) ? ctx.AgentName : ctx.ConcurrencyGroup,
             StartedAt = DateTime.UtcNow,
+            Model = ctx.Model,
         };
         if (ctx.OnEventHook is not null) run.OnEvent += ctx.OnEventHook;
         _runs.Register(run);
@@ -226,6 +227,7 @@ public sealed class ClaudeRunner
                     $"Quota reached on {(ctx.Model ?? "default model")} — retrying with fallback model {ctx.FallbackModel}"));
                 _logger.LogWarning("Quota hit for {Agent} (model={Model}); falling back to {Fallback}",
                     ctx.AgentName, ctx.Model, ctx.FallbackModel);
+                run.Model = ctx.FallbackModel;
                 attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume: false, modelOverride: ctx.FallbackModel, ct);
                 if (attempt.Cancelled) return run;
             }

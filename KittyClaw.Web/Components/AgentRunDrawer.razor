@@ -24,6 +24,10 @@
                 <span title="Skill">@_run.SkillFile</span>
                 <span title="Session">@(_run.SessionId?[..8] ?? "—")</span>
                 <span title="Group">@_run.ConcurrencyGroup</span>
+                @if (!string.IsNullOrEmpty(_run.Model))
+                {
+                    <span class="agent-drawer-model" title="Model">@_run.Model</span>
+                }
                 <span>@FormatElapsed(_run.StartedAt)</span>
             </div>
             <div class="agent-drawer-actions">

@@ -17,6 +17,7 @@ public sealed class AgentRun
     public required string ConcurrencyGroup { get; init; }
     public required DateTime StartedAt { get; init; }
     public string? SessionId { get; set; }
+    public string? Model { get; set; }
     public AgentRunStatus Status { get; set; } = AgentRunStatus.Running;
     public DateTime? EndedAt { get; set; }
     public int? ExitCode { get; set; }
@@ -59,6 +60,7 @@ public sealed class AgentRunSnapshot
     public DateTime StartedAt { get; set; }
     public DateTime? EndedAt { get; set; }
     public string? SessionId { get; set; }
+    public string? Model { get; set; }
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public AgentRunStatus Status { get; set; }
     public int? ExitCode { get; set; }
@@ -94,6 +96,7 @@ public sealed class RunLogStore
             StartedAt = run.StartedAt,
             EndedAt = run.EndedAt,
             SessionId = run.SessionId,
+            Model = run.Model,
             Status = run.Status,
             ExitCode = run.ExitCode,
             Events = run.SnapshotBuffer().ToList(),
@@ -133,6 +136,7 @@ public sealed class RunLogStore
                 StartedAt = snapshot.StartedAt,
             };
             run.SessionId = snapshot.SessionId;
+            run.Model = snapshot.Model;
             run.Status = snapshot.Status;
             run.EndedAt = snapshot.EndedAt;
             run.ExitCode = snapshot.ExitCode;

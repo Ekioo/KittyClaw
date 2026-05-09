@@ -45,6 +45,10 @@
                     <span class="chat-drawer-ticket-ref" title="@TicketTitle">· #@tid @(string.IsNullOrEmpty(TicketTitle) ? "" : "— " + Truncate(TicketTitle!, 40))</span>
                 }
             </span>
+            @if (!string.IsNullOrEmpty(_activeRun?.Model))
+            {
+                <span class="chat-drawer-model" title="Model">@_activeRun.Model</span>
+            }
             <button class="chat-newsession-btn" @onclick="StartNewSession" title="@L["NewSession"]">＋</button>
             <button class="agent-close-btn" @onclick="Close" title="@L["Close"]">×</button>
         </div>
