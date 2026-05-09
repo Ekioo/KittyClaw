@@ -62,6 +62,14 @@ public sealed class TestInstance : IAsyncDisposable
         var contentRoot = FindContentRoot(webExePath);
         if (contentRoot is not null)
             psi.Environment["ASPNETCORE_CONTENTROOT"] = contentRoot;
+        // Pin the test instance to the mock claude. In stable layouts the mock lives in qa-mock/
+        // (not as a sibling of the Web exe — that would hijack real agent dispatch). In dev, walk
+        // up to KittyClaw.ClaudeMock/bin/**/claude.exe. If neither resolves, leave the env var
+        // unset and let the test instance fall back to whatever ResolveClaudeBinary() picks up,
+        // surfacing the warning via stderr.
+        var mockClaude = FindMockClaude(webExePath);
+        if (mockClaude is not null)
+            psi.Environment["KITTYCLAW_CLAUDE_BIN"] = mockClaude;
 
         var proc = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start KittyClaw.Web for QA");
@@ -97,6 +105,29 @@ public sealed class TestInstance : IAsyncDisposable
         {
             if (Directory.Exists(Path.Combine(dir.FullName, "wwwroot")))
                 return dir.FullName;
+        }
+        return null;
+    }
+
+    private static string? FindMockClaude(string webExePath)
+    {
+        var name = OperatingSystem.IsWindows() ? "claude.exe" : "claude";
+        var webDir = Path.GetDirectoryName(webExePath)!;
+
+        // Stable / publish layout: mock lives in `<webDir>/qa-mock/claude.exe`.
+        var qaMock = Path.Combine(webDir, "qa-mock", name);
+        if (File.Exists(qaMock)) return qaMock;
+
+        // Dev: walk up to find KittyClaw.ClaudeMock/bin/**/claude.exe.
+        var dir = new DirectoryInfo(webDir);
+        for (int i = 0; i < 6 && dir is not null; i++, dir = dir.Parent)
+        {
+            var mockBin = Path.Combine(dir.FullName, "KittyClaw.ClaudeMock", "bin");
+            if (Directory.Exists(mockBin))
+            {
+                var found = Directory.EnumerateFiles(mockBin, name, SearchOption.AllDirectories).FirstOrDefault();
+                if (found is not null) return found;
+            }
         }
         return null;
     }
