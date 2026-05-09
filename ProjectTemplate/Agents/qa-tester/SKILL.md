@@ -37,6 +37,8 @@ Use the file list from the programmer's delivery comment. Read each file via `Re
 
 Static review is a starting point, not a verdict. You must **execute** the code path the ticket changed and record the observed result. Pick the cheapest level of execution that genuinely exercises the change:
 
+**API-first heuristic** (when using a scenario runner or HTTP-based harness): Do all setup via API calls; reserve browser/UI interactions for the visual assertion only. API calls are instant and deterministic — they never break on a disabled button or a render race. Only reach for UI clicks when the thing you need to verify *is* the UI interaction itself.
+
 | Change type | Minimum execution required |
 |---|---|
 | Pure function / business rule | Run the project's unit-test suite (and add a test if none covers the change) |

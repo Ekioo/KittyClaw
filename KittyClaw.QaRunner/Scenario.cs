@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace KittyClaw.QaRunner;
@@ -29,6 +30,24 @@ public sealed class ScenarioAction
     public string? Project { get; set; }
     public string? WorkspacePath { get; set; }
     public int? Ms { get; set; }
+
+    // Generic api action fields
+    public string? Method { get; set; }
+    public string? Path { get; set; }
+    public JsonElement? Body { get; set; }
+    public Dictionary<string, string>? Headers { get; set; }
+    /// <summary>Maps variable name to dotted JSON path (e.g. "ticketId" → "id").</summary>
+    public Dictionary<string, string>? Extract { get; set; }
+
+    // assertJson fields
+    public string? JsonPath { get; set; }
+
+    // Convenience shortcut fields (createTicket, assignTicket, setStatus)
+    public string? Title { get; set; }
+    public string? Status { get; set; }
+    public string? Priority { get; set; }
+    public string? AssignedTo { get; set; }
+    public string? CreatedBy { get; set; }
 }
 
 public sealed class ScenarioVerdict
