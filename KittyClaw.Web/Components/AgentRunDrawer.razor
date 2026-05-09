@@ -40,7 +40,7 @@
         </div>
 
         <div class="agent-drawer-console" @ref="_consoleRef">
-            @foreach (var ev in _events)
+            @foreach (var ev in _events.ToList())
             {
                 @if (ev.Kind == "tool_use")
                 {
