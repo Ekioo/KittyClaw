@@ -9,8 +9,11 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Default to HTTP-only on :5000 when no URL config is provided. KittyClaw is a local-only
 // app with no HTTPS cert, so the framework default (HTTP + HTTPS dual binding) is wrong here.
-// ASPNETCORE_URLS / launchSettings / --urls still take precedence over this.
-builder.WebHost.UseUrls("http://localhost:5000");
+// Only kick in when nothing else (ASPNETCORE_URLS, launchSettings.applicationUrl, --urls,
+// urls config key) has set the URL — otherwise UseUrls() called after CreateBuilder would
+// overwrite that config and break the qa launch profile, QaRunner test instances, etc.
+if (string.IsNullOrEmpty(builder.Configuration["urls"]))
+    builder.WebHost.UseUrls("http://localhost:5000");
 
 // KITTYCLAW_DATA_DIR overrides the default %APPDATA%/KittyClaw location.
 // Used by isolated test instances (KittyClaw.QaRunner) and anyone running
