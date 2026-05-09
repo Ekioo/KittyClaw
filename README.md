@@ -47,7 +47,7 @@ Both wrap `dotnet watch --project KittyClaw.Web --non-interactive` and serve the
 From the home page, type a name and click **Create**. A popup asks you to set a workspace folder (absolute path to a repo/folder) and offers to create it if missing. Click **Initialize** to:
 
 1. Create the project registry entry + per-project SQLite DB.
-2. Copy the agent template (`.agents/preamble.md`, `.agents/{agent}/SKILL.md`, empty `memory.md`, `automations.json`) into `<workspace>/.agents/`.
+2. Copy the project template from `ProjectTemplate/` (`preamble.md`, `{agent}/SKILL.md`, empty `memory.md`, `automations.json`, `CLAUDE.md`) into the workspace — agent files under `<workspace>/.agents/`, `CLAUDE.md` at the workspace root.
 3. Run `git init` if the workspace is not already a git repo (skipped if `git` isn't installed).
 4. Create a member for each agent slug found in the template.
 5. Navigate to the board.
@@ -68,11 +68,15 @@ Per-project agent state lives **in the workspace**: `<workspace>/.agents/{agent}
 
 ## Project Structure
 
-| Project | Description |
+| Path | Description |
 |---|---|
-| **KittyClaw.Core** | Domain models, EF Core contexts, services, automation engine, embedded `.agents/` template |
+| **KittyClaw.Core** | Domain models, EF Core contexts, services, automation engine, embedded project template |
 | **KittyClaw.Core.Tests** | xUnit tests (conditions, triggers, signals, JSON polymorphism) |
 | **KittyClaw.Web** | Blazor Server UI + REST API |
+| **KittyClaw.QaRunner** | Isolated test-instance launcher (Playwright + scenario runner) used by the qa-tester agent |
+| **KittyClaw.ClaudeMock** | Mock `claude` CLI used by `KittyClaw.QaRunner` for hermetic agent dispatch in tests |
+| **ProjectTemplate/** | Source of truth for new-project initialization. Files under `.agents/` are written to `<workspace>/.agents/`; `CLAUDE.md` is written to the workspace root. |
+| **tools/** | Repo helpers (e.g. `publish-stable.ps1` to bundle Web + QaRunner + ClaudeMock for a stable channel) |
 
 ## API
 
