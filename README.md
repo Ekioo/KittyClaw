@@ -124,9 +124,9 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 
 - **Triggers**: `interval`, `ticketInColumn`, `statusChange`, `subTicketStatus`, `ticketCommentAdded`, `gitCommit`, `boardIdle`, `agentInactivity`.
 - **Conditions**: `ticketInColumn`, `ticketCountInColumn`, `fieldLength`, `priority`, `labels`, `assignedTo`, `hasParent`, `allSubTicketsInStatus`, `ticketAge`.
-- **Actions**: `runAgent`, `moveTicketStatus`, `setLabels`, `assignTicket`, `addComment`, `commitAgentMemory`, `executePowerShell`.
+- **Actions**: `runAgent`, `moveTicketStatus`, `setLabels`, `assignTicket`, `addComment`, `consolidateAgentMemory`, `commitAgentMemory`, `executePowerShell`.
 - `{assignee}` placeholder in `runAgent.agent` / `runAgent.concurrencyGroup` resolves from the firing ticket's `assignedTo`.
-- Every `runAgent` should be followed by `commitAgentMemory` to auto-commit the agent's `memory.md` changes.
+- Canonical post-run chain: `runAgent` → `consolidateAgentMemory` (focused claude pass that compacts the agent's `memory.md`) → `commitAgentMemory` (commits the result).
 
 ---
 
