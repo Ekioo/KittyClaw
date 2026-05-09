@@ -103,19 +103,14 @@ app.UseAntiforgery();
 app.MapOpenApi();
 app.MapTodoApi();
 
-string? _cachedApiDocs = null;
-
 app.MapGet("/api/docs", async (HttpContext ctx) =>
 {
-    if (_cachedApiDocs is null)
-    {
-        var baseUrl = $"{ctx.Request.Scheme}://{ctx.Request.Host}";
-        using var client = new HttpClient();
-        var json = await client.GetStringAsync($"{baseUrl}/openapi/v1.json");
-        using var doc = JsonDocument.Parse(json);
-        _cachedApiDocs = OpenApiMarkdownGenerator.Generate(doc);
-    }
-    return Results.Text(_cachedApiDocs, "text/markdown; charset=utf-8");
+    var baseUrl = $"{ctx.Request.Scheme}://{ctx.Request.Host}";
+    using var client = new HttpClient();
+    var json = await client.GetStringAsync($"{baseUrl}/openapi/v1.json");
+    using var doc = JsonDocument.Parse(json);
+    var markdown = OpenApiMarkdownGenerator.Generate(doc);
+    return Results.Text(markdown, "text/markdown; charset=utf-8");
 }).ExcludeFromDescription();
 
 app.MapStaticAssets();
