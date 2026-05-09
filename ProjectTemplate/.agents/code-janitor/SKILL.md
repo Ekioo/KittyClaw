@@ -92,7 +92,7 @@ Maintain `.agents/code-janitor/health.md`:
    c. Apply safe changes only.
    d. Verify: trust the project's background build tool; only hard compile errors are blockers.
 5. File Backlog tickets for anything needing judgment:
-   curl -X POST ${KITTYCLAW_API_URL:-http://localhost:5230}/api/projects/{project-slug}/tickets \
+   curl -X POST ${KITTYCLAW_API_URL}/api/projects/{project-slug}/tickets \
      -H "Content-Type: application/json" \
      -d '{"title":"...","description":"...","createdBy":"code-janitor","status":"Backlog","priority":"NiceToHave"}'
 6. Update .agents/code-janitor/health.md.

@@ -17,7 +17,7 @@ You do **not** post any comment on the ticket. You do **not** touch the worker's
 
 ## API
 
-Base URL: `${KITTYCLAW_API_URL:-http://localhost:5230}/api/projects/{project-slug}`
+Base URL: `${KITTYCLAW_API_URL}/api/projects/{project-slug}`
 
 - `GET /tickets/{id}` — full ticket (description, comments, activities, sub-tickets)
 - `GET /tickets?status=Done` — all validated tickets
