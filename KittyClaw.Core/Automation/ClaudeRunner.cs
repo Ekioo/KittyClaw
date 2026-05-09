@@ -67,6 +67,31 @@ public sealed class ClaudeRunner
         return "http://localhost:5230";
     }
 
+    // Locator for the orchestrator's own Web exe. Works in both publish layout (exe sibling of the
+    // running assembly) and `dotnet watch` dev (bin dir contains the exe even though the loader is
+    // dotnet.exe). Returns a forward-slashed path so bash conditionals in skills work cleanly on Windows.
+    private static string? ResolveSelfWebExe()
+    {
+        var name = OperatingSystem.IsWindows() ? "KittyClaw.Web.exe" : "KittyClaw.Web";
+        var sibling = Path.Combine(AppContext.BaseDirectory, name);
+        if (File.Exists(sibling)) return sibling.Replace('\\', '/');
+        var processPath = Environment.ProcessPath;
+        if (!string.IsNullOrEmpty(processPath) &&
+            processPath.EndsWith(name, StringComparison.OrdinalIgnoreCase) &&
+            File.Exists(processPath))
+            return processPath.Replace('\\', '/');
+        return null;
+    }
+
+    // Returns the QaRunner exe only when it sits next to the Web exe (publish layout). In dev each
+    // project has its own bin/, so this returns null and the qa-tester skill falls back to dotnet run.
+    private static string? ResolveSiblingQaRunner()
+    {
+        var name = OperatingSystem.IsWindows() ? "KittyClaw.QaRunner.exe" : "KittyClaw.QaRunner";
+        var sibling = Path.Combine(AppContext.BaseDirectory, name);
+        return File.Exists(sibling) ? sibling.Replace('\\', '/') : null;
+    }
+
     private static string ResolveClaudeBinary()
     {
         var fromEnv = Environment.GetEnvironmentVariable("KITTYCLAW_CLAUDE_BIN");
@@ -288,6 +313,12 @@ public sealed class ClaudeRunner
         // so they hit the *current* host instance even when running on a non-default port (e.g. an
         // isolated test instance spawned by KittyClaw.QaRunner).
         psi.Environment["KITTYCLAW_API_URL"] = ResolveApiUrl();
+        // Locate the orchestrator's own Web exe (and sibling QaRunner exe in the publish layout) so
+        // skills test the same build that's orchestrating them — not whatever happens to be on disk.
+        var selfWebExe = ResolveSelfWebExe();
+        if (selfWebExe is not null) psi.Environment["KITTYCLAW_WEB_EXE"] = selfWebExe;
+        var siblingQaRunner = ResolveSiblingQaRunner();
+        if (siblingQaRunner is not null) psi.Environment["KITTYCLAW_QARUNNER_EXE"] = siblingQaRunner;
         foreach (var kv in ctx.Env) psi.Environment[kv.Key] = kv.Value;
 
         AppendDebugLog(ctx, $"LAUNCHING {ctx.AgentName} {(isResume ? "(resume)" : "(new)")} ticket=#{ctx.TicketId} session={sessionId}");

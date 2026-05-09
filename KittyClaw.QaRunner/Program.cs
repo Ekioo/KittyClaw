@@ -31,6 +31,7 @@ if (scenarioPath is null || targetApi is null)
     return 2;
 }
 
+webExe ??= Environment.GetEnvironmentVariable("KITTYCLAW_WEB_EXE");
 webExe ??= ResolveWebExe();
 if (webExe is null || !File.Exists(webExe))
 {
