@@ -6,6 +6,7 @@
 @using Microsoft.AspNetCore.Components
 @using KittyClaw.Core.Models
 @using KittyClaw.Core.Services
+@using KittyClaw.Core.Extensions
 @using KittyClaw.Web.Extensions
 @inject ProjectService ProjectService
 @inject TicketService TicketService
@@ -870,7 +871,7 @@ else
         _columns = await ColumnService.ListColumnsAsync(Slug);
         if (_selectedTicket is not null)
             _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
-        RebuildPipeline();
+        await RebuildPipelineAsync();
         StateHasChanged();
     }
 
@@ -957,13 +958,45 @@ else
 
     private MarkdownPipeline _mdPipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
 
-    private void RebuildPipeline()
+    private readonly Dictionary<string, Dictionary<int, string>> _crossProjectTickets =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private static readonly System.Text.RegularExpressions.Regex CrossProjectRefPattern =
+        new(@"#([A-Za-z0-9][A-Za-z0-9-]*):\d+", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private async Task FetchCrossProjectTicketsAsync()
     {
+        var allText = string.Join('\n', _tickets.Select(t => (t.Description ?? "") + '\n' + t.Title));
+        if (_selectedTicket is not null)
+            allText += '\n' + string.Join('\n', _selectedTicket.Comments.Select(c => c.Content));
+
+        var foreignSlugs = CrossProjectRefPattern.Matches(allText)
+            .Select(m => m.Groups[1].Value.ToLowerInvariant())
+            .Where(s => !s.Equals(Slug, StringComparison.OrdinalIgnoreCase))
+            .ToHashSet();
+
+        foreach (var foreignSlug in foreignSlugs)
+        {
+            if (_crossProjectTickets.ContainsKey(foreignSlug)) continue;
+            var project = await ProjectService.GetProjectAsync(foreignSlug);
+            if (project is null)
+            {
+                _crossProjectTickets[foreignSlug] = [];
+                continue;
+            }
+            var tickets = await TicketService.ListTicketsAsync(foreignSlug);
+            _crossProjectTickets[foreignSlug] = tickets.ToDictionary(t => t.Id, t => t.Title);
+        }
+    }
+
+    private async Task RebuildPipelineAsync()
+    {
+        await FetchCrossProjectTicketsAsync();
         var index = _tickets.ToDictionary(t => t.Id, t => t.Title);
         var memberHandles = new HashSet<string>(_allMembers.Select(m => m.Slug), StringComparer.OrdinalIgnoreCase);
         _mdPipeline = new MarkdownPipelineBuilder()
             .UseAdvancedExtensions()
-            .Use(new TicketReferenceExtension(Slug, index))
+            .Use(new TicketReferenceExtension(Slug, index, _crossProjectTickets))
             .Use(new MentionExtension(memberHandles))
             .Build();
     }
@@ -1055,7 +1088,7 @@ else
             _tickets = await TicketService.ListTicketsAsync(Slug);
             _allLabels = await LabelService.ListLabelsAsync(Slug);
             _allMembers = await MemberService.ListMembersAsync(Slug);
-            RebuildPipeline();
+            await RebuildPipelineAsync();
         }
         if (ParentId.HasValue)
         {
@@ -1077,7 +1110,7 @@ else
             _allMembers = await MemberService.ListMembersAsync(Slug);
             if (_selectedTicket is not null)
                 _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
-            RebuildPipeline();
+            await RebuildPipelineAsync();
             StateHasChanged();
         });
     }
@@ -1410,7 +1443,7 @@ else
         _dragHoverIndex = -1;
         _dragActiveSlot = -1;
         _dropTargetTicketId = null;
-        RebuildPipeline();
+        await RebuildPipelineAsync();
     }
 
     private async Task OnDropAsChild(TicketSummary target, string colName)
@@ -1430,7 +1463,7 @@ else
             _dragHoverIndex = -1;
             _dragActiveSlot = -1;
             _dropTargetTicketId = null;
-            RebuildPipeline();
+            await RebuildPipelineAsync();
             return;
         }
 
@@ -1474,7 +1507,7 @@ else
         _dragOverStatus = null;
         _dragHoverIndex = -1;
         _dragActiveSlot = -1;
-        RebuildPipeline();
+        await RebuildPipelineAsync();
     }
 
     // Create popup
@@ -1518,7 +1551,7 @@ else
                 await TicketService.DeleteTicketAsync(Slug, ticket.Id));
         _showCreatePopup = false;
         await RefreshTicketsAndTouch();
-        RebuildPipeline();
+        await RebuildPipelineAsync();
     }
 
     private async Task SelectTicket(TicketSummary ticket)
@@ -1565,7 +1598,7 @@ else
         _selectedTicket = null;
         _confirmDelete = false;
         await RefreshTicketsAndTouch();
-        RebuildPipeline();
+        await RebuildPipelineAsync();
         Navigation.NavigateTo($"/board/{Slug}", replace: true);
     }
 
@@ -1606,7 +1639,7 @@ else
         _editingTitle = false;
         _selectedTicket = await TicketService.GetTicketAsync(Slug, ticketId);
         await RefreshTicketsAndTouch();
-        RebuildPipeline();
+        await RebuildPipelineAsync();
     }
 
     private async Task HandleTitleKeyDown(KeyboardEventArgs e)
@@ -1669,7 +1702,7 @@ else
         _trashConfirmColumn = null;
         _columns = await ColumnService.ListColumnsAsync(Slug);
         await RefreshTicketsAndTouch();
-        RebuildPipeline();
+        await RebuildPipelineAsync();
     }
 
     // Trash zone handlers
@@ -1722,7 +1755,7 @@ else
             await TicketService.CreateTicketAsync(Slug, t.Title, t.Description, t.CreatedBy, t.Status, labelIds, t.Priority, t.AssignedTo, t.ParentId));
         _trashConfirmTicket = null;
         await RefreshTicketsAndTouch();
-        RebuildPipeline();
+        await RebuildPipelineAsync();
     }
 
     // ── Label autocomplete ──
