@@ -15,11 +15,16 @@ Keep the `dotnet watch` process running — it serves the UI and the automation 
 ## Repository layout
 
 ```
-KittyClaw.Core/            Models, services, automation engine, embedded .agents/ template
+KittyClaw.Core/            Models, services, automation engine, embedded project template
 KittyClaw.Core.Tests/      xUnit tests
 KittyClaw.Web/             Blazor Server app + REST endpoints (Api/Endpoints.cs), components, CSS, JS
-.agents/              Live agents used by KittyClaw itself (also embedded as template for other projects)
-.agents-root/         Files copied to each initialized workspace's root (e.g. CLAUDE.md)
+KittyClaw.QaRunner/        Isolated test-instance launcher (Playwright + scenario runner)
+KittyClaw.ClaudeMock/      Mock claude CLI used by QaRunner for hermetic agent dispatch
+ProjectTemplate/           Source of truth for new-project initialization. Embedded into
+                           KittyClaw.Core.dll and copied into each workspace on Initialize.
+  .agents/                   Skills, memory stubs, automations.json, preamble.md.
+  CLAUDE.md                  Workspace guide written to the workspace root.
+tools/                     Repo helpers (publish-stable.ps1, …).
 ```
 
 ## Storage
@@ -37,11 +42,15 @@ KittyClaw.Web/             Blazor Server app + REST endpoints (Api/Endpoints.cs)
 - **Services** are singletons injected via DI in `KittyClaw.Web/Program.cs`.
 - **Blazor components**: `@rendermode InteractiveServer`, `[Parameter]`, `StateHasChanged()`. Prefer direct service calls over HTTP self-calls.
 - **CSS** lives in a single `KittyClaw.Web/wwwroot/app.css`. **JS** in `KittyClaw.Web/wwwroot/js/`.
-- **English everywhere**: code comments, commit messages, ticket content, `.agents/**`.
+- **English everywhere**: code comments, commit messages, ticket content, `ProjectTemplate/**`.
 
-## Agent template embedding
+## Project template embedding
 
-`.agents/preamble.md`, `.agents/*/SKILL.md`, `.agents/*/memory.md` and `.agents/automations.json` are embedded into `KittyClaw.Core.dll` via `KittyClaw.Core.csproj` (`<EmbeddedResource>` items with `LogicalName` `KittyClaw.Core.AgentsTemplate/…`). `AgentsTemplateService` enumerates them and copies them into a target project's workspace on Initialize. Keep these files **generic** (no KittyClaw-specific stack references) since they are shipped as a starter template to other projects.
+Files under `ProjectTemplate/` are the source of truth for new-project initialization:
+- `ProjectTemplate/.agents/preamble.md`, `*/SKILL.md`, `*/memory.md`, `automations.json` are embedded with `LogicalName` `KittyClaw.Core.AgentsTemplate/…` and written to `<workspace>/.agents/` on Initialize.
+- Everything else under `ProjectTemplate/` (e.g. `CLAUDE.md`) is embedded with `LogicalName` `KittyClaw.Core.AgentsTemplateRoot/…` and written to the workspace root.
+
+`AgentsTemplateService` enumerates the embedded resources by these prefixes and copies them out via `InitializeAsync(workspace, overwrite)` (called by the project-creation flow). Keep `ProjectTemplate/**` **generic** (no KittyClaw-specific stack references) since the same files ship to every initialized project.
 
 ## API
 
