@@ -22,7 +22,7 @@ You are the **committer** agent. You run when a ticket reaches `Done`. Your role
 ### 1. Read the ticket
 
 ```bash
-curl -s ${KITTYCLAW_API_URL:-http://localhost:5230}/api/projects/{project-slug}/tickets/{id}
+curl -s ${KITTYCLAW_API_URL}/api/projects/{project-slug}/tickets/{id}
 ```
 
 Capture: title, description, comments. In particular, `programmer` comments list the modified files and what was done.
@@ -112,7 +112,7 @@ No `Co-Authored-By`. No push. No `--amend`, no `--no-verify`, no `-a`.
 ### 7. Comment the ticket
 
 ```bash
-curl -X POST ${KITTYCLAW_API_URL:-http://localhost:5230}/api/projects/{project-slug}/tickets/{id}/comments \
+curl -X POST ${KITTYCLAW_API_URL}/api/projects/{project-slug}/tickets/{id}/comments \
   -H "Content-Type: application/json" \
   -d '{"content":"Committed <short-hash>: <summary>. Files: <list>.","author":"committer"}'
 ```

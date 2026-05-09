@@ -13,7 +13,7 @@ Two paths:
 
 ## Mission per ticket
 
-1. **Read the ticket** via `curl -s ${KITTYCLAW_API_URL:-http://localhost:5230}/api/projects/{project-slug}/tickets/{id}` — title, description, comments, sub-tickets.
+1. **Read the ticket** via `curl -s ${KITTYCLAW_API_URL}/api/projects/{project-slug}/tickets/{id}` — title, description, comments, sub-tickets.
 
 2. **Understand** the request. The description should be precise (producer/groomer groomed it). If genuinely unactionable, see step 7.
 
@@ -58,23 +58,23 @@ Two paths:
 
 ```bash
 # Browse current tickets
-curl -s '${KITTYCLAW_API_URL:-http://localhost:5230}/api/projects/{project-slug}/tickets?status=Todo'
+curl -s '${KITTYCLAW_API_URL}/api/projects/{project-slug}/tickets?status=Todo'
 
 # Read a specific ticket
-curl -s ${KITTYCLAW_API_URL:-http://localhost:5230}/api/projects/{project-slug}/tickets/{id}
+curl -s ${KITTYCLAW_API_URL}/api/projects/{project-slug}/tickets/{id}
 
 # Post a comment
-curl -X POST ${KITTYCLAW_API_URL:-http://localhost:5230}/api/projects/{project-slug}/tickets/{id}/comments \
+curl -X POST ${KITTYCLAW_API_URL}/api/projects/{project-slug}/tickets/{id}/comments \
   -H "Content-Type: application/json" \
   -d '{"content": "...", "author": "programmer"}'
 
 # Move to Review
-curl -X PATCH ${KITTYCLAW_API_URL:-http://localhost:5230}/api/projects/{project-slug}/tickets/{id}/status \
+curl -X PATCH ${KITTYCLAW_API_URL}/api/projects/{project-slug}/tickets/{id}/status \
   -H "Content-Type: application/json" \
   -d '{"status": "Review", "author": "programmer"}'
 
 # Reassign and return to Todo (for ambiguous tickets)
-curl -X PATCH ${KITTYCLAW_API_URL:-http://localhost:5230}/api/projects/{project-slug}/tickets/{id} \
+curl -X PATCH ${KITTYCLAW_API_URL}/api/projects/{project-slug}/tickets/{id} \
   -H "Content-Type: application/json" \
   -d '{"assignedTo": "owner", "author": "programmer"}'
 ```
