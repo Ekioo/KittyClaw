@@ -39,4 +39,4 @@ Thumbs.db
 .vscode
 
 # Agent skills, automations config and runtime state — local to each workspace.
-.agents/channel/
+.agents
