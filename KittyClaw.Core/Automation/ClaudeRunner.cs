@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -43,84 +42,6 @@ public sealed class ClaudeRunner
     private readonly AgentRunRegistry _runs;
     private readonly RunConcurrencyGate _gate;
     private readonly ILogger<ClaudeRunner> _logger;
-
-    // Resolved once per process. Search order:
-    //   0. KITTYCLAW_CLAUDE_BIN env var (escape hatch)
-    //   1. Sibling of host exe: <baseDir>/claude(.exe)
-    //   2. <baseDir>/tools/claude(.exe)
-    //   3. Walk up to a repo root and look for KittyClaw.ClaudeMock/bin/<config>/net10.0/claude(.exe) (dev)
-    //   4. "claude" — resolved via PATH (production default)
-    private static readonly Lazy<string> _claudeBinary = new(ResolveClaudeBinary);
-
-    private static string ResolveApiUrl()
-    {
-        // Pick the first http(s) URL the host process is listening on, falling back to the
-        // historical default (5230). Stripped of trailing slashes so skills can append paths.
-        var urls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS");
-        if (!string.IsNullOrWhiteSpace(urls))
-        {
-            var first = urls.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .FirstOrDefault(u => u.StartsWith("http://", StringComparison.OrdinalIgnoreCase));
-            if (!string.IsNullOrEmpty(first))
-                return first.TrimEnd('/');
-        }
-        return "http://localhost:5230";
-    }
-
-    // Locator for the orchestrator's own Web exe. Works in both publish layout (exe sibling of the
-    // running assembly) and `dotnet watch` dev (bin dir contains the exe even though the loader is
-    // dotnet.exe). Returns a forward-slashed path so bash conditionals in skills work cleanly on Windows.
-    private static string? ResolveSelfWebExe()
-    {
-        var name = OperatingSystem.IsWindows() ? "KittyClaw.Web.exe" : "KittyClaw.Web";
-        var sibling = Path.Combine(AppContext.BaseDirectory, name);
-        if (File.Exists(sibling)) return sibling.Replace('\\', '/');
-        var processPath = Environment.ProcessPath;
-        if (!string.IsNullOrEmpty(processPath) &&
-            processPath.EndsWith(name, StringComparison.OrdinalIgnoreCase) &&
-            File.Exists(processPath))
-            return processPath.Replace('\\', '/');
-        return null;
-    }
-
-    // Returns the QaRunner exe only when it sits next to the Web exe (publish layout). In dev each
-    // project has its own bin/, so this returns null and the qa-tester skill falls back to dotnet run.
-    private static string? ResolveSiblingQaRunner()
-    {
-        var name = OperatingSystem.IsWindows() ? "KittyClaw.QaRunner.exe" : "KittyClaw.QaRunner";
-        var sibling = Path.Combine(AppContext.BaseDirectory, name);
-        return File.Exists(sibling) ? sibling.Replace('\\', '/') : null;
-    }
-
-    private static string ResolveClaudeBinary()
-    {
-        var fromEnv = Environment.GetEnvironmentVariable("KITTYCLAW_CLAUDE_BIN");
-        if (!string.IsNullOrWhiteSpace(fromEnv) && File.Exists(fromEnv))
-            return fromEnv;
-
-        var exe = OperatingSystem.IsWindows() ? "claude.exe" : "claude";
-        var baseDir = AppContext.BaseDirectory;
-
-        var sibling = Path.Combine(baseDir, exe);
-        if (File.Exists(sibling)) return sibling;
-
-        var tools = Path.Combine(baseDir, "tools", exe);
-        if (File.Exists(tools)) return tools;
-
-        // Walk up looking for KittyClaw.ClaudeMock/bin/**/claude(.exe) (dev mode)
-        var dir = new DirectoryInfo(baseDir);
-        for (int i = 0; i < 6 && dir is not null; i++, dir = dir.Parent)
-        {
-            var mockProj = Path.Combine(dir.FullName, "KittyClaw.ClaudeMock", "bin");
-            if (Directory.Exists(mockProj))
-            {
-                var found = Directory.EnumerateFiles(mockProj, exe, SearchOption.AllDirectories).FirstOrDefault();
-                if (found is not null) return found;
-            }
-        }
-
-        return "claude";
-    }
 
     public ClaudeRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<ClaudeRunner> logger)
     {
@@ -293,44 +214,17 @@ public sealed class ClaudeRunner
         var effectiveModel = modelOverride ?? ctx.Model;
         if (effectiveModel is not null) { args.Add("--model"); args.Add(effectiveModel); }
 
-        var psi = new ProcessStartInfo
-        {
-            FileName = _claudeBinary.Value,
-            WorkingDirectory = ctx.WorkspacePath,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            // Force UTF-8 on all three streams. .NET's default on Windows is the OEM code
-            // page (CP850/CP1252), which mangles every accented character in chat prompts
-            // sent to claude and every accented character in claude's reply going back.
-            StandardInputEncoding = Encoding.UTF8,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
-        foreach (var a in args) psi.ArgumentList.Add(a);
-        psi.Environment["CLAUDE_AGENT"] = ctx.AgentName;
-        // Tell skills which API URL to talk to. Skills resolve `${KITTYCLAW_API_URL:-http://localhost:5230}`
-        // so they hit the *current* host instance even when running on a non-default port (e.g. an
-        // isolated test instance spawned by KittyClaw.QaRunner).
-        psi.Environment["KITTYCLAW_API_URL"] = ResolveApiUrl();
-        // Locate the orchestrator's own Web exe (and sibling QaRunner exe in the publish layout) so
-        // skills test the same build that's orchestrating them — not whatever happens to be on disk.
-        var selfWebExe = ResolveSelfWebExe();
-        if (selfWebExe is not null) psi.Environment["KITTYCLAW_WEB_EXE"] = selfWebExe;
-        var siblingQaRunner = ResolveSiblingQaRunner();
-        if (siblingQaRunner is not null) psi.Environment["KITTYCLAW_QARUNNER_EXE"] = siblingQaRunner;
-        foreach (var kv in ctx.Env) psi.Environment[kv.Key] = kv.Value;
+        var psi = ProcessLifecycleManager.BuildProcessStartInfo(ctx, args);
 
         AppendDebugLog(ctx, $"LAUNCHING {ctx.AgentName} {(isResume ? "(resume)" : "(new)")} ticket=#{ctx.TicketId} session={sessionId}");
         _logger.LogInformation("LAUNCH {Agent} {Mode} ticket=#{TicketId} session={SessionId} cmd={Bin} {Args}",
-            ctx.AgentName, isResume ? "(resume)" : "(new)", ctx.TicketId, sessionId, _claudeBinary.Value, string.Join(" ", args));
+            ctx.AgentName, isResume ? "(resume)" : "(new)", ctx.TicketId, sessionId,
+            ProcessLifecycleManager.ClaudeBinary, string.Join(" ", args));
 
-        Process proc;
+        System.Diagnostics.Process proc;
         try
         {
-            proc = Process.Start(psi)!;
+            proc = System.Diagnostics.Process.Start(psi)!;
         }
         catch (Exception ex)
         {
@@ -368,9 +262,9 @@ public sealed class ClaudeRunner
         }
 
         var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, run.Cancellation.Token);
-        var stdoutTask = PumpStdoutAsync(proc, run, linked.Token);
-        var stderrTask = PumpStderrAsync(proc, run, linked.Token);
-        var steerTask = PumpSteeringAsync(proc, run, linked.Token);
+        var stdoutTask = ClaudeStreamPump.PumpStdoutAsync(proc, run, linked.Token);
+        var stderrTask = ClaudeStreamPump.PumpStderrAsync(proc, run, linked.Token);
+        var steerTask = ClaudeStreamPump.PumpSteeringAsync(proc, run, linked.Token);
 
         using var killReg = linked.Token.Register(() =>
         {
@@ -437,87 +331,6 @@ public sealed class ClaudeRunner
         }
 
         return sb.ToString();
-    }
-
-    private static async Task PumpStdoutAsync(Process proc, AgentRun run, CancellationToken ct)
-    {
-        var reader = proc.StandardOutput;
-        while (!ct.IsCancellationRequested)
-        {
-            var line = await reader.ReadLineAsync(ct);
-            if (line is null) break;
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            try
-            {
-                using var doc = JsonDocument.Parse(line);
-                var kind = doc.RootElement.TryGetProperty("type", out var t) ? t.GetString() ?? "event" : "event";
-                // For assistant message events: emit the assistant text first, then separate tool_use events
-                if (kind == "assistant" &&
-                    doc.RootElement.TryGetProperty("message", out var msg) &&
-                    msg.TryGetProperty("content", out var content) &&
-                    content.ValueKind == JsonValueKind.Array)
-                {
-                    run.Push(new StreamEvent(DateTime.UtcNow, kind, FlattenJson(doc.RootElement)));
-                    foreach (var part in content.EnumerateArray())
-                    {
-                        if (part.TryGetProperty("type", out var ptype) && ptype.GetString() == "tool_use")
-                        {
-                            var toolName = part.TryGetProperty("name", out var n) ? n.GetString() ?? "tool" : "tool";
-                            var toolInput = part.TryGetProperty("input", out var inp) ? inp.ToString() : "{}";
-                            run.Push(new StreamEvent(DateTime.UtcNow, "tool_use", toolName, toolInput));
-                        }
-                    }
-                }
-                else
-                {
-                    run.Push(new StreamEvent(DateTime.UtcNow, kind, FlattenJson(doc.RootElement)));
-                }
-            }
-            catch
-            {
-                run.Push(new StreamEvent(DateTime.UtcNow, "raw", line));
-            }
-        }
-    }
-
-    private static async Task PumpStderrAsync(Process proc, AgentRun run, CancellationToken ct)
-    {
-        var reader = proc.StandardError;
-        while (!ct.IsCancellationRequested)
-        {
-            var line = await reader.ReadLineAsync(ct);
-            if (line is null) break;
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            run.Push(new StreamEvent(DateTime.UtcNow, "stderr", line));
-        }
-    }
-
-    private static async Task PumpSteeringAsync(Process proc, AgentRun run, CancellationToken ct)
-    {
-        // Best-effort steering: write queued messages to stdin while it's still open.
-        // With --print mode, claude closes its own stdin read after the initial prompt
-        // is consumed, so messages arriving after that will be held in the queue and
-        // replayed on the next --resume invocation (handled by the engine).
-        try
-        {
-            while (await run.SteeringQueue.Reader.WaitToReadAsync(ct))
-            {
-                while (run.SteeringQueue.Reader.TryRead(out var msg))
-                {
-                    run.Push(new StreamEvent(DateTime.UtcNow, "steer", msg));
-                    try
-                    {
-                        if (proc.StandardInput.BaseStream.CanWrite)
-                        {
-                            await proc.StandardInput.WriteLineAsync(msg);
-                            await proc.StandardInput.FlushAsync(ct);
-                        }
-                    }
-                    catch { /* stdin already closed */ }
-                }
-            }
-        }
-        catch (OperationCanceledException) { }
     }
 
     internal static string FlattenJson(JsonElement e)

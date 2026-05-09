@@ -1,0 +1,89 @@
+using System.Diagnostics;
+using System.Text.Json;
+
+namespace KittyClaw.Core.Automation;
+
+/// <summary>Pumps stdout, stderr, and steering stdin between a claude subprocess and an AgentRun.</summary>
+internal static class ClaudeStreamPump
+{
+    internal static async Task PumpStdoutAsync(Process proc, AgentRun run, CancellationToken ct)
+    {
+        var reader = proc.StandardOutput;
+        while (!ct.IsCancellationRequested)
+        {
+            var line = await reader.ReadLineAsync(ct);
+            if (line is null) break;
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            try
+            {
+                using var doc = JsonDocument.Parse(line);
+                var kind = doc.RootElement.TryGetProperty("type", out var t) ? t.GetString() ?? "event" : "event";
+                // For assistant message events: emit the assistant text first, then separate tool_use events
+                if (kind == "assistant" &&
+                    doc.RootElement.TryGetProperty("message", out var msg) &&
+                    msg.TryGetProperty("content", out var content) &&
+                    content.ValueKind == JsonValueKind.Array)
+                {
+                    run.Push(new StreamEvent(DateTime.UtcNow, kind, ClaudeRunner.FlattenJson(doc.RootElement)));
+                    foreach (var part in content.EnumerateArray())
+                    {
+                        if (part.TryGetProperty("type", out var ptype) && ptype.GetString() == "tool_use")
+                        {
+                            var toolName = part.TryGetProperty("name", out var n) ? n.GetString() ?? "tool" : "tool";
+                            var toolInput = part.TryGetProperty("input", out var inp) ? inp.ToString() : "{}";
+                            run.Push(new StreamEvent(DateTime.UtcNow, "tool_use", toolName, toolInput));
+                        }
+                    }
+                }
+                else
+                {
+                    run.Push(new StreamEvent(DateTime.UtcNow, kind, ClaudeRunner.FlattenJson(doc.RootElement)));
+                }
+            }
+            catch
+            {
+                run.Push(new StreamEvent(DateTime.UtcNow, "raw", line));
+            }
+        }
+    }
+
+    internal static async Task PumpStderrAsync(Process proc, AgentRun run, CancellationToken ct)
+    {
+        var reader = proc.StandardError;
+        while (!ct.IsCancellationRequested)
+        {
+            var line = await reader.ReadLineAsync(ct);
+            if (line is null) break;
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            run.Push(new StreamEvent(DateTime.UtcNow, "stderr", line));
+        }
+    }
+
+    internal static async Task PumpSteeringAsync(Process proc, AgentRun run, CancellationToken ct)
+    {
+        // Best-effort steering: write queued messages to stdin while it's still open.
+        // With --print mode, claude closes its own stdin read after the initial prompt
+        // is consumed, so messages arriving after that will be held in the queue and
+        // replayed on the next --resume invocation (handled by the engine).
+        try
+        {
+            while (await run.SteeringQueue.Reader.WaitToReadAsync(ct))
+            {
+                while (run.SteeringQueue.Reader.TryRead(out var msg))
+                {
+                    run.Push(new StreamEvent(DateTime.UtcNow, "steer", msg));
+                    try
+                    {
+                        if (proc.StandardInput.BaseStream.CanWrite)
+                        {
+                            await proc.StandardInput.WriteLineAsync(msg);
+                            await proc.StandardInput.FlushAsync(ct);
+                        }
+                    }
+                    catch { /* stdin already closed */ }
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+}
