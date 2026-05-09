@@ -52,6 +52,10 @@ Files under `ProjectTemplate/` are the source of truth for new-project initializ
 
 `AgentsTemplateService` enumerates the embedded resources by these prefixes and copies them out via `InitializeAsync(workspace, overwrite)` (called by the project-creation flow). Keep `ProjectTemplate/**` **generic** (no KittyClaw-specific stack references) since the same files ship to every initialized project.
 
+## Architecture docs
+
+Per-feature architecture documentation lives under [`doc/`](doc/index.md) — start at `doc/index.md` and follow the relative links. Each feature page covers purpose, key components, entry points, and external dependencies. Each concept is explained in exactly one file.
+
 ## API
 
 Auto-generated at runtime from the OpenAPI spec. Read it live — do not rely on any committed snapshot:

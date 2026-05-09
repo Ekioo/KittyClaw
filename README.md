@@ -78,6 +78,10 @@ Per-project agent state lives **in the workspace**: `<workspace>/.agents/{agent}
 | **ProjectTemplate/** | Source of truth for new-project initialization. Files under `Agents/` are written to `<workspace>/.agents/`; `CLAUDE.md` is written to the workspace root. |
 | **tools/** | Repo helpers (e.g. `publish-stable.ps1` to bundle Web + QaRunner + ClaudeMock for a stable channel) |
 
+## Architecture
+
+Per-feature architecture documentation lives under [`doc/`](doc/index.md). Start at `doc/index.md` for an indexed map of the automation engine, agent dispatch, project template, REST API, storage, and Kanban UI.
+
 ## API
 
 All endpoints are under `/api`. The documentation is auto-generated from the live OpenAPI spec:
