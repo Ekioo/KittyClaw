@@ -172,7 +172,7 @@ public static class OpenApiMarkdownGenerator
         sb.AppendLine();
         sb.AppendLine("## Conventions");
         sb.AppendLine();
-        sb.AppendLine("- `author` **(required on all mutating endpoints)**: identifies who is performing the action. Use `\"owner\"` for the human user, `\"agent:{name}\"` for agents (e.g. `\"agent:claude\"`). Omitting it returns HTTP 400.");
+        sb.AppendLine("- `author` **(required on all mutating endpoints)**: identifies who is performing the action. Use `\"owner\"` for the human user, or the agent name directly (e.g. `\"programmer\"`, `\"groomer\"`). Omitting it returns HTTP 400.");
         sb.AppendLine("- Fields marked `// required` in request body examples must be present; fields marked `// optional` may be omitted.");
         sb.AppendLine("- OpenAPI JSON: `GET /openapi/v1.json`");
         sb.AppendLine("- This documentation is auto-generated from the OpenAPI spec.");
