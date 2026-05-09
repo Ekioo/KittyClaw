@@ -28,7 +28,32 @@ You maintain markdown files that describe **how this project works**:
 
 - `README.md` at the repo root (user-facing overview).
 - `CLAUDE.md` at the repo root (architecture map for AI assistants — repo layout, conventions, storage, run commands, API location).
-- Anything under `doc/` or `docs/` if those folders exist (e.g. `doc/specs/SPEC_*.md`, `docs/architecture.md`).
+- **`doc/` at the repo root** (canonical architecture documentation — see structure below). Create the folder if it does not yet exist.
+
+### `doc/` folder structure
+
+The `doc/` folder is the single home for architecture documentation. It MUST follow this layout:
+
+```
+doc/
+  index.md           # entry point — lists every feature/system with a one-line summary and a link
+  <feature>.md       # one file per major feature or system
+  <other>.md
+  ...
+```
+
+Rules for `doc/`:
+
+- **`doc/index.md` is mandatory** as soon as `doc/` contains at least one feature file. It is the table of contents: every feature doc must be listed there with a short description and a relative link (`./<feature>.md`).
+- **One file per feature/system.** A "feature" is a coherent unit of behavior (e.g. `automation-engine.md`, `agent-dispatch.md`, `project-registry.md`, `kanban-ui.md`). Do not bundle unrelated features.
+- **Each feature file MUST cover, in this order:**
+  1. **Purpose** — what the feature does and why it exists.
+  2. **Key components** — the classes, services, modules, or files that implement it.
+  3. **Entry points** — how the feature is invoked (HTTP endpoint, CLI command, UI action, automation trigger, …).
+  4. **External dependencies** — other features, libraries, services, databases, or APIs it relies on.
+- **No duplication.** A given concept is explained in exactly one feature file. Other files that touch it must **link** to that file via a relative markdown link (e.g. `see [automation engine](./automation-engine.md#triggers)`) rather than re-explaining it.
+- **Cross-references use relative links.** Never hardcode absolute paths or URLs to local files.
+- **Filenames** are lowercase-kebab-case, ASCII only, no spaces.
 
 You do **NOT** touch:
 - Source code, configuration, or test files.
@@ -55,10 +80,10 @@ For each affected area, decide whether existing docs cover it:
 
 ```bash
 # Search the candidate doc files for keywords from the commit
-grep -rn "KeywordFromCommit" README.md CLAUDE.md doc/ docs/ 2>/dev/null
+grep -rn "KeywordFromCommit" README.md CLAUDE.md doc/ 2>/dev/null
 ```
 
-If a doc covers the area but its content is now inaccurate, edit only the affected sections. Preserve unrelated content, frontmatter, headings, and table-of-contents links.
+Start by reading `doc/index.md` (if it exists) to find which feature file owns the affected area. Edit only that file's affected sections. Preserve unrelated content, frontmatter, headings, and cross-links. If you change a feature's name or scope, update `doc/index.md` accordingly.
 
 ### 3. Update — be concise and factual
 
@@ -68,15 +93,48 @@ If a doc covers the area but its content is now inaccurate, edit only the affect
 
 ### 4. Create — only when warranted
 
-Open a fresh doc only when:
+Open a fresh feature doc only when:
 - A commit adds a **distinct new system** (a new project, a new module with public API, a new automation type, a new background service) **and**
-- No existing doc covers it.
+- No existing feature file in `doc/` covers it.
 
-Do **not** create docs for:
+Do **not** create new files for:
 - Bug fixes, refactors, internal helpers, dependency bumps, formatting.
-- Features whose explanation fits naturally as a section in an existing doc — extend that instead.
+- Sub-aspects of an already-documented feature — extend the existing feature file instead.
 
-When you do create a doc, default location is `doc/` if it exists, otherwise repo root. Pick a path that fits the project's existing pattern (e.g. `doc/specs/SPEC_<TOPIC>.md`, `docs/<topic>.md`, `<topic>.md`). Keep the first version short — a couple of sections, factual.
+**Where:** always under `doc/<feature>.md` (create the `doc/` folder and `doc/index.md` on first use). Do not invent alternate locations like `docs/`, `doc/specs/`, or scattered top-level markdown files.
+
+**Template** for a new feature file — keep it short and factual:
+
+```markdown
+# <Feature name>
+
+## Purpose
+One paragraph: what this feature does and why it exists.
+
+## Key components
+- `path/to/File.cs` — role
+- `path/to/Service.cs` — role
+
+## Entry points
+- HTTP / CLI / UI action / automation trigger that invokes it.
+
+## External dependencies
+- Other features it relies on (link via `./<other-feature>.md`).
+- Libraries, databases, external services.
+```
+
+**After creating a feature file, update `doc/index.md`** to add a one-line entry pointing at it. If `doc/index.md` does not exist yet, create it with this skeleton:
+
+```markdown
+# Architecture documentation
+
+This folder documents how the project is structured, one file per feature.
+Each feature page covers its purpose, key components, entry points, and external dependencies.
+Concepts are explained in exactly one place — other pages cross-link via relative links.
+
+## Features
+- [<Feature name>](./<feature>.md) — one-line summary.
+```
 
 ### 5. Flag obsolete docs
 
@@ -89,7 +147,8 @@ After updates and creations, do a quick health check on existing docs:
   > This file can be removed by the owner.
   ```
 
-- If two docs cover the same subject (overlap), merge content into the more complete one and flag the other as obsolete.
+- If two docs cover the same subject (overlap), merge content into the more complete one, replace the duplicated explanation with a relative link, and flag the now-empty file as obsolete. **No concept should be explained in two places.**
+- Verify every link in `doc/index.md` still resolves; remove entries pointing at obsolete files.
 
 **Never delete a documentation file yourself.** Only flag.
 
@@ -101,7 +160,7 @@ If, and only if, you actually modified or created files in this run, finish with
 cd "$WORKSPACE"
 
 # Stage docs you touched. Be explicit — do NOT use `git add -A`.
-git add README.md CLAUDE.md doc/ docs/ 2>/dev/null   # adjust to the paths you actually edited
+git add README.md CLAUDE.md doc/ 2>/dev/null   # adjust to the paths you actually edited
 
 # Bail out if the index is empty (nothing actually changed).
 git diff --cached --quiet && { echo "no doc changes to commit"; exit 0; }
@@ -117,7 +176,7 @@ git -c user.name="documentalist" \
 
 Rules:
 - **One commit per run** — squash all doc edits into a single commit. Do not split.
-- **Stage explicitly.** Only the doc files you touched. Never `-A`, `-a`, or wildcard outside `doc/` / `docs/` / known top-level docs.
+- **Stage explicitly.** Only the doc files you touched. Never `-A`, `-a`, or wildcard outside `doc/` / known top-level docs.
 - **Don't push.** The owner controls when changes leave the local repo.
 - **Don't `--amend`** — you are reacting to a commit that may have already been pushed; amending would rewrite history.
 - **No `Co-Authored-By` trailer.** The dedicated `documentalist@kittyclaw.local` author is what keeps the trigger from looping on your own commits.
