@@ -80,9 +80,9 @@ else
                             }
                             else
                             {
-                                <button class="dashboard-tile-refresh" title="@L["RefreshTile"]"
+                                <button class="dashboard-tile-refresh" title="@(_refreshErrors.TryGetValue(t.FileName, out var err) ? err : L["RefreshTile"])"
                                         @onclick="() => RefreshTile(t.FileName)"
-                                        @onmousedown:stopPropagation>&#x21BB;</button>
+                                        @onmousedown:stopPropagation>@(_refreshErrors.ContainsKey(t.FileName) ? "⚠" : "↻")</button>
                             }
                             <button class="dashboard-tile-edit" title="@L["EditTile"]"
                                     @onclick="() => OpenTileEdit(t.FileName)"
@@ -244,6 +244,7 @@ else
 
     // fileName → runId of active ClaudeRunner refresh run
     private readonly Dictionary<string, string> _refreshRunIds = new();
+    private readonly Dictionary<string, string> _refreshErrors = new();
     private string? _activeRunDrawerId;
 
     private static readonly MarkdownPipeline _markdownPipeline =
@@ -647,6 +648,7 @@ else
     {
         var runId = Guid.NewGuid().ToString("N");
         _refreshRunIds[fileName] = runId;
+        _refreshErrors.Remove(fileName);
         await InvokeAsync(StateHasChanged);
 
         var output = new StringBuilder();
@@ -665,6 +667,7 @@ else
                 ConcurrencyGroup = $"dashboard-{Slug}-{SanitizeName(fileName)}",
                 Model = sidecar.Model,
                 SessionScope = "dashboard",
+                PersistSession = false,
                 PresetRunId = runId,
                 OnEventHook = ev =>
                 {
@@ -691,6 +694,14 @@ else
                 // the same but a fresh request is triggered by the StateHasChanged below.
                 _contentCache[fileName] = "";
             }
+            else
+            {
+                _refreshErrors[fileName] = "Refresh produced no output — open the run drawer to see what claude returned.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _refreshErrors[fileName] = $"Refresh failed: {ex.Message}";
         }
         finally
         {

@@ -114,6 +114,7 @@ public sealed class DashboardRefreshService : BackgroundService
             ConcurrencyGroup = $"dashboard-{slug}-{SanitizeFileName(fileName)}",
             Model = sidecar.Model,
             SessionScope = "dashboard",
+            PersistSession = false,
             OnEventHook = ev =>
             {
                 if (ev.Kind != "assistant" || string.IsNullOrWhiteSpace(ev.Text)) return;

@@ -32,6 +32,9 @@ public sealed class ClaudeRunContext
     /// <summary>If true and the run was a --resume that produced no assistant output and exited non-zero, the runner will silently invalidate the session and respawn with a fresh one in the same AgentRun.</summary>
     public bool RetryOnResumeFailure { get; init; }
 
+    /// <summary>If false, the run starts a fresh claude session every time and does not persist a sessionId for resume. Use for stateless on-demand runs (e.g. dashboard tile refresh) that must re-execute their tools rather than recall prior turns.</summary>
+    public bool PersistSession { get; init; } = true;
+
     /// <summary>Callback invoked for every StreamEvent pushed onto the AgentRun. Wired before any event is emitted, so no race with subscribers attaching after the fact.</summary>
     public Action<StreamEvent>? OnEventHook { get; init; }
 }
@@ -93,11 +96,14 @@ public sealed class ClaudeRunner
         // SessionScope optionally namespaces the key (e.g. "chat:agent:sweep") so chat
         // sessions don't collide with automation sessions for the same agent.
         var scopedAgent = ctx.SessionScope is null ? ctx.AgentName : $"{ctx.SessionScope}:{ctx.AgentName}";
-        var existingSessionId = _sessions.GetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId);
+        var existingSessionId = ctx.PersistSession
+            ? _sessions.GetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId)
+            : null;
         var sessionId = existingSessionId ?? Guid.NewGuid().ToString();
         var isResume = existingSessionId is not null;
         run.SessionId = sessionId;
-        _sessions.SetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId, sessionId);
+        if (ctx.PersistSession)
+            _sessions.SetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId, sessionId);
 
         // Global concurrency gate: cap simultaneous claude subprocesses across all projects
         // so the host doesn't OOM under heavy automation. Chats bypass entirely.
