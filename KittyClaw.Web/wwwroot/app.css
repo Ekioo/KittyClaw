@@ -3193,13 +3193,14 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .dashboard-grid {
     position: relative;
     min-width: 100%;
+    min-height: calc(100vh - 110px);
     border-radius: 8px;
-    background-image: radial-gradient(circle, rgba(255,255,255,0.10) 1.5px, transparent 1.5px);
+    background-image: radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px);
     background-size: 20px 20px;
 }
 
 .dashboard-grid.grid-active {
-    background-image: radial-gradient(circle, rgba(255,255,255,0.40) 2px, transparent 2px);
+    background-image: radial-gradient(circle, rgba(255,255,255,0.25) 1.5px, transparent 1.5px);
 }
 
 .dashboard-tile {
@@ -3284,6 +3285,24 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
+.dashboard-tile-edit {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.85rem;
+    line-height: 1;
+    padding: 0 0.15rem;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+    opacity: 0;
+}
+.dashboard-tile:hover .dashboard-tile-edit { opacity: 1; }
+.dashboard-tile-edit:hover {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 .dashboard-tile-remove {
     background: none;
     border: none;
@@ -3296,9 +3315,7 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     transition: color 0.15s, background 0.15s;
     opacity: 0;
 }
-
 .dashboard-tile:hover .dashboard-tile-remove { opacity: 1; }
-
 .dashboard-tile-remove:hover {
     color: var(--s-blocked);
     background: color-mix(in srgb, var(--s-blocked) 12%, transparent);
@@ -4061,7 +4078,8 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 }
 
 .tile-config-field input,
-.tile-config-field textarea {
+.tile-config-field textarea,
+.tile-config-field select {
     background: var(--surface2);
     border: 1px solid var(--border);
     border-radius: 7px;
@@ -4072,8 +4090,27 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     line-height: 1.4;
 }
 
+.tile-config-field select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 2rem;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='%237a7a96'><path d='M0 0h12L6 8z'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 0.7rem center;
+    background-size: 9px 6px;
+    cursor: pointer;
+}
+.tile-config-field select option { background: var(--surface2); color: var(--text); }
+
+.tile-config-field input:disabled,
+.tile-config-field select:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
 .tile-config-field input:focus,
-.tile-config-field textarea:focus {
+.tile-config-field textarea:focus,
+.tile-config-field select:focus {
     outline: none;
     border-color: var(--accent);
 }
