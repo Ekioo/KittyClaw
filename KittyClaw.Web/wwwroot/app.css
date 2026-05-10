@@ -3229,6 +3229,26 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 
 .dashboard-tile:hover .dashboard-tile-drag-handle { opacity: 1; }
 
+.dashboard-tile-refresh {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0 0.15rem;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+    opacity: 0;
+}
+
+.dashboard-tile:hover .dashboard-tile-refresh { opacity: 1; }
+
+.dashboard-tile-refresh:hover {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 .dashboard-tile-remove {
     background: none;
     border: none;
