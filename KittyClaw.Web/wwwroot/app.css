@@ -3562,20 +3562,42 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .tile-status-label { font-size: 0.78rem; color: var(--text); font-weight: 500; }
 .tile-status-detail { font-size: 0.7rem; color: var(--text-muted); }
 
-/* Heatmap calendar — row above (corner + months), row below (days col + week grid).
-   Both rows share the same flex-gap and the corner width matches the days col so that
-   month labels align exactly with the week columns underneath. */
-.tile-heatmap-wrap { display: inline-flex; flex-direction: column; gap: 3px; font-size: 0.62rem; color: var(--text-muted); }
-.tile-heatmap-row { display: flex; gap: 4px; }
-.tile-heatmap-body { display: flex; gap: 4px; }
-.tile-heatmap-corner { width: 24px; flex: none; }
-.tile-heatmap-days { width: 24px; flex: none; display: flex; flex-direction: column; gap: 2px; }
-.tile-heatmap-days span { height: 11px; line-height: 11px; }
-.tile-heatmap-months { display: flex; gap: 2px; }
-.tile-heatmap-months span { width: 11px; height: 11px; line-height: 11px; flex: none; white-space: nowrap; overflow: visible; }
-.tile-heatmap { display: flex; gap: 2px; }
-.tile-heatmap-week { display: flex; flex-direction: column; gap: 2px; }
-.tile-heatmap-cell { width: 11px; height: 11px; border-radius: 2px; background: var(--surface3); display: inline-block; flex: none; }
+/* Heatmap calendar — single CSS grid: 1 day-label column + N week columns,
+   8 rows (1 month-label row + 7 day-of-week rows). The month-label row is taller
+   to accommodate the -45° rotated text. */
+.tile-heatmap-grid {
+    display: inline-grid;
+    grid-template-rows: 40px repeat(7, 11px);
+    gap: 2px;
+    font-size: 0.58rem;
+    color: var(--text-muted);
+}
+.tile-heatmap-corner { /* empty cell at row 1 col 1 */ }
+.tile-heatmap-month {
+    /* Anchor at the bottom-right corner of the column's grid cell (translate +13px
+       from the column's left = column width + gap), then tilt -60° so the text
+       baseline starts right at the column it labels and reads up-right. */
+    justify-self: start;
+    align-self: end;
+    width: 11px;
+    height: 11px;
+    line-height: 11px;
+    transform: translateX(13px) rotate(-60deg);
+    transform-origin: 0 100%;
+    white-space: nowrap;
+    overflow: visible;
+}
+.tile-heatmap-day {
+    line-height: 11px;
+    text-align: right;
+    padding-right: 4px;
+}
+.tile-heatmap-cell {
+    width: 11px;
+    height: 11px;
+    border-radius: 2px;
+    background: var(--surface3);
+}
 .tile-heatmap-empty { background: transparent; }
 .tile-heatmap-l0 { background: var(--surface3); }
 .tile-heatmap-l1 { background: color-mix(in srgb, var(--accent) 25%, var(--surface3)); }

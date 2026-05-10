@@ -13,11 +13,14 @@ namespace KittyClaw.Core.Services;
 /// <param name="Refresh">How often to re-run the prompt, in seconds. 0 = static (never auto-refresh).</param>
 /// <param name="Prompt">LLM instruction executed on each refresh. Empty for static tiles.</param>
 /// <param name="Model">Optional Claude model override (null/empty = project default).</param>
+/// <param name="Title">Optional custom title shown in the tile header. If null/empty,
+/// the file name (without extension) is shown.</param>
 public sealed record TileSidecar(
     string Template,
     int Refresh,
     string Prompt,
-    string? Model);
+    string? Model,
+    string? Title = null);
 
 public static class TileSidecarSerializer
 {
@@ -41,7 +44,8 @@ public static class TileSidecarSerializer
                 raw.Template.Trim().ToLowerInvariant(),
                 raw.Refresh,
                 raw.Prompt ?? "",
-                string.IsNullOrWhiteSpace(raw.Model) ? null : raw.Model);
+                string.IsNullOrWhiteSpace(raw.Model) ? null : raw.Model,
+                string.IsNullOrWhiteSpace(raw.Title) ? null : raw.Title);
         }
         catch
         {
@@ -57,6 +61,7 @@ public static class TileSidecarSerializer
             Refresh = sidecar.Refresh,
             Prompt = sidecar.Prompt,
             Model = sidecar.Model ?? "",
+            Title = sidecar.Title ?? "",
         };
         return _serializer.Serialize(dto);
     }
@@ -67,5 +72,6 @@ public static class TileSidecarSerializer
         public int Refresh { get; set; }
         public string Prompt { get; set; } = "";
         public string Model { get; set; } = "";
+        public string Title { get; set; } = "";
     }
 }

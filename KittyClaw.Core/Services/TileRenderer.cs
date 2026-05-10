@@ -415,55 +415,40 @@ public static class TileRenderer
         // align start to a Monday
         while (start.DayOfWeek != DayOfWeek.Monday) start = start.AddDays(-1);
 
-        // Build month labels: one entry per week column, empty unless this week starts a new month.
         var weeks = new List<DateOnly>();
         for (var d = start; d <= end; d = d.AddDays(7)) weeks.Add(d);
 
-        var monthsRow = new StringBuilder("<div class=\"tile-heatmap-months\">");
-        int? lastMonth = null;
-        foreach (var weekStart in weeks)
-        {
-            // A month label sits at the first week whose Monday is on/after the 1st of that month.
-            string label = "";
-            if (lastMonth != weekStart.Month)
-            {
-                // Skip if the previous week was also in this month and just crossed midweek
-                if (weekStart.Day <= 7) label = weekStart.ToString("MMM", CultureInfo.InvariantCulture);
-                lastMonth = weekStart.Month;
-            }
-            monthsRow.Append($"<span>{label}</span>");
-        }
-        monthsRow.Append("</div>");
+        // One label per column = the week's start date. Format "MMM d" so each column is
+        // unique and the month context is always visible. Rendered at -45° above the column.
+        var monthLabels = new string[weeks.Count];
+        for (int i = 0; i < weeks.Count; i++)
+            monthLabels[i] = weeks[i].ToString("MMM d", CultureInfo.InvariantCulture);
 
-        // Day-of-week labels: only Mon/Wed/Fri to save space (GitHub style).
-        const string daysCol = """
-            <div class="tile-heatmap-days">
-              <span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span></span>
-            </div>
-            """;
+        // Single CSS grid: 1 day-label col + N week cols × 1 month-label row + 7 day rows.
+        var sb = new StringBuilder();
+        sb.Append($"<div class=\"tile-heatmap-grid\" style=\"grid-template-columns: 28px repeat({weeks.Count}, 11px)\">");
 
-        var sb = new StringBuilder("<div class=\"tile-heatmap-wrap\">");
-        sb.Append("<div class=\"tile-heatmap-row\"><div class=\"tile-heatmap-corner\"></div>");
-        sb.Append(monthsRow);
-        sb.Append("</div>");
-        sb.Append("<div class=\"tile-heatmap-body\">");
-        sb.Append(daysCol);
-        sb.Append("<div class=\"tile-heatmap\">");
-        foreach (var weekStart in weeks)
+        // Row 1: empty corner + tilted month labels.
+        sb.Append("<div class=\"tile-heatmap-corner\"></div>");
+        for (int i = 0; i < weeks.Count; i++)
+            sb.Append($"<span class=\"tile-heatmap-month\">{monthLabels[i]}</span>");
+
+        // Rows 2..8: one day label per row, all 7 days.
+        string[] dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+        for (int day = 0; day < 7; day++)
         {
-            sb.Append("<div class=\"tile-heatmap-week\">");
-            for (var i = 0; i < 7; i++)
+            sb.Append($"<span class=\"tile-heatmap-day\">{dayLabels[day]}</span>");
+            for (int w = 0; w < weeks.Count; w++)
             {
-                var day = weekStart.AddDays(i);
-                if (day > end) { sb.Append("<div class=\"tile-heatmap-cell tile-heatmap-empty\"></div>"); continue; }
-                var v = entries.GetValueOrDefault(day, 0);
+                var date = weeks[w].AddDays(day);
+                if (date > end) { sb.Append("<div class=\"tile-heatmap-cell tile-heatmap-empty\"></div>"); continue; }
+                var v = entries.GetValueOrDefault(date, 0);
                 var lvl = maxV <= 0 ? 0 : (int)Math.Ceiling(v / maxV * 4);
                 lvl = Math.Clamp(lvl, 0, 4);
-                sb.Append($"<div class=\"tile-heatmap-cell tile-heatmap-l{lvl}\" title=\"{day:yyyy-MM-dd}: {Fmt(v)}\"></div>");
+                sb.Append($"<div class=\"tile-heatmap-cell tile-heatmap-l{lvl}\" title=\"{date:yyyy-MM-dd}: {Fmt(v)}\"></div>");
             }
-            sb.Append("</div>");
         }
-        sb.Append("</div></div></div>");
+        sb.Append("</div>");
         return sb.ToString();
     }
 

@@ -26,6 +26,8 @@
   "TileConfigEditTitle": "Modifier la tuile",
   "TileConfigSave": "Enregistrer",
   "TileConfigFileName": "Nom du fichier",
+  "TileConfigDisplayTitle": "Titre",
+  "TileConfigDisplayTitleHint": "Laisser vide pour utiliser le nom du fichier",
   "TileConfigTemplate": "Modèle visuel",
   "TileConfigPrompt": "Invite IA",
   "TileConfigPromptHint": "Laissez vide pour un fichier statique (sans actualisation automatique).",
