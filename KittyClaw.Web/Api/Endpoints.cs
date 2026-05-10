@@ -713,6 +713,30 @@ public static class Endpoints
             return tile is null ? Results.NotFound() : Results.Ok(tile);
         }).WithTags("Dashboard");
 
+        // Serves the raw bytes of a tile result file (used by the image template). Validated to
+        // stay strictly inside the project's .dashboard/ directory to prevent path traversal.
+        api.MapGet("/projects/{slug}/dashboard/files/{fileName}", async (string slug, string fileName, ProjectService ps, DashboardService ds) =>
+        {
+            var project = await ps.GetProjectAsync(slug);
+            if (project is null) return Results.NotFound();
+            var workspace = ps.ResolveWorkspacePath(project);
+            var dir = Path.GetFullPath(ds.GetDashboardDir(workspace));
+            var path = Path.GetFullPath(ds.GetFilePath(workspace, fileName));
+            if (!path.StartsWith(dir + Path.DirectorySeparatorChar, StringComparison.Ordinal)) return Results.BadRequest();
+            if (!File.Exists(path)) return Results.NotFound();
+            var ext = Path.GetExtension(fileName).ToLowerInvariant();
+            var contentType = ext switch
+            {
+                ".png" => "image/png",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".gif" => "image/gif",
+                ".webp" => "image/webp",
+                ".svg" => "image/svg+xml",
+                _ => "application/octet-stream",
+            };
+            return Results.File(path, contentType);
+        }).WithTags("Dashboard");
+
     }
 
     private static readonly JsonSerializerOptions SseJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };

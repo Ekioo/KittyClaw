@@ -7,10 +7,10 @@ using Microsoft.Extensions.Logging;
 namespace KittyClaw.Core.Services;
 
 /// <summary>
-/// Background service that periodically refreshes dashboard files whose front-matter
-/// declares a <c>refresh</c> interval and a <c>prompt</c>. On each scheduled refresh the
-/// configured LLM prompt is executed via the claude CLI and the result is written back to
-/// the file, preserving the header.
+/// Background service that periodically refreshes dashboard tiles whose sidecar declares a
+/// <c>refresh</c> interval &gt; 0 and a non-empty <c>prompt</c>. The configured LLM prompt is
+/// executed via the claude CLI and its output is written back to the result file.
+/// The sidecar is left untouched.
 /// </summary>
 public sealed class DashboardRefreshService : BackgroundService
 {
@@ -71,37 +71,35 @@ public sealed class DashboardRefreshService : BackgroundService
     {
         try
         {
-            var content = await _dashboard.ReadFileContentAsync(workspace, fileName);
-            if (content is null) return;
-
-            var header = DashboardService.ParseHeader(content);
-            if (header is null) return; // static file — skip
+            var sidecar = await _dashboard.ReadSidecarAsync(workspace, fileName);
+            if (sidecar is null) return;
+            if (sidecar.Refresh <= 0 || string.IsNullOrWhiteSpace(sidecar.Prompt)) return;
 
             var key = $"{slug}:{fileName}";
             var now = DateTime.UtcNow;
             if (_lastRefreshed.TryGetValue(key, out var last)
-                && (now - last).TotalSeconds < header.RefreshSeconds)
+                && (now - last).TotalSeconds < sidecar.Refresh)
                 return;
 
-            _logger.LogInformation("Refreshing dashboard file {Slug}/{File}", slug, fileName);
+            _logger.LogInformation("Refreshing dashboard tile {Slug}/{File} (template={Template})",
+                slug, fileName, sidecar.Template);
             _lastRefreshed[key] = now;
 
-            var newBody = await RunPromptAsync(slug, workspace, fileName, header, ct);
+            var newBody = await RunPromptAsync(slug, workspace, fileName, sidecar, ct);
             if (newBody is null) return;
 
-            var updated = DashboardService.BuildContent(header, newBody);
-            await _dashboard.WriteFileAsync(workspace, fileName, updated);
-            _logger.LogInformation("Dashboard file {Slug}/{File} updated ({Chars} chars)", slug, fileName, newBody.Length);
+            await _dashboard.WriteFileAsync(workspace, fileName, newBody);
+            _logger.LogInformation("Dashboard tile {Slug}/{File} updated ({Chars} chars)", slug, fileName, newBody.Length);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to refresh dashboard file {Slug}/{File}", slug, fileName);
+            _logger.LogWarning(ex, "Failed to refresh dashboard tile {Slug}/{File}", slug, fileName);
         }
     }
 
     private async Task<string?> RunPromptAsync(
         string slug, string workspace, string fileName,
-        DashboardFileHeader header, CancellationToken ct)
+        TileSidecar sidecar, CancellationToken ct)
     {
         var output = new StringBuilder();
 
@@ -110,16 +108,21 @@ public sealed class DashboardRefreshService : BackgroundService
             ProjectSlug = slug,
             WorkspacePath = workspace,
             AgentName = "dashboard",
-            SkillFile = "dashboard/SKILL.md", // intentionally non-existent; InlineSkillContent used instead
-            InlineSkillContent = header.Prompt,
+            SkillFile = "dashboard/SKILL.md",
+            InlineSkillContent = sidecar.Prompt + TileTemplate.SchemaPrompt(sidecar.Template),
             MaxTurns = 5,
             ConcurrencyGroup = $"dashboard-{slug}-{SanitizeFileName(fileName)}",
-            Model = header.Model,
+            Model = sidecar.Model,
             SessionScope = "dashboard",
             OnEventHook = ev =>
             {
-                if (ev.Kind == "assistant" && !string.IsNullOrWhiteSpace(ev.Text))
-                    lock (output) { output.Append(ev.Text); }
+                if (ev.Kind != "assistant" || string.IsNullOrWhiteSpace(ev.Text)) return;
+                // FlattenJson prefixes assistant text with "[assistant] " — strip it before
+                // we write the tile body, otherwise it shows up literally in the rendered output.
+                var text = ev.Text;
+                const string prefix = "[assistant] ";
+                if (text.StartsWith(prefix, StringComparison.Ordinal)) text = text[prefix.Length..];
+                lock (output) { output.Append(text); }
             },
         };
 

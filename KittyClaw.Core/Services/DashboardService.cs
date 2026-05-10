@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 
@@ -6,24 +7,19 @@ namespace KittyClaw.Core.Services;
 // X, Y, Width, Height are pixel values snapped to the 20px grid
 public record DashboardTileLayout(string FileName, int X = 0, int Y = 0, int Width = 300, int Height = 200);
 
-/// <summary>
-/// Parsed front-matter header from a dashboard file.
-/// Files without this header are static and never auto-refreshed.
-/// </summary>
-/// <param name="RefreshSeconds">How often to re-run the prompt, in seconds.</param>
-/// <param name="Prompt">The LLM instruction to execute on each refresh.</param>
-/// <param name="Model">Optional Claude model override (null = project default).</param>
-public record DashboardFileHeader(int RefreshSeconds, string Prompt, string? Model);
-
 public class DashboardService
 {
     private readonly ProjectService _projectService;
     private static readonly JsonSerializerOptions _json = new() { PropertyNameCaseInsensitive = true };
 
+    public const string SidecarSuffix = ".yaml";
+
     public DashboardService(ProjectService projectService)
     {
         _projectService = projectService;
     }
+
+    // ── Layout (per-project SQLite) ──────────────────────────────────────────
 
     private async Task EnsureTableAsync(string slug)
     {
@@ -51,7 +47,7 @@ public class DashboardService
         var result = await cmd.ExecuteScalarAsync();
         if (result is null) return [];
         try { return JsonSerializer.Deserialize<List<DashboardTileLayout>>(result.ToString()!, _json) ?? []; }
-        catch { return []; } // silently discard data from old schema
+        catch { return []; }
     }
 
     private async Task SaveTilesAsync(string slug, List<DashboardTileLayout> tiles)
@@ -74,7 +70,6 @@ public class DashboardService
         var tiles = await GetTilesAsync(slug);
         if (tiles.Any(t => t.FileName == fileName)) return tiles.First(t => t.FileName == fileName);
 
-        // Auto-place in a 4-column staggered layout so tiles don't all overlap
         var idx = tiles.Count;
         var col = idx % 4;
         var row = idx / 4;
@@ -118,13 +113,22 @@ public class DashboardService
         return updated;
     }
 
+    private static int Snap(int v) => (int)Math.Round((double)v / 20) * 20;
+
+    // ── Files (.dashboard/) ─────────────────────────────────────────────────
+
+    public string GetDashboardDir(string workspace) => Path.Combine(workspace, ".dashboard");
+    public string GetFilePath(string workspace, string fileName) => Path.Combine(GetDashboardDir(workspace), fileName);
+    public string GetSidecarPath(string workspace, string fileName) => GetFilePath(workspace, fileName) + SidecarSuffix;
+
+    /// <summary>Lists tile result files, excluding the .yaml sidecars.</summary>
     public List<string> GetAvailableFiles(string workspace)
     {
-        var dashDir = Path.Combine(workspace, ".dashboard");
-        if (!Directory.Exists(dashDir)) return [];
-        return Directory.GetFiles(dashDir, "*", SearchOption.TopDirectoryOnly)
+        var dir = GetDashboardDir(workspace);
+        if (!Directory.Exists(dir)) return [];
+        return Directory.GetFiles(dir, "*", SearchOption.TopDirectoryOnly)
             .Select(Path.GetFileName)
-            .Where(f => f is not null)
+            .Where(f => f is not null && !f.EndsWith(SidecarSuffix, StringComparison.OrdinalIgnoreCase))
             .Cast<string>()
             .OrderBy(f => f)
             .ToList();
@@ -132,41 +136,83 @@ public class DashboardService
 
     public async Task<string?> ReadFileContentAsync(string workspace, string fileName)
     {
-        var path = Path.Combine(workspace, ".dashboard", fileName);
+        var path = GetFilePath(workspace, fileName);
         if (!File.Exists(path)) return null;
-        return await File.ReadAllTextAsync(path, System.Text.Encoding.UTF8);
+        return await File.ReadAllTextAsync(path, Encoding.UTF8);
     }
 
     public async Task WriteFileAsync(string workspace, string fileName, string content)
     {
-        var dashDir = Path.Combine(workspace, ".dashboard");
-        Directory.CreateDirectory(dashDir);
-        await File.WriteAllTextAsync(Path.Combine(dashDir, fileName), content, System.Text.Encoding.UTF8);
+        var dir = GetDashboardDir(workspace);
+        Directory.CreateDirectory(dir);
+        await File.WriteAllTextAsync(GetFilePath(workspace, fileName), content, Encoding.UTF8);
     }
 
-    private static int Snap(int v) => (int)Math.Round((double)v / 20) * 20;
+    public void DeleteTileFiles(string workspace, string fileName)
+    {
+        var path = GetFilePath(workspace, fileName);
+        if (File.Exists(path)) File.Delete(path);
+        var side = GetSidecarPath(workspace, fileName);
+        if (File.Exists(side)) File.Delete(side);
+    }
 
-    // --- Header parsing ---
-
-    private const string HeaderDelimiter = "---";
+    // ── Sidecar ─────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Parses the YAML-like front-matter header from a dashboard file.
-    /// Returns null if the file has no header or the header is malformed.
-    /// Expected format:
-    /// ---
-    /// refresh: 3600
-    /// prompt: Your LLM instruction here
-    /// model: claude-haiku-4-5-20251001
-    /// ---
+    /// Reads <c>{fileName}.yaml</c> if present. Also performs a one-shot migration of legacy
+    /// in-file YAML front-matter (--- refresh: ... ---) into a sidecar so older tiles keep working.
     /// </summary>
-    public static DashboardFileHeader? ParseHeader(string content)
+    public async Task<TileSidecar?> ReadSidecarAsync(string workspace, string fileName)
+    {
+        await TryMigrateLegacyHeaderAsync(workspace, fileName);
+
+        var path = GetSidecarPath(workspace, fileName);
+        if (!File.Exists(path)) return null;
+        var yaml = await File.ReadAllTextAsync(path, Encoding.UTF8);
+        return TileSidecarSerializer.TryParse(yaml);
+    }
+
+    public async Task WriteSidecarAsync(string workspace, string fileName, TileSidecar sidecar)
+    {
+        var dir = GetDashboardDir(workspace);
+        Directory.CreateDirectory(dir);
+        var yaml = TileSidecarSerializer.Serialize(sidecar);
+        await File.WriteAllTextAsync(GetSidecarPath(workspace, fileName), yaml, Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// Detects the legacy front-matter format and converts it to a sidecar in-place.
+    /// Idempotent: does nothing if there's already a sidecar or no legacy header.
+    /// </summary>
+    private async Task TryMigrateLegacyHeaderAsync(string workspace, string fileName)
+    {
+        var filePath = GetFilePath(workspace, fileName);
+        var sidePath = GetSidecarPath(workspace, fileName);
+        if (!File.Exists(filePath) || File.Exists(sidePath)) return;
+
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
+        if (ext != ".md" && ext != ".json") return; // legacy headers only ever lived in md/json
+
+        var content = await File.ReadAllTextAsync(filePath, Encoding.UTF8);
+        var legacy = ParseLegacyHeader(content);
+        if (legacy is null) return;
+
+        var body = ExtractLegacyBody(content);
+        var template = ext == ".md" ? TileTemplate.Markdown : TileTemplate.Table;
+        var sidecar = new TileSidecar(template, legacy.RefreshSeconds, legacy.Prompt, legacy.Model);
+
+        await File.WriteAllTextAsync(sidePath, TileSidecarSerializer.Serialize(sidecar), Encoding.UTF8);
+        await File.WriteAllTextAsync(filePath, body, Encoding.UTF8);
+    }
+
+    private record LegacyHeader(int RefreshSeconds, string Prompt, string? Model);
+
+    private static LegacyHeader? ParseLegacyHeader(string content)
     {
         if (string.IsNullOrWhiteSpace(content)) return null;
         var lines = content.ReplaceLineEndings("\n").Split('\n');
-        if (lines.Length < 3 || lines[0].Trim() != HeaderDelimiter) return null;
-
-        var end = Array.FindIndex(lines, 1, l => l.Trim() == HeaderDelimiter);
+        if (lines.Length < 3 || lines[0].Trim() != "---") return null;
+        var end = Array.FindIndex(lines, 1, l => l.Trim() == "---");
         if (end < 0) return null;
 
         int refresh = 0;
@@ -185,32 +231,16 @@ public class DashboardService
                 case "model": model = string.IsNullOrWhiteSpace(val) ? null : val; break;
             }
         }
-
         if (refresh <= 0 || string.IsNullOrWhiteSpace(prompt)) return null;
-        return new DashboardFileHeader(refresh, prompt!, model);
+        return new LegacyHeader(refresh, prompt!, model);
     }
 
-    /// <summary>Returns the body of a dashboard file, stripping the front-matter header if present.</summary>
-    public static string ExtractBody(string content)
+    private static string ExtractLegacyBody(string content)
     {
-        if (string.IsNullOrWhiteSpace(content)) return content;
         var lines = content.ReplaceLineEndings("\n").Split('\n');
-        if (lines.Length < 3 || lines[0].Trim() != HeaderDelimiter) return content;
-        var end = Array.FindIndex(lines, 1, l => l.Trim() == HeaderDelimiter);
+        if (lines.Length < 3 || lines[0].Trim() != "---") return content;
+        var end = Array.FindIndex(lines, 1, l => l.Trim() == "---");
         if (end < 0) return content;
         return string.Join('\n', lines.Skip(end + 1)).TrimStart('\n');
-    }
-
-    /// <summary>Serialises a header + body back to the dashboard file format.</summary>
-    public static string BuildContent(DashboardFileHeader header, string body)
-    {
-        var sb = new System.Text.StringBuilder();
-        sb.AppendLine(HeaderDelimiter);
-        sb.AppendLine($"refresh: {header.RefreshSeconds}");
-        sb.AppendLine($"prompt: {header.Prompt}");
-        if (header.Model is not null) sb.AppendLine($"model: {header.Model}");
-        sb.AppendLine(HeaderDelimiter);
-        sb.Append(body);
-        return sb.ToString();
     }
 }
