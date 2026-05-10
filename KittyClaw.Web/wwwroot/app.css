@@ -2000,9 +2000,18 @@ button:disabled { opacity: 0.4; cursor: default; }
 .agent-drawer-meta {
     grid-column: 1 / 3;
     display: flex;
-    gap: 1rem;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.agent-drawer-meta span {
+    background: var(--surface2, #1e2736);
+    border: 1px solid var(--border, #333);
+    border-radius: 4px;
+    padding: 0 0.4rem;
+    font-family: monospace;
+    font-size: 0.75rem;
     color: var(--muted, #8a99b0);
-    font-size: 0.8rem;
 }
 .agent-drawer-model {
     background: var(--surface2, #1e2736);
