@@ -7,11 +7,10 @@ namespace KittyClaw.Core.Automation;
 internal static class ProcessLifecycleManager
 {
     // Resolved once per process. Search order:
-    //   0. KITTYCLAW_CLAUDE_BIN env var (escape hatch)
+    //   0. KITTYCLAW_CLAUDE_BIN env var (escape hatch / QaRunner injection)
     //   1. Sibling of host exe: <baseDir>/claude(.exe)
     //   2. <baseDir>/tools/claude(.exe)
-    //   3. Walk up to a repo root and look for KittyClaw.ClaudeMock/bin/<config>/net10.0/claude(.exe) (dev)
-    //   4. "claude" — resolved via PATH (production default)
+    //   3. "claude" — resolved via PATH (production default)
     private static readonly Lazy<string> _claudeBinary = new(ResolveClaudeBinary);
 
     internal static string ClaudeBinary => _claudeBinary.Value;
@@ -68,18 +67,6 @@ internal static class ProcessLifecycleManager
 
         var tools = Path.Combine(baseDir, "tools", exe);
         if (File.Exists(tools)) return tools;
-
-        // Walk up looking for KittyClaw.ClaudeMock/bin/**/claude(.exe) (dev mode)
-        var dir = new DirectoryInfo(baseDir);
-        for (int i = 0; i < 6 && dir is not null; i++, dir = dir.Parent)
-        {
-            var mockProj = Path.Combine(dir.FullName, "KittyClaw.ClaudeMock", "bin");
-            if (Directory.Exists(mockProj))
-            {
-                var found = Directory.EnumerateFiles(mockProj, exe, SearchOption.AllDirectories).FirstOrDefault();
-                if (found is not null) return found;
-            }
-        }
 
         return "claude";
     }

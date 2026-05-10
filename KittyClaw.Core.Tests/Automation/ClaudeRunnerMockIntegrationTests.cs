@@ -4,6 +4,35 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace KittyClaw.Core.Tests.Automation;
 
+// Finds KittyClaw.ClaudeMock/bin/**/claude(.exe) by walking up from the test assembly and sets
+// KITTYCLAW_CLAUDE_BIN before any ClaudeRunner is constructed, because ResolveClaudeBinary is a
+// static Lazy that caches on first access — the env var must be in place before that happens.
+[CollectionDefinition("MockClaude")]
+public sealed class MockClaudeCollection : ICollectionFixture<MockClaudeBinFixture> { }
+
+public sealed class MockClaudeBinFixture : IDisposable
+{
+    public MockClaudeBinFixture()
+    {
+        var exe = OperatingSystem.IsWindows() ? "claude.exe" : "claude";
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        for (int i = 0; i < 8 && dir is not null; i++, dir = dir.Parent)
+        {
+            var mockBin = Path.Combine(dir.FullName, "KittyClaw.ClaudeMock", "bin");
+            if (!Directory.Exists(mockBin)) continue;
+            var found = Directory.EnumerateFiles(mockBin, exe, SearchOption.AllDirectories).FirstOrDefault();
+            if (found is not null)
+            {
+                Environment.SetEnvironmentVariable("KITTYCLAW_CLAUDE_BIN", found);
+                return;
+            }
+        }
+    }
+
+    public void Dispose() => Environment.SetEnvironmentVariable("KITTYCLAW_CLAUDE_BIN", null);
+}
+
+[Collection("MockClaude")]
 public class ClaudeRunnerMockIntegrationTests
 {
     [Fact]
