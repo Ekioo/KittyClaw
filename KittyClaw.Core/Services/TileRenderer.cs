@@ -443,7 +443,9 @@ public static class TileRenderer
             """;
 
         var sb = new StringBuilder("<div class=\"tile-heatmap-wrap\">");
+        sb.Append("<div class=\"tile-heatmap-row\"><div class=\"tile-heatmap-corner\"></div>");
         sb.Append(monthsRow);
+        sb.Append("</div>");
         sb.Append("<div class=\"tile-heatmap-body\">");
         sb.Append(daysCol);
         sb.Append("<div class=\"tile-heatmap\">");
