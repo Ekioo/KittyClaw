@@ -113,6 +113,7 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 - Onboarding popup on first launch with Claude Code + Git detection
 - Project creation popup with workspace selection + one-click agent template initialization
 - Kanban board with drag-and-drop
+- Customizable dashboard view with free-drag tiles backed by `.dashboard/` Markdown files
 - Ticket detail panel with comments and activity timeline
 - Live agent run drawer (SSE stream of Claude Code output, steer + stop controls)
 - New-instruction chat drawer to send an ad-hoc prompt to an agent
