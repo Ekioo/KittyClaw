@@ -70,7 +70,7 @@ else
                              @onmousedown="(e) => OnDragMouseDown(e, t)"
                              title="@L["DragToReorder"]">
                             <span class="dashboard-tile-drag-handle">&#8942;&#8942;</span>
-                            <span class="dashboard-tile-title">@Path.GetFileNameWithoutExtension(t.FileName)</span>
+                            <span class="dashboard-tile-title">@TileTitle(t.FileName)</span>
                             @if (_refreshRunIds.TryGetValue(t.FileName, out var activeRunId))
                             {
                                 <span class="agent-spinner dashboard-tile-spinner"
@@ -153,7 +153,7 @@ else
 
     @if (_tileConfigOpen)
     {
-        <div class="ticket-modal-overlay" @onclick="CloseTileConfigPopup">
+        <div class="ticket-modal-overlay">
             <div class="tile-config-popup" @onclick:stopPropagation>
                 <div class="tile-config-header">
                     <h2>@(_configEditingFileName is null ? L["TileConfigTitle"] : L["TileConfigEditTitle"])</h2>
@@ -163,6 +163,10 @@ else
                     <div class="tile-config-field">
                         <label>@L["TileConfigFileName"]</label>
                         <input type="text" @bind="_configFileName" disabled="@(_configEditingFileName is not null)" />
+                    </div>
+                    <div class="tile-config-field">
+                        <label>@L["TileConfigDisplayTitle"]</label>
+                        <input type="text" placeholder="@L["TileConfigDisplayTitleHint"]" @bind="_configTitle" />
                     </div>
                     <div class="tile-config-field">
                         <label>@L["TileConfigTemplate"]</label>
@@ -260,6 +264,7 @@ else
     private bool _tileConfigOpen;
     private string? _configEditingFileName; // null = create new tile, non-null = edit existing
     private string _configFileName = "";
+    private string _configTitle = "";
     private string _configTemplate = TileTemplate.Markdown;
     private string _configPrompt = "";
     private int _configRefreshSeconds;
@@ -271,6 +276,14 @@ else
 
     private static string TileId(string fileName) =>
         "tile-" + fileName.Replace(".", "-").Replace(" ", "_");
+
+    private string TileTitle(string fileName)
+    {
+        var sidecarTitle = _sidecars.GetValueOrDefault(fileName)?.Title;
+        return string.IsNullOrWhiteSpace(sidecarTitle)
+            ? Path.GetFileNameWithoutExtension(fileName)
+            : sidecarTitle;
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -404,11 +417,12 @@ else
         before or after it:
 
         ```json
-        {"fileName":"sprint-health.json","template":"kpi-grid","prompt":"Compute 4 KPIs from .agents/* and recent commits.","refreshSeconds":3600,"model":""}
+        {"fileName":"sprint-health.json","title":"Sprint health","template":"kpi-grid","prompt":"Compute 4 KPIs from .agents/* and recent commits.","refreshSeconds":3600,"model":""}
         ```
 
         Fields:
         - fileName: name of the file in .dashboard/ (include extension matching the template)
+        - title: human-readable title shown in the tile header (concise, 2-5 words). Empty = use the filename.
         - template: one of the template ids above
         - prompt: LLM instruction for auto-refresh; "" for static tiles
         - refreshSeconds: refresh interval in seconds; 0 for static; 3600 = hourly; 86400 = daily
@@ -491,6 +505,7 @@ else
                 {
                     _chatOpen = false;
                     _configFileName = config.FileName;
+                    _configTitle = config.Title;
                     _configTemplate = config.Template;
                     _configPrompt = config.Prompt;
                     _configRefreshSeconds = config.RefreshSeconds;
@@ -527,17 +542,18 @@ else
             var root = doc.RootElement;
             var fileName = root.TryGetProperty("fileName", out var fn) ? fn.GetString() ?? "" : "";
             if (string.IsNullOrWhiteSpace(fileName)) return null;
+            var title = root.TryGetProperty("title", out var ti) ? ti.GetString() ?? "" : "";
             var template = root.TryGetProperty("template", out var tp) ? (tp.GetString() ?? "").Trim().ToLowerInvariant() : TileTemplate.Markdown;
             if (!TileTemplate.IsKnown(template)) template = TileTemplate.Markdown;
             var prompt = root.TryGetProperty("prompt", out var p) ? p.GetString() ?? "" : "";
             var refreshSeconds = root.TryGetProperty("refreshSeconds", out var r) ? r.GetInt32() : 0;
             var model = root.TryGetProperty("model", out var m) ? m.GetString() ?? "" : "";
-            return new TileAiConfig(fileName, template, prompt, refreshSeconds, model);
+            return new TileAiConfig(fileName, title, template, prompt, refreshSeconds, model);
         }
         catch { return null; }
     }
 
-    private record TileAiConfig(string FileName, string Template, string Prompt, int RefreshSeconds, string Model);
+    private record TileAiConfig(string FileName, string Title, string Template, string Prompt, int RefreshSeconds, string Model);
 
     // ── Tile config popup ──
 
@@ -560,6 +576,7 @@ else
             ?? new TileSidecar(TileTemplate.Markdown, 0, "", null);
         _configEditingFileName = fileName;
         _configFileName = fileName;
+        _configTitle = sidecar.Title ?? "";
         _configTemplate = sidecar.Template;
         _configPrompt = sidecar.Prompt;
         _configRefreshSeconds = sidecar.Refresh;
@@ -574,7 +591,8 @@ else
             template,
             _configRefreshSeconds,
             _configPrompt ?? "",
-            string.IsNullOrWhiteSpace(_configModel) ? null : _configModel);
+            string.IsNullOrWhiteSpace(_configModel) ? null : _configModel,
+            string.IsNullOrWhiteSpace(_configTitle) ? null : _configTitle.Trim());
 
         // Edit mode: update sidecar in place; never recreate the result file or change layout.
         if (_configEditingFileName is not null)

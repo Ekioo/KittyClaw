@@ -26,6 +26,8 @@
   "TileConfigEditTitle": "Edit Tile",
   "TileConfigSave": "Save",
   "TileConfigFileName": "File name",
+  "TileConfigDisplayTitle": "Title",
+  "TileConfigDisplayTitleHint": "Leave empty to use the file name",
   "TileConfigTemplate": "Template",
   "TileConfigPrompt": "AI prompt",
   "TileConfigPromptHint": "Leave empty for a static file (no auto-refresh).",
