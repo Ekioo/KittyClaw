@@ -1,10 +1,16 @@
 @page "/board/{Slug}/dashboard"
+@using System.Text
 @using System.Text.Json
+@using System.Text.RegularExpressions
 @using Markdig
+@using KittyClaw.Core.Automation
 @using KittyClaw.Core.Models
 @using KittyClaw.Core.Services
+@using KittyClaw.Web.Services
 @inject ProjectService ProjectService
 @inject DashboardService DashboardService
+@inject ClaudeRunner ClaudeRunner
+@inject AgentRunsState RunsState
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject LocalizationService L
@@ -27,7 +33,7 @@ else
             <span class="view-toggle-btn view-toggle-btn--active">@L["Dashboard"]</span>
         </div>
         <div class="header-right">
-            <button class="header-action-btn" @onclick="OpenAddTilePopup">@L["AddTile"]</button>
+            <button class="header-action-btn" @onclick="OpenTileChat">@L["AddTile"]</button>
             <a class="header-action-btn" href="/board/@Slug/automations">&#9881; @L["Automations"]</a>
             <a class="header-action-btn" href="/board/@Slug/settings">&#9881;&#65039; @L["ProjectSettings"]</a>
         </div>
@@ -65,9 +71,19 @@ else
                              title="@L["DragToReorder"]">
                             <span class="dashboard-tile-drag-handle">&#8942;&#8942;</span>
                             <span class="dashboard-tile-title">@Path.GetFileNameWithoutExtension(t.FileName)</span>
-                            <button class="dashboard-tile-refresh" title="@L["RefreshTile"]"
-                                    @onclick="() => RefreshTile(t.FileName)"
-                                    @onmousedown:stopPropagation>&#x21BB;</button>
+                            @if (_refreshRunIds.TryGetValue(t.FileName, out var activeRunId))
+                            {
+                                <span class="agent-spinner dashboard-tile-spinner"
+                                      title="@L["RefreshRunning"]"
+                                      @onclick="() => OpenRunDrawer(activeRunId)"
+                                      @onmousedown:stopPropagation></span>
+                            }
+                            else
+                            {
+                                <button class="dashboard-tile-refresh" title="@L["RefreshTile"]"
+                                        @onclick="() => RefreshTile(t.FileName)"
+                                        @onmousedown:stopPropagation>&#x21BB;</button>
+                            }
                             <button class="dashboard-tile-remove" title="@L["RemoveTile"]"
                                     @onclick="() => RemoveTile(t.FileName)"
                                     @onmousedown:stopPropagation>&times;</button>
@@ -85,69 +101,105 @@ else
         }
     </div>
 
-    @if (_addTileOpen)
+    @if (_chatOpen)
     {
-        <div class="dashboard-add-overlay" @onclick="CloseAddTilePopup">
-            <div class="dashboard-add-popup" @onclick:stopPropagation>
-                @if (_creatingNewFile)
-                {
-                    <div class="dashboard-add-popup-header">
-                        <button class="dashboard-add-back-btn" @onclick="CloseNewFileForm">&#8592;</button>
-                        <span>@L["NewFileTitle"]</span>
-                        <button class="dashboard-add-popup-close" @onclick="CloseAddTilePopup">&times;</button>
-                    </div>
-                    <div class="dashboard-new-file-form">
-                        <label class="dashboard-new-file-label">@L["NewFileName"]</label>
-                        <input class="dashboard-new-file-input" type="text"
-                               placeholder="@L["NewFileNamePlaceholder"]"
-                               @bind="_newFileName" @bind:event="oninput" />
-                        <label class="dashboard-new-file-label">@L["NewFileContent"]</label>
-                        <textarea class="dashboard-new-file-textarea" rows="8"
-                                  placeholder="@L["NewFileContentPlaceholder"]"
-                                  @bind="_newFileContent" @bind:event="oninput"></textarea>
-                        @if (!string.IsNullOrEmpty(_newFileError))
-                        {
-                            <div class="dashboard-new-file-error">@_newFileError</div>
-                        }
-                        <div class="dashboard-new-file-actions">
-                            <button class="dashboard-new-file-cancel" @onclick="CloseNewFileForm">@L["Cancel"]</button>
-                            <button class="dashboard-new-file-create" @onclick="CreateNewFile"
-                                    disabled="@string.IsNullOrWhiteSpace(_newFileName)">@L["CreateFile"]</button>
-                        </div>
-                    </div>
-                }
-                else
-                {
-                    <div class="dashboard-add-popup-header">
-                        <span>@L["AddTileTitle"]</span>
-                        <button class="dashboard-add-popup-close" @onclick="CloseAddTilePopup">&times;</button>
-                    </div>
-                    @if (_availableToAdd.Count == 0)
+        <div class="tile-chat-overlay" @onclick="CloseTileChat">
+            <div class="tile-chat-panel" @onclick:stopPropagation>
+                <div class="tile-chat-header">
+                    <span class="tile-chat-title">@L["TileChatTitle"]</span>
+                    <button class="tile-chat-close" @onclick="CloseTileChat">&times;</button>
+                </div>
+                <div class="tile-chat-messages" @ref="_chatMessagesRef">
+                    @foreach (var msg in _chatMessages)
                     {
-                        <div class="dashboard-add-popup-empty">@L["NoMoreFiles"]</div>
-                    }
-                    else
-                    {
-                        <div class="dashboard-add-popup-list">
-                            @foreach (var file in _availableToAdd)
-                            {
-                                var f = file;
-                                <button class="dashboard-add-file-btn" @onclick="() => AddTile(f)">
-                                    <span class="dashboard-add-file-icon">@GetFileIcon(f)</span>
-                                    <span class="dashboard-add-file-name">@Path.GetFileNameWithoutExtension(f)</span>
-                                    <span class="dashboard-add-file-ext">@Path.GetExtension(f)</span>
-                                </button>
-                            }
+                        <div class="tile-chat-msg tile-chat-msg-@msg.Role">
+                            <div class="tile-chat-bubble markdown-body">
+                                @((MarkupString)Markdown.ToHtml(msg.Text, _markdownPipeline))
+                            </div>
                         </div>
                     }
-                    <div class="dashboard-add-popup-footer">
-                        <button class="dashboard-add-newfile-btn" @onclick="OpenNewFileForm">
-                            &#43; @L["NewFile"]
-                        </button>
-                    </div>
+                    @if (_chatLoading)
+                    {
+                        <div class="tile-chat-msg tile-chat-msg-assistant">
+                            <div class="tile-chat-bubble tile-chat-bubble-loading">…</div>
+                        </div>
+                    }
+                    @if (_chatMessages.Count == 0 && !_chatLoading)
+                    {
+                        <div class="tile-chat-empty">@L["TileChatEmpty"]</div>
+                    }
+                </div>
+                @if (_chatError is not null)
+                {
+                    <div class="tile-chat-error">@_chatError</div>
                 }
+                <div class="tile-chat-input-area">
+                    <textarea placeholder="@L["TileChatPlaceholder"]"
+                              value="@_chatInput"
+                              @oninput="OnChatInput"
+                              @onkeydown="OnChatKeyDown"
+                              disabled="@_chatLoading" rows="3"></textarea>
+                    <button class="tile-chat-send" @onclick="SendChatMessage"
+                            disabled="@(string.IsNullOrWhiteSpace(_chatInput) || _chatLoading)">
+                        @L["TileChatSend"]
+                    </button>
+                </div>
             </div>
         </div>
+    }
+
+    @if (_tileConfigOpen)
+    {
+        <div class="ticket-modal-overlay" @onclick="CloseTileConfigPopup">
+            <div class="tile-config-popup" @onclick:stopPropagation>
+                <div class="tile-config-header">
+                    <h2>@L["TileConfigTitle"]</h2>
+                    <button class="agent-close-btn" @onclick="CloseTileConfigPopup">&times;</button>
+                </div>
+                <div class="tile-config-body">
+                    <div class="tile-config-field">
+                        <label>@L["TileConfigFileName"]</label>
+                        <input type="text" @bind="_configFileName" />
+                    </div>
+                    <div class="tile-config-field">
+                        <label>@L["TileConfigTemplate"]</label>
+                        <select @bind="_configTemplate">
+                            @foreach (var t in TileTemplate.All)
+                            {
+                                <option value="@t">@t</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="tile-config-field">
+                        <label>@L["TileConfigPrompt"]</label>
+                        <textarea rows="5" @bind="_configPrompt" placeholder="@L["TileConfigPromptHint"]"></textarea>
+                    </div>
+                    <div class="tile-config-field">
+                        <label>@L["TileConfigRefreshSeconds"]</label>
+                        <input type="number" min="0" @bind="_configRefreshSeconds" />
+                    </div>
+                    <div class="tile-config-field">
+                        <label>@L["TileConfigModel"]</label>
+                        <input type="text" placeholder="@L["TileConfigModelHint"]" @bind="_configModel" />
+                    </div>
+                </div>
+                <div class="tile-config-actions">
+                    <button class="tile-config-cancel" @onclick="CloseTileConfigPopup">@L["Cancel"]</button>
+                    <button class="tile-config-revise" @onclick="ReviseTileConfig">@L["TileConfigRevise"]</button>
+                    <button class="tile-config-accept" @onclick="AcceptTileConfig"
+                            disabled="@string.IsNullOrWhiteSpace(_configFileName)">@L["TileConfigAccept"]</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (_activeRunDrawerId is not null)
+    {
+        <ErrorBoundary>
+            <ChildContent>
+                <AgentRunDrawer RunId="@_activeRunDrawerId" OnClose="CloseRunDrawer" />
+            </ChildContent>
+        </ErrorBoundary>
     }
 }
 
@@ -159,18 +211,38 @@ else
     private List<DashboardTileLayout> _tiles = [];
     private List<string> _availableFiles = [];
     private Dictionary<string, string?> _contentCache = new();
+    private Dictionary<string, TileSidecar?> _sidecars = new();
 
     private DashboardTileLayout? _resizingTile;
     private DotNetObjectReference<Dashboard>? _dotNetRef;
 
-    private bool _addTileOpen;
-    private bool _creatingNewFile;
-    private string _newFileName = "";
-    private string _newFileContent = "";
-    private string _newFileError = "";
-    private List<string> _availableToAdd => _availableFiles
-        .Where(f => !_tiles.Any(t => t.FileName == f))
-        .ToList();
+    // ── Tile refresh runs ──
+
+    // fileName → runId of active ClaudeRunner refresh run
+    private readonly Dictionary<string, string> _refreshRunIds = new();
+    private string? _activeRunDrawerId;
+
+    private static readonly MarkdownPipeline _markdownPipeline =
+        new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+
+    // ── Tile chat ──
+
+    private bool _chatOpen;
+    private string _chatAgentName = "";
+    private List<(string Role, string Text)> _chatMessages = [];
+    private string _chatInput = "";
+    private bool _chatLoading;
+    private string? _chatError;
+    private ElementReference _chatMessagesRef;
+
+    // ── Tile config popup ──
+
+    private bool _tileConfigOpen;
+    private string _configFileName = "";
+    private string _configTemplate = TileTemplate.Markdown;
+    private string _configPrompt = "";
+    private int _configRefreshSeconds;
+    private string _configModel = "";
 
     private int GridHeight => _tiles.Count == 0
         ? 600
@@ -196,6 +268,9 @@ else
         }
 
         await LoadAllContentAsync();
+        AutoStartEmptyTiles();
+
+        RunsState.OnChange += OnRunsStateChanged;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -209,14 +284,38 @@ else
 
     public async ValueTask DisposeAsync()
     {
+        RunsState.OnChange -= OnRunsStateChanged;
         _dotNetRef?.Dispose();
         await Task.CompletedTask;
+    }
+
+    private void OnRunsStateChanged() => InvokeAsync(StateHasChanged);
+
+    private void AutoStartEmptyTiles()
+    {
+        foreach (var tile in _tiles)
+        {
+            if (_refreshRunIds.ContainsKey(tile.FileName)) continue;
+            _sidecars.TryGetValue(tile.FileName, out var sidecar);
+            if (sidecar is null || string.IsNullOrWhiteSpace(sidecar.Prompt)) continue;
+            _contentCache.TryGetValue(tile.FileName, out var raw);
+            if (string.IsNullOrWhiteSpace(raw))
+                _ = RefreshTileWithAiAsync(tile.FileName, sidecar);
+        }
     }
 
     private async Task LoadAllContentAsync()
     {
         foreach (var tile in _tiles)
         {
+            if (!_sidecars.ContainsKey(tile.FileName))
+                _sidecars[tile.FileName] = await DashboardService.ReadSidecarAsync(_workspace, tile.FileName);
+
+            if (_sidecars[tile.FileName]?.Template == TileTemplate.Image)
+            {
+                _contentCache[tile.FileName] = "";
+                continue;
+            }
             if (!_contentCache.ContainsKey(tile.FileName))
                 _contentCache[tile.FileName] = await DashboardService.ReadFileContentAsync(_workspace, tile.FileName);
         }
@@ -224,168 +323,335 @@ else
 
     private RenderFragment RenderTileContent(string fileName) => builder =>
     {
-        _contentCache.TryGetValue(fileName, out var content);
-        if (content is null)
+        _sidecars.TryGetValue(fileName, out var sidecar);
+        var template = sidecar?.Template;
+
+        if (template == TileTemplate.Image)
+        {
+            var url = $"/api/projects/{Slug}/dashboard/files/{Uri.EscapeDataString(fileName)}";
+            builder.AddMarkupContent(0, $"<img class=\"tile-image\" src=\"{url}\" alt=\"{System.Web.HttpUtility.HtmlEncode(fileName)}\" />");
+            return;
+        }
+
+        _contentCache.TryGetValue(fileName, out var rawContent);
+        if (rawContent is null)
         {
             builder.AddMarkupContent(0, $"<span class=\"tile-missing\">{L["TileFileMissing"]}</span>");
             return;
         }
 
-        var ext = Path.GetExtension(fileName).ToLowerInvariant();
-        switch (ext)
+        if (string.IsNullOrWhiteSpace(rawContent))
         {
-            case ".md":
-                var html = Markdown.ToHtml(content, new MarkdownPipelineBuilder().UseAdvancedExtensions().Build());
-                builder.AddMarkupContent(0, $"<div class=\"tile-markdown\">{html}</div>");
-                break;
-
-            case ".json":
-                builder.AddMarkupContent(0, RenderJson(content));
-                break;
-
-            default:
-                builder.AddMarkupContent(0, $"<pre class=\"tile-raw\">{System.Web.HttpUtility.HtmlEncode(content)}</pre>");
-                break;
+            var isRefreshing = _refreshRunIds.ContainsKey(fileName);
+            var placeholder = isRefreshing ? L["TileGenerating"] : L["TileEmpty"];
+            builder.AddMarkupContent(0, $"<span class=\"tile-placeholder\">{System.Web.HttpUtility.HtmlEncode(placeholder)}</span>");
+            return;
         }
+
+        var html = template is not null
+            ? TileRenderer.Render(template, rawContent, fileName)
+            : TileRenderer.RenderByExtension(rawContent, fileName);
+        builder.AddMarkupContent(0, html);
     };
 
-    private static string RenderJson(string json)
+    // ── Tile chat ──
+
+    private static readonly string TileChatSystemPrompt = """
+        You are a dashboard tile creation assistant for KittyClaw.
+
+        A dashboard tile is a result file in .dashboard/ paired with a YAML sidecar `<file>.yaml`
+        that describes how to render it and (optionally) how an LLM should refresh it on a schedule.
+
+        Pick the most visually appropriate template for the user's intent. Available templates:
+        - markdown      → free-form text, headings, lists, tables, **bold**. File: .md
+        - table         → structured rows/columns. File: .json (array of objects)
+        - kpi           → one big number (e.g. "active users"). File: .json
+        - kpi-grid      → 2-6 KPIs side by side. File: .json (array)
+        - progress      → labeled progress bars. File: .json (array)
+        - sparkline     → mini trend curve + current value. File: .json
+        - bar-chart     → categorical bars. File: .json
+        - donut         → proportional slices. File: .json (array)
+        - gauge         → value within a range (CPU, capacity). File: .json
+        - status-grid   → red/yellow/green status cells. File: .json (array)
+        - heatmap       → calendar-style activity heatmap. File: .json (array of {date,value})
+        - leaderboard   → ranked list with medals. File: .json (array)
+        - image         → PNG/JPG/SVG generated by the agent. File: .png/.jpg/.svg
+        - mermaid       → diagram (flowchart, sequence, gantt, …). File: .mmd
+
+        Help the user figure out what tile they want. Ask at most 2-3 short, targeted questions
+        if needed. Once you have enough information, respond with ONLY a JSON block — no text
+        before or after it:
+
+        ```json
+        {"fileName":"sprint-health.json","template":"kpi-grid","prompt":"Compute 4 KPIs from .agents/* and recent commits.","refreshSeconds":3600,"model":""}
+        ```
+
+        Fields:
+        - fileName: name of the file in .dashboard/ (include extension matching the template)
+        - template: one of the template ids above
+        - prompt: LLM instruction for auto-refresh; "" for static tiles
+        - refreshSeconds: refresh interval in seconds; 0 for static; 3600 = hourly; 86400 = daily
+        - model: Claude model override; "" for project default
+        """;
+
+    private void OnChatInput(ChangeEventArgs e) => _chatInput = e.Value?.ToString() ?? "";
+
+    private void OpenTileChat()
     {
+        _chatAgentName = $"tile-chat-{Guid.NewGuid():N}"[..20];
+        _chatMessages.Clear();
+        _chatInput = "";
+        _chatError = null;
+        _chatLoading = false;
+        _chatOpen = true;
+    }
+
+    private void CloseTileChat() => _chatOpen = false;
+
+    private async Task OnChatKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && e.CtrlKey && !string.IsNullOrWhiteSpace(_chatInput) && !_chatLoading)
+            await SendChatMessage();
+    }
+
+    private async Task SendChatMessage()
+    {
+        var text = _chatInput.Trim();
+        if (string.IsNullOrWhiteSpace(text) || _chatLoading) return;
+
+        _chatInput = "";
+        _chatMessages.Add(("user", text));
+        _chatLoading = true;
+        _chatError = null;
+        StateHasChanged();
+        await ScrollChatToBottom();
+
         try
         {
-            using var doc = JsonDocument.Parse(json);
+            // isResume = true when there's already an assistant reply (session exists in registry)
+            var isResume = _chatMessages.Count > 1;
+
+            var output = new StringBuilder();
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+
+            var ctx = new ClaudeRunContext
+            {
+                ProjectSlug = Slug,
+                WorkspacePath = _workspace,
+                AgentName = _chatAgentName,
+                SkillFile = "tile-chat",
+                InlineSkillContent = TileChatSystemPrompt,
+                ExtraContext = text,
+                MaxTurns = 3,
+                SessionScope = "chat",
+                OnEventHook = ev =>
+                {
+                    if (ev.Kind != "assistant" || string.IsNullOrWhiteSpace(ev.Text)) return;
+                    var t = ev.Text;
+                    const string prefix = "[assistant] ";
+                    if (t.StartsWith(prefix, StringComparison.Ordinal)) t = t[prefix.Length..];
+                    lock (output) { output.Append(t); }
+                },
+            };
+
+            var run = await ClaudeRunner.RunAsync(ctx, cts.Token);
+            var response = output.ToString().Trim();
+
+            if (run.Status == AgentRunStatus.Failed || string.IsNullOrEmpty(response))
+            {
+                _chatError = L["TileChatError"];
+            }
+            else
+            {
+                _chatMessages.Add(("assistant", response));
+
+                var config = TryExtractTileConfig(response);
+                if (config is not null)
+                {
+                    _chatOpen = false;
+                    _configFileName = config.FileName;
+                    _configTemplate = config.Template;
+                    _configPrompt = config.Prompt;
+                    _configRefreshSeconds = config.RefreshSeconds;
+                    _configModel = config.Model;
+                    _tileConfigOpen = true;
+                }
+            }
+        }
+        catch (Exception)
+        {
+            _chatError = L["TileChatError"];
+        }
+        finally
+        {
+            _chatLoading = false;
+            StateHasChanged();
+            await ScrollChatToBottom();
+        }
+    }
+
+    private async Task ScrollChatToBottom()
+    {
+        try { await JS.InvokeVoidAsync("tileChatScrollToBottom", _chatMessagesRef); }
+        catch { /* best-effort */ }
+    }
+
+    private static TileAiConfig? TryExtractTileConfig(string text)
+    {
+        var match = Regex.Match(text, @"```json\s*(\{[\s\S]+?\})\s*```");
+        if (!match.Success) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(match.Groups[1].Value);
             var root = doc.RootElement;
-
-            if (root.ValueKind == JsonValueKind.Array)
-            {
-                var rows = root.EnumerateArray().ToList();
-                if (rows.Count == 0) return "<span class=\"tile-empty\">[]</span>";
-
-                if (rows[0].ValueKind == JsonValueKind.Object)
-                {
-                    var cols = rows[0].EnumerateObject().Select(p => p.Name).ToList();
-                    var sb = new System.Text.StringBuilder();
-                    sb.Append("<div class=\"tile-table-wrap\"><table class=\"tile-table\"><thead><tr>");
-                    foreach (var col in cols) sb.Append($"<th>{System.Web.HttpUtility.HtmlEncode(col)}</th>");
-                    sb.Append("</tr></thead><tbody>");
-                    foreach (var row in rows)
-                    {
-                        sb.Append("<tr>");
-                        foreach (var col in cols)
-                        {
-                            var val = row.TryGetProperty(col, out var p) ? p.ToString() : "";
-                            sb.Append($"<td>{System.Web.HttpUtility.HtmlEncode(val)}</td>");
-                        }
-                        sb.Append("</tr>");
-                    }
-                    sb.Append("</tbody></table></div>");
-                    return sb.ToString();
-                }
-
-                var listSb = new System.Text.StringBuilder("<ul class=\"tile-list\">");
-                foreach (var item in rows)
-                    listSb.Append($"<li>{System.Web.HttpUtility.HtmlEncode(item.ToString())}</li>");
-                listSb.Append("</ul>");
-                return listSb.ToString();
-            }
-
-            if (root.ValueKind == JsonValueKind.Object)
-            {
-                var sb = new System.Text.StringBuilder("<div class=\"tile-metrics\">");
-                foreach (var prop in root.EnumerateObject())
-                {
-                    sb.Append("<div class=\"tile-metric\">");
-                    sb.Append($"<div class=\"tile-metric-value\">{System.Web.HttpUtility.HtmlEncode(prop.Value.ToString())}</div>");
-                    sb.Append($"<div class=\"tile-metric-label\">{System.Web.HttpUtility.HtmlEncode(prop.Name)}</div>");
-                    sb.Append("</div>");
-                }
-                sb.Append("</div>");
-                return sb.ToString();
-            }
-
-            return $"<pre class=\"tile-raw\">{System.Web.HttpUtility.HtmlEncode(json)}</pre>";
+            var fileName = root.TryGetProperty("fileName", out var fn) ? fn.GetString() ?? "" : "";
+            if (string.IsNullOrWhiteSpace(fileName)) return null;
+            var template = root.TryGetProperty("template", out var tp) ? (tp.GetString() ?? "").Trim().ToLowerInvariant() : TileTemplate.Markdown;
+            if (!TileTemplate.IsKnown(template)) template = TileTemplate.Markdown;
+            var prompt = root.TryGetProperty("prompt", out var p) ? p.GetString() ?? "" : "";
+            var refreshSeconds = root.TryGetProperty("refreshSeconds", out var r) ? r.GetInt32() : 0;
+            var model = root.TryGetProperty("model", out var m) ? m.GetString() ?? "" : "";
+            return new TileAiConfig(fileName, template, prompt, refreshSeconds, model);
         }
-        catch
-        {
-            return $"<pre class=\"tile-raw\">{System.Web.HttpUtility.HtmlEncode(json)}</pre>";
-        }
+        catch { return null; }
     }
 
-    private static string GetFileIcon(string fileName) =>
-        Path.GetExtension(fileName).ToLowerInvariant() switch
-        {
-            ".md" => "📝",
-            ".json" => "📊",
-            ".csv" => "📋",
-            _ => "📄"
-        };
+    private record TileAiConfig(string FileName, string Template, string Prompt, int RefreshSeconds, string Model);
 
-    // ── Add tile popup ──
+    // ── Tile config popup ──
 
-    private void OpenNewFileForm()
+    private void CloseTileConfigPopup() => _tileConfigOpen = false;
+
+    private void ReviseTileConfig()
     {
-        _creatingNewFile = true;
-        _newFileName = "";
-        _newFileContent = "";
-        _newFileError = "";
+        _tileConfigOpen = false;
+        _chatOpen = true;
     }
 
-    private void CloseNewFileForm() => _creatingNewFile = false;
-
-    private void OpenAddTilePopup()
+    private async Task AcceptTileConfig()
     {
-        _addTileOpen = true;
-        _creatingNewFile = false;
-        _newFileName = "";
-        _newFileContent = "";
-        _newFileError = "";
-    }
+        var name = _configFileName.Trim();
+        if (string.IsNullOrWhiteSpace(name)) return;
+        var template = TileTemplate.IsKnown(_configTemplate) ? _configTemplate : TileTemplate.Markdown;
+        if (!Path.HasExtension(name)) name += TileTemplate.DefaultExtension(template);
 
-    private void CloseAddTilePopup()
-    {
-        _addTileOpen = false;
-        _creatingNewFile = false;
-    }
+        var sidecar = new TileSidecar(
+            template,
+            _configRefreshSeconds,
+            _configPrompt ?? "",
+            string.IsNullOrWhiteSpace(_configModel) ? null : _configModel);
 
-    private async Task AddTile(string fileName)
-    {
-        await DashboardService.AddTileAsync(Slug, fileName);
+        // Write empty result file (so the tile shows immediately) and the sidecar.
+        // Image tiles skip the empty-write since the agent will produce a real binary.
+        if (template != TileTemplate.Image)
+            await DashboardService.WriteFileAsync(_workspace, name, "");
+        await DashboardService.WriteSidecarAsync(_workspace, name, sidecar);
+
+        _availableFiles = DashboardService.GetAvailableFiles(_workspace);
+        await DashboardService.AddTileAsync(Slug, name);
         _tiles = await DashboardService.GetTilesAsync(Slug);
-        _contentCache[fileName] = await DashboardService.ReadFileContentAsync(_workspace, fileName);
-        _addTileOpen = false;
+        _sidecars[name] = sidecar;
+        _contentCache[name] = "";
+        _tileConfigOpen = false;
+
+        if (!string.IsNullOrWhiteSpace(sidecar.Prompt) && sidecar.Refresh > 0)
+            _ = RefreshTileWithAiAsync(name, sidecar);
     }
 
     private async Task RefreshTile(string fileName)
     {
-        _contentCache[fileName] = await DashboardService.ReadFileContentAsync(_workspace, fileName);
+        if (_refreshRunIds.ContainsKey(fileName)) return;
+
+        var sidecar = await DashboardService.ReadSidecarAsync(_workspace, fileName);
+        _sidecars[fileName] = sidecar;
+
+        // Manual refresh always runs the prompt if one is set, even when Refresh == 0
+        // (a static tile with a prompt = "regenerate on demand only").
+        if (sidecar is not null && !string.IsNullOrWhiteSpace(sidecar.Prompt))
+        {
+            _ = RefreshTileWithAiAsync(fileName, sidecar);
+        }
+        else
+        {
+            _contentCache[fileName] = await DashboardService.ReadFileContentAsync(_workspace, fileName);
+            StateHasChanged();
+        }
     }
+
+    private async Task RefreshTileWithAiAsync(string fileName, TileSidecar sidecar)
+    {
+        var runId = Guid.NewGuid().ToString("N");
+        _refreshRunIds[fileName] = runId;
+        await InvokeAsync(StateHasChanged);
+
+        var output = new StringBuilder();
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+
+        try
+        {
+            var ctx = new ClaudeRunContext
+            {
+                ProjectSlug = Slug,
+                WorkspacePath = _workspace,
+                AgentName = "dashboard",
+                SkillFile = "dashboard",
+                InlineSkillContent = sidecar.Prompt + TileTemplate.SchemaPrompt(sidecar.Template),
+                MaxTurns = 5,
+                ConcurrencyGroup = $"dashboard-{Slug}-{SanitizeName(fileName)}",
+                Model = sidecar.Model,
+                SessionScope = "dashboard",
+                PresetRunId = runId,
+                OnEventHook = ev =>
+                {
+                    if (ev.Kind != "assistant" || string.IsNullOrWhiteSpace(ev.Text)) return;
+                    var t = ev.Text;
+                    const string prefix = "[assistant] ";
+                    if (t.StartsWith(prefix, StringComparison.Ordinal)) t = t[prefix.Length..];
+                    lock (output) { output.Append(t); }
+                },
+            };
+
+            var run = await ClaudeRunner.RunAsync(ctx, cts.Token);
+            var text = output.ToString().Trim();
+
+            // For image tiles the agent writes the binary directly; nothing to overwrite here.
+            if (sidecar.Template != TileTemplate.Image && !string.IsNullOrWhiteSpace(text))
+            {
+                await DashboardService.WriteFileAsync(_workspace, fileName, text);
+                _contentCache[fileName] = text;
+            }
+            else if (sidecar.Template == TileTemplate.Image)
+            {
+                // Bust the browser cache by re-reading content unchanged; the <img> URL stays
+                // the same but a fresh request is triggered by the StateHasChanged below.
+                _contentCache[fileName] = "";
+            }
+        }
+        finally
+        {
+            _refreshRunIds.Remove(fileName);
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static string SanitizeName(string name) =>
+        string.Concat(name.Select(c => char.IsLetterOrDigit(c) ? c : '_'));
+
+    private void OpenRunDrawer(string runId) => _activeRunDrawerId = runId;
+    private void CloseRunDrawer() => _activeRunDrawerId = null;
 
     private async Task RemoveTile(string fileName)
     {
+        var msg = string.Format(L["RemoveTileConfirm"], fileName);
+        var confirmed = await JS.InvokeAsync<bool>("confirm", msg);
+        if (!confirmed) return;
+
         await DashboardService.RemoveTileAsync(Slug, fileName);
+        DashboardService.DeleteTileFiles(_workspace, fileName);
         _tiles = _tiles.Where(t => t.FileName != fileName).ToList();
-    }
-
-    private async Task CreateNewFile()
-    {
-        var name = _newFileName.Trim();
-        if (string.IsNullOrWhiteSpace(name)) return;
-
-        if (!Path.HasExtension(name)) name += ".md";
-
-        if (name.Contains('/') || name.Contains('\\') || name.Contains(".."))
-        {
-            _newFileError = L["NewFileInvalidName"];
-            return;
-        }
-
-        await DashboardService.WriteFileAsync(_workspace, name, _newFileContent);
+        _sidecars.Remove(fileName);
+        _contentCache.Remove(fileName);
         _availableFiles = DashboardService.GetAvailableFiles(_workspace);
-        await DashboardService.AddTileAsync(Slug, name);
-        _tiles = await DashboardService.GetTilesAsync(Slug);
-        _contentCache[name] = _newFileContent;
-        _creatingNewFile = false;
-        _addTileOpen = false;
     }
 
     // ── Drag (free-position) ──

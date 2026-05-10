@@ -65,6 +65,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
     <PackageReference Include="Markdig" Version="1.1.2" />
     <PackageReference Include="NCrontab" Version="3.3.3" />
+    <PackageReference Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>
 
 </Project>

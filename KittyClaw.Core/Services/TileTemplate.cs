@@ -1,0 +1,235 @@
+namespace KittyClaw.Core.Services;
+
+/// <summary>
+/// Catalogue of dashboard tile templates. Each template defines:
+/// - the file extension the agent must produce (json, md, mmd, png/jpg/svg)
+/// - the JSON/text schema injected into the LLM prompt so the agent knows what to output
+/// - rendering happens server-side in TileRenderer (data → HTML), or client-side for mermaid.
+/// </summary>
+public static class TileTemplate
+{
+    public const string Markdown    = "markdown";
+    public const string Table       = "table";
+    public const string Kpi         = "kpi";
+    public const string KpiGrid     = "kpi-grid";
+    public const string Progress    = "progress";
+    public const string Sparkline   = "sparkline";
+    public const string BarChart    = "bar-chart";
+    public const string Donut       = "donut";
+    public const string Gauge       = "gauge";
+    public const string StatusGrid  = "status-grid";
+    public const string Heatmap     = "heatmap";
+    public const string Leaderboard = "leaderboard";
+    public const string Image       = "image";
+    public const string Mermaid     = "mermaid";
+    public const string Timeline    = "timeline";
+
+    public static readonly string[] All =
+    [
+        Markdown, Table, Kpi, KpiGrid, Progress, Sparkline, BarChart,
+        Donut, Gauge, StatusGrid, Heatmap, Leaderboard, Timeline, Image, Mermaid,
+    ];
+
+    public static bool IsKnown(string id) => Array.IndexOf(All, id) >= 0;
+
+    /// <summary>Returns the file extension the agent should write for the given template.</summary>
+    public static string DefaultExtension(string template) => template switch
+    {
+        Markdown    => ".md",
+        Mermaid     => ".mmd",
+        Image       => ".png",
+        _           => ".json",
+    };
+
+    /// <summary>
+    /// Schema/instruction text appended to the LLM prompt so the agent produces the right output.
+    /// Each block is self-contained: format, fields, example.
+    /// </summary>
+    public static string SchemaPrompt(string template) => template switch
+    {
+        Markdown => """
+
+Output rules:
+- Write Markdown only. No JSON, no code fences around the whole answer.
+- Be concise — this is a small dashboard tile.
+- Use headings, lists, tables, **bold**, code blocks as needed.
+""",
+
+        Table => """
+
+Output a JSON array of objects with consistent keys. The first row's keys define the columns.
+
+Example:
+[
+  {"name": "auth-api", "uptime": "99.9%", "p95_ms": 142},
+  {"name": "billing",  "uptime": "99.7%", "p95_ms": 88}
+]
+
+Output the JSON only — no prose, no code fences.
+""",
+
+        Kpi => """
+
+Output a JSON object representing a single KPI:
+{
+  "value": <number or string>,
+  "label": "<short label>",
+  "unit": "<optional unit, e.g. ms, %, $>",
+  "delta": <optional signed number, change vs previous period>,
+  "trend": "<up|down|flat — optional>"
+}
+
+Output the JSON only.
+""",
+
+        KpiGrid => """
+
+Output a JSON array of KPI objects (2-6 items recommended):
+[
+  {"value": 142, "label": "Open tickets", "delta": -8, "trend": "down"},
+  {"value": "99.9%", "label": "Uptime",   "trend": "flat"},
+  {"value": 23, "label": "PRs merged", "delta": 5, "trend": "up", "unit": "/wk"}
+]
+
+Output the JSON only.
+""",
+
+        Progress => """
+
+Output a JSON array of progress bars:
+[
+  {"label": "Backend",  "value": 8,  "max": 10},
+  {"label": "Frontend", "value": 4,  "max": 10, "color": "#f59e0b"},
+  {"label": "QA",       "value": 2,  "max": 10}
+]
+
+`color` is optional (CSS color). Output the JSON only.
+""",
+
+        Sparkline => """
+
+Output a JSON object with a numeric series:
+{
+  "points": [12, 14, 13, 17, 22, 19, 24, 28],
+  "label": "Daily signups",
+  "current": 28,
+  "unit": "/day"
+}
+
+`points` is required (4-60 numbers). Output the JSON only.
+""",
+
+        BarChart => """
+
+Output a JSON object with parallel labels/values arrays:
+{
+  "labels": ["Mon", "Tue", "Wed", "Thu", "Fri"],
+  "values": [12, 19, 8, 22, 17],
+  "unit": "deploys"
+}
+
+Output the JSON only.
+""",
+
+        Donut => """
+
+Output a JSON array of slices. Values are summed automatically.
+[
+  {"label": "Done",        "value": 24, "color": "#22c55e"},
+  {"label": "In progress", "value": 8,  "color": "#3b82f6"},
+  {"label": "Blocked",     "value": 3,  "color": "#ef4444"}
+]
+
+`color` is optional. Output the JSON only.
+""",
+
+        Gauge => """
+
+Output a JSON object representing a value within a range:
+{
+  "value": 72,
+  "min": 0,
+  "max": 100,
+  "label": "CPU load",
+  "unit": "%"
+}
+
+`min` defaults to 0. Output the JSON only.
+""",
+
+        StatusGrid => """
+
+Output a JSON array of status cells. `status` must be "ok", "warn", or "err".
+[
+  {"label": "auth-api",   "status": "ok",   "detail": "200ms p95"},
+  {"label": "billing",    "status": "warn", "detail": "elevated 5xx"},
+  {"label": "ingest",     "status": "err",  "detail": "down 3m"}
+]
+
+Output the JSON only.
+""",
+
+        Heatmap => """
+
+Output a JSON array of dated values (GitHub-style activity calendar):
+[
+  {"date": "2026-04-01", "value": 3},
+  {"date": "2026-04-02", "value": 7},
+  {"date": "2026-04-03", "value": 0}
+]
+
+Dates must be ISO format YYYY-MM-DD. Output the JSON only.
+""",
+
+        Leaderboard => """
+
+Output a JSON array of ranked entries (sort yourself, highest first):
+[
+  {"label": "alice",   "score": 142},
+  {"label": "bob",     "score": 118},
+  {"label": "carol",   "score": 97}
+]
+
+Output the JSON only.
+""",
+
+        Image => """
+
+This tile renders an image. Save the resulting image (PNG, JPG, or SVG)
+to the dashboard file path. Do NOT output text — only write the image file.
+""",
+
+        Timeline => """
+
+Output a JSON array of timeline events. `type` colors the marker (release=green,
+incident=red, milestone=blue, freeze=orange, anything else=neutral grey).
+
+[
+  {"date": "2026-03-12", "label": "v1.1 release",      "type": "release"},
+  {"date": "2026-04-02", "label": "ingest outage 22m", "type": "incident"},
+  {"date": "2026-04-18", "label": "Q2 kickoff",        "type": "milestone"},
+  {"date": "2026-05-05", "label": "merge freeze",      "type": "freeze"},
+  {"date": "2026-05-08", "label": "v1.2 release",      "type": "release"}
+]
+
+Dates must be ISO YYYY-MM-DD. Output the JSON only.
+""",
+
+        Mermaid => """
+
+Output a Mermaid diagram source (no fences, no prose). Examples of supported diagrams:
+flowchart, sequenceDiagram, gantt, classDiagram, stateDiagram-v2, pie, mindmap.
+
+Example:
+flowchart LR
+  A[Ingest] --> B[Validate]
+  B --> C{Valid?}
+  C -->|yes| D[Store]
+  C -->|no|  E[Reject]
+
+Output the diagram source only.
+""",
+
+        _ => "",
+    };
+}

@@ -3273,6 +3273,12 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 
 .dashboard-tile:hover .dashboard-tile-refresh { opacity: 1; }
 
+.dashboard-tile-spinner {
+    margin-left: 0;
+    flex-shrink: 0;
+    opacity: 1;
+}
+
 .dashboard-tile-refresh:hover {
     color: var(--accent);
     background: color-mix(in srgb, var(--accent) 12%, transparent);
@@ -3458,6 +3464,133 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     font-style: italic;
     font-size: 0.82rem;
 }
+
+.tile-placeholder {
+    display: block;
+    color: var(--text-muted);
+    font-style: italic;
+    font-size: 0.82rem;
+    padding: 0.5rem 0;
+}
+
+/* ── Tile templates ─────────────────────────────────────────────────────── */
+
+/* Image tile */
+.tile-image { max-width: 100%; max-height: 100%; display: block; margin: 0 auto; object-fit: contain; }
+
+/* KPI (single + grid) */
+.tile-kpi { display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem; padding: 0.4rem 0.6rem; }
+.tile-kpi--large { padding: 0.8rem; gap: 0.3rem; }
+.tile-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 0.4rem; }
+.tile-kpi-grid .tile-kpi { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; }
+.tile-kpi-value { font-size: 1.6rem; font-weight: 700; line-height: 1.1; color: var(--text); letter-spacing: -0.02em; }
+.tile-kpi--large .tile-kpi-value { font-size: 2.4rem; }
+.tile-kpi-unit { font-size: 0.65em; color: var(--text-muted); margin-left: 0.15rem; font-weight: 500; }
+.tile-kpi-label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.tile-kpi-delta { font-size: 0.78rem; font-weight: 600; }
+.tile-kpi-delta.trend-up { color: var(--accent-success); }
+.tile-kpi-delta.trend-down { color: var(--s-blocked); }
+.tile-kpi-delta.trend-flat { color: var(--text-muted); }
+
+/* Progress bars */
+.tile-progress { display: flex; flex-direction: column; gap: 0.5rem; }
+.tile-progress-row { display: flex; flex-direction: column; gap: 0.2rem; }
+.tile-progress-head { display: flex; justify-content: space-between; font-size: 0.75rem; }
+.tile-progress-label { color: var(--text); }
+.tile-progress-val { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.tile-progress-bar { background: var(--surface3); border-radius: 4px; height: 8px; overflow: hidden; }
+.tile-progress-fill { background: var(--accent); height: 100%; border-radius: 4px; transition: width 0.3s ease; }
+
+/* Sparkline */
+.tile-sparkline { display: flex; flex-direction: column; gap: 0.4rem; height: 100%; color: var(--accent); }
+.tile-sparkline-head { display: flex; justify-content: space-between; align-items: baseline; color: var(--text); }
+.tile-sparkline-current { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+.tile-sparkline-label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.tile-sparkline-svg { flex: 1; min-height: 40px; width: 100%; }
+
+/* Bar chart */
+.tile-bar-chart { display: flex; flex-direction: column; gap: 0.35rem; }
+.tile-bar-row { display: grid; grid-template-columns: minmax(50px, 25%) 1fr auto; gap: 0.5rem; align-items: center; font-size: 0.78rem; }
+.tile-bar-label { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-bar-track { background: var(--surface3); border-radius: 3px; height: 14px; overflow: hidden; }
+.tile-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s ease; }
+.tile-bar-val { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* Donut */
+.tile-donut { display: flex; gap: 0.8rem; align-items: center; }
+.tile-donut-chart { width: 100px; height: 100px; border-radius: 50%; position: relative; flex: none; }
+.tile-donut-hole { position: absolute; inset: 22%; border-radius: 50%; background: var(--surface); }
+.tile-donut-legend { list-style: none; padding: 0; margin: 0; flex: 1; display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.75rem; }
+.tile-donut-legend li { display: grid; grid-template-columns: 12px 1fr auto; gap: 0.4rem; align-items: center; }
+.tile-donut-swatch { width: 10px; height: 10px; border-radius: 2px; }
+.tile-donut-label { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile-donut-pct { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* Gauge */
+.tile-gauge { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; }
+.tile-gauge svg { width: 100%; max-width: 180px; }
+.tile-gauge-value { font-size: 1.6rem; font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
+.tile-gauge-label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* Status grid */
+.tile-status-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.4rem; }
+.tile-status-cell { display: grid; grid-template-columns: 10px 1fr; gap: 0.5rem; align-items: center; padding: 0.4rem 0.55rem; background: var(--surface2); border: 1px solid var(--border); border-left-width: 3px; border-radius: 6px; }
+.tile-status-dot { width: 8px; height: 8px; border-radius: 50%; }
+.tile-status-ok { border-left-color: var(--accent-success); }
+.tile-status-ok .tile-status-dot { background: var(--accent-success); }
+.tile-status-warn { border-left-color: #f59e0b; }
+.tile-status-warn .tile-status-dot { background: #f59e0b; }
+.tile-status-err { border-left-color: var(--s-blocked); }
+.tile-status-err .tile-status-dot { background: var(--s-blocked); }
+.tile-status-label { font-size: 0.78rem; color: var(--text); font-weight: 500; }
+.tile-status-detail { font-size: 0.7rem; color: var(--text-muted); }
+
+/* Heatmap calendar */
+.tile-heatmap-wrap { display: inline-flex; flex-direction: column; gap: 4px; font-size: 0.65rem; color: var(--text-muted); }
+.tile-heatmap-body { display: flex; gap: 4px; }
+.tile-heatmap-days { display: flex; flex-direction: column; gap: 2px; padding-top: 0; }
+.tile-heatmap-days span { height: 11px; line-height: 11px; }
+.tile-heatmap-months { display: flex; gap: 2px; margin-left: 30px; }
+.tile-heatmap-months span { width: 11px; height: 11px; line-height: 11px; flex: none; white-space: nowrap; overflow: visible; }
+.tile-heatmap { display: flex; gap: 2px; }
+.tile-heatmap-week { display: flex; flex-direction: column; gap: 2px; }
+.tile-heatmap-cell { width: 11px; height: 11px; border-radius: 2px; background: var(--surface3); display: inline-block; flex: none; }
+.tile-heatmap-empty { background: transparent; }
+.tile-heatmap-l0 { background: var(--surface3); }
+.tile-heatmap-l1 { background: color-mix(in srgb, var(--accent) 25%, var(--surface3)); }
+.tile-heatmap-l2 { background: color-mix(in srgb, var(--accent) 50%, var(--surface3)); }
+.tile-heatmap-l3 { background: color-mix(in srgb, var(--accent) 75%, var(--surface3)); }
+.tile-heatmap-l4 { background: var(--accent); }
+
+/* Leaderboard */
+.tile-leaderboard { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.2rem; }
+.tile-leaderboard li { display: grid; grid-template-columns: 32px 1fr auto; gap: 0.5rem; align-items: center; padding: 0.3rem 0.4rem; background: var(--surface2); border-radius: 4px; font-size: 0.82rem; }
+.tile-lb-rank { color: var(--text-muted); font-variant-numeric: tabular-nums; text-align: center; }
+.tile-lb-label { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile-lb-score { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Timeline */
+.tile-timeline { display: flex; flex-direction: column; gap: 0.4rem; height: 100%; padding: 0.3rem 0; }
+.tile-timeline-track { position: relative; flex: 1; min-height: 130px; }
+.tile-timeline-axis { position: absolute; left: 4%; right: 4%; top: 50%; height: 2px; background: var(--surface3); transform: translateY(-50%); }
+.tile-timeline-event { position: absolute; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; pointer-events: auto; }
+.tile-timeline-above { bottom: 50%; padding-bottom: 8px; }
+.tile-timeline-below { top: 50%; padding-top: 8px; flex-direction: column-reverse; }
+.tile-timeline-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 0.2rem 0.45rem; max-width: 110px; }
+.tile-timeline-label { font-size: 0.72rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
+.tile-timeline-date { font-size: 0.62rem; color: var(--text-muted); line-height: 1.2; }
+.tile-timeline-stem { width: 1px; height: 22px; background: var(--text-muted); opacity: 0.4; }
+.tile-timeline-dot { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--surface); z-index: 2; }
+.tile-timeline-release { background: #22c55e; }
+.tile-timeline-incident { background: #ef4444; }
+.tile-timeline-milestone { background: #3b82f6; }
+.tile-timeline-freeze { background: #f59e0b; }
+.tile-timeline-default { background: #7a7a96; }
+.tile-timeline-axis-labels { display: flex; justify-content: space-between; padding: 0 0.4rem; font-size: 0.65rem; color: var(--text-muted); }
+
+/* Mermaid */
+.tile-mermaid { display: flex; align-items: center; justify-content: center; height: 100%; }
+.tile-mermaid pre.mermaid { background: transparent; color: var(--text); margin: 0; max-width: 100%; max-height: 100%; }
 
 /* Add tile popup */
 .dashboard-add-overlay {
@@ -3707,3 +3840,292 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     max-width: 420px;
     line-height: 1.5;
 }
+
+/* ── Tile chat panel ───────────────────────────────────────────────────────── */
+
+.tile-chat-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 200;
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+    padding: 1.5rem;
+}
+
+.tile-chat-panel {
+    width: 420px;
+    max-width: calc(100vw - 2rem);
+    height: 560px;
+    max-height: calc(100vh - 4rem);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.tile-chat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+    flex-shrink: 0;
+}
+
+.tile-chat-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.tile-chat-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    line-height: 1;
+    transition: color 0.12s, background 0.12s;
+}
+
+.tile-chat-close:hover { color: var(--text); background: var(--surface3); }
+
+.tile-chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.tile-chat-empty {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    text-align: center;
+    padding: 1.5rem 0.5rem;
+    line-height: 1.5;
+}
+
+.tile-chat-msg { display: flex; }
+
+.tile-chat-msg-user { justify-content: flex-end; }
+.tile-chat-msg-assistant { justify-content: flex-start; }
+
+.tile-chat-bubble {
+    max-width: 85%;
+    padding: 0.5rem 0.8rem;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    word-break: break-word;
+}
+
+.tile-chat-msg-user .tile-chat-bubble {
+    background: var(--accent);
+    color: #000;
+    border-bottom-right-radius: 3px;
+}
+
+.tile-chat-msg-assistant .tile-chat-bubble {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 3px;
+}
+
+.tile-chat-bubble-loading {
+    color: var(--text-muted);
+    font-size: 1.2rem;
+    letter-spacing: 0.15em;
+    padding: 0.4rem 0.9rem;
+}
+
+.tile-chat-error {
+    flex-shrink: 0;
+    padding: 0.5rem 0.75rem;
+    background: rgba(220, 50, 50, 0.12);
+    border-top: 1px solid rgba(220, 50, 50, 0.25);
+    color: #f87171;
+    font-size: 0.8rem;
+}
+
+.tile-chat-input-area {
+    flex-shrink: 0;
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    border-top: 1px solid var(--border);
+    background: var(--surface2);
+}
+
+.tile-chat-input-area textarea {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 0.85rem;
+    padding: 0.45rem 0.6rem;
+    resize: none;
+    min-height: 3rem;
+    max-height: 8rem;
+    font-family: inherit;
+    line-height: 1.4;
+}
+
+.tile-chat-input-area textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.tile-chat-input-area textarea:disabled { opacity: 0.5; }
+
+.tile-chat-send {
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    color: #000;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.4rem 0.9rem;
+    cursor: pointer;
+    align-self: flex-end;
+    transition: opacity 0.12s;
+    white-space: nowrap;
+}
+
+.tile-chat-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Tile config popup ─────────────────────────────────────────────────────── */
+
+.tile-config-popup {
+    width: 580px;
+    max-width: calc(100vw - 2rem);
+    max-height: 88vh;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 14px;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.7);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.tile-config-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+    flex-shrink: 0;
+}
+
+.tile-config-header h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0;
+}
+
+.tile-config-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.tile-config-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.tile-config-field label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.tile-config-field input,
+.tile-config-field textarea {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--text);
+    font-size: 0.88rem;
+    padding: 0.5rem 0.65rem;
+    font-family: inherit;
+    line-height: 1.4;
+}
+
+.tile-config-field input:focus,
+.tile-config-field textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.tile-config-field textarea { resize: vertical; }
+
+.tile-config-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding: 0.85rem 1.25rem;
+    border-top: 1px solid var(--border);
+    background: var(--surface2);
+    flex-shrink: 0;
+}
+
+.tile-config-cancel {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: 0.4rem 0.9rem;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+}
+
+.tile-config-cancel:hover { background: var(--surface3); color: var(--text); }
+
+.tile-config-revise {
+    background: var(--surface3);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--text);
+    font-size: 0.85rem;
+    padding: 0.4rem 0.9rem;
+    cursor: pointer;
+    transition: background 0.12s;
+}
+
+.tile-config-revise:hover { background: var(--surface2); }
+
+.tile-config-accept {
+    background: var(--accent);
+    border: none;
+    border-radius: 7px;
+    color: #000;
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 0.4rem 1rem;
+    cursor: pointer;
+    transition: opacity 0.12s;
+}
+
+.tile-config-accept:disabled { opacity: 0.4; cursor: not-allowed; }
