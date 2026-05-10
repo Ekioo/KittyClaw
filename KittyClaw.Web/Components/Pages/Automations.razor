@@ -117,7 +117,16 @@ else
                             {
                                 <span class="tile-next-run">@nextRunLabel</span>
                             }
-                            <button class="icon-btn delete-icon" @onclick="() => RemoveAutomation(idx)" title="@L["Delete"]">🗑</button>
+                            @if (_confirmDeleteIdx == idx)
+                            {
+                                <span class="confirm-delete-label">@L["DeleteAutomationConfirm"]</span>
+                                <button class="delete-btn" @onclick="() => RemoveAutomation(idx)">@L["Confirm"]</button>
+                                <button class="cancel-btn" @onclick="() => _confirmDeleteIdx = null">@L["Cancel"]</button>
+                            }
+                            else
+                            {
+                                <button class="icon-btn delete-icon" @onclick="() => _confirmDeleteIdx = idx" title="@L["Delete"]">🗑</button>
+                            }
                         </div>
                     </div>
                 }
@@ -294,6 +303,7 @@ else
     }
 
     private int? _editingIndex;
+    private int? _confirmDeleteIdx;
     public enum NodeKind { Trigger, Condition, Action }
     private NodeKind _selectedKind = NodeKind.Trigger;
     private int _selectedSub;
@@ -623,6 +633,7 @@ else
     private async Task RemoveAutomation(int idx)
     {
         if (_config is null) return;
+        _confirmDeleteIdx = null;
         var name = _config.Automations[idx].Name;
         _config.Automations.RemoveAt(idx);
         await SaveAll();
