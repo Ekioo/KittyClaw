@@ -1,0 +1,420 @@
+@page "/board/{Slug}/dashboard"
+@using System.Text.Json
+@using Markdig
+@using KittyClaw.Core.Models
+@using KittyClaw.Core.Services
+@inject ProjectService ProjectService
+@inject DashboardService DashboardService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject LocalizationService L
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+
+<PageTitle>@(_project?.Name ?? "Dashboard") — @L["Dashboard"]</PageTitle>
+
+@if (_project is null)
+{
+    <p>@L["ProjectNotFound"]</p>
+}
+else
+{
+    <div class="page-header">
+        <a href="/" class="back-link">&larr; @L["BackToProjects"]</a>
+        <h1>@_project.Name</h1>
+        <div class="view-toggle">
+            <a class="view-toggle-btn" href="/board/@Slug">@L["KanbanView"]</a>
+            <span class="view-toggle-btn view-toggle-btn--active">@L["Dashboard"]</span>
+        </div>
+        <div class="header-right">
+            <button class="header-action-btn" @onclick="OpenAddTilePopup">@L["AddTile"]</button>
+            <a class="header-action-btn" href="/board/@Slug/automations">&#9881; @L["Automations"]</a>
+            <a class="header-action-btn" href="/board/@Slug/settings">&#9881;&#65039; @L["ProjectSettings"]</a>
+        </div>
+    </div>
+
+    <div class="dashboard-view">
+        @if (_tiles.Count == 0 && _availableFiles.Count == 0)
+        {
+            <div class="dashboard-empty">
+                <div class="dashboard-empty-icon">&#128202;</div>
+                <div class="dashboard-empty-title">@L["DashboardEmpty"]</div>
+                <div class="dashboard-empty-hint">@L["DashboardEmptyHint"]</div>
+            </div>
+        }
+        else if (_tiles.Count == 0)
+        {
+            <div class="dashboard-empty">
+                <div class="dashboard-empty-icon">&#128202;</div>
+                <div class="dashboard-empty-title">@L["DashboardNoTiles"]</div>
+                <div class="dashboard-empty-hint">@L["DashboardNoTilesHint"]</div>
+            </div>
+        }
+        else
+        {
+            <div class="dashboard-grid" id="dashboard-grid" style="height: @(GridHeight)px;">
+                @foreach (var tile in _tiles.ToList())
+                {
+                    var t = tile;
+                    var tileId = TileId(t.FileName);
+                    <div class="dashboard-tile @(_resizingTile?.FileName == t.FileName ? "tile-resizing" : "")"
+                         id="@tileId"
+                         style="left:@(t.X)px; top:@(t.Y)px; width:@(t.Width)px; height:@(t.Height)px;">
+                        <div class="dashboard-tile-header"
+                             @onmousedown="(e) => OnDragMouseDown(e, t)"
+                             title="@L["DragToReorder"]">
+                            <span class="dashboard-tile-drag-handle">&#8942;&#8942;</span>
+                            <span class="dashboard-tile-title">@Path.GetFileNameWithoutExtension(t.FileName)</span>
+                            <button class="dashboard-tile-remove" title="@L["RemoveTile"]"
+                                    @onclick="() => RemoveTile(t.FileName)"
+                                    @onmousedown:stopPropagation>&times;</button>
+                        </div>
+                        <div class="dashboard-tile-content">
+                            @RenderTileContent(t.FileName)
+                        </div>
+                        <div class="dashboard-tile-resize-handle"
+                             @onmousedown="(e) => OnResizeMouseDown(e, t)"
+                             title="@L["ResizeTile"]">
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    @if (_addTileOpen)
+    {
+        <div class="dashboard-add-overlay" @onclick="CloseAddTilePopup">
+            <div class="dashboard-add-popup" @onclick:stopPropagation>
+                @if (_creatingNewFile)
+                {
+                    <div class="dashboard-add-popup-header">
+                        <button class="dashboard-add-back-btn" @onclick="CloseNewFileForm">&#8592;</button>
+                        <span>@L["NewFileTitle"]</span>
+                        <button class="dashboard-add-popup-close" @onclick="CloseAddTilePopup">&times;</button>
+                    </div>
+                    <div class="dashboard-new-file-form">
+                        <label class="dashboard-new-file-label">@L["NewFileName"]</label>
+                        <input class="dashboard-new-file-input" type="text"
+                               placeholder="@L["NewFileNamePlaceholder"]"
+                               @bind="_newFileName" @bind:event="oninput" />
+                        <label class="dashboard-new-file-label">@L["NewFileContent"]</label>
+                        <textarea class="dashboard-new-file-textarea" rows="8"
+                                  placeholder="@L["NewFileContentPlaceholder"]"
+                                  @bind="_newFileContent" @bind:event="oninput"></textarea>
+                        @if (!string.IsNullOrEmpty(_newFileError))
+                        {
+                            <div class="dashboard-new-file-error">@_newFileError</div>
+                        }
+                        <div class="dashboard-new-file-actions">
+                            <button class="dashboard-new-file-cancel" @onclick="CloseNewFileForm">@L["Cancel"]</button>
+                            <button class="dashboard-new-file-create" @onclick="CreateNewFile"
+                                    disabled="@string.IsNullOrWhiteSpace(_newFileName)">@L["CreateFile"]</button>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="dashboard-add-popup-header">
+                        <span>@L["AddTileTitle"]</span>
+                        <button class="dashboard-add-popup-close" @onclick="CloseAddTilePopup">&times;</button>
+                    </div>
+                    @if (_availableToAdd.Count == 0)
+                    {
+                        <div class="dashboard-add-popup-empty">@L["NoMoreFiles"]</div>
+                    }
+                    else
+                    {
+                        <div class="dashboard-add-popup-list">
+                            @foreach (var file in _availableToAdd)
+                            {
+                                var f = file;
+                                <button class="dashboard-add-file-btn" @onclick="() => AddTile(f)">
+                                    <span class="dashboard-add-file-icon">@GetFileIcon(f)</span>
+                                    <span class="dashboard-add-file-name">@Path.GetFileNameWithoutExtension(f)</span>
+                                    <span class="dashboard-add-file-ext">@Path.GetExtension(f)</span>
+                                </button>
+                            }
+                        </div>
+                    }
+                    <div class="dashboard-add-popup-footer">
+                        <button class="dashboard-add-newfile-btn" @onclick="OpenNewFileForm">
+                            &#43; @L["NewFile"]
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+
+    private Project? _project;
+    private string _workspace = "";
+    private List<DashboardTileLayout> _tiles = [];
+    private List<string> _availableFiles = [];
+    private Dictionary<string, string?> _contentCache = new();
+
+    private DashboardTileLayout? _resizingTile;
+    private DotNetObjectReference<Dashboard>? _dotNetRef;
+
+    private bool _addTileOpen;
+    private bool _creatingNewFile;
+    private string _newFileName = "";
+    private string _newFileContent = "";
+    private string _newFileError = "";
+    private List<string> _availableToAdd => _availableFiles
+        .Where(f => !_tiles.Any(t => t.FileName == f))
+        .ToList();
+
+    private int GridHeight => _tiles.Count == 0
+        ? 600
+        : Math.Max(600, _tiles.Max(t => t.Y + t.Height) + 80);
+
+    private static string TileId(string fileName) =>
+        "tile-" + fileName.Replace(".", "-").Replace(" ", "_");
+
+    protected override async Task OnInitializedAsync()
+    {
+        _project = await ProjectService.GetProjectAsync(Slug);
+        if (_project is null) return;
+
+        _workspace = ProjectService.ResolveWorkspacePath(_project);
+        _availableFiles = DashboardService.GetAvailableFiles(_workspace);
+        _tiles = await DashboardService.GetTilesAsync(Slug);
+
+        var missing = _tiles.Where(t => !_availableFiles.Contains(t.FileName)).ToList();
+        if (missing.Count > 0)
+        {
+            foreach (var m in missing) await DashboardService.RemoveTileAsync(Slug, m.FileName);
+            _tiles = _tiles.Where(t => _availableFiles.Contains(t.FileName)).ToList();
+        }
+
+        await LoadAllContentAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("dashboardInitDnd", _dotNetRef);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _dotNetRef?.Dispose();
+        await Task.CompletedTask;
+    }
+
+    private async Task LoadAllContentAsync()
+    {
+        foreach (var tile in _tiles)
+        {
+            if (!_contentCache.ContainsKey(tile.FileName))
+                _contentCache[tile.FileName] = await DashboardService.ReadFileContentAsync(_workspace, tile.FileName);
+        }
+    }
+
+    private RenderFragment RenderTileContent(string fileName) => builder =>
+    {
+        _contentCache.TryGetValue(fileName, out var content);
+        if (content is null)
+        {
+            builder.AddMarkupContent(0, $"<span class=\"tile-missing\">{L["TileFileMissing"]}</span>");
+            return;
+        }
+
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
+        switch (ext)
+        {
+            case ".md":
+                var html = Markdown.ToHtml(content, new MarkdownPipelineBuilder().UseAdvancedExtensions().Build());
+                builder.AddMarkupContent(0, $"<div class=\"tile-markdown\">{html}</div>");
+                break;
+
+            case ".json":
+                builder.AddMarkupContent(0, RenderJson(content));
+                break;
+
+            default:
+                builder.AddMarkupContent(0, $"<pre class=\"tile-raw\">{System.Web.HttpUtility.HtmlEncode(content)}</pre>");
+                break;
+        }
+    };
+
+    private static string RenderJson(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (root.ValueKind == JsonValueKind.Array)
+            {
+                var rows = root.EnumerateArray().ToList();
+                if (rows.Count == 0) return "<span class=\"tile-empty\">[]</span>";
+
+                if (rows[0].ValueKind == JsonValueKind.Object)
+                {
+                    var cols = rows[0].EnumerateObject().Select(p => p.Name).ToList();
+                    var sb = new System.Text.StringBuilder();
+                    sb.Append("<div class=\"tile-table-wrap\"><table class=\"tile-table\"><thead><tr>");
+                    foreach (var col in cols) sb.Append($"<th>{System.Web.HttpUtility.HtmlEncode(col)}</th>");
+                    sb.Append("</tr></thead><tbody>");
+                    foreach (var row in rows)
+                    {
+                        sb.Append("<tr>");
+                        foreach (var col in cols)
+                        {
+                            var val = row.TryGetProperty(col, out var p) ? p.ToString() : "";
+                            sb.Append($"<td>{System.Web.HttpUtility.HtmlEncode(val)}</td>");
+                        }
+                        sb.Append("</tr>");
+                    }
+                    sb.Append("</tbody></table></div>");
+                    return sb.ToString();
+                }
+
+                var listSb = new System.Text.StringBuilder("<ul class=\"tile-list\">");
+                foreach (var item in rows)
+                    listSb.Append($"<li>{System.Web.HttpUtility.HtmlEncode(item.ToString())}</li>");
+                listSb.Append("</ul>");
+                return listSb.ToString();
+            }
+
+            if (root.ValueKind == JsonValueKind.Object)
+            {
+                var sb = new System.Text.StringBuilder("<div class=\"tile-metrics\">");
+                foreach (var prop in root.EnumerateObject())
+                {
+                    sb.Append("<div class=\"tile-metric\">");
+                    sb.Append($"<div class=\"tile-metric-value\">{System.Web.HttpUtility.HtmlEncode(prop.Value.ToString())}</div>");
+                    sb.Append($"<div class=\"tile-metric-label\">{System.Web.HttpUtility.HtmlEncode(prop.Name)}</div>");
+                    sb.Append("</div>");
+                }
+                sb.Append("</div>");
+                return sb.ToString();
+            }
+
+            return $"<pre class=\"tile-raw\">{System.Web.HttpUtility.HtmlEncode(json)}</pre>";
+        }
+        catch
+        {
+            return $"<pre class=\"tile-raw\">{System.Web.HttpUtility.HtmlEncode(json)}</pre>";
+        }
+    }
+
+    private static string GetFileIcon(string fileName) =>
+        Path.GetExtension(fileName).ToLowerInvariant() switch
+        {
+            ".md" => "📝",
+            ".json" => "📊",
+            ".csv" => "📋",
+            _ => "📄"
+        };
+
+    // ── Add tile popup ──
+
+    private void OpenNewFileForm()
+    {
+        _creatingNewFile = true;
+        _newFileName = "";
+        _newFileContent = "";
+        _newFileError = "";
+    }
+
+    private void CloseNewFileForm() => _creatingNewFile = false;
+
+    private void OpenAddTilePopup()
+    {
+        _addTileOpen = true;
+        _creatingNewFile = false;
+        _newFileName = "";
+        _newFileContent = "";
+        _newFileError = "";
+    }
+
+    private void CloseAddTilePopup()
+    {
+        _addTileOpen = false;
+        _creatingNewFile = false;
+    }
+
+    private async Task AddTile(string fileName)
+    {
+        await DashboardService.AddTileAsync(Slug, fileName);
+        _tiles = await DashboardService.GetTilesAsync(Slug);
+        _contentCache[fileName] = await DashboardService.ReadFileContentAsync(_workspace, fileName);
+        _addTileOpen = false;
+    }
+
+    private async Task RemoveTile(string fileName)
+    {
+        await DashboardService.RemoveTileAsync(Slug, fileName);
+        _tiles = _tiles.Where(t => t.FileName != fileName).ToList();
+    }
+
+    private async Task CreateNewFile()
+    {
+        var name = _newFileName.Trim();
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        if (!Path.HasExtension(name)) name += ".md";
+
+        if (name.Contains('/') || name.Contains('\\') || name.Contains(".."))
+        {
+            _newFileError = L["NewFileInvalidName"];
+            return;
+        }
+
+        await DashboardService.WriteFileAsync(_workspace, name, _newFileContent);
+        _availableFiles = DashboardService.GetAvailableFiles(_workspace);
+        await DashboardService.AddTileAsync(Slug, name);
+        _tiles = await DashboardService.GetTilesAsync(Slug);
+        _contentCache[name] = _newFileContent;
+        _creatingNewFile = false;
+        _addTileOpen = false;
+    }
+
+    // ── Drag (free-position) ──
+
+    private async Task OnDragMouseDown(MouseEventArgs e, DashboardTileLayout tile)
+    {
+        await JS.InvokeVoidAsync("dashboardStartDrag",
+            tile.FileName, TileId(tile.FileName),
+            e.ClientX, e.ClientY,
+            tile.X, tile.Y);
+    }
+
+    [JSInvokable]
+    public async Task OnTileMoveEnd(string fileName, int x, int y)
+    {
+        await DashboardService.MoveTileAsync(Slug, fileName, x, y);
+        _tiles = await DashboardService.GetTilesAsync(Slug);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // ── Resize ──
+
+    private async Task OnResizeMouseDown(MouseEventArgs e, DashboardTileLayout tile)
+    {
+        _resizingTile = tile;
+        await JS.InvokeVoidAsync("dashboardStartResize",
+            tile.FileName, TileId(tile.FileName),
+            e.ClientX, e.ClientY,
+            tile.Width, tile.Height);
+    }
+
+    [JSInvokable]
+    public async Task OnResizeEnd(string fileName, int width, int height)
+    {
+        _resizingTile = null;
+        await DashboardService.ResizeTileAsync(Slug, fileName, width, height);
+        _tiles = await DashboardService.GetTilesAsync(Slug);
+        await InvokeAsync(StateHasChanged);
+    }
+}
