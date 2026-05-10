@@ -3,8 +3,9 @@
 ## Purpose
 A free-form, tile-based dashboard view that complements the Kanban board. Each tile displays a file read from the project's `.dashboard/` folder. Users and agents can add, edit, remove, move, and resize tiles; layout is persisted per project so it survives restarts. Agents write files directly to `.dashboard/`; the dashboard discovers them automatically.
 
-Each tile result file is paired with a **sidecar YAML** at `<file>.yaml` containing four fields:
+Each tile result file is paired with a **sidecar YAML** at `<file>.yaml` containing five fields:
 - `template` — required — which renderer to use (`markdown`, `table`, `kpi`, `kpi-grid`, `progress`, `sparkline`, `bar-chart`, `donut`, `gauge`, `status-grid`, `heatmap`, `leaderboard`, `timeline`, `image`, `mermaid`).
+- `title` — optional display title shown in the tile header (falls back to the file name when absent).
 - `refresh` — auto-refresh interval in seconds. `0` = static (no auto-refresh; can still be regenerated on demand by clicking the refresh button if a prompt is set).
 - `prompt` — the LLM instruction sent to `claude` to (re)generate the file. Empty for fully static tiles.
 - `model` — optional Claude model override (`""` = project default).
