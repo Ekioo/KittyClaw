@@ -3562,12 +3562,16 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .tile-status-label { font-size: 0.78rem; color: var(--text); font-weight: 500; }
 .tile-status-detail { font-size: 0.7rem; color: var(--text-muted); }
 
-/* Heatmap calendar */
-.tile-heatmap-wrap { display: inline-flex; flex-direction: column; gap: 4px; font-size: 0.65rem; color: var(--text-muted); }
+/* Heatmap calendar — row above (corner + months), row below (days col + week grid).
+   Both rows share the same flex-gap and the corner width matches the days col so that
+   month labels align exactly with the week columns underneath. */
+.tile-heatmap-wrap { display: inline-flex; flex-direction: column; gap: 3px; font-size: 0.62rem; color: var(--text-muted); }
+.tile-heatmap-row { display: flex; gap: 4px; }
 .tile-heatmap-body { display: flex; gap: 4px; }
-.tile-heatmap-days { display: flex; flex-direction: column; gap: 2px; padding-top: 0; }
+.tile-heatmap-corner { width: 24px; flex: none; }
+.tile-heatmap-days { width: 24px; flex: none; display: flex; flex-direction: column; gap: 2px; }
 .tile-heatmap-days span { height: 11px; line-height: 11px; }
-.tile-heatmap-months { display: flex; gap: 2px; margin-left: 30px; }
+.tile-heatmap-months { display: flex; gap: 2px; }
 .tile-heatmap-months span { width: 11px; height: 11px; line-height: 11px; flex: none; white-space: nowrap; overflow: visible; }
 .tile-heatmap { display: flex; gap: 2px; }
 .tile-heatmap-week { display: flex; flex-direction: column; gap: 2px; }
@@ -4141,17 +4145,21 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .tile-config-cancel:hover { background: var(--surface3); color: var(--text); }
 
 .tile-config-revise {
-    background: var(--surface3);
-    border: 1px solid var(--border);
+    background: none;
+    border: 1px solid var(--border-strong);
     border-radius: 7px;
     color: var(--text);
     font-size: 0.85rem;
     padding: 0.4rem 0.9rem;
     cursor: pointer;
-    transition: background 0.12s;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 
-.tile-config-revise:hover { background: var(--surface2); }
+.tile-config-revise:hover {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border-color: var(--accent);
+    color: var(--accent-hover);
+}
 
 .tile-config-accept {
     background: var(--accent);

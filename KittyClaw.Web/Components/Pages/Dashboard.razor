@@ -219,6 +219,15 @@ else
 
     private Project? _project;
     private string _workspace = "";
+    // Mirror of ActionEditor.DefaultModels — keep in sync when adding a new Claude model.
+    private static readonly string[] AvailableModels =
+    [
+        "claude-opus-4-7",
+        "claude-opus-4-7-1m",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5",
+    ];
+
     private List<DashboardTileLayout> _tiles = [];
     private List<string> _availableFiles = [];
     private Dictionary<string, string?> _contentCache = new();
