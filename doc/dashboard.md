@@ -13,7 +13,10 @@ Files with this header are periodically updated by `DashboardRefreshService`, wh
 ## Key components
 - `KittyClaw.Core/Services/DashboardService.cs` — reads `.dashboard/*.md` files, parses YAML front-matter, persists tile layout (position, size) in the per-project SQLite DB, and exposes add/remove/move/resize/refresh operations.
 - `KittyClaw.Core/Services/DashboardRefreshService.cs` — background service that polls tiles with a `refresh` front-matter field, dispatches `claude` CLI calls, and writes updated content back to disk.
-- `KittyClaw.Web/Components/Pages/Dashboard.razor` — Blazor page rendering tiles on a 20 px dot-grid with free drag-and-drop (mouse events) and resize handles.
+- `KittyClaw.Core/Services/TileRenderer.cs` — converts tile file content into HTML based on the tile template type (Markdown, KPI, Gauge, Heatmap, Timeline, BarChart, Donut, Sparkline, etc.).
+- `KittyClaw.Core/Services/TileTemplate.cs` — catalogue of tile template variants (`markdown`, `kpi`, `kpi-grid`, `bar-chart`, `donut`, `gauge`, `heatmap`, `timeline`, `sparkline`, `progress`, `status-grid`, `leaderboard`, `image`, `mermaid`, `table`). Each variant defines its expected JSON or Markdown schema and the format instructions appended to LLM prompts.
+- `KittyClaw.Core/Services/TileSidecar.cs` — reads/writes the YAML front-matter sidecar alongside tile files.
+- `KittyClaw.Web/Components/Pages/Dashboard.razor` — Blazor page rendering tiles on a 20 px dot-grid with free drag-and-drop (mouse events), resize handles, a chat-based AI tile creation panel, and a refresh log drawer.
 - `KittyClaw.Web/wwwroot/js/dashboard.js` — client-side drag/resize helpers.
 - `KittyClaw.Web/wwwroot/app.css` — dashboard-specific layout and tile styles.
 
@@ -25,7 +28,8 @@ Files with this header are periodically updated by `DashboardRefreshService`, wh
   - `DELETE /tiles/{fileName}` — remove a tile.
   - `PATCH /tiles/{fileName}/position` — move a tile (`x`, `y`).
   - `PATCH /tiles/{fileName}/size` — resize a tile (`width`, `height`).
-- **Agent writes**: agents drop `.md` files into `.dashboard/` directly; the UI discovers them on next load.
+- **Agent writes**: agents drop `.md` (or template-specific JSON/Mermaid) files into `.dashboard/` directly; the UI discovers them on next load.
+- **Chat-based tile creation**: a conversational AI panel in the UI guides the user through creating a new tile — Claude asks follow-up questions then pre-fills a review popup before writing the file.
 
 ## External dependencies
 - [Storage](./storage.md) — tile layout persisted in the per-project SQLite DB.
