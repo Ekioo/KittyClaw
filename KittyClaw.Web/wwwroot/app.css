@@ -222,6 +222,35 @@ a:hover { color: var(--accent-hover); }
 .project-card h3 { color: var(--text); margin: 0 0 0.2rem; font-size: 1rem; }
 .project-card small { color: var(--text-muted); font-size: 0.78rem; }
 
+/* Context menu */
+.context-menu-backdrop { position: fixed; inset: 0; z-index: 999; }
+.context-menu {
+    position: fixed;
+    z-index: 1000;
+    background: var(--surface1);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    min-width: 180px;
+    padding: 0.25rem 0;
+}
+.context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 0.5rem 0.9rem;
+    font-size: 0.88rem;
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+}
+.context-menu-item:hover { background: var(--surface2); }
+.context-menu-item.active { font-weight: 600; color: var(--accent); }
+.context-menu-check { display: inline-block; width: 1rem; text-align: center; }
+
 /* Confirm delete overlay */
 .confirm-overlay {
     position: fixed;

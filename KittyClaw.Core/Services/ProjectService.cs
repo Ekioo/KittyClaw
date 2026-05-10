@@ -37,6 +37,8 @@ public partial class ProjectService
             catch { /* column already exists */ }
             try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN FallbackModel TEXT NULL"); }
             catch { /* column already exists */ }
+            try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN UpdatedAt TEXT NOT NULL DEFAULT '1970-01-01 00:00:00'"); }
+            catch { /* column already exists */ }
             _dbInitialized = true;
         }
         finally
@@ -96,6 +98,7 @@ public partial class ProjectService
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Slug == slug);
         if (project is null) return null;
         project.IsPaused = !project.IsPaused;
+        project.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
         return project;
     }
@@ -111,6 +114,7 @@ public partial class ProjectService
         {
             project.FallbackModel = string.IsNullOrWhiteSpace(fallbackModel) ? null : fallbackModel.Trim();
         }
+        project.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
         return project;
     }

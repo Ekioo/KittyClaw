@@ -19,5 +19,8 @@
   "OnboardingInstall": "Installer",
   "OnboardingMissingWarning": "KittyClaw peut fonctionner sans ces outils, mais le dispatch des agents et les commits git échoueront. Installe ce qui manque puis assure-toi que les exécutables sont dans le PATH (variables d'environnement), puis clique sur Revérifier.",
   "Recheck": "Revérifier",
-  "Continue": "Continuer"
+  "Continue": "Continuer",
+  "SortByName": "Par nom",
+  "SortByCreationDate": "Par date de création",
+  "SortByLastModified": "Par dernière modification"
 }

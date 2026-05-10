@@ -10,6 +10,7 @@
 @inject LocalizationService L
 @inject IHttpClientFactory HttpFactory
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 @rendermode InteractiveServer
 @implements IDisposable
 
@@ -21,10 +22,10 @@
     <img src="/KittyClaw-Logo-Horizontal.webp" alt="KittyClaw" class="home-logo-horizontal" />
 </div>
 
-<div class="project-list">
+<div class="project-list" @oncontextmenu="ShowSortMenu" @oncontextmenu:preventDefault>
     @if (_projects is not null)
     {
-        @foreach (var project in _projects)
+        @foreach (var project in SortedProjects)
         {
             <div class="project-card-wrap @(project.IsPaused ? "project-paused" : "")">
                 <a class="project-card" href="/board/@project.Slug">
@@ -46,6 +47,25 @@
         }
     }
 </div>
+
+@if (_sortMenuVisible)
+{
+    <div class="context-menu-backdrop" @onclick="HideSortMenu"></div>
+    <div class="context-menu" style="left:@(_sortMenuX)px;top:@(_sortMenuY)px">
+        <button class="context-menu-item @(_sortOrder == "name" ? "active" : "")" @onclick='() => SetSort("name")'>
+            @if (_sortOrder == "name") { <span class="context-menu-check">✓</span> } else { <span class="context-menu-check"></span> }
+            @L["SortByName"]
+        </button>
+        <button class="context-menu-item @(_sortOrder == "created" ? "active" : "")" @onclick='() => SetSort("created")'>
+            @if (_sortOrder == "created") { <span class="context-menu-check">✓</span> } else { <span class="context-menu-check"></span> }
+            @L["SortByCreationDate"]
+        </button>
+        <button class="context-menu-item @(_sortOrder == "updated" ? "active" : "")" @onclick='() => SetSort("updated")'>
+            @if (_sortOrder == "updated") { <span class="context-menu-check">✓</span> } else { <span class="context-menu-check"></span> }
+            @L["SortByLastModified"]
+        </button>
+    </div>
+}
 
 <div class="create-project">
     <input @bind="_newProjectName" @bind:event="oninput" placeholder="@L["NewProjectPlaceholder"]"
@@ -172,6 +192,18 @@
 @code {
     private List<Project>? _projects;
     private string _newProjectName = "";
+    private string _sortOrder = "name";
+    private bool _sortMenuVisible;
+    private double _sortMenuX, _sortMenuY;
+
+    private IEnumerable<Project> SortedProjects => (_projects ?? []).OrderBy(SortKey).ThenBy(p => p.Name);
+
+    private IComparable SortKey(Project p) => _sortOrder switch
+    {
+        "created" => p.CreatedAt,
+        "updated" => p.UpdatedAt,
+        _ => (IComparable)p.Name
+    };
     private Project? _deleteTarget;
 
     private string? _pendingName;
@@ -198,6 +230,8 @@
     {
         if (!firstRender || _onboardingEvaluated) return;
         _onboardingEvaluated = true;
+        var stored = await JS.InvokeAsync<string?>("localStorage.getItem", "kc-project-sort");
+        if (stored is "name" or "created" or "updated") _sortOrder = stored;
         if (!_showOnboarding)
         {
             await LoadProjectsAsync();
@@ -388,6 +422,22 @@
         await ProjectService.DeleteProjectAsync(_deleteTarget.Slug);
         _deleteTarget = null;
         _projects = await ProjectService.ListProjectsAsync();
+    }
+
+    private void ShowSortMenu(MouseEventArgs e)
+    {
+        _sortMenuX = e.ClientX;
+        _sortMenuY = e.ClientY;
+        _sortMenuVisible = true;
+    }
+
+    private void HideSortMenu() => _sortMenuVisible = false;
+
+    private async Task SetSort(string order)
+    {
+        _sortOrder = order;
+        _sortMenuVisible = false;
+        await JS.InvokeVoidAsync("localStorage.setItem", "kc-project-sort", order);
     }
 
     private void OnLangChanged() => InvokeAsync(StateHasChanged);

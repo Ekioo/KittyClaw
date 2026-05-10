@@ -19,5 +19,8 @@
   "OnboardingInstall": "Install",
   "OnboardingMissingWarning": "KittyClaw can run without these, but agent dispatch and git commits will fail. Install the missing tools and make sure they are on your PATH (environment variables), then click Recheck.",
   "Recheck": "Recheck",
-  "Continue": "Continue"
+  "Continue": "Continue",
+  "SortByName": "By Name",
+  "SortByCreationDate": "By Creation Date",
+  "SortByLastModified": "By Last Modified"
 }
