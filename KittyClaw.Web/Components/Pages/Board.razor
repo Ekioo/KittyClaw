@@ -282,8 +282,8 @@ else
     @* ── Create ticket popup ── *@
     @if (_showCreatePopup)
     {
-        <div class="ticket-modal-overlay" @onmousedown="CloseCreatePopup">
-            <div class="create-popup" @onmousedown:stopPropagation>
+        <div class="ticket-modal-overlay">
+            <div class="create-popup">
                 <div class="create-popup-header">
                     <h2>@L["NewTicket"]</h2>
                     <button class="close-btn" @onclick="CloseCreatePopup">&times;</button>
@@ -354,8 +354,8 @@ else
 
     @if (_selectedTicket is not null)
     {
-        <div class="ticket-modal-overlay" @onmousedown="ClosePanel">
-            <div class="ticket-panel" @onmousedown:stopPropagation>
+        <div class="ticket-modal-overlay">
+            <div class="ticket-panel">
             <div class="ticket-panel-header">
                 <div class="editable-field">
                     <div class="priority-dot-btn" @onclick="() => _showPriorityPicker = !_showPriorityPicker" title="@L["ChangePriority"]">
@@ -652,8 +652,8 @@ else
 
 @if (!string.IsNullOrEmpty(_fullscreenTarget))
 {
-    <div class="fullscreen-editor-overlay" @onclick="CancelFullscreen">
-        <div class="fullscreen-editor" @onclick:stopPropagation>
+    <div class="fullscreen-editor-overlay">
+        <div class="fullscreen-editor">
             <div class="fullscreen-editor-header">
                 <span>@(_fullscreenTarget == "description" ? L["FullscreenDescription"] : L["FullscreenComment"])</span>
                 <button class="icon-btn cancel-icon-btn" @onclick="CancelFullscreen">&#10005;</button>
