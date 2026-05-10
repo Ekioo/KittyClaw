@@ -684,6 +684,35 @@ public static class Endpoints
             return Results.Ok(new { url = $"/uploads/{filename}" });
         }).WithTags("Images").DisableAntiforgery();
 
+        // Dashboard
+        api.MapGet("/projects/{slug}/dashboard/tiles", async (string slug, DashboardService ds) =>
+            Results.Ok(await ds.GetTilesAsync(slug)))
+            .WithTags("Dashboard");
+
+        api.MapPost("/projects/{slug}/dashboard/tiles", async (string slug, AddTileRequest req, DashboardService ds) =>
+        {
+            var tile = await ds.AddTileAsync(slug, req.FileName);
+            return Results.Created($"/api/projects/{slug}/dashboard/tiles/{req.FileName}", tile);
+        }).WithTags("Dashboard");
+
+        api.MapDelete("/projects/{slug}/dashboard/tiles/{fileName}", async (string slug, string fileName, DashboardService ds) =>
+        {
+            var removed = await ds.RemoveTileAsync(slug, fileName);
+            return removed ? Results.NoContent() : Results.NotFound();
+        }).WithTags("Dashboard");
+
+        api.MapPatch("/projects/{slug}/dashboard/tiles/{fileName}/position", async (string slug, string fileName, MoveTileRequest req, DashboardService ds) =>
+        {
+            var tile = await ds.MoveTileAsync(slug, fileName, req.X, req.Y);
+            return tile is null ? Results.NotFound() : Results.Ok(tile);
+        }).WithTags("Dashboard");
+
+        api.MapPatch("/projects/{slug}/dashboard/tiles/{fileName}/size", async (string slug, string fileName, ResizeTileRequest req, DashboardService ds) =>
+        {
+            var tile = await ds.ResizeTileAsync(slug, fileName, req.Width, req.Height);
+            return tile is null ? Results.NotFound() : Results.Ok(tile);
+        }).WithTags("Dashboard");
+
     }
 
     private static readonly JsonSerializerOptions SseJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
