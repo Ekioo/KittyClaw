@@ -7,6 +7,7 @@
   "EditNode": "Edit node",
   "AutomationNamePlaceholder": "Automation name",
   "Enabled": "Enabled",
+  "DeleteAutomationConfirm": "Delete this automation?",
   "AutomationDeleted": "Automation '{0}' deleted.",
   "NewAutomationName": "New automation",
   "DragToMove": "Drag to move",

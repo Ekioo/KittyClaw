@@ -7,6 +7,7 @@
   "EditNode": "Éditer le nœud",
   "AutomationNamePlaceholder": "Nom de l'automation",
   "Enabled": "Activé",
+  "DeleteAutomationConfirm": "Supprimer cette automation ?",
   "AutomationDeleted": "Automation '{0}' supprimée.",
   "NewAutomationName": "Nouvelle automation",
   "DragToMove": "Glisser pour déplacer",
