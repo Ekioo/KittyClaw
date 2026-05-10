@@ -65,6 +65,9 @@ else
                              title="@L["DragToReorder"]">
                             <span class="dashboard-tile-drag-handle">&#8942;&#8942;</span>
                             <span class="dashboard-tile-title">@Path.GetFileNameWithoutExtension(t.FileName)</span>
+                            <button class="dashboard-tile-refresh" title="@L["RefreshTile"]"
+                                    @onclick="() => RefreshTile(t.FileName)"
+                                    @onmousedown:stopPropagation>&#x21BB;</button>
                             <button class="dashboard-tile-remove" title="@L["RemoveTile"]"
                                     @onclick="() => RemoveTile(t.FileName)"
                                     @onmousedown:stopPropagation>&times;</button>
@@ -350,6 +353,11 @@ else
         _tiles = await DashboardService.GetTilesAsync(Slug);
         _contentCache[fileName] = await DashboardService.ReadFileContentAsync(_workspace, fileName);
         _addTileOpen = false;
+    }
+
+    private async Task RefreshTile(string fileName)
+    {
+        _contentCache[fileName] = await DashboardService.ReadFileContentAsync(_workspace, fileName);
     }
 
     private async Task RemoveTile(string fileName)

@@ -6,6 +6,15 @@ namespace KittyClaw.Core.Services;
 // X, Y, Width, Height are pixel values snapped to the 20px grid
 public record DashboardTileLayout(string FileName, int X = 0, int Y = 0, int Width = 300, int Height = 200);
 
+/// <summary>
+/// Parsed front-matter header from a dashboard file.
+/// Files without this header are static and never auto-refreshed.
+/// </summary>
+/// <param name="RefreshSeconds">How often to re-run the prompt, in seconds.</param>
+/// <param name="Prompt">The LLM instruction to execute on each refresh.</param>
+/// <param name="Model">Optional Claude model override (null = project default).</param>
+public record DashboardFileHeader(int RefreshSeconds, string Prompt, string? Model);
+
 public class DashboardService
 {
     private readonly ProjectService _projectService;
@@ -136,4 +145,72 @@ public class DashboardService
     }
 
     private static int Snap(int v) => (int)Math.Round((double)v / 20) * 20;
+
+    // --- Header parsing ---
+
+    private const string HeaderDelimiter = "---";
+
+    /// <summary>
+    /// Parses the YAML-like front-matter header from a dashboard file.
+    /// Returns null if the file has no header or the header is malformed.
+    /// Expected format:
+    /// ---
+    /// refresh: 3600
+    /// prompt: Your LLM instruction here
+    /// model: claude-haiku-4-5-20251001
+    /// ---
+    /// </summary>
+    public static DashboardFileHeader? ParseHeader(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content)) return null;
+        var lines = content.ReplaceLineEndings("\n").Split('\n');
+        if (lines.Length < 3 || lines[0].Trim() != HeaderDelimiter) return null;
+
+        var end = Array.FindIndex(lines, 1, l => l.Trim() == HeaderDelimiter);
+        if (end < 0) return null;
+
+        int refresh = 0;
+        string? prompt = null;
+        string? model = null;
+        for (int i = 1; i < end; i++)
+        {
+            var colon = lines[i].IndexOf(':');
+            if (colon < 0) continue;
+            var key = lines[i][..colon].Trim().ToLowerInvariant();
+            var val = lines[i][(colon + 1)..].Trim();
+            switch (key)
+            {
+                case "refresh": int.TryParse(val, out refresh); break;
+                case "prompt": prompt = val; break;
+                case "model": model = string.IsNullOrWhiteSpace(val) ? null : val; break;
+            }
+        }
+
+        if (refresh <= 0 || string.IsNullOrWhiteSpace(prompt)) return null;
+        return new DashboardFileHeader(refresh, prompt!, model);
+    }
+
+    /// <summary>Returns the body of a dashboard file, stripping the front-matter header if present.</summary>
+    public static string ExtractBody(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content)) return content;
+        var lines = content.ReplaceLineEndings("\n").Split('\n');
+        if (lines.Length < 3 || lines[0].Trim() != HeaderDelimiter) return content;
+        var end = Array.FindIndex(lines, 1, l => l.Trim() == HeaderDelimiter);
+        if (end < 0) return content;
+        return string.Join('\n', lines.Skip(end + 1)).TrimStart('\n');
+    }
+
+    /// <summary>Serialises a header + body back to the dashboard file format.</summary>
+    public static string BuildContent(DashboardFileHeader header, string body)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(HeaderDelimiter);
+        sb.AppendLine($"refresh: {header.RefreshSeconds}");
+        sb.AppendLine($"prompt: {header.Prompt}");
+        if (header.Model is not null) sb.AppendLine($"model: {header.Model}");
+        sb.AppendLine(HeaderDelimiter);
+        sb.Append(body);
+        return sb.ToString();
+    }
 }
