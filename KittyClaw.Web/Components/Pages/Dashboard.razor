@@ -84,6 +84,9 @@ else
                                         @onclick="() => RefreshTile(t.FileName)"
                                         @onmousedown:stopPropagation>&#x21BB;</button>
                             }
+                            <button class="dashboard-tile-edit" title="@L["EditTile"]"
+                                    @onclick="() => OpenTileEdit(t.FileName)"
+                                    @onmousedown:stopPropagation>&#9998;</button>
                             <button class="dashboard-tile-remove" title="@L["RemoveTile"]"
                                     @onclick="() => RemoveTile(t.FileName)"
                                     @onmousedown:stopPropagation>&times;</button>
@@ -153,13 +156,13 @@ else
         <div class="ticket-modal-overlay" @onclick="CloseTileConfigPopup">
             <div class="tile-config-popup" @onclick:stopPropagation>
                 <div class="tile-config-header">
-                    <h2>@L["TileConfigTitle"]</h2>
+                    <h2>@(_configEditingFileName is null ? L["TileConfigTitle"] : L["TileConfigEditTitle"])</h2>
                     <button class="agent-close-btn" @onclick="CloseTileConfigPopup">&times;</button>
                 </div>
                 <div class="tile-config-body">
                     <div class="tile-config-field">
                         <label>@L["TileConfigFileName"]</label>
-                        <input type="text" @bind="_configFileName" />
+                        <input type="text" @bind="_configFileName" disabled="@(_configEditingFileName is not null)" />
                     </div>
                     <div class="tile-config-field">
                         <label>@L["TileConfigTemplate"]</label>
@@ -180,14 +183,22 @@ else
                     </div>
                     <div class="tile-config-field">
                         <label>@L["TileConfigModel"]</label>
-                        <input type="text" placeholder="@L["TileConfigModelHint"]" @bind="_configModel" />
+                        <select @bind="_configModel">
+                            <option value="">@L["TileConfigModelHint"]</option>
+                            @foreach (var m in AvailableModels)
+                            {
+                                <option value="@m">@m</option>
+                            }
+                        </select>
                     </div>
                 </div>
                 <div class="tile-config-actions">
                     <button class="tile-config-cancel" @onclick="CloseTileConfigPopup">@L["Cancel"]</button>
                     <button class="tile-config-revise" @onclick="ReviseTileConfig">@L["TileConfigRevise"]</button>
                     <button class="tile-config-accept" @onclick="AcceptTileConfig"
-                            disabled="@string.IsNullOrWhiteSpace(_configFileName)">@L["TileConfigAccept"]</button>
+                            disabled="@string.IsNullOrWhiteSpace(_configFileName)">
+                        @(_configEditingFileName is null ? L["TileConfigAccept"] : L["TileConfigSave"])
+                    </button>
                 </div>
             </div>
         </div>
@@ -238,6 +249,7 @@ else
     // ── Tile config popup ──
 
     private bool _tileConfigOpen;
+    private string? _configEditingFileName; // null = create new tile, non-null = edit existing
     private string _configFileName = "";
     private string _configTemplate = TileTemplate.Markdown;
     private string _configPrompt = "";
@@ -520,26 +532,55 @@ else
 
     // ── Tile config popup ──
 
-    private void CloseTileConfigPopup() => _tileConfigOpen = false;
+    private void CloseTileConfigPopup()
+    {
+        _tileConfigOpen = false;
+        _configEditingFileName = null;
+    }
 
     private void ReviseTileConfig()
     {
         _tileConfigOpen = false;
+        _configEditingFileName = null;
         _chatOpen = true;
+    }
+
+    private async Task OpenTileEdit(string fileName)
+    {
+        var sidecar = await DashboardService.ReadSidecarAsync(_workspace, fileName)
+            ?? new TileSidecar(TileTemplate.Markdown, 0, "", null);
+        _configEditingFileName = fileName;
+        _configFileName = fileName;
+        _configTemplate = sidecar.Template;
+        _configPrompt = sidecar.Prompt;
+        _configRefreshSeconds = sidecar.Refresh;
+        _configModel = sidecar.Model ?? "";
+        _tileConfigOpen = true;
     }
 
     private async Task AcceptTileConfig()
     {
-        var name = _configFileName.Trim();
-        if (string.IsNullOrWhiteSpace(name)) return;
         var template = TileTemplate.IsKnown(_configTemplate) ? _configTemplate : TileTemplate.Markdown;
-        if (!Path.HasExtension(name)) name += TileTemplate.DefaultExtension(template);
-
         var sidecar = new TileSidecar(
             template,
             _configRefreshSeconds,
             _configPrompt ?? "",
             string.IsNullOrWhiteSpace(_configModel) ? null : _configModel);
+
+        // Edit mode: update sidecar in place; never recreate the result file or change layout.
+        if (_configEditingFileName is not null)
+        {
+            var fileName = _configEditingFileName;
+            await DashboardService.WriteSidecarAsync(_workspace, fileName, sidecar);
+            _sidecars[fileName] = sidecar;
+            _tileConfigOpen = false;
+            _configEditingFileName = null;
+            return;
+        }
+
+        var name = _configFileName.Trim();
+        if (string.IsNullOrWhiteSpace(name)) return;
+        if (!Path.HasExtension(name)) name += TileTemplate.DefaultExtension(template);
 
         // Write empty result file (so the tile shows immediately) and the sidecar.
         // Image tiles skip the empty-write since the agent will produce a real binary.
