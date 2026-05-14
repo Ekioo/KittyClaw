@@ -10,6 +10,7 @@
 @inject ProjectService ProjectService
 @inject DashboardService DashboardService
 @inject ClaudeRunner ClaudeRunner
+@inject DashboardTileGate TileGate
 @inject AgentRunsState RunsState
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
@@ -71,12 +72,22 @@ else
                              title="@L["DragToReorder"]">
                             <span class="dashboard-tile-drag-handle">&#8942;&#8942;</span>
                             <span class="dashboard-tile-title">@TileTitle(t.FileName)</span>
+                            @{
+                                var gateSnapshot = TileGate.Snapshot();
+                                var tileQueued = gateSnapshot.Queued.Any(q => q.Slug == Slug && q.FileName == t.FileName);
+                            }
                             @if (_refreshRunIds.TryGetValue(t.FileName, out var activeRunId))
                             {
                                 <span class="agent-spinner dashboard-tile-spinner"
                                       title="@L["RefreshRunning"]"
                                       @onclick="() => OpenRunDrawer(activeRunId)"
                                       @onmousedown:stopPropagation></span>
+                            }
+                            else if (tileQueued)
+                            {
+                                <span class="dashboard-tile-queued-badge"
+                                      title="@L["RefreshQueued"]"
+                                      @onmousedown:stopPropagation>queued</span>
                             }
                             else
                             {
@@ -306,6 +317,7 @@ else
         AutoStartEmptyTiles();
 
         RunsState.OnChange += OnRunsStateChanged;
+        TileGate.StateChanged += OnTileGateStateChanged;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -320,11 +332,13 @@ else
     public async ValueTask DisposeAsync()
     {
         RunsState.OnChange -= OnRunsStateChanged;
+        TileGate.StateChanged -= OnTileGateStateChanged;
         _dotNetRef?.Dispose();
         await Task.CompletedTask;
     }
 
     private void OnRunsStateChanged() => InvokeAsync(StateHasChanged);
+    private void OnTileGateStateChanged() => InvokeAsync(StateHasChanged);
 
     private void AutoStartEmptyTiles()
     {
@@ -635,7 +649,7 @@ else
         // (a static tile with a prompt = "regenerate on demand only").
         if (sidecar is not null && !string.IsNullOrWhiteSpace(sidecar.Prompt))
         {
-            _ = RefreshTileWithAiAsync(fileName, sidecar);
+            _ = RefreshTileWithAiAsync(fileName, sidecar, manual: true);
         }
         else
         {
@@ -644,68 +658,77 @@ else
         }
     }
 
-    private async Task RefreshTileWithAiAsync(string fileName, TileSidecar sidecar)
+    private async Task RefreshTileWithAiAsync(string fileName, TileSidecar sidecar, bool manual = false)
     {
-        var runId = Guid.NewGuid().ToString("N");
-        _refreshRunIds[fileName] = runId;
         _refreshErrors.Remove(fileName);
         await InvokeAsync(StateHasChanged);
 
-        var output = new StringBuilder();
-        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
 
         try
         {
-            var ctx = new ClaudeRunContext
+            await TileGate.RunAsync(Slug, fileName, manual, async gct =>
             {
-                ProjectSlug = Slug,
-                WorkspacePath = _workspace,
-                AgentName = "dashboard",
-                SkillFile = "dashboard",
-                InlineSkillContent = sidecar.Prompt + TileTemplate.SchemaPrompt(sidecar.Template),
-                MaxTurns = 5,
-                ConcurrencyGroup = $"dashboard-{Slug}-{SanitizeName(fileName)}",
-                Model = sidecar.Model,
-                SessionScope = "dashboard",
-                PersistSession = false,
-                PresetRunId = runId,
-                OnEventHook = ev =>
+                var runId = Guid.NewGuid().ToString("N");
+                _refreshRunIds[fileName] = runId;
+                await InvokeAsync(StateHasChanged);
+
+                var output = new StringBuilder();
+                try
                 {
-                    if (ev.Kind != "assistant" || string.IsNullOrWhiteSpace(ev.Text)) return;
-                    var t = ev.Text;
-                    const string prefix = "[assistant] ";
-                    if (t.StartsWith(prefix, StringComparison.Ordinal)) t = t[prefix.Length..];
-                    lock (output) { output.Append(t); }
-                },
-            };
+                    var ctx = new ClaudeRunContext
+                    {
+                        ProjectSlug = Slug,
+                        WorkspacePath = _workspace,
+                        AgentName = "dashboard",
+                        SkillFile = "dashboard",
+                        InlineSkillContent = sidecar.Prompt + TileTemplate.SchemaPrompt(sidecar.Template),
+                        MaxTurns = 5,
+                        ConcurrencyGroup = $"dashboard-{Slug}-{SanitizeName(fileName)}",
+                        Model = sidecar.Model,
+                        SessionScope = "dashboard",
+                        PersistSession = false,
+                        PresetRunId = runId,
+                        OnEventHook = ev =>
+                        {
+                            if (ev.Kind != "assistant" || string.IsNullOrWhiteSpace(ev.Text)) return;
+                            var t = ev.Text;
+                            const string prefix = "[assistant] ";
+                            if (t.StartsWith(prefix, StringComparison.Ordinal)) t = t[prefix.Length..];
+                            lock (output) { output.Append(t); }
+                        },
+                    };
 
-            var run = await ClaudeRunner.RunAsync(ctx, cts.Token);
-            var text = output.ToString().Trim();
+                    var run = await ClaudeRunner.RunAsync(ctx, gct);
+                    var text = output.ToString().Trim();
 
-            // For image tiles the agent writes the binary directly; nothing to overwrite here.
-            if (sidecar.Template != TileTemplate.Image && !string.IsNullOrWhiteSpace(text))
-            {
-                await DashboardService.WriteFileAsync(_workspace, fileName, text);
-                _contentCache[fileName] = text;
-            }
-            else if (sidecar.Template == TileTemplate.Image)
-            {
-                // Bust the browser cache by re-reading content unchanged; the <img> URL stays
-                // the same but a fresh request is triggered by the StateHasChanged below.
-                _contentCache[fileName] = "";
-            }
-            else
-            {
-                _refreshErrors[fileName] = "Refresh produced no output — open the run drawer to see what claude returned.";
-            }
+                    // For image tiles the agent writes the binary directly; nothing to overwrite here.
+                    if (sidecar.Template != TileTemplate.Image && !string.IsNullOrWhiteSpace(text))
+                    {
+                        await DashboardService.WriteFileAsync(_workspace, fileName, text);
+                        _contentCache[fileName] = text;
+                    }
+                    else if (sidecar.Template == TileTemplate.Image)
+                    {
+                        // Bust the browser cache by re-reading content unchanged; the <img> URL stays
+                        // the same but a fresh request is triggered by the StateHasChanged below.
+                        _contentCache[fileName] = "";
+                    }
+                    else
+                    {
+                        _refreshErrors[fileName] = "Refresh produced no output — open the run drawer to see what claude returned.";
+                    }
+                }
+                finally
+                {
+                    _refreshRunIds.Remove(fileName);
+                    await InvokeAsync(StateHasChanged);
+                }
+            }, cts.Token);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _refreshErrors[fileName] = $"Refresh failed: {ex.Message}";
-        }
-        finally
-        {
-            _refreshRunIds.Remove(fileName);
             await InvokeAsync(StateHasChanged);
         }
     }

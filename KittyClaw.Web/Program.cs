@@ -66,6 +66,7 @@ builder.Services.AddSingleton<AutomationEngine>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomationEngine>());
 builder.Services.AddSingleton<GitRepositoryWatcher>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<GitRepositoryWatcher>());
+builder.Services.AddSingleton<KittyClaw.Core.Services.DashboardTileGate>();
 builder.Services.AddSingleton<KittyClaw.Core.Services.DashboardRefreshService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<KittyClaw.Core.Services.DashboardRefreshService>());
 builder.Services.AddSingleton<KittyClaw.Web.Services.AgentRunsState>();

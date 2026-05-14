@@ -8,6 +8,7 @@
   "AddTile": "+ Add tile",
   "RefreshTile": "Refresh",
   "RefreshRunning": "Refresh in progress — click to view log",
+  "RefreshQueued": "Queued — waiting for current refresh to finish",
   "EditTile": "Edit tile",
   "RemoveTile": "Remove tile",
   "RemoveTileConfirm": "Remove tile \"{0}\"? This will also delete the file and its sidecar from .dashboard/.",

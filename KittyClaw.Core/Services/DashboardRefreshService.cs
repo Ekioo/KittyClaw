@@ -17,6 +17,7 @@ public sealed class DashboardRefreshService : BackgroundService
     private readonly ProjectService _projects;
     private readonly DashboardService _dashboard;
     private readonly ClaudeRunner _runner;
+    private readonly DashboardTileGate _gate;
     private readonly ILogger<DashboardRefreshService> _logger;
 
     // key = "{slug}:{fileName}", value = last refresh UTC
@@ -26,11 +27,13 @@ public sealed class DashboardRefreshService : BackgroundService
         ProjectService projects,
         DashboardService dashboard,
         ClaudeRunner runner,
+        DashboardTileGate gate,
         ILogger<DashboardRefreshService> logger)
     {
         _projects = projects;
         _dashboard = dashboard;
         _runner = runner;
+        _gate = gate;
         _logger = logger;
     }
 
@@ -85,11 +88,13 @@ public sealed class DashboardRefreshService : BackgroundService
                 slug, fileName, sidecar.Template);
             _lastRefreshed[key] = now;
 
-            var newBody = await RunPromptAsync(slug, workspace, fileName, sidecar, ct);
-            if (newBody is null) return;
-
-            await _dashboard.WriteFileAsync(workspace, fileName, newBody);
-            _logger.LogInformation("Dashboard tile {Slug}/{File} updated ({Chars} chars)", slug, fileName, newBody.Length);
+            await _gate.RunAsync(slug, fileName, manual: false, async gct =>
+            {
+                var newBody = await RunPromptAsync(slug, workspace, fileName, sidecar, gct);
+                if (newBody is null) return;
+                await _dashboard.WriteFileAsync(workspace, fileName, newBody);
+                _logger.LogInformation("Dashboard tile {Slug}/{File} updated ({Chars} chars)", slug, fileName, newBody.Length);
+            }, ct);
         }
         catch (Exception ex)
         {
