@@ -20,8 +20,8 @@ namespace KittyClaw.Core.Services;
 public sealed record TileSidecar(
     string Template,
     int Refresh,
-    string Prompt,
-    string? Model,
+    string Prompt = "",
+    string? Model = null,
     string? Title = null,
     string? Script = null);
 
