@@ -3,22 +3,24 @@
 ## Purpose
 A free-form, tile-based dashboard view that complements the Kanban board. Each tile displays a file read from the project's `.dashboard/` folder. Users and agents can add, edit, remove, move, and resize tiles; layout is persisted per project so it survives restarts. Agents write files directly to `.dashboard/`; the dashboard discovers them automatically.
 
-Each tile result file is paired with a **sidecar YAML** at `<file>.yaml` containing five fields:
+Each tile result file is paired with a **sidecar YAML** at `<file>.yaml` containing six fields:
 - `template` — required — which renderer to use (`markdown`, `table`, `kpi`, `kpi-grid`, `progress`, `sparkline`, `bar-chart`, `donut`, `gauge`, `status-grid`, `heatmap`, `leaderboard`, `timeline`, `image`, `mermaid`).
 - `title` — optional display title shown in the tile header (falls back to the file name when absent).
-- `refresh` — auto-refresh interval in seconds. `0` = static (no auto-refresh; can still be regenerated on demand by clicking the refresh button if a prompt is set).
-- `prompt` — the LLM instruction sent to `claude` to (re)generate the file. Empty for fully static tiles.
+- `refresh` — auto-refresh interval in seconds. `0` = static (no auto-refresh; can still be regenerated on demand by clicking the refresh button if a script or prompt is set).
+- `script` — optional path (relative to the workspace root) to a script file (`.ps1`, `.sh`, `.js`, `.py`) whose stdout is written to the tile result file. Runs before the prompt step when both are set.
+- `prompt` — the LLM instruction sent to `claude` to (re)generate the file. Optional; omit for script-only tiles.
 - `model` — optional Claude model override (`""` = project default).
 
 A file without a sidecar is treated as a static tile; rendering falls back to the file extension (`.md` → markdown, `.json` → table/kpi-grid auto-detected, anything else → raw text).
 
-`DashboardRefreshService` polls every ~10 s and re-runs the prompt for tiles whose sidecar declares `refresh > 0` and the interval has elapsed. The agent's output is written back to the result file; the sidecar is left untouched. Manual refresh from the tile header always runs the prompt when one is set, regardless of `refresh`.
+`DashboardRefreshService` polls every ~10 s for tiles whose sidecar declares `refresh > 0` and the interval has elapsed. When triggered, it runs the script first (if set), then the prompt (if set); results are written back to the result file. Manual refresh from the tile header works for any tile that has a script or a prompt, regardless of `refresh`.
 
 Legacy in-file front-matter (`---\nrefresh: …\nprompt: …\n---`) is **migrated automatically** the first time `ReadSidecarAsync` is called on such a file: the header is stripped from the file body and a `<file>.yaml` sidecar is created with `template: markdown` (for `.md`) or `template: table` (for `.json`).
 
 ## Key components
 - `KittyClaw.Core/Services/DashboardService.cs` — reads `.dashboard/*.md` files, parses YAML front-matter, persists tile layout (position, size) in the per-project SQLite DB, and exposes add/remove/move/resize/refresh operations.
-- `KittyClaw.Core/Services/DashboardRefreshService.cs` — background service that polls tiles with a `refresh` front-matter field, enqueues them through `DashboardTileGate`, and writes updated content back to disk.
+- `KittyClaw.Core/Services/DashboardRefreshService.cs` — background service that polls tiles with a `refresh` sidecar field, enqueues them through `DashboardTileGate`, and orchestrates the script-then-prompt pipeline before writing updated content back to disk.
+- `KittyClaw.Core/Services/DashboardScriptRunner.cs` — executes tile scripts (`.ps1`, `.sh`, `.js`, `.py`), capturing stdout as the new tile content. Resolves interpreters automatically (pwsh/powershell, bash/Git Bash, node, python); working directory is the project workspace root.
 - `KittyClaw.Core/Services/DashboardTileGate.cs` — global singleton semaphore (size 1) that serializes all tile refreshes across all projects. Scheduling: oldest `lastFinishedAt` first; never-run tiles last; manual refreshes jump the queue. Deduplicates by `(slug, fileName)`. Persists `lastFinishedAt` to `registry.db`.
 - `KittyClaw.Core/Services/TileRenderer.cs` — converts tile file content into HTML based on the tile template type (Markdown, KPI, Gauge, Heatmap, Timeline, BarChart, Donut, Sparkline, etc.).
 - `KittyClaw.Core/Services/TileTemplate.cs` — catalogue of tile template variants (`markdown`, `kpi`, `kpi-grid`, `bar-chart`, `donut`, `gauge`, `heatmap`, `timeline`, `sparkline`, `progress`, `status-grid`, `leaderboard`, `image`, `mermaid`, `table`). Each variant defines its expected JSON or Markdown schema and the format instructions appended to LLM prompts.
