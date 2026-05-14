@@ -8,6 +8,7 @@
   "AddTile": "+ Ajouter une tuile",
   "RefreshTile": "Rafraîchir",
   "RefreshRunning": "Actualisation en cours — cliquez pour voir le journal",
+  "RefreshQueued": "En attente — actualisation en file d'attente",
   "EditTile": "Modifier la tuile",
   "RemoveTile": "Supprimer la tuile",
   "RemoveTileConfirm": "Supprimer la tuile « {0} » ? Le fichier et son sidecar seront supprimés de .dashboard/.",
