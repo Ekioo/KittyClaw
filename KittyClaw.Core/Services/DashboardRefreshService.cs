@@ -8,9 +8,8 @@ namespace KittyClaw.Core.Services;
 
 /// <summary>
 /// Background service that periodically refreshes dashboard tiles whose sidecar declares a
-/// <c>refresh</c> interval &gt; 0 and a non-empty <c>prompt</c>. The configured LLM prompt is
-/// executed via the claude CLI and its output is written back to the result file.
-/// The sidecar is left untouched.
+/// <c>refresh</c> interval &gt; 0 and a script or prompt. The pipeline is:
+/// script (optional) → prompt (optional) → write result file.
 /// </summary>
 public sealed class DashboardRefreshService : BackgroundService
 {
@@ -18,6 +17,7 @@ public sealed class DashboardRefreshService : BackgroundService
     private readonly DashboardService _dashboard;
     private readonly ClaudeRunner _runner;
     private readonly DashboardTileGate _gate;
+    private readonly DashboardScriptRunner _scriptRunner;
     private readonly ILogger<DashboardRefreshService> _logger;
 
     // key = "{slug}:{fileName}", value = last refresh UTC
@@ -28,12 +28,14 @@ public sealed class DashboardRefreshService : BackgroundService
         DashboardService dashboard,
         ClaudeRunner runner,
         DashboardTileGate gate,
+        DashboardScriptRunner scriptRunner,
         ILogger<DashboardRefreshService> logger)
     {
         _projects = projects;
         _dashboard = dashboard;
         _runner = runner;
         _gate = gate;
+        _scriptRunner = scriptRunner;
         _logger = logger;
     }
 
@@ -76,7 +78,10 @@ public sealed class DashboardRefreshService : BackgroundService
         {
             var sidecar = await _dashboard.ReadSidecarAsync(workspace, fileName);
             if (sidecar is null) return;
-            if (sidecar.Refresh <= 0 || string.IsNullOrWhiteSpace(sidecar.Prompt)) return;
+
+            var hasScript = !string.IsNullOrWhiteSpace(sidecar.Script);
+            var hasPrompt = !string.IsNullOrWhiteSpace(sidecar.Prompt);
+            if (sidecar.Refresh <= 0 || (!hasScript && !hasPrompt)) return;
 
             var key = $"{slug}:{fileName}";
             var now = DateTime.UtcNow;
@@ -90,10 +95,38 @@ public sealed class DashboardRefreshService : BackgroundService
 
             await _gate.RunAsync(slug, fileName, manual: false, async gct =>
             {
-                var newBody = await RunPromptAsync(slug, workspace, fileName, sidecar, gct);
-                if (newBody is null) return;
-                await _dashboard.WriteFileAsync(workspace, fileName, newBody);
-                _logger.LogInformation("Dashboard tile {Slug}/{File} updated ({Chars} chars)", slug, fileName, newBody.Length);
+                // Script phase: run script, write stdout to result file.
+                if (hasScript)
+                {
+                    var scriptFileName = sidecar.Script!.Trim();
+                    if (!DashboardScriptRunner.IsSupported(scriptFileName))
+                    {
+                        _logger.LogWarning("Dashboard tile {Slug}/{File}: unsupported script extension for '{Script}'",
+                            slug, fileName, scriptFileName);
+                        return;
+                    }
+                    var dashboardDir = _dashboard.GetDashboardDir(workspace);
+                    var scriptPath = Path.Combine(dashboardDir, scriptFileName);
+                    var result = await _scriptRunner.RunAsync(scriptPath, workspace, gct);
+                    if (!result.IsSuccess)
+                    {
+                        _logger.LogWarning("Dashboard script failed for {Slug}/{File}: {Error}",
+                            slug, fileName, result.ConfigError ?? result.Stderr);
+                        return;
+                    }
+                    await _dashboard.WriteFileAsync(workspace, fileName, result.Stdout);
+                    _logger.LogInformation("Dashboard script {Slug}/{File} wrote {Chars} chars",
+                        slug, fileName, result.Stdout.Length);
+                }
+
+                // Prompt phase: run LLM prompt, write output to result file.
+                if (hasPrompt)
+                {
+                    var newBody = await RunPromptAsync(slug, workspace, fileName, sidecar, gct);
+                    if (newBody is null) return;
+                    await _dashboard.WriteFileAsync(workspace, fileName, newBody);
+                    _logger.LogInformation("Dashboard tile {Slug}/{File} updated ({Chars} chars)", slug, fileName, newBody.Length);
+                }
             }, ct);
         }
         catch (Exception ex)
