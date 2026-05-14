@@ -15,12 +15,15 @@ namespace KittyClaw.Core.Services;
 /// <param name="Model">Optional Claude model override (null/empty = project default).</param>
 /// <param name="Title">Optional custom title shown in the tile header. If null/empty,
 /// the file name (without extension) is shown.</param>
+/// <param name="Script">Optional script filename (e.g. <c>my-tile.ps1</c>) relative to <c>.dashboard/</c>.
+/// When set, the script runs first and its stdout is written to the result file before any prompt.</param>
 public sealed record TileSidecar(
     string Template,
     int Refresh,
-    string Prompt,
-    string? Model,
-    string? Title = null);
+    string Prompt = "",
+    string? Model = null,
+    string? Title = null,
+    string? Script = null);
 
 public static class TileSidecarSerializer
 {
@@ -45,7 +48,8 @@ public static class TileSidecarSerializer
                 raw.Refresh,
                 raw.Prompt ?? "",
                 string.IsNullOrWhiteSpace(raw.Model) ? null : raw.Model,
-                string.IsNullOrWhiteSpace(raw.Title) ? null : raw.Title);
+                string.IsNullOrWhiteSpace(raw.Title) ? null : raw.Title,
+                string.IsNullOrWhiteSpace(raw.Script) ? null : raw.Script.Trim());
         }
         catch
         {
@@ -62,6 +66,7 @@ public static class TileSidecarSerializer
             Prompt = sidecar.Prompt,
             Model = sidecar.Model ?? "",
             Title = sidecar.Title ?? "",
+            Script = sidecar.Script ?? "",
         };
         return _serializer.Serialize(dto);
     }
@@ -73,5 +78,6 @@ public static class TileSidecarSerializer
         public string Prompt { get; set; } = "";
         public string Model { get; set; } = "";
         public string Title { get; set; } = "";
+        public string Script { get; set; } = "";
     }
 }

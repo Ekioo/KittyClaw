@@ -11,6 +11,7 @@
 @inject DashboardService DashboardService
 @inject ClaudeRunner ClaudeRunner
 @inject DashboardTileGate TileGate
+@inject DashboardScriptRunner ScriptRunner
 @inject AgentRunsState RunsState
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
@@ -189,6 +190,10 @@ else
                         </select>
                     </div>
                     <div class="tile-config-field">
+                        <label>@L["TileConfigScript"]</label>
+                        <input type="text" @bind="_configScript" placeholder="@L["TileConfigScriptHint"]" />
+                    </div>
+                    <div class="tile-config-field">
                         <label>@L["TileConfigPrompt"]</label>
                         <textarea rows="5" @bind="_configPrompt" placeholder="@L["TileConfigPromptHint"]"></textarea>
                     </div>
@@ -281,6 +286,7 @@ else
     private string _configPrompt = "";
     private int _configRefreshSeconds;
     private string _configModel = "";
+    private string _configScript = "";
 
     private int GridHeight => _tiles.Count == 0
         ? 600
@@ -346,7 +352,9 @@ else
         {
             if (_refreshRunIds.ContainsKey(tile.FileName)) continue;
             _sidecars.TryGetValue(tile.FileName, out var sidecar);
-            if (sidecar is null || string.IsNullOrWhiteSpace(sidecar.Prompt)) continue;
+            if (sidecar is null) continue;
+            var hasContent = !string.IsNullOrWhiteSpace(sidecar.Script) || !string.IsNullOrWhiteSpace(sidecar.Prompt);
+            if (!hasContent) continue;
             _contentCache.TryGetValue(tile.FileName, out var raw);
             if (string.IsNullOrWhiteSpace(raw))
                 _ = RefreshTileWithAiAsync(tile.FileName, sidecar);
@@ -418,7 +426,18 @@ else
             You are a dashboard tile creation assistant for KittyClaw.
 
             A dashboard tile is a result file in .dashboard/ paired with a YAML sidecar `<file>.yaml`
-            that describes how to render it and (optionally) how an LLM should refresh it on a schedule.
+            that describes how to render it and (optionally) how it is refreshed on a schedule.
+
+            **Content pipeline**: script (optional) → prompt (optional) → render.
+            - Script runs first; its stdout is written to the result file.
+            - Prompt (LLM) runs after. It reads whatever it needs from the workspace.
+            - If neither is set, the result file is rendered as-is (static tile).
+
+            **Always prefer a script-only tile** when the task can be done deterministically
+            (git commands, file reads, API calls, arithmetic). Only add a prompt when the task
+            genuinely requires language understanding (summarisation, classification, free-form
+            interpretation). A script that shells out to `git log`, `jq`, or a REST API is faster,
+            cheaper, and more reliable than an LLM doing the same work.
 
             Pick the most visually appropriate template for the user's intent. Available templates:
             {{rows}}
@@ -428,16 +447,20 @@ else
             before or after it:
 
             ```json
-            {"fileName":"sprint-health.json","title":"Sprint health","template":"kpi-grid","prompt":"Compute 4 KPIs from .agents/* and recent commits.","refreshSeconds":3600,"model":""}
+            {"fileName":"sprint-health.json","title":"Sprint health","template":"kpi-grid","script":"sprint-health.ps1","prompt":"","refreshSeconds":3600,"model":""}
             ```
 
             Fields:
-            - fileName: name of the file in .dashboard/ (include extension matching the template)
+            - fileName: name of the result file in .dashboard/ (include extension matching the template)
             - title: human-readable title shown in the tile header (concise, 2-5 words). Empty = use the filename.
             - template: one of the template ids above
-            - prompt: LLM instruction for auto-refresh; "" for static tiles
+            - script: filename of the script in .dashboard/ (e.g. "my-tile.ps1"); "" to skip
+            - prompt: LLM instruction; "" to skip (prefer "" when a script already handles the data)
             - refreshSeconds: refresh interval in seconds; 0 for static; 3600 = hourly; 86400 = daily
             - model: Claude model override; "" for project default
+
+            When a script is used, ensure its stdout matches the format expected by the chosen template
+            (e.g. a JSON array of objects for the table template).
             """;
     }
 
@@ -519,6 +542,7 @@ else
                     _configFileName = config.FileName;
                     _configTitle = config.Title;
                     _configTemplate = config.Template;
+                    _configScript = config.Script;
                     _configPrompt = config.Prompt;
                     _configRefreshSeconds = config.RefreshSeconds;
                     _configModel = config.Model;
@@ -557,15 +581,16 @@ else
             var title = root.TryGetProperty("title", out var ti) ? ti.GetString() ?? "" : "";
             var template = root.TryGetProperty("template", out var tp) ? (tp.GetString() ?? "").Trim().ToLowerInvariant() : TileTemplate.Markdown;
             if (!TileTemplate.IsKnown(template)) template = TileTemplate.Markdown;
+            var script = root.TryGetProperty("script", out var sc) ? sc.GetString() ?? "" : "";
             var prompt = root.TryGetProperty("prompt", out var p) ? p.GetString() ?? "" : "";
             var refreshSeconds = root.TryGetProperty("refreshSeconds", out var r) ? r.GetInt32() : 0;
             var model = root.TryGetProperty("model", out var m) ? m.GetString() ?? "" : "";
-            return new TileAiConfig(fileName, title, template, prompt, refreshSeconds, model);
+            return new TileAiConfig(fileName, title, template, script, prompt, refreshSeconds, model);
         }
         catch { return null; }
     }
 
-    private record TileAiConfig(string FileName, string Title, string Template, string Prompt, int RefreshSeconds, string Model);
+    private record TileAiConfig(string FileName, string Title, string Template, string Script, string Prompt, int RefreshSeconds, string Model);
 
     // ── Tile config popup ──
 
@@ -590,6 +615,7 @@ else
         _configFileName = fileName;
         _configTitle = sidecar.Title ?? "";
         _configTemplate = sidecar.Template;
+        _configScript = sidecar.Script ?? "";
         _configPrompt = sidecar.Prompt;
         _configRefreshSeconds = sidecar.Refresh;
         _configModel = sidecar.Model ?? "";
@@ -604,7 +630,8 @@ else
             _configRefreshSeconds,
             _configPrompt ?? "",
             string.IsNullOrWhiteSpace(_configModel) ? null : _configModel,
-            string.IsNullOrWhiteSpace(_configTitle) ? null : _configTitle.Trim());
+            string.IsNullOrWhiteSpace(_configTitle) ? null : _configTitle.Trim(),
+            string.IsNullOrWhiteSpace(_configScript) ? null : _configScript.Trim());
 
         // Edit mode: update sidecar in place; never recreate the result file or change layout.
         if (_configEditingFileName is not null)
@@ -634,7 +661,8 @@ else
         _contentCache[name] = "";
         _tileConfigOpen = false;
 
-        if (!string.IsNullOrWhiteSpace(sidecar.Prompt) && sidecar.Refresh > 0)
+        var hasContent = !string.IsNullOrWhiteSpace(sidecar.Script) || !string.IsNullOrWhiteSpace(sidecar.Prompt);
+        if (hasContent && sidecar.Refresh > 0)
             _ = RefreshTileWithAiAsync(name, sidecar);
     }
 
@@ -645,11 +673,13 @@ else
         var sidecar = await DashboardService.ReadSidecarAsync(_workspace, fileName);
         _sidecars[fileName] = sidecar;
 
-        // Manual refresh always runs the prompt if one is set, even when Refresh == 0
-        // (a static tile with a prompt = "regenerate on demand only").
-        if (sidecar is not null && !string.IsNullOrWhiteSpace(sidecar.Prompt))
+        // Manual refresh runs if a script or prompt is set, even when Refresh == 0
+        // (a static tile = "regenerate on demand only").
+        var hasContent = sidecar is not null &&
+            (!string.IsNullOrWhiteSpace(sidecar.Script) || !string.IsNullOrWhiteSpace(sidecar.Prompt));
+        if (hasContent)
         {
-            _ = RefreshTileWithAiAsync(fileName, sidecar, manual: true);
+            _ = RefreshTileWithAiAsync(fileName, sidecar!, manual: true);
         }
         else
         {
@@ -673,50 +703,81 @@ else
                 _refreshRunIds[fileName] = runId;
                 await InvokeAsync(StateHasChanged);
 
-                var output = new StringBuilder();
                 try
                 {
-                    var ctx = new ClaudeRunContext
+                    // Script phase: run script, write stdout to result file.
+                    if (!string.IsNullOrWhiteSpace(sidecar.Script))
                     {
-                        ProjectSlug = Slug,
-                        WorkspacePath = _workspace,
-                        AgentName = "dashboard",
-                        SkillFile = "dashboard",
-                        InlineSkillContent = sidecar.Prompt + TileTemplate.SchemaPrompt(sidecar.Template),
-                        MaxTurns = 5,
-                        ConcurrencyGroup = $"dashboard-{Slug}-{SanitizeName(fileName)}",
-                        Model = sidecar.Model,
-                        SessionScope = "dashboard",
-                        PersistSession = false,
-                        PresetRunId = runId,
-                        OnEventHook = ev =>
+                        var scriptFileName = sidecar.Script.Trim();
+                        if (!DashboardScriptRunner.IsSupported(scriptFileName))
                         {
-                            if (ev.Kind != "assistant" || string.IsNullOrWhiteSpace(ev.Text)) return;
-                            var t = ev.Text;
-                            const string prefix = "[assistant] ";
-                            if (t.StartsWith(prefix, StringComparison.Ordinal)) t = t[prefix.Length..];
-                            lock (output) { output.Append(t); }
-                        },
-                    };
-
-                    var run = await ClaudeRunner.RunAsync(ctx, gct);
-                    var text = output.ToString().Trim();
-
-                    // For image tiles the agent writes the binary directly; nothing to overwrite here.
-                    if (sidecar.Template != TileTemplate.Image && !string.IsNullOrWhiteSpace(text))
-                    {
-                        await DashboardService.WriteFileAsync(_workspace, fileName, text);
-                        _contentCache[fileName] = text;
+                            _refreshErrors[fileName] = $"Unsupported script extension for '{scriptFileName}'. Supported: .ps1, .sh, .js, .py";
+                            return;
+                        }
+                        var dashboardDir = DashboardService.GetDashboardDir(_workspace);
+                        var scriptPath = Path.Combine(dashboardDir, scriptFileName);
+                        var result = await ScriptRunner.RunAsync(scriptPath, _workspace, gct);
+                        if (!result.IsSuccess)
+                        {
+                            _refreshErrors[fileName] = result.ConfigError
+                                ?? $"Script exited with code {result.ExitCode}: {result.Stderr}";
+                            return;
+                        }
+                        await DashboardService.WriteFileAsync(_workspace, fileName, result.Stdout);
+                        _contentCache[fileName] = result.Stdout;
                     }
-                    else if (sidecar.Template == TileTemplate.Image)
+
+                    // Prompt phase: run LLM prompt, write output to result file.
+                    if (!string.IsNullOrWhiteSpace(sidecar.Prompt))
                     {
-                        // Bust the browser cache by re-reading content unchanged; the <img> URL stays
-                        // the same but a fresh request is triggered by the StateHasChanged below.
-                        _contentCache[fileName] = "";
+                        var output = new StringBuilder();
+                        var ctx = new ClaudeRunContext
+                        {
+                            ProjectSlug = Slug,
+                            WorkspacePath = _workspace,
+                            AgentName = "dashboard",
+                            SkillFile = "dashboard",
+                            InlineSkillContent = sidecar.Prompt + TileTemplate.SchemaPrompt(sidecar.Template),
+                            MaxTurns = 5,
+                            ConcurrencyGroup = $"dashboard-{Slug}-{SanitizeName(fileName)}",
+                            Model = sidecar.Model,
+                            SessionScope = "dashboard",
+                            PersistSession = false,
+                            PresetRunId = runId,
+                            OnEventHook = ev =>
+                            {
+                                if (ev.Kind != "assistant" || string.IsNullOrWhiteSpace(ev.Text)) return;
+                                var t = ev.Text;
+                                const string prefix = "[assistant] ";
+                                if (t.StartsWith(prefix, StringComparison.Ordinal)) t = t[prefix.Length..];
+                                lock (output) { output.Append(t); }
+                            },
+                        };
+
+                        var run = await ClaudeRunner.RunAsync(ctx, gct);
+                        var text = output.ToString().Trim();
+
+                        // For image tiles the agent writes the binary directly; nothing to overwrite here.
+                        if (sidecar.Template != TileTemplate.Image && !string.IsNullOrWhiteSpace(text))
+                        {
+                            await DashboardService.WriteFileAsync(_workspace, fileName, text);
+                            _contentCache[fileName] = text;
+                        }
+                        else if (sidecar.Template == TileTemplate.Image)
+                        {
+                            // Bust the browser cache by re-reading content unchanged; the <img> URL stays
+                            // the same but a fresh request is triggered by the StateHasChanged below.
+                            _contentCache[fileName] = "";
+                        }
+                        else
+                        {
+                            _refreshErrors[fileName] = "Refresh produced no output — open the run drawer to see what claude returned.";
+                        }
                     }
-                    else
+                    else if (string.IsNullOrWhiteSpace(sidecar.Script))
                     {
-                        _refreshErrors[fileName] = "Refresh produced no output — open the run drawer to see what claude returned.";
+                        // Neither script nor prompt — reload the file from disk.
+                        _contentCache[fileName] = await DashboardService.ReadFileContentAsync(_workspace, fileName);
                     }
                 }
                 finally
