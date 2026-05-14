@@ -9,53 +9,81 @@ internal static class ClaudeStreamPump
     internal static async Task PumpStdoutAsync(Process proc, AgentRun run, CancellationToken ct)
     {
         var reader = proc.StandardOutput;
-        while (!ct.IsCancellationRequested)
+        try
         {
-            var line = await reader.ReadLineAsync(ct);
-            if (line is null) break;
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            try
+            while (!ct.IsCancellationRequested)
             {
-                using var doc = JsonDocument.Parse(line);
-                var kind = doc.RootElement.TryGetProperty("type", out var t) ? t.GetString() ?? "event" : "event";
-                // For assistant message events: emit the assistant text first, then separate tool_use events
-                if (kind == "assistant" &&
-                    doc.RootElement.TryGetProperty("message", out var msg) &&
-                    msg.TryGetProperty("content", out var content) &&
-                    content.ValueKind == JsonValueKind.Array)
+                string? line;
+                try { line = await reader.ReadLineAsync(ct); }
+                catch (OperationCanceledException) { break; }
+                catch (Exception ex)
                 {
-                    run.Push(new StreamEvent(DateTime.UtcNow, kind, ClaudeRunner.FlattenJson(doc.RootElement)));
-                    foreach (var part in content.EnumerateArray())
+                    run.Push(new StreamEvent(DateTime.UtcNow, "error", $"stdout read error: {ex.Message}"));
+                    break;
+                }
+                if (line is null) break;
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                try
+                {
+                    using var doc = JsonDocument.Parse(line);
+                    var kind = doc.RootElement.TryGetProperty("type", out var t) ? t.GetString() ?? "event" : "event";
+                    // For assistant message events: emit the assistant text first, then separate tool_use events
+                    if (kind == "assistant" &&
+                        doc.RootElement.TryGetProperty("message", out var msg) &&
+                        msg.TryGetProperty("content", out var content) &&
+                        content.ValueKind == JsonValueKind.Array)
                     {
-                        if (part.TryGetProperty("type", out var ptype) && ptype.GetString() == "tool_use")
+                        run.Push(new StreamEvent(DateTime.UtcNow, kind, ClaudeRunner.FlattenJson(doc.RootElement)));
+                        foreach (var part in content.EnumerateArray())
                         {
-                            var toolName = part.TryGetProperty("name", out var n) ? n.GetString() ?? "tool" : "tool";
-                            var toolInput = part.TryGetProperty("input", out var inp) ? inp.ToString() : "{}";
-                            run.Push(new StreamEvent(DateTime.UtcNow, "tool_use", toolName, toolInput));
+                            if (part.TryGetProperty("type", out var ptype) && ptype.GetString() == "tool_use")
+                            {
+                                var toolName = part.TryGetProperty("name", out var n) ? n.GetString() ?? "tool" : "tool";
+                                var toolInput = part.TryGetProperty("input", out var inp) ? inp.ToString() : "{}";
+                                run.Push(new StreamEvent(DateTime.UtcNow, "tool_use", toolName, toolInput));
+                            }
                         }
                     }
+                    else
+                    {
+                        run.Push(new StreamEvent(DateTime.UtcNow, kind, ClaudeRunner.FlattenJson(doc.RootElement)));
+                    }
                 }
-                else
+                catch
                 {
-                    run.Push(new StreamEvent(DateTime.UtcNow, kind, ClaudeRunner.FlattenJson(doc.RootElement)));
+                    run.Push(new StreamEvent(DateTime.UtcNow, "raw", line));
                 }
             }
-            catch
-            {
-                run.Push(new StreamEvent(DateTime.UtcNow, "raw", line));
-            }
+        }
+        catch (Exception ex)
+        {
+            try { run.Push(new StreamEvent(DateTime.UtcNow, "error", $"stdout pump failed: {ex.Message}")); } catch { /* subscriber may throw */ }
         }
     }
 
     internal static async Task PumpStderrAsync(Process proc, AgentRun run, CancellationToken ct)
     {
         var reader = proc.StandardError;
-        while (!ct.IsCancellationRequested)
+        try
         {
-            var line = await reader.ReadLineAsync(ct);
-            if (line is null) break;
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            run.Push(new StreamEvent(DateTime.UtcNow, "stderr", line));
+            while (!ct.IsCancellationRequested)
+            {
+                string? line;
+                try { line = await reader.ReadLineAsync(ct); }
+                catch (OperationCanceledException) { break; }
+                catch (Exception ex)
+                {
+                    try { run.Push(new StreamEvent(DateTime.UtcNow, "error", $"stderr read error: {ex.Message}")); } catch { /* subscriber may throw */ }
+                    break;
+                }
+                if (line is null) break;
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                run.Push(new StreamEvent(DateTime.UtcNow, "stderr", line));
+            }
+        }
+        catch (Exception ex)
+        {
+            try { run.Push(new StreamEvent(DateTime.UtcNow, "error", $"stderr pump failed: {ex.Message}")); } catch { /* subscriber may throw */ }
         }
     }
 

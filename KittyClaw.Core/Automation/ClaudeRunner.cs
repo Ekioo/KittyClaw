@@ -163,6 +163,20 @@ public sealed class ClaudeRunner
             AppendDebugLog(ctx, $"FINISHED {ctx.AgentName} run={run.RunId} exit={attempt.Exit}");
             return run;
         }
+        catch (OperationCanceledException)
+        {
+            // Cancellation is handled inside SpawnAndWaitAsync; if it bubbles here the run
+            // was already completed as Stopped — Complete is idempotent, so this is safe.
+            _runs.Complete(run.RunId, AgentRunStatus.Stopped, null);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception in ClaudeRunner for {Agent} run={RunId}", ctx.AgentName, run.RunId);
+            try { run.Push(new StreamEvent(DateTime.UtcNow, "error", $"Internal runner error: {ex.Message}")); } catch { /* subscriber may throw */ }
+            _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
+            return run;
+        }
         finally
         {
             slot.Dispose();
