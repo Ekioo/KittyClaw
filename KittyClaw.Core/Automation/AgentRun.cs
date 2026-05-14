@@ -161,7 +161,18 @@ public sealed class AgentRunRegistry
     {
         _store = store;
         foreach (var run in store.LoadAll())
+        {
+            // A live run is never persisted — any snapshot with Status=Running is stale
+            // (process exited before Complete was called). Reconcile to Stopped so the UI
+            // never shows permanently-Running runs after a restart.
+            if (run.Status == AgentRunStatus.Running)
+            {
+                run.Status = AgentRunStatus.Stopped;
+                run.EndedAt = DateTime.UtcNow;
+                store.Save(run);
+            }
             _runs[run.RunId] = run;
+        }
     }
 
     public AgentRun Register(AgentRun run)
@@ -174,6 +185,8 @@ public sealed class AgentRunRegistry
     public void Complete(string runId, AgentRunStatus status, int? exitCode)
     {
         if (!_runs.TryGetValue(runId, out var run)) return;
+        // Idempotent: a terminal status must never be downgraded by a stray second call.
+        if (run.Status != AgentRunStatus.Running) return;
         run.Status = status;
         run.EndedAt = DateTime.UtcNow;
         run.ExitCode = exitCode;
