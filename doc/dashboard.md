@@ -18,7 +18,8 @@ Legacy in-file front-matter (`---\nrefresh: …\nprompt: …\n---`) is **migrate
 
 ## Key components
 - `KittyClaw.Core/Services/DashboardService.cs` — reads `.dashboard/*.md` files, parses YAML front-matter, persists tile layout (position, size) in the per-project SQLite DB, and exposes add/remove/move/resize/refresh operations.
-- `KittyClaw.Core/Services/DashboardRefreshService.cs` — background service that polls tiles with a `refresh` front-matter field, dispatches `claude` CLI calls, and writes updated content back to disk.
+- `KittyClaw.Core/Services/DashboardRefreshService.cs` — background service that polls tiles with a `refresh` front-matter field, enqueues them through `DashboardTileGate`, and writes updated content back to disk.
+- `KittyClaw.Core/Services/DashboardTileGate.cs` — global singleton semaphore (size 1) that serializes all tile refreshes across all projects. Scheduling: oldest `lastFinishedAt` first; never-run tiles last; manual refreshes jump the queue. Deduplicates by `(slug, fileName)`. Persists `lastFinishedAt` to `registry.db`.
 - `KittyClaw.Core/Services/TileRenderer.cs` — converts tile file content into HTML based on the tile template type (Markdown, KPI, Gauge, Heatmap, Timeline, BarChart, Donut, Sparkline, etc.).
 - `KittyClaw.Core/Services/TileTemplate.cs` — catalogue of tile template variants (`markdown`, `kpi`, `kpi-grid`, `bar-chart`, `donut`, `gauge`, `heatmap`, `timeline`, `sparkline`, `progress`, `status-grid`, `leaderboard`, `image`, `mermaid`, `table`). Each variant defines its expected JSON or Markdown schema and the format instructions appended to LLM prompts.
 - `KittyClaw.Core/Services/TileSidecar.cs` — reads/writes the YAML front-matter sidecar alongside tile files.
