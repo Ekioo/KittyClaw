@@ -403,7 +403,7 @@ else
                     var lid = label.Id;
                     <span class="label-pill label-removable" style="--lc: @label.Color">
                         @label.Name
-                        <button class="label-remove-btn" @onclick="() => RemoveLabel(lid)">&times;</button>
+                        <button class="label-remove-btn" @onclick="() => RemoveLabel(lid)" @onclick:stopPropagation>&times;</button>
                     </span>
                 }
                 <div class="label-autocomplete">
