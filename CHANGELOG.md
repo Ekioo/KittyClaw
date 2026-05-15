@@ -2,6 +2,29 @@
 
 All notable changes to KittyClaw.
 
+## [v0.6] — 2026-05-15
+
+Dashboard tile pipeline overhaul, agent run robustness, and UX polish.
+
+### Added
+- **Script-first content pipeline** for dashboard tiles: tiles run a script that emits content, with UTF-8 stdout/stderr.
+- **Folder-per-tile layout** with convention-based filenames under `.dashboard/`.
+- **Global dashboard tile refresh semaphore** (size 1, LRU) to serialize refreshes and avoid concurrent claude sessions.
+- Confirmation dialog before deleting an automation.
+- `DashboardTileGate` documented in dashboard architecture docs.
+
+### Changed
+- `tile-chat` assistant raised to MaxTurns=25 and allowed to read existing files; now generates real `scriptContent` instead of a stub.
+- README video replaced with YouTube thumbnail + animated WebP so it works in private browsing and across devices.
+
+### Fixed
+- Label remove button now visible on hover and no longer triggers ticket card click (#199).
+- Prevent orphaned `Running` agent runs when `ClaudeRunner` pumps throw (#188).
+- Dashboard tile refresh forces a fresh claude session each time so tools re-run instead of replaying.
+- `TileSidecar.Prompt` and `Model` marked optional in the OpenAPI spec.
+
+---
+
 ## [v0.5] — 2026-05-10
 
 Customizable dashboards, AutomationEngine refactor, architecture docs.
