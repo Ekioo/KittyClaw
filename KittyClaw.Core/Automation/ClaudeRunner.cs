@@ -37,6 +37,9 @@ public sealed class ClaudeRunContext
 
     /// <summary>Callback invoked for every StreamEvent pushed onto the AgentRun. Wired before any event is emitted, so no race with subscribers attaching after the fact.</summary>
     public Action<StreamEvent>? OnEventHook { get; init; }
+
+    /// <summary>For chat runs: the chat target slug (e.g. "programmer" or "programmer#ticket-42"). Stored on the AgentRun so the steer endpoint can persist injected messages to chat history.</summary>
+    public string? ChatTarget { get; init; }
 }
 
 public sealed class ClaudeRunner
@@ -66,6 +69,7 @@ public sealed class ClaudeRunner
             ConcurrencyGroup = string.IsNullOrEmpty(ctx.ConcurrencyGroup) ? ctx.AgentName : ctx.ConcurrencyGroup,
             StartedAt = DateTime.UtcNow,
             Model = ctx.Model,
+            ChatTarget = ctx.ChatTarget,
         };
         if (ctx.OnEventHook is not null) run.OnEvent += ctx.OnEventHook;
         _runs.Register(run);
@@ -294,8 +298,8 @@ public sealed class ClaudeRunner
         int? exit;
         try
         {
-            try { proc.StandardInput.Close(); } catch { /* stdin may already be closed */ }
             await proc.WaitForExitAsync(linked.Token);
+            try { proc.StandardInput.Close(); } catch { /* stdin may already be closed */ }
             exit = proc.ExitCode;
         }
         catch (OperationCanceledException)
