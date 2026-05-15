@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 
 namespace KittyClaw.Core.Services;
@@ -102,39 +101,17 @@ public sealed class DashboardScriptRunner
         }
     }
 
-    private static string ResolvePowerShell()
-    {
-        // Prefer pwsh (PowerShell 7+); fall back to powershell on Windows.
-        if (TryFindOnPath("pwsh")) return "pwsh";
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && TryFindOnPath("powershell"))
-            return "powershell";
-        return "pwsh";
-    }
+    private static string ResolvePowerShell() => ShellResolver.ResolvePowerShell();
 
     private static string ResolveBash()
     {
-        if (TryFindOnPath("bash")) return "bash";
+        if (ShellResolver.TryFindOnPath("bash")) return "bash";
         // Git Bash on Windows common location.
         var gitBash = @"C:\Program Files\Git\bin\bash.exe";
         if (File.Exists(gitBash)) return gitBash;
         return "bash";
     }
 
-    private static bool TryFindOnPath(string exe)
-    {
-        var pathExt = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? new[] { ".exe", ".cmd", "" }
-            : new[] { "" };
-        var paths = (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator);
-        foreach (var dir in paths)
-        {
-            foreach (var ext in pathExt)
-            {
-                if (File.Exists(Path.Combine(dir, exe + ext))) return true;
-            }
-        }
-        return false;
-    }
 }
 
 public sealed record ScriptResult(bool IsSuccess, string Stdout, string Stderr, int ExitCode, string? ConfigError)
