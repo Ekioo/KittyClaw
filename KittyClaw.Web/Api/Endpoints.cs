@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using KittyClaw.Core.Automation;
 using KittyClaw.Core.Models;
@@ -684,112 +684,129 @@ public static class Endpoints
             return Results.Ok(new { url = $"/uploads/{filename}" });
         }).WithTags("Images").DisableAntiforgery();
 
-        // Dashboard
+        // Dashboard (folder-per-tile layout: .dashboard/<tileSlug>/{tile.yaml,script.*,output.*})
+
         api.MapGet("/projects/{slug}/dashboard/tiles", async (string slug, DashboardService ds) =>
             Results.Ok(await ds.GetTilesAsync(slug)))
             .WithTags("Dashboard");
 
         api.MapPost("/projects/{slug}/dashboard/tiles", async (string slug, AddTileRequest req, DashboardService ds) =>
         {
-            var tile = await ds.AddTileAsync(slug, req.FileName);
-            return Results.Created($"/api/projects/{slug}/dashboard/tiles/{req.FileName}", tile);
+            var tile = await ds.AddTileAsync(slug, req.TileSlug);
+            return Results.Created($"/api/projects/{slug}/dashboard/tiles/{req.TileSlug}", tile);
         }).WithTags("Dashboard");
 
-        // Removes the tile from the dashboard layout AND deletes its result file + sidecar from
-        // .dashboard/. Pass ?keepFiles=true to only unregister from the layout (legacy behavior).
-        api.MapDelete("/projects/{slug}/dashboard/tiles/{fileName}", async (string slug, string fileName, bool? keepFiles, ProjectService ps, DashboardService ds) =>
+        // Removes the tile from the layout AND deletes the entire .dashboard/<tileSlug>/ folder.
+        api.MapDelete("/projects/{slug}/dashboard/tiles/{tileSlug}", async (string slug, string tileSlug, ProjectService ps, DashboardService ds) =>
         {
-            var removed = await ds.RemoveTileAsync(slug, fileName);
+            var removed = await ds.RemoveTileAsync(slug, tileSlug);
             if (!removed) return Results.NotFound();
-            if (keepFiles != true)
-            {
-                var project = await ps.GetProjectAsync(slug);
-                if (project is not null)
-                    ds.DeleteTileFiles(ps.ResolveWorkspacePath(project), fileName);
-            }
+            var project = await ps.GetProjectAsync(slug);
+            if (project is not null)
+                ds.DeleteTileFolder(ps.ResolveWorkspacePath(project), tileSlug);
             return Results.NoContent();
         }).WithTags("Dashboard");
 
-        api.MapPatch("/projects/{slug}/dashboard/tiles/{fileName}/position", async (string slug, string fileName, MoveTileRequest req, DashboardService ds) =>
+        api.MapPatch("/projects/{slug}/dashboard/tiles/{tileSlug}/position", async (string slug, string tileSlug, MoveTileRequest req, DashboardService ds) =>
         {
-            var tile = await ds.MoveTileAsync(slug, fileName, req.X, req.Y);
+            var tile = await ds.MoveTileAsync(slug, tileSlug, req.X, req.Y);
             return tile is null ? Results.NotFound() : Results.Ok(tile);
         }).WithTags("Dashboard");
 
-        api.MapPatch("/projects/{slug}/dashboard/tiles/{fileName}/size", async (string slug, string fileName, ResizeTileRequest req, DashboardService ds) =>
+        api.MapPatch("/projects/{slug}/dashboard/tiles/{tileSlug}/size", async (string slug, string tileSlug, ResizeTileRequest req, DashboardService ds) =>
         {
-            var tile = await ds.ResizeTileAsync(slug, fileName, req.Width, req.Height);
+            var tile = await ds.ResizeTileAsync(slug, tileSlug, req.Width, req.Height);
             return tile is null ? Results.NotFound() : Results.Ok(tile);
         }).WithTags("Dashboard");
 
-        // Serves the raw bytes of a tile result file (used by the image template, also handy for
-        // any binary content). Validated to stay inside the project's .dashboard/ directory to
-        // prevent path traversal.
-        api.MapGet("/projects/{slug}/dashboard/files/{fileName}", async (string slug, string fileName, ProjectService ps, DashboardService ds) =>
+        // Returns the rendered output content of a tile (text/plain). 404 if no output.* file.
+        api.MapGet("/projects/{slug}/dashboard/tiles/{tileSlug}/output", async (string slug, string tileSlug, ProjectService ps, DashboardService ds) =>
         {
             var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
             if (workspace is null) return Results.NotFound();
-            var path = ds.GetFilePath(workspace, fileName);
-            if (!IsInsideDashboard(workspace, path, ds)) return Results.BadRequest();
-            if (!File.Exists(path)) return Results.NotFound();
-            var ext = Path.GetExtension(fileName).ToLowerInvariant();
+            if (!IsInsideTileDir(workspace, tileSlug, ds)) return Results.BadRequest();
+            var content = await ds.ReadOutputAsync(workspace, tileSlug);
+            return content is null ? Results.NotFound() : Results.Text(content);
+        }).WithTags("Dashboard");
+
+        // Serves the raw bytes of a tile output file (used by the image template).
+        api.MapGet("/projects/{slug}/dashboard/tiles/{tileSlug}/output/raw", async (string slug, string tileSlug, ProjectService ps, DashboardService ds) =>
+        {
+            var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
+            if (workspace is null) return Results.NotFound();
+            if (!IsInsideTileDir(workspace, tileSlug, ds)) return Results.BadRequest();
+            var path = ds.FindOutputPath(workspace, tileSlug);
+            if (path is null || !File.Exists(path)) return Results.NotFound();
+            var ext = Path.GetExtension(path).ToLowerInvariant();
             var contentType = ext switch
             {
-                ".png" => "image/png",
+                ".png"  => "image/png",
                 ".jpg" or ".jpeg" => "image/jpeg",
-                ".gif" => "image/gif",
+                ".gif"  => "image/gif",
                 ".webp" => "image/webp",
-                ".svg" => "image/svg+xml",
-                _ => "application/octet-stream",
+                ".svg"  => "image/svg+xml",
+                _       => "application/octet-stream",
             };
             return Results.File(path, contentType);
         }).WithTags("Dashboard");
 
-        // Read the textual content of a tile result file (markdown, json, mmd…). Returns 404 if
-        // the file doesn't exist. Use /files/{name} for binary content.
-        api.MapGet("/projects/{slug}/dashboard/content/{fileName}", async (string slug, string fileName, ProjectService ps, DashboardService ds) =>
+        // Overwrites the output file of a tile. Body is plain text. Template determines extension.
+        api.MapPut("/projects/{slug}/dashboard/tiles/{tileSlug}/output", async (string slug, string tileSlug, HttpRequest req, ProjectService ps, DashboardService ds) =>
         {
             var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
             if (workspace is null) return Results.NotFound();
-            if (!IsInsideDashboard(workspace, ds.GetFilePath(workspace, fileName), ds)) return Results.BadRequest();
-            var content = await ds.ReadFileContentAsync(workspace, fileName);
-            return content is null ? Results.NotFound() : Results.Text(content);
-        }).WithTags("Dashboard");
-
-        // Overwrite the textual content of a tile result file. Body is plain text. Creates the
-        // .dashboard/ directory if missing.
-        api.MapPut("/projects/{slug}/dashboard/content/{fileName}", async (string slug, string fileName, HttpRequest req, ProjectService ps, DashboardService ds) =>
-        {
-            var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
-            if (workspace is null) return Results.NotFound();
-            if (!IsInsideDashboard(workspace, ds.GetFilePath(workspace, fileName), ds)) return Results.BadRequest();
+            if (!IsInsideTileDir(workspace, tileSlug, ds)) return Results.BadRequest();
+            var sidecar = await ds.ReadSidecarAsync(workspace, tileSlug);
+            var template = sidecar?.Template ?? TileTemplate.Markdown;
             using var reader = new StreamReader(req.Body);
             var body = await reader.ReadToEndAsync();
-            await ds.WriteFileAsync(workspace, fileName, body);
+            await ds.WriteOutputAsync(workspace, tileSlug, body, template);
             return Results.NoContent();
         }).WithTags("Dashboard");
 
-        // Read the parsed YAML sidecar (template, refresh, prompt, model). Returns 404 if no
-        // sidecar exists for that file.
-        api.MapGet("/projects/{slug}/dashboard/sidecar/{fileName}", async (string slug, string fileName, ProjectService ps, DashboardService ds) =>
+        // Returns the parsed tile.yaml sidecar. 404 if none.
+        api.MapGet("/projects/{slug}/dashboard/tiles/{tileSlug}/sidecar", async (string slug, string tileSlug, ProjectService ps, DashboardService ds) =>
         {
             var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
             if (workspace is null) return Results.NotFound();
-            if (!IsInsideDashboard(workspace, ds.GetSidecarPath(workspace, fileName), ds)) return Results.BadRequest();
-            var sidecar = await ds.ReadSidecarAsync(workspace, fileName);
+            if (!IsInsideTileDir(workspace, tileSlug, ds)) return Results.BadRequest();
+            var sidecar = await ds.ReadSidecarAsync(workspace, tileSlug);
             return sidecar is null ? Results.NotFound() : Results.Ok(sidecar);
         }).WithTags("Dashboard");
 
-        // Create or replace the YAML sidecar of a tile.
-        api.MapPut("/projects/{slug}/dashboard/sidecar/{fileName}", async (string slug, string fileName, TileSidecar sidecar, ProjectService ps, DashboardService ds) =>
+        // Creates or replaces tile.yaml.
+        api.MapPut("/projects/{slug}/dashboard/tiles/{tileSlug}/sidecar", async (string slug, string tileSlug, TileSidecar sidecar, ProjectService ps, DashboardService ds) =>
         {
             var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
             if (workspace is null) return Results.NotFound();
-            if (!IsInsideDashboard(workspace, ds.GetSidecarPath(workspace, fileName), ds)) return Results.BadRequest();
+            if (!IsInsideTileDir(workspace, tileSlug, ds)) return Results.BadRequest();
             if (string.IsNullOrWhiteSpace(sidecar.Template) || !TileTemplate.IsKnown(sidecar.Template))
                 return Results.BadRequest(new { error = $"Unknown template '{sidecar.Template}'." });
-            await ds.WriteSidecarAsync(workspace, fileName, sidecar);
+            await ds.WriteSidecarAsync(workspace, tileSlug, sidecar);
             return Results.NoContent();
+        }).WithTags("Dashboard");
+
+        // Returns the script filename (script.*) if present; 404 if none.
+        api.MapGet("/projects/{slug}/dashboard/tiles/{tileSlug}/script", async (string slug, string tileSlug, ProjectService ps, DashboardService ds) =>
+        {
+            var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
+            if (workspace is null) return Results.NotFound();
+            if (!IsInsideTileDir(workspace, tileSlug, ds)) return Results.BadRequest();
+            var (scriptPath, error) = ds.FindScript(workspace, tileSlug);
+            if (error is not null) return Results.BadRequest(new { error });
+            if (scriptPath is null) return Results.NotFound();
+            var content = await File.ReadAllTextAsync(scriptPath, System.Text.Encoding.UTF8);
+            return Results.Text(content);
+        }).WithTags("Dashboard");
+
+        // Triggers an immediate refresh of the tile (same pipeline as auto-refresh).
+        api.MapPost("/projects/{slug}/dashboard/tiles/{tileSlug}/refresh", async (string slug, string tileSlug, ProjectService ps, DashboardService ds, DashboardRefreshService refreshSvc) =>
+        {
+            var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
+            if (workspace is null) return Results.NotFound();
+            // Actual refresh is fire-and-forget; caller polls via the gate snapshot or SSE.
+            _ = Task.Run(() => refreshSvc.ManualRefreshAsync(slug, workspace, tileSlug, CancellationToken.None));
+            return Results.Accepted();
         }).WithTags("Dashboard");
 
     }
@@ -800,11 +817,13 @@ public static class Endpoints
         return project is null ? null : ps.ResolveWorkspacePath(project);
     }
 
-    private static bool IsInsideDashboard(string workspace, string targetPath, DashboardService ds)
+    private static bool IsInsideTileDir(string workspace, string tileSlug, DashboardService ds)
     {
-        var dir = Path.GetFullPath(ds.GetDashboardDir(workspace));
-        var full = Path.GetFullPath(targetPath);
-        return full.StartsWith(dir + Path.DirectorySeparatorChar, StringComparison.Ordinal);
+        var dashDir = Path.GetFullPath(ds.GetDashboardDir(workspace));
+        var tileDir = Path.GetFullPath(ds.GetTileDirPath(workspace, tileSlug));
+        return tileDir.StartsWith(dashDir + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+            && !tileSlug.Contains(Path.DirectorySeparatorChar)
+            && !tileSlug.Contains(Path.AltDirectorySeparatorChar);
     }
 
     private static readonly JsonSerializerOptions SseJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };

@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Text;
 using KittyClaw.Core.Automation;
 using Microsoft.Extensions.Hosting;
@@ -8,8 +8,9 @@ namespace KittyClaw.Core.Services;
 
 /// <summary>
 /// Background service that periodically refreshes dashboard tiles whose sidecar declares a
-/// <c>refresh</c> interval &gt; 0 and a script or prompt. The pipeline is:
-/// script (optional) → prompt (optional) → write result file.
+/// refresh interval > 0 and a script or prompt. The pipeline is:
+/// script (optional) -> prompt (optional) -> write output file.
+/// Script is detected by convention: script.* inside the tile folder.
 /// </summary>
 public sealed class DashboardRefreshService : BackgroundService
 {
@@ -20,7 +21,7 @@ public sealed class DashboardRefreshService : BackgroundService
     private readonly DashboardScriptRunner _scriptRunner;
     private readonly ILogger<DashboardRefreshService> _logger;
 
-    // key = "{slug}:{fileName}", value = last refresh UTC
+    // key = "{projectSlug}:{tileSlug}", value = last refresh UTC
     private readonly ConcurrentDictionary<string, DateTime> _lastRefreshed = new();
 
     public DashboardRefreshService(
@@ -41,7 +42,9 @@ public sealed class DashboardRefreshService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("DashboardRefreshService started");
+        _logger.LogInformation("DashboardRefreshService started — running startup migration");
+        await RunStartupMigrationAsync(stoppingToken);
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try { await TickAsync(stoppingToken); }
@@ -49,6 +52,26 @@ public sealed class DashboardRefreshService : BackgroundService
 
             try { await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken); }
             catch (OperationCanceledException) { break; }
+        }
+    }
+
+    private async Task RunStartupMigrationAsync(CancellationToken ct)
+    {
+        try
+        {
+            var projects = await _projects.ListProjectsAsync();
+            foreach (var project in projects)
+            {
+                if (ct.IsCancellationRequested) return;
+                var workspace = _projects.ResolveWorkspacePath(project);
+                if (!Directory.Exists(workspace)) continue;
+                await _dashboard.MigrateAsync(project.Slug, workspace,
+                    msg => _logger.LogInformation("{Msg}", msg));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Dashboard startup migration encountered an error");
         }
     }
 
@@ -63,101 +86,103 @@ public sealed class DashboardRefreshService : BackgroundService
             var workspace = _projects.ResolveWorkspacePath(project);
             if (!Directory.Exists(workspace)) continue;
 
-            var files = _dashboard.GetAvailableFiles(workspace);
-            foreach (var fileName in files)
+            var slugs = _dashboard.GetAvailableSlugs(workspace);
+            foreach (var tileSlug in slugs)
             {
                 if (ct.IsCancellationRequested) return;
-                await MaybeRefreshFileAsync(project.Slug, workspace, fileName, ct);
+                await MaybeRefreshTileAsync(project.Slug, workspace, tileSlug, ct);
             }
         }
     }
 
-    private async Task MaybeRefreshFileAsync(string slug, string workspace, string fileName, CancellationToken ct)
+    private async Task MaybeRefreshTileAsync(string projectSlug, string workspace, string tileSlug, CancellationToken ct)
     {
         try
         {
-            var sidecar = await _dashboard.ReadSidecarAsync(workspace, fileName);
+            var sidecar = await _dashboard.ReadSidecarAsync(workspace, tileSlug);
             if (sidecar is null) return;
 
-            var hasScript = !string.IsNullOrWhiteSpace(sidecar.Script);
+            var (scriptPath, scriptConfigError) = _dashboard.FindScript(workspace, tileSlug);
+            var hasScript = scriptPath is not null;
             var hasPrompt = !string.IsNullOrWhiteSpace(sidecar.Prompt);
             if (sidecar.Refresh <= 0 || (!hasScript && !hasPrompt)) return;
 
-            var key = $"{slug}:{fileName}";
+            var key = $"{projectSlug}:{tileSlug}";
             var now = DateTime.UtcNow;
             if (_lastRefreshed.TryGetValue(key, out var last)
                 && (now - last).TotalSeconds < sidecar.Refresh)
                 return;
 
-            _logger.LogInformation("Refreshing dashboard tile {Slug}/{File} (template={Template})",
-                slug, fileName, sidecar.Template);
+            _logger.LogInformation("Refreshing dashboard tile {Project}/{Tile} (template={Template})",
+                projectSlug, tileSlug, sidecar.Template);
             _lastRefreshed[key] = now;
 
-            await _gate.RunAsync(slug, fileName, manual: false, async gct =>
+            await _gate.RunAsync(projectSlug, tileSlug, manual: false, async gct =>
             {
-                // Script phase: run script, write stdout to result file.
-                if (hasScript)
+                if (scriptConfigError is not null)
                 {
-                    var scriptFileName = sidecar.Script!.Trim();
-                    if (!DashboardScriptRunner.IsSupported(scriptFileName))
-                    {
-                        _logger.LogWarning("Dashboard tile {Slug}/{File}: unsupported script extension for '{Script}'",
-                            slug, fileName, scriptFileName);
-                        return;
-                    }
-                    var dashboardDir = _dashboard.GetDashboardDir(workspace);
-                    var scriptPath = Path.Combine(dashboardDir, scriptFileName);
-                    var result = await _scriptRunner.RunAsync(scriptPath, workspace, gct);
-                    if (!result.IsSuccess)
-                    {
-                        _logger.LogWarning("Dashboard script failed for {Slug}/{File}: {Error}",
-                            slug, fileName, result.ConfigError ?? result.Stderr);
-                        return;
-                    }
-                    await _dashboard.WriteFileAsync(workspace, fileName, result.Stdout);
-                    _logger.LogInformation("Dashboard script {Slug}/{File} wrote {Chars} chars",
-                        slug, fileName, result.Stdout.Length);
+                    _logger.LogWarning("Dashboard tile {Project}/{Tile}: {Error}",
+                        projectSlug, tileSlug, scriptConfigError);
+                    return;
                 }
 
-                // Prompt phase: run LLM prompt, write output to result file.
+                if (hasScript)
+                {
+                    if (!DashboardScriptRunner.IsSupported(scriptPath!))
+                    {
+                        _logger.LogWarning("Dashboard tile {Project}/{Tile}: unsupported script extension '{Script}'",
+                            projectSlug, tileSlug, scriptPath);
+                        return;
+                    }
+                    var result = await _scriptRunner.RunAsync(scriptPath!, workspace, gct);
+                    if (!result.IsSuccess)
+                    {
+                        _logger.LogWarning("Dashboard script failed for {Project}/{Tile}: {Error}",
+                            projectSlug, tileSlug, result.ConfigError ?? result.Stderr);
+                        return;
+                    }
+                    await _dashboard.WriteOutputAsync(workspace, tileSlug, result.Stdout, sidecar.Template);
+                    _logger.LogInformation("Dashboard script {Project}/{Tile} wrote {Chars} chars",
+                        projectSlug, tileSlug, result.Stdout.Length);
+                }
+
                 if (hasPrompt)
                 {
-                    var newBody = await RunPromptAsync(slug, workspace, fileName, sidecar, gct);
+                    var newBody = await RunPromptAsync(projectSlug, workspace, tileSlug, sidecar, gct);
                     if (newBody is null) return;
-                    await _dashboard.WriteFileAsync(workspace, fileName, newBody);
-                    _logger.LogInformation("Dashboard tile {Slug}/{File} updated ({Chars} chars)", slug, fileName, newBody.Length);
+                    await _dashboard.WriteOutputAsync(workspace, tileSlug, newBody, sidecar.Template);
+                    _logger.LogInformation("Dashboard tile {Project}/{Tile} updated ({Chars} chars)",
+                        projectSlug, tileSlug, newBody.Length);
                 }
             }, ct);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to refresh dashboard tile {Slug}/{File}", slug, fileName);
+            _logger.LogWarning(ex, "Failed to refresh dashboard tile {Project}/{Tile}", projectSlug, tileSlug);
         }
     }
 
     private async Task<string?> RunPromptAsync(
-        string slug, string workspace, string fileName,
+        string projectSlug, string workspace, string tileSlug,
         TileSidecar sidecar, CancellationToken ct)
     {
         var output = new StringBuilder();
 
         var ctx = new ClaudeRunContext
         {
-            ProjectSlug = slug,
+            ProjectSlug = projectSlug,
             WorkspacePath = workspace,
             AgentName = "dashboard",
             SkillFile = "dashboard/SKILL.md",
             InlineSkillContent = sidecar.Prompt + TileTemplate.SchemaPrompt(sidecar.Template),
             MaxTurns = 5,
-            ConcurrencyGroup = $"dashboard-{slug}-{SanitizeFileName(fileName)}",
+            ConcurrencyGroup = $"dashboard-{projectSlug}-{SanitizeName(tileSlug)}",
             Model = sidecar.Model,
             SessionScope = "dashboard",
             PersistSession = false,
             OnEventHook = ev =>
             {
                 if (ev.Kind != "assistant" || string.IsNullOrWhiteSpace(ev.Text)) return;
-                // FlattenJson prefixes assistant text with "[assistant] " — strip it before
-                // we write the tile body, otherwise it shows up literally in the rendered output.
                 var text = ev.Text;
                 const string prefix = "[assistant] ";
                 if (text.StartsWith(prefix, StringComparison.Ordinal)) text = text[prefix.Length..];
@@ -168,7 +193,8 @@ public sealed class DashboardRefreshService : BackgroundService
         var run = await _runner.RunAsync(ctx, ct);
         if (run.Status == AgentRunStatus.Failed)
         {
-            _logger.LogWarning("Dashboard prompt run failed for {Slug}/{File} (exit {Exit})", slug, fileName, run.ExitCode);
+            _logger.LogWarning("Dashboard prompt run failed for {Project}/{Tile} (exit {Exit})",
+                projectSlug, tileSlug, run.ExitCode);
             return null;
         }
 
@@ -176,6 +202,45 @@ public sealed class DashboardRefreshService : BackgroundService
         return string.IsNullOrWhiteSpace(text) ? null : text;
     }
 
-    private static string SanitizeFileName(string name) =>
+    public async Task ManualRefreshAsync(string projectSlug, string workspace, string tileSlug, CancellationToken ct)
+    {
+        var sidecar = await _dashboard.ReadSidecarAsync(workspace, tileSlug);
+        if (sidecar is null) return;
+        var (scriptPath, scriptConfigError) = _dashboard.FindScript(workspace, tileSlug);
+        var hasScript = scriptPath is not null;
+        var hasPrompt = !string.IsNullOrWhiteSpace(sidecar.Prompt);
+        if (!hasScript && !hasPrompt) return;
+
+        var key = $"{projectSlug}:{tileSlug}";
+        _lastRefreshed[key] = DateTime.UtcNow;
+
+        await _gate.RunAsync(projectSlug, tileSlug, manual: true, async gct =>
+        {
+            if (scriptConfigError is not null)
+            {
+                _logger.LogWarning("Dashboard tile {Project}/{Tile}: {Error}", projectSlug, tileSlug, scriptConfigError);
+                return;
+            }
+            if (hasScript)
+            {
+                var result = await _scriptRunner.RunAsync(scriptPath!, workspace, gct);
+                if (!result.IsSuccess)
+                {
+                    _logger.LogWarning("Dashboard manual script failed {Project}/{Tile}: {Error}",
+                        projectSlug, tileSlug, result.ConfigError ?? result.Stderr);
+                    return;
+                }
+                await _dashboard.WriteOutputAsync(workspace, tileSlug, result.Stdout, sidecar.Template);
+            }
+            if (hasPrompt)
+            {
+                var body = await RunPromptAsync(projectSlug, workspace, tileSlug, sidecar, gct);
+                if (body is not null)
+                    await _dashboard.WriteOutputAsync(workspace, tileSlug, body, sidecar.Template);
+            }
+        }, ct);
+    }
+
+    private static string SanitizeName(string name) =>
         string.Concat(name.Select(c => char.IsLetterOrDigit(c) ? c : '_'));
 }

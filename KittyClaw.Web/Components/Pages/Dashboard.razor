@@ -1,4 +1,4 @@
-@page "/board/{Slug}/dashboard"
+﻿@page "/board/{Slug}/dashboard"
 @using System.Text
 @using System.Text.Json
 @using System.Text.RegularExpressions
@@ -42,7 +42,7 @@ else
     </div>
 
     <div class="dashboard-view">
-        @if (_tiles.Count == 0 && _availableFiles.Count == 0)
+        @if (_tiles.Count == 0 && _availableSlugs.Count == 0)
         {
             <div class="dashboard-empty">
                 <div class="dashboard-empty-icon">&#128202;</div>
@@ -64,20 +64,20 @@ else
                 @foreach (var tile in _tiles.ToList())
                 {
                     var t = tile;
-                    var tileId = TileId(t.FileName);
-                    <div class="dashboard-tile @(_resizingTile?.FileName == t.FileName ? "tile-resizing" : "")"
+                    var tileId = TileId(t.Slug);
+                    <div class="dashboard-tile @(_resizingTile?.Slug == t.Slug ? "tile-resizing" : "")"
                          id="@tileId"
                          style="left:@(t.X)px; top:@(t.Y)px; width:@(t.Width)px; height:@(t.Height)px;">
                         <div class="dashboard-tile-header"
                              @onmousedown="(e) => OnDragMouseDown(e, t)"
                              title="@L["DragToReorder"]">
                             <span class="dashboard-tile-drag-handle">&#8942;&#8942;</span>
-                            <span class="dashboard-tile-title">@TileTitle(t.FileName)</span>
+                            <span class="dashboard-tile-title">@TileTitle(t.Slug)</span>
                             @{
                                 var gateSnapshot = TileGate.Snapshot();
-                                var tileQueued = gateSnapshot.Queued.Any(q => q.Slug == Slug && q.FileName == t.FileName);
+                                var tileQueued = gateSnapshot.Queued.Any(q => q.Slug == Slug && q.TileSlug == t.Slug);
                             }
-                            @if (_refreshRunIds.TryGetValue(t.FileName, out var activeRunId))
+                            @if (_refreshRunIds.TryGetValue(t.Slug, out var activeRunId))
                             {
                                 <span class="agent-spinner dashboard-tile-spinner"
                                       title="@L["RefreshRunning"]"
@@ -92,19 +92,19 @@ else
                             }
                             else
                             {
-                                <button class="dashboard-tile-refresh" title="@(_refreshErrors.TryGetValue(t.FileName, out var err) ? err : L["RefreshTile"])"
-                                        @onclick="() => RefreshTile(t.FileName)"
-                                        @onmousedown:stopPropagation>@(_refreshErrors.ContainsKey(t.FileName) ? "⚠" : "↻")</button>
+                                <button class="dashboard-tile-refresh" title="@(_refreshErrors.TryGetValue(t.Slug, out var err) ? err : L["RefreshTile"])"
+                                        @onclick="() => RefreshTile(t.Slug)"
+                                        @onmousedown:stopPropagation>@(_refreshErrors.ContainsKey(t.Slug) ? "⚠" : "↻")</button>
                             }
                             <button class="dashboard-tile-edit" title="@L["EditTile"]"
-                                    @onclick="() => OpenTileEdit(t.FileName)"
+                                    @onclick="() => OpenTileEdit(t.Slug)"
                                     @onmousedown:stopPropagation>&#9998;</button>
                             <button class="dashboard-tile-remove" title="@L["RemoveTile"]"
-                                    @onclick="() => RemoveTile(t.FileName)"
+                                    @onclick="() => RemoveTile(t.Slug)"
                                     @onmousedown:stopPropagation>&times;</button>
                         </div>
                         <div class="dashboard-tile-content">
-                            @RenderTileContent(t.FileName)
+                            @RenderTileContent(t.Slug)
                         </div>
                         <div class="dashboard-tile-resize-handle"
                              @onmousedown="(e) => OnResizeMouseDown(e, t)"
@@ -168,13 +168,13 @@ else
         <div class="ticket-modal-overlay">
             <div class="tile-config-popup" @onclick:stopPropagation>
                 <div class="tile-config-header">
-                    <h2>@(_configEditingFileName is null ? L["TileConfigTitle"] : L["TileConfigEditTitle"])</h2>
+                    <h2>@(_configEditingSlug is null ? L["TileConfigTitle"] : L["TileConfigEditTitle"])</h2>
                     <button class="agent-close-btn" @onclick="CloseTileConfigPopup">&times;</button>
                 </div>
                 <div class="tile-config-body">
                     <div class="tile-config-field">
-                        <label>@L["TileConfigFileName"]</label>
-                        <input type="text" @bind="_configFileName" disabled="@(_configEditingFileName is not null)" />
+                        <label>@L["TileConfigSlug"]</label>
+                        <input type="text" @bind="_configSlug" disabled="@(_configEditingSlug is not null)" />
                     </div>
                     <div class="tile-config-field">
                         <label>@L["TileConfigDisplayTitle"]</label>
@@ -189,10 +189,39 @@ else
                             }
                         </select>
                     </div>
-                    <div class="tile-config-field">
-                        <label>@L["TileConfigScript"]</label>
-                        <input type="text" @bind="_configScript" placeholder="@L["TileConfigScriptHint"]" />
-                    </div>
+                    @{
+                        var detectedScript = _configEditingSlug is not null
+                            ? DashboardService.FindScript(_workspace, _configEditingSlug).Path
+                            : null;
+                        var detectedOutput = _configEditingSlug is not null
+                            ? DashboardService.FindOutputPath(_workspace, _configEditingSlug)
+                            : null;
+                    }
+                    @if (detectedScript is not null)
+                    {
+                        <div class="tile-config-field">
+                            <label>@L["TileConfigDetectedScript"]</label>
+                            <span class="tile-config-readonly">@System.IO.Path.GetFileName(detectedScript)</span>
+                        </div>
+                    }
+                    else if (_configEditingSlug is null)
+                    {
+                        <div class="tile-config-field">
+                            <label>@L["TileConfigScriptContent"]</label>
+                            <textarea rows="6" @bind="_configScriptContent" placeholder="@L["TileConfigScriptContentHint"]"></textarea>
+                            @if (_configScriptError is not null)
+                            {
+                                <span class="tile-config-error">@_configScriptError</span>
+                            }
+                        </div>
+                    }
+                    @if (detectedOutput is not null)
+                    {
+                        <div class="tile-config-field">
+                            <label>@L["TileConfigDetectedOutput"]</label>
+                            <span class="tile-config-readonly">@System.IO.Path.GetFileName(detectedOutput)</span>
+                        </div>
+                    }
                     <div class="tile-config-field">
                         <label>@L["TileConfigPrompt"]</label>
                         <textarea rows="5" @bind="_configPrompt" placeholder="@L["TileConfigPromptHint"]"></textarea>
@@ -216,8 +245,8 @@ else
                     <button class="tile-config-cancel" @onclick="CloseTileConfigPopup">@L["Cancel"]</button>
                     <button class="tile-config-revise" @onclick="ReviseTileConfig">@L["TileConfigRevise"]</button>
                     <button class="tile-config-accept" @onclick="AcceptTileConfig"
-                            disabled="@string.IsNullOrWhiteSpace(_configFileName)">
-                        @(_configEditingFileName is null ? L["TileConfigAccept"] : L["TileConfigSave"])
+                            disabled="@string.IsNullOrWhiteSpace(_configSlug)">
+                        @(_configEditingSlug is null ? L["TileConfigAccept"] : L["TileConfigSave"])
                     </button>
                 </div>
             </div>
@@ -249,7 +278,7 @@ else
     ];
 
     private List<DashboardTileLayout> _tiles = [];
-    private List<string> _availableFiles = [];
+    private List<string> _availableSlugs = [];
     private Dictionary<string, string?> _contentCache = new();
     private Dictionary<string, TileSidecar?> _sidecars = new();
 
@@ -258,7 +287,7 @@ else
 
     // ── Tile refresh runs ──
 
-    // fileName → runId of active ClaudeRunner refresh run
+    // tileSlug → runId of active ClaudeRunner refresh run
     private readonly Dictionary<string, string> _refreshRunIds = new();
     private readonly Dictionary<string, string> _refreshErrors = new();
     private string? _activeRunDrawerId;
@@ -279,28 +308,27 @@ else
     // ── Tile config popup ──
 
     private bool _tileConfigOpen;
-    private string? _configEditingFileName; // null = create new tile, non-null = edit existing
-    private string _configFileName = "";
+    private string? _configEditingSlug;
+    private string _configSlug = "";
     private string _configTitle = "";
     private string _configTemplate = TileTemplate.Markdown;
     private string _configPrompt = "";
     private int _configRefreshSeconds;
     private string _configModel = "";
-    private string _configScript = "";
+    private string _configScriptContent = "";
+    private string? _configScriptError;
 
     private int GridHeight => _tiles.Count == 0
         ? 600
         : Math.Max(600, _tiles.Max(t => t.Y + t.Height) + 80);
 
-    private static string TileId(string fileName) =>
-        "tile-" + fileName.Replace(".", "-").Replace(" ", "_");
+    private static string TileId(string tileSlug) =>
+        "tile-" + tileSlug.Replace("-", "_");
 
-    private string TileTitle(string fileName)
+    private string TileTitle(string tileSlug)
     {
-        var sidecarTitle = _sidecars.GetValueOrDefault(fileName)?.Title;
-        return string.IsNullOrWhiteSpace(sidecarTitle)
-            ? Path.GetFileNameWithoutExtension(fileName)
-            : sidecarTitle;
+        var sidecarTitle = _sidecars.GetValueOrDefault(tileSlug)?.Title;
+        return string.IsNullOrWhiteSpace(sidecarTitle) ? tileSlug : sidecarTitle;
     }
 
     protected override async Task OnInitializedAsync()
@@ -309,14 +337,14 @@ else
         if (_project is null) return;
 
         _workspace = ProjectService.ResolveWorkspacePath(_project);
-        _availableFiles = DashboardService.GetAvailableFiles(_workspace);
+        _availableSlugs = DashboardService.GetAvailableSlugs(_workspace);
         _tiles = await DashboardService.GetTilesAsync(Slug);
 
-        var missing = _tiles.Where(t => !_availableFiles.Contains(t.FileName)).ToList();
+        var missing = _tiles.Where(t => !_availableSlugs.Contains(t.Slug)).ToList();
         if (missing.Count > 0)
         {
-            foreach (var m in missing) await DashboardService.RemoveTileAsync(Slug, m.FileName);
-            _tiles = _tiles.Where(t => _availableFiles.Contains(t.FileName)).ToList();
+            foreach (var m in missing) await DashboardService.RemoveTileAsync(Slug, m.Slug);
+            _tiles = _tiles.Where(t => _availableSlugs.Contains(t.Slug)).ToList();
         }
 
         await LoadAllContentAsync();
@@ -350,14 +378,15 @@ else
     {
         foreach (var tile in _tiles)
         {
-            if (_refreshRunIds.ContainsKey(tile.FileName)) continue;
-            _sidecars.TryGetValue(tile.FileName, out var sidecar);
+            if (_refreshRunIds.ContainsKey(tile.Slug)) continue;
+            _sidecars.TryGetValue(tile.Slug, out var sidecar);
             if (sidecar is null) continue;
-            var hasContent = !string.IsNullOrWhiteSpace(sidecar.Script) || !string.IsNullOrWhiteSpace(sidecar.Prompt);
+            var (tileScript, _) = DashboardService.FindScript(_workspace, tile.Slug);
+            var hasContent = tileScript is not null || !string.IsNullOrWhiteSpace(sidecar.Prompt);
             if (!hasContent) continue;
-            _contentCache.TryGetValue(tile.FileName, out var raw);
+            _contentCache.TryGetValue(tile.Slug, out var raw);
             if (string.IsNullOrWhiteSpace(raw))
-                _ = RefreshTileWithAiAsync(tile.FileName, sidecar);
+                _ = RefreshTileWithAiAsync(tile.Slug, sidecar);
         }
     }
 
@@ -365,32 +394,32 @@ else
     {
         foreach (var tile in _tiles)
         {
-            if (!_sidecars.ContainsKey(tile.FileName))
-                _sidecars[tile.FileName] = await DashboardService.ReadSidecarAsync(_workspace, tile.FileName);
+            if (!_sidecars.ContainsKey(tile.Slug))
+                _sidecars[tile.Slug] = await DashboardService.ReadSidecarAsync(_workspace, tile.Slug);
 
-            if (_sidecars[tile.FileName]?.Template == TileTemplate.Image)
+            if (_sidecars[tile.Slug]?.Template == TileTemplate.Image)
             {
-                _contentCache[tile.FileName] = "";
+                _contentCache[tile.Slug] = "";
                 continue;
             }
-            if (!_contentCache.ContainsKey(tile.FileName))
-                _contentCache[tile.FileName] = await DashboardService.ReadFileContentAsync(_workspace, tile.FileName);
+            if (!_contentCache.ContainsKey(tile.Slug))
+                _contentCache[tile.Slug] = await DashboardService.ReadOutputAsync(_workspace, tile.Slug);
         }
     }
 
-    private RenderFragment RenderTileContent(string fileName) => builder =>
+    private RenderFragment RenderTileContent(string tileSlug) => builder =>
     {
-        _sidecars.TryGetValue(fileName, out var sidecar);
+        _sidecars.TryGetValue(tileSlug, out var sidecar);
         var template = sidecar?.Template;
 
         if (template == TileTemplate.Image)
         {
-            var url = $"/api/projects/{Slug}/dashboard/files/{Uri.EscapeDataString(fileName)}";
-            builder.AddMarkupContent(0, $"<img class=\"tile-image\" src=\"{url}\" alt=\"{System.Web.HttpUtility.HtmlEncode(fileName)}\" />");
+            var url = $"/api/projects/{Slug}/dashboard/tiles/{Uri.EscapeDataString(tileSlug)}/output/raw";
+            builder.AddMarkupContent(0, $"<img class=\"tile-image\" src=\"{url}\" alt=\"{System.Web.HttpUtility.HtmlEncode(tileSlug)}\" />");
             return;
         }
 
-        _contentCache.TryGetValue(fileName, out var rawContent);
+        _contentCache.TryGetValue(tileSlug, out var rawContent);
         if (rawContent is null)
         {
             builder.AddMarkupContent(0, $"<span class=\"tile-missing\">{L["TileFileMissing"]}</span>");
@@ -399,15 +428,17 @@ else
 
         if (string.IsNullOrWhiteSpace(rawContent))
         {
-            var isRefreshing = _refreshRunIds.ContainsKey(fileName);
+            var isRefreshing = _refreshRunIds.ContainsKey(tileSlug);
             var placeholder = isRefreshing ? L["TileGenerating"] : L["TileEmpty"];
             builder.AddMarkupContent(0, $"<span class=\"tile-placeholder\">{System.Web.HttpUtility.HtmlEncode(placeholder)}</span>");
             return;
         }
 
+        var outputPath = DashboardService.FindOutputPath(_workspace, tileSlug);
+        var outputFileName = outputPath is not null ? System.IO.Path.GetFileName(outputPath) : tileSlug;
         var html = template is not null
-            ? TileRenderer.Render(template, rawContent, fileName)
-            : TileRenderer.RenderByExtension(rawContent, fileName);
+            ? TileRenderer.Render(template, rawContent, outputFileName)
+            : TileRenderer.RenderByExtension(rawContent, outputFileName);
         builder.AddMarkupContent(0, html);
     };
 
@@ -447,20 +478,20 @@ else
             before or after it:
 
             ```json
-            {"fileName":"sprint-health.json","title":"Sprint health","template":"kpi-grid","script":"sprint-health.ps1","prompt":"","refreshSeconds":3600,"model":""}
+            {"slug":"sprint-health","title":"Sprint health","template":"kpi-grid","hasScript":true,"prompt":"","refreshSeconds":3600,"model":""}
             ```
 
             Fields:
-            - fileName: name of the result file in .dashboard/ (include extension matching the template)
-            - title: human-readable title shown in the tile header (concise, 2-5 words). Empty = use the filename.
+            - slug: the tile folder name in .dashboard/ (no extension, URL-safe, kebab-case)
+            - title: human-readable title shown in the tile header (concise, 2-5 words). Empty = use slug.
             - template: one of the template ids above
-            - script: filename of the script in .dashboard/ (e.g. "my-tile.ps1"); "" to skip
+            - hasScript: true to generate a script for this tile; false if prompt-only or static
             - prompt: LLM instruction; "" to skip (prefer "" when a script already handles the data)
             - refreshSeconds: refresh interval in seconds; 0 for static; 3600 = hourly; 86400 = daily
             - model: Claude model override; "" for project default
 
-            When a script is used, ensure its stdout matches the format expected by the chosen template
-            (e.g. a JSON array of objects for the table template).
+            When hasScript is true, the script will be placed as script.{ext} inside the tile folder.
+            Its stdout must match the format expected by the chosen template (e.g. JSON array for table).
             """;
     }
 
@@ -539,10 +570,11 @@ else
                 if (config is not null)
                 {
                     _chatOpen = false;
-                    _configFileName = config.FileName;
+                    _configSlug = config.Slug;
                     _configTitle = config.Title;
                     _configTemplate = config.Template;
-                    _configScript = config.Script;
+                    _configScriptContent = config.HasScript ? $"# Script for tile: {config.Slug}" : "";
+                    _configScriptError = null;
                     _configPrompt = config.Prompt;
                     _configRefreshSeconds = config.RefreshSeconds;
                     _configModel = config.Model;
@@ -576,46 +608,54 @@ else
         {
             using var doc = JsonDocument.Parse(match.Groups[1].Value);
             var root = doc.RootElement;
-            var fileName = root.TryGetProperty("fileName", out var fn) ? fn.GetString() ?? "" : "";
-            if (string.IsNullOrWhiteSpace(fileName)) return null;
+            // Accept both "slug" (new) and "fileName" (legacy) from the AI
+            var slug = root.TryGetProperty("slug", out var sl) ? sl.GetString() ?? "" : "";
+            if (string.IsNullOrWhiteSpace(slug))
+            {
+                var fn = root.TryGetProperty("fileName", out var fnp) ? fnp.GetString() ?? "" : "";
+                slug = System.IO.Path.GetFileNameWithoutExtension(fn);
+            }
+            if (string.IsNullOrWhiteSpace(slug)) return null;
             var title = root.TryGetProperty("title", out var ti) ? ti.GetString() ?? "" : "";
             var template = root.TryGetProperty("template", out var tp) ? (tp.GetString() ?? "").Trim().ToLowerInvariant() : TileTemplate.Markdown;
             if (!TileTemplate.IsKnown(template)) template = TileTemplate.Markdown;
-            var script = root.TryGetProperty("script", out var sc) ? sc.GetString() ?? "" : "";
+            var hasScript = root.TryGetProperty("hasScript", out var hs) && hs.GetBoolean();
             var prompt = root.TryGetProperty("prompt", out var p) ? p.GetString() ?? "" : "";
             var refreshSeconds = root.TryGetProperty("refreshSeconds", out var r) ? r.GetInt32() : 0;
             var model = root.TryGetProperty("model", out var m) ? m.GetString() ?? "" : "";
-            return new TileAiConfig(fileName, title, template, script, prompt, refreshSeconds, model);
+            return new TileAiConfig(slug, title, template, hasScript, prompt, refreshSeconds, model);
         }
         catch { return null; }
     }
 
-    private record TileAiConfig(string FileName, string Title, string Template, string Script, string Prompt, int RefreshSeconds, string Model);
+    private record TileAiConfig(string Slug, string Title, string Template, bool HasScript, string Prompt, int RefreshSeconds, string Model);
 
     // ── Tile config popup ──
 
     private void CloseTileConfigPopup()
     {
         _tileConfigOpen = false;
-        _configEditingFileName = null;
+        _configEditingSlug = null;
+        _configScriptError = null;
     }
 
     private void ReviseTileConfig()
     {
         _tileConfigOpen = false;
-        _configEditingFileName = null;
+        _configEditingSlug = null;
         _chatOpen = true;
     }
 
-    private async Task OpenTileEdit(string fileName)
+    private async Task OpenTileEdit(string tileSlug)
     {
-        var sidecar = await DashboardService.ReadSidecarAsync(_workspace, fileName)
+        var sidecar = await DashboardService.ReadSidecarAsync(_workspace, tileSlug)
             ?? new TileSidecar(TileTemplate.Markdown, 0, "", null);
-        _configEditingFileName = fileName;
-        _configFileName = fileName;
+        _configEditingSlug = tileSlug;
+        _configSlug = tileSlug;
         _configTitle = sidecar.Title ?? "";
         _configTemplate = sidecar.Template;
-        _configScript = sidecar.Script ?? "";
+        _configScriptContent = "";
+        _configScriptError = null;
         _configPrompt = sidecar.Prompt;
         _configRefreshSeconds = sidecar.Refresh;
         _configModel = sidecar.Model ?? "";
@@ -630,101 +670,125 @@ else
             _configRefreshSeconds,
             _configPrompt ?? "",
             string.IsNullOrWhiteSpace(_configModel) ? null : _configModel,
-            string.IsNullOrWhiteSpace(_configTitle) ? null : _configTitle.Trim(),
-            string.IsNullOrWhiteSpace(_configScript) ? null : _configScript.Trim());
+            string.IsNullOrWhiteSpace(_configTitle) ? null : _configTitle.Trim());
 
-        // Edit mode: update sidecar in place; never recreate the result file or change layout.
-        if (_configEditingFileName is not null)
+        // Edit mode: update sidecar in place.
+        if (_configEditingSlug is not null)
         {
-            var fileName = _configEditingFileName;
-            await DashboardService.WriteSidecarAsync(_workspace, fileName, sidecar);
-            _sidecars[fileName] = sidecar;
+            await DashboardService.WriteSidecarAsync(_workspace, _configEditingSlug, sidecar);
+            _sidecars[_configEditingSlug] = sidecar;
             _tileConfigOpen = false;
-            _configEditingFileName = null;
+            _configEditingSlug = null;
             return;
         }
 
-        var name = _configFileName.Trim();
-        if (string.IsNullOrWhiteSpace(name)) return;
-        if (!Path.HasExtension(name)) name += TileTemplate.DefaultExtension(template);
+        var tileSlug = _configSlug.Trim();
+        if (string.IsNullOrWhiteSpace(tileSlug)) return;
 
-        // Write empty result file (so the tile shows immediately) and the sidecar.
-        // Image tiles skip the empty-write since the agent will produce a real binary.
-        if (template != TileTemplate.Image)
-            await DashboardService.WriteFileAsync(_workspace, name, "");
-        await DashboardService.WriteSidecarAsync(_workspace, name, sidecar);
+        // If script content provided, write it, test it, and abort on failure.
+        if (!string.IsNullOrWhiteSpace(_configScriptContent))
+        {
+            var scriptExt = DashboardService.DefaultScriptExtension();
+            var tileDir = DashboardService.GetTileDirPath(_workspace, tileSlug);
+            System.IO.Directory.CreateDirectory(tileDir);
+            var scriptPath = System.IO.Path.Combine(tileDir, DashboardService.ScriptBaseName + scriptExt);
+            await System.IO.File.WriteAllTextAsync(scriptPath, _configScriptContent, System.Text.Encoding.UTF8);
 
-        _availableFiles = DashboardService.GetAvailableFiles(_workspace);
-        await DashboardService.AddTileAsync(Slug, name);
+            var result = await ScriptRunner.RunAsync(scriptPath, _workspace, CancellationToken.None);
+            if (!result.IsSuccess)
+            {
+                _configScriptError = result.ConfigError
+                    ?? $"Script exited with code {result.ExitCode}: {result.Stderr}";
+                StateHasChanged();
+                return;
+            }
+            _configScriptError = null;
+            // Write script stdout as initial output
+            await DashboardService.WriteOutputAsync(_workspace, tileSlug, result.Stdout, template);
+        }
+        else if (template != TileTemplate.Image)
+        {
+            await DashboardService.WriteOutputAsync(_workspace, tileSlug, "", template);
+        }
+
+        await DashboardService.WriteSidecarAsync(_workspace, tileSlug, sidecar);
+
+        _availableSlugs = DashboardService.GetAvailableSlugs(_workspace);
+        await DashboardService.AddTileAsync(Slug, tileSlug);
         _tiles = await DashboardService.GetTilesAsync(Slug);
-        _sidecars[name] = sidecar;
-        _contentCache[name] = "";
+        _sidecars[tileSlug] = sidecar;
+        _contentCache[tileSlug] = "";
         _tileConfigOpen = false;
 
-        var hasContent = !string.IsNullOrWhiteSpace(sidecar.Script) || !string.IsNullOrWhiteSpace(sidecar.Prompt);
+        var (scriptFile, _) = DashboardService.FindScript(_workspace, tileSlug);
+        var hasContent = scriptFile is not null || !string.IsNullOrWhiteSpace(sidecar.Prompt);
         if (hasContent && sidecar.Refresh > 0)
-            _ = RefreshTileWithAiAsync(name, sidecar);
+            _ = RefreshTileWithAiAsync(tileSlug, sidecar);
     }
 
-    private async Task RefreshTile(string fileName)
+    private async Task RefreshTile(string tileSlug)
     {
-        if (_refreshRunIds.ContainsKey(fileName)) return;
+        if (_refreshRunIds.ContainsKey(tileSlug)) return;
 
-        var sidecar = await DashboardService.ReadSidecarAsync(_workspace, fileName);
-        _sidecars[fileName] = sidecar;
+        var sidecar = await DashboardService.ReadSidecarAsync(_workspace, tileSlug);
+        _sidecars[tileSlug] = sidecar;
 
-        // Manual refresh runs if a script or prompt is set, even when Refresh == 0
-        // (a static tile = "regenerate on demand only").
+        var (scriptPath, _) = DashboardService.FindScript(_workspace, tileSlug);
         var hasContent = sidecar is not null &&
-            (!string.IsNullOrWhiteSpace(sidecar.Script) || !string.IsNullOrWhiteSpace(sidecar.Prompt));
+            (scriptPath is not null || !string.IsNullOrWhiteSpace(sidecar.Prompt));
         if (hasContent)
         {
-            _ = RefreshTileWithAiAsync(fileName, sidecar!, manual: true);
+            _ = RefreshTileWithAiAsync(tileSlug, sidecar!, manual: true);
         }
         else
         {
-            _contentCache[fileName] = await DashboardService.ReadFileContentAsync(_workspace, fileName);
+            _contentCache[tileSlug] = await DashboardService.ReadOutputAsync(_workspace, tileSlug);
             StateHasChanged();
         }
     }
 
-    private async Task RefreshTileWithAiAsync(string fileName, TileSidecar sidecar, bool manual = false)
+    private async Task RefreshTileWithAiAsync(string tileSlug, TileSidecar sidecar, bool manual = false)
     {
-        _refreshErrors.Remove(fileName);
+        _refreshErrors.Remove(tileSlug);
         await InvokeAsync(StateHasChanged);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
 
         try
         {
-            await TileGate.RunAsync(Slug, fileName, manual, async gct =>
+            await TileGate.RunAsync(Slug, tileSlug, manual, async gct =>
             {
                 var runId = Guid.NewGuid().ToString("N");
-                _refreshRunIds[fileName] = runId;
+                _refreshRunIds[tileSlug] = runId;
                 await InvokeAsync(StateHasChanged);
 
                 try
                 {
-                    // Script phase: run script, write stdout to result file.
-                    if (!string.IsNullOrWhiteSpace(sidecar.Script))
+                    var (scriptPath, scriptConfigError) = DashboardService.FindScript(_workspace, tileSlug);
+
+                    if (scriptConfigError is not null)
                     {
-                        var scriptFileName = sidecar.Script.Trim();
-                        if (!DashboardScriptRunner.IsSupported(scriptFileName))
+                        _refreshErrors[tileSlug] = scriptConfigError;
+                        return;
+                    }
+
+                    // Script phase: run script, write stdout to output file.
+                    if (scriptPath is not null)
+                    {
+                        if (!DashboardScriptRunner.IsSupported(scriptPath))
                         {
-                            _refreshErrors[fileName] = $"Unsupported script extension for '{scriptFileName}'. Supported: .ps1, .sh, .js, .py";
+                            _refreshErrors[tileSlug] = $"Unsupported script extension: {System.IO.Path.GetExtension(scriptPath)}";
                             return;
                         }
-                        var dashboardDir = DashboardService.GetDashboardDir(_workspace);
-                        var scriptPath = Path.Combine(dashboardDir, scriptFileName);
                         var result = await ScriptRunner.RunAsync(scriptPath, _workspace, gct);
                         if (!result.IsSuccess)
                         {
-                            _refreshErrors[fileName] = result.ConfigError
+                            _refreshErrors[tileSlug] = result.ConfigError
                                 ?? $"Script exited with code {result.ExitCode}: {result.Stderr}";
                             return;
                         }
-                        await DashboardService.WriteFileAsync(_workspace, fileName, result.Stdout);
-                        _contentCache[fileName] = result.Stdout;
+                        await DashboardService.WriteOutputAsync(_workspace, tileSlug, result.Stdout, sidecar.Template);
+                        _contentCache[tileSlug] = result.Stdout;
                     }
 
                     // Prompt phase: run LLM prompt, write output to result file.
@@ -739,7 +803,7 @@ else
                             SkillFile = "dashboard",
                             InlineSkillContent = sidecar.Prompt + TileTemplate.SchemaPrompt(sidecar.Template),
                             MaxTurns = 5,
-                            ConcurrencyGroup = $"dashboard-{Slug}-{SanitizeName(fileName)}",
+                            ConcurrencyGroup = $"dashboard-{Slug}-{SanitizeName(tileSlug)}",
                             Model = sidecar.Model,
                             SessionScope = "dashboard",
                             PersistSession = false,
@@ -757,39 +821,35 @@ else
                         var run = await ClaudeRunner.RunAsync(ctx, gct);
                         var text = output.ToString().Trim();
 
-                        // For image tiles the agent writes the binary directly; nothing to overwrite here.
                         if (sidecar.Template != TileTemplate.Image && !string.IsNullOrWhiteSpace(text))
                         {
-                            await DashboardService.WriteFileAsync(_workspace, fileName, text);
-                            _contentCache[fileName] = text;
+                            await DashboardService.WriteOutputAsync(_workspace, tileSlug, text, sidecar.Template);
+                            _contentCache[tileSlug] = text;
                         }
                         else if (sidecar.Template == TileTemplate.Image)
                         {
-                            // Bust the browser cache by re-reading content unchanged; the <img> URL stays
-                            // the same but a fresh request is triggered by the StateHasChanged below.
-                            _contentCache[fileName] = "";
+                            _contentCache[tileSlug] = "";
                         }
                         else
                         {
-                            _refreshErrors[fileName] = "Refresh produced no output — open the run drawer to see what claude returned.";
+                            _refreshErrors[tileSlug] = "Refresh produced no output — open the run drawer to see what claude returned.";
                         }
                     }
-                    else if (string.IsNullOrWhiteSpace(sidecar.Script))
+                    else if (scriptPath is null)
                     {
-                        // Neither script nor prompt — reload the file from disk.
-                        _contentCache[fileName] = await DashboardService.ReadFileContentAsync(_workspace, fileName);
+                        _contentCache[tileSlug] = await DashboardService.ReadOutputAsync(_workspace, tileSlug);
                     }
                 }
                 finally
                 {
-                    _refreshRunIds.Remove(fileName);
+                    _refreshRunIds.Remove(tileSlug);
                     await InvokeAsync(StateHasChanged);
                 }
             }, cts.Token);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _refreshErrors[fileName] = $"Refresh failed: {ex.Message}";
+            _refreshErrors[tileSlug] = $"Refresh failed: {ex.Message}";
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -800,18 +860,18 @@ else
     private void OpenRunDrawer(string runId) => _activeRunDrawerId = runId;
     private void CloseRunDrawer() => _activeRunDrawerId = null;
 
-    private async Task RemoveTile(string fileName)
+    private async Task RemoveTile(string tileSlug)
     {
-        var msg = string.Format(L["RemoveTileConfirm"], fileName);
+        var msg = string.Format(L["RemoveTileConfirm"], tileSlug);
         var confirmed = await JS.InvokeAsync<bool>("confirm", msg);
         if (!confirmed) return;
 
-        await DashboardService.RemoveTileAsync(Slug, fileName);
-        DashboardService.DeleteTileFiles(_workspace, fileName);
-        _tiles = _tiles.Where(t => t.FileName != fileName).ToList();
-        _sidecars.Remove(fileName);
-        _contentCache.Remove(fileName);
-        _availableFiles = DashboardService.GetAvailableFiles(_workspace);
+        await DashboardService.RemoveTileAsync(Slug, tileSlug);
+        DashboardService.DeleteTileFolder(_workspace, tileSlug);
+        _tiles = _tiles.Where(t => t.Slug != tileSlug).ToList();
+        _sidecars.Remove(tileSlug);
+        _contentCache.Remove(tileSlug);
+        _availableSlugs = DashboardService.GetAvailableSlugs(_workspace);
     }
 
     // ── Drag (free-position) ──
@@ -819,15 +879,15 @@ else
     private async Task OnDragMouseDown(MouseEventArgs e, DashboardTileLayout tile)
     {
         await JS.InvokeVoidAsync("dashboardStartDrag",
-            tile.FileName, TileId(tile.FileName),
+            tile.Slug, TileId(tile.Slug),
             e.ClientX, e.ClientY,
             tile.X, tile.Y);
     }
 
     [JSInvokable]
-    public async Task OnTileMoveEnd(string fileName, int x, int y)
+    public async Task OnTileMoveEnd(string tileSlug, int x, int y)
     {
-        await DashboardService.MoveTileAsync(Slug, fileName, x, y);
+        await DashboardService.MoveTileAsync(Slug, tileSlug, x, y);
         _tiles = await DashboardService.GetTilesAsync(Slug);
         await InvokeAsync(StateHasChanged);
     }
@@ -838,16 +898,16 @@ else
     {
         _resizingTile = tile;
         await JS.InvokeVoidAsync("dashboardStartResize",
-            tile.FileName, TileId(tile.FileName),
+            tile.Slug, TileId(tile.Slug),
             e.ClientX, e.ClientY,
             tile.Width, tile.Height);
     }
 
     [JSInvokable]
-    public async Task OnResizeEnd(string fileName, int width, int height)
+    public async Task OnResizeEnd(string tileSlug, int width, int height)
     {
         _resizingTile = null;
-        await DashboardService.ResizeTileAsync(Slug, fileName, width, height);
+        await DashboardService.ResizeTileAsync(Slug, tileSlug, width, height);
         _tiles = await DashboardService.GetTilesAsync(Slug);
         await InvokeAsync(StateHasChanged);
     }
