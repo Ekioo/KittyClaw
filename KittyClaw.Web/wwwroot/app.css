@@ -1392,20 +1392,22 @@ button:disabled { opacity: 0.4; cursor: default; }
 }
 .label-remove-btn {
     position: absolute;
-    right: 0.2rem;
+    right: 0.15rem;
     top: 50%;
     transform: translateY(-50%);
     background: none;
     border: none;
-    color: rgba(255,255,255,0.6);
-    font-size: 0.7rem;
+    color: #fff;
+    font-size: 0.75rem;
     line-height: 1;
-    padding: 0;
+    padding: 0.1rem 0.15rem;
     cursor: pointer;
-    opacity: 0.35;
+    opacity: 0;
     transition: opacity 0.15s;
 }
-.label-remove-btn:hover { opacity: 1; color: #fff; }
+.label-removable:hover .label-remove-btn,
+.assignee-pill:hover .label-remove-btn { opacity: 0.75; }
+.label-remove-btn:hover { opacity: 1; }
 
 /* Label autocomplete */
 .label-autocomplete {
