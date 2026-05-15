@@ -702,9 +702,10 @@ internal sealed class ActionExecutor
                 ? " -Args " + string.Join(",", spec.Arguments.Select(a => $"\"{a}\""))
                 : "";
 
+            var pwshBin = ShellResolver.ResolvePowerShell();
             var psi = new System.Diagnostics.ProcessStartInfo
             {
-                FileName = "pwsh",
+                FileName = pwshBin,
                 Arguments = $"-NonInteractive -NoProfile {scriptArg}{extraArgs}",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -716,7 +717,7 @@ internal sealed class ActionExecutor
                 psi.Environment[k] = v;
 
             using var proc = System.Diagnostics.Process.Start(psi)
-                ?? throw new InvalidOperationException("Failed to start pwsh process");
+                ?? throw new InvalidOperationException($"Failed to start {pwshBin} process");
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(TimeSpan.FromSeconds(spec.TimeoutSeconds));
