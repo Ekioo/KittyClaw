@@ -478,7 +478,7 @@ else
             before or after it:
 
             ```json
-            {"slug":"sprint-health","title":"Sprint health","template":"kpi-grid","hasScript":true,"prompt":"","refreshSeconds":3600,"model":""}
+            {"slug":"sprint-health","title":"Sprint health","template":"kpi-grid","hasScript":true,"scriptContent":"# PowerShell script\n$data = @(...)\n$data | ConvertTo-Json","prompt":"","refreshSeconds":3600,"model":""}
             ```
 
             Fields:
@@ -486,12 +486,13 @@ else
             - title: human-readable title shown in the tile header (concise, 2-5 words). Empty = use slug.
             - template: one of the template ids above
             - hasScript: true to generate a script for this tile; false if prompt-only or static
+            - scriptContent: the **full PowerShell script body** when hasScript is true; "" when hasScript is false.
+              The script must write its output to stdout. Its stdout must match the format expected by the
+              chosen template (e.g. a JSON array for table; markdown text for markdown). If the user wants
+              fake/fictional data, generate realistic hardcoded data inline — never return an empty output.
             - prompt: LLM instruction; "" to skip (prefer "" when a script already handles the data)
             - refreshSeconds: refresh interval in seconds; 0 for static; 3600 = hourly; 86400 = daily
             - model: Claude model override; "" for project default
-
-            When hasScript is true, the script will be placed as script.{ext} inside the tile folder.
-            Its stdout must match the format expected by the chosen template (e.g. JSON array for table).
 
             You may read existing tile files (script, yaml, prompt) when the user asks you to revise
             an existing tile — but keep exploration minimal and always end your turn with the JSON config.
@@ -577,7 +578,9 @@ else
                     _configSlug = config.Slug;
                     _configTitle = config.Title;
                     _configTemplate = config.Template;
-                    _configScriptContent = config.HasScript ? $"# Script for tile: {config.Slug}" : "";
+                    _configScriptContent = config.HasScript
+                        ? (string.IsNullOrWhiteSpace(config.ScriptContent) ? $"# Script for tile: {config.Slug}" : config.ScriptContent)
+                        : "";
                     _configScriptError = null;
                     _configPrompt = config.Prompt;
                     _configRefreshSeconds = config.RefreshSeconds;
@@ -624,15 +627,16 @@ else
             var template = root.TryGetProperty("template", out var tp) ? (tp.GetString() ?? "").Trim().ToLowerInvariant() : TileTemplate.Markdown;
             if (!TileTemplate.IsKnown(template)) template = TileTemplate.Markdown;
             var hasScript = root.TryGetProperty("hasScript", out var hs) && hs.GetBoolean();
+            var scriptContent = root.TryGetProperty("scriptContent", out var sc) ? sc.GetString() ?? "" : "";
             var prompt = root.TryGetProperty("prompt", out var p) ? p.GetString() ?? "" : "";
             var refreshSeconds = root.TryGetProperty("refreshSeconds", out var r) ? r.GetInt32() : 0;
             var model = root.TryGetProperty("model", out var m) ? m.GetString() ?? "" : "";
-            return new TileAiConfig(slug, title, template, hasScript, prompt, refreshSeconds, model);
+            return new TileAiConfig(slug, title, template, hasScript, scriptContent, prompt, refreshSeconds, model);
         }
         catch { return null; }
     }
 
-    private record TileAiConfig(string Slug, string Title, string Template, bool HasScript, string Prompt, int RefreshSeconds, string Model);
+    private record TileAiConfig(string Slug, string Title, string Template, bool HasScript, string ScriptContent, string Prompt, int RefreshSeconds, string Model);
 
     // ── Tile config popup ──
 
