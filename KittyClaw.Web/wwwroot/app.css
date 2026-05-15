@@ -2900,6 +2900,12 @@ body.flow-dnd-active * { cursor: grabbing !important; }
 .chat-input-area button:disabled { background: transparent; color: var(--text-muted); cursor: default; }
 .chat-input-area .chat-stop-btn { background: #c44; color: #fff; }
 .chat-input-area .chat-stop-btn:hover { background: #d55; color: #fff; }
+.chat-input-area-thinking { border-color: rgba(124, 92, 214, 0.4); }
+.chat-input-area-thinking:focus-within { border-color: rgba(124, 92, 214, 0.8); }
+.chat-input-actions { display: flex; gap: 0.4rem; }
+.chat-inject-btn { background: rgba(124, 92, 214, 0.2); color: #a07de8; border: 1px solid rgba(124, 92, 214, 0.4); }
+.chat-inject-btn:hover { background: rgba(124, 92, 214, 0.4); color: #c3b0f0; border-color: rgba(124, 92, 214, 0.7); }
+.chat-inject-btn:disabled { background: transparent; color: var(--text-muted); cursor: default; border-color: transparent; }
 .new-instruction-btn { background: var(--accent-dim); color: var(--accent-hover); border-color: var(--accent); }
 .new-instruction-btn:hover { background: var(--accent); color: #052e16; border-color: var(--accent-hover); }
 
@@ -2991,6 +2997,14 @@ body.flow-dnd-active * { cursor: grabbing !important; }
     font-size: 0.8rem;
     opacity: 0.75;
     padding: 0.2rem 0;
+}
+.chat-message-inject { justify-content: flex-end; }
+.chat-message-inject .chat-bubble {
+    background: rgba(124, 92, 214, 0.15);
+    color: #a07de8;
+    border: 1px solid rgba(124, 92, 214, 0.3);
+    font-style: italic;
+    font-size: 0.85rem;
 }
 
 /* ─── Tool call blocks in chat drawer ──────────────────────────────────── */
