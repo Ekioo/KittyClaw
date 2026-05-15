@@ -1,25 +1,33 @@
+﻿using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 
 namespace KittyClaw.Core.Services;
 
-// X, Y, Width, Height are pixel values snapped to the 20px grid
-public record DashboardTileLayout(string FileName, int X = 0, int Y = 0, int Width = 300, int Height = 200);
+// X, Y, Width, Height are pixel values snapped to the 20px grid.
+// Slug is the tile folder name inside .dashboard/ -- the single identity of the tile.
+public record DashboardTileLayout(string Slug, int X = 0, int Y = 0, int Width = 300, int Height = 200);
 
 public class DashboardService
 {
     private readonly ProjectService _projectService;
     private static readonly JsonSerializerOptions _json = new() { PropertyNameCaseInsensitive = true };
 
-    public const string SidecarSuffix = ".yaml";
+    // Convention-based filenames inside each tile folder.
+    public const string SidecarFileName = "tile.yaml";
+    public const string ScriptBaseName  = "script";
+    public const string OutputBaseName  = "output";
+
+    private static readonly HashSet<string> ScriptExtensions =
+        new(StringComparer.OrdinalIgnoreCase) { ".ps1", ".sh", ".js", ".py" };
 
     public DashboardService(ProjectService projectService)
     {
         _projectService = projectService;
     }
 
-    // ── Layout (per-project SQLite) ──────────────────────────────────────────
+    // -- Layout (per-project SQLite) ---------------------------------------------
 
     private async Task EnsureTableAsync(string slug)
     {
@@ -65,182 +73,291 @@ public class DashboardService
         await cmd.ExecuteNonQueryAsync();
     }
 
-    public async Task<DashboardTileLayout?> AddTileAsync(string slug, string fileName)
+    public async Task<DashboardTileLayout?> AddTileAsync(string projectSlug, string tileSlug)
     {
-        var tiles = await GetTilesAsync(slug);
-        if (tiles.Any(t => t.FileName == fileName)) return tiles.First(t => t.FileName == fileName);
+        var tiles = await GetTilesAsync(projectSlug);
+        if (tiles.Any(t => t.Slug == tileSlug)) return tiles.First(t => t.Slug == tileSlug);
 
         var idx = tiles.Count;
         var col = idx % 4;
         var row = idx / 4;
-        var tile = new DashboardTileLayout(fileName, X: col * 320, Y: row * 220);
+        var tile = new DashboardTileLayout(tileSlug, X: col * 320, Y: row * 220);
         tiles.Add(tile);
-        await SaveTilesAsync(slug, tiles);
+        await SaveTilesAsync(projectSlug, tiles);
         return tile;
     }
 
-    public async Task<bool> RemoveTileAsync(string slug, string fileName)
+    public async Task<bool> RemoveTileAsync(string projectSlug, string tileSlug)
     {
-        var tiles = await GetTilesAsync(slug);
-        var removed = tiles.RemoveAll(t => t.FileName == fileName) > 0;
-        if (removed) await SaveTilesAsync(slug, tiles);
+        var tiles = await GetTilesAsync(projectSlug);
+        var removed = tiles.RemoveAll(t => t.Slug == tileSlug) > 0;
+        if (removed) await SaveTilesAsync(projectSlug, tiles);
         return removed;
     }
 
-    public async Task<DashboardTileLayout?> MoveTileAsync(string slug, string fileName, int x, int y)
+    public async Task<DashboardTileLayout?> MoveTileAsync(string projectSlug, string tileSlug, int x, int y)
     {
-        var tiles = await GetTilesAsync(slug);
-        var idx = tiles.FindIndex(t => t.FileName == fileName);
+        var tiles = await GetTilesAsync(projectSlug);
+        var idx = tiles.FindIndex(t => t.Slug == tileSlug);
         if (idx < 0) return null;
         x = Snap(Math.Max(0, x));
         y = Snap(Math.Max(0, y));
         var updated = tiles[idx] with { X = x, Y = y };
         tiles[idx] = updated;
-        await SaveTilesAsync(slug, tiles);
+        await SaveTilesAsync(projectSlug, tiles);
         return updated;
     }
 
-    public async Task<DashboardTileLayout?> ResizeTileAsync(string slug, string fileName, int width, int height)
+    public async Task<DashboardTileLayout?> ResizeTileAsync(string projectSlug, string tileSlug, int width, int height)
     {
-        var tiles = await GetTilesAsync(slug);
-        var idx = tiles.FindIndex(t => t.FileName == fileName);
+        var tiles = await GetTilesAsync(projectSlug);
+        var idx = tiles.FindIndex(t => t.Slug == tileSlug);
         if (idx < 0) return null;
         width = Snap(Math.Max(100, width));
         height = Snap(Math.Max(60, height));
         var updated = tiles[idx] with { Width = width, Height = height };
         tiles[idx] = updated;
-        await SaveTilesAsync(slug, tiles);
+        await SaveTilesAsync(projectSlug, tiles);
         return updated;
     }
 
     private static int Snap(int v) => (int)Math.Round((double)v / 20) * 20;
 
-    // ── Files (.dashboard/) ─────────────────────────────────────────────────
+    // -- File paths (.dashboard/<slug>/) -----------------------------------------
 
     public string GetDashboardDir(string workspace) => Path.Combine(workspace, ".dashboard");
-    public string GetFilePath(string workspace, string fileName) => Path.Combine(GetDashboardDir(workspace), fileName);
-    public string GetSidecarPath(string workspace, string fileName) => GetFilePath(workspace, fileName) + SidecarSuffix;
 
-    /// <summary>Lists tile result files, excluding the .yaml sidecars.</summary>
-    public List<string> GetAvailableFiles(string workspace)
+    public string GetTileDirPath(string workspace, string tileSlug) =>
+        Path.Combine(GetDashboardDir(workspace), tileSlug);
+
+    public string GetSidecarPath(string workspace, string tileSlug) =>
+        Path.Combine(GetTileDirPath(workspace, tileSlug), SidecarFileName);
+
+    public string GetOutputPath(string workspace, string tileSlug, string template) =>
+        Path.Combine(GetTileDirPath(workspace, tileSlug), OutputBaseName + TileTemplate.DefaultExtension(template));
+
+    public string? FindOutputPath(string workspace, string tileSlug)
+    {
+        var dir = GetTileDirPath(workspace, tileSlug);
+        if (!Directory.Exists(dir)) return null;
+        return Directory.GetFiles(dir, OutputBaseName + ".*", SearchOption.TopDirectoryOnly)
+            .FirstOrDefault();
+    }
+
+    public (string? Path, string? ConfigError) FindScript(string workspace, string tileSlug)
+    {
+        var dir = GetTileDirPath(workspace, tileSlug);
+        if (!Directory.Exists(dir)) return (null, null);
+
+        var scripts = Directory.GetFiles(dir, ScriptBaseName + ".*", SearchOption.TopDirectoryOnly)
+            .Where(f => ScriptExtensions.Contains(Path.GetExtension(f)))
+            .ToList();
+
+        return scripts.Count switch
+        {
+            0 => (null, null),
+            1 => (scripts[0], null),
+            _ => (null, $"Multiple scripts found in {dir}; keep exactly one script.* file."),
+        };
+    }
+
+    public List<string> GetAvailableSlugs(string workspace)
     {
         var dir = GetDashboardDir(workspace);
         if (!Directory.Exists(dir)) return [];
-        return Directory.GetFiles(dir, "*", SearchOption.TopDirectoryOnly)
+        return Directory.GetDirectories(dir, "*", SearchOption.TopDirectoryOnly)
             .Select(Path.GetFileName)
-            .Where(f => f is not null && !f.EndsWith(SidecarSuffix, StringComparison.OrdinalIgnoreCase))
+            .Where(n => n is not null)
             .Cast<string>()
-            .OrderBy(f => f)
+            .OrderBy(n => n)
             .ToList();
     }
 
-    public async Task<string?> ReadFileContentAsync(string workspace, string fileName)
+    // -- File I/O ----------------------------------------------------------------
+
+    public async Task<string?> ReadOutputAsync(string workspace, string tileSlug)
     {
-        var path = GetFilePath(workspace, fileName);
-        if (!File.Exists(path)) return null;
+        var path = FindOutputPath(workspace, tileSlug);
+        if (path is null || !File.Exists(path)) return null;
         return await File.ReadAllTextAsync(path, Encoding.UTF8);
     }
 
-    public async Task WriteFileAsync(string workspace, string fileName, string content)
+    public async Task WriteOutputAsync(string workspace, string tileSlug, string content, string template)
     {
-        var dir = GetDashboardDir(workspace);
+        var dir = GetTileDirPath(workspace, tileSlug);
         Directory.CreateDirectory(dir);
-        await File.WriteAllTextAsync(GetFilePath(workspace, fileName), content, Encoding.UTF8);
+        foreach (var old in Directory.GetFiles(dir, OutputBaseName + ".*", SearchOption.TopDirectoryOnly))
+            File.Delete(old);
+        var path = GetOutputPath(workspace, tileSlug, template);
+        await File.WriteAllTextAsync(path, content, Encoding.UTF8);
     }
 
-    public void DeleteTileFiles(string workspace, string fileName)
+    public void DeleteTileFolder(string workspace, string tileSlug)
     {
-        var path = GetFilePath(workspace, fileName);
-        if (File.Exists(path)) File.Delete(path);
-        var side = GetSidecarPath(workspace, fileName);
-        if (File.Exists(side)) File.Delete(side);
+        var dir = GetTileDirPath(workspace, tileSlug);
+        if (Directory.Exists(dir))
+            Directory.Delete(dir, recursive: true);
     }
 
-    // ── Sidecar ─────────────────────────────────────────────────────────────
+    // -- Sidecar -----------------------------------------------------------------
 
-    /// <summary>
-    /// Reads <c>{fileName}.yaml</c> if present. Also performs a one-shot migration of legacy
-    /// in-file YAML front-matter (--- refresh: ... ---) into a sidecar so older tiles keep working.
-    /// </summary>
-    public async Task<TileSidecar?> ReadSidecarAsync(string workspace, string fileName)
+    public async Task<TileSidecar?> ReadSidecarAsync(string workspace, string tileSlug)
     {
-        await TryMigrateLegacyHeaderAsync(workspace, fileName);
-
-        var path = GetSidecarPath(workspace, fileName);
+        var path = GetSidecarPath(workspace, tileSlug);
         if (!File.Exists(path)) return null;
         var yaml = await File.ReadAllTextAsync(path, Encoding.UTF8);
         return TileSidecarSerializer.TryParse(yaml);
     }
 
-    public async Task WriteSidecarAsync(string workspace, string fileName, TileSidecar sidecar)
+    public async Task WriteSidecarAsync(string workspace, string tileSlug, TileSidecar sidecar)
     {
-        var dir = GetDashboardDir(workspace);
+        var dir = GetTileDirPath(workspace, tileSlug);
         Directory.CreateDirectory(dir);
         var yaml = TileSidecarSerializer.Serialize(sidecar);
-        await File.WriteAllTextAsync(GetSidecarPath(workspace, fileName), yaml, Encoding.UTF8);
+        await File.WriteAllTextAsync(GetSidecarPath(workspace, tileSlug), yaml, Encoding.UTF8);
     }
 
-    /// <summary>
-    /// Detects the legacy front-matter format and converts it to a sidecar in-place.
-    /// Idempotent: does nothing if there's already a sidecar or no legacy header.
-    /// </summary>
-    private async Task TryMigrateLegacyHeaderAsync(string workspace, string fileName)
+    // -- Startup migration (flat to folder-per-tile) --------------------------------
+
+    public async Task MigrateAsync(string projectSlug, string workspace, Action<string>? log = null)
     {
-        var filePath = GetFilePath(workspace, fileName);
-        var sidePath = GetSidecarPath(workspace, fileName);
-        if (!File.Exists(filePath) || File.Exists(sidePath)) return;
+        var dashDir = GetDashboardDir(workspace);
+        if (!Directory.Exists(dashDir)) return;
 
-        var ext = Path.GetExtension(fileName).ToLowerInvariant();
-        if (ext != ".md" && ext != ".json") return; // legacy headers only ever lived in md/json
-
-        var content = await File.ReadAllTextAsync(filePath, Encoding.UTF8);
-        var legacy = ParseLegacyHeader(content);
-        if (legacy is null) return;
-
-        var body = ExtractLegacyBody(content);
-        var template = ext == ".md" ? TileTemplate.Markdown : TileTemplate.Table;
-        var sidecar = new TileSidecar(template, legacy.RefreshSeconds, legacy.Prompt, legacy.Model);
-
-        await File.WriteAllTextAsync(sidePath, TileSidecarSerializer.Serialize(sidecar), Encoding.UTF8);
-        await File.WriteAllTextAsync(filePath, body, Encoding.UTF8);
-    }
-
-    private record LegacyHeader(int RefreshSeconds, string Prompt, string? Model);
-
-    private static LegacyHeader? ParseLegacyHeader(string content)
-    {
-        if (string.IsNullOrWhiteSpace(content)) return null;
-        var lines = content.ReplaceLineEndings("\n").Split('\n');
-        if (lines.Length < 3 || lines[0].Trim() != "---") return null;
-        var end = Array.FindIndex(lines, 1, l => l.Trim() == "---");
-        if (end < 0) return null;
-
-        int refresh = 0;
-        string? prompt = null;
-        string? model = null;
-        for (int i = 1; i < end; i++)
-        {
-            var colon = lines[i].IndexOf(':');
-            if (colon < 0) continue;
-            var key = lines[i][..colon].Trim().ToLowerInvariant();
-            var val = lines[i][(colon + 1)..].Trim();
-            switch (key)
+        var flatSidecars = Directory.GetFiles(dashDir, "*.yaml", SearchOption.TopDirectoryOnly)
+            .Where(p =>
             {
-                case "refresh": int.TryParse(val, out refresh); break;
-                case "prompt": prompt = val; break;
-                case "model": model = string.IsNullOrWhiteSpace(val) ? null : val; break;
+                var name = Path.GetFileName(p);
+                var withoutYaml = name[..^".yaml".Length];
+                return Path.GetExtension(withoutYaml).Length > 0;
+            })
+            .ToList();
+
+        foreach (var sidecarPath in flatSidecars)
+        {
+            try
+            {
+                var sidecarFile = Path.GetFileName(sidecarPath);
+                var resultFile  = sidecarFile[..^".yaml".Length];
+                var tileSlug    = Path.GetFileNameWithoutExtension(resultFile);
+                if (string.IsNullOrWhiteSpace(tileSlug)) continue;
+
+                var tileDir = GetTileDirPath(workspace, tileSlug);
+                if (Directory.Exists(tileDir))
+                {
+                    log?.Invoke($"[migrate] {tileSlug}: folder already exists, skipping");
+                    continue;
+                }
+
+                Directory.CreateDirectory(tileDir);
+
+                var oldYaml       = await File.ReadAllTextAsync(sidecarPath, Encoding.UTF8);
+                var oldSidecar    = TileSidecarSerializer.TryParse(oldYaml);
+                var legacyScript  = ExtractLegacyScriptField(oldYaml);
+
+                string? scriptSrc = null;
+                if (legacyScript is not null)
+                {
+                    var c = Path.Combine(dashDir, legacyScript);
+                    if (File.Exists(c)) scriptSrc = c;
+                }
+                if (scriptSrc is null)
+                {
+                    foreach (var ext in ScriptExtensions)
+                    {
+                        var c = Path.Combine(dashDir, tileSlug + ext);
+                        if (File.Exists(c)) { scriptSrc = c; break; }
+                    }
+                }
+
+                var resultSrc = Path.Combine(dashDir, resultFile);
+                if (File.Exists(resultSrc))
+                {
+                    var outputExt = Path.GetExtension(resultFile);
+                    var outputDst = Path.Combine(tileDir, OutputBaseName + outputExt);
+                    File.Move(resultSrc, outputDst);
+                    log?.Invoke($"[migrate] {tileSlug}: {resultFile} -> output{outputExt}");
+                }
+
+                if (scriptSrc is not null && File.Exists(scriptSrc))
+                {
+                    var scriptExt = Path.GetExtension(scriptSrc);
+                    var scriptDst = Path.Combine(tileDir, ScriptBaseName + scriptExt);
+                    if (!File.Exists(scriptDst))
+                    {
+                        File.Move(scriptSrc, scriptDst);
+                        log?.Invoke($"[migrate] {tileSlug}: {Path.GetFileName(scriptSrc)} -> script{scriptExt}");
+                    }
+                }
+
+                var newYaml = oldSidecar is not null
+                    ? TileSidecarSerializer.Serialize(oldSidecar)
+                    : oldYaml;
+                await File.WriteAllTextAsync(GetSidecarPath(workspace, tileSlug), newYaml, Encoding.UTF8);
+
+                File.Delete(sidecarPath);
+                log?.Invoke($"[migrate] {tileSlug}: done");
+            }
+            catch (Exception ex)
+            {
+                log?.Invoke($"[migrate] WARNING: {Path.GetFileName(sidecarPath)}: {ex.Message}");
             }
         }
-        if (refresh <= 0 || string.IsNullOrWhiteSpace(prompt)) return null;
-        return new LegacyHeader(refresh, prompt!, model);
+
+        await MigrateLayoutDbAsync(projectSlug);
     }
 
-    private static string ExtractLegacyBody(string content)
+    private async Task MigrateLayoutDbAsync(string projectSlug)
     {
-        var lines = content.ReplaceLineEndings("\n").Split('\n');
-        if (lines.Length < 3 || lines[0].Trim() != "---") return content;
-        var end = Array.FindIndex(lines, 1, l => l.Trim() == "---");
-        if (end < 0) return content;
-        return string.Join('\n', lines.Skip(end + 1)).TrimStart('\n');
+        if (_projectService is null) return; // skip in unit-test context without DB
+        await EnsureTableAsync(projectSlug);
+        var dbPath = _projectService.GetProjectDbPath(projectSlug);
+        await using var conn = new SqliteConnection($"Data Source={dbPath}");
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT LayoutJson FROM DashboardLayout WHERE Id = 1";
+        var raw = await cmd.ExecuteScalarAsync() as string;
+        if (string.IsNullOrWhiteSpace(raw) || raw == "[]") return;
+
+        try
+        {
+            var current = JsonSerializer.Deserialize<List<DashboardTileLayout>>(raw, _json) ?? [];
+            if (current.Any(t => !string.IsNullOrWhiteSpace(t.Slug))) return;
+        }
+        catch { }
+
+        try
+        {
+            var legacy = JsonSerializer.Deserialize<List<LegacyTileLayout>>(raw, _json) ?? [];
+            if (legacy.Count == 0) return;
+            var migrated = legacy
+                .Select(e => new DashboardTileLayout(
+                    Slug: Path.GetFileNameWithoutExtension(e.FileName),
+                    X: e.X, Y: e.Y, Width: e.Width, Height: e.Height))
+                .Where(e => !string.IsNullOrWhiteSpace(e.Slug))
+                .DistinctBy(e => e.Slug)
+                .ToList();
+            await SaveTilesAsync(projectSlug, migrated);
+        }
+        catch { }
     }
+
+    private record LegacyTileLayout(string FileName = "", int X = 0, int Y = 0, int Width = 300, int Height = 200);
+
+    private static string? ExtractLegacyScriptField(string yaml)
+    {
+        foreach (var line in yaml.ReplaceLineEndings("\n").Split('\n'))
+        {
+            var colon = line.IndexOf(':');
+            if (colon < 0) continue;
+            var key = line[..colon].Trim();
+            if (!key.Equals("script", StringComparison.OrdinalIgnoreCase)) continue;
+            var val = line[(colon + 1)..].Trim().Trim('"', '\'');
+            return string.IsNullOrWhiteSpace(val) ? null : val;
+        }
+        return null;
+    }
+
+    public static string DefaultScriptExtension() =>
+        RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ".ps1" : ".sh";
 }
