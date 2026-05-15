@@ -4,8 +4,10 @@
 Background service that watches each project for events and dispatches agents in response. Drives the agentic workflow: when a ticket moves, a comment is posted, a commit lands, an interval elapses, etc., the engine evaluates configured automations and runs the matching actions.
 
 ## Key components
-- `KittyClaw.Core/Automation/AutomationEngine.cs` — orchestration loop; polls triggers and coordinates condition/action dispatch (~150 lines).
-- `KittyClaw.Core/Automation/ActionExecutor.cs` — condition evaluation and all `Execute*Async` action implementations.
+- `KittyClaw.Core/Automation/AutomationEngine.cs` — top-level wiring only; delegates to `TriggerHandler` and `RunStateManager`.
+- `KittyClaw.Core/Automation/TriggerHandler.cs` — owns the tick loop (urgent drain + per-project poll).
+- `KittyClaw.Core/Automation/RunStateManager.cs` — encapsulates the 5 dispatch-gate checks (`ShouldSkipAsync`); shared by `AutomationEngine` and `ActionExecutor`.
+- `KittyClaw.Core/Automation/ActionExecutor.cs` — condition evaluation and all `Execute*Async` action implementations; delegates skip checks to `RunStateManager`.
 - `KittyClaw.Core/Automation/ProjectRuntimeManager.cs` — per-project runtime dictionary and signal fan-out.
 - `KittyClaw.Core/Automation/ProjectRuntime.cs` — data class holding per-project run state.
 - `KittyClaw.Core/Automation/AutomationConfig.cs` — JSON-deserialized automation definitions (triggers, conditions, actions).
