@@ -5,7 +5,13 @@
 # KittyClaw
 
 <p align="center">
-  <video src="https://github.com/user-attachments/assets/7c3085af-e98e-4424-9962-247467d9cc4d" controls muted loop></video>
+  <a href="https://www.youtube.com/watch?v=nqDHH1T5TwA">
+    <img src="https://img.youtube.com/vi/nqDHH1T5TwA/maxresdefault.jpg" alt="KittyClaw demo" width="800" />
+  </a>
+</p>
+
+<p align="center">
+  <img src="docs/assets/demo.webp" alt="KittyClaw demo" width="800" />
 </p>
 
 <p align="center">
