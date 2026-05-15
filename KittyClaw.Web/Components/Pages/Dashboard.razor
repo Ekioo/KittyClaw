@@ -478,7 +478,7 @@ else
             before or after it:
 
             ```json
-            {"slug":"sprint-health","title":"Sprint health","template":"kpi-grid","hasScript":true,"scriptContent":"# PowerShell script\n$data = @(...)\n$data | ConvertTo-Json","prompt":"","refreshSeconds":3600,"model":""}
+            {"slug":"release-timeline","title":"Release timeline","template":"timeline","hasScript":true,"scriptContent":"@(\n  [pscustomobject]@{date='2026-03-12';label='v1.0 launch';type='release'},\n  [pscustomobject]@{date='2026-04-02';label='Outage 22m';type='incident'},\n  [pscustomobject]@{date='2026-04-18';label='Q2 kickoff';type='milestone'},\n  [pscustomobject]@{date='2026-05-05';label='Merge freeze';type='freeze'},\n  [pscustomobject]@{date='2026-05-08';label='v1.1 release';type='release'}\n) | ConvertTo-Json","prompt":"","refreshSeconds":0,"model":""}
             ```
 
             Fields:
@@ -486,10 +486,15 @@ else
             - title: human-readable title shown in the tile header (concise, 2-5 words). Empty = use slug.
             - template: one of the template ids above
             - hasScript: true to generate a script for this tile; false if prompt-only or static
-            - scriptContent: the **full PowerShell script body** when hasScript is true; "" when hasScript is false.
-              The script must write its output to stdout. Its stdout must match the format expected by the
-              chosen template (e.g. a JSON array for table; markdown text for markdown). If the user wants
-              fake/fictional data, generate realistic hardcoded data inline — never return an empty output.
+            - scriptContent: the **complete, runnable PowerShell script** when hasScript is true; "" when false.
+              RULES for scriptContent:
+              • Output must go to stdout (use Write-Output or leave expressions on the pipeline).
+              • stdout must match the template's expected format exactly (see template descriptions above).
+              • For JSON templates: end with `| ConvertTo-Json` (add `-Depth 5` for nested objects).
+              • For Markdown: output plain Markdown text, no JSON.
+              • NEVER use placeholders (`...`, `@(...)`). Always write literal, complete, working data.
+              • If the user wants fake/fictional data, hardcode realistic values inline — the script must
+                produce non-empty output when run as-is with no arguments or external dependencies.
             - prompt: LLM instruction; "" to skip (prefer "" when a script already handles the data)
             - refreshSeconds: refresh interval in seconds; 0 for static; 3600 = hourly; 86400 = daily
             - model: Claude model override; "" for project default
