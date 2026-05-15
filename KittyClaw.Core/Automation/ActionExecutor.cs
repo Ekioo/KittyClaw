@@ -19,6 +19,7 @@ internal sealed class ActionExecutor
     private readonly CostTracker _cost;
     private readonly LocalizationService _loc;
     private readonly ProjectService _projects;
+    private readonly RunStateManager _runState;
     private readonly ILogger _logger;
 
     // Serializes in-process git operations across multiple automations.
@@ -34,6 +35,7 @@ internal sealed class ActionExecutor
         CostTracker cost,
         LocalizationService loc,
         ProjectService projects,
+        RunStateManager runState,
         ILogger logger)
     {
         _tickets = tickets;
@@ -45,6 +47,7 @@ internal sealed class ActionExecutor
         _cost = cost;
         _loc = loc;
         _projects = projects;
+        _runState = runState;
         _logger = logger;
     }
 
@@ -270,31 +273,7 @@ internal sealed class ActionExecutor
         var skillFile = $"{agentName}/SKILL.md";
         var group = string.IsNullOrEmpty(a.ConcurrencyGroup) ? agentName : a.ConcurrencyGroup.Replace("{assignee}", agentName);
 
-        if (rt.Config?.DailyBudgetUsd is decimal cap && group != "ceo"
-            && _cost.IsBudgetExceeded(rt.Workspace!, cap))
-        {
-            _logger.LogInformation("Budget exceeded for {Slug} — skipping {Agent}", rt.Slug, agentName);
-            return true;
-        }
-
-        if (rt.Config?.MinDescriptionLength is int minLen && firing.TicketId is not null)
-        {
-            var t = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
-            if (t is not null && t.Description.Length < minLen)
-            {
-                _logger.LogInformation("Ticket #{Id} description too short ({Len}<{Min}) — skipping {Agent}",
-                    firing.TicketId, t.Description.Length, minLen, agentName);
-                return true;
-            }
-        }
-
-        if (firing.TicketId is not null
-            && _runs.ActiveForTicket(rt.Slug, firing.TicketId.Value).Any(r => r.AgentName == agentName))
-            return true;
-
-        if (_runs.HasActiveInGroup(rt.Slug, group)) return true;
-
-        if (a.MutuallyExclusiveWith.Count > 0 && _runs.HasActiveAny(rt.Slug, a.MutuallyExclusiveWith)) return true;
+        if (await _runState.ShouldSkipAsync(rt, a, firing, agentName, group)) return true;
 
         await commitAsync();
 
