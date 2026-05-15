@@ -493,8 +493,8 @@ else
             When hasScript is true, the script will be placed as script.{ext} inside the tile folder.
             Its stdout must match the format expected by the chosen template (e.g. JSON array for table).
 
-            **Do not use tools.** You are a conversational assistant — answer from the user's messages
-            and your own knowledge. Never read files or inspect the workspace.
+            You may read existing tile files (script, yaml, prompt) when the user asks you to revise
+            an existing tile — but keep exploration minimal and always end your turn with the JSON config.
             """;
     }
 
@@ -546,7 +546,7 @@ else
                 SkillFile = "tile-chat",
                 InlineSkillContent = TileChatSystemPrompt,
                 ExtraContext = text,
-                MaxTurns = 8,
+                MaxTurns = 25,
                 RetryOnResumeFailure = true,
                 SessionScope = "chat",
                 OnEventHook = ev =>
