@@ -3618,6 +3618,9 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .tile-heatmap-l2 { background: color-mix(in srgb, var(--accent) 50%, var(--surface3)); }
 .tile-heatmap-l3 { background: color-mix(in srgb, var(--accent) 75%, var(--surface3)); }
 .tile-heatmap-l4 { background: var(--accent); }
+.tile-heatmap-legend { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.4rem; font-size: 0.7rem; color: var(--text-muted); }
+.tile-heatmap-legend-item { display: flex; align-items: center; gap: 0.3rem; }
+.tile-heatmap-legend-swatch { width: 10px; height: 10px; border-radius: 2px; background: var(--surface3); flex-shrink: 0; }
 
 /* Leaderboard */
 .tile-leaderboard { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.2rem; }
