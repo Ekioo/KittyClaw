@@ -196,14 +196,29 @@ Output the JSON only.
 
         Heatmap => """
 
-Output a JSON array of dated values (GitHub-style activity calendar):
+Output a GitHub-style activity calendar as JSON.
+
+Simple format (single series, accent color):
 [
   {"date": "2026-04-01", "value": 3},
   {"date": "2026-04-02", "value": 7},
   {"date": "2026-04-03", "value": 0}
 ]
 
-Dates must be ISO format YYYY-MM-DD. Output the JSON only.
+Multi-color format with optional legend (each color group is intensity-scaled independently):
+{
+  "data": [
+    {"date": "2026-04-01", "value": 3, "color": "#4f9cf7"},
+    {"date": "2026-04-01", "value": 2, "color": "#f97316"},
+    {"date": "2026-04-02", "value": 7, "color": "#4f9cf7"}
+  ],
+  "legend": [
+    {"label": "Commits", "color": "#4f9cf7"},
+    {"label": "Reviews", "color": "#f97316"}
+  ]
+}
+
+Dates must be ISO format YYYY-MM-DD. Colors must be hex (#rrggbb or #rgb). Output the JSON only.
 """,
 
         Leaderboard => """
