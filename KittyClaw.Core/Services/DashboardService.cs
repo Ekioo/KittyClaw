@@ -123,6 +123,55 @@ public class DashboardService
 
     private static int Snap(int v) => (int)Math.Round((double)v / 20) * 20;
 
+    // -- Tile refresh state (per-project SQLite) ---------------------------------
+
+    private async Task EnsureRefreshStateTableAsync(string projectSlug)
+    {
+        var dbPath = _projectService.GetProjectDbPath(projectSlug);
+        Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+        await using var conn = new SqliteConnection($"Data Source={dbPath}");
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            CREATE TABLE IF NOT EXISTS dashboard_tile_refresh_state (
+                TileKey TEXT NOT NULL PRIMARY KEY,
+                LastRefreshedAt TEXT NOT NULL
+            )
+            """;
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task<DateTime?> GetLastRefreshedAtAsync(string projectSlug, string tileSlug)
+    {
+        await EnsureRefreshStateTableAsync(projectSlug);
+        var dbPath = _projectService.GetProjectDbPath(projectSlug);
+        await using var conn = new SqliteConnection($"Data Source={dbPath}");
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT LastRefreshedAt FROM dashboard_tile_refresh_state WHERE TileKey = $key";
+        cmd.Parameters.AddWithValue("$key", $"{projectSlug}:{tileSlug}");
+        var raw = await cmd.ExecuteScalarAsync() as string;
+        if (raw is null) return null;
+        return DateTime.TryParse(raw, null, System.Globalization.DateTimeStyles.RoundtripKind, out var dt) ? dt : null;
+    }
+
+    public async Task SetLastRefreshedAtAsync(string projectSlug, string tileSlug, DateTime lastRefreshedAt)
+    {
+        await EnsureRefreshStateTableAsync(projectSlug);
+        var dbPath = _projectService.GetProjectDbPath(projectSlug);
+        await using var conn = new SqliteConnection($"Data Source={dbPath}");
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO dashboard_tile_refresh_state (TileKey, LastRefreshedAt)
+            VALUES ($key, $ts)
+            ON CONFLICT(TileKey) DO UPDATE SET LastRefreshedAt = $ts
+            """;
+        cmd.Parameters.AddWithValue("$key", $"{projectSlug}:{tileSlug}");
+        cmd.Parameters.AddWithValue("$ts", lastRefreshedAt.ToString("O"));
+        await cmd.ExecuteNonQueryAsync();
+    }
+
     // -- File paths (.dashboard/<slug>/) -----------------------------------------
 
     public string GetDashboardDir(string workspace) => Path.Combine(workspace, ".dashboard");
