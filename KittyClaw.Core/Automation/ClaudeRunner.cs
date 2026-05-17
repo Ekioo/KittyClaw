@@ -40,6 +40,9 @@ public sealed class ClaudeRunContext
 
     /// <summary>For chat runs: the chat target slug (e.g. "programmer" or "programmer#ticket-42"). Stored on the AgentRun so the steer endpoint can persist injected messages to chat history.</summary>
     public string? ChatTarget { get; init; }
+
+    /// <summary>Steering messages that could not be delivered to the previous run (stdin already closed). BuildPromptAsync prepends them to the next chat-resume prompt so the agent receives them.</summary>
+    public IReadOnlyList<string>? PendingSteerMessages { get; init; }
 }
 
 public sealed class ClaudeRunner
@@ -263,6 +266,10 @@ public sealed class ClaudeRunner
         run.Push(new StreamEvent(DateTime.UtcNow, "launch",
             $"{ctx.AgentName} {(isResume ? "(resume)" : "(new)")} session={sessionId[..8]} cwd={ctx.WorkspacePath} skill={ctx.SkillFile}"));
 
+        if (ctx.PendingSteerMessages?.Count > 0)
+            foreach (var steer in ctx.PendingSteerMessages)
+                run.Push(new StreamEvent(DateTime.UtcNow, "steer", steer));
+
         // Count assistant events emitted during THIS attempt only, and watch for quota
         // markers in stream-json events / stderr so the outer RunAsync can decide whether
         // to retry with a fallback model.
@@ -331,7 +338,19 @@ public sealed class ClaudeRunner
         // Chat resume: each turn just sends the user's message. The skill/preamble was
         // injected when the session was created and is preserved across resumes by claude.
         if (ctx.SessionScope == "chat" && isResume)
-            return ctx.ExtraContext ?? "";
+        {
+            var userMsg = ctx.ExtraContext ?? "";
+            if (ctx.PendingSteerMessages?.Count > 0)
+            {
+                var sb = new StringBuilder();
+                foreach (var steer in ctx.PendingSteerMessages)
+                    sb.AppendLine($"[Steering message from previous turn]: {steer}");
+                sb.AppendLine();
+                sb.Append(userMsg);
+                return sb.ToString();
+            }
+            return userMsg;
+        }
 
         // Automation resume on a ticket: ping the agent that the owner posted new feedback.
         if (isResume && ctx.TicketId is not null)
