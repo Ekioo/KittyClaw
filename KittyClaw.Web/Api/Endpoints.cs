@@ -501,7 +501,7 @@ public static class Endpoints
             return Results.NoContent();
         }).WithTags("Chat");
 
-        api.MapPost("/projects/{slug}/chat/start", async (string slug, ChatStartRequest req, ProjectService ps, MemberService ms, ChatService cs, TicketService ts, ClaudeRunner runner, SessionRegistry sessions, HttpContext http) =>
+        api.MapPost("/projects/{slug}/chat/start", async (string slug, ChatStartRequest req, ProjectService ps, MemberService ms, ChatService cs, TicketService ts, ClaudeRunner runner, SessionRegistry sessions, AgentRunRegistry runReg, HttpContext http) =>
         {
             var project = await ps.GetProjectAsync(slug);
             if (project is null) return Results.NotFound();
@@ -516,6 +516,14 @@ public static class Endpoints
             // claude session is also per-ticket (session key "chat:{agent}:{ticketId}").
             var (baseAgent, parsedTicketId) = ParseChatTarget(target);
             var effectiveTicketId = req.TicketId ?? parsedTicketId;
+
+            // Carry over undelivered steer messages from the most recent completed run for this chat target.
+            var chatGroup = $"chat:{slug}:{target}";
+            var lastCompletedRun = runReg.AllForProject(slug)
+                .Where(r => r.ConcurrencyGroup == chatGroup && r.Status == AgentRunStatus.Completed && r.PendingSteerMessages.Count > 0)
+                .OrderByDescending(r => r.EndedAt)
+                .FirstOrDefault();
+            IReadOnlyList<string>? pendingSteerMessages = lastCompletedRun?.PendingSteerMessages;
 
             if (req.ForceNew)
             {
@@ -617,6 +625,7 @@ public static class Endpoints
                     RetryOnResumeFailure = true,
                     OnEventHook = ev => PersistChatEvent(cs, slug, target, ev),
                     ChatTarget = target,
+                    PendingSteerMessages = pendingSteerMessages,
                 };
             }
             else
@@ -676,6 +685,7 @@ public static class Endpoints
                     RetryOnResumeFailure = true,
                     OnEventHook = ev => PersistChatEvent(cs, slug, target, ev),
                     ChatTarget = target,
+                    PendingSteerMessages = pendingSteerMessages,
                 };
             }
 

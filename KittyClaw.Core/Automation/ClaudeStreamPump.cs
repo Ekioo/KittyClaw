@@ -113,8 +113,12 @@ internal static class ClaudeStreamPump
                             await proc.StandardInput.WriteLineAsync(msg);
                             await proc.StandardInput.FlushAsync(ct);
                         }
+                        else
+                        {
+                            run.AddPendingSteerMessage(msg);
+                        }
                     }
-                    catch { /* stdin already closed */ }
+                    catch { run.AddPendingSteerMessage(msg); }
                 }
             }
         }
