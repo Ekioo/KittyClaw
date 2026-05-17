@@ -16,4 +16,4 @@ For a high-level overview see the root [README.md](../README.md). For repo layou
 - [Kanban UI](./kanban-ui.md) — Blazor Server board, ticket panel, agent run drawer.
 - [Dashboard](./dashboard.md) — free-form tile view backed by `.dashboard/` Markdown files with drag-and-drop layout.
 - [Graphic charter](./graphic-charter.md) — palette, typography, spacing, form controls, button variants. Reference before adding any new UI.
-- [Per-ticket worktree workflow](./worktree-workflow.md) — isolating each ticket's changes in a dedicated git worktree for safe parallel agent work.
+- [Per-ticket worktree workflow](./worktree-workflow.md) — opt-in pattern; helper scripts and `{ticketId}` placeholder ship, but agent SKILLs in `ProjectTemplate` do not use it by default.
