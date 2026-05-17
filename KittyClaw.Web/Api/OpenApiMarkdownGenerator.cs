@@ -407,6 +407,9 @@ public static class OpenApiMarkdownGenerator
             return first.ValueKind == JsonValueKind.String ? $"\"{first.GetString()}\"" : first.GetRawText();
         }
 
+        if (name == "author")
+            return "\"owner\"";
+
         if (resolved.TryGetProperty("type", out var type))
         {
             var t = GetTypeString(type);
