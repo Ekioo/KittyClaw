@@ -41,8 +41,10 @@ public sealed class TicketInColumnTrigger : ITrigger
             var tickets = await ctx.Tickets.ListTicketsAsync(ctx.ProjectSlug, statusFilter: col);
             foreach (var t in tickets)
             {
-                if (t.AssignedTo is null) continue;
-                if (!string.IsNullOrEmpty(_spec.AssigneeSlug) && t.AssignedTo != _spec.AssigneeSlug) continue;
+                if (!string.IsNullOrEmpty(_spec.AssigneeSlug))
+                {
+                    if (t.AssignedTo is null || t.AssignedTo != _spec.AssigneeSlug) continue;
+                }
 
                 if (debounce > 0 && t.Id is { } tid)
                 {
