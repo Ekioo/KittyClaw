@@ -216,19 +216,24 @@ public sealed class ClaudeRunner
         var prompt = await BuildPromptAsync(ctx, skillContent, isResume, ct);
         var sessionName = ctx.TicketId is not null ? $"{ctx.AgentName} #{ctx.TicketId}" : ctx.AgentName;
 
+        var isChat = ctx.SessionScope == "chat";
         var args = new List<string>
         {
             "--print", "--verbose",
             "--output-format", "stream-json",
             "--dangerously-skip-permissions",
             "--max-turns", ctx.MaxTurns.ToString(),
-            "--remote-control",
             // KittyClaw owns the agent memory layer (.agents/{agent}/memory.md committed to
             // the workspace repo). Disable claude's built-in Memory tool so agents don't
             // also write to their per-host memory store and end up with two divergent
             // sources of truth.
             "--disallowed-tools", "Memory",
         };
+        // --remote-control uses file-based IPC in the working directory. Chat sessions run
+        // in the same workspace as the automation and would pick up the automation's IPC
+        // files (payload.json) instead of starting fresh. Chat turns are separate subprocess
+        // invocations that don't need mid-run steering, so skip --remote-control for them.
+        if (!isChat) args.Add("--remote-control");
         if (isResume) { args.Add("--resume"); args.Add(sessionId); }
         else { args.Add("-n"); args.Add(sessionName); args.Add("--session-id"); args.Add(sessionId); }
         var effectiveModel = modelOverride ?? ctx.Model;
