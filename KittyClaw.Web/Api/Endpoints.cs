@@ -422,12 +422,14 @@ public static class Endpoints
             finally { run.OnEvent -= handler; }
         }).WithTags("Runs");
 
-        api.MapPost("/projects/{slug}/runs/{runId}/steer", async (string slug, string runId, SteerRunRequest req, AgentRunRegistry reg) =>
+        api.MapPost("/projects/{slug}/runs/{runId}/steer", async (string slug, string runId, SteerRunRequest req, AgentRunRegistry reg, ChatService cs) =>
         {
             var run = reg.Get(runId);
             if (run is null || run.ProjectSlug != slug) return Results.NotFound();
             if (run.Status != AgentRunStatus.Running) return Results.BadRequest(new { error = "Run is not active." });
             await run.SteeringQueue.Writer.WriteAsync(req.Text);
+            if (!string.IsNullOrEmpty(run.ChatTarget))
+                await cs.AppendAsync(slug, run.ChatTarget, "inject", req.Text);
             return Results.NoContent();
         }).WithTags("Runs");
 
@@ -601,6 +603,7 @@ public static class Endpoints
                     TicketId = effectiveTicketId,
                     RetryOnResumeFailure = true,
                     OnEventHook = ev => PersistChatEvent(cs, slug, target, ev),
+                    ChatTarget = target,
                 };
             }
             else
@@ -659,6 +662,7 @@ public static class Endpoints
                     TicketId = effectiveTicketId,
                     RetryOnResumeFailure = true,
                     OnEventHook = ev => PersistChatEvent(cs, slug, target, ev),
+                    ChatTarget = target,
                 };
             }
 
@@ -861,6 +865,7 @@ public static class Endpoints
 
     private static void PersistChatEvent(ChatService cs, string slug, string target, StreamEvent ev)
     {
+        // "inject" events are persisted directly by the steer endpoint — skip here to avoid double-write.
         // Only persist what the drawer actually renders to the user.
         if (ev.Kind == "assistant")
         {

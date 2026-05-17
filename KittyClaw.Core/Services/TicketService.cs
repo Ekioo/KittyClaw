@@ -466,6 +466,8 @@ public class TicketService
         }
 
         await db.SaveChangesAsync();
+        if (statusChanged)
+            TicketStatusChanged?.Invoke(projectSlug, ticketId, oldStatus, newStatus);
     }
 
     private static string PriorityLabel(TicketPriority p) => p switch

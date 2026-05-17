@@ -15,6 +15,7 @@ Background service that watches each project for events and dispatches agents in
 - `KittyClaw.Core/Automation/Triggers/` — trigger implementations.
 - `KittyClaw.Core/Automation/GitRepositoryWatcher.cs` — backs the `gitCommit` trigger.
 - `KittyClaw.Core/Automation/RunConcurrencyGate.cs` — serializes runs sharing a `concurrencyGroup`.
+- `KittyClaw.Core/Automation/TriggerStateStore.cs` — persists the last-run timestamp per automation in the per-project SQLite DB (`automation_trigger_state` table); enables catchup on boot for missed interval/cron firings.
 
 ## Model
 - **Triggers**: `interval`, `ticketInColumn`, `statusChange`, `subTicketStatus`, `ticketCommentAdded`, `gitCommit`, `boardIdle`, `agentInactivity`.
