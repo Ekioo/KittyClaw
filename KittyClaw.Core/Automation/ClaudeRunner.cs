@@ -220,7 +220,6 @@ public sealed class ClaudeRunner
         var prompt = await BuildPromptAsync(ctx, skillContent, isResume, ct);
         var sessionName = ctx.TicketId is not null ? $"{ctx.AgentName} #{ctx.TicketId}" : ctx.AgentName;
 
-        var isChat = ctx.SessionScope == "chat";
         var args = new List<string>
         {
             "--print", "--verbose",
@@ -233,11 +232,11 @@ public sealed class ClaudeRunner
             // sources of truth.
             "--disallowed-tools", "Memory",
         };
-        // --remote-control uses file-based IPC in the working directory. Chat sessions run
-        // in the same workspace as the automation and would pick up the automation's IPC
-        // files (payload.json) instead of starting fresh. Chat turns are separate subprocess
-        // invocations that don't need mid-run steering, so skip --remote-control for them.
-        if (!isChat) args.Add("--remote-control");
+        // No --remote-control: it has no effect on non-interactive `claude --print` runs and
+        // its file-based IPC (payload.json in the working directory) is keyed on the cwd, so
+        // any two concurrent runs in the same workspace would read each other's IPC file and
+        // either cross-contaminate sessions or deadlock at startup. Mid-run steering does not
+        // depend on it — PumpSteeringAsync queues messages for replay on the next --resume.
         if (isResume) { args.Add("--resume"); args.Add(sessionId); }
         else { args.Add("-n"); args.Add(sessionName); args.Add("--session-id"); args.Add(sessionId); }
         var effectiveModel = modelOverride ?? ctx.Model;
@@ -284,6 +283,11 @@ public sealed class ClaudeRunner
         {
             await proc.StandardInput.WriteAsync(prompt);
             await proc.StandardInput.FlushAsync();
+            // `claude --print` reads its prompt from stdin and blocks until EOF before
+            // processing anything, so close stdin now. Mid-run steering does not reach the
+            // process this way — PumpSteeringAsync queues steered messages for replay on the
+            // next --resume invocation (see its comment).
+            proc.StandardInput.Close();
         }
         catch (Exception ex)
         {
