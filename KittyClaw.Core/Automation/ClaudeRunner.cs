@@ -94,7 +94,7 @@ public sealed class ClaudeRunner
                 _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
                 return run;
             }
-            skillContent = await File.ReadAllTextAsync(skillAbs, ct);
+            skillContent = await File.ReadAllTextAsync(skillAbs);
         }
 
         // Session key matches the legacy dispatcher.mjs format ({agent}:{ticketId|sweep}).

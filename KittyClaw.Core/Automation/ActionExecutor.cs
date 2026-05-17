@@ -279,8 +279,6 @@ internal sealed class ActionExecutor
 
         if (await _runState.ShouldSkipAsync(rt, a, firing, agentName, group)) return true;
 
-        await commitAsync();
-
         var project = await _projects.GetProjectAsync(rt.Slug);
         var fallbackModel = project?.FallbackModel;
 
@@ -312,7 +310,7 @@ internal sealed class ActionExecutor
         var statusBefore = state.StatusBeforeMove;
         var statusAfter = state.StatusAfterMove;
         var assigneeBefore = state.AssigneeBeforeMove;
-        _ = HandleRunCompletionAsync(runTask, rt, firing, a, agentName, statusBefore, statusAfter, assigneeBefore, remainingActions, ct);
+        _ = HandleRunCompletionAsync(runTask, rt, firing, a, agentName, statusBefore, statusAfter, assigneeBefore, remainingActions, commitAsync, ct);
         state.LastRun = null;
         return false;
     }
@@ -327,6 +325,7 @@ internal sealed class ActionExecutor
         string? statusAfterMove,
         string? assigneeBeforeMove,
         List<ActionSpec> remainingActions,
+        Func<Task> commitAsync,
         CancellationToken ct)
     {
         AgentRun run;
@@ -336,6 +335,9 @@ internal sealed class ActionExecutor
             _logger.LogError(ex, "runAgent {Agent} crashed for ticket #{Id}", agentName, firing.TicketId);
             return;
         }
+
+        if (run.Status == AgentRunStatus.Completed)
+            await commitAsync();
 
         if (firing.TicketId is not null)
         {
