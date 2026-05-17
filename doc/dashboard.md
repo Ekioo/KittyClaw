@@ -32,6 +32,8 @@ Scripts are **not** declared in `tile.yaml`. Presence of a `script.*` file in th
 
 `DashboardRefreshService` polls every ~10 s for tiles whose sidecar declares `refresh > 0` and the interval has elapsed. When triggered it runs: **script first** (if `script.*` exists), then **prompt** (if set). Results are written to `output.*`. Manual refresh from the tile header works for any tile that has a script or a prompt, regardless of `refresh`.
 
+The last refresh timestamp is persisted per tile in a `dashboard_tile_refresh_state` SQLite table (in the per-project DB). On startup, `DashboardRefreshService` reads these timestamps and fires a single catch-up refresh for any tile whose interval has elapsed since the app was last running — without double-firing tiles that shut down normally mid-interval.
+
 A tile folder without a sidecar is treated as a static tile; rendering falls back to the output file extension (`.md` → markdown, `.json` → table/kpi-grid auto-detected, anything else → raw text).
 
 **Startup migration**: `DashboardRefreshService` runs `DashboardService.MigrateAsync` at startup to convert legacy flat-file tiles (`<slug>.<ext>` + `<slug>.<ext>.yaml`) into the folder layout.
