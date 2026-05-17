@@ -74,6 +74,12 @@
                 {
                     <div class="chat-message chat-message-reset">@L["ChatSessionReset"]</div>
                 }
+                else if (msg.Role == "inject")
+                {
+                    <div class="chat-message chat-message-inject">
+                        <div class="chat-bubble">↩ @msg.Text</div>
+                    </div>
+                }
                 else
                 {
                     <div class="chat-message chat-message-@msg.Role">
@@ -97,16 +103,18 @@
             }
         </div>
 
-        <div class="chat-input-area">
+        <div class="chat-input-area @(_loading ? "chat-input-area-thinking" : "")">
             <textarea @ref="_inputRef"
                       value="@_inputText"
                       @oninput="OnInput"
-                      placeholder="@L["ChatPlaceholder"]"
-                      @onkeydown="OnKeyDown"
-                      disabled="@_loading"></textarea>
+                      placeholder="@(_loading ? L["ChatInjectPlaceholder"] : L["ChatPlaceholder"])"
+                      @onkeydown="OnKeyDown"></textarea>
             @if (_loading && !string.IsNullOrEmpty(_activeStreamId))
             {
-                <button class="chat-stop-btn" @onclick="StopActiveRun" title="@L["Stop"]">⏹ @L["Stop"]</button>
+                <div class="chat-input-actions">
+                    <button class="chat-inject-btn" @onclick="Inject" disabled="@string.IsNullOrWhiteSpace(_inputText)" title="@L["ChatInject"]">↩ @L["ChatInject"]</button>
+                    <button class="chat-stop-btn" @onclick="StopActiveRun" title="@L["Stop"]">⏹ @L["Stop"]</button>
+                </div>
             }
             else
             {
@@ -311,7 +319,38 @@
 
     private async Task OnKeyDown(KeyboardEventArgs e)
     {
-        if (e.Key == "Enter" && !e.ShiftKey) await Send();
+        if (e.Key == "Enter" && !e.ShiftKey)
+        {
+            if (_loading && !string.IsNullOrEmpty(_activeStreamId))
+                await Inject();
+            else
+                await Send();
+        }
+    }
+
+    private async Task Inject()
+    {
+        var text = _inputText.Trim();
+        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(_activeStreamId)) return;
+
+        _messages.Add(new ChatMessage("inject", text));
+        _inputText = "";
+        StateHasChanged();
+
+        using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+        try
+        {
+            var resp = await http.PostAsJsonAsync(
+                $"/api/projects/{ProjectSlug}/runs/{_activeStreamId}/steer",
+                new { text });
+            if (!resp.IsSuccessStatusCode)
+                _messages.Add(new ChatMessage("error", $"Inject failed: {resp.StatusCode}"));
+        }
+        catch (Exception ex)
+        {
+            _messages.Add(new ChatMessage("error", ex.Message));
+        }
+        StateHasChanged();
     }
 
     private void OnInput(ChangeEventArgs e)
@@ -373,6 +412,9 @@
     [JSInvokable]
     public Task ReceiveSse(string kind, string text, string? detail = null)
     {
+        // "steer" events are echoed back from PumpSteeringAsync — skip to avoid duplicating
+        // the inject message already added optimistically in Inject().
+        if (kind == "steer") return Task.CompletedTask;
         if (kind == "tool_use" && !string.IsNullOrWhiteSpace(text))
         {
             var preview = GetToolPreview(text, detail);
