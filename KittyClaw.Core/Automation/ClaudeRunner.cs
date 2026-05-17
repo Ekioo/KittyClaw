@@ -410,7 +410,7 @@ public sealed class ClaudeRunner
                 }
             }
         }
-        if (body.Length == 0) return e.ToString();
+        if (body.Length == 0) return e.GetRawText();
         return typePrefix.Append(body).ToString();
     }
 
