@@ -20,7 +20,7 @@ The **tile slug** (`<tileSlug>`) is the folder name and the stable identifier us
 ### Sidecar fields (`tile.yaml`)
 
 The sidecar YAML inside each tile folder contains five fields:
-- `template` — required — which renderer to use (`markdown`, `table`, `kpi`, `kpi-grid`, `progress`, `sparkline`, `bar-chart`, `donut`, `gauge`, `status-grid`, `heatmap`, `leaderboard`, `timeline`, `image`, `mermaid`).
+- `template` — required — which renderer to use (`markdown`, `table`, `kpi`, `kpi-grid`, `progress`, `sparkline`, `bar-chart`, `donut`, `gauge`, `status-grid`, `heatmap`, `leaderboard`, `timeline`, `image`, `mermaid`). The `heatmap` template supports per-color intensity levels and an optional legend via the `colors` and `legend` fields in the tile's JSON output.
 - `title` — optional display title shown in the tile header (falls back to the slug when absent).
 - `refresh` — auto-refresh interval in seconds. `0` = static (no auto-refresh; can still be regenerated on demand by clicking the refresh button if a script or prompt is set).
 - `prompt` — optional LLM instruction sent to `claude` to (re)generate the output file. Omit for script-only tiles.
