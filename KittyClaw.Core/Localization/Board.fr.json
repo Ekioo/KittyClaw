@@ -29,6 +29,8 @@
   "NewInstruction": "Nouvelle instruction",
   "ChatEmpty": "Posez une question ou donnez une instruction à Claude\u2026",
   "ChatPlaceholder": "Votre message\u2026 (Entrée pour envoyer)",
+  "ChatInjectPlaceholder": "Injecter un message\u2026 (Entrée pour injecter)",
+  "ChatInject": "Injecter",
   "NewSession": "Nouvelle session",
   "Back": "Retour",
   "ChatPickTarget": "À qui voulez-vous parler ?",

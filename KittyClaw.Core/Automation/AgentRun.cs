@@ -18,6 +18,7 @@ public sealed class AgentRun
     public required DateTime StartedAt { get; init; }
     public string? SessionId { get; set; }
     public string? Model { get; set; }
+    public string? ChatTarget { get; set; }
     public AgentRunStatus Status { get; set; } = AgentRunStatus.Running;
     public DateTime? EndedAt { get; set; }
     public int? ExitCode { get; set; }
