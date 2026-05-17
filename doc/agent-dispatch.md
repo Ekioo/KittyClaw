@@ -6,7 +6,8 @@ Runs an agent as a `claude` CLI subprocess, streams its stdout/stderr in near-re
 ## Key components
 - `KittyClaw.Core/Automation/ClaudeRunner.cs` — orchestrates a single agent run. Invokes `claude --print` (no `--remote-control`) and closes stdin after writing the prompt so the subprocess does not block; parallel runs across different worktrees cannot collide via IPC files.
 - `KittyClaw.Core/Automation/ProcessLifecycleManager.cs` — process spawn, exit, and kill handling.
-- `KittyClaw.Core/Automation/ClaudeStreamPump.cs` — pumps NDJSON events from the subprocess into the run's event list.
+- `KittyClaw.Core/Automation/ClaudeStreamPump.cs` — pumps NDJSON events from the subprocess into the run's event list. When the CLI emits `{"type":"result","subtype":"error_max_turns"}`, the pump re-labels the event kind to `"max_turns"` instead of `"result"`.
+- `KittyClaw.Web/Components/ClaudeChatDrawer.razor` — chat UI component. Handles `max_turns` SSE events by setting `_hitMaxTurns = true` and rendering an inline banner with a **Continue** button; clicking it pre-fills the input with "Continue" and calls `Send()`. Any sent message also clears the banner.
 - `KittyClaw.Core/Automation/AgentRun.cs` — in-memory run model + event stream consumed by the UI; carries a `ChatTarget` slug so the steer endpoint knows which chat thread to append injected messages to.
 - `KittyClaw.Core/Automation/SessionRegistry.cs` — tracks active sessions per agent for steering and inactivity detection.
 - `KittyClaw.Core/Automation/CostTracker.cs` — records token/cost telemetry from each run.
