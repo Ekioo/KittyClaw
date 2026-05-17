@@ -67,11 +67,45 @@ public sealed class DashboardRefreshService : BackgroundService
                 if (!Directory.Exists(workspace)) continue;
                 await _dashboard.MigrateAsync(project.Slug, workspace,
                     msg => _logger.LogInformation("{Msg}", msg));
+                await LoadAndCatchUpAsync(project.Slug, workspace, ct);
             }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Dashboard startup migration encountered an error");
+        }
+    }
+
+    private async Task LoadAndCatchUpAsync(string projectSlug, string workspace, CancellationToken ct)
+    {
+        var slugs = _dashboard.GetAvailableSlugs(workspace);
+        foreach (var tileSlug in slugs)
+        {
+            if (ct.IsCancellationRequested) return;
+            try
+            {
+                var persisted = await _dashboard.GetLastRefreshedAtAsync(projectSlug, tileSlug);
+                if (persisted.HasValue)
+                    _lastRefreshed[$"{projectSlug}:{tileSlug}"] = persisted.Value;
+
+                var sidecar = await _dashboard.ReadSidecarAsync(workspace, tileSlug);
+                if (sidecar is null || sidecar.Refresh <= 0) continue;
+                var (scriptPath, _) = _dashboard.FindScript(workspace, tileSlug);
+                if (scriptPath is null && string.IsNullOrWhiteSpace(sidecar.Prompt)) continue;
+
+                var last = persisted ?? DateTime.MinValue;
+                if ((DateTime.UtcNow - last).TotalSeconds >= sidecar.Refresh)
+                {
+                    _logger.LogInformation(
+                        "Dashboard tile {Project}/{Tile} missed refresh — catching up at startup",
+                        projectSlug, tileSlug);
+                    await MaybeRefreshTileAsync(projectSlug, workspace, tileSlug, ct);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Startup catchup failed for tile {Project}/{Tile}", projectSlug, tileSlug);
+            }
         }
     }
 
@@ -116,6 +150,7 @@ public sealed class DashboardRefreshService : BackgroundService
             _logger.LogInformation("Refreshing dashboard tile {Project}/{Tile} (template={Template})",
                 projectSlug, tileSlug, sidecar.Template);
             _lastRefreshed[key] = now;
+            await _dashboard.SetLastRefreshedAtAsync(projectSlug, tileSlug, now);
 
             await _gate.RunAsync(projectSlug, tileSlug, manual: false, async gct =>
             {
@@ -212,7 +247,9 @@ public sealed class DashboardRefreshService : BackgroundService
         if (!hasScript && !hasPrompt) return;
 
         var key = $"{projectSlug}:{tileSlug}";
-        _lastRefreshed[key] = DateTime.UtcNow;
+        var now = DateTime.UtcNow;
+        _lastRefreshed[key] = now;
+        await _dashboard.SetLastRefreshedAtAsync(projectSlug, tileSlug, now);
 
         await _gate.RunAsync(projectSlug, tileSlug, manual: true, async gct =>
         {
