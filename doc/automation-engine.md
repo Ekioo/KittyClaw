@@ -21,6 +21,8 @@ Background service that watches each project for events and dispatches agents in
 - **Conditions**: `ticketInColumn`, `ticketCountInColumn`, `fieldLength`, `priority`, `labels`, `assignedTo`, `hasParent`, `allSubTicketsInStatus`, `ticketAge`.
 - **Actions**: `runAgent`, `moveTicketStatus`, `setLabels`, `assignTicket`, `addComment`, `consolidateAgentMemory`, `commitAgentMemory`, `executePowerShell`.
 - `{assignee}` placeholder in `runAgent.agent` / `runAgent.concurrencyGroup` resolves from the firing ticket's `assignedTo`.
+- `{ticketId}` placeholder in `concurrencyGroup` and `mutuallyExclusiveWith` resolves to the firing ticket's ID, enabling per-ticket serialization while preserving parallelism across distinct tickets.
+- `commitAgentMemory` detects whether `.agents/` is a standalone git repo (`.agents/.git` present) and commits there; otherwise falls back to the main workspace repo.
 - Canonical post-run chain: `runAgent` → `consolidateAgentMemory` → `commitAgentMemory`.
 
 ## Entry points
