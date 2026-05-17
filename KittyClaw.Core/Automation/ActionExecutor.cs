@@ -225,7 +225,7 @@ internal sealed class ActionExecutor
                     break;
                 case ExecutePowerShellActionSpec ps:
                 {
-                    var abort = await ExecutePowerShellAsync(ps, rt.Workspace!, ct);
+                    var abort = await ExecutePowerShellAsync(ps, rt.Workspace!, rt.Slug, firing, ct);
                     if (abort) return state.LastRun;
                     break;
                 }
@@ -381,7 +381,7 @@ internal sealed class ActionExecutor
                     case AddCommentActionSpec ac when firing.TicketId is not null: await ExecuteAddCommentActionAsync(rt, firing, ac); break;
                     case SetLabelsActionSpec sl when firing.TicketId is not null: await ExecuteSetLabelsActionAsync(rt, firing, sl); break;
                     case AssignTicketActionSpec at when firing.TicketId is not null: await ExecuteAssignTicketActionAsync(rt, firing, at); break;
-                    case ExecutePowerShellActionSpec ps: await ExecutePowerShellAsync(ps, rt.Workspace!, ct); break;
+                    case ExecutePowerShellActionSpec ps: await ExecutePowerShellAsync(ps, rt.Workspace!, rt.Slug, firing, ct); break;
                     // A second RunAgent post-run is not supported — skip silently.
                 }
             }
@@ -699,26 +699,32 @@ internal sealed class ActionExecutor
     }
 
     // Returns true when AbortOnFailure is set and the process exited with a non-zero code.
-    private async Task<bool> ExecutePowerShellAsync(ExecutePowerShellActionSpec spec, string workspacePath, CancellationToken ct)
+    private async Task<bool> ExecutePowerShellAsync(ExecutePowerShellActionSpec spec, string workspacePath, string slug, TriggerFiring firing, CancellationToken ct)
     {
         try
         {
+            string Render(string s) => (s ?? string.Empty)
+                .Replace("{ticketId}", firing.TicketId?.ToString() ?? "")
+                .Replace("{ticketTitle}", firing.TicketTitle ?? "")
+                .Replace("{slug}", slug ?? "");
+
             string scriptArg;
             if (!string.IsNullOrWhiteSpace(spec.ScriptFile))
             {
-                var path = Path.IsPathRooted(spec.ScriptFile)
-                    ? spec.ScriptFile
-                    : Path.Combine(workspacePath, spec.ScriptFile);
+                var rendered = Render(spec.ScriptFile);
+                var path = Path.IsPathRooted(rendered)
+                    ? rendered
+                    : Path.Combine(workspacePath, rendered);
                 scriptArg = $"-File \"{path}\"";
             }
             else
             {
-                var bytes = System.Text.Encoding.Unicode.GetBytes(spec.Script);
+                var bytes = System.Text.Encoding.Unicode.GetBytes(Render(spec.Script));
                 scriptArg = $"-EncodedCommand {Convert.ToBase64String(bytes)}";
             }
 
             var extraArgs = spec.Arguments.Count > 0
-                ? " -Args " + string.Join(",", spec.Arguments.Select(a => $"\"{a}\""))
+                ? " " + string.Join(" ", spec.Arguments.Select(a => $"\"{Render(a)}\""))
                 : "";
 
             var pwshBin = ShellResolver.ResolvePowerShell();
