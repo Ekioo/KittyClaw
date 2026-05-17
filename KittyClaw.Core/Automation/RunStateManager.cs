@@ -59,8 +59,15 @@ internal sealed class RunStateManager
 
         if (_runs.HasActiveInGroup(rt.Slug, group)) return true;
 
-        if (spec.MutuallyExclusiveWith.Count > 0 && _runs.HasActiveAny(rt.Slug, spec.MutuallyExclusiveWith))
-            return true;
+        if (spec.MutuallyExclusiveWith.Count > 0)
+        {
+            var ticketIdStr = firing.TicketId?.ToString() ?? "none";
+            var resolved = spec.MutuallyExclusiveWith
+                .Select(g => g.Replace("{assignee}", agentName).Replace("{ticketId}", ticketIdStr))
+                .ToList();
+            if (_runs.HasActiveAny(rt.Slug, resolved))
+                return true;
+        }
 
         return false;
     }

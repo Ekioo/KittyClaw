@@ -68,6 +68,42 @@ public class ClaudeRunnerMockIntegrationTests
     }
 
     [Fact]
+    public async Task ChatSession_CompletesSuccessfully_WithInlineSkill()
+    {
+        // Regression: chat sessions must NOT pass --remote-control to the claude CLI.
+        // When an automation and a chat session share the same workspace, --remote-control
+        // creates IPC files (payload.json) in the CWD that the chat process would pick up
+        // instead of reading its own prompt from stdin.
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("chat-test");
+        var workspace = projects.ResolveWorkspacePath(project);
+        Directory.CreateDirectory(workspace);
+
+        var runner = new ClaudeRunner(new SessionRegistry(), new AgentRunRegistry(), new RunConcurrencyGate(1),
+            NullLogger<ClaudeRunner>.Instance);
+
+        var ctx = new ClaudeRunContext
+        {
+            ProjectSlug = project.Slug,
+            WorkspacePath = workspace,
+            AgentName = "test-agent",
+            SkillFile = "(inline)",
+            InlineSkillContent = "You are a test agent. <!--scenario:default-->",
+            ExtraContext = "Hello",
+            MaxTurns = 1,
+            SessionScope = "chat",
+            ConcurrencyGroup = $"chat:{project.Slug}:test-agent",
+            RetryOnResumeFailure = true,
+        };
+
+        var run = await runner.RunAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(AgentRunStatus.Completed, run.Status);
+        Assert.Equal(0, run.ExitCode);
+    }
+
+    [Fact]
     public async Task ScenarioWithErrorExit_MarksRunAsFailed()
     {
         using var tmp = new TempDir();
