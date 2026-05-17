@@ -18,6 +18,7 @@ public sealed class AutomationEngine : BackgroundService
         MemberService members,
         LabelService labels,
         AutomationStore store,
+        TriggerStateStore triggerState,
         SessionRegistry sessions,
         AgentRunRegistry runs,
         ClaudeRunner runner,
@@ -28,7 +29,7 @@ public sealed class AutomationEngine : BackgroundService
         _runs = runs;
         _logger = logger;
 
-        _runtimeManager = new ProjectRuntimeManager(store, logger);
+        _runtimeManager = new ProjectRuntimeManager(store, triggerState, logger);
         var runState = new RunStateManager(runs, cost, tickets, logger);
         var executor = new ActionExecutor(tickets, members, labels, sessions, runs, runner, cost, loc, projects, runState, logger);
         _triggerHandler = new TriggerHandler(projects, _runtimeManager, executor, tickets, members, sessions, runs, logger);

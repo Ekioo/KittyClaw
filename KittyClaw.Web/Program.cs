@@ -53,6 +53,7 @@ builder.Services.AddSingleton<KittyClaw.Web.Services.BoardUpdateNotifier>();
 
 // Automation engine
 builder.Services.AddSingleton<AutomationStore>();
+builder.Services.AddSingleton<TriggerStateStore>();
 builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton(new RunLogStore(dataDir));
 builder.Services.AddSingleton<AgentRunRegistry>(sp => new AgentRunRegistry(sp.GetRequiredService<RunLogStore>()));
