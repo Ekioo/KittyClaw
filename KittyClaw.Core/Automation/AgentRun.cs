@@ -31,6 +31,14 @@ public sealed class AgentRun
     public CancellationTokenSource Cancellation { get; } = new();
     public event Action<StreamEvent>? OnEvent;
 
+    private readonly List<string> _pendingSteerMessages = new();
+    public IReadOnlyList<string> PendingSteerMessages => _pendingSteerMessages;
+
+    public void AddPendingSteerMessage(string msg)
+    {
+        lock (_logLock) _pendingSteerMessages.Add(msg);
+    }
+
     public IReadOnlyList<StreamEvent> SnapshotBuffer()
     {
         lock (_logLock) return _buffer.ToList();
