@@ -271,7 +271,11 @@ internal sealed class ActionExecutor
         }
 
         var skillFile = $"{agentName}/SKILL.md";
-        var group = string.IsNullOrEmpty(a.ConcurrencyGroup) ? agentName : a.ConcurrencyGroup.Replace("{assignee}", agentName);
+        var group = string.IsNullOrEmpty(a.ConcurrencyGroup)
+            ? agentName
+            : a.ConcurrencyGroup
+                .Replace("{assignee}", agentName)
+                .Replace("{ticketId}", firing.TicketId?.ToString() ?? "none");
 
         if (await _runState.ShouldSkipAsync(rt, a, firing, agentName, group)) return true;
 
@@ -636,23 +640,38 @@ internal sealed class ActionExecutor
                 return;
             }
 
-            if (!Directory.Exists(Path.Combine(workspace, ".git")))
+            // Prefer a nested .agents/.git repo if present (decouples agent config from main project repo).
+            // Otherwise fall back to the main workspace repo.
+            var agentsDir = Path.Combine(workspace, ".agents");
+            string gitCwd;
+            string pathArg;
+            if (Directory.Exists(Path.Combine(agentsDir, ".git")))
             {
-                _logger.LogDebug("commitAgentMemory: workspace {Path} is not a git repo — skipping", workspace);
+                gitCwd = agentsDir;
+                pathArg = $"{agent}/memory.md";
+            }
+            else if (Directory.Exists(Path.Combine(workspace, ".git")))
+            {
+                gitCwd = workspace;
+                pathArg = memoryRel;
+            }
+            else
+            {
+                _logger.LogDebug("commitAgentMemory: no git repo at {Path} or {Agents} — skipping", workspace, agentsDir);
                 return;
             }
 
             await _gitLock.WaitAsync();
             try
             {
-                var diff = await RunGitAsync(workspace, $"diff --quiet --exit-code -- \"{memoryRel}\"");
+                var diff = await RunGitAsync(gitCwd, $"diff --quiet --exit-code -- \"{pathArg}\"");
                 if (diff.exitCode == 0)
                 {
                     _logger.LogDebug("commitAgentMemory: {Agent} memory is clean, nothing to commit", agent);
                     return;
                 }
 
-                var add = await RunGitAsync(workspace, $"add -- \"{memoryRel}\"");
+                var add = await RunGitAsync(gitCwd, $"add -- \"{pathArg}\"");
                 if (add.exitCode != 0)
                 {
                     _logger.LogWarning("commitAgentMemory: git add failed for {Agent}: {Err}", agent, add.stderr);
@@ -661,7 +680,7 @@ internal sealed class ActionExecutor
 
                 var ticketSuffix = firing?.TicketId is int tid ? $" (#{tid})" : "";
                 var msg = $"chore(memory): {agent}{ticketSuffix}";
-                var commit = await RunGitAsync(workspace, $"commit --no-verify -m \"{msg}\" -- \"{memoryRel}\"");
+                var commit = await RunGitAsync(gitCwd, $"commit --no-verify -m \"{msg}\" -- \"{pathArg}\"");
                 if (commit.exitCode != 0)
                 {
                     _logger.LogWarning("commitAgentMemory: git commit failed for {Agent}: {Err}", agent, commit.stderr);

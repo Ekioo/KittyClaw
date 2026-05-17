@@ -15,13 +15,15 @@ internal sealed class ProjectRuntimeManager
     private readonly Channel<UrgentEntry> _urgentChannel =
         Channel.CreateUnbounded<UrgentEntry>(new UnboundedChannelOptions { SingleReader = true });
     private readonly AutomationStore _store;
+    private readonly ITriggerStateStore _triggerState;
     private readonly ILogger _logger;
 
     internal sealed record UrgentEntry(string Slug, Automation Automation, ITrigger Trigger, TriggerFiring Firing);
 
-    public ProjectRuntimeManager(AutomationStore store, ILogger logger)
+    public ProjectRuntimeManager(AutomationStore store, ITriggerStateStore triggerState, ILogger logger)
     {
         _store = store;
+        _triggerState = triggerState;
         _logger = logger;
     }
 
@@ -47,7 +49,7 @@ internal sealed class ProjectRuntimeManager
             var (config, workspace, _) = await _store.LoadAsync(slug);
             rt.Workspace = workspace;
             rt.Config = config;
-            rt.Triggers = BuildTriggers(config);
+            rt.Triggers = await BuildTriggersAsync(slug, config);
             _logger.LogInformation("Automations loaded for {Slug}: {Count} entries", slug, config.Automations.Count);
         }
         catch (Exception ex)
@@ -88,23 +90,32 @@ internal sealed class ProjectRuntimeManager
         }
     }
 
-    private static Dictionary<string, ITrigger> BuildTriggers(AutomationConfig config)
+    private async Task<Dictionary<string, ITrigger>> BuildTriggersAsync(string slug, AutomationConfig config)
     {
         var map = new Dictionary<string, ITrigger>();
         foreach (var a in config.Automations)
         {
-            map[a.Id] = a.Trigger switch
+            ITrigger trigger;
+            if (a.Trigger is IntervalTriggerSpec its)
             {
-                IntervalTriggerSpec s          => new IntervalTrigger(s),
-                TicketInColumnTriggerSpec s     => new TicketInColumnTrigger(s),
-                GitCommitTriggerSpec s          => new GitCommitTrigger(s),
-                StatusChangeTriggerSpec s       => new StatusChangeTrigger(s),
-                SubTicketStatusTriggerSpec s    => new SubTicketStatusTrigger(s),
-                BoardIdleTriggerSpec s          => new BoardIdleTrigger(s),
-                AgentInactivityTriggerSpec s    => new AgentInactivityTrigger(s),
-                TicketCommentAddedTriggerSpec s => new TicketCommentAddedTrigger(s),
-                _                              => new NullTrigger(),
-            };
+                var lastRunAt = await _triggerState.GetLastRunAtAsync(slug, a.Id) ?? DateTime.MinValue;
+                trigger = new IntervalTrigger(its, lastRunAt, _triggerState, slug, a.Id);
+            }
+            else
+            {
+                trigger = a.Trigger switch
+                {
+                    TicketInColumnTriggerSpec t     => new TicketInColumnTrigger(t),
+                    GitCommitTriggerSpec t          => new GitCommitTrigger(t),
+                    StatusChangeTriggerSpec t       => new StatusChangeTrigger(t),
+                    SubTicketStatusTriggerSpec t    => new SubTicketStatusTrigger(t),
+                    BoardIdleTriggerSpec t          => new BoardIdleTrigger(t),
+                    AgentInactivityTriggerSpec t    => new AgentInactivityTrigger(t),
+                    TicketCommentAddedTriggerSpec t => new TicketCommentAddedTrigger(t),
+                    _                              => new NullTrigger(),
+                };
+            }
+            map[a.Id] = trigger;
         }
         return map;
     }
