@@ -271,7 +271,11 @@ internal sealed class ActionExecutor
         }
 
         var skillFile = $"{agentName}/SKILL.md";
-        var group = string.IsNullOrEmpty(a.ConcurrencyGroup) ? agentName : a.ConcurrencyGroup.Replace("{assignee}", agentName);
+        var group = string.IsNullOrEmpty(a.ConcurrencyGroup)
+            ? agentName
+            : a.ConcurrencyGroup
+                .Replace("{assignee}", agentName)
+                .Replace("{ticketId}", firing.TicketId?.ToString() ?? "none");
 
         if (await _runState.ShouldSkipAsync(rt, a, firing, agentName, group)) return true;
 
