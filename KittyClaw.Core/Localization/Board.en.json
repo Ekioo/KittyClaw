@@ -37,6 +37,8 @@
   "ChatTalkToClaude": "Direct chat",
   "ChatMember": "Project member",
   "ChatSessionReset": "Session restarted (previous one expired)",
+  "ChatMaxTurns": "The assistant may not have finished — the turn limit was reached.",
+  "ChatContinue": "Continue",
   "ChatEmptyMember": "Ask {0} a question or give them an instruction…",
   "Title": "Title",
   "TicketTitlePlaceholder": "Ticket title...",

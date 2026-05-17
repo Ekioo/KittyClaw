@@ -46,6 +46,12 @@ internal static class ClaudeStreamPump
                     }
                     else
                     {
+                        if (kind == "result" &&
+                            doc.RootElement.TryGetProperty("subtype", out var subtype) &&
+                            subtype.GetString() == "error_max_turns")
+                        {
+                            kind = "max_turns";
+                        }
                         run.Push(new StreamEvent(DateTime.UtcNow, kind, ClaudeRunner.FlattenJson(doc.RootElement)));
                     }
                 }

@@ -92,6 +92,7 @@ internal static class ProcessLifecycleManager
         foreach (var a in args) psi.ArgumentList.Add(a);
 
         psi.Environment["CLAUDE_AGENT"] = ctx.AgentName;
+        if (ctx.TicketId is int tid) psi.Environment["KITTYCLAW_TICKET_ID"] = tid.ToString();
         // Tell skills which API URL to talk to. Skills resolve `${KITTYCLAW_API_URL:-http://localhost:5230}`
         // so they hit the *current* host instance even when running on a non-default port (e.g. an
         // isolated test instance spawned by KittyClaw.QaRunner).
