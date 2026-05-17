@@ -103,6 +103,14 @@
             }
         </div>
 
+        @if (_hitMaxTurns)
+        {
+            <div class="chat-max-turns-banner">
+                <span>@L["ChatMaxTurns"]</span>
+                <button class="chat-continue-btn" @onclick="Continue">@L["ChatContinue"]</button>
+            </div>
+        }
+
         <div class="chat-input-area @(_loading ? "chat-input-area-thinking" : "")">
             <textarea @ref="_inputRef"
                       value="@_inputText"
@@ -153,6 +161,7 @@
     private IJSObjectReference? _sseModule;
     private DotNetObjectReference<ClaudeChatDrawer>? _dotnetRef;
     private string? _activeStreamId;
+    private bool _hitMaxTurns = false;
 
     private record ChatMessage(string Role, string Text);
     private sealed record ToolCallMessage(string ToolName, string Preview, string Detail)
@@ -363,6 +372,7 @@
         var text = _inputText.Trim();
         if (string.IsNullOrEmpty(text) || _loading || _activeTarget is null) return;
 
+        _hitMaxTurns = false;
         _messages.Add(new ChatMessage("user", text));
         _inputText = "";
         _loading = true;
@@ -415,6 +425,11 @@
         // "steer" events are echoed back from PumpSteeringAsync — skip to avoid duplicating
         // the inject message already added optimistically in Inject().
         if (kind == "steer") return Task.CompletedTask;
+        if (kind == "max_turns")
+        {
+            _hitMaxTurns = true;
+            return InvokeAsync(StateHasChanged);
+        }
         if (kind == "tool_use" && !string.IsNullOrWhiteSpace(text))
         {
             var preview = GetToolPreview(text, detail);
@@ -435,6 +450,13 @@
                 _messages.Add(new ChatMessage("assistant", reply));
         }
         return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Continue()
+    {
+        _hitMaxTurns = false;
+        _inputText = "Continue";
+        await Send();
     }
 
     private static string GetToolPreview(string toolName, string? detail)

@@ -84,7 +84,8 @@ public static class Endpoints
         // Tickets
         api.MapGet("/projects/{slug}/tickets", async (string slug, string? status, TicketPriority? priority, string? assignedTo, string? createdBy, string? search, int? parentId, TicketService ts) =>
             Results.Ok(await ts.ListTicketsAsync(slug, status, priority, assignedTo, createdBy, search, parentId)))
-            .WithTags("Tickets");
+            .WithTags("Tickets")
+            .Produces<List<TicketSummary>>();
 
         api.MapPost("/projects/{slug}/tickets", async (string slug, CreateTicketRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
         {
@@ -98,7 +99,9 @@ public static class Endpoints
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        }).WithTags("Tickets");
+        }).WithTags("Tickets")
+        .Produces<Ticket>(StatusCodes.Status201Created)
+        .ProducesProblem(StatusCodes.Status400BadRequest);
 
         api.MapPatch("/projects/{slug}/tickets/{id:int}", async (string slug, int id, UpdateTicketRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
         {
@@ -114,13 +117,18 @@ public static class Endpoints
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        }).WithTags("Tickets");
+        }).WithTags("Tickets")
+        .Produces<Ticket>()
+        .ProducesProblem(StatusCodes.Status400BadRequest)
+        .ProducesProblem(StatusCodes.Status404NotFound);
 
         api.MapGet("/projects/{slug}/tickets/{id:int}", async (string slug, int id, TicketService ts) =>
         {
             var ticket = await ts.GetTicketAsync(slug, id);
             return ticket is null ? Results.NotFound() : Results.Ok(ticket);
-        }).WithTags("Tickets");
+        }).WithTags("Tickets")
+        .Produces<Ticket>()
+        .ProducesProblem(StatusCodes.Status404NotFound);
 
         api.MapPatch("/projects/{slug}/tickets/{id:int}/status", async (string slug, int id, MoveTicketRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
         {
@@ -134,14 +142,19 @@ public static class Endpoints
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        }).WithTags("Tickets");
+        }).WithTags("Tickets")
+        .Produces<Ticket>()
+        .ProducesProblem(StatusCodes.Status400BadRequest)
+        .ProducesProblem(StatusCodes.Status404NotFound);
 
         api.MapDelete("/projects/{slug}/tickets/{id:int}", async (string slug, int id, TicketService ts, BoardUpdateNotifier notifier) =>
         {
             var deleted = await ts.DeleteTicketAsync(slug, id);
             if (deleted) notifier.NotifyProjectUpdated(slug);
             return deleted ? Results.NoContent() : Results.NotFound();
-        }).WithTags("Tickets");
+        }).WithTags("Tickets")
+        .Produces(StatusCodes.Status204NoContent)
+        .ProducesProblem(StatusCodes.Status404NotFound);
 
         // Sub-tickets
         api.MapPut("/projects/{slug}/tickets/{id:int}/parent", async (string slug, int id, SetParentRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
