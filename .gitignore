@@ -43,6 +43,6 @@ Thumbs.db
 .dashboard
 /doc/.obsidian
 
-# TDD gate scratch (dotnet test stdout/stderr written into each worktree)
-.gate-test.out
-.gate-test.err
+# TDD gate scratch (dotnet test/build stdout/stderr written into each worktree)
+.gate-*.out
+.gate-*.err
