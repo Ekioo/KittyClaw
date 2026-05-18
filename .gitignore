@@ -42,3 +42,7 @@ Thumbs.db
 .agents
 .dashboard
 /doc/.obsidian
+
+# TDD gate scratch (dotnet test stdout/stderr written into each worktree)
+.gate-test.out
+.gate-test.err
