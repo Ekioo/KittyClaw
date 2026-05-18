@@ -15,6 +15,9 @@ public record TicketSummary(
     int CommentCount,
     DateTime? LastActivityAt,
     int? ParentId,
-    List<SubTicketInfo> SubTickets);
+    List<SubTicketInfo> SubTickets)
+{
+    public DateTime? DueDate { get; init; }
+}
 
 public record SubTicketInfo(int Id, string Title, string Status, string? AssignedTo);

@@ -1,4 +1,13 @@
 {
+  "SortMenuTitle": "Trier les tickets",
+  "SortManual": "Manuel (glisser-déposer)",
+  "SortByTitle": "Titre",
+  "SortByPriority": "Priorité",
+  "SortByAssignee": "Assigné",
+  "SortByCreated": "Date de création",
+  "SortByDueDate": "Échéance",
+  "SortAsc": "Croissant",
+  "SortDesc": "Décroissant",
   "KanbanView": "Kanban",
   "Dashboard": "Tableau de bord",
   "ProjectNotFound": "Projet introuvable.",
