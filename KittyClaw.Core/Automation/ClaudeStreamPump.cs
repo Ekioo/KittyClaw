@@ -46,7 +46,11 @@ internal static class ClaudeStreamPump
                     }
                     else
                     {
-                        run.Push(new StreamEvent(DateTime.UtcNow, kind, ClaudeRunner.FlattenJson(doc.RootElement)));
+                        // Carry the raw JSON as Detail for result / rate_limit_event events so
+                        // the quota detector can inspect their fields (status, result text)
+                        // regardless of how FlattenJson collapses the event for display.
+                        var detail = kind is "result" or "rate_limit_event" ? line : null;
+                        run.Push(new StreamEvent(DateTime.UtcNow, kind, ClaudeRunner.FlattenJson(doc.RootElement), detail));
                     }
                 }
                 catch
