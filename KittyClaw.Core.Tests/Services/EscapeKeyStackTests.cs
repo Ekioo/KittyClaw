@@ -1,5 +1,6 @@
 using KittyClaw.Web.Services;
 
+// Failing tests for ticket #187: EscapeKeyStack contract (LIFO close-handler registry).
 namespace KittyClaw.Core.Tests.Services;
 
 public class EscapeKeyStackTests
