@@ -1,4 +1,13 @@
 {
+  "SortMenuTitle": "Sort tickets",
+  "SortManual": "Manual (drag & drop)",
+  "SortByTitle": "Title",
+  "SortByPriority": "Priority",
+  "SortByAssignee": "Assignee",
+  "SortByCreated": "Created date",
+  "SortByDueDate": "Due date",
+  "SortAsc": "Ascending",
+  "SortDesc": "Descending",
   "KanbanView": "Kanban",
   "Dashboard": "Dashboard",
   "ProjectNotFound": "Project not found.",
