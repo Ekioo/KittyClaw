@@ -39,6 +39,28 @@ public class AppSettingsService
         }
     }
 
+    public string? UpdateDismissedVersion
+    {
+        get => _data.UpdateDismissedVersion;
+        set
+        {
+            if (_data.UpdateDismissedVersion == value) return;
+            _data.UpdateDismissedVersion = value;
+            Save();
+        }
+    }
+
+    public DateTime? UpdateCheckLastRun
+    {
+        get => _data.UpdateCheckLastRun;
+        set
+        {
+            if (_data.UpdateCheckLastRun == value) return;
+            _data.UpdateCheckLastRun = value;
+            Save();
+        }
+    }
+
     private void Load()
     {
         if (!File.Exists(_settingsPath)) return;
@@ -60,5 +82,7 @@ public class AppSettingsService
     {
         public string Language { get; set; } = "fr";
         public bool OnboardingSeen { get; set; } = false;
+        public string? UpdateDismissedVersion { get; set; }
+        public DateTime? UpdateCheckLastRun { get; set; }
     }
 }

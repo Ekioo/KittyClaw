@@ -11,6 +11,7 @@
 @inject IHttpClientFactory HttpFactory
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject KittyClaw.Web.Services.EscapeKeyStack EscapeStack
 @rendermode InteractiveServer
 @implements IDisposable
 
@@ -218,6 +219,9 @@
     private bool _gitInstalled;
     private List<string>? _initConflicts;
     private (string text, string css)? _creationStatus;
+    private IDisposable? _escOnboarding;
+    private IDisposable? _escPending;
+    private IDisposable? _escDelete;
 
     protected override void OnInitialized()
     {
@@ -228,14 +232,35 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender || _onboardingEvaluated) return;
-        _onboardingEvaluated = true;
-        var stored = await JS.InvokeAsync<string?>("localStorage.getItem", "kc-project-sort");
-        if (stored is "name" or "created" or "updated") _sortOrder = stored;
-        if (!_showOnboarding)
+        if (firstRender && !_onboardingEvaluated)
         {
-            await LoadProjectsAsync();
+            _onboardingEvaluated = true;
+            var stored = await JS.InvokeAsync<string?>("localStorage.getItem", "kc-project-sort");
+            if (stored is "name" or "created" or "updated") _sortOrder = stored;
+            if (!_showOnboarding)
+            {
+                await LoadProjectsAsync();
+            }
         }
+        SyncEscapeTokens();
+    }
+
+    private void SyncEscapeTokens()
+    {
+        if (_showOnboarding && _escOnboarding is null)
+            _escOnboarding = EscapeStack.PushWithFocus(JS, () => InvokeAsync(async () => { await DismissOnboarding(); }));
+        else if (!_showOnboarding && _escOnboarding is not null)
+        { _escOnboarding.Dispose(); _escOnboarding = null; }
+
+        if (_pendingName is not null && _escPending is null)
+            _escPending = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CancelCreation(); StateHasChanged(); }));
+        else if (_pendingName is null && _escPending is not null)
+        { _escPending.Dispose(); _escPending = null; }
+
+        if (_deleteTarget is not null && _escDelete is null)
+            _escDelete = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CancelDelete(); StateHasChanged(); }));
+        else if (_deleteTarget is null && _escDelete is not null)
+        { _escDelete.Dispose(); _escDelete = null; }
     }
 
     private async Task LoadProjectsAsync()
@@ -441,5 +466,11 @@
     }
 
     private void OnLangChanged() => InvokeAsync(StateHasChanged);
-    public void Dispose() => L.OnLanguageChanged -= OnLangChanged;
+    public void Dispose()
+    {
+        L.OnLanguageChanged -= OnLangChanged;
+        _escOnboarding?.Dispose();
+        _escPending?.Dispose();
+        _escDelete?.Dispose();
+    }
 }

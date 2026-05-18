@@ -1,0 +1,31 @@
+@using Microsoft.JSInterop
+@using KittyClaw.Web.Services
+@inject EscapeKeyStack EscapeStack
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@code {
+    private DotNetObjectReference<EscapeKeyHost>? _ref;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _ref = DotNetObjectReference.Create(this);
+        try
+        {
+            await JS.InvokeVoidAsync("escapeStack.init", _ref);
+        }
+        catch (JSDisconnectedException) { }
+        catch (TaskCanceledException) { }
+    }
+
+    [JSInvokable]
+    public bool HandleEscape() => EscapeStack.HandleEscape();
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("escapeStack.dispose"); }
+        catch { }
+        _ref?.Dispose();
+    }
+}
