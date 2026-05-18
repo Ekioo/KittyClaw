@@ -4,7 +4,8 @@
 Exposes the project, ticket, comment, member, label, column, and automation data over HTTP so that AI agents (and the Blazor UI) can read and mutate the board programmatically.
 
 ## Key components
-- `KittyClaw.Web/Api/Endpoints.cs` — all `/api/...` route definitions.
+- `KittyClaw.Web/Api/Endpoints.cs` — `MapApiEndpoints` entry point; route definitions are split across per-domain `partial class Endpoints` files in the same folder:
+  - `Endpoints.Projects.cs`, `Endpoints.Tickets.cs`, `Endpoints.Columns.cs`, `Endpoints.Labels.cs`, `Endpoints.Members.cs`, `Endpoints.Automations.cs`, `Endpoints.Runs.cs`, `Endpoints.Chat.cs`, `Endpoints.Dashboard.cs`, `Endpoints.Skills.cs`, `Endpoints.Images.cs`, `Endpoints.Browse.cs`.
 - `KittyClaw.Web/Api/Contracts.cs` — request/response DTOs.
 - `KittyClaw.Web/Api/OpenApiMarkdownGenerator.cs` — renders the live OpenAPI spec as human-readable Markdown.
 
