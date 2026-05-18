@@ -20,7 +20,7 @@
     }
 
     [JSInvokable]
-    public void HandleEscape() => EscapeStack.HandleEscape();
+    public bool HandleEscape() => EscapeStack.HandleEscape();
 
     public async ValueTask DisposeAsync()
     {
