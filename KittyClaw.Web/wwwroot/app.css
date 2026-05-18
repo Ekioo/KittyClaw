@@ -2068,6 +2068,17 @@ button:disabled { opacity: 0.4; cursor: default; }
     cursor: pointer;
 }
 .agent-stop-btn:hover { background: #f06b6b44; }
+.agent-retry-btn {
+    background: #f59e4222;
+    color: #f59e42;
+    border: 1px solid #f59e4244;
+    padding: 0.1rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+.agent-retry-btn:hover { background: #f59e4244; }
+.agent-retry-btn:disabled { opacity: 0.5; cursor: default; }
 .agent-close-btn {
     background: transparent;
     color: var(--muted, #8a99b0);

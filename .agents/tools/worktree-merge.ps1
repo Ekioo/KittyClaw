@@ -1,5 +1,5 @@
 #!/usr/bin/env pwsh
-# Fast-forward merges a ticket worktree's branch into main, then cleans up.
+# Fast-forward merges a ticket worktree's branch into dev, then cleans up.
 #
 # Exit codes:
 #   0 -merged and cleaned up
@@ -16,7 +16,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $repoParent = Split-Path $repo -Parent
 $repoName = Split-Path $repo -Leaf
 $wtPath = Join-Path (Join-Path $repoParent "$repoName.worktrees") "ticket-$TicketId"
@@ -42,13 +42,13 @@ if ($wtBranch -ne $branch) {
     Fail 1 "Worktree HEAD is on '$wtBranch', expected '$branch'."
 }
 
-Log "Merging main into $branch (in worktree)."
-& git -C $wtPath merge main --no-edit
+Log "Merging dev into $branch (in worktree)."
+& git -C $wtPath merge dev --no-edit
 if ($LASTEXITCODE -ne 0) {
-    Fail 4 "Conflicts merging main into $branch. Worktree retained with conflict markers."
+    Fail 4 "Conflicts merging dev into $branch. Worktree retained with conflict markers."
 }
 
-Log "Fast-forwarding main to $branch."
+Log "Fast-forwarding dev to $branch."
 & git -C $repo merge --ff-only $branch
 if ($LASTEXITCODE -ne 0) {
     Fail 1 "git merge --ff-only failed unexpectedly."
