@@ -25,6 +25,7 @@ Background service that watches each project for events and dispatches agents in
 - `{ticketId}` placeholder in `concurrencyGroup` and `mutuallyExclusiveWith` resolves to the firing ticket's ID, enabling per-ticket serialization while preserving parallelism across distinct tickets.
 - `commitAgentMemory` detects whether `.agents/` is a standalone git repo (`.agents/.git` present) and commits there; otherwise falls back to the main workspace repo.
 - Canonical post-run chain: `runAgent` → `consolidateAgentMemory` → `commitAgentMemory`.
+- **`statusChange` trigger re-fire on failure**: for `runAgent` actions backed by a `statusChange` (or `subTicketStatus`) trigger, `ActionExecutor` defers advancing the trigger snapshot (`commitAsync`) until after the run completes. If the run ends with `AgentRunStatus.Failed` or `Stopped`, the snapshot is left at the pre-transition value, so the next poll detects the transition again and re-dispatches the agent. On `Completed`, the snapshot advances normally and subsequent polls stay silent. This means a rate-limited or crashed agent is automatically retried on the next poll cycle (≤ `pollSeconds`) without any manual intervention.
 
 ## Entry points
 - Hosted at app startup via DI in `KittyClaw.Web/Program.cs`.
