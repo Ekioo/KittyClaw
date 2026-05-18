@@ -272,7 +272,7 @@ else
         </div>
     }
 
-    <AgentRunDrawer RunId="@_activeRunDrawerId" OnClose="() => { _activeRunDrawerId = null; _showHistory = true; }" />
+    <AgentRunDrawer RunId="@_activeRunDrawerId" OnClose="() => { _activeRunDrawerId = null; _showHistory = true; }" OnRetried="@(id => _activeRunDrawerId = id)" />
 }
 
 @code {
