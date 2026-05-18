@@ -14,6 +14,7 @@
 @inject LocalizationService L
 @inject MemberService MemberService
 @inject AgentRunsState RunsState
+@inject KittyClaw.Web.Services.EscapeKeyStack EscapeStack
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -40,7 +41,7 @@ else
             {
                 <button class="header-action-btn" @onclick="StartInitialize" disabled="@_initializing" title="@L["InitializeHint"]">@(_initializing ? "…" : L["Initialize"])</button>
                 <button class="header-action-btn" @onclick="ReloadFromDisk" title="@L["ReloadFromDisk"]">&#8635; @L["Reload"]</button>
-                <button class="header-action-btn" @onclick="() => { _showHistory = true; _historyCount = 30; }"><span aria-hidden="true">🕒</span> @L["History"]</button>
+                <button class="header-action-btn" @onclick="OpenHistory"><span aria-hidden="true">🕒</span> @L["History"]</button>
                 <button class="header-action-btn" @onclick="AddAutomation">@L["NewAutomation"]</button>
                 <button class="header-action-btn settings-primary" @onclick="SaveAll" disabled="@(_saving || _configLoadError)">
                     @(_saving ? "…" : L["Save"])
@@ -226,11 +227,11 @@ else
 
     @if (_showHistory)
     {
-        <div class="run-history-overlay" @onclick="() => _showHistory = false"></div>
+        <div class="run-history-overlay" @onclick="CloseHistory"></div>
         <div class="run-history-drawer" @onclick:stopPropagation>
             <div class="run-history-header">
                 <span class="run-history-title">@L["History"]</span>
-                <button class="agent-close-btn" @onclick="() => _showHistory = false" title="@L["Close"]">×</button>
+                <button class="agent-close-btn" @onclick="CloseHistory" title="@L["Close"]">×</button>
             </div>
             <div class="run-history-list">
                 @{
@@ -292,14 +293,32 @@ else
     private bool _showHistory;
     private int _historyCount = 30;
     private string? _activeRunDrawerId;
+    private IDisposable? _escInitConflicts;
+    private IDisposable? _escHistory;
 
     private Dictionary<string, DateTime?> _nextRunTimes = new();
     private Timer? _nextRunTimer;
 
     private void OpenRun(string runId)
     {
-        _showHistory = false;
+        CloseHistory();
         _activeRunDrawerId = runId;
+    }
+
+    private void OpenHistory()
+    {
+        if (_showHistory) return;
+        _showHistory = true;
+        _historyCount = 30;
+        _escHistory?.Dispose();
+        _escHistory = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseHistory(); StateHasChanged(); }));
+    }
+
+    private void CloseHistory()
+    {
+        _showHistory = false;
+        _escHistory?.Dispose();
+        _escHistory = null;
     }
 
     private int? _editingIndex;
@@ -353,6 +372,8 @@ else
             try { await _dndModule.DisposeAsync(); } catch { }
         }
         _dotnetRef?.Dispose();
+        _escInitConflicts?.Dispose();
+        _escHistory?.Dispose();
     }
 
     private HttpClient NewHttp()
@@ -417,17 +438,26 @@ else
             else
             {
                 _initConflicts = conflicts;
+                _escInitConflicts?.Dispose();
+                _escInitConflicts = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CancelInitialize(); StateHasChanged(); }));
             }
         }
         finally { _initializing = false; }
     }
 
-    private void CancelInitialize() => _initConflicts = null;
+    private void CancelInitialize()
+    {
+        _initConflicts = null;
+        _escInitConflicts?.Dispose();
+        _escInitConflicts = null;
+    }
 
     private async Task RunInitialize(bool overwrite)
     {
         if (_project is null) return;
         _initConflicts = null;
+        _escInitConflicts?.Dispose();
+        _escInitConflicts = null;
         _initializing = true;
         try
         {
