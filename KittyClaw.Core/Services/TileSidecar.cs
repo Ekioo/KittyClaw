@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -15,15 +16,21 @@ namespace KittyClaw.Core.Services;
 /// <param name="Model">Optional Claude model override (null/empty = project default).</param>
 /// <param name="Title">Optional custom title shown in the tile header. If null/empty,
 /// the tile slug is used.</param>
+/// <param name="RefreshAt">Optional time-of-day trigger in strict <c>HH:mm</c> format
+/// (24-hour, zero-padded). When set, the tile fires once per local day at or after this
+/// time, regardless of <see cref="Refresh"/>.</param>
 public sealed record TileSidecar(
     string Template,
     int Refresh,
     string Prompt = "",
     string? Model = null,
-    string? Title = null);
+    string? Title = null,
+    string? RefreshAt = null);
 
 public static class TileSidecarSerializer
 {
+    private static readonly Regex _hhmm = new(@"^([01]\d|2[0-3]):[0-5]\d$", RegexOptions.Compiled);
+
     private static readonly IDeserializer _deserializer = new DeserializerBuilder()
         .WithNamingConvention(CamelCaseNamingConvention.Instance)
         .IgnoreUnmatchedProperties()
@@ -45,7 +52,8 @@ public static class TileSidecarSerializer
                 raw.Refresh,
                 raw.Prompt ?? "",
                 string.IsNullOrWhiteSpace(raw.Model) ? null : raw.Model,
-                string.IsNullOrWhiteSpace(raw.Title) ? null : raw.Title);
+                string.IsNullOrWhiteSpace(raw.Title) ? null : raw.Title,
+                NormalizeRefreshAt(raw.RefreshAt));
         }
         catch
         {
@@ -62,8 +70,16 @@ public static class TileSidecarSerializer
             Prompt = sidecar.Prompt,
             Model = sidecar.Model ?? "",
             Title = sidecar.Title ?? "",
+            RefreshAt = NormalizeRefreshAt(sidecar.RefreshAt),
         };
         return _serializer.Serialize(dto);
+    }
+
+    private static string? NormalizeRefreshAt(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var trimmed = value.Trim();
+        return _hhmm.IsMatch(trimmed) ? trimmed : null;
     }
 
     private sealed class Dto
@@ -73,5 +89,7 @@ public static class TileSidecarSerializer
         public string Prompt { get; set; } = "";
         public string Model { get; set; } = "";
         public string Title { get; set; } = "";
+        [YamlMember(DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+        public string? RefreshAt { get; set; }
     }
 }

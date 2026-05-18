@@ -4164,6 +4164,21 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     gap: 0.35rem;
 }
 
+.tile-config-frequency-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.tile-config-frequency-row select {
+    flex: 1 1 auto;
+}
+
+.tile-config-frequency-row input {
+    flex: 0 0 auto;
+    width: 9rem;
+}
+
 .tile-config-field label {
     font-size: 0.8rem;
     font-weight: 600;

@@ -89,12 +89,16 @@ public sealed class DashboardRefreshService : BackgroundService
                     _lastRefreshed[$"{projectSlug}:{tileSlug}"] = persisted.Value;
 
                 var sidecar = await _dashboard.ReadSidecarAsync(workspace, tileSlug);
-                if (sidecar is null || sidecar.Refresh <= 0) continue;
+                if (sidecar is null) continue;
+                var hasDailyAt = !string.IsNullOrWhiteSpace(sidecar.RefreshAt);
+                if (!hasDailyAt && sidecar.Refresh <= 0) continue;
                 var (scriptPath, _) = _dashboard.FindScript(workspace, tileSlug);
                 if (scriptPath is null && string.IsNullOrWhiteSpace(sidecar.Prompt)) continue;
 
-                var last = persisted ?? DateTime.MinValue;
-                if ((DateTime.UtcNow - last).TotalSeconds >= sidecar.Refresh)
+                var shouldFire = hasDailyAt
+                    ? DashboardRefreshScheduling.ShouldFireDailyAt(DateTime.Now, persisted?.ToLocalTime(), sidecar.RefreshAt)
+                    : (DateTime.UtcNow - (persisted ?? DateTime.MinValue)).TotalSeconds >= sidecar.Refresh;
+                if (shouldFire)
                 {
                     _logger.LogInformation(
                         "Dashboard tile {Project}/{Tile} missed refresh — catching up at startup",
@@ -139,13 +143,25 @@ public sealed class DashboardRefreshService : BackgroundService
             var (scriptPath, scriptConfigError) = _dashboard.FindScript(workspace, tileSlug);
             var hasScript = scriptPath is not null;
             var hasPrompt = !string.IsNullOrWhiteSpace(sidecar.Prompt);
-            if (sidecar.Refresh <= 0 || (!hasScript && !hasPrompt)) return;
+            var hasDailyAt = !string.IsNullOrWhiteSpace(sidecar.RefreshAt);
+            if ((sidecar.Refresh <= 0 && !hasDailyAt) || (!hasScript && !hasPrompt)) return;
 
             var key = $"{projectSlug}:{tileSlug}";
             var now = DateTime.UtcNow;
-            if (_lastRefreshed.TryGetValue(key, out var last)
-                && (now - last).TotalSeconds < sidecar.Refresh)
+            _lastRefreshed.TryGetValue(key, out var last);
+            var hasLast = last != default;
+            if (hasDailyAt)
+            {
+                if (!DashboardRefreshScheduling.ShouldFireDailyAt(
+                        DateTime.Now,
+                        hasLast ? last.ToLocalTime() : null,
+                        sidecar.RefreshAt))
+                    return;
+            }
+            else if (hasLast && (now - last).TotalSeconds < sidecar.Refresh)
+            {
                 return;
+            }
 
             _logger.LogInformation("Refreshing dashboard tile {Project}/{Tile} (template={Template})",
                 projectSlug, tileSlug, sidecar.Template);

@@ -227,8 +227,27 @@ else
                         <textarea rows="5" @bind="_configPrompt" placeholder="@L["TileConfigPromptHint"]"></textarea>
                     </div>
                     <div class="tile-config-field">
-                        <label>@L["TileConfigRefreshSeconds"]</label>
-                        <input type="number" min="0" @bind="_configRefreshSeconds" />
+                        <label>@L["TileConfigFrequency"]</label>
+                        <div class="tile-config-frequency-row">
+                            <select @bind="_configFrequencyKind">
+                                <option value="@TileFrequencyKind.Never">@L["FrequencyNever"]</option>
+                                <option value="@TileFrequencyKind.Minutes">@L["FrequencyEveryNMinutes"]</option>
+                                <option value="@TileFrequencyKind.Hours">@L["FrequencyEveryNHours"]</option>
+                                <option value="@TileFrequencyKind.Days">@L["FrequencyEveryNDays"]</option>
+                                <option value="@TileFrequencyKind.DailyAt">@L["FrequencyDailyAt"]</option>
+                            </select>
+                            @if (_configFrequencyKind == TileFrequencyKind.Minutes
+                              || _configFrequencyKind == TileFrequencyKind.Hours
+                              || _configFrequencyKind == TileFrequencyKind.Days)
+                            {
+                                <input type="number" min="1" @bind="_configFrequencyValue" />
+                            }
+                            else if (_configFrequencyKind == TileFrequencyKind.DailyAt)
+                            {
+                                <input type="time" value="@_configFrequencyTime"
+                                       @onchange="@(e => _configFrequencyTime = e.Value?.ToString() ?? "09:00")" />
+                            }
+                        </div>
                     </div>
                     <div class="tile-config-field">
                         <label>@L["TileConfigModel"]</label>
@@ -314,6 +333,9 @@ else
     private string _configTemplate = TileTemplate.Markdown;
     private string _configPrompt = "";
     private int _configRefreshSeconds;
+    private TileFrequencyKind _configFrequencyKind = TileFrequencyKind.Never;
+    private int _configFrequencyValue = 10;
+    private string _configFrequencyTime = "09:00";
     private string _configModel = "";
     private string _configScriptContent = "";
     private string? _configScriptError;
@@ -589,6 +611,11 @@ else
                     _configScriptError = null;
                     _configPrompt = config.Prompt;
                     _configRefreshSeconds = config.RefreshSeconds;
+                    var (aiKind, aiValue, aiTime) = TileFrequency.FromSidecar(
+                        new TileSidecar(config.Template, config.RefreshSeconds));
+                    _configFrequencyKind = aiKind;
+                    _configFrequencyValue = aiValue == 0 ? 10 : aiValue;
+                    _configFrequencyTime = aiTime ?? "09:00";
                     _configModel = config.Model;
                     _tileConfigOpen = true;
                 }
@@ -671,6 +698,10 @@ else
         _configScriptError = null;
         _configPrompt = sidecar.Prompt;
         _configRefreshSeconds = sidecar.Refresh;
+        var (fkind, fvalue, ftime) = TileFrequency.FromSidecar(sidecar);
+        _configFrequencyKind = fkind;
+        _configFrequencyValue = fvalue == 0 ? 10 : fvalue;
+        _configFrequencyTime = ftime ?? "09:00";
         _configModel = sidecar.Model ?? "";
         _tileConfigOpen = true;
     }
@@ -678,12 +709,16 @@ else
     private async Task AcceptTileConfig()
     {
         var template = TileTemplate.IsKnown(_configTemplate) ? _configTemplate : TileTemplate.Markdown;
+        var (refreshSeconds, refreshAt) = TileFrequency.ToSidecar(
+            _configFrequencyKind, _configFrequencyValue, _configFrequencyTime);
+        _configRefreshSeconds = refreshSeconds;
         var sidecar = new TileSidecar(
             template,
-            _configRefreshSeconds,
+            refreshSeconds,
             _configPrompt ?? "",
             string.IsNullOrWhiteSpace(_configModel) ? null : _configModel,
-            string.IsNullOrWhiteSpace(_configTitle) ? null : _configTitle.Trim());
+            string.IsNullOrWhiteSpace(_configTitle) ? null : _configTitle.Trim(),
+            refreshAt);
 
         // Edit mode: update sidecar in place.
         if (_configEditingSlug is not null)
