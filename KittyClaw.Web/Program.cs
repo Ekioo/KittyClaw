@@ -48,7 +48,7 @@ builder.Services.AddSingleton<MemberService>();
 builder.Services.AddSingleton<ChatService>();
 builder.Services.AddSingleton<DashboardService>();
 builder.Services.AddSingleton<AgentsTemplateService>();
-builder.Services.AddSingleton<KittyClaw.Web.Services.BoardFilterState>();
+builder.Services.AddScoped<KittyClaw.Web.Services.BoardFilterState>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.BoardUpdateNotifier>();
 
 // Automation engine

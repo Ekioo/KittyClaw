@@ -162,6 +162,12 @@ public sealed class ClaudeRunner
                 _logger.LogWarning("Quota hit for {Agent} (model={Model}); falling back to {Fallback}",
                     ctx.AgentName, ctx.Model, ctx.FallbackModel);
                 run.Model = ctx.FallbackModel;
+                // Start the retry in a fresh session: the first attempt already consumed
+                // `sessionId`, so reusing it with --session-id would fail ("already in use").
+                sessionId = Guid.NewGuid().ToString();
+                run.SessionId = sessionId;
+                if (ctx.PersistSession)
+                    _sessions.SetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId, sessionId);
                 attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume: false, modelOverride: ctx.FallbackModel, ct);
                 if (attempt.Cancelled) return run;
             }
@@ -197,8 +203,7 @@ public sealed class ClaudeRunner
     // positives only cause one extra retry on the fallback model, which is recoverable.
     private static readonly string[] QuotaMarkers =
     {
-        "usage limit reached",
-        "claude ai usage limit",
+        "usage limit",
         "rate_limit_error",
         "rate limit",
         "quota exceeded",
@@ -206,7 +211,7 @@ public sealed class ClaudeRunner
         "5-hour limit",
     };
 
-    private static bool LooksLikeQuotaError(string text)
+    private static bool LooksLikeQuotaError(string? text)
     {
         if (string.IsNullOrEmpty(text)) return false;
         foreach (var marker in QuotaMarkers)
@@ -214,6 +219,37 @@ public sealed class ClaudeRunner
             if (text.Contains(marker, StringComparison.OrdinalIgnoreCase)) return true;
         }
         return false;
+    }
+
+    // True when an event signals the run was throttled by a usage / rate limit. Covers both
+    // the CLI's structured `rate_limit_event` (status == "rejected") and the plain-text
+    // limit message that surfaces in the final `result` event. Inspects both Detail (raw
+    // JSON, set by the stdout pump) and Text so detection never depends on FlattenJson.
+    internal static bool IsQuotaSignal(StreamEvent ev)
+    {
+        if (ev.Kind == "rate_limit_event")
+            return IsRejectedRateLimit(ev.Detail) || IsRejectedRateLimit(ev.Text);
+        if (ev.Kind is "stderr" or "result" or "raw" or "error")
+            return LooksLikeQuotaError(ev.Detail) || LooksLikeQuotaError(ev.Text);
+        return false;
+    }
+
+    // A rate_limit_event payload counts as a quota hit only when its status is "rejected"
+    // (the CLI also emits "allowed" / "allowed_warning" events that must not trigger a retry).
+    private static bool IsRejectedRateLimit(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return false;
+        // Tolerate a flattened "[rate_limit_event] {...}" prefix: parse from the first brace.
+        var brace = text.IndexOf('{');
+        if (brace < 0) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(text[brace..]);
+            return doc.RootElement.TryGetProperty("rate_limit_info", out var info)
+                && info.TryGetProperty("status", out var status)
+                && string.Equals(status.GetString(), "rejected", StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
     }
 
     private async Task<SpawnResult> SpawnAndWaitAsync(
@@ -278,11 +314,8 @@ public sealed class ClaudeRunner
         Action<StreamEvent> counter = ev =>
         {
             if (ev.Kind == "assistant") Interlocked.Increment(ref assistantCount);
-            if (hitQuota == 0 && (ev.Kind == "stderr" || ev.Kind == "result" || ev.Kind == "raw" || ev.Kind == "error"))
-            {
-                if (LooksLikeQuotaError(ev.Detail) || LooksLikeQuotaError(ev.Text))
-                    Interlocked.Exchange(ref hitQuota, 1);
-            }
+            if (hitQuota == 0 && IsQuotaSignal(ev))
+                Interlocked.Exchange(ref hitQuota, 1);
         };
         run.OnEvent += counter;
 
