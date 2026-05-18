@@ -8,6 +8,7 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 - `KittyClaw.Web/wwwroot/app.css` — single global stylesheet.
 - `KittyClaw.Web/wwwroot/js/` — JS interop helpers.
 - `KittyClaw.Web/Services/BoardFilterState.cs` — per-circuit (scoped) service holding the board search filter text. Registered as `AddScoped` so each browser tab gets an independent instance; a Singleton registration would cause filter text typed in one tab to appear in all other open tabs.
+- `KittyClaw.Web/Markdown/CommentMarkdownPipeline.cs` — shared Markdig pipeline used to render ticket comments and activity entries; enables advanced extensions and treats soft line breaks as hard breaks so newlines typed in comments render visibly.
 - `KittyClaw.Web/Services/EscapeKeyStack.cs` + `EscapeKeyStackExtensions.cs` — scoped LIFO stack of Escape handlers. Components register a close callback via `Push` (or `PushWithFocus` to also save/restore focus through `wwwroot/js/escape-stack.js`) and dispose the returned token when their popup closes. `Components/EscapeKeyHost.razor` is mounted once in `MainLayout` and routes browser Escape keydowns to the topmost handler.
 - Components consume the [storage](./storage.md) services directly via DI rather than self-calling the [REST API](./rest-api.md).
 

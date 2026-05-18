@@ -961,7 +961,7 @@ else
         await RefreshTicketsAndTouch();
     }
 
-    private MarkdownPipeline _mdPipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+    private MarkdownPipeline _mdPipeline = KittyClaw.Web.Markdown.CommentMarkdownPipeline.Build();
 
     private readonly Dictionary<string, Dictionary<int, string>> _crossProjectTickets =
         new(StringComparer.OrdinalIgnoreCase);
@@ -999,8 +999,7 @@ else
         await FetchCrossProjectTicketsAsync();
         var index = _tickets.ToDictionary(t => t.Id, t => t.Title);
         var memberHandles = new HashSet<string>(_allMembers.Select(m => m.Slug), StringComparer.OrdinalIgnoreCase);
-        _mdPipeline = new MarkdownPipelineBuilder()
-            .UseAdvancedExtensions()
+        _mdPipeline = KittyClaw.Web.Markdown.CommentMarkdownPipeline.Configure(new MarkdownPipelineBuilder())
             .Use(new TicketReferenceExtension(Slug, index, _crossProjectTickets))
             .Use(new MentionExtension(memberHandles))
             .Build();
