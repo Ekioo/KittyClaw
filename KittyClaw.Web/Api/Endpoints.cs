@@ -439,6 +439,47 @@ public static class Endpoints
             return Results.NoContent();
         }).WithTags("Runs");
 
+        api.MapPost("/projects/{slug}/runs/{runId}/retry", async (string slug, string runId,
+            AgentRunRegistry reg, ProjectService ps, TicketService ts, ClaudeRunner runner) =>
+        {
+            var run = reg.Get(runId);
+            if (run is null || run.ProjectSlug != slug) return Results.NotFound();
+            if (run.Status == AgentRunStatus.Running)
+                return Results.BadRequest(new { error = "Run is still active." });
+            if (reg.HasActiveInGroup(slug, run.ConcurrencyGroup))
+                return Results.BadRequest(new { error = "An agent is already running in this group." });
+
+            var project = await ps.GetProjectAsync(slug);
+            if (project is null) return Results.NotFound();
+
+            string? ticketTitle = null, ticketStatus = null;
+            if (run.TicketId is int tid)
+            {
+                var ticket = await ts.GetTicketAsync(slug, tid);
+                ticketTitle = ticket?.Title;
+                ticketStatus = ticket?.Status;
+            }
+
+            var newRunId = Guid.NewGuid().ToString("N");
+            var ctx = new ClaudeRunContext
+            {
+                ProjectSlug = slug,
+                WorkspacePath = ps.ResolveWorkspacePath(project),
+                AgentName = run.AgentName,
+                SkillFile = run.SkillFile,
+                TicketId = run.TicketId,
+                TicketTitle = ticketTitle,
+                TicketStatus = ticketStatus,
+                ConcurrencyGroup = run.ConcurrencyGroup,
+                Model = run.Model,
+                FallbackModel = project.FallbackModel,
+                RetryOnResumeFailure = true,
+                PresetRunId = newRunId,
+            };
+            _ = runner.RunAsync(ctx, CancellationToken.None);
+            return Results.Ok(new { runId = newRunId });
+        }).WithTags("Runs");
+
         // Owner chat (ad-hoc Claude session)
         api.MapGet("/projects/{slug}/chat/targets", async (string slug, ProjectService ps, MemberService ms, ChatService cs) =>
         {
