@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 # Ensures a per-ticket git worktree exists for the given ticket id.
 # Idempotent: prints the absolute worktree path on stdout regardless of pre-state.
-# Convention: branch `ticket/<id>`, folder `<repo>.worktrees/ticket-<id>`, based on local `main`.
+# Convention: branch `ticket/<id>`, folder `<repo>.worktrees/ticket-<id>`, based on local `dev`.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$true, Position=0)]
@@ -10,7 +10,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $repoParent = Split-Path $repo -Parent
 $repoName = Split-Path $repo -Leaf
 $wtRoot = Join-Path $repoParent "$repoName.worktrees"
@@ -71,8 +71,8 @@ if ($branchExists) {
     Log "Branch $branch exists, creating worktree from it."
     & git -C $repo worktree add $wtPath $branch
 } else {
-    Log "Creating new branch $branch from local main."
-    & git -C $repo worktree add $wtPath -b $branch main
+    Log "Creating new branch $branch from local dev."
+    & git -C $repo worktree add $wtPath -b $branch dev
 }
 if ($LASTEXITCODE -ne 0) { Write-Error "git worktree add failed."; exit 1 }
 
