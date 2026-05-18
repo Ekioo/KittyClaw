@@ -1,6 +1,8 @@
 {
   "StopAgent": "Stop agent",
   "Stop": "Stop",
+  "Retry": "Retry",
+  "RetryAgent": "Run this agent again",
   "WaitingForOutput": "Waiting for output\u2026",
   "SteerPlaceholder": "Send an instruction to the agent\u2026",
   "Send": "Send"

@@ -19,6 +19,10 @@
                     <span class="agent-ticket">#@_run.TicketId</span>
                 }
                 <span class="agent-status agent-status-@_run.Status.ToString().ToLowerInvariant()">@_run.Status</span>
+                @if (_run.Status is AgentRunStatus.Failed or AgentRunStatus.Stopped)
+                {
+                    <button class="agent-retry-btn" @onclick="Retry" disabled="@_retrying" title="@L["RetryAgent"]">↻ @L["Retry"]</button>
+                }
             </div>
             <div class="agent-drawer-meta">
                 <span title="Skill">@_run.SkillFile</span>
@@ -151,10 +155,12 @@
 @code {
     [Parameter] public string? RunId { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<string> OnRetried { get; set; }
 
     private AgentRun? _run;
     private readonly List<StreamEvent> _events = new();
     private string _steerText = "";
+    private bool _retrying;
     private IJSObjectReference? _sseModule;
     private string? _activeStreamId;
     private ElementReference _consoleRef;
@@ -248,6 +254,27 @@
         using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
         try { await http.PostAsync($"/api/projects/{_run.ProjectSlug}/runs/{_run.RunId}/stop", null); } catch { }
     }
+
+    private async Task Retry()
+    {
+        if (_run is null || _retrying) return;
+        _retrying = true;
+        try
+        {
+            using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+            var resp = await http.PostAsync($"/api/projects/{_run.ProjectSlug}/runs/{_run.RunId}/retry", null);
+            if (resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadFromJsonAsync<RetryResponse>();
+                if (body is not null && OnRetried.HasDelegate)
+                    await OnRetried.InvokeAsync(body.RunId);
+            }
+        }
+        catch { }
+        finally { _retrying = false; }
+    }
+
+    private sealed record RetryResponse(string RunId);
 
     private static string GetMessageBody(string? text)
     {

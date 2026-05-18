@@ -675,7 +675,7 @@ else
 {
     <ErrorBoundary>
         <ChildContent>
-            <AgentRunDrawer RunId="@_activeRunDrawerId" OnClose="CloseRunDrawer" />
+            <AgentRunDrawer RunId="@_activeRunDrawerId" OnClose="CloseRunDrawer" OnRetried="OpenRunDrawer" />
         </ChildContent>
         <ErrorContent Context="ex">
             <div class="agent-drawer-overlay" @onclick="CloseRunDrawer"></div>
