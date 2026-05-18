@@ -7,6 +7,7 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 - `KittyClaw.Web/` — Blazor Server app (`@rendermode InteractiveServer`).
 - `KittyClaw.Web/wwwroot/app.css` — single global stylesheet.
 - `KittyClaw.Web/wwwroot/js/` — JS interop helpers.
+- `KittyClaw.Web/Services/BoardFilterState.cs` — per-circuit (scoped) service holding the board search filter text. Registered as `AddScoped` so each browser tab gets an independent instance; a Singleton registration would cause filter text typed in one tab to appear in all other open tabs.
 - Components consume the [storage](./storage.md) services directly via DI rather than self-calling the [REST API](./rest-api.md).
 
 ## Features

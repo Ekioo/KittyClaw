@@ -4,7 +4,7 @@
 Runs an agent as a `claude` CLI subprocess, streams its stdout/stderr in near-real-time to the UI, tracks lifecycle (started, exited, killed), and persists a run record for later inspection.
 
 ## Key components
-- `KittyClaw.Core/Automation/ClaudeRunner.cs` — orchestrates a single agent run. Invokes `claude --print` (no `--remote-control`) and closes stdin after writing the prompt so the subprocess does not block; parallel runs across different worktrees cannot collide via IPC files.
+- `KittyClaw.Core/Automation/ClaudeRunner.cs` — orchestrates a single agent run. Invokes `claude --print` (no `--remote-control`) and closes stdin after writing the prompt so the subprocess does not block; parallel runs across different worktrees cannot collide via IPC files. Skill file reads do not pass the cancellation token, ensuring a cancelled outer scope cannot leave the run stuck in `Running` state.
 - `KittyClaw.Core/Automation/ProcessLifecycleManager.cs` — process spawn, exit, and kill handling.
 - `KittyClaw.Core/Automation/ClaudeStreamPump.cs` — pumps NDJSON events from the subprocess into the run's event list. When the CLI emits `{"type":"result","subtype":"error_max_turns"}`, the pump re-labels the event kind to `"max_turns"` instead of `"result"`.
 - `KittyClaw.Web/Components/ClaudeChatDrawer.razor` — chat UI component. Handles `max_turns` SSE events by setting `_hitMaxTurns = true` and rendering an inline banner with a **Continue** button; clicking it pre-fills the input with "Continue" and calls `Send()`. Any sent message also clears the banner.
