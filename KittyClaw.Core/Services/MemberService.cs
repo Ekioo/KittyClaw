@@ -4,6 +4,13 @@ using KittyClaw.Core.Models;
 
 namespace KittyClaw.Core.Services;
 
+public enum DeleteMemberResult
+{
+    Deleted,
+    NotFound,
+    ProtectedOwner
+}
+
 public class MemberService
 {
     private readonly ProjectService _projectService;
@@ -96,14 +103,21 @@ public class MemberService
         return member;
     }
 
-    public async Task<bool> DeleteMemberAsync(string projectSlug, int memberId)
+    public async Task<DeleteMemberResult> DeleteMemberAsync(string projectSlug, int memberId)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureMemberTableAsync(db);
         var member = await db.Members.FindAsync(memberId);
-        if (member is null) return false;
+        if (member is null) return DeleteMemberResult.NotFound;
+        if (member.Slug == "owner") return DeleteMemberResult.ProtectedOwner;
+        var slug = member.Slug;
         db.Members.Remove(member);
         await db.SaveChangesAsync();
-        return true;
+        if (!string.IsNullOrEmpty(slug))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "UPDATE Tickets SET AssignedTo = NULL WHERE AssignedTo = {0}", slug);
+        }
+        return DeleteMemberResult.Deleted;
     }
 }
