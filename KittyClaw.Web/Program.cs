@@ -73,6 +73,8 @@ builder.Services.AddSingleton<KittyClaw.Core.Services.DashboardRefreshService>()
 builder.Services.AddHostedService(sp => sp.GetRequiredService<KittyClaw.Core.Services.DashboardRefreshService>());
 builder.Services.AddSingleton<KittyClaw.Web.Services.AgentRunsState>();
 builder.Services.AddHttpClient();
+builder.Services.AddSingleton<KittyClaw.Web.Services.UpdateCheckService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<KittyClaw.Web.Services.UpdateCheckService>());
 
 // Folder picker: only on Windows hosts (local or MAUI-Windows). Cloud deployments
 // register nothing, so the UI hides the Parcourir button.
@@ -108,6 +110,20 @@ app.UseAntiforgery();
 
 app.MapOpenApi();
 app.MapTodoApi();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapPost("/api/dev/update-check/simulate", (string version, KittyClaw.Web.Services.UpdateCheckService svc) =>
+    {
+        svc.SimulateUpdate(version);
+        return Results.Ok(new { simulated = version });
+    });
+    app.MapPost("/api/dev/update-check/reset", (KittyClaw.Web.Services.UpdateCheckService svc) =>
+    {
+        svc.ResetSimulation();
+        return Results.Ok(new { reset = true });
+    });
+}
 
 app.MapGet("/api/docs", async (HttpContext ctx) =>
 {
