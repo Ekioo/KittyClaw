@@ -33,7 +33,19 @@ internal static class ClaudeStreamPump
                         msg.TryGetProperty("content", out var content) &&
                         content.ValueKind == JsonValueKind.Array)
                     {
-                        run.Push(new StreamEvent(DateTime.UtcNow, kind, ClaudeRunner.FlattenJson(doc.RootElement)));
+                        var hasText = false;
+                        foreach (var part in content.EnumerateArray())
+                        {
+                            if (part.TryGetProperty("type", out var pt) && pt.GetString() == "text")
+                            {
+                                hasText = true;
+                                break;
+                            }
+                        }
+                        if (hasText)
+                        {
+                            run.Push(new StreamEvent(DateTime.UtcNow, kind, ClaudeRunner.FlattenJson(doc.RootElement)));
+                        }
                         foreach (var part in content.EnumerateArray())
                         {
                             if (part.TryGetProperty("type", out var ptype) && ptype.GetString() == "tool_use")
