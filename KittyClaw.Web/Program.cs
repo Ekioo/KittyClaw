@@ -50,6 +50,7 @@ builder.Services.AddSingleton<DashboardService>();
 builder.Services.AddSingleton<AgentsTemplateService>();
 builder.Services.AddScoped<KittyClaw.Web.Services.BoardFilterState>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.BoardUpdateNotifier>();
+builder.Services.AddScoped<KittyClaw.Web.Services.EscapeKeyStack>();
 
 // Automation engine
 builder.Services.AddSingleton<AutomationStore>();

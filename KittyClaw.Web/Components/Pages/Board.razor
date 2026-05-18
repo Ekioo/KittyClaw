@@ -19,6 +19,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject LocalizationService L
+@inject KittyClaw.Web.Services.EscapeKeyStack EscapeStack
 @rendermode InteractiveServer
 @implements IDisposable
 
@@ -362,7 +363,7 @@ else
             <div class="ticket-panel">
             <div class="ticket-panel-header">
                 <div class="editable-field">
-                    <div class="priority-dot-btn" @onclick="() => _showPriorityPicker = !_showPriorityPicker" title="@L["ChangePriority"]">
+                    <div class="priority-dot-btn" @onclick="TogglePriorityPicker" title="@L["ChangePriority"]">
                         <span class="priority-dot priority-@GetPriorityClass(_selectedTicket.Priority)"></span>
                     </div>
                     @if (_showPriorityPicker)
@@ -411,7 +412,7 @@ else
                            placeholder="+ Label..."
                            @bind="_labelSearch"
                            @bind:event="oninput"
-                           @onfocus="() => _labelDropdownOpen = true"
+                           @onfocus="OpenLabelDropdown"
                            @onblur="OnLabelBlur"
                            @onkeydown="HandleLabelKeyDown" />
                     @if (_labelDropdownOpen && GetLabelSuggestions().Any())
@@ -444,7 +445,7 @@ else
                            placeholder="@(string.IsNullOrEmpty(_selectedTicket.AssignedTo) ? L["AssignPlaceholder"] : L["ChangePlaceholder"])"
                            @bind="_assigneeSearch"
                            @bind:event="oninput"
-                           @onfocus="() => _assigneeDropdownOpen = true"
+                           @onfocus="OpenAssigneeDropdown"
                            @onblur="OnAssigneeBlur"
                            @onkeydown="HandleAssigneeKeyDown" />
                     @if (_assigneeDropdownOpen && GetAssigneeSuggestions().Any())
@@ -1024,8 +1025,18 @@ else
         if (updated is not null) { _project = updated; StateHasChanged(); }
     }
 
-    private void OpenRunDrawer(string runId) => _activeRunDrawerId = runId;
-    private void CloseRunDrawer() => _activeRunDrawerId = null;
+    private void OpenRunDrawer(string runId)
+    {
+        _activeRunDrawerId = runId;
+        _escRunDrawer?.Dispose();
+        _escRunDrawer = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseRunDrawer(); StateHasChanged(); }));
+    }
+    private void CloseRunDrawer()
+    {
+        _activeRunDrawerId = null;
+        _escRunDrawer?.Dispose();
+        _escRunDrawer = null;
+    }
     private void OpenChatDrawer()
     {
         _chatInitialAgent = null;
@@ -1033,6 +1044,8 @@ else
         _chatTicketId = null;
         _chatTicketTitle = null;
         _showChatDrawer = true;
+        _escChatDrawer?.Dispose();
+        _escChatDrawer = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseChatDrawer(); StateHasChanged(); }));
     }
 
     private void CloseChatDrawer()
@@ -1042,6 +1055,8 @@ else
         _chatInitialAgentName = null;
         _chatTicketId = null;
         _chatTicketTitle = null;
+        _escChatDrawer?.Dispose();
+        _escChatDrawer = null;
     }
 
     private void OpenTicketChat()
@@ -1065,6 +1080,8 @@ else
         _chatTicketId = _selectedTicket.Id;
         _chatTicketTitle = _selectedTicket.Title;
         _showChatDrawer = true;
+        _escChatDrawer?.Dispose();
+        _escChatDrawer = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseChatDrawer(); StateHasChanged(); }));
     }
 
     private bool CanChatWithAssignee()
@@ -1126,6 +1143,16 @@ else
         if (_undoHandler is not null)
             _ = JS.InvokeVoidAsync("unregisterUndoShortcut", _undoHandler);
         _dotNetRef?.Dispose();
+        _escCreatePopup?.Dispose();
+        _escLabelManager?.Dispose();
+        _escMemberManager?.Dispose();
+        _escTicketPanel?.Dispose();
+        _escRunDrawer?.Dispose();
+        _escChatDrawer?.Dispose();
+        _escTrashDialog?.Dispose();
+        _escPriorityPicker?.Dispose();
+        _escLabelDropdown?.Dispose();
+        _escAssigneeDropdown?.Dispose();
     }
 
     protected override async Task OnParametersSetAsync()
@@ -1314,8 +1341,26 @@ else
 
     private async Task SetPriorityAndClose(TicketPriority p)
     {
-        _showPriorityPicker = false;
+        ClosePriorityPicker();
         await SetPriority(p);
+    }
+
+    private void TogglePriorityPicker()
+    {
+        if (_showPriorityPicker) ClosePriorityPicker();
+        else
+        {
+            _showPriorityPicker = true;
+            _escPriorityPicker?.Dispose();
+            _escPriorityPicker = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { ClosePriorityPicker(); StateHasChanged(); }));
+        }
+    }
+
+    private void ClosePriorityPicker()
+    {
+        _showPriorityPicker = false;
+        _escPriorityPicker?.Dispose();
+        _escPriorityPicker = null;
     }
 
     private void OnDragStart(TicketSummary ticket) => _draggedTicket = ticket;
@@ -1514,6 +1559,18 @@ else
         await RebuildPipelineAsync();
     }
 
+    // Escape key handler tokens for popups
+    private IDisposable? _escCreatePopup;
+    private IDisposable? _escLabelManager;
+    private IDisposable? _escMemberManager;
+    private IDisposable? _escTicketPanel;
+    private IDisposable? _escRunDrawer;
+    private IDisposable? _escChatDrawer;
+    private IDisposable? _escTrashDialog;
+    private IDisposable? _escPriorityPicker;
+    private IDisposable? _escLabelDropdown;
+    private IDisposable? _escAssigneeDropdown;
+
     // Create popup
     private void OpenCreatePopup()
     {
@@ -1524,9 +1581,16 @@ else
         _newTicketAssignedTo = "";
         _showNewLabelForm = false;
         _showCreatePopup = true;
+        _escCreatePopup?.Dispose();
+        _escCreatePopup = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseCreatePopup(); StateHasChanged(); }));
     }
 
-    private void CloseCreatePopup() => _showCreatePopup = false;
+    private void CloseCreatePopup()
+    {
+        _showCreatePopup = false;
+        _escCreatePopup?.Dispose();
+        _escCreatePopup = null;
+    }
 
     private void ToggleLabel(int id)
     {
@@ -1565,6 +1629,8 @@ else
         _editingCommentId = null;
         _fullscreenTarget = "";
         _selectedTicket = await TicketService.GetTicketAsync(Slug, ticket.Id);
+        _escTicketPanel?.Dispose();
+        _escTicketPanel = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { ClosePanel(); StateHasChanged(); }));
 
         // Clear the "updated" indicator only for the ticket actually opened.
         await MarkTicketViewedAsync(ticket.Id);
@@ -1578,13 +1644,16 @@ else
     private void ClosePanel()
     {
         _selectedTicket = null;
+        _escTicketPanel?.Dispose();
+        _escTicketPanel = null;
         _confirmDelete = false;
         _editingTitle = false;
         _editingCommentId = null;
         _fullscreenTarget = "";
-        _showPriorityPicker = false;
+        ClosePriorityPicker();
         _labelSearch = "";
-        _labelDropdownOpen = false;
+        CloseLabelDropdown();
+        CloseAssigneeDropdown();
         if (_subKanbanParentId is not null)
             Navigation.NavigateTo($"/board/{Slug}/sub/{_subKanbanParentId}", replace: true);
         else
@@ -1697,6 +1766,13 @@ else
         _trashConfirmColumn = col;
         var first = _columns.FirstOrDefault(c => c.Id != columnId);
         _deleteColumnMoveTo = first?.Name ?? "";
+        ArmTrashEscape();
+    }
+
+    private void ArmTrashEscape()
+    {
+        _escTrashDialog?.Dispose();
+        _escTrashDialog = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CancelTrash(); StateHasChanged(); }));
     }
 
     private async Task DeleteColumn(int columnId)
@@ -1734,18 +1810,24 @@ else
             _dragHoverIndex = -1;
             _dragActiveSlot = -1;
         }
+        if (_trashConfirmColumn is not null || _trashConfirmTicket is not null)
+            ArmTrashEscape();
     }
 
     private void CancelTrash()
     {
         _trashConfirmColumn = null;
         _trashConfirmTicket = null;
+        _escTrashDialog?.Dispose();
+        _escTrashDialog = null;
     }
 
     private async Task ConfirmTrashColumn()
     {
         if (_trashConfirmColumn is null) return;
         await DeleteColumn(_trashConfirmColumn.Id);
+        _escTrashDialog?.Dispose();
+        _escTrashDialog = null;
     }
 
     private async Task ConfirmTrashTicket()
@@ -1758,6 +1840,8 @@ else
         PushUndo($"{L["UndoDelete"]} #{t.Id}", async () =>
             await TicketService.CreateTicketAsync(Slug, t.Title, t.Description, t.CreatedBy, t.Status, labelIds, t.Priority, t.AssignedTo, t.ParentId));
         _trashConfirmTicket = null;
+        _escTrashDialog?.Dispose();
+        _escTrashDialog = null;
         await RefreshTicketsAndTouch();
         await RebuildPipelineAsync();
     }
@@ -1787,7 +1871,7 @@ else
         _selectedTicket = await TicketService.GetTicketAsync(Slug, ticketId);
         await RefreshTicketsAndTouch();
         _labelSearch = "";
-        _labelDropdownOpen = false;
+        CloseLabelDropdown();
     }
 
     private async Task RemoveLabel(int labelId)
@@ -1814,7 +1898,7 @@ else
         _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
         await RefreshTicketsAndTouch();
         _labelSearch = "";
-        _labelDropdownOpen = false;
+        CloseLabelDropdown();
     }
 
     private async Task HandleLabelKeyDown(KeyboardEventArgs e)
@@ -1830,14 +1914,29 @@ else
         else if (e.Key == "Escape")
         {
             _labelSearch = "";
-            _labelDropdownOpen = false;
+            CloseLabelDropdown();
         }
+    }
+
+    private void OpenLabelDropdown()
+    {
+        if (_labelDropdownOpen) return;
+        _labelDropdownOpen = true;
+        _escLabelDropdown?.Dispose();
+        _escLabelDropdown = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseLabelDropdown(); StateHasChanged(); }));
+    }
+
+    private void CloseLabelDropdown()
+    {
+        _labelDropdownOpen = false;
+        _escLabelDropdown?.Dispose();
+        _escLabelDropdown = null;
     }
 
     private void OnLabelBlur()
     {
         // Small delay handled by @onmousedown on dropdown items
-        _labelDropdownOpen = false;
+        CloseLabelDropdown();
     }
 
     // ── Label manager popup ──
@@ -1906,7 +2005,7 @@ else
         _selectedTicket = await TicketService.GetTicketAsync(Slug, ticketId);
         await RefreshTicketsAndTouch();
         _assigneeSearch = "";
-        _assigneeDropdownOpen = false;
+        CloseAssigneeDropdown();
     }
 
     private async Task RemoveAssignee()
@@ -1943,13 +2042,28 @@ else
         else if (e.Key == "Escape")
         {
             _assigneeSearch = "";
-            _assigneeDropdownOpen = false;
+            CloseAssigneeDropdown();
         }
+    }
+
+    private void OpenAssigneeDropdown()
+    {
+        if (_assigneeDropdownOpen) return;
+        _assigneeDropdownOpen = true;
+        _escAssigneeDropdown?.Dispose();
+        _escAssigneeDropdown = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseAssigneeDropdown(); StateHasChanged(); }));
+    }
+
+    private void CloseAssigneeDropdown()
+    {
+        _assigneeDropdownOpen = false;
+        _escAssigneeDropdown?.Dispose();
+        _escAssigneeDropdown = null;
     }
 
     private void OnAssigneeBlur()
     {
-        _assigneeDropdownOpen = false;
+        CloseAssigneeDropdown();
     }
 
     // ── Member manager popup ──
