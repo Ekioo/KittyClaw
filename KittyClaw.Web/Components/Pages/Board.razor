@@ -19,6 +19,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject LocalizationService L
+@inject KittyClaw.Web.Services.EscapeKeyStack EscapeStack
 @rendermode InteractiveServer
 @implements IDisposable
 
@@ -1024,8 +1025,18 @@ else
         if (updated is not null) { _project = updated; StateHasChanged(); }
     }
 
-    private void OpenRunDrawer(string runId) => _activeRunDrawerId = runId;
-    private void CloseRunDrawer() => _activeRunDrawerId = null;
+    private void OpenRunDrawer(string runId)
+    {
+        _activeRunDrawerId = runId;
+        _escRunDrawer?.Dispose();
+        _escRunDrawer = EscapeStack.Push(() => InvokeAsync(() => { CloseRunDrawer(); StateHasChanged(); }));
+    }
+    private void CloseRunDrawer()
+    {
+        _activeRunDrawerId = null;
+        _escRunDrawer?.Dispose();
+        _escRunDrawer = null;
+    }
     private void OpenChatDrawer()
     {
         _chatInitialAgent = null;
@@ -1033,6 +1044,8 @@ else
         _chatTicketId = null;
         _chatTicketTitle = null;
         _showChatDrawer = true;
+        _escChatDrawer?.Dispose();
+        _escChatDrawer = EscapeStack.Push(() => InvokeAsync(() => { CloseChatDrawer(); StateHasChanged(); }));
     }
 
     private void CloseChatDrawer()
@@ -1042,6 +1055,8 @@ else
         _chatInitialAgentName = null;
         _chatTicketId = null;
         _chatTicketTitle = null;
+        _escChatDrawer?.Dispose();
+        _escChatDrawer = null;
     }
 
     private void OpenTicketChat()
@@ -1065,6 +1080,8 @@ else
         _chatTicketId = _selectedTicket.Id;
         _chatTicketTitle = _selectedTicket.Title;
         _showChatDrawer = true;
+        _escChatDrawer?.Dispose();
+        _escChatDrawer = EscapeStack.Push(() => InvokeAsync(() => { CloseChatDrawer(); StateHasChanged(); }));
     }
 
     private bool CanChatWithAssignee()
@@ -1126,6 +1143,12 @@ else
         if (_undoHandler is not null)
             _ = JS.InvokeVoidAsync("unregisterUndoShortcut", _undoHandler);
         _dotNetRef?.Dispose();
+        _escCreatePopup?.Dispose();
+        _escLabelManager?.Dispose();
+        _escMemberManager?.Dispose();
+        _escTicketPanel?.Dispose();
+        _escRunDrawer?.Dispose();
+        _escChatDrawer?.Dispose();
     }
 
     protected override async Task OnParametersSetAsync()
@@ -1514,6 +1537,14 @@ else
         await RebuildPipelineAsync();
     }
 
+    // Escape key handler tokens for popups
+    private IDisposable? _escCreatePopup;
+    private IDisposable? _escLabelManager;
+    private IDisposable? _escMemberManager;
+    private IDisposable? _escTicketPanel;
+    private IDisposable? _escRunDrawer;
+    private IDisposable? _escChatDrawer;
+
     // Create popup
     private void OpenCreatePopup()
     {
@@ -1524,9 +1555,16 @@ else
         _newTicketAssignedTo = "";
         _showNewLabelForm = false;
         _showCreatePopup = true;
+        _escCreatePopup?.Dispose();
+        _escCreatePopup = EscapeStack.Push(() => InvokeAsync(() => { CloseCreatePopup(); StateHasChanged(); }));
     }
 
-    private void CloseCreatePopup() => _showCreatePopup = false;
+    private void CloseCreatePopup()
+    {
+        _showCreatePopup = false;
+        _escCreatePopup?.Dispose();
+        _escCreatePopup = null;
+    }
 
     private void ToggleLabel(int id)
     {
@@ -1565,6 +1603,8 @@ else
         _editingCommentId = null;
         _fullscreenTarget = "";
         _selectedTicket = await TicketService.GetTicketAsync(Slug, ticket.Id);
+        _escTicketPanel?.Dispose();
+        _escTicketPanel = EscapeStack.Push(() => InvokeAsync(() => { ClosePanel(); StateHasChanged(); }));
 
         // Clear the "updated" indicator only for the ticket actually opened.
         await MarkTicketViewedAsync(ticket.Id);
@@ -1578,6 +1618,8 @@ else
     private void ClosePanel()
     {
         _selectedTicket = null;
+        _escTicketPanel?.Dispose();
+        _escTicketPanel = null;
         _confirmDelete = false;
         _editingTitle = false;
         _editingCommentId = null;
