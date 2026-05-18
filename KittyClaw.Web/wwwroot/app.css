@@ -4298,3 +4298,47 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     opacity: 0.7;
 }
 .update-banner-dismiss:hover { opacity: 1; }
+
+/* Chat image paste (#115) */
+.chat-paste-previews {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 4px 0 6px;
+}
+.chat-paste-preview {
+    position: relative;
+    width: 64px;
+    height: 64px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #2a2f3a;
+}
+.chat-paste-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.chat-paste-remove {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    border: none;
+    background: rgba(0, 0, 0, 0.65);
+    color: #fff;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    padding: 0;
+}
+.chat-paste-error {
+    color: #e57373;
+    font-size: 12px;
+    padding: 4px 6px;
+    background: rgba(229, 115, 115, 0.08);
+    border-radius: 4px;
+    margin-bottom: 4px;
+}
