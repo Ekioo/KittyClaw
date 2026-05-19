@@ -67,6 +67,7 @@ public sealed class DashboardRefreshService : BackgroundService
                 if (!Directory.Exists(workspace)) continue;
                 await _dashboard.MigrateAsync(project.Slug, workspace,
                     msg => _logger.LogInformation("{Msg}", msg));
+                if (project.IsPaused) continue;
                 await LoadAndCatchUpAsync(project.Slug, workspace, ct);
             }
         }
@@ -255,6 +256,8 @@ public sealed class DashboardRefreshService : BackgroundService
 
     public async Task ManualRefreshAsync(string projectSlug, string workspace, string tileSlug, CancellationToken ct)
     {
+        var project = await _projects.GetProjectAsync(projectSlug);
+        if (project is null || project.IsPaused) return;
         var sidecar = await _dashboard.ReadSidecarAsync(workspace, tileSlug);
         if (sidecar is null) return;
         var (scriptPath, scriptConfigError) = _dashboard.FindScript(workspace, tileSlug);

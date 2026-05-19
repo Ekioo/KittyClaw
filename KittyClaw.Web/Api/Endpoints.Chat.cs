@@ -85,6 +85,12 @@ public static partial class Endpoints
                 sessions.Clear(workspacePath, $"chat:{baseAgent}", effectiveTicketId);
             }
 
+            // Image paste validation (#115). Enforce MIME allow-list, per-image size cap,
+            // and per-turn count cap server-side regardless of what the JS sent.
+            var (imagePaths, imageError) = await PersistChatImagesAsync(req.Images, workspacePath, runId);
+            if (imageError is not null)
+                return Results.BadRequest(new { error = "image_rejected", reason = imageError });
+
             await cs.AppendAsync(slug, target, "user", req.Message);
 
             // Build ticket-context block when this chat is scoped to a ticket.
@@ -180,6 +186,7 @@ public static partial class Endpoints
                     OnEventHook = ev => PersistChatEvent(cs, slug, target, ev),
                     ChatTarget = target,
                     PendingSteerMessages = pendingSteerMessages,
+                    ImagePaths = imagePaths,
                 };
             }
             else
@@ -240,6 +247,7 @@ public static partial class Endpoints
                     OnEventHook = ev => PersistChatEvent(cs, slug, target, ev),
                     ChatTarget = target,
                     PendingSteerMessages = pendingSteerMessages,
+                    ImagePaths = imagePaths,
                 };
             }
 
@@ -263,6 +271,63 @@ public static partial class Endpoints
         if (tail.StartsWith(prefix) && int.TryParse(tail.AsSpan(prefix.Length), out var id))
             return (head, id);
         return (target, null);
+    }
+
+    private const long ChatImageMaxBytes = 5 * 1024 * 1024;
+    private const int ChatImageMaxCount = 5;
+    private static readonly HashSet<string> ChatImageAllowedMime = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "image/jpeg", "image/png", "image/gif", "image/webp",
+    };
+
+    /// <summary>
+    /// Validates and persists pasted images to <c>&lt;workspace&gt;/.agents/channel/tmp/</c>.
+    /// Returns the list of absolute paths to forward to <see cref="ClaudeRunContext.ImagePaths"/>,
+    /// or a non-null reason string for a 400 "image_rejected" response.
+    /// </summary>
+    private static async Task<(IReadOnlyList<string>? Paths, string? RejectReason)> PersistChatImagesAsync(
+        IReadOnlyList<ChatImageDto>? images, string workspacePath, string runId)
+    {
+        if (images is null || images.Count == 0) return (null, null);
+        if (images.Count > ChatImageMaxCount)
+            return (null, $"too many images (max {ChatImageMaxCount})");
+
+        var tmpDir = Path.Combine(workspacePath, ".agents", "channel", "tmp");
+        Directory.CreateDirectory(tmpDir);
+
+        var paths = new List<string>(images.Count);
+        for (var i = 0; i < images.Count; i++)
+        {
+            var img = images[i];
+            if (string.IsNullOrWhiteSpace(img.Mime) || !ChatImageAllowedMime.Contains(img.Mime))
+                return (null, $"unsupported MIME type: {img.Mime}");
+            if (img.SizeBytes > ChatImageMaxBytes)
+                return (null, $"image too large (max {ChatImageMaxBytes} bytes)");
+            if (string.IsNullOrWhiteSpace(img.DataUrl))
+                return (null, "empty data URL");
+
+            // data:image/png;base64,XXXX  →  XXXX
+            var commaIdx = img.DataUrl.IndexOf(',');
+            var base64 = commaIdx > 0 ? img.DataUrl[(commaIdx + 1)..] : img.DataUrl;
+            byte[] bytes;
+            try { bytes = Convert.FromBase64String(base64); }
+            catch { return (null, "malformed base64 payload"); }
+            if (bytes.LongLength > ChatImageMaxBytes)
+                return (null, $"image too large (max {ChatImageMaxBytes} bytes)");
+
+            var ext = img.Mime switch
+            {
+                "image/jpeg" => "jpg",
+                "image/png" => "png",
+                "image/gif" => "gif",
+                "image/webp" => "webp",
+                _ => "bin",
+            };
+            var path = Path.Combine(tmpDir, $"chat-{runId}-{i}.{ext}");
+            await File.WriteAllBytesAsync(path, bytes);
+            paths.Add(path);
+        }
+        return (paths, null);
     }
 
     private static void PersistChatEvent(ChatService cs, string slug, string target, StreamEvent ev)
