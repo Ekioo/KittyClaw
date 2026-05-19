@@ -177,6 +177,38 @@ public sealed class ClaudeRunner
 
             _runs.Complete(run.RunId, attempt.Exit == 0 ? AgentRunStatus.Completed : AgentRunStatus.Failed, attempt.Exit);
             AppendDebugLog(ctx, $"FINISHED {ctx.AgentName} run={run.RunId} exit={attempt.Exit}");
+
+            // Auto-continue: when a chat run ends with undelivered steer messages, fire a
+            // follow-up turn immediately so the agent receives them without the user having
+            // to send another message.
+            if (isChat && run.Status == AgentRunStatus.Completed && run.PendingSteerMessages.Count > 0)
+            {
+                var followCtx = new ClaudeRunContext
+                {
+                    ProjectSlug = ctx.ProjectSlug,
+                    WorkspacePath = ctx.WorkspacePath,
+                    AgentName = ctx.AgentName,
+                    SkillFile = ctx.SkillFile,
+                    InlineSkillContent = ctx.InlineSkillContent,
+                    ExtraContext = null,
+                    MaxTurns = ctx.MaxTurns,
+                    ConcurrencyGroup = ctx.ConcurrencyGroup,
+                    SessionScope = ctx.SessionScope,
+                    TicketId = ctx.TicketId,
+                    TicketTitle = ctx.TicketTitle,
+                    TicketStatus = ctx.TicketStatus,
+                    RetryOnResumeFailure = ctx.RetryOnResumeFailure,
+                    PersistSession = ctx.PersistSession,
+                    OnEventHook = ctx.OnEventHook,
+                    ChatTarget = ctx.ChatTarget,
+                    Model = ctx.Model,
+                    FallbackModel = ctx.FallbackModel,
+                    Env = ctx.Env,
+                    PendingSteerMessages = run.PendingSteerMessages,
+                };
+                _ = Task.Run(() => RunAsync(followCtx, CancellationToken.None));
+            }
+
             return run;
         }
         catch (OperationCanceledException)

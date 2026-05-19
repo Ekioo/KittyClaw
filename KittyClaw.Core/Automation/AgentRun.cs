@@ -74,6 +74,7 @@ public sealed class AgentRunSnapshot
     public AgentRunStatus Status { get; set; }
     public int? ExitCode { get; set; }
     public List<StreamEvent> Events { get; set; } = [];
+    public List<string> PendingSteerMessages { get; set; } = [];
 }
 
 /// <summary>Persists completed runs as JSON files on disk.</summary>
@@ -109,6 +110,7 @@ public sealed class RunLogStore
             Status = run.Status,
             ExitCode = run.ExitCode,
             Events = run.SnapshotBuffer().ToList(),
+            PendingSteerMessages = run.PendingSteerMessages.ToList(),
         };
         var path = Path.Combine(_dir, $"{run.RunId}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(snapshot, s_json));
@@ -151,6 +153,8 @@ public sealed class RunLogStore
             run.ExitCode = snapshot.ExitCode;
             foreach (var ev in snapshot.Events)
                 run.Push(ev);
+            foreach (var msg in snapshot.PendingSteerMessages)
+                run.AddPendingSteerMessage(msg);
             yield return run;
         }
     }
