@@ -12,6 +12,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject KittyClaw.Web.Services.EscapeKeyStack EscapeStack
+@inject KittyClaw.Web.Services.AgentRunsState RunsState
 @rendermode InteractiveServer
 @implements IDisposable
 
@@ -29,6 +30,10 @@
         @foreach (var project in SortedProjects)
         {
             <div class="project-card-wrap @(project.IsPaused ? "project-paused" : "")">
+                @if (RunsState.ActiveForProject(project.Slug).Any())
+                {
+                    <span class="project-card-agent-badge" title="Agent running"></span>
+                }
                 <a class="project-card" href="/board/@project.Slug">
                     <h3>
                         @project.Name
@@ -226,6 +231,7 @@
     protected override void OnInitialized()
     {
         L.OnLanguageChanged += OnLangChanged;
+        RunsState.OnChange += OnRunsChanged;
         RecheckTools();
         _showOnboarding = !AppSettings.OnboardingSeen || !_claudeInstalled || !_gitInstalled;
     }
@@ -466,9 +472,11 @@
     }
 
     private void OnLangChanged() => InvokeAsync(StateHasChanged);
+    private void OnRunsChanged() => InvokeAsync(StateHasChanged);
     public void Dispose()
     {
         L.OnLanguageChanged -= OnLangChanged;
+        RunsState.OnChange -= OnRunsChanged;
         _escOnboarding?.Dispose();
         _escPending?.Dispose();
         _escDelete?.Dispose();
