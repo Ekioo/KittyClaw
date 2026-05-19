@@ -12,6 +12,7 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 - `KittyClaw.Web/Markdown/CommentMarkdownPipeline.cs` — shared Markdig pipeline used to render ticket comments and activity entries; enables advanced extensions and treats soft line breaks as hard breaks so newlines typed in comments render visibly.
 - `KittyClaw.Web/wwwroot/js/chat-drawer.js` `chatDrawerInstallPasteHandler` — listens for `paste` events on the chat textarea, extracts image clipboard items (JPEG, PNG, GIF, WebP; max 5 MB each; max 5 per turn), reads them as data URLs via `FileReader`, and bridges results to the Blazor component through `JSInvokable` callbacks (`OnImagePasted` / `OnImagePasteError`). Plain-text pastes are not intercepted.
 - `KittyClaw.Web/Markdown/ChatMarkdownRenderer.cs` — static renderer for the chat drawer; wraps Markdig with a try/catch so a malformed message (e.g. deeply nested lists/quotes that trigger a Markdig nesting-depth error) falls back to HTML-encoded plain text with an inline warning instead of crashing the UI.
+- `KittyClaw.Web/Services/AgentRunsState.cs` — singleton service that tracks which agent runs are currently active, keyed by project slug. `Home.razor` injects it and subscribes to `OnChange` (via `InvokeAsync(StateHasChanged)`) to reactively render a `.project-card-agent-badge` spinner on cards where `ActiveForProject(slug).Any()` is true.
 - `KittyClaw.Web/Services/EscapeKeyStack.cs` + `EscapeKeyStackExtensions.cs` — scoped LIFO stack of Escape handlers. Components register a close callback via `Push` (or `PushWithFocus` to also save/restore focus through `wwwroot/js/escape-stack.js`) and dispose the returned token when their popup closes. `Components/EscapeKeyHost.razor` is mounted once in `MainLayout` and routes browser Escape keydowns to the topmost handler.
 - Components consume the [storage](./storage.md) services directly via DI rather than self-calling the [REST API](./rest-api.md).
 
@@ -21,6 +22,7 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 - Kanban board with drag-and-drop.
 - Ticket detail panel with comments and activity timeline.
 - Live agent run drawer (SSE stream of Claude Code output, steer + stop controls).
+- Animated spinner badge on project cards (`Home.razor`) when one or more agent runs are active for that project (sourced from `AgentRunsState`).
 - New-instruction chat drawer to send an ad-hoc prompt to an agent, with image paste support (paste screenshots or images directly into the textarea; thumbnails shown before send; up to 5 images per turn).
 - Automations page: list, enable/disable, edit (triggers / conditions / actions), reload from disk, re-initialize agent template.
 - Markdown rendering with `@mention`, `#id`, and `#{slug}:{id}` cross-project ticket references.
