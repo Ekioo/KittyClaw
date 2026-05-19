@@ -112,6 +112,24 @@
         }
 
         <div class="chat-input-area @(_loading ? "chat-input-area-thinking" : "")">
+            @if (!string.IsNullOrEmpty(_pasteError))
+            {
+                <div class="chat-paste-error">@_pasteError</div>
+            }
+            @if (_pendingImages.Count > 0)
+            {
+                <div class="chat-paste-previews">
+                    @for (var i = 0; i < _pendingImages.Count; i++)
+                    {
+                        var idx = i;
+                        var img = _pendingImages[i];
+                        <div class="chat-paste-preview">
+                            <img src="@img.DataUrl" alt="@img.Name" />
+                            <button type="button" class="chat-paste-remove" @onclick="() => RemoveImage(idx)" title="Remove">×</button>
+                        </div>
+                    }
+                </div>
+            }
             <textarea @ref="_inputRef"
                       value="@_inputText"
                       @oninput="OnInput"
@@ -126,7 +144,7 @@
             }
             else
             {
-                <button @onclick="Send" disabled="@(string.IsNullOrWhiteSpace(_inputText) || _loading)">@L["Send"]</button>
+                <button @onclick="Send" disabled="@((string.IsNullOrWhiteSpace(_inputText) && _pendingImages.Count == 0) || _loading)">@L["Send"]</button>
             }
         </div>
     }
@@ -162,6 +180,12 @@
     private DotNetObjectReference<ClaudeChatDrawer>? _dotnetRef;
     private string? _activeStreamId;
     private bool _hitMaxTurns = false;
+
+    // Image paste (#115). Accepted clipboard images await Send() in this buffer; rejections
+    // surface in _pasteError as a small inline banner.
+    public sealed record PendingImage(string DataUrl, string Mime, string Name, long SizeBytes);
+    private readonly List<PendingImage> _pendingImages = [];
+    private string? _pasteError;
 
     private record ChatMessage(string Role, string Text);
     private sealed record ToolCallMessage(string ToolName, string Preview, string Detail)
@@ -318,6 +342,8 @@
         if (_view == View.Conversation)
         {
             try { await JS.InvokeVoidAsync("chatDrawerInstallEnterGuard", _inputRef); } catch { }
+            _dotnetRef ??= DotNetObjectReference.Create(this);
+            try { await JS.InvokeVoidAsync("chatDrawerInstallPasteHandler", _inputRef, _dotnetRef); } catch { }
         }
         try
         {
@@ -367,14 +393,45 @@
         _inputText = e.Value?.ToString() ?? "";
     }
 
+    [JSInvokable]
+    public Task OnImagePasted(PendingImage img)
+    {
+        if (_pendingImages.Count >= 5)
+        {
+            _pasteError = "too many images attached (max 5)";
+        }
+        else
+        {
+            _pendingImages.Add(img);
+            _pasteError = null;
+        }
+        return InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task OnImagePasteError(string reason)
+    {
+        _pasteError = reason;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private void RemoveImage(int idx)
+    {
+        if (idx >= 0 && idx < _pendingImages.Count) _pendingImages.RemoveAt(idx);
+    }
+
     private async Task Send()
     {
         var text = _inputText.Trim();
-        if (string.IsNullOrEmpty(text) || _loading || _activeTarget is null) return;
+        if ((string.IsNullOrEmpty(text) && _pendingImages.Count == 0) || _loading || _activeTarget is null) return;
 
         _hitMaxTurns = false;
-        _messages.Add(new ChatMessage("user", text));
+        if (!string.IsNullOrEmpty(text))
+            _messages.Add(new ChatMessage("user", text));
+        var imagesPayload = _pendingImages.Select(p => new { dataUrl = p.DataUrl, mime = p.Mime, name = p.Name, sizeBytes = p.SizeBytes }).ToList();
         _inputText = "";
+        _pendingImages.Clear();
+        _pasteError = null;
         _loading = true;
         StateHasChanged();
 
@@ -384,7 +441,7 @@
         try
         {
             var resp = await http.PostAsJsonAsync($"/api/projects/{ProjectSlug}/chat/start",
-                new { message = text, target = _activeTarget.Slug, ticketId = TicketId });
+                new { message = text, target = _activeTarget.Slug, ticketId = TicketId, images = imagesPayload });
             if (!resp.IsSuccessStatusCode)
             {
                 _messages.Add(new ChatMessage("error", $"Error {resp.StatusCode}"));
@@ -549,7 +606,7 @@
     }
 
     private static string RenderMarkdown(string text) =>
-        Markdig.Markdown.ToHtml(text, new MarkdownPipelineBuilder().UseAdvancedExtensions().Build());
+        KittyClaw.Web.Markdown.ChatMarkdownRenderer.Render(text);
 
     private sealed record ChatStartResponse(string RunId);
     private sealed record ActiveResponse(string? RunId);

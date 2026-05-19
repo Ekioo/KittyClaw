@@ -28,6 +28,10 @@ public sealed class ChatService
         """);
         await db.Database.ExecuteSqlRawAsync(
             "CREATE INDEX IF NOT EXISTS IX_ChatMessages_Target ON ChatMessages(TargetSlug, CreatedAt)");
+        // Image paste support (#115): persist a JSON blob of data URLs so the drawer can
+        // re-render thumbnails when the user reopens a past conversation.
+        try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE ChatMessages ADD COLUMN imagesJson TEXT NULL"); }
+        catch { /* already exists */ }
     }
 
     public async Task<List<ChatMessageRow>> ListAsync(string projectSlug, string targetSlug)
