@@ -9,6 +9,7 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 - `KittyClaw.Web/wwwroot/js/` — JS interop helpers.
 - `KittyClaw.Web/Services/BoardFilterState.cs` — per-circuit (scoped) service holding the board search filter text. Registered as `AddScoped` so each browser tab gets an independent instance; a Singleton registration would cause filter text typed in one tab to appear in all other open tabs.
 - `KittyClaw.Web/Markdown/CommentMarkdownPipeline.cs` — shared Markdig pipeline used to render ticket comments and activity entries; enables advanced extensions and treats soft line breaks as hard breaks so newlines typed in comments render visibly.
+- `KittyClaw.Web/wwwroot/js/chat-drawer.js` `chatDrawerInstallPasteHandler` — listens for `paste` events on the chat textarea, extracts image clipboard items (JPEG, PNG, GIF, WebP; max 5 MB each; max 5 per turn), reads them as data URLs via `FileReader`, and bridges results to the Blazor component through `JSInvokable` callbacks (`OnImagePasted` / `OnImagePasteError`). Plain-text pastes are not intercepted.
 - `KittyClaw.Web/Services/EscapeKeyStack.cs` + `EscapeKeyStackExtensions.cs` — scoped LIFO stack of Escape handlers. Components register a close callback via `Push` (or `PushWithFocus` to also save/restore focus through `wwwroot/js/escape-stack.js`) and dispose the returned token when their popup closes. `Components/EscapeKeyHost.razor` is mounted once in `MainLayout` and routes browser Escape keydowns to the topmost handler.
 - Components consume the [storage](./storage.md) services directly via DI rather than self-calling the [REST API](./rest-api.md).
 
@@ -18,7 +19,7 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 - Kanban board with drag-and-drop.
 - Ticket detail panel with comments and activity timeline.
 - Live agent run drawer (SSE stream of Claude Code output, steer + stop controls).
-- New-instruction chat drawer to send an ad-hoc prompt to an agent.
+- New-instruction chat drawer to send an ad-hoc prompt to an agent, with image paste support (paste screenshots or images directly into the textarea; thumbnails shown before send; up to 5 images per turn).
 - Automations page: list, enable/disable, edit (triggers / conditions / actions), reload from disk, re-initialize agent template.
 - Markdown rendering with `@mention`, `#id`, and `#{slug}:{id}` cross-project ticket references.
 - Advanced search syntax: `#42`, `@owner`, `>date`, `priority:critical`, `label:bug`, `by:owner`.

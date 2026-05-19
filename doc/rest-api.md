@@ -13,6 +13,7 @@ Exposes the project, ticket, comment, member, label, column, and automation data
 - `GET /api/docs` — Markdown documentation, generated at runtime from the OpenAPI spec.
 - `GET /openapi/v1.json` — machine-readable OpenAPI JSON.
 - `/api/projects/{slug}/...` — projects, tickets, comments, columns, members, labels, mentions, automations.
+- `POST /api/projects/{slug}/chat/start` accepts an optional `images` array (`ChatImageDto[]`). Each DTO carries `dataUrl` (base64 data URL), `mime`, `name`, and `sizeBytes`. Server-side: MIME allow-list (JPEG, PNG, GIF, WebP), 5 MB per-image cap, 5 images per turn cap, base64 decoded and persisted to `<workspace>/.agents/channel/tmp/chat-{runId}-{i}.{ext}` before being forwarded as `ImagePaths` to `ClaudeRunContext`. Invalid images return HTTP 400 `image_rejected`.
 
 ## Conventions
 - `author` is **required** on every mutating endpoint; omitting it returns HTTP 400. Use `"owner"` for the human user, plain agent name (e.g. `"programmer"`) for AI agents.
