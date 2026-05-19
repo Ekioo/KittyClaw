@@ -224,12 +224,10 @@
     private record ChatMessage(string Role, string Text);
     private sealed record ToolCallMessage(string ToolName, string Preview, string Detail)
         : ChatMessage("tool_use", ToolName);
-    private sealed class AskUserQuestionMessage(string prompt, string[] options, bool isAnswered = false)
-        : ChatMessage("ask_user_question", prompt)
+    private sealed record AskUserQuestionMessage(string Prompt, string[] Options)
+        : ChatMessage("ask_user_question", Prompt)
     {
-        public string Prompt { get; } = prompt;
-        public string[] Options { get; } = options;
-        public bool IsAnswered { get; set; } = isAnswered;
+        public bool IsAnswered { get; set; }
         public string InputText { get; set; } = "";
     }
     private sealed record ChatTarget(string Slug, string Name, string Kind);
@@ -295,7 +293,7 @@
                     else if (m.Role == "ask_user_question")
                     {
                         var (prompt, options) = ParseAskUserQuestionDetail(m.Detail);
-                        _messages.Add(new AskUserQuestionMessage(prompt, options, isAnswered: true));
+                        _messages.Add(new AskUserQuestionMessage(prompt, options) { IsAnswered = true });
                     }
                     else
                     {
