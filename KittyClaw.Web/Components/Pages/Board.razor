@@ -11,6 +11,7 @@
 @inject ProjectService ProjectService
 @inject TicketService TicketService
 @inject KittyClaw.Web.Services.BoardFilterState FilterState
+@inject KittyClaw.Web.Services.BoardSortState SortState
 @inject KittyClaw.Web.Services.BoardUpdateNotifier BoardUpdateNotifier
 @inject KittyClaw.Web.Services.AgentRunsState AgentRuns
 @inject LabelService LabelService
@@ -88,6 +89,8 @@ else
                 &#8630;
             </button>
             <button class="header-action-btn new-instruction-btn" @onclick="OpenChatDrawer" title="@L["NewInstruction"]">&#128172; @L["NewInstruction"]</button>
+            <button class="header-action-btn" @onclick="OpenLabelManager" title="@L["LabelManagement"]">&#127991; @L["LabelManagement"]</button>
+            <button class="header-action-btn" @onclick="OpenMemberManager" title="@L["MemberManagement"]">&#128100; @L["MemberManagement"]</button>
             <a class="header-action-btn" href="/board/@Slug/automations" title="@L["Automations"]">&#9881; @L["Automations"]</a>
             <a class="header-action-btn" href="/board/@Slug/settings" title="@L["ProjectSettingsTooltip"]">&#9881;&#65039; @L["ProjectSettings"]</a>
         </div>
@@ -114,8 +117,15 @@ else
                      @ondragover="(e) => OnColumnDragOver(colIndex, e)"
                      @ondragover:preventDefault
                      @ondrop="OnColumnDrop"
-                     @ondrop:preventDefault>
+                     @ondrop:preventDefault
+                     @oncontextmenu="(e) => OpenSortMenu(col.Name, e)"
+                     @oncontextmenu:preventDefault>
                     <span class="status-pill" style="color: @col.Color; background: color-mix(in srgb, @col.Color 12%, transparent)">@col.Name</span>
+                    @{ var _sortHere = SortState.Get(Slug, col.Name); }
+                    @if (_sortHere.Mode != KittyClaw.Web.Services.ColumnSortMode.Manual)
+                    {
+                        <span class="column-sort-indicator" title="@SortLabel(_sortHere.Mode) @DirectionLabel(_sortHere.Direction)">@(_sortHere.Direction == KittyClaw.Web.Services.SortDirection.Ascending ? "▲" : "▼")</span>
+                    }
                     <span class="count">@GetTickets(col.Name).Count</span>
                 </div>
                 <div class="column-body">
@@ -219,6 +229,34 @@ else
         }
 
     </div>
+
+    @* ── Column sort context menu ── *@
+    @if (_sortMenuOpenFor is not null)
+    {
+        var current = SortState.Get(Slug, _sortMenuOpenFor);
+        <div class="column-context-menu-backdrop" @onclick="CloseSortMenu" @oncontextmenu="CloseSortMenu" @oncontextmenu:preventDefault></div>
+        <div class="column-context-menu" style="left:@(_sortMenuX)px; top:@(_sortMenuY)px;" @onclick:stopPropagation @oncontextmenu:preventDefault>
+            <div class="column-context-menu-title">@L["SortMenuTitle"]</div>
+            <button class="column-context-menu-item @(current.Mode == KittyClaw.Web.Services.ColumnSortMode.Manual ? "column-context-menu-item--active" : "")"
+                    @onclick="() => SelectSort(KittyClaw.Web.Services.ColumnSortMode.Manual, KittyClaw.Web.Services.SortDirection.Ascending)">
+                <span class="column-context-menu-check">@(current.Mode == KittyClaw.Web.Services.ColumnSortMode.Manual ? "✓" : "")</span>
+                <span>@L["SortManual"]</span>
+            </button>
+            <div class="column-context-menu-separator"></div>
+            @foreach (var mode in _sortModes)
+            {
+                foreach (var dir in _sortDirections)
+                {
+                    var active = current.Mode == mode && current.Direction == dir;
+                    <button class="column-context-menu-item @(active ? "column-context-menu-item--active" : "")"
+                            @onclick="() => SelectSort(mode, dir)">
+                        <span class="column-context-menu-check">@(active ? "✓" : "")</span>
+                        <span>@SortLabel(mode) — @DirectionLabel(dir)</span>
+                    </button>
+                }
+            }
+        </div>
+    }
 
     @* ── Trash drop zone (visible during drag) ── *@
     @if (_draggedTicket is not null || _draggedColumn is not null)
@@ -580,11 +618,11 @@ else
     @* ── Label management popup ── *@
     @if (_showLabelManager)
     {
-        <div class="ticket-modal-overlay" @onmousedown="() => _showLabelManager = false">
+        <div class="ticket-modal-overlay" @onmousedown="CloseLabelManager">
             <div class="label-manager-popup" @onmousedown:stopPropagation>
                 <div class="create-popup-header">
                     <h2>@L["LabelManagement"]</h2>
-                    <button class="close-btn" @onclick="() => _showLabelManager = false">&times;</button>
+                    <button class="close-btn" @onclick="CloseLabelManager">&times;</button>
                 </div>
                 <div class="label-manager-body">
                     @foreach (var label in _allLabels)
@@ -619,11 +657,11 @@ else
     @* ── Member management popup ── *@
     @if (_showMemberManager)
     {
-        <div class="ticket-modal-overlay" @onmousedown="() => _showMemberManager = false">
+        <div class="ticket-modal-overlay" @onmousedown="CloseMemberManager">
             <div class="label-manager-popup" @onmousedown:stopPropagation>
                 <div class="create-popup-header">
                     <h2>@L["MemberManagement"]</h2>
-                    <button class="close-btn" @onclick="() => _showMemberManager = false">&times;</button>
+                    <button class="close-btn" @onclick="CloseMemberManager">&times;</button>
                 </div>
                 <div class="label-manager-body">
                     @foreach (var member in _allMembers)
@@ -1210,6 +1248,8 @@ else
                 catch { /* corrupt JSON — ignore, will be overwritten on next view */ }
             }
 
+            await LoadSortAsync();
+
             StateHasChanged();
         }
         if (!string.IsNullOrEmpty(_fullscreenTarget) && !_pasteListenerAttached)
@@ -1246,7 +1286,81 @@ else
         if (!string.IsNullOrWhiteSpace(_filterText))
             tickets = ApplyFilter(tickets);
 
+        var sort = SortState.Get(Slug, status);
+        if (sort.Mode != KittyClaw.Web.Services.ColumnSortMode.Manual)
+            tickets = KittyClaw.Web.Services.BoardSortState.ApplySort(tickets, sort.Mode, sort.Direction);
+
         return tickets.ToList();
+    }
+
+    private static readonly KittyClaw.Web.Services.ColumnSortMode[] _sortModes = new[]
+    {
+        KittyClaw.Web.Services.ColumnSortMode.Title,
+        KittyClaw.Web.Services.ColumnSortMode.Priority,
+        KittyClaw.Web.Services.ColumnSortMode.Assignee,
+        KittyClaw.Web.Services.ColumnSortMode.CreatedAt,
+        KittyClaw.Web.Services.ColumnSortMode.DueDate,
+    };
+    private static readonly KittyClaw.Web.Services.SortDirection[] _sortDirections = new[]
+    {
+        KittyClaw.Web.Services.SortDirection.Ascending,
+        KittyClaw.Web.Services.SortDirection.Descending,
+    };
+    private string? _sortMenuOpenFor;
+    private double _sortMenuX;
+    private double _sortMenuY;
+
+    private void OpenSortMenu(string columnName, Microsoft.AspNetCore.Components.Web.MouseEventArgs e)
+    {
+        _sortMenuOpenFor = columnName;
+        _sortMenuX = e.ClientX;
+        _sortMenuY = e.ClientY;
+    }
+
+    private void CloseSortMenu() => _sortMenuOpenFor = null;
+
+    private async Task SelectSort(KittyClaw.Web.Services.ColumnSortMode mode, KittyClaw.Web.Services.SortDirection direction)
+    {
+        if (_sortMenuOpenFor is null) return;
+        SortState.Set(Slug, _sortMenuOpenFor, mode, direction);
+        _sortMenuOpenFor = null;
+        await PersistSortAsync();
+    }
+
+    private string SortLabel(KittyClaw.Web.Services.ColumnSortMode mode) => mode switch
+    {
+        KittyClaw.Web.Services.ColumnSortMode.Title => L["SortByTitle"],
+        KittyClaw.Web.Services.ColumnSortMode.Priority => L["SortByPriority"],
+        KittyClaw.Web.Services.ColumnSortMode.Assignee => L["SortByAssignee"],
+        KittyClaw.Web.Services.ColumnSortMode.CreatedAt => L["SortByCreated"],
+        KittyClaw.Web.Services.ColumnSortMode.DueDate => L["SortByDueDate"],
+        _ => L["SortManual"],
+    };
+
+    private string DirectionLabel(KittyClaw.Web.Services.SortDirection dir)
+        => dir == KittyClaw.Web.Services.SortDirection.Ascending ? L["SortAsc"] : L["SortDesc"];
+
+    private async Task LoadSortAsync()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string?>("localStorage.getItem", $"board-sort-{Slug}");
+            if (string.IsNullOrWhiteSpace(json)) return;
+            var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, KittyClaw.Web.Services.ColumnSortSetting>>(json);
+            if (dict is not null) SortState.LoadForSlug(Slug, dict);
+        }
+        catch { /* ignore corrupt JSON */ }
+    }
+
+    private async Task PersistSortAsync()
+    {
+        try
+        {
+            var snapshot = SortState.SnapshotForSlug(Slug);
+            var json = System.Text.Json.JsonSerializer.Serialize(snapshot);
+            await JS.InvokeVoidAsync("localStorage.setItem", $"board-sort-{Slug}", json);
+        }
+        catch { /* ignore */ }
     }
 
     private IEnumerable<TicketSummary> ApplyFilter(IEnumerable<TicketSummary> tickets)
@@ -1589,6 +1703,36 @@ else
         _showCreatePopup = false;
         _escCreatePopup?.Dispose();
         _escCreatePopup = null;
+    }
+
+    // Label manager popup
+    private void OpenLabelManager()
+    {
+        _showLabelManager = true;
+        _escLabelManager?.Dispose();
+        _escLabelManager = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseLabelManager(); StateHasChanged(); }));
+    }
+
+    private void CloseLabelManager()
+    {
+        _showLabelManager = false;
+        _escLabelManager?.Dispose();
+        _escLabelManager = null;
+    }
+
+    // Member manager popup
+    private void OpenMemberManager()
+    {
+        _showMemberManager = true;
+        _escMemberManager?.Dispose();
+        _escMemberManager = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseMemberManager(); StateHasChanged(); }));
+    }
+
+    private void CloseMemberManager()
+    {
+        _showMemberManager = false;
+        _escMemberManager?.Dispose();
+        _escMemberManager = null;
     }
 
     private void ToggleLabel(int id)

@@ -43,6 +43,9 @@ public sealed class ClaudeRunContext
 
     /// <summary>Steering messages that could not be delivered to the previous run (stdin already closed). BuildPromptAsync prepends them to the next chat-resume prompt so the agent receives them.</summary>
     public IReadOnlyList<string>? PendingSteerMessages { get; init; }
+
+    /// <summary>Absolute paths to user-pasted image files saved under the workspace's channel/tmp. BuildPromptAsync surfaces them under an [Attached images] block; the runner best-effort deletes them after the process exits.</summary>
+    public IReadOnlyList<string>? ImagePaths { get; init; }
 }
 
 public sealed class ClaudeRunner
@@ -193,6 +196,7 @@ public sealed class ClaudeRunner
         finally
         {
             slot.Dispose();
+            CleanupImageTempFiles(ctx);
         }
     }
 
@@ -368,6 +372,8 @@ public sealed class ClaudeRunner
 
     private static async Task<string> BuildPromptAsync(ClaudeRunContext ctx, string skillContent, bool isResume, CancellationToken ct)
     {
+        var imagesBlock = BuildAttachedImagesBlock(ctx);
+
         // Chat resume: each turn just sends the user's message. The skill/preamble was
         // injected when the session was created and is preserved across resumes by claude.
         if (ctx.SessionScope == "chat" && isResume)
@@ -380,9 +386,10 @@ public sealed class ClaudeRunner
                     sb.AppendLine($"[Steering message from previous turn]: {steer}");
                 sb.AppendLine();
                 sb.Append(userMsg);
+                sb.Append(imagesBlock);
                 return sb.ToString();
             }
-            return userMsg;
+            return userMsg + imagesBlock;
         }
 
         // Automation resume on a ticket: ping the agent that the owner posted new feedback.
@@ -393,7 +400,30 @@ public sealed class ClaudeRunner
 
         if (ctx.TicketId is not null && ctx.SessionScope != "chat")
             return $"{prefix}{skillContent}\n\nFocus on ticket #{ctx.TicketId}: {ctx.TicketTitle}";
-        return ctx.ExtraContext is null ? $"{prefix}{skillContent}" : $"{prefix}{skillContent}\n\n{ctx.ExtraContext}";
+        return ctx.ExtraContext is null
+            ? $"{prefix}{skillContent}{imagesBlock}"
+            : $"{prefix}{skillContent}\n\n{ctx.ExtraContext}{imagesBlock}";
+    }
+
+    private static string BuildAttachedImagesBlock(ClaudeRunContext ctx)
+    {
+        if (!(ctx.ImagePaths != null && ctx.ImagePaths.Count > 0)) return "";
+        var sb = new StringBuilder();
+        sb.AppendLine();
+        sb.AppendLine();
+        sb.AppendLine("[Attached images]");
+        foreach (var p in ctx.ImagePaths)
+            sb.AppendLine($"- {p}");
+        return sb.ToString();
+    }
+
+    private static void CleanupImageTempFiles(ClaudeRunContext ctx)
+    {
+        if (ctx.ImagePaths is null || ctx.ImagePaths.Count == 0) return;
+        foreach (var p in ctx.ImagePaths)
+        {
+            try { File.Delete(p); } catch { /* best-effort cleanup */ }
+        }
     }
 
     private static async Task<string> BuildPreambleAsync(ClaudeRunContext ctx, CancellationToken ct)

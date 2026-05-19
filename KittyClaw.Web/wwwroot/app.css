@@ -4298,3 +4298,109 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     opacity: 0.7;
 }
 .update-banner-dismiss:hover { opacity: 1; }
+
+/* Column sort context menu (ticket #120) */
+.column-sort-indicator {
+    font-size: 11px;
+    color: var(--col-color, #888);
+    margin-left: 4px;
+}
+.column-context-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    background: transparent;
+}
+.column-context-menu {
+    position: fixed;
+    z-index: 9001;
+    background: #fff;
+    border: 1px solid #d0d0d0;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    min-width: 220px;
+    padding: 6px 0;
+    font-size: 13px;
+}
+.column-context-menu-title {
+    padding: 4px 12px 6px 12px;
+    font-weight: 600;
+    color: #666;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.column-context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 12px;
+    background: transparent;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    color: #222;
+}
+.column-context-menu-item:hover {
+    background: #f3f4f6;
+}
+.column-context-menu-item--active {
+    color: #2563eb;
+    font-weight: 600;
+}
+.column-context-menu-check {
+    display: inline-block;
+    width: 14px;
+    color: #2563eb;
+}
+.column-context-menu-separator {
+    height: 1px;
+    background: #e5e7eb;
+    margin: 4px 0;
+}
+
+/* Chat image paste (#115) */
+.chat-paste-previews {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 4px 0 6px;
+}
+.chat-paste-preview {
+    position: relative;
+    width: 64px;
+    height: 64px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #2a2f3a;
+}
+.chat-paste-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.chat-paste-remove {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    border: none;
+    background: rgba(0, 0, 0, 0.65);
+    color: #fff;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    padding: 0;
+}
+.chat-paste-error {
+    color: #e57373;
+    font-size: 12px;
+    padding: 4px 6px;
+    background: rgba(229, 115, 115, 0.08);
+    border-radius: 4px;
+    margin-bottom: 4px;
+}
