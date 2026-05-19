@@ -92,8 +92,10 @@ public class UpdateCheckService : BackgroundService
 
     private static string ResolveCurrentVersion()
     {
-        var v = Assembly.GetEntryAssembly()?.GetName().Version;
-        return v is null ? "0.0.0" : $"{Math.Max(v.Major, 0)}.{Math.Max(v.Minor, 0)}.{Math.Max(v.Build, 0)}";
+        var info = Assembly.GetEntryAssembly()
+            ?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion;
+        return VersionFormatter.Format(info);
     }
 
     private static string? NormalizeTag(string? tag)
