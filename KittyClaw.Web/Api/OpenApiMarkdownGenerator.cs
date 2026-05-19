@@ -133,6 +133,20 @@ public static class OpenApiMarkdownGenerator
                 sb.AppendLine();
 
                 var schemaObj = schemaProp.Value;
+
+                if (schemaProp.Name == "TileSidecar")
+                {
+                    sb.AppendLine("| Field | Type | Required | Description |");
+                    sb.AppendLine("|-------|------|----------|-------------|");
+                    sb.AppendLine("| template | string | Yes | Renderer to use. Allowed values: `markdown`, `table`, `kpi`, `kpi-grid`, `progress`, `sparkline`, `bar-chart`, `donut`, `gauge`, `status-grid`, `heatmap`, `leaderboard`, `timeline`, `image`, `mermaid`. |");
+                    sb.AppendLine("| refresh | integer | Yes | Refresh interval in seconds. `0` = static tile (no auto-refresh). |");
+                    sb.AppendLine("| prompt | string | No | LLM instruction executed on each refresh. Empty for static tiles. |");
+                    sb.AppendLine("| model | string? | No | Optional Claude model override. Null/empty falls back to the project default. |");
+                    sb.AppendLine("| title | string? | No | Optional custom tile header. Null/empty falls back to the tile slug. |");
+                    sb.AppendLine();
+                    continue;
+                }
+
                 if (schemaObj.TryGetProperty("enum", out var enumValues))
                 {
                     sb.AppendLine("Enum values:");
@@ -181,8 +195,86 @@ public static class OpenApiMarkdownGenerator
         // Automations guide
         AppendAutomationsGuide(sb);
 
+        // Dashboard tiles guide
+        AppendDashboardTilesGuide(sb);
+
         return sb.ToString();
     }
+
+    private static void AppendDashboardTilesGuide(StringBuilder sb)
+    {
+        sb.AppendLine();
+        sb.AppendLine("---");
+        sb.AppendLine();
+        sb.AppendLine("## Guide: Dashboard tiles");
+        sb.AppendLine();
+        sb.AppendLine("Dashboard tiles are auto-refreshing widgets rendered on the project dashboard. Each tile lives in `{WorkspacePath}/.dashboard/<slug>/` and is described by a `tile.yaml` sidecar.");
+        sb.AppendLine();
+        sb.AppendLine("### Sidecar (`tile.yaml`) format");
+        sb.AppendLine();
+        sb.AppendLine("```yaml");
+        sb.AppendLine("template: markdown   # required — renderer (see table below)");
+        sb.AppendLine("refresh: 300         # required — seconds between refreshes (0 = static)");
+        sb.AppendLine("prompt: |            # optional — LLM instruction executed on each refresh");
+        sb.AppendLine("  Summarize the most recent CI runs.");
+        sb.AppendLine("model: claude-sonnet-4-6  # optional — override the project default model");
+        sb.AppendLine("title: Recent CI runs     # optional — header label (falls back to tile slug)");
+        sb.AppendLine("```");
+        sb.AppendLine();
+        sb.AppendLine("### Available templates");
+        sb.AppendLine();
+        sb.AppendLine("| Template | Default file | Description |");
+        sb.AppendLine("|----------|--------------|-------------|");
+        foreach (var id in TileTemplateCatalog)
+        {
+            var ext = id switch
+            {
+                "markdown" => ".md",
+                "mermaid"  => ".mmd",
+                "image"    => ".png/.jpg/.svg",
+                _          => ".json",
+            };
+            var desc = TileTemplateDescriptions.TryGetValue(id, out var d) ? d : "";
+            sb.AppendLine($"| `{id}` | `{ext}` | {desc} |");
+        }
+        sb.AppendLine();
+        sb.AppendLine("### Creating a tile — walkthrough");
+        sb.AppendLine();
+        sb.AppendLine("1. **Register the tile** with `POST /dashboard/tiles` (body: `{ \"tileSlug\": \"my-tile\", ... }`). This creates the tile folder.");
+        sb.AppendLine("2. **Write the sidecar** with `PUT /api/projects/{slug}/dashboard/tiles/{tileSlug}/sidecar` (body: a `TileSidecar` JSON object). This is what tells the renderer which template to use and how often to refresh.");
+        sb.AppendLine("3. **Seed the initial output** with `PUT /api/projects/{slug}/dashboard/tiles/{tileSlug}/output` so the tile renders something before the first refresh runs.");
+        sb.AppendLine("4. **Trigger a refresh** with `POST /api/projects/{slug}/dashboard/tiles/{tileSlug}/refresh` to run the LLM pipeline once on demand (auto-refreshes also happen every `refresh` seconds).");
+        sb.AppendLine();
+    }
+
+    // Kept in this file (rather than referencing TileTemplate.All) so the generated docs
+    // remain stable even if Core's catalogue is restructured. Order is intentional —
+    // matches the order surfaced in the Dashboard "add tile" picker.
+    private static readonly string[] TileTemplateCatalog =
+    [
+        "markdown", "table", "kpi", "kpi-grid", "progress", "sparkline",
+        "bar-chart", "donut", "gauge", "status-grid", "heatmap",
+        "leaderboard", "timeline", "image", "mermaid",
+    ];
+
+    private static readonly Dictionary<string, string> TileTemplateDescriptions = new()
+    {
+        ["markdown"]     = "Free-form text, headings, lists, tables, **bold**.",
+        ["table"]        = "Structured rows/columns from a JSON array of objects.",
+        ["kpi"]          = "One big number with optional unit, delta, trend.",
+        ["kpi-grid"]     = "2-6 KPIs side by side.",
+        ["progress"]     = "Labeled progress bars.",
+        ["sparkline"]    = "Mini trend curve plus current value.",
+        ["bar-chart"]    = "Categorical bars (labels + values).",
+        ["donut"]        = "Proportional slices.",
+        ["gauge"]        = "Value within a min/max range.",
+        ["status-grid"]  = "Red/yellow/green status cells.",
+        ["heatmap"]      = "GitHub-style activity calendar (date,value).",
+        ["leaderboard"]  = "Ranked list with medals.",
+        ["timeline"]     = "Events on a horizontal time axis.",
+        ["image"]        = "Static or generated PNG/JPG/SVG.",
+        ["mermaid"]      = "Mermaid diagram (flowchart, sequence, gantt, …).",
+    };
 
     private static void AppendAutomationsGuide(StringBuilder sb)
     {

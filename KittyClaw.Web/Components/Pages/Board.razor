@@ -88,6 +88,8 @@ else
                 &#8630;
             </button>
             <button class="header-action-btn new-instruction-btn" @onclick="OpenChatDrawer" title="@L["NewInstruction"]">&#128172; @L["NewInstruction"]</button>
+            <button class="header-action-btn" @onclick="OpenLabelManager" title="@L["LabelManagement"]">@L["LabelManagement"]</button>
+            <button class="header-action-btn" @onclick="OpenMemberManager" title="@L["MemberManagement"]">@L["MemberManagement"]</button>
             <a class="header-action-btn" href="/board/@Slug/automations" title="@L["Automations"]">&#9881; @L["Automations"]</a>
             <a class="header-action-btn" href="/board/@Slug/settings" title="@L["ProjectSettingsTooltip"]">&#9881;&#65039; @L["ProjectSettings"]</a>
         </div>
@@ -580,11 +582,11 @@ else
     @* ── Label management popup ── *@
     @if (_showLabelManager)
     {
-        <div class="ticket-modal-overlay" @onmousedown="() => _showLabelManager = false">
+        <div class="ticket-modal-overlay" @onmousedown="CloseLabelManager">
             <div class="label-manager-popup" @onmousedown:stopPropagation>
                 <div class="create-popup-header">
                     <h2>@L["LabelManagement"]</h2>
-                    <button class="close-btn" @onclick="() => _showLabelManager = false">&times;</button>
+                    <button class="close-btn" @onclick="CloseLabelManager">&times;</button>
                 </div>
                 <div class="label-manager-body">
                     @foreach (var label in _allLabels)
@@ -619,11 +621,11 @@ else
     @* ── Member management popup ── *@
     @if (_showMemberManager)
     {
-        <div class="ticket-modal-overlay" @onmousedown="() => _showMemberManager = false">
+        <div class="ticket-modal-overlay" @onmousedown="CloseMemberManager">
             <div class="label-manager-popup" @onmousedown:stopPropagation>
                 <div class="create-popup-header">
                     <h2>@L["MemberManagement"]</h2>
-                    <button class="close-btn" @onclick="() => _showMemberManager = false">&times;</button>
+                    <button class="close-btn" @onclick="CloseMemberManager">&times;</button>
                 </div>
                 <div class="label-manager-body">
                     @foreach (var member in _allMembers)
@@ -1589,6 +1591,34 @@ else
         _showCreatePopup = false;
         _escCreatePopup?.Dispose();
         _escCreatePopup = null;
+    }
+
+    private void OpenLabelManager()
+    {
+        _showLabelManager = true;
+        _escLabelManager?.Dispose();
+        _escLabelManager = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseLabelManager(); StateHasChanged(); }));
+    }
+
+    private void CloseLabelManager()
+    {
+        _showLabelManager = false;
+        _escLabelManager?.Dispose();
+        _escLabelManager = null;
+    }
+
+    private void OpenMemberManager()
+    {
+        _showMemberManager = true;
+        _escMemberManager?.Dispose();
+        _escMemberManager = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseMemberManager(); StateHasChanged(); }));
+    }
+
+    private void CloseMemberManager()
+    {
+        _showMemberManager = false;
+        _escMemberManager?.Dispose();
+        _escMemberManager = null;
     }
 
     private void ToggleLabel(int id)

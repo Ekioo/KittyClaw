@@ -7,10 +7,10 @@ Exposes the project, ticket, comment, member, label, column, and automation data
 - `KittyClaw.Web/Api/Endpoints.cs` — `MapApiEndpoints` entry point; route definitions are split across per-domain `partial class Endpoints` files in the same folder:
   - `Endpoints.Projects.cs`, `Endpoints.Tickets.cs`, `Endpoints.Columns.cs`, `Endpoints.Labels.cs`, `Endpoints.Members.cs`, `Endpoints.Automations.cs`, `Endpoints.Runs.cs`, `Endpoints.Chat.cs`, `Endpoints.Dashboard.cs`, `Endpoints.Skills.cs`, `Endpoints.Images.cs`, `Endpoints.Browse.cs`.
 - `KittyClaw.Web/Api/Contracts.cs` — request/response DTOs.
-- `KittyClaw.Web/Api/OpenApiMarkdownGenerator.cs` — renders the live OpenAPI spec as human-readable Markdown.
+- `KittyClaw.Web/Api/OpenApiMarkdownGenerator.cs` — renders the live OpenAPI spec as human-readable Markdown; appends embedded reference guides (automations, dashboard tiles) so agents can discover the full API surface from a single `GET /api/docs`.
 
 ## Entry points
-- `GET /api/docs` — Markdown documentation, generated at runtime from the OpenAPI spec.
+- `GET /api/docs` — Markdown documentation, generated at runtime from the OpenAPI spec. Includes: schema tables for all request/response types (e.g. `TileSidecar` with allowed `template` values), an **Automations guide**, and a **Dashboard tiles guide** (template catalogue, sidecar format, creation walkthrough).
 - `GET /openapi/v1.json` — machine-readable OpenAPI JSON.
 - `/api/projects/{slug}/...` — projects, tickets, comments, columns, members, labels, mentions, automations.
 
