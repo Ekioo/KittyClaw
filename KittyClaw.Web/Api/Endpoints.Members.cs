@@ -27,9 +27,17 @@ public static partial class Endpoints
 
         api.MapDelete("/projects/{slug}/members/{memberId:int}", async (string slug, int memberId, MemberService ms, BoardUpdateNotifier notifier) =>
         {
-            var deleted = await ms.DeleteMemberAsync(slug, memberId);
-            if (deleted) notifier.NotifyProjectUpdated(slug);
-            return deleted ? Results.NoContent() : Results.NotFound();
+            var result = await ms.DeleteMemberAsync(slug, memberId);
+            switch (result)
+            {
+                case DeleteMemberResult.Deleted:
+                    notifier.NotifyProjectUpdated(slug);
+                    return Results.NoContent();
+                case DeleteMemberResult.ProtectedOwner:
+                    return Results.Conflict(new { error = "cannot delete owner" });
+                default:
+                    return Results.NotFound();
+            }
         }).WithTags("Members");
 
         api.MapGet("/projects/{slug}/mentions/{handle}", async (string slug, string handle, DateTime? since, DateTime? until, TicketService ts) =>
