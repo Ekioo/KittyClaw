@@ -97,7 +97,7 @@ public sealed class SubTicketStatusTrigger : ITrigger
         return firings;
     }
 
-    public async Task CommitFiringAsync(TriggerContext ctx, TriggerFiring firing)
+    public async Task CommitFiringAsync(TriggerContext ctx, TriggerFiring firing, DateTime? completedAt = null)
     {
         if (firing.TicketId is not int tid) return;
         var ticket = await ctx.Tickets.GetTicketAsync(ctx.ProjectSlug, tid);
