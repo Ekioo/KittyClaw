@@ -3,6 +3,13 @@
 # into a single sibling-exe layout, which is what the qa-tester skill and the
 # QaRunner's TestInstance expect (KITTYCLAW_QARUNNER_EXE / KittyClaw.ClaudeMock.exe
 # resolved relative to KittyClaw.Web.exe).
+#
+# Versioning: the assembly version is derived automatically by MinVer from the
+# latest `vX.Y.Z` git tag. The release ritual is therefore:
+#     git tag vX.Y.Z && git push --tags
+# No manual edits to any csproj are required. Builds between tags are emitted
+# as pre-releases (e.g. 0.7.1-alpha.0.3). MinVer needs full git history, so
+# avoid `git clone --depth 1` when invoking this script.
 [CmdletBinding()]
 param(
     [string] $Out = 'C:\KittyClaw-stable',

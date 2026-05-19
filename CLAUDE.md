@@ -17,7 +17,7 @@ Keep the `dotnet watch` process running — it serves the UI and the automation 
 ```
 KittyClaw.Core/            Models, services, automation engine, embedded project template
 KittyClaw.Core.Tests/      xUnit tests
-KittyClaw.Web/             Blazor Server app + REST endpoints (Api/Endpoints.cs), components, CSS, JS
+KittyClaw.Web/             Blazor Server app + REST endpoints (Api/Endpoints.*.cs partials), components, CSS, JS
 KittyClaw.QaRunner/        Isolated test-instance launcher (Playwright + scenario runner)
 KittyClaw.ClaudeMock/      Mock claude CLI used by QaRunner for hermetic agent dispatch
 ProjectTemplate/           Source of truth for new-project initialization. Embedded into
