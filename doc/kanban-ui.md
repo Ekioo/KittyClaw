@@ -24,7 +24,7 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 - Advanced search syntax: `#42`, `@owner`, `>date`, `priority:critical`, `label:bug`, `by:owner`.
 - Sub-tickets with parent/child relationships and progress tracking.
 - Column management (create, reorder, customize colors), label and member management, image upload.
-- Escape key closes the topmost open popup, drawer, or menu (board ticket panel, run drawer, chat drawer, project/automation dialogs, board context menus), with previously-focused element restoration.
+- Escape key closes the topmost open popup, drawer, or menu (board ticket panel, run drawer, chat drawer, project/automation dialogs, board context menus, label manager, member manager), with previously-focused element restoration.
 
 ## Entry points
 - `http://localhost:5230/` (default port served by `dotnet watch`).
