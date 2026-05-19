@@ -549,7 +549,7 @@
     }
 
     private static string RenderMarkdown(string text) =>
-        Markdig.Markdown.ToHtml(text, new MarkdownPipelineBuilder().UseAdvancedExtensions().Build());
+        KittyClaw.Web.Markdown.ChatMarkdownRenderer.Render(text);
 
     private sealed record ChatStartResponse(string RunId);
     private sealed record ActiveResponse(string? RunId);
