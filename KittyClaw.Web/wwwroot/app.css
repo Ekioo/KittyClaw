@@ -1955,6 +1955,20 @@ button:disabled { opacity: 0.4; cursor: default; }
 .agent-spinner:hover { border-top-color: #60afff; filter: drop-shadow(0 0 3px #4a9eff88); }
 @keyframes agent-spin { to { transform: rotate(360deg); } }
 
+.project-card-agent-badge {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    border-top-color: #4a9eff;
+    animation: agent-spin 0.9s linear infinite;
+    pointer-events: none;
+    cursor: default;
+}
+
 /* Small "log" button shown on a ticket that has a completed (non-active) run. */
 .agent-log-btn {
     margin-left: auto;
