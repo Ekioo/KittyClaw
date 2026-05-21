@@ -39,6 +39,16 @@ public sealed class AgentRun
         lock (_logLock) _pendingSteerMessages.Add(msg);
     }
 
+    public IReadOnlyList<string> DrainPendingSteerMessages()
+    {
+        lock (_logLock)
+        {
+            var result = _pendingSteerMessages.ToList();
+            _pendingSteerMessages.Clear();
+            return result;
+        }
+    }
+
     public IReadOnlyList<StreamEvent> SnapshotBuffer()
     {
         lock (_logLock) return _buffer.ToList();
@@ -227,6 +237,11 @@ public sealed class AgentRunRegistry
     }
 
     public void Remove(string runId) => _runs.TryRemove(runId, out _);
+
+    public AgentRun? LastCompletedForChatTarget(string projectSlug, string chatTarget) =>
+        _runs.Values
+            .Where(r => r.ProjectSlug == projectSlug && r.ChatTarget == chatTarget && r.Status != AgentRunStatus.Running && r.EndedAt is not null)
+            .MaxBy(r => r.EndedAt);
 
     /// <summary>Purge runs that ended more than N minutes ago.</summary>
     public void PurgeOld(TimeSpan age)

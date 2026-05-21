@@ -89,8 +89,6 @@ else
                 &#8630;
             </button>
             <button class="header-action-btn new-instruction-btn" @onclick="OpenChatDrawer" title="@L["NewInstruction"]">&#128172; @L["NewInstruction"]</button>
-            <button class="header-action-btn" @onclick="OpenLabelManager" title="@L["LabelManagement"]">&#127991; @L["LabelManagement"]</button>
-            <button class="header-action-btn" @onclick="OpenMemberManager" title="@L["MemberManagement"]">&#128100; @L["MemberManagement"]</button>
             <a class="header-action-btn" href="/board/@Slug/automations" title="@L["Automations"]">&#9881; @L["Automations"]</a>
             <a class="header-action-btn" href="/board/@Slug/settings" title="@L["ProjectSettingsTooltip"]">&#9881;&#65039; @L["ProjectSettings"]</a>
         </div>
@@ -615,82 +613,6 @@ else
         </div>
     }
 
-    @* ── Label management popup ── *@
-    @if (_showLabelManager)
-    {
-        <div class="ticket-modal-overlay" @onmousedown="CloseLabelManager">
-            <div class="label-manager-popup" @onmousedown:stopPropagation>
-                <div class="create-popup-header">
-                    <h2>@L["LabelManagement"]</h2>
-                    <button class="close-btn" @onclick="CloseLabelManager">&times;</button>
-                </div>
-                <div class="label-manager-body">
-                    @foreach (var label in _allLabels)
-                    {
-                        var lid = label.Id;
-                        <div class="label-manager-row">
-                            @if (_editingLabelId == lid)
-                            {
-                                <input class="label-manager-name" @bind="_editLabelName" placeholder="Nom..." />
-                                <input type="color" class="label-manager-color" @bind="_editLabelColor" />
-                                <button class="icon-btn save-btn" @onclick="() => SaveLabel(lid)">&#10003;</button>
-                                <button class="icon-btn cancel-icon-btn" @onclick="() => _editingLabelId = null">&#10005;</button>
-                            }
-                            else
-                            {
-                                <span class="label-pill" style="--lc: @label.Color">@label.Name</span>
-                                <button class="icon-btn pencil-btn" @onclick="() => StartEditLabel(label)">&#9998;</button>
-                                <button class="icon-btn label-delete-icon" @onclick="() => DeleteManagedLabel(lid)">&times;</button>
-                            }
-                        </div>
-                    }
-                    <div class="label-manager-add">
-                        <input @bind="_managerNewName" placeholder="@L["NewLabelPlaceholder"]" />
-                        <input type="color" @bind="_managerNewColor" />
-                        <button class="icon-btn save-btn" @onclick="CreateManagedLabel" disabled="@string.IsNullOrWhiteSpace(_managerNewName)">&#10003;</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
-
-    @* ── Member management popup ── *@
-    @if (_showMemberManager)
-    {
-        <div class="ticket-modal-overlay" @onmousedown="CloseMemberManager">
-            <div class="label-manager-popup" @onmousedown:stopPropagation>
-                <div class="create-popup-header">
-                    <h2>@L["MemberManagement"]</h2>
-                    <button class="close-btn" @onclick="CloseMemberManager">&times;</button>
-                </div>
-                <div class="label-manager-body">
-                    @foreach (var member in _allMembers)
-                    {
-                        var mid = member.Id;
-                        <div class="label-manager-row">
-                            @if (_editingMemberId == mid)
-                            {
-                                <input class="label-manager-name" @bind="_editMemberName" placeholder="Nom..." />
-                                <button class="icon-btn save-btn" @onclick="() => SaveMember(mid)">&#10003;</button>
-                                <button class="icon-btn cancel-icon-btn" @onclick="() => _editingMemberId = null">&#10005;</button>
-                            }
-                            else
-                            {
-                                <span class="assignee-pill">@member.Name</span>
-                                <span class="member-slug-hint">@member.Slug</span>
-                                <button class="icon-btn pencil-btn" @onclick="() => StartEditMember(member)">&#9998;</button>
-                                <button class="icon-btn label-delete-icon" @onclick="() => DeleteManagedMember(mid)">&times;</button>
-                            }
-                        </div>
-                    }
-                    <div class="label-manager-add">
-                        <input @bind="_managerNewMemberName" placeholder="@L["NewMemberPlaceholder"]" />
-                        <button class="icon-btn save-btn" @onclick="CreateManagedMember" disabled="@string.IsNullOrWhiteSpace(_managerNewMemberName)">&#10003;</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
 }
 
 @if (!string.IsNullOrEmpty(_fullscreenTarget))
@@ -808,14 +730,6 @@ else
     private string _labelSearch = "";
     private bool _labelDropdownOpen = false;
 
-    // Label manager popup
-    private bool _showLabelManager = false;
-    private int? _editingLabelId = null;
-    private string _editLabelName = "";
-    private string _editLabelColor = "#6366f1";
-    private string _managerNewName = "";
-    private string _managerNewColor = "#6366f1";
-
     // Members
     private List<Member> _allMembers = [];
     private string _newTicketAssignedTo = "";
@@ -823,12 +737,6 @@ else
     // Assignee autocomplete
     private string _assigneeSearch = "";
     private bool _assigneeDropdownOpen = false;
-
-    // Member manager popup
-    private bool _showMemberManager = false;
-    private int? _editingMemberId = null;
-    private string _editMemberName = "";
-    private string _managerNewMemberName = "";
 
     // Settings popup
 
@@ -1181,8 +1089,6 @@ else
             _ = JS.InvokeVoidAsync("unregisterUndoShortcut", _undoHandler);
         _dotNetRef?.Dispose();
         _escCreatePopup?.Dispose();
-        _escLabelManager?.Dispose();
-        _escMemberManager?.Dispose();
         _escTicketPanel?.Dispose();
         _escRunDrawer?.Dispose();
         _escChatDrawer?.Dispose();
@@ -1674,8 +1580,6 @@ else
 
     // Escape key handler tokens for popups
     private IDisposable? _escCreatePopup;
-    private IDisposable? _escLabelManager;
-    private IDisposable? _escMemberManager;
     private IDisposable? _escTicketPanel;
     private IDisposable? _escRunDrawer;
     private IDisposable? _escChatDrawer;
@@ -1703,36 +1607,6 @@ else
         _showCreatePopup = false;
         _escCreatePopup?.Dispose();
         _escCreatePopup = null;
-    }
-
-    // Label manager popup
-    private void OpenLabelManager()
-    {
-        _showLabelManager = true;
-        _escLabelManager?.Dispose();
-        _escLabelManager = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseLabelManager(); StateHasChanged(); }));
-    }
-
-    private void CloseLabelManager()
-    {
-        _showLabelManager = false;
-        _escLabelManager?.Dispose();
-        _escLabelManager = null;
-    }
-
-    // Member manager popup
-    private void OpenMemberManager()
-    {
-        _showMemberManager = true;
-        _escMemberManager?.Dispose();
-        _escMemberManager = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseMemberManager(); StateHasChanged(); }));
-    }
-
-    private void CloseMemberManager()
-    {
-        _showMemberManager = false;
-        _escMemberManager?.Dispose();
-        _escMemberManager = null;
     }
 
     private void ToggleLabel(int id)
@@ -2082,43 +1956,6 @@ else
         CloseLabelDropdown();
     }
 
-    // ── Label manager popup ──
-    private void StartEditLabel(Label label)
-    {
-        _editingLabelId = label.Id;
-        _editLabelName = label.Name;
-        _editLabelColor = label.Color;
-    }
-
-    private async Task SaveLabel(int labelId)
-    {
-        if (string.IsNullOrWhiteSpace(_editLabelName)) return;
-        await LabelService.UpdateLabelAsync(Slug, labelId, _editLabelName.Trim(), _editLabelColor);
-        _editingLabelId = null;
-        _allLabels = await LabelService.ListLabelsAsync(Slug);
-        if (_selectedTicket is not null)
-            _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
-        await RefreshTicketsAndTouch();
-    }
-
-    private async Task DeleteManagedLabel(int labelId)
-    {
-        await LabelService.DeleteLabelAsync(Slug, labelId);
-        _allLabels = await LabelService.ListLabelsAsync(Slug);
-        if (_selectedTicket is not null)
-            _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
-        await RefreshTicketsAndTouch();
-    }
-
-    private async Task CreateManagedLabel()
-    {
-        if (string.IsNullOrWhiteSpace(_managerNewName)) return;
-        await LabelService.CreateLabelAsync(Slug, _managerNewName.Trim(), _managerNewColor);
-        _allLabels = await LabelService.ListLabelsAsync(Slug);
-        _managerNewName = "";
-        _managerNewColor = "#6366f1";
-    }
-
     // ── Assignee autocomplete ──
     private List<Member> GetAssigneeSuggestions()
     {
@@ -2209,32 +2046,4 @@ else
         CloseAssigneeDropdown();
     }
 
-    // ── Member manager popup ──
-    private void StartEditMember(Member member)
-    {
-        _editingMemberId = member.Id;
-        _editMemberName = member.Name;
-    }
-
-    private async Task SaveMember(int memberId)
-    {
-        if (string.IsNullOrWhiteSpace(_editMemberName)) return;
-        await MemberService.UpdateMemberAsync(Slug, memberId, _editMemberName.Trim());
-        _editingMemberId = null;
-        _allMembers = await MemberService.ListMembersAsync(Slug);
-    }
-
-    private async Task DeleteManagedMember(int memberId)
-    {
-        await MemberService.DeleteMemberAsync(Slug, memberId);
-        _allMembers = await MemberService.ListMembersAsync(Slug);
-    }
-
-    private async Task CreateManagedMember()
-    {
-        if (string.IsNullOrWhiteSpace(_managerNewMemberName)) return;
-        await MemberService.CreateMemberAsync(Slug, _managerNewMemberName.Trim());
-        _allMembers = await MemberService.ListMembersAsync(Slug);
-        _managerNewMemberName = "";
-    }
 }

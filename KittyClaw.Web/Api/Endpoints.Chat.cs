@@ -71,13 +71,9 @@ public static partial class Endpoints
             var (baseAgent, parsedTicketId) = ParseChatTarget(target);
             var effectiveTicketId = req.TicketId ?? parsedTicketId;
 
-            // Carry over undelivered steer messages from the most recent completed run for this chat target.
-            var chatGroup = $"chat:{slug}:{target}";
-            var lastCompletedRun = runReg.AllForProject(slug)
-                .Where(r => r.ConcurrencyGroup == chatGroup && r.Status == AgentRunStatus.Completed && r.PendingSteerMessages.Count > 0)
-                .OrderByDescending(r => r.EndedAt)
-                .FirstOrDefault();
-            IReadOnlyList<string>? pendingSteerMessages = lastCompletedRun?.PendingSteerMessages;
+            // Drain undelivered steer messages from the most recent completed run for this chat target.
+            // Drain (not read) so they are not replayed on subsequent turns.
+            var pendingSteerMessages = runReg.LastCompletedForChatTarget(slug, target)?.DrainPendingSteerMessages();
 
             if (req.ForceNew)
             {
