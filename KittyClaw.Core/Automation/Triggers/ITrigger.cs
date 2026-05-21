@@ -21,7 +21,7 @@ public interface ITrigger
     /// that a firing skipped by a transient gate is retried next poll instead
     /// of being silently dropped.
     /// </summary>
-    Task CommitFiringAsync(TriggerContext ctx, TriggerFiring firing) => Task.CompletedTask;
+    Task CommitFiringAsync(TriggerContext ctx, TriggerFiring firing, DateTime? completedAt = null) => Task.CompletedTask;
 
     /// <summary>
     /// Called by the engine when an external signal is pushed via

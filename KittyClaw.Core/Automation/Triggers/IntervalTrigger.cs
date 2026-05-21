@@ -44,7 +44,7 @@ public sealed class IntervalTrigger : ITrigger
         return Task.FromResult(one);
     }
 
-    public async Task CommitFiringAsync(TriggerContext ctx, TriggerFiring firing)
+    public async Task CommitFiringAsync(TriggerContext ctx, TriggerFiring firing, DateTime? completedAt = null)
     {
         await _stateStore.SetLastRunAtAsync(_slug, _automationId, _lastFired);
     }

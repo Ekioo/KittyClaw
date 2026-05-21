@@ -79,7 +79,7 @@ public sealed class StatusChangeTrigger : ITrigger
         return true;
     }
 
-    public Task CommitFiringAsync(TriggerContext ctx, TriggerFiring firing)
+    public Task CommitFiringAsync(TriggerContext ctx, TriggerFiring firing, DateTime? completedAt = null)
     {
         if (firing.TicketId is int tid && firing.TicketStatus is { } status)
         {
