@@ -108,6 +108,9 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "PUT /api/projects/{slug}/dashboard/tiles/{tileSlug}/sidecar",
         "GET /api/projects/{slug}/dashboard/tiles/{tileSlug}/script",
         "POST /api/projects/{slug}/dashboard/tiles/{tileSlug}/refresh",
+        // Dev utilities
+        "POST /api/dev/update-check/reset",
+        "POST /api/dev/update-check/simulate",
     };
 
     [Fact]
