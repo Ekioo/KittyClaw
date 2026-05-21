@@ -23,7 +23,7 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 - Ticket detail panel with comments and activity timeline.
 - Live agent run drawer (SSE stream of Claude Code output, steer + stop controls).
 - Animated spinner badge on project cards (`Home.razor`) when one or more agent runs are active for that project (sourced from `AgentRunsState`).
-- New-instruction chat drawer to send an ad-hoc prompt to an agent, with image paste support (paste screenshots or images directly into the textarea; thumbnails shown before send; up to 5 images per turn).
+- New-instruction chat drawer to send an ad-hoc prompt to an agent, with image paste support (paste screenshots or images directly into the textarea; thumbnails shown before send; up to 5 images per turn). When the agent invokes `AskUserQuestion`, the chat drawer renders an interactive prompt widget — either multiple-choice buttons or a free-text textarea — and the user's answer is sent back via the `/steer` endpoint. Answered widgets are locked in place so history remains readable.
 - Automations page: list, enable/disable, edit (triggers / conditions / actions), reload from disk, re-initialize agent template.
 - Markdown rendering with `@mention`, `#id`, and `#{slug}:{id}` cross-project ticket references.
 - Advanced search syntax: `#42`, `@owner`, `>date`, `priority:critical`, `label:bug`, `by:owner`.
