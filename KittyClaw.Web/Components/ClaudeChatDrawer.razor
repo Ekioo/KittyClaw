@@ -481,7 +481,8 @@
     {
         // "steer" events are echoed back from PumpSteeringAsync — skip to avoid duplicating
         // the inject message already added optimistically in Inject().
-        if (kind == "steer") return Task.CompletedTask;
+        // "steer_replay" is an internal marker for auto-continuation; no UI bubble needed.
+        if (kind == "steer" || kind == "steer_replay") return Task.CompletedTask;
         if (kind == "max_turns")
         {
             _hitMaxTurns = true;
