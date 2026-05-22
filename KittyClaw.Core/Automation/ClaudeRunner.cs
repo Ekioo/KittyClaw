@@ -26,6 +26,32 @@ public sealed class ClaudeRunContext
     public string? InlineSkillContent { get; init; }
     public string? PresetRunId { get; init; }
 
+    /// <summary>Returns a copy of this context suitable for auto-replaying steer messages in the same run, with ExtraContext replaced and non-repeatable fields cleared.</summary>
+    internal ClaudeRunContext WithChatReplay(string steerText) => new ClaudeRunContext
+    {
+        ProjectSlug = ProjectSlug,
+        WorkspacePath = WorkspacePath,
+        AgentName = AgentName,
+        SkillFile = SkillFile,
+        TicketId = TicketId,
+        TicketTitle = TicketTitle,
+        TicketStatus = TicketStatus,
+        MaxTurns = MaxTurns,
+        ConcurrencyGroup = ConcurrencyGroup,
+        Env = Env,
+        Model = Model,
+        FallbackModel = FallbackModel,
+        ExtraContext = steerText,
+        InlineSkillContent = InlineSkillContent,
+        SessionScope = SessionScope,
+        RetryOnResumeFailure = false,
+        PersistSession = PersistSession,
+        OnEventHook = OnEventHook,
+        ChatTarget = ChatTarget,
+        PendingSteerMessages = null,
+        ImagePaths = null,
+    };
+
     /// <summary>Optional namespace prefix for the SessionRegistry key (e.g. "chat" → "chat:agent:sweep"). Keeps chat sessions isolated from automation sessions for the same agent.</summary>
     public string? SessionScope { get; init; }
 
@@ -172,6 +198,19 @@ public sealed class ClaudeRunner
                 if (ctx.PersistSession)
                     _sessions.SetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId, sessionId);
                 attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume: false, modelOverride: ctx.FallbackModel, ct);
+                if (attempt.Cancelled) return run;
+            }
+
+            // Auto-replay steer messages that arrived while stdin was closed (--print mode).
+            // Loop so that steers injected during the replay itself are also picked up.
+            while (ctx.SessionScope == "chat" && attempt.Exit == 0 && run.PendingSteerMessages.Count > 0)
+            {
+                var steers = run.DrainPendingSteerMessages();
+                var steerText = string.Join("\n", steers.Select(s => $"[Steering message from previous turn]: {s}"));
+                run.Push(new StreamEvent(DateTime.UtcNow, "steer_replay",
+                    $"Replaying {steers.Count} injected message(s) from previous turn"));
+                var replayCtx = ctx.WithChatReplay(steerText);
+                attempt = await SpawnAndWaitAsync(replayCtx, run, skillContent, sessionId, isResume: true, modelOverride: null, ct);
                 if (attempt.Cancelled) return run;
             }
 
