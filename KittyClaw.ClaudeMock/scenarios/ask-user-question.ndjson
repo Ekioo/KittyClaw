@@ -1,0 +1,5 @@
+{"type":"system","subtype":"init","session_id":"{{session_id}}","model":"mock"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"I need some information before I can proceed."},{"type":"tool_use","id":"toolu_aq_1","name":"AskUserQuestion","input":{"prompt":"Which environment should I deploy to?","options":["staging","production","cancel"]}}]}}
+{"_meta":{"delay_ms":8000}}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":8200,"num_turns":1}
+{"_meta":{"exit":0}}

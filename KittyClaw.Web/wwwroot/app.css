@@ -1955,6 +1955,20 @@ button:disabled { opacity: 0.4; cursor: default; }
 .agent-spinner:hover { border-top-color: #60afff; filter: drop-shadow(0 0 3px #4a9eff88); }
 @keyframes agent-spin { to { transform: rotate(360deg); } }
 
+.project-card-agent-badge {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    border-top-color: #4a9eff;
+    animation: agent-spin 0.9s linear infinite;
+    pointer-events: none;
+    cursor: default;
+}
+
 /* Small "log" button shown on a ticket that has a completed (non-active) run. */
 .agent-log-btn {
     margin-left: auto;
@@ -3021,6 +3035,53 @@ body.flow-dnd-active * { cursor: grabbing !important; }
     font-style: italic;
     font-size: 0.85rem;
 }
+
+/* ─── AskUserQuestion prompts in chat drawer ───────────────────────────── */
+.chat-ask-user { justify-content: flex-start; }
+.chat-ask-user .chat-bubble {
+    background: #1a2540;
+    border: 1px solid #3b5bdb;
+    border-radius: 8px;
+    max-width: 90%;
+    padding: 0.75rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.chat-ask-user-answered .chat-bubble { opacity: 0.6; }
+.chat-ask-prompt { margin: 0; font-weight: 500; color: #c1d3fe; }
+.chat-ask-option {
+    background: #2d3f80;
+    border: 1px solid #4c6ef5;
+    border-radius: 6px;
+    color: #a5b4fc;
+    padding: 0.35rem 0.8rem;
+    cursor: pointer;
+    text-align: left;
+}
+.chat-ask-option:hover:not(:disabled) { background: #3b52a8; }
+.chat-ask-option:disabled { opacity: 0.5; cursor: default; }
+.chat-ask-textarea {
+    width: 100%;
+    min-height: 60px;
+    background: #111827;
+    border: 1px solid #374151;
+    border-radius: 6px;
+    color: #e5e7eb;
+    padding: 0.4rem;
+    font-size: 0.9rem;
+    resize: vertical;
+}
+.chat-ask-submit {
+    align-self: flex-start;
+    background: #3b5bdb;
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    padding: 0.35rem 0.8rem;
+    cursor: pointer;
+}
+.chat-ask-submit:disabled { opacity: 0.4; cursor: default; }
 
 /* ─── Tool call blocks in chat drawer ──────────────────────────────────── */
 .chat-message-tool { justify-content: flex-start; }
