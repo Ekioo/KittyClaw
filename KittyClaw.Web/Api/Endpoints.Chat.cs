@@ -342,6 +342,10 @@ public static partial class Endpoints
         {
             _ = cs.AppendAsync(slug, target, "tool_use", ev.Text, toolName: ev.Text, detail: ev.Detail);
         }
+        else if (ev.Kind == "ask_user_question")
+        {
+            _ = cs.AppendAsync(slug, target, "ask_user_question", ev.Text ?? "", toolName: ev.Text, detail: ev.Detail);
+        }
         else if (ev.Kind == "reset")
         {
             _ = cs.AppendAsync(slug, target, "reset", ev.Text);

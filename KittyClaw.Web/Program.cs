@@ -119,12 +119,12 @@ if (app.Environment.IsDevelopment())
     {
         svc.SimulateUpdate(version);
         return Results.Ok(new { simulated = version });
-    });
+    }).ExcludeFromDescription();
     app.MapPost("/api/dev/update-check/reset", (KittyClaw.Web.Services.UpdateCheckService svc) =>
     {
         svc.ResetSimulation();
         return Results.Ok(new { reset = true });
-    });
+    }).ExcludeFromDescription();
 }
 
 app.MapGet("/api/docs", async (HttpContext ctx) =>
