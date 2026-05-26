@@ -4,13 +4,20 @@ namespace KittyClaw.Core.Automation.Triggers;
 
 public sealed class IntervalTrigger : ITrigger
 {
-    private DateTime _lastFired = DateTime.MinValue;
+    private DateTime _lastFired;
     private readonly IntervalTriggerSpec _spec;
     private readonly CrontabSchedule? _schedule;
+    private readonly ITriggerStateStore _stateStore;
+    private readonly string _slug;
+    private readonly string _automationId;
 
-    public IntervalTrigger(IntervalTriggerSpec spec)
+    public IntervalTrigger(IntervalTriggerSpec spec, DateTime lastFired, ITriggerStateStore stateStore, string slug, string automationId)
     {
         _spec = spec;
+        _lastFired = lastFired;
+        _stateStore = stateStore;
+        _slug = slug;
+        _automationId = automationId;
         if (!string.IsNullOrWhiteSpace(spec.Cron))
             _schedule = CrontabSchedule.Parse(spec.Cron);
     }
@@ -35,6 +42,11 @@ public sealed class IntervalTrigger : ITrigger
         _lastFired = now;
         IReadOnlyList<TriggerFiring> one = new[] { new TriggerFiring(null, null, null) };
         return Task.FromResult(one);
+    }
+
+    public async Task CommitFiringAsync(TriggerContext ctx, TriggerFiring firing, DateTime? completedAt = null)
+    {
+        await _stateStore.SetLastRunAtAsync(_slug, _automationId, _lastFired);
     }
 
     public DateTime? GetNextRunAt(DateTime now)

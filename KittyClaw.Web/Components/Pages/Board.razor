@@ -11,6 +11,7 @@
 @inject ProjectService ProjectService
 @inject TicketService TicketService
 @inject KittyClaw.Web.Services.BoardFilterState FilterState
+@inject KittyClaw.Web.Services.BoardSortState SortState
 @inject KittyClaw.Web.Services.BoardUpdateNotifier BoardUpdateNotifier
 @inject KittyClaw.Web.Services.AgentRunsState AgentRuns
 @inject LabelService LabelService
@@ -19,6 +20,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject LocalizationService L
+@inject KittyClaw.Web.Services.EscapeKeyStack EscapeStack
 @rendermode InteractiveServer
 @implements IDisposable
 
@@ -113,8 +115,15 @@ else
                      @ondragover="(e) => OnColumnDragOver(colIndex, e)"
                      @ondragover:preventDefault
                      @ondrop="OnColumnDrop"
-                     @ondrop:preventDefault>
+                     @ondrop:preventDefault
+                     @oncontextmenu="(e) => OpenSortMenu(col.Name, e)"
+                     @oncontextmenu:preventDefault>
                     <span class="status-pill" style="color: @col.Color; background: color-mix(in srgb, @col.Color 12%, transparent)">@col.Name</span>
+                    @{ var _sortHere = SortState.Get(Slug, col.Name); }
+                    @if (_sortHere.Mode != KittyClaw.Web.Services.ColumnSortMode.Manual)
+                    {
+                        <span class="column-sort-indicator" title="@SortLabel(_sortHere.Mode) @DirectionLabel(_sortHere.Direction)">@(_sortHere.Direction == KittyClaw.Web.Services.SortDirection.Ascending ? "▲" : "▼")</span>
+                    }
                     <span class="count">@GetTickets(col.Name).Count</span>
                 </div>
                 <div class="column-body">
@@ -218,6 +227,34 @@ else
         }
 
     </div>
+
+    @* ── Column sort context menu ── *@
+    @if (_sortMenuOpenFor is not null)
+    {
+        var current = SortState.Get(Slug, _sortMenuOpenFor);
+        <div class="column-context-menu-backdrop" @onclick="CloseSortMenu" @oncontextmenu="CloseSortMenu" @oncontextmenu:preventDefault></div>
+        <div class="column-context-menu" style="left:@(_sortMenuX)px; top:@(_sortMenuY)px;" @onclick:stopPropagation @oncontextmenu:preventDefault>
+            <div class="column-context-menu-title">@L["SortMenuTitle"]</div>
+            <button class="column-context-menu-item @(current.Mode == KittyClaw.Web.Services.ColumnSortMode.Manual ? "column-context-menu-item--active" : "")"
+                    @onclick="() => SelectSort(KittyClaw.Web.Services.ColumnSortMode.Manual, KittyClaw.Web.Services.SortDirection.Ascending)">
+                <span class="column-context-menu-check">@(current.Mode == KittyClaw.Web.Services.ColumnSortMode.Manual ? "✓" : "")</span>
+                <span>@L["SortManual"]</span>
+            </button>
+            <div class="column-context-menu-separator"></div>
+            @foreach (var mode in _sortModes)
+            {
+                foreach (var dir in _sortDirections)
+                {
+                    var active = current.Mode == mode && current.Direction == dir;
+                    <button class="column-context-menu-item @(active ? "column-context-menu-item--active" : "")"
+                            @onclick="() => SelectSort(mode, dir)">
+                        <span class="column-context-menu-check">@(active ? "✓" : "")</span>
+                        <span>@SortLabel(mode) — @DirectionLabel(dir)</span>
+                    </button>
+                }
+            }
+        </div>
+    }
 
     @* ── Trash drop zone (visible during drag) ── *@
     @if (_draggedTicket is not null || _draggedColumn is not null)
@@ -362,7 +399,7 @@ else
             <div class="ticket-panel">
             <div class="ticket-panel-header">
                 <div class="editable-field">
-                    <div class="priority-dot-btn" @onclick="() => _showPriorityPicker = !_showPriorityPicker" title="@L["ChangePriority"]">
+                    <div class="priority-dot-btn" @onclick="TogglePriorityPicker" title="@L["ChangePriority"]">
                         <span class="priority-dot priority-@GetPriorityClass(_selectedTicket.Priority)"></span>
                     </div>
                     @if (_showPriorityPicker)
@@ -411,7 +448,7 @@ else
                            placeholder="+ Label..."
                            @bind="_labelSearch"
                            @bind:event="oninput"
-                           @onfocus="() => _labelDropdownOpen = true"
+                           @onfocus="OpenLabelDropdown"
                            @onblur="OnLabelBlur"
                            @onkeydown="HandleLabelKeyDown" />
                     @if (_labelDropdownOpen && GetLabelSuggestions().Any())
@@ -444,7 +481,7 @@ else
                            placeholder="@(string.IsNullOrEmpty(_selectedTicket.AssignedTo) ? L["AssignPlaceholder"] : L["ChangePlaceholder"])"
                            @bind="_assigneeSearch"
                            @bind:event="oninput"
-                           @onfocus="() => _assigneeDropdownOpen = true"
+                           @onfocus="OpenAssigneeDropdown"
                            @onblur="OnAssigneeBlur"
                            @onkeydown="HandleAssigneeKeyDown" />
                     @if (_assigneeDropdownOpen && GetAssigneeSuggestions().Any())
@@ -576,82 +613,6 @@ else
         </div>
     }
 
-    @* ── Label management popup ── *@
-    @if (_showLabelManager)
-    {
-        <div class="ticket-modal-overlay" @onmousedown="() => _showLabelManager = false">
-            <div class="label-manager-popup" @onmousedown:stopPropagation>
-                <div class="create-popup-header">
-                    <h2>@L["LabelManagement"]</h2>
-                    <button class="close-btn" @onclick="() => _showLabelManager = false">&times;</button>
-                </div>
-                <div class="label-manager-body">
-                    @foreach (var label in _allLabels)
-                    {
-                        var lid = label.Id;
-                        <div class="label-manager-row">
-                            @if (_editingLabelId == lid)
-                            {
-                                <input class="label-manager-name" @bind="_editLabelName" placeholder="Nom..." />
-                                <input type="color" class="label-manager-color" @bind="_editLabelColor" />
-                                <button class="icon-btn save-btn" @onclick="() => SaveLabel(lid)">&#10003;</button>
-                                <button class="icon-btn cancel-icon-btn" @onclick="() => _editingLabelId = null">&#10005;</button>
-                            }
-                            else
-                            {
-                                <span class="label-pill" style="--lc: @label.Color">@label.Name</span>
-                                <button class="icon-btn pencil-btn" @onclick="() => StartEditLabel(label)">&#9998;</button>
-                                <button class="icon-btn label-delete-icon" @onclick="() => DeleteManagedLabel(lid)">&times;</button>
-                            }
-                        </div>
-                    }
-                    <div class="label-manager-add">
-                        <input @bind="_managerNewName" placeholder="@L["NewLabelPlaceholder"]" />
-                        <input type="color" @bind="_managerNewColor" />
-                        <button class="icon-btn save-btn" @onclick="CreateManagedLabel" disabled="@string.IsNullOrWhiteSpace(_managerNewName)">&#10003;</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
-
-    @* ── Member management popup ── *@
-    @if (_showMemberManager)
-    {
-        <div class="ticket-modal-overlay" @onmousedown="() => _showMemberManager = false">
-            <div class="label-manager-popup" @onmousedown:stopPropagation>
-                <div class="create-popup-header">
-                    <h2>@L["MemberManagement"]</h2>
-                    <button class="close-btn" @onclick="() => _showMemberManager = false">&times;</button>
-                </div>
-                <div class="label-manager-body">
-                    @foreach (var member in _allMembers)
-                    {
-                        var mid = member.Id;
-                        <div class="label-manager-row">
-                            @if (_editingMemberId == mid)
-                            {
-                                <input class="label-manager-name" @bind="_editMemberName" placeholder="Nom..." />
-                                <button class="icon-btn save-btn" @onclick="() => SaveMember(mid)">&#10003;</button>
-                                <button class="icon-btn cancel-icon-btn" @onclick="() => _editingMemberId = null">&#10005;</button>
-                            }
-                            else
-                            {
-                                <span class="assignee-pill">@member.Name</span>
-                                <span class="member-slug-hint">@member.Slug</span>
-                                <button class="icon-btn pencil-btn" @onclick="() => StartEditMember(member)">&#9998;</button>
-                                <button class="icon-btn label-delete-icon" @onclick="() => DeleteManagedMember(mid)">&times;</button>
-                            }
-                        </div>
-                    }
-                    <div class="label-manager-add">
-                        <input @bind="_managerNewMemberName" placeholder="@L["NewMemberPlaceholder"]" />
-                        <button class="icon-btn save-btn" @onclick="CreateManagedMember" disabled="@string.IsNullOrWhiteSpace(_managerNewMemberName)">&#10003;</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
 }
 
 @if (!string.IsNullOrEmpty(_fullscreenTarget))
@@ -769,14 +730,6 @@ else
     private string _labelSearch = "";
     private bool _labelDropdownOpen = false;
 
-    // Label manager popup
-    private bool _showLabelManager = false;
-    private int? _editingLabelId = null;
-    private string _editLabelName = "";
-    private string _editLabelColor = "#6366f1";
-    private string _managerNewName = "";
-    private string _managerNewColor = "#6366f1";
-
     // Members
     private List<Member> _allMembers = [];
     private string _newTicketAssignedTo = "";
@@ -784,12 +737,6 @@ else
     // Assignee autocomplete
     private string _assigneeSearch = "";
     private bool _assigneeDropdownOpen = false;
-
-    // Member manager popup
-    private bool _showMemberManager = false;
-    private int? _editingMemberId = null;
-    private string _editMemberName = "";
-    private string _managerNewMemberName = "";
 
     // Settings popup
 
@@ -960,7 +907,7 @@ else
         await RefreshTicketsAndTouch();
     }
 
-    private MarkdownPipeline _mdPipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+    private MarkdownPipeline _mdPipeline = KittyClaw.Web.Markdown.CommentMarkdownPipeline.Build();
 
     private readonly Dictionary<string, Dictionary<int, string>> _crossProjectTickets =
         new(StringComparer.OrdinalIgnoreCase);
@@ -998,8 +945,7 @@ else
         await FetchCrossProjectTicketsAsync();
         var index = _tickets.ToDictionary(t => t.Id, t => t.Title);
         var memberHandles = new HashSet<string>(_allMembers.Select(m => m.Slug), StringComparer.OrdinalIgnoreCase);
-        _mdPipeline = new MarkdownPipelineBuilder()
-            .UseAdvancedExtensions()
+        _mdPipeline = KittyClaw.Web.Markdown.CommentMarkdownPipeline.Configure(new MarkdownPipelineBuilder())
             .Use(new TicketReferenceExtension(Slug, index, _crossProjectTickets))
             .Use(new MentionExtension(memberHandles))
             .Build();
@@ -1024,8 +970,18 @@ else
         if (updated is not null) { _project = updated; StateHasChanged(); }
     }
 
-    private void OpenRunDrawer(string runId) => _activeRunDrawerId = runId;
-    private void CloseRunDrawer() => _activeRunDrawerId = null;
+    private void OpenRunDrawer(string runId)
+    {
+        _activeRunDrawerId = runId;
+        _escRunDrawer?.Dispose();
+        _escRunDrawer = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseRunDrawer(); StateHasChanged(); }));
+    }
+    private void CloseRunDrawer()
+    {
+        _activeRunDrawerId = null;
+        _escRunDrawer?.Dispose();
+        _escRunDrawer = null;
+    }
     private void OpenChatDrawer()
     {
         _chatInitialAgent = null;
@@ -1033,6 +989,8 @@ else
         _chatTicketId = null;
         _chatTicketTitle = null;
         _showChatDrawer = true;
+        _escChatDrawer?.Dispose();
+        _escChatDrawer = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseChatDrawer(); StateHasChanged(); }));
     }
 
     private void CloseChatDrawer()
@@ -1042,6 +1000,8 @@ else
         _chatInitialAgentName = null;
         _chatTicketId = null;
         _chatTicketTitle = null;
+        _escChatDrawer?.Dispose();
+        _escChatDrawer = null;
     }
 
     private void OpenTicketChat()
@@ -1065,6 +1025,8 @@ else
         _chatTicketId = _selectedTicket.Id;
         _chatTicketTitle = _selectedTicket.Title;
         _showChatDrawer = true;
+        _escChatDrawer?.Dispose();
+        _escChatDrawer = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseChatDrawer(); StateHasChanged(); }));
     }
 
     private bool CanChatWithAssignee()
@@ -1126,6 +1088,14 @@ else
         if (_undoHandler is not null)
             _ = JS.InvokeVoidAsync("unregisterUndoShortcut", _undoHandler);
         _dotNetRef?.Dispose();
+        _escCreatePopup?.Dispose();
+        _escTicketPanel?.Dispose();
+        _escRunDrawer?.Dispose();
+        _escChatDrawer?.Dispose();
+        _escTrashDialog?.Dispose();
+        _escPriorityPicker?.Dispose();
+        _escLabelDropdown?.Dispose();
+        _escAssigneeDropdown?.Dispose();
     }
 
     protected override async Task OnParametersSetAsync()
@@ -1184,6 +1154,8 @@ else
                 catch { /* corrupt JSON — ignore, will be overwritten on next view */ }
             }
 
+            await LoadSortAsync();
+
             StateHasChanged();
         }
         if (!string.IsNullOrEmpty(_fullscreenTarget) && !_pasteListenerAttached)
@@ -1220,7 +1192,81 @@ else
         if (!string.IsNullOrWhiteSpace(_filterText))
             tickets = ApplyFilter(tickets);
 
+        var sort = SortState.Get(Slug, status);
+        if (sort.Mode != KittyClaw.Web.Services.ColumnSortMode.Manual)
+            tickets = KittyClaw.Web.Services.BoardSortState.ApplySort(tickets, sort.Mode, sort.Direction);
+
         return tickets.ToList();
+    }
+
+    private static readonly KittyClaw.Web.Services.ColumnSortMode[] _sortModes = new[]
+    {
+        KittyClaw.Web.Services.ColumnSortMode.Title,
+        KittyClaw.Web.Services.ColumnSortMode.Priority,
+        KittyClaw.Web.Services.ColumnSortMode.Assignee,
+        KittyClaw.Web.Services.ColumnSortMode.CreatedAt,
+        KittyClaw.Web.Services.ColumnSortMode.DueDate,
+    };
+    private static readonly KittyClaw.Web.Services.SortDirection[] _sortDirections = new[]
+    {
+        KittyClaw.Web.Services.SortDirection.Ascending,
+        KittyClaw.Web.Services.SortDirection.Descending,
+    };
+    private string? _sortMenuOpenFor;
+    private double _sortMenuX;
+    private double _sortMenuY;
+
+    private void OpenSortMenu(string columnName, Microsoft.AspNetCore.Components.Web.MouseEventArgs e)
+    {
+        _sortMenuOpenFor = columnName;
+        _sortMenuX = e.ClientX;
+        _sortMenuY = e.ClientY;
+    }
+
+    private void CloseSortMenu() => _sortMenuOpenFor = null;
+
+    private async Task SelectSort(KittyClaw.Web.Services.ColumnSortMode mode, KittyClaw.Web.Services.SortDirection direction)
+    {
+        if (_sortMenuOpenFor is null) return;
+        SortState.Set(Slug, _sortMenuOpenFor, mode, direction);
+        _sortMenuOpenFor = null;
+        await PersistSortAsync();
+    }
+
+    private string SortLabel(KittyClaw.Web.Services.ColumnSortMode mode) => mode switch
+    {
+        KittyClaw.Web.Services.ColumnSortMode.Title => L["SortByTitle"],
+        KittyClaw.Web.Services.ColumnSortMode.Priority => L["SortByPriority"],
+        KittyClaw.Web.Services.ColumnSortMode.Assignee => L["SortByAssignee"],
+        KittyClaw.Web.Services.ColumnSortMode.CreatedAt => L["SortByCreated"],
+        KittyClaw.Web.Services.ColumnSortMode.DueDate => L["SortByDueDate"],
+        _ => L["SortManual"],
+    };
+
+    private string DirectionLabel(KittyClaw.Web.Services.SortDirection dir)
+        => dir == KittyClaw.Web.Services.SortDirection.Ascending ? L["SortAsc"] : L["SortDesc"];
+
+    private async Task LoadSortAsync()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string?>("localStorage.getItem", $"board-sort-{Slug}");
+            if (string.IsNullOrWhiteSpace(json)) return;
+            var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, KittyClaw.Web.Services.ColumnSortSetting>>(json);
+            if (dict is not null) SortState.LoadForSlug(Slug, dict);
+        }
+        catch { /* ignore corrupt JSON */ }
+    }
+
+    private async Task PersistSortAsync()
+    {
+        try
+        {
+            var snapshot = SortState.SnapshotForSlug(Slug);
+            var json = System.Text.Json.JsonSerializer.Serialize(snapshot);
+            await JS.InvokeVoidAsync("localStorage.setItem", $"board-sort-{Slug}", json);
+        }
+        catch { /* ignore */ }
     }
 
     private IEnumerable<TicketSummary> ApplyFilter(IEnumerable<TicketSummary> tickets)
@@ -1314,8 +1360,26 @@ else
 
     private async Task SetPriorityAndClose(TicketPriority p)
     {
-        _showPriorityPicker = false;
+        ClosePriorityPicker();
         await SetPriority(p);
+    }
+
+    private void TogglePriorityPicker()
+    {
+        if (_showPriorityPicker) ClosePriorityPicker();
+        else
+        {
+            _showPriorityPicker = true;
+            _escPriorityPicker?.Dispose();
+            _escPriorityPicker = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { ClosePriorityPicker(); StateHasChanged(); }));
+        }
+    }
+
+    private void ClosePriorityPicker()
+    {
+        _showPriorityPicker = false;
+        _escPriorityPicker?.Dispose();
+        _escPriorityPicker = null;
     }
 
     private void OnDragStart(TicketSummary ticket) => _draggedTicket = ticket;
@@ -1514,6 +1578,16 @@ else
         await RebuildPipelineAsync();
     }
 
+    // Escape key handler tokens for popups
+    private IDisposable? _escCreatePopup;
+    private IDisposable? _escTicketPanel;
+    private IDisposable? _escRunDrawer;
+    private IDisposable? _escChatDrawer;
+    private IDisposable? _escTrashDialog;
+    private IDisposable? _escPriorityPicker;
+    private IDisposable? _escLabelDropdown;
+    private IDisposable? _escAssigneeDropdown;
+
     // Create popup
     private void OpenCreatePopup()
     {
@@ -1524,9 +1598,16 @@ else
         _newTicketAssignedTo = "";
         _showNewLabelForm = false;
         _showCreatePopup = true;
+        _escCreatePopup?.Dispose();
+        _escCreatePopup = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseCreatePopup(); StateHasChanged(); }));
     }
 
-    private void CloseCreatePopup() => _showCreatePopup = false;
+    private void CloseCreatePopup()
+    {
+        _showCreatePopup = false;
+        _escCreatePopup?.Dispose();
+        _escCreatePopup = null;
+    }
 
     private void ToggleLabel(int id)
     {
@@ -1565,6 +1646,8 @@ else
         _editingCommentId = null;
         _fullscreenTarget = "";
         _selectedTicket = await TicketService.GetTicketAsync(Slug, ticket.Id);
+        _escTicketPanel?.Dispose();
+        _escTicketPanel = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { ClosePanel(); StateHasChanged(); }));
 
         // Clear the "updated" indicator only for the ticket actually opened.
         await MarkTicketViewedAsync(ticket.Id);
@@ -1578,13 +1661,16 @@ else
     private void ClosePanel()
     {
         _selectedTicket = null;
+        _escTicketPanel?.Dispose();
+        _escTicketPanel = null;
         _confirmDelete = false;
         _editingTitle = false;
         _editingCommentId = null;
         _fullscreenTarget = "";
-        _showPriorityPicker = false;
+        ClosePriorityPicker();
         _labelSearch = "";
-        _labelDropdownOpen = false;
+        CloseLabelDropdown();
+        CloseAssigneeDropdown();
         if (_subKanbanParentId is not null)
             Navigation.NavigateTo($"/board/{Slug}/sub/{_subKanbanParentId}", replace: true);
         else
@@ -1697,6 +1783,13 @@ else
         _trashConfirmColumn = col;
         var first = _columns.FirstOrDefault(c => c.Id != columnId);
         _deleteColumnMoveTo = first?.Name ?? "";
+        ArmTrashEscape();
+    }
+
+    private void ArmTrashEscape()
+    {
+        _escTrashDialog?.Dispose();
+        _escTrashDialog = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CancelTrash(); StateHasChanged(); }));
     }
 
     private async Task DeleteColumn(int columnId)
@@ -1734,18 +1827,24 @@ else
             _dragHoverIndex = -1;
             _dragActiveSlot = -1;
         }
+        if (_trashConfirmColumn is not null || _trashConfirmTicket is not null)
+            ArmTrashEscape();
     }
 
     private void CancelTrash()
     {
         _trashConfirmColumn = null;
         _trashConfirmTicket = null;
+        _escTrashDialog?.Dispose();
+        _escTrashDialog = null;
     }
 
     private async Task ConfirmTrashColumn()
     {
         if (_trashConfirmColumn is null) return;
         await DeleteColumn(_trashConfirmColumn.Id);
+        _escTrashDialog?.Dispose();
+        _escTrashDialog = null;
     }
 
     private async Task ConfirmTrashTicket()
@@ -1758,6 +1857,8 @@ else
         PushUndo($"{L["UndoDelete"]} #{t.Id}", async () =>
             await TicketService.CreateTicketAsync(Slug, t.Title, t.Description, t.CreatedBy, t.Status, labelIds, t.Priority, t.AssignedTo, t.ParentId));
         _trashConfirmTicket = null;
+        _escTrashDialog?.Dispose();
+        _escTrashDialog = null;
         await RefreshTicketsAndTouch();
         await RebuildPipelineAsync();
     }
@@ -1787,7 +1888,7 @@ else
         _selectedTicket = await TicketService.GetTicketAsync(Slug, ticketId);
         await RefreshTicketsAndTouch();
         _labelSearch = "";
-        _labelDropdownOpen = false;
+        CloseLabelDropdown();
     }
 
     private async Task RemoveLabel(int labelId)
@@ -1814,7 +1915,7 @@ else
         _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
         await RefreshTicketsAndTouch();
         _labelSearch = "";
-        _labelDropdownOpen = false;
+        CloseLabelDropdown();
     }
 
     private async Task HandleLabelKeyDown(KeyboardEventArgs e)
@@ -1830,51 +1931,29 @@ else
         else if (e.Key == "Escape")
         {
             _labelSearch = "";
-            _labelDropdownOpen = false;
+            CloseLabelDropdown();
         }
+    }
+
+    private void OpenLabelDropdown()
+    {
+        if (_labelDropdownOpen) return;
+        _labelDropdownOpen = true;
+        _escLabelDropdown?.Dispose();
+        _escLabelDropdown = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseLabelDropdown(); StateHasChanged(); }));
+    }
+
+    private void CloseLabelDropdown()
+    {
+        _labelDropdownOpen = false;
+        _escLabelDropdown?.Dispose();
+        _escLabelDropdown = null;
     }
 
     private void OnLabelBlur()
     {
         // Small delay handled by @onmousedown on dropdown items
-        _labelDropdownOpen = false;
-    }
-
-    // ── Label manager popup ──
-    private void StartEditLabel(Label label)
-    {
-        _editingLabelId = label.Id;
-        _editLabelName = label.Name;
-        _editLabelColor = label.Color;
-    }
-
-    private async Task SaveLabel(int labelId)
-    {
-        if (string.IsNullOrWhiteSpace(_editLabelName)) return;
-        await LabelService.UpdateLabelAsync(Slug, labelId, _editLabelName.Trim(), _editLabelColor);
-        _editingLabelId = null;
-        _allLabels = await LabelService.ListLabelsAsync(Slug);
-        if (_selectedTicket is not null)
-            _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
-        await RefreshTicketsAndTouch();
-    }
-
-    private async Task DeleteManagedLabel(int labelId)
-    {
-        await LabelService.DeleteLabelAsync(Slug, labelId);
-        _allLabels = await LabelService.ListLabelsAsync(Slug);
-        if (_selectedTicket is not null)
-            _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
-        await RefreshTicketsAndTouch();
-    }
-
-    private async Task CreateManagedLabel()
-    {
-        if (string.IsNullOrWhiteSpace(_managerNewName)) return;
-        await LabelService.CreateLabelAsync(Slug, _managerNewName.Trim(), _managerNewColor);
-        _allLabels = await LabelService.ListLabelsAsync(Slug);
-        _managerNewName = "";
-        _managerNewColor = "#6366f1";
+        CloseLabelDropdown();
     }
 
     // ── Assignee autocomplete ──
@@ -1906,7 +1985,7 @@ else
         _selectedTicket = await TicketService.GetTicketAsync(Slug, ticketId);
         await RefreshTicketsAndTouch();
         _assigneeSearch = "";
-        _assigneeDropdownOpen = false;
+        CloseAssigneeDropdown();
     }
 
     private async Task RemoveAssignee()
@@ -1943,41 +2022,28 @@ else
         else if (e.Key == "Escape")
         {
             _assigneeSearch = "";
-            _assigneeDropdownOpen = false;
+            CloseAssigneeDropdown();
         }
+    }
+
+    private void OpenAssigneeDropdown()
+    {
+        if (_assigneeDropdownOpen) return;
+        _assigneeDropdownOpen = true;
+        _escAssigneeDropdown?.Dispose();
+        _escAssigneeDropdown = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseAssigneeDropdown(); StateHasChanged(); }));
+    }
+
+    private void CloseAssigneeDropdown()
+    {
+        _assigneeDropdownOpen = false;
+        _escAssigneeDropdown?.Dispose();
+        _escAssigneeDropdown = null;
     }
 
     private void OnAssigneeBlur()
     {
-        _assigneeDropdownOpen = false;
+        CloseAssigneeDropdown();
     }
 
-    // ── Member manager popup ──
-    private void StartEditMember(Member member)
-    {
-        _editingMemberId = member.Id;
-        _editMemberName = member.Name;
-    }
-
-    private async Task SaveMember(int memberId)
-    {
-        if (string.IsNullOrWhiteSpace(_editMemberName)) return;
-        await MemberService.UpdateMemberAsync(Slug, memberId, _editMemberName.Trim());
-        _editingMemberId = null;
-        _allMembers = await MemberService.ListMembersAsync(Slug);
-    }
-
-    private async Task DeleteManagedMember(int memberId)
-    {
-        await MemberService.DeleteMemberAsync(Slug, memberId);
-        _allMembers = await MemberService.ListMembersAsync(Slug);
-    }
-
-    private async Task CreateManagedMember()
-    {
-        if (string.IsNullOrWhiteSpace(_managerNewMemberName)) return;
-        await MemberService.CreateMemberAsync(Slug, _managerNewMemberName.Trim());
-        _allMembers = await MemberService.ListMembersAsync(Slug);
-        _managerNewMemberName = "";
-    }
 }

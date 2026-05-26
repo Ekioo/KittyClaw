@@ -33,19 +33,38 @@ internal static class ClaudeStreamPump
                         msg.TryGetProperty("content", out var content) &&
                         content.ValueKind == JsonValueKind.Array)
                     {
-                        run.Push(new StreamEvent(DateTime.UtcNow, kind, ClaudeRunner.FlattenJson(doc.RootElement)));
+                        var hasText = false;
+                        foreach (var part in content.EnumerateArray())
+                        {
+                            if (part.TryGetProperty("type", out var pt) && pt.GetString() == "text")
+                            {
+                                hasText = true;
+                                break;
+                            }
+                        }
+                        if (hasText)
+                        {
+                            run.Push(new StreamEvent(DateTime.UtcNow, kind, ClaudeRunner.FlattenJson(doc.RootElement)));
+                        }
                         foreach (var part in content.EnumerateArray())
                         {
                             if (part.TryGetProperty("type", out var ptype) && ptype.GetString() == "tool_use")
                             {
                                 var toolName = part.TryGetProperty("name", out var n) ? n.GetString() ?? "tool" : "tool";
                                 var toolInput = part.TryGetProperty("input", out var inp) ? inp.ToString() : "{}";
-                                run.Push(new StreamEvent(DateTime.UtcNow, "tool_use", toolName, toolInput));
+                                var eventKind = toolName == "AskUserQuestion" ? "ask_user_question" : "tool_use";
+                                run.Push(new StreamEvent(DateTime.UtcNow, eventKind, toolName, toolInput));
                             }
                         }
                     }
                     else
                     {
+                        if (kind == "result" &&
+                            doc.RootElement.TryGetProperty("subtype", out var subtype) &&
+                            subtype.GetString() == "error_max_turns")
+                        {
+                            kind = "max_turns";
+                        }
                         // Carry the raw JSON as Detail for result / rate_limit_event events so
                         // the quota detector can inspect their fields (status, result text)
                         // regardless of how FlattenJson collapses the event for display.
@@ -111,8 +130,12 @@ internal static class ClaudeStreamPump
                             await proc.StandardInput.WriteLineAsync(msg);
                             await proc.StandardInput.FlushAsync(ct);
                         }
+                        else
+                        {
+                            run.AddPendingSteerMessage(msg);
+                        }
                     }
-                    catch { /* stdin already closed */ }
+                    catch { run.AddPendingSteerMessage(msg); }
                 }
             }
         }

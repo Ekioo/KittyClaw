@@ -19,10 +19,11 @@ The **tile slug** (`<tileSlug>`) is the folder name and the stable identifier us
 
 ### Sidecar fields (`tile.yaml`)
 
-The sidecar YAML inside each tile folder contains five fields:
-- `template` — required — which renderer to use (`markdown`, `table`, `kpi`, `kpi-grid`, `progress`, `sparkline`, `bar-chart`, `donut`, `gauge`, `status-grid`, `heatmap`, `leaderboard`, `timeline`, `image`, `mermaid`).
+The sidecar YAML inside each tile folder contains six fields:
+- `template` — required — which renderer to use (`markdown`, `table`, `kpi`, `kpi-grid`, `progress`, `sparkline`, `bar-chart`, `donut`, `gauge`, `status-grid`, `heatmap`, `leaderboard`, `timeline`, `image`, `mermaid`). The `heatmap` template supports per-color intensity levels and an optional legend via the `colors` and `legend` fields in the tile's JSON output.
 - `title` — optional display title shown in the tile header (falls back to the slug when absent).
-- `refresh` — auto-refresh interval in seconds. `0` = static (no auto-refresh; can still be regenerated on demand by clicking the refresh button if a script or prompt is set).
+- `refresh` — auto-refresh interval in seconds. `0` = static (no auto-refresh; can still be regenerated on demand by clicking the refresh button if a script or prompt is set). Ignored when `refreshAt` is set.
+- `refreshAt` — optional time-of-day trigger in `HH:mm` format (24-hour, zero-padded, e.g. `"07:30"`). When present, the tile fires **once per local day** at or after the specified time, regardless of `refresh`. Validated and normalised by `TileSidecarSerializer`; invalid values are silently dropped.
 - `prompt` — optional LLM instruction sent to `claude` to (re)generate the output file. Omit for script-only tiles.
 - `model` — optional Claude model override (`""` = project default).
 
@@ -30,7 +31,14 @@ Scripts are **not** declared in `tile.yaml`. Presence of a `script.*` file in th
 
 ### Content pipeline
 
-`DashboardRefreshService` polls every ~10 s for tiles whose sidecar declares `refresh > 0` and the interval has elapsed. When triggered it runs: **script first** (if `script.*` exists), then **prompt** (if set). Results are written to `output.*`. Manual refresh from the tile header works for any tile that has a script or a prompt, regardless of `refresh`.
+`DashboardRefreshService` polls every ~10 s for tiles that need refreshing. Two scheduling modes are supported:
+
+- **Interval mode** (`refresh > 0`): fires when `(now − lastRefresh) >= refresh` seconds.
+- **Daily-at mode** (`refreshAt` set): fires once per local calendar day at or after the configured `HH:mm` time. Scheduling logic is delegated to `DashboardRefreshScheduling.ShouldFireDailyAt`, which is kept side-effect-free for testability.
+
+When triggered it runs: **script first** (if `script.*` exists), then **prompt** (if set). Results are written to `output.*`. Manual refresh from the tile header works for any tile that has a script or a prompt, regardless of `refresh`. **Paused projects are skipped** — both the periodic tick and manual refresh calls return immediately without updating `lastRefreshed` if the project's `IsPaused` flag is set or if the project slug is unknown.
+
+The last refresh timestamp is persisted per tile in a `dashboard_tile_refresh_state` SQLite table (in the per-project DB). On startup, `DashboardRefreshService` reads these timestamps and fires a single catch-up refresh for any tile whose interval has elapsed since the app was last running — without double-firing tiles that shut down normally mid-interval. Daily-at tiles also participate in catch-up: if the target time has passed today and the tile has not yet fired today, it fires once at startup. **Paused projects are also skipped during startup catch-up**: after migration, `IsPaused` is checked before `LoadAndCatchUpAsync` is called.
 
 A tile folder without a sidecar is treated as a static tile; rendering falls back to the output file extension (`.md` → markdown, `.json` → table/kpi-grid auto-detected, anything else → raw text).
 
@@ -43,8 +51,10 @@ A tile folder without a sidecar is treated as a static tile; rendering falls bac
 - `KittyClaw.Core/Services/DashboardScriptRunner.cs` — executes tile scripts (`.ps1`, `.sh`, `.js`, `.py`), capturing stdout as the new tile content. Working directory is the project workspace root.
 - `KittyClaw.Core/Services/TileRenderer.cs` — converts tile output content into HTML based on the tile template type (Markdown, KPI, Gauge, Heatmap, Timeline, BarChart, Donut, Sparkline, etc.).
 - `KittyClaw.Core/Services/TileTemplate.cs` — catalogue of tile template variants (`markdown`, `kpi`, `kpi-grid`, `bar-chart`, `donut`, `gauge`, `heatmap`, `timeline`, `sparkline`, `progress`, `status-grid`, `leaderboard`, `image`, `mermaid`, `table`). Each variant defines its expected JSON or Markdown schema and the format instructions appended to LLM prompts.
-- `KittyClaw.Core/Services/TileSidecar.cs` — reads/writes `tile.yaml` inside a tile folder.
-- `KittyClaw.Web/Components/Pages/Dashboard.razor` — Blazor page rendering tiles on a 20 px dot-grid with free drag-and-drop (mouse events), resize handles, a chat-based AI tile creation panel, and a refresh log drawer.
+- `KittyClaw.Core/Services/TileSidecar.cs` — reads/writes `tile.yaml` inside a tile folder. `TileSidecarSerializer` normalises `refreshAt` on both read and write (strips invalid values).
+- `KittyClaw.Core/Services/TileFrequency.cs` — UI-friendly frequency mapping. `TileFrequency.ToSidecar(kind, value, time)` converts a `(TileFrequencyKind, int, string?)` tuple to the `(RefreshSeconds, RefreshAt)` pair stored in `tile.yaml`; `FromSidecar(sidecar)` does the reverse. `TileFrequencyKind` values: `Never`, `Minutes`, `Hours`, `Days`, `DailyAt`.
+- `KittyClaw.Core/Services/DashboardRefreshScheduling.cs` — pure-function helpers for daily-at scheduling. `ShouldFireDailyAt(now, lastRefresh, hhmm)` returns `true` when the target time has been reached today and the tile has not yet fired today. Side-effect-free; unit-tested independently.
+- `KittyClaw.Web/Components/Pages/Dashboard.razor` — Blazor page rendering tiles on a 20 px dot-grid with free drag-and-drop (mouse events), resize handles, a chat-based AI tile creation panel, a refresh log drawer, and a **frequency picker** in the tile config popup. The picker presents labelled presets (Never / Every N minutes / Every N hours / Every N days / Daily at HH:mm) and maps them to sidecar fields via `TileFrequency`.
 - `KittyClaw.Web/wwwroot/js/dashboard.js` — client-side drag/resize helpers.
 - `KittyClaw.Web/wwwroot/app.css` — dashboard-specific layout and tile styles.
 

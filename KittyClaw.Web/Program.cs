@@ -48,11 +48,14 @@ builder.Services.AddSingleton<MemberService>();
 builder.Services.AddSingleton<ChatService>();
 builder.Services.AddSingleton<DashboardService>();
 builder.Services.AddSingleton<AgentsTemplateService>();
-builder.Services.AddSingleton<KittyClaw.Web.Services.BoardFilterState>();
+builder.Services.AddScoped<KittyClaw.Web.Services.BoardFilterState>();
+builder.Services.AddScoped<KittyClaw.Web.Services.BoardSortState>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.BoardUpdateNotifier>();
+builder.Services.AddScoped<KittyClaw.Web.Services.EscapeKeyStack>();
 
 // Automation engine
 builder.Services.AddSingleton<AutomationStore>();
+builder.Services.AddSingleton<TriggerStateStore>();
 builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton(new RunLogStore(dataDir));
 builder.Services.AddSingleton<AgentRunRegistry>(sp => new AgentRunRegistry(sp.GetRequiredService<RunLogStore>()));
@@ -72,6 +75,8 @@ builder.Services.AddSingleton<KittyClaw.Core.Services.DashboardRefreshService>()
 builder.Services.AddHostedService(sp => sp.GetRequiredService<KittyClaw.Core.Services.DashboardRefreshService>());
 builder.Services.AddSingleton<KittyClaw.Web.Services.AgentRunsState>();
 builder.Services.AddHttpClient();
+builder.Services.AddSingleton<KittyClaw.Web.Services.UpdateCheckService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<KittyClaw.Web.Services.UpdateCheckService>());
 
 // Folder picker: only on Windows hosts (local or MAUI-Windows). Cloud deployments
 // register nothing, so the UI hides the Parcourir button.
@@ -107,6 +112,20 @@ app.UseAntiforgery();
 
 app.MapOpenApi();
 app.MapTodoApi();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapPost("/api/dev/update-check/simulate", (string version, KittyClaw.Web.Services.UpdateCheckService svc) =>
+    {
+        svc.SimulateUpdate(version);
+        return Results.Ok(new { simulated = version });
+    }).ExcludeFromDescription();
+    app.MapPost("/api/dev/update-check/reset", (KittyClaw.Web.Services.UpdateCheckService svc) =>
+    {
+        svc.ResetSimulation();
+        return Results.Ok(new { reset = true });
+    }).ExcludeFromDescription();
+}
 
 app.MapGet("/api/docs", async (HttpContext ctx) =>
 {

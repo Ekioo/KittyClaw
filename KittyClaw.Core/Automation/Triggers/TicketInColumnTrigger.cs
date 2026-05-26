@@ -41,8 +41,10 @@ public sealed class TicketInColumnTrigger : ITrigger
             var tickets = await ctx.Tickets.ListTicketsAsync(ctx.ProjectSlug, statusFilter: col);
             foreach (var t in tickets)
             {
-                if (t.AssignedTo is null) continue;
-                if (!string.IsNullOrEmpty(_spec.AssigneeSlug) && t.AssignedTo != _spec.AssigneeSlug) continue;
+                if (!string.IsNullOrEmpty(_spec.AssigneeSlug))
+                {
+                    if (t.AssignedTo is null || t.AssignedTo != _spec.AssigneeSlug) continue;
+                }
 
                 if (debounce > 0 && t.Id is { } tid)
                 {
@@ -62,13 +64,13 @@ public sealed class TicketInColumnTrigger : ITrigger
         return firings;
     }
 
-    public Task CommitFiringAsync(TriggerContext ctx, TriggerFiring firing)
+    public Task CommitFiringAsync(TriggerContext ctx, TriggerFiring firing, DateTime? completedAt = null)
     {
         if (_spec.DebounceSeconds > 0 && firing.TicketId is int tid)
         {
             var state = ctx.Sessions.Load(ctx.WorkspacePath);
             var bucket = GetLastFiredBucket(state, ctx.Automation.Id);
-            bucket[tid.ToString()] = ctx.Now.ToString("o");
+            bucket[tid.ToString()] = (completedAt ?? ctx.Now).ToString("o");
             ctx.Sessions.Save(ctx.WorkspacePath, state);
         }
         return Task.CompletedTask;

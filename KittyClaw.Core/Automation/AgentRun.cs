@@ -18,6 +18,7 @@ public sealed class AgentRun
     public required DateTime StartedAt { get; init; }
     public string? SessionId { get; set; }
     public string? Model { get; set; }
+    public string? ChatTarget { get; set; }
     public AgentRunStatus Status { get; set; } = AgentRunStatus.Running;
     public DateTime? EndedAt { get; set; }
     public int? ExitCode { get; set; }
@@ -29,6 +30,24 @@ public sealed class AgentRun
     public Channel<string> SteeringQueue { get; } = Channel.CreateUnbounded<string>();
     public CancellationTokenSource Cancellation { get; } = new();
     public event Action<StreamEvent>? OnEvent;
+
+    private readonly List<string> _pendingSteerMessages = new();
+    public IReadOnlyList<string> PendingSteerMessages => _pendingSteerMessages;
+
+    public void AddPendingSteerMessage(string msg)
+    {
+        lock (_logLock) _pendingSteerMessages.Add(msg);
+    }
+
+    public IReadOnlyList<string> DrainPendingSteerMessages()
+    {
+        lock (_logLock)
+        {
+            var result = _pendingSteerMessages.ToList();
+            _pendingSteerMessages.Clear();
+            return result;
+        }
+    }
 
     public IReadOnlyList<StreamEvent> SnapshotBuffer()
     {
@@ -65,6 +84,7 @@ public sealed class AgentRunSnapshot
     public AgentRunStatus Status { get; set; }
     public int? ExitCode { get; set; }
     public List<StreamEvent> Events { get; set; } = [];
+    public List<string> PendingSteerMessages { get; set; } = [];
 }
 
 /// <summary>Persists completed runs as JSON files on disk.</summary>
@@ -100,6 +120,7 @@ public sealed class RunLogStore
             Status = run.Status,
             ExitCode = run.ExitCode,
             Events = run.SnapshotBuffer().ToList(),
+            PendingSteerMessages = run.PendingSteerMessages.ToList(),
         };
         var path = Path.Combine(_dir, $"{run.RunId}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(snapshot, s_json));
@@ -142,6 +163,8 @@ public sealed class RunLogStore
             run.ExitCode = snapshot.ExitCode;
             foreach (var ev in snapshot.Events)
                 run.Push(ev);
+            foreach (var msg in snapshot.PendingSteerMessages)
+                run.AddPendingSteerMessage(msg);
             yield return run;
         }
     }
@@ -218,6 +241,11 @@ public sealed class AgentRunRegistry
     }
 
     public void Remove(string runId) => _runs.TryRemove(runId, out _);
+
+    public AgentRun? LastCompletedForChatTarget(string projectSlug, string chatTarget) =>
+        _runs.Values
+            .Where(r => r.ProjectSlug == projectSlug && r.ChatTarget == chatTarget && r.Status != AgentRunStatus.Running && r.EndedAt is not null)
+            .MaxBy(r => r.EndedAt);
 
     /// <summary>Purge runs that ended more than N minutes ago.</summary>
     public void PurgeOld(TimeSpan age)

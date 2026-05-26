@@ -395,18 +395,35 @@ public static class TileRenderer
     {
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
-        if (root.ValueKind != JsonValueKind.Array) return Raw(json);
 
-        var entries = new Dictionary<DateOnly, double>();
-        double maxV = 0;
-        foreach (var item in root.EnumerateArray())
+        // Accept either a plain array or {data:[...], legend:[{label,color}]}
+        JsonElement dataEl;
+        JsonElement? legendEl = null;
+        if (root.ValueKind == JsonValueKind.Object)
+        {
+            if (!root.TryGetProperty("data", out dataEl) || dataEl.ValueKind != JsonValueKind.Array) return Raw(json);
+            if (root.TryGetProperty("legend", out var lEl) && lEl.ValueKind == JsonValueKind.Array)
+                legendEl = lEl;
+        }
+        else if (root.ValueKind == JsonValueKind.Array)
+            dataEl = root;
+        else
+            return Raw(json);
+
+        // Parse entries; track max value per color group for independent intensity scaling.
+        var entries = new Dictionary<DateOnly, (double Value, string? Color)>();
+        var maxPerGroup = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var item in dataEl.EnumerateArray())
         {
             if (item.ValueKind != JsonValueKind.Object) continue;
             if (!item.TryGetProperty("date", out var dEl) || dEl.ValueKind != JsonValueKind.String) continue;
             if (!DateOnly.TryParseExact(dEl.GetString(), "yyyy-MM-dd", out var date)) continue;
             var val = item.TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : 0;
-            entries[date] = val;
-            if (val > maxV) maxV = val;
+            var color = item.TryGetProperty("color", out var cEl) && cEl.ValueKind == JsonValueKind.String ? cEl.GetString() : null;
+            entries[date] = (val, color);
+            var key = color ?? "";
+            if (!maxPerGroup.TryGetValue(key, out var prev) || val > prev) maxPerGroup[key] = val;
         }
         if (entries.Count == 0) return "<span class=\"tile-empty\">—</span>";
 
@@ -442,14 +459,67 @@ public static class TileRenderer
             {
                 var date = weeks[w].AddDays(day);
                 if (date > end) { sb.Append("<div class=\"tile-heatmap-cell tile-heatmap-empty\"></div>"); continue; }
-                var v = entries.GetValueOrDefault(date, 0);
-                var lvl = maxV <= 0 ? 0 : (int)Math.Ceiling(v / maxV * 4);
+                if (!entries.TryGetValue(date, out var entry))
+                {
+                    sb.Append($"<div class=\"tile-heatmap-cell tile-heatmap-l0\" title=\"{date:yyyy-MM-dd}: 0\"></div>");
+                    continue;
+                }
+                var (v, color) = entry;
+                var groupMax = maxPerGroup.GetValueOrDefault(color ?? "", 1);
+                var lvl = groupMax <= 0 ? 0 : (int)Math.Ceiling(v / groupMax * 4);
                 lvl = Math.Clamp(lvl, 0, 4);
-                sb.Append($"<div class=\"tile-heatmap-cell tile-heatmap-l{lvl}\" title=\"{date:yyyy-MM-dd}: {Fmt(v)}\"></div>");
+
+                if (color != null && TryParseHexColor(color, out var r, out var g, out var b))
+                {
+                    // Intensity via rgba alpha: l0 = transparent (falls back to surface3 base), l4 = fully opaque.
+                    var alpha = lvl switch { 0 => 0.0, 1 => 0.25, 2 => 0.5, 3 => 0.75, _ => 1.0 };
+                    var alphaStr = alpha.ToString("F2", CultureInfo.InvariantCulture);
+                    sb.Append($"<div class=\"tile-heatmap-cell\" style=\"background:rgba({r},{g},{b},{alphaStr})\" title=\"{date:yyyy-MM-dd}: {Fmt(v)}\"></div>");
+                }
+                else
+                {
+                    sb.Append($"<div class=\"tile-heatmap-cell tile-heatmap-l{lvl}\" title=\"{date:yyyy-MM-dd}: {Fmt(v)}\"></div>");
+                }
             }
         }
         sb.Append("</div>");
+
+        if (legendEl.HasValue)
+        {
+            sb.Append("<div class=\"tile-heatmap-legend\">");
+            foreach (var item in legendEl.Value.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object) continue;
+                var label = item.TryGetProperty("label", out var lEl) ? Esc(lEl.GetString() ?? "") : "";
+                var color = item.TryGetProperty("color", out var cEl) ? Esc(cEl.GetString() ?? "") : "";
+                var swatchStyle = color.Length > 0 ? $" style=\"background:{color}\"" : "";
+                sb.Append($"<span class=\"tile-heatmap-legend-item\"><span class=\"tile-heatmap-legend-swatch\"{swatchStyle}></span>{label}</span>");
+            }
+            sb.Append("</div>");
+        }
+
         return sb.ToString();
+    }
+
+    private static bool TryParseHexColor(string hex, out int r, out int g, out int b)
+    {
+        r = g = b = 0;
+        var h = hex.TrimStart('#');
+        if (h.Length == 6)
+        {
+            r = Convert.ToInt32(h[..2], 16);
+            g = Convert.ToInt32(h[2..4], 16);
+            b = Convert.ToInt32(h[4..6], 16);
+            return true;
+        }
+        if (h.Length == 3)
+        {
+            r = Convert.ToInt32(new string(h[0], 2), 16);
+            g = Convert.ToInt32(new string(h[1], 2), 16);
+            b = Convert.ToInt32(new string(h[2], 2), 16);
+            return true;
+        }
+        return false;
     }
 
     // ── Leaderboard ──────────────────────────────────────────────────────────

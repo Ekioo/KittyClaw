@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using KittyClaw.Core.Automation.Triggers;
 using KittyClaw.Core.Services;
@@ -19,10 +20,15 @@ internal sealed class ActionExecutor
     private readonly CostTracker _cost;
     private readonly LocalizationService _loc;
     private readonly ProjectService _projects;
+    private readonly RunStateManager _runState;
     private readonly ILogger _logger;
 
     // Serializes in-process git operations across multiple automations.
     private static readonly SemaphoreSlim _gitLock = new(1, 1);
+
+    // Tracks in-flight action chains keyed by "{automationId}:{ticketId}".
+    // Prevents concurrent chains for the same (automation, ticket) pair.
+    private readonly ConcurrentDictionary<string, byte> _inFlightChains = new();
 
     public ActionExecutor(
         TicketService tickets,
@@ -34,6 +40,7 @@ internal sealed class ActionExecutor
         CostTracker cost,
         LocalizationService loc,
         ProjectService projects,
+        RunStateManager runState,
         ILogger logger)
     {
         _tickets = tickets;
@@ -45,6 +52,7 @@ internal sealed class ActionExecutor
         _cost = cost;
         _loc = loc;
         _projects = projects;
+        _runState = runState;
         _logger = logger;
     }
 
@@ -179,62 +187,82 @@ internal sealed class ActionExecutor
         ITrigger? trigger = null,
         TriggerContext? tctx = null)
     {
+        string? chainKey = null;
+        if (firing.TicketId is int tid)
+            chainKey = $"{automation.Id}:{tid}";
+        if (chainKey is not null && !_inFlightChains.TryAdd(chainKey, 0))
+        {
+            _logger.LogDebug("Chain {Key} already in flight — skipping", chainKey);
+            return null;
+        }
+
         var state = new ActionState();
         bool committed = false;
-        async Task CommitAsync()
+        bool runAgentDispatched = false;
+
+        async Task CommitAsync(DateTime? completedAt = null)
         {
             if (committed || trigger is null || tctx is null) return;
             committed = true;
-            try { await trigger.CommitFiringAsync(tctx, firing); }
+            try { await trigger.CommitFiringAsync(tctx, firing, completedAt); }
             catch (Exception ex) { _logger.LogWarning(ex, "CommitFiring failed for {Id}", automation.Id); }
         }
 
-        for (int i = 0; i < automation.Actions.Count; i++)
+        try
         {
-            var action = automation.Actions[i];
-            switch (action)
+            for (int i = 0; i < automation.Actions.Count; i++)
             {
-                case RunAgentActionSpec a:
+                var action = automation.Actions[i];
+                switch (action)
                 {
-                    var remaining = automation.Actions.Skip(i + 1).ToList();
-                    var skip = await ExecuteRunAgentActionAsync(rt, automation, firing, a, ct, CommitAsync, state, remaining);
-                    // Whether skipped or dispatched, remaining actions are NOT processed here.
-                    if (skip) return null;
-                    return state.LastRun;
+                    case RunAgentActionSpec a:
+                    {
+                        var remaining = automation.Actions.Skip(i + 1).ToList();
+                        var skip = await ExecuteRunAgentActionAsync(rt, automation, firing, a, ct, CommitAsync, state, remaining, chainKey);
+                        runAgentDispatched = !skip;
+                        // Whether skipped or dispatched, remaining actions are NOT processed here.
+                        if (skip) return null;
+                        return state.LastRun;
+                    }
+                    case MoveTicketStatusActionSpec m when firing.TicketId is not null:
+                        await ExecuteMoveTicketStatusActionAsync(rt, firing, m, state);
+                        break;
+                    case SetLabelsActionSpec s when firing.TicketId is not null:
+                        await ExecuteSetLabelsActionAsync(rt, firing, s);
+                        break;
+                    case AddCommentActionSpec ac when firing.TicketId is not null:
+                        await ExecuteAddCommentActionAsync(rt, firing, ac);
+                        break;
+                    case AssignTicketActionSpec at when firing.TicketId is not null:
+                        await ExecuteAssignTicketActionAsync(rt, firing, at);
+                        break;
+                    case CommitAgentMemoryActionSpec cm:
+                        await ExecuteCommitAgentMemoryActionAsync(rt, cm, firing);
+                        break;
+                    case ConsolidateAgentMemoryActionSpec csm:
+                        await ExecuteConsolidateAgentMemoryActionAsync(rt, csm, firing, parentRun: null, ct);
+                        break;
+                    case ExecutePowerShellActionSpec ps:
+                    {
+                        var abort = await ExecutePowerShellAsync(ps, rt.Workspace!, rt.Slug, firing, ct);
+                        if (abort) return state.LastRun;
+                        break;
+                    }
+                    case CreateTicketActionSpec cta:
+                        await ExecuteCreateTicketActionAsync(rt, cta);
+                        break;
+                    default:
+                        throw new NotSupportedException($"Unhandled action type {action.GetType().Name}. Register it in ActionExecutor.ExecuteAutomationAsync.");
                 }
-                case MoveTicketStatusActionSpec m when firing.TicketId is not null:
-                    await ExecuteMoveTicketStatusActionAsync(rt, firing, m, state);
-                    break;
-                case SetLabelsActionSpec s when firing.TicketId is not null:
-                    await ExecuteSetLabelsActionAsync(rt, firing, s);
-                    break;
-                case AddCommentActionSpec ac when firing.TicketId is not null:
-                    await ExecuteAddCommentActionAsync(rt, firing, ac);
-                    break;
-                case AssignTicketActionSpec at when firing.TicketId is not null:
-                    await ExecuteAssignTicketActionAsync(rt, firing, at);
-                    break;
-                case CommitAgentMemoryActionSpec cm:
-                    await ExecuteCommitAgentMemoryActionAsync(rt, cm, firing);
-                    break;
-                case ConsolidateAgentMemoryActionSpec csm:
-                    await ExecuteConsolidateAgentMemoryActionAsync(rt, csm, firing, parentRun: null, ct);
-                    break;
-                case ExecutePowerShellActionSpec ps:
-                {
-                    var abort = await ExecutePowerShellAsync(ps, rt.Workspace!, ct);
-                    if (abort) return state.LastRun;
-                    break;
-                }
-                case CreateTicketActionSpec cta:
-                    await ExecuteCreateTicketActionAsync(rt, cta);
-                    break;
-                default:
-                    throw new NotSupportedException($"Unhandled action type {action.GetType().Name}. Register it in ActionExecutor.ExecuteAutomationAsync.");
             }
+            await CommitAsync(DateTime.UtcNow);
+            return state.LastRun;
         }
-        await CommitAsync();
-        return state.LastRun;
+        finally
+        {
+            if (chainKey is not null && !runAgentDispatched)
+                _inFlightChains.TryRemove(chainKey, out _);
+        }
     }
 
     // Returns true when the caller should abort (gate not passed).
@@ -245,9 +273,10 @@ internal sealed class ActionExecutor
         TriggerFiring firing,
         RunAgentActionSpec a,
         CancellationToken ct,
-        Func<Task> commitAsync,
+        Func<DateTime?, Task> commitAsync,
         ActionState state,
-        List<ActionSpec> remainingActions)
+        List<ActionSpec> remainingActions,
+        string? chainKey)
     {
         var agentName = a.Agent;
         if (agentName.Contains("{assignee}"))
@@ -268,35 +297,13 @@ internal sealed class ActionExecutor
         }
 
         var skillFile = $"{agentName}/SKILL.md";
-        var group = string.IsNullOrEmpty(a.ConcurrencyGroup) ? agentName : a.ConcurrencyGroup.Replace("{assignee}", agentName);
+        var group = string.IsNullOrEmpty(a.ConcurrencyGroup)
+            ? agentName
+            : a.ConcurrencyGroup
+                .Replace("{assignee}", agentName)
+                .Replace("{ticketId}", firing.TicketId?.ToString() ?? "none");
 
-        if (rt.Config?.DailyBudgetUsd is decimal cap && group != "ceo"
-            && _cost.IsBudgetExceeded(rt.Workspace!, cap))
-        {
-            _logger.LogInformation("Budget exceeded for {Slug} — skipping {Agent}", rt.Slug, agentName);
-            return true;
-        }
-
-        if (rt.Config?.MinDescriptionLength is int minLen && firing.TicketId is not null)
-        {
-            var t = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
-            if (t is not null && t.Description.Length < minLen)
-            {
-                _logger.LogInformation("Ticket #{Id} description too short ({Len}<{Min}) — skipping {Agent}",
-                    firing.TicketId, t.Description.Length, minLen, agentName);
-                return true;
-            }
-        }
-
-        if (firing.TicketId is not null
-            && _runs.ActiveForTicket(rt.Slug, firing.TicketId.Value).Any(r => r.AgentName == agentName))
-            return true;
-
-        if (_runs.HasActiveInGroup(rt.Slug, group)) return true;
-
-        if (a.MutuallyExclusiveWith.Count > 0 && _runs.HasActiveAny(rt.Slug, a.MutuallyExclusiveWith)) return true;
-
-        await commitAsync();
+        if (await _runState.ShouldSkipAsync(rt, a, firing, agentName, group)) return true;
 
         var project = await _projects.GetProjectAsync(rt.Slug);
         var fallbackModel = project?.FallbackModel;
@@ -329,7 +336,7 @@ internal sealed class ActionExecutor
         var statusBefore = state.StatusBeforeMove;
         var statusAfter = state.StatusAfterMove;
         var assigneeBefore = state.AssigneeBeforeMove;
-        _ = HandleRunCompletionAsync(runTask, rt, firing, a, agentName, statusBefore, statusAfter, assigneeBefore, remainingActions, ct);
+        _ = HandleRunCompletionAsync(runTask, rt, firing, a, agentName, statusBefore, statusAfter, assigneeBefore, remainingActions, commitAsync, chainKey, ct);
         state.LastRun = null;
         return false;
     }
@@ -344,8 +351,13 @@ internal sealed class ActionExecutor
         string? statusAfterMove,
         string? assigneeBeforeMove,
         List<ActionSpec> remainingActions,
+        Func<DateTime?, Task> commitAsync,
+        string? chainKey,
         CancellationToken ct)
     {
+        try
+        {
+
         AgentRun run;
         try { run = await runTask; }
         catch (Exception ex)
@@ -353,6 +365,9 @@ internal sealed class ActionExecutor
             _logger.LogError(ex, "runAgent {Agent} crashed for ticket #{Id}", agentName, firing.TicketId);
             return;
         }
+
+        if (run.Status == AgentRunStatus.Completed)
+            await commitAsync(DateTime.UtcNow);
 
         if (firing.TicketId is not null)
         {
@@ -398,11 +413,18 @@ internal sealed class ActionExecutor
                     case AddCommentActionSpec ac when firing.TicketId is not null: await ExecuteAddCommentActionAsync(rt, firing, ac); break;
                     case SetLabelsActionSpec sl when firing.TicketId is not null: await ExecuteSetLabelsActionAsync(rt, firing, sl); break;
                     case AssignTicketActionSpec at when firing.TicketId is not null: await ExecuteAssignTicketActionAsync(rt, firing, at); break;
-                    case ExecutePowerShellActionSpec ps: await ExecutePowerShellAsync(ps, rt.Workspace!, ct); break;
+                    case ExecutePowerShellActionSpec ps: await ExecutePowerShellAsync(ps, rt.Workspace!, rt.Slug, firing, ct); break;
                     // A second RunAgent post-run is not supported — skip silently.
                 }
             }
             catch (Exception ex) { _logger.LogWarning(ex, "Post-run action {Type} failed", post.GetType().Name); }
+        }
+
+        } // end try
+        finally
+        {
+            if (chainKey is not null)
+                _inFlightChains.TryRemove(chainKey, out _);
         }
     }
 
@@ -657,23 +679,38 @@ internal sealed class ActionExecutor
                 return;
             }
 
-            if (!Directory.Exists(Path.Combine(workspace, ".git")))
+            // Prefer a nested .agents/.git repo if present (decouples agent config from main project repo).
+            // Otherwise fall back to the main workspace repo.
+            var agentsDir = Path.Combine(workspace, ".agents");
+            string gitCwd;
+            string pathArg;
+            if (Directory.Exists(Path.Combine(agentsDir, ".git")))
             {
-                _logger.LogDebug("commitAgentMemory: workspace {Path} is not a git repo — skipping", workspace);
+                gitCwd = agentsDir;
+                pathArg = $"{agent}/memory.md";
+            }
+            else if (Directory.Exists(Path.Combine(workspace, ".git")))
+            {
+                gitCwd = workspace;
+                pathArg = memoryRel;
+            }
+            else
+            {
+                _logger.LogDebug("commitAgentMemory: no git repo at {Path} or {Agents} — skipping", workspace, agentsDir);
                 return;
             }
 
             await _gitLock.WaitAsync();
             try
             {
-                var diff = await RunGitAsync(workspace, $"diff --quiet --exit-code -- \"{memoryRel}\"");
+                var diff = await RunGitAsync(gitCwd, $"diff --quiet --exit-code -- \"{pathArg}\"");
                 if (diff.exitCode == 0)
                 {
                     _logger.LogDebug("commitAgentMemory: {Agent} memory is clean, nothing to commit", agent);
                     return;
                 }
 
-                var add = await RunGitAsync(workspace, $"add -- \"{memoryRel}\"");
+                var add = await RunGitAsync(gitCwd, $"add -- \"{pathArg}\"");
                 if (add.exitCode != 0)
                 {
                     _logger.LogWarning("commitAgentMemory: git add failed for {Agent}: {Err}", agent, add.stderr);
@@ -682,7 +719,7 @@ internal sealed class ActionExecutor
 
                 var ticketSuffix = firing?.TicketId is int tid ? $" (#{tid})" : "";
                 var msg = $"chore(memory): {agent}{ticketSuffix}";
-                var commit = await RunGitAsync(workspace, $"commit --no-verify -m \"{msg}\" -- \"{memoryRel}\"");
+                var commit = await RunGitAsync(gitCwd, $"commit --no-verify -m \"{msg}\" -- \"{pathArg}\"");
                 if (commit.exitCode != 0)
                 {
                     _logger.LogWarning("commitAgentMemory: git commit failed for {Agent}: {Err}", agent, commit.stderr);
@@ -701,31 +738,38 @@ internal sealed class ActionExecutor
     }
 
     // Returns true when AbortOnFailure is set and the process exited with a non-zero code.
-    private async Task<bool> ExecutePowerShellAsync(ExecutePowerShellActionSpec spec, string workspacePath, CancellationToken ct)
+    private async Task<bool> ExecutePowerShellAsync(ExecutePowerShellActionSpec spec, string workspacePath, string slug, TriggerFiring firing, CancellationToken ct)
     {
         try
         {
+            string Render(string s) => (s ?? string.Empty)
+                .Replace("{ticketId}", firing.TicketId?.ToString() ?? "")
+                .Replace("{ticketTitle}", firing.TicketTitle ?? "")
+                .Replace("{slug}", slug ?? "");
+
             string scriptArg;
             if (!string.IsNullOrWhiteSpace(spec.ScriptFile))
             {
-                var path = Path.IsPathRooted(spec.ScriptFile)
-                    ? spec.ScriptFile
-                    : Path.Combine(workspacePath, spec.ScriptFile);
+                var rendered = Render(spec.ScriptFile);
+                var path = Path.IsPathRooted(rendered)
+                    ? rendered
+                    : Path.Combine(workspacePath, rendered);
                 scriptArg = $"-File \"{path}\"";
             }
             else
             {
-                var bytes = System.Text.Encoding.Unicode.GetBytes(spec.Script);
+                var bytes = System.Text.Encoding.Unicode.GetBytes(Render(spec.Script));
                 scriptArg = $"-EncodedCommand {Convert.ToBase64String(bytes)}";
             }
 
             var extraArgs = spec.Arguments.Count > 0
-                ? " -Args " + string.Join(",", spec.Arguments.Select(a => $"\"{a}\""))
+                ? " " + string.Join(" ", spec.Arguments.Select(a => $"\"{Render(a)}\""))
                 : "";
 
+            var pwshBin = ShellResolver.ResolvePowerShell();
             var psi = new System.Diagnostics.ProcessStartInfo
             {
-                FileName = "pwsh",
+                FileName = pwshBin,
                 Arguments = $"-NonInteractive -NoProfile {scriptArg}{extraArgs}",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -737,7 +781,7 @@ internal sealed class ActionExecutor
                 psi.Environment[k] = v;
 
             using var proc = System.Diagnostics.Process.Start(psi)
-                ?? throw new InvalidOperationException("Failed to start pwsh process");
+                ?? throw new InvalidOperationException($"Failed to start {pwshBin} process");
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(TimeSpan.FromSeconds(spec.TimeoutSeconds));

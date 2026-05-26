@@ -26,6 +26,32 @@ public sealed class ClaudeRunContext
     public string? InlineSkillContent { get; init; }
     public string? PresetRunId { get; init; }
 
+    /// <summary>Returns a copy of this context suitable for auto-replaying steer messages in the same run, with ExtraContext replaced and non-repeatable fields cleared.</summary>
+    internal ClaudeRunContext WithChatReplay(string steerText) => new ClaudeRunContext
+    {
+        ProjectSlug = ProjectSlug,
+        WorkspacePath = WorkspacePath,
+        AgentName = AgentName,
+        SkillFile = SkillFile,
+        TicketId = TicketId,
+        TicketTitle = TicketTitle,
+        TicketStatus = TicketStatus,
+        MaxTurns = MaxTurns,
+        ConcurrencyGroup = ConcurrencyGroup,
+        Env = Env,
+        Model = Model,
+        FallbackModel = FallbackModel,
+        ExtraContext = steerText,
+        InlineSkillContent = InlineSkillContent,
+        SessionScope = SessionScope,
+        RetryOnResumeFailure = false,
+        PersistSession = PersistSession,
+        OnEventHook = OnEventHook,
+        ChatTarget = ChatTarget,
+        PendingSteerMessages = null,
+        ImagePaths = null,
+    };
+
     /// <summary>Optional namespace prefix for the SessionRegistry key (e.g. "chat" → "chat:agent:sweep"). Keeps chat sessions isolated from automation sessions for the same agent.</summary>
     public string? SessionScope { get; init; }
 
@@ -37,6 +63,15 @@ public sealed class ClaudeRunContext
 
     /// <summary>Callback invoked for every StreamEvent pushed onto the AgentRun. Wired before any event is emitted, so no race with subscribers attaching after the fact.</summary>
     public Action<StreamEvent>? OnEventHook { get; init; }
+
+    /// <summary>For chat runs: the chat target slug (e.g. "programmer" or "programmer#ticket-42"). Stored on the AgentRun so the steer endpoint can persist injected messages to chat history.</summary>
+    public string? ChatTarget { get; init; }
+
+    /// <summary>Steering messages that could not be delivered to the previous run (stdin already closed). BuildPromptAsync prepends them to the next chat-resume prompt so the agent receives them.</summary>
+    public IReadOnlyList<string>? PendingSteerMessages { get; init; }
+
+    /// <summary>Absolute paths to user-pasted image files saved under the workspace's channel/tmp. BuildPromptAsync surfaces them under an [Attached images] block; the runner best-effort deletes them after the process exits.</summary>
+    public IReadOnlyList<string>? ImagePaths { get; init; }
 }
 
 public sealed class ClaudeRunner
@@ -66,6 +101,7 @@ public sealed class ClaudeRunner
             ConcurrencyGroup = string.IsNullOrEmpty(ctx.ConcurrencyGroup) ? ctx.AgentName : ctx.ConcurrencyGroup,
             StartedAt = DateTime.UtcNow,
             Model = ctx.Model,
+            ChatTarget = ctx.ChatTarget,
         };
         if (ctx.OnEventHook is not null) run.OnEvent += ctx.OnEventHook;
         _runs.Register(run);
@@ -87,7 +123,7 @@ public sealed class ClaudeRunner
                 _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
                 return run;
             }
-            skillContent = await File.ReadAllTextAsync(skillAbs, ct);
+            skillContent = await File.ReadAllTextAsync(skillAbs);
         }
 
         // Session key matches the legacy dispatcher.mjs format ({agent}:{ticketId|sweep}).
@@ -165,8 +201,53 @@ public sealed class ClaudeRunner
                 if (attempt.Cancelled) return run;
             }
 
+            // Auto-replay steer messages that arrived while stdin was closed (--print mode).
+            // Loop so that steers injected during the replay itself are also picked up.
+            while (ctx.SessionScope == "chat" && attempt.Exit == 0 && run.PendingSteerMessages.Count > 0)
+            {
+                var steers = run.DrainPendingSteerMessages();
+                var steerText = string.Join("\n", steers.Select(s => $"[Steering message from previous turn]: {s}"));
+                run.Push(new StreamEvent(DateTime.UtcNow, "steer_replay",
+                    $"Replaying {steers.Count} injected message(s) from previous turn"));
+                var replayCtx = ctx.WithChatReplay(steerText);
+                attempt = await SpawnAndWaitAsync(replayCtx, run, skillContent, sessionId, isResume: true, modelOverride: null, ct);
+                if (attempt.Cancelled) return run;
+            }
+
             _runs.Complete(run.RunId, attempt.Exit == 0 ? AgentRunStatus.Completed : AgentRunStatus.Failed, attempt.Exit);
             AppendDebugLog(ctx, $"FINISHED {ctx.AgentName} run={run.RunId} exit={attempt.Exit}");
+
+            // Auto-continue: when a chat run ends with undelivered steer messages, fire a
+            // follow-up turn immediately so the agent receives them without the user having
+            // to send another message.
+            if (isChat && run.Status == AgentRunStatus.Completed && run.PendingSteerMessages.Count > 0)
+            {
+                var followCtx = new ClaudeRunContext
+                {
+                    ProjectSlug = ctx.ProjectSlug,
+                    WorkspacePath = ctx.WorkspacePath,
+                    AgentName = ctx.AgentName,
+                    SkillFile = ctx.SkillFile,
+                    InlineSkillContent = ctx.InlineSkillContent,
+                    ExtraContext = null,
+                    MaxTurns = ctx.MaxTurns,
+                    ConcurrencyGroup = ctx.ConcurrencyGroup,
+                    SessionScope = ctx.SessionScope,
+                    TicketId = ctx.TicketId,
+                    TicketTitle = ctx.TicketTitle,
+                    TicketStatus = ctx.TicketStatus,
+                    RetryOnResumeFailure = ctx.RetryOnResumeFailure,
+                    PersistSession = ctx.PersistSession,
+                    OnEventHook = ctx.OnEventHook,
+                    ChatTarget = ctx.ChatTarget,
+                    Model = ctx.Model,
+                    FallbackModel = ctx.FallbackModel,
+                    Env = ctx.Env,
+                    PendingSteerMessages = run.PendingSteerMessages,
+                };
+                _ = Task.Run(() => RunAsync(followCtx, CancellationToken.None));
+            }
+
             return run;
         }
         catch (OperationCanceledException)
@@ -186,6 +267,7 @@ public sealed class ClaudeRunner
         finally
         {
             slot.Dispose();
+            CleanupImageTempFiles(ctx);
         }
     }
 
@@ -258,13 +340,17 @@ public sealed class ClaudeRunner
             "--output-format", "stream-json",
             "--dangerously-skip-permissions",
             "--max-turns", ctx.MaxTurns.ToString(),
-            "--remote-control",
             // KittyClaw owns the agent memory layer (.agents/{agent}/memory.md committed to
             // the workspace repo). Disable claude's built-in Memory tool so agents don't
             // also write to their per-host memory store and end up with two divergent
             // sources of truth.
             "--disallowed-tools", "Memory",
         };
+        // No --remote-control: it has no effect on non-interactive `claude --print` runs and
+        // its file-based IPC (payload.json in the working directory) is keyed on the cwd, so
+        // any two concurrent runs in the same workspace would read each other's IPC file and
+        // either cross-contaminate sessions or deadlock at startup. Mid-run steering does not
+        // depend on it — PumpSteeringAsync queues messages for replay on the next --resume.
         if (isResume) { args.Add("--resume"); args.Add(sessionId); }
         else { args.Add("-n"); args.Add(sessionName); args.Add("--session-id"); args.Add(sessionId); }
         var effectiveModel = modelOverride ?? ctx.Model;
@@ -291,6 +377,10 @@ public sealed class ClaudeRunner
         run.Push(new StreamEvent(DateTime.UtcNow, "launch",
             $"{ctx.AgentName} {(isResume ? "(resume)" : "(new)")} session={sessionId[..8]} cwd={ctx.WorkspacePath} skill={ctx.SkillFile}"));
 
+        if (ctx.PendingSteerMessages?.Count > 0)
+            foreach (var steer in ctx.PendingSteerMessages)
+                run.Push(new StreamEvent(DateTime.UtcNow, "steer", steer));
+
         // Count assistant events emitted during THIS attempt only, and watch for quota
         // markers in stream-json events / stderr so the outer RunAsync can decide whether
         // to retry with a fallback model.
@@ -308,6 +398,11 @@ public sealed class ClaudeRunner
         {
             await proc.StandardInput.WriteAsync(prompt);
             await proc.StandardInput.FlushAsync();
+            // `claude --print` reads its prompt from stdin and blocks until EOF before
+            // processing anything, so close stdin now. Mid-run steering does not reach the
+            // process this way — PumpSteeringAsync queues steered messages for replay on the
+            // next --resume invocation (see its comment).
+            proc.StandardInput.Close();
         }
         catch (Exception ex)
         {
@@ -327,8 +422,8 @@ public sealed class ClaudeRunner
         int? exit;
         try
         {
-            try { proc.StandardInput.Close(); } catch { /* stdin may already be closed */ }
             await proc.WaitForExitAsync(linked.Token);
+            try { proc.StandardInput.Close(); } catch { /* stdin may already be closed */ }
             exit = proc.ExitCode;
         }
         catch (OperationCanceledException)
@@ -348,10 +443,25 @@ public sealed class ClaudeRunner
 
     private static async Task<string> BuildPromptAsync(ClaudeRunContext ctx, string skillContent, bool isResume, CancellationToken ct)
     {
+        var imagesBlock = BuildAttachedImagesBlock(ctx);
+
         // Chat resume: each turn just sends the user's message. The skill/preamble was
         // injected when the session was created and is preserved across resumes by claude.
         if (ctx.SessionScope == "chat" && isResume)
-            return ctx.ExtraContext ?? "";
+        {
+            var userMsg = ctx.ExtraContext ?? "";
+            if (ctx.PendingSteerMessages?.Count > 0)
+            {
+                var sb = new StringBuilder();
+                foreach (var steer in ctx.PendingSteerMessages)
+                    sb.AppendLine($"[Steering message from previous turn]: {steer}");
+                sb.AppendLine();
+                sb.Append(userMsg);
+                sb.Append(imagesBlock);
+                return sb.ToString();
+            }
+            return userMsg + imagesBlock;
+        }
 
         // Automation resume on a ticket: ping the agent that the owner posted new feedback.
         if (isResume && ctx.TicketId is not null)
@@ -361,7 +471,30 @@ public sealed class ClaudeRunner
 
         if (ctx.TicketId is not null && ctx.SessionScope != "chat")
             return $"{prefix}{skillContent}\n\nFocus on ticket #{ctx.TicketId}: {ctx.TicketTitle}";
-        return ctx.ExtraContext is null ? $"{prefix}{skillContent}" : $"{prefix}{skillContent}\n\n{ctx.ExtraContext}";
+        return ctx.ExtraContext is null
+            ? $"{prefix}{skillContent}{imagesBlock}"
+            : $"{prefix}{skillContent}\n\n{ctx.ExtraContext}{imagesBlock}";
+    }
+
+    private static string BuildAttachedImagesBlock(ClaudeRunContext ctx)
+    {
+        if (!(ctx.ImagePaths != null && ctx.ImagePaths.Count > 0)) return "";
+        var sb = new StringBuilder();
+        sb.AppendLine();
+        sb.AppendLine();
+        sb.AppendLine("[Attached images]");
+        foreach (var p in ctx.ImagePaths)
+            sb.AppendLine($"- {p}");
+        return sb.ToString();
+    }
+
+    private static void CleanupImageTempFiles(ClaudeRunContext ctx)
+    {
+        if (ctx.ImagePaths is null || ctx.ImagePaths.Count == 0) return;
+        foreach (var p in ctx.ImagePaths)
+        {
+            try { File.Delete(p); } catch { /* best-effort cleanup */ }
+        }
     }
 
     private static async Task<string> BuildPreambleAsync(ClaudeRunContext ctx, CancellationToken ct)
@@ -430,7 +563,7 @@ public sealed class ClaudeRunner
                 }
             }
         }
-        if (body.Length == 0) return typePrefix.Length > 0 ? typePrefix.ToString() : e.ToString();
+        if (body.Length == 0) return e.GetRawText();
         return typePrefix.Append(body).ToString();
     }
 

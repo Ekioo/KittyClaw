@@ -70,9 +70,49 @@
                         </details>
                     </div>
                 }
+                else if (msg.Role == "ask_user_question")
+                {
+                    var askMsg = (AskUserQuestionMessage)msg;
+                    <div class="chat-message chat-ask-user @(askMsg.IsAnswered ? "chat-ask-user-answered" : "")">
+                        <div class="chat-bubble">
+                            <p class="chat-ask-prompt">
+                                @if (string.IsNullOrWhiteSpace(askMsg.Prompt))
+                                {
+                                    <span>The agent is asking for input</span>
+                                }
+                                else
+                                {
+                                    @askMsg.Prompt
+                                }
+                            </p>
+                            @if (askMsg.Options.Length > 0)
+                            {
+                                @foreach (var opt in askMsg.Options)
+                                {
+                                    var optCopy = opt;
+                                    <button class="chat-ask-option" disabled="@askMsg.IsAnswered"
+                                            @onclick="() => SubmitAskUserQuestion(askMsg, optCopy)">@opt</button>
+                                }
+                            }
+                            else
+                            {
+                                <textarea class="chat-ask-textarea" disabled="@askMsg.IsAnswered"
+                                          @bind="askMsg.InputText" placeholder="Type your answer…"></textarea>
+                                <button class="chat-ask-submit" disabled="@(askMsg.IsAnswered || _activeRunId == null || string.IsNullOrWhiteSpace(askMsg.InputText))"
+                                        @onclick="() => SubmitAskUserQuestion(askMsg, askMsg.InputText)">Submit</button>
+                            }
+                        </div>
+                    </div>
+                }
                 else if (msg.Role == "reset")
                 {
                     <div class="chat-message chat-message-reset">@L["ChatSessionReset"]</div>
+                }
+                else if (msg.Role == "inject")
+                {
+                    <div class="chat-message chat-message-inject">
+                        <div class="chat-bubble">↩ @msg.Text</div>
+                    </div>
                 }
                 else
                 {
@@ -97,20 +137,48 @@
             }
         </div>
 
-        <div class="chat-input-area">
+        @if (_hitMaxTurns)
+        {
+            <div class="chat-max-turns-banner">
+                <span>@L["ChatMaxTurns"]</span>
+                <button class="chat-continue-btn" @onclick="Continue">@L["ChatContinue"]</button>
+            </div>
+        }
+
+        <div class="chat-input-area @(_loading ? "chat-input-area-thinking" : "")">
+            @if (!string.IsNullOrEmpty(_pasteError))
+            {
+                <div class="chat-paste-error">@_pasteError</div>
+            }
+            @if (_pendingImages.Count > 0)
+            {
+                <div class="chat-paste-previews">
+                    @for (var i = 0; i < _pendingImages.Count; i++)
+                    {
+                        var idx = i;
+                        var img = _pendingImages[i];
+                        <div class="chat-paste-preview">
+                            <img src="@img.DataUrl" alt="@img.Name" />
+                            <button type="button" class="chat-paste-remove" @onclick="() => RemoveImage(idx)" title="Remove">×</button>
+                        </div>
+                    }
+                </div>
+            }
             <textarea @ref="_inputRef"
                       value="@_inputText"
                       @oninput="OnInput"
-                      placeholder="@L["ChatPlaceholder"]"
-                      @onkeydown="OnKeyDown"
-                      disabled="@_loading"></textarea>
+                      placeholder="@(_loading ? L["ChatInjectPlaceholder"] : L["ChatPlaceholder"])"
+                      @onkeydown="OnKeyDown"></textarea>
             @if (_loading && !string.IsNullOrEmpty(_activeStreamId))
             {
-                <button class="chat-stop-btn" @onclick="StopActiveRun" title="@L["Stop"]">⏹ @L["Stop"]</button>
+                <div class="chat-input-actions">
+                    <button class="chat-inject-btn" @onclick="Inject" disabled="@string.IsNullOrWhiteSpace(_inputText)" title="@L["ChatInject"]">↩ @L["ChatInject"]</button>
+                    <button class="chat-stop-btn" @onclick="StopActiveRun" title="@L["Stop"]">⏹ @L["Stop"]</button>
+                </div>
             }
             else
             {
-                <button @onclick="Send" disabled="@(string.IsNullOrWhiteSpace(_inputText) || _loading)">@L["Send"]</button>
+                <button @onclick="Send" disabled="@((string.IsNullOrWhiteSpace(_inputText) && _pendingImages.Count == 0) || _loading)">@L["Send"]</button>
             }
         </div>
     }
@@ -145,11 +213,26 @@
     private IJSObjectReference? _sseModule;
     private DotNetObjectReference<ClaudeChatDrawer>? _dotnetRef;
     private string? _activeStreamId;
+    private bool _hitMaxTurns = false;
+
+    // Image paste (#115). Accepted clipboard images await Send() in this buffer; rejections
+    // surface in _pasteError as a small inline banner.
+    public sealed record PendingImage(string DataUrl, string Mime, string Name, long SizeBytes);
+    private readonly List<PendingImage> _pendingImages = [];
+    private string? _pasteError;
 
     private record ChatMessage(string Role, string Text);
     private sealed record ToolCallMessage(string ToolName, string Preview, string Detail)
         : ChatMessage("tool_use", ToolName);
+    private sealed record AskUserQuestionMessage(string Prompt, string[] Options)
+        : ChatMessage("ask_user_question", Prompt)
+    {
+        public bool IsAnswered { get; set; }
+        public string InputText { get; set; } = "";
+    }
     private sealed record ChatTarget(string Slug, string Name, string Kind);
+
+    private string? _activeRunId => _activeStreamId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -206,6 +289,11 @@
                     {
                         var preview = GetToolPreview(m.ToolName ?? m.Text, m.Detail);
                         _messages.Add(new ToolCallMessage(m.ToolName ?? m.Text, preview, m.Detail ?? "{}"));
+                    }
+                    else if (m.Role == "ask_user_question")
+                    {
+                        var (prompt, options) = ParseAskUserQuestionDetail(m.Detail);
+                        _messages.Add(new AskUserQuestionMessage(prompt, options) { IsAnswered = true });
                     }
                     else
                     {
@@ -301,6 +389,8 @@
         if (_view == View.Conversation)
         {
             try { await JS.InvokeVoidAsync("chatDrawerInstallEnterGuard", _inputRef); } catch { }
+            _dotnetRef ??= DotNetObjectReference.Create(this);
+            try { await JS.InvokeVoidAsync("chatDrawerInstallPasteHandler", _inputRef, _dotnetRef); } catch { }
         }
         try
         {
@@ -311,7 +401,38 @@
 
     private async Task OnKeyDown(KeyboardEventArgs e)
     {
-        if (e.Key == "Enter" && !e.ShiftKey) await Send();
+        if (e.Key == "Enter" && !e.ShiftKey)
+        {
+            if (_loading && !string.IsNullOrEmpty(_activeStreamId))
+                await Inject();
+            else
+                await Send();
+        }
+    }
+
+    private async Task Inject()
+    {
+        var text = _inputText.Trim();
+        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(_activeStreamId)) return;
+
+        _messages.Add(new ChatMessage("inject", text));
+        _inputText = "";
+        StateHasChanged();
+
+        using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+        try
+        {
+            var resp = await http.PostAsJsonAsync(
+                $"/api/projects/{ProjectSlug}/runs/{_activeStreamId}/steer",
+                new { text });
+            if (!resp.IsSuccessStatusCode)
+                _messages.Add(new ChatMessage("error", $"Inject failed: {resp.StatusCode}"));
+        }
+        catch (Exception ex)
+        {
+            _messages.Add(new ChatMessage("error", ex.Message));
+        }
+        StateHasChanged();
     }
 
     private void OnInput(ChangeEventArgs e)
@@ -319,13 +440,45 @@
         _inputText = e.Value?.ToString() ?? "";
     }
 
+    [JSInvokable]
+    public Task OnImagePasted(PendingImage img)
+    {
+        if (_pendingImages.Count >= 5)
+        {
+            _pasteError = "too many images attached (max 5)";
+        }
+        else
+        {
+            _pendingImages.Add(img);
+            _pasteError = null;
+        }
+        return InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task OnImagePasteError(string reason)
+    {
+        _pasteError = reason;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private void RemoveImage(int idx)
+    {
+        if (idx >= 0 && idx < _pendingImages.Count) _pendingImages.RemoveAt(idx);
+    }
+
     private async Task Send()
     {
         var text = _inputText.Trim();
-        if (string.IsNullOrEmpty(text) || _loading || _activeTarget is null) return;
+        if ((string.IsNullOrEmpty(text) && _pendingImages.Count == 0) || _loading || _activeTarget is null) return;
 
-        _messages.Add(new ChatMessage("user", text));
+        _hitMaxTurns = false;
+        if (!string.IsNullOrEmpty(text))
+            _messages.Add(new ChatMessage("user", text));
+        var imagesPayload = _pendingImages.Select(p => new { dataUrl = p.DataUrl, mime = p.Mime, name = p.Name, sizeBytes = p.SizeBytes }).ToList();
         _inputText = "";
+        _pendingImages.Clear();
+        _pasteError = null;
         _loading = true;
         StateHasChanged();
 
@@ -335,7 +488,7 @@
         try
         {
             var resp = await http.PostAsJsonAsync($"/api/projects/{ProjectSlug}/chat/start",
-                new { message = text, target = _activeTarget.Slug, ticketId = TicketId });
+                new { message = text, target = _activeTarget.Slug, ticketId = TicketId, images = imagesPayload });
             if (!resp.IsSuccessStatusCode)
             {
                 _messages.Add(new ChatMessage("error", $"Error {resp.StatusCode}"));
@@ -373,7 +526,21 @@
     [JSInvokable]
     public Task ReceiveSse(string kind, string text, string? detail = null)
     {
-        if (kind == "tool_use" && !string.IsNullOrWhiteSpace(text))
+        // "steer" events are echoed back from PumpSteeringAsync — skip to avoid duplicating
+        // the inject message already added optimistically in Inject().
+        // "steer_replay" is an internal marker for auto-continuation; no UI bubble needed.
+        if (kind == "steer" || kind == "steer_replay") return Task.CompletedTask;
+        if (kind == "max_turns")
+        {
+            _hitMaxTurns = true;
+            return InvokeAsync(StateHasChanged);
+        }
+        if (kind == "ask_user_question")
+        {
+            var (prompt, options) = ParseAskUserQuestionDetail(detail);
+            _messages.Add(new AskUserQuestionMessage(prompt, options));
+        }
+        else if (kind == "tool_use" && !string.IsNullOrWhiteSpace(text))
         {
             var preview = GetToolPreview(text, detail);
             _messages.Add(new ToolCallMessage(text, preview, detail ?? "{}"));
@@ -393,6 +560,13 @@
                 _messages.Add(new ChatMessage("assistant", reply));
         }
         return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Continue()
+    {
+        _hitMaxTurns = false;
+        _inputText = "Continue";
+        await Send();
     }
 
     private static string GetToolPreview(string toolName, string? detail)
@@ -420,6 +594,35 @@
 
     private static string Truncate(string? s, int max = 80) =>
         s is null ? "" : s.Length <= max ? s : s[..max] + "…";
+
+    private static (string Prompt, string[] Options) ParseAskUserQuestionDetail(string? detail)
+    {
+        if (string.IsNullOrWhiteSpace(detail)) return ("", []);
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(detail);
+            var root = doc.RootElement;
+            var prompt = root.TryGetProperty("prompt", out var p) ? p.GetString() ?? "" : "";
+            var options = root.TryGetProperty("options", out var o) && o.ValueKind == System.Text.Json.JsonValueKind.Array
+                ? o.EnumerateArray().Select(x => x.GetString() ?? "").ToArray()
+                : Array.Empty<string>();
+            return (prompt, options);
+        }
+        catch { return ("", []); }
+    }
+
+    private async Task SubmitAskUserQuestion(AskUserQuestionMessage msg, string answer)
+    {
+        if (_activeRunId == null) return;
+        msg.IsAnswered = true;
+        StateHasChanged();
+        using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+        try
+        {
+            await http.PostAsJsonAsync($"/api/projects/{ProjectSlug}/runs/{_activeRunId}/steer", new { text = answer });
+        }
+        catch { /* best-effort */ }
+    }
 
     [JSInvokable]
     public Task StreamEnded()
@@ -485,7 +688,7 @@
     }
 
     private static string RenderMarkdown(string text) =>
-        Markdig.Markdown.ToHtml(text, new MarkdownPipelineBuilder().UseAdvancedExtensions().Build());
+        KittyClaw.Web.Markdown.ChatMarkdownRenderer.Render(text);
 
     private sealed record ChatStartResponse(string RunId);
     private sealed record ActiveResponse(string? RunId);
