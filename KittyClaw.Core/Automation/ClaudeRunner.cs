@@ -377,69 +377,101 @@ public sealed class ClaudeRunner
         run.Push(new StreamEvent(DateTime.UtcNow, "launch",
             $"{ctx.AgentName} {(isResume ? "(resume)" : "(new)")} session={sessionId[..8]} cwd={ctx.WorkspacePath} skill={ctx.SkillFile}"));
 
-        if (ctx.PendingSteerMessages?.Count > 0)
-            foreach (var steer in ctx.PendingSteerMessages)
-                run.Push(new StreamEvent(DateTime.UtcNow, "steer", steer));
-
-        // Count assistant events emitted during THIS attempt only, and watch for quota
-        // markers in stream-json events / stderr so the outer RunAsync can decide whether
-        // to retry with a fallback model.
-        var assistantCount = 0;
-        var hitQuota = 0;
-        Action<StreamEvent> counter = ev =>
-        {
-            if (ev.Kind == "assistant") Interlocked.Increment(ref assistantCount);
-            if (hitQuota == 0 && IsQuotaSignal(ev))
-                Interlocked.Exchange(ref hitQuota, 1);
-        };
-        run.OnEvent += counter;
-
+        // Confine claude and every process it spawns to a job that is killed when we close it.
+        // This is the root-cause guard against stuck runs: a process the agent backgrounds would
+        // otherwise inherit claude's stdout/stderr pipe and outlive it, so the pipe never reaches
+        // EOF and the pump tasks (hence the whole run) would hang forever. No-op on non-Windows.
+        var job = ProcessJobObject.TryCreateAndAssign(proc);
         try
         {
-            await proc.StandardInput.WriteAsync(prompt);
-            await proc.StandardInput.FlushAsync();
-            // `claude --print` reads its prompt from stdin and blocks until EOF before
-            // processing anything, so close stdin now. Mid-run steering does not reach the
-            // process this way — PumpSteeringAsync queues steered messages for replay on the
-            // next --resume invocation (see its comment).
-            proc.StandardInput.Close();
-        }
-        catch (Exception ex)
-        {
-            run.Push(new StreamEvent(DateTime.UtcNow, "error", $"stdin write failed: {ex.Message}"));
-        }
+            if (ctx.PendingSteerMessages?.Count > 0)
+                foreach (var steer in ctx.PendingSteerMessages)
+                    run.Push(new StreamEvent(DateTime.UtcNow, "steer", steer));
 
-        var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, run.Cancellation.Token);
-        var stdoutTask = ClaudeStreamPump.PumpStdoutAsync(proc, run, linked.Token);
-        var stderrTask = ClaudeStreamPump.PumpStderrAsync(proc, run, linked.Token);
-        var steerTask = ClaudeStreamPump.PumpSteeringAsync(proc, run, linked.Token);
+            // Count assistant events emitted during THIS attempt only, and watch for quota
+            // markers in stream-json events / stderr so the outer RunAsync can decide whether
+            // to retry with a fallback model.
+            var assistantCount = 0;
+            var hitQuota = 0;
+            Action<StreamEvent> counter = ev =>
+            {
+                if (ev.Kind == "assistant") Interlocked.Increment(ref assistantCount);
+                if (hitQuota == 0 && IsQuotaSignal(ev))
+                    Interlocked.Exchange(ref hitQuota, 1);
+            };
+            run.OnEvent += counter;
 
-        using var killReg = linked.Token.Register(() =>
-        {
-            try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { /* cleanup, process may already be exiting */ }
-        });
+            try
+            {
+                await proc.StandardInput.WriteAsync(prompt);
+                await proc.StandardInput.FlushAsync();
+                // `claude --print` reads its prompt from stdin and blocks until EOF before
+                // processing anything, so close stdin now. Mid-run steering does not reach the
+                // process this way — PumpSteeringAsync queues steered messages for replay on the
+                // next --resume invocation (see its comment).
+                proc.StandardInput.Close();
+            }
+            catch (Exception ex)
+            {
+                run.Push(new StreamEvent(DateTime.UtcNow, "error", $"stdin write failed: {ex.Message}"));
+            }
 
-        int? exit;
-        try
-        {
-            await proc.WaitForExitAsync(linked.Token);
-            try { proc.StandardInput.Close(); } catch { /* stdin may already be closed */ }
-            exit = proc.ExitCode;
-        }
-        catch (OperationCanceledException)
-        {
-            try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { /* cleanup on cancellation */ }
-            _runs.Complete(run.RunId, AgentRunStatus.Stopped, null);
-            AppendDebugLog(ctx, $"STOPPED {ctx.AgentName} run={run.RunId}");
+            var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, run.Cancellation.Token);
+            var stdoutTask = ClaudeStreamPump.PumpStdoutAsync(proc, run, linked.Token);
+            var stderrTask = ClaudeStreamPump.PumpStderrAsync(proc, run, linked.Token);
+            var steerTask = ClaudeStreamPump.PumpSteeringAsync(proc, run, linked.Token);
+
+            using var killReg = linked.Token.Register(() =>
+            {
+                try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { /* cleanup, process may already be exiting */ }
+            });
+
+            int? exit;
+            try
+            {
+                await proc.WaitForExitAsync(linked.Token);
+                try { proc.StandardInput.Close(); } catch { /* stdin may already be closed */ }
+                exit = proc.ExitCode;
+            }
+            catch (OperationCanceledException)
+            {
+                try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { /* cleanup on cancellation */ }
+                job?.Dispose(); // also terminate any descendant the agent backgrounded
+                _runs.Complete(run.RunId, AgentRunStatus.Stopped, null);
+                AppendDebugLog(ctx, $"STOPPED {ctx.AgentName} run={run.RunId}");
+                run.OnEvent -= counter;
+                return new SpawnResult(null, assistantCount, true, hitQuota == 1);
+            }
+
+            // claude has exited. Close the job NOW to terminate any descendant it left running
+            // (e.g. a backgrounded dev server). That releases the inherited write handle so the
+            // stdout/stderr pipe reaches EOF and the pumps below finish promptly. The bounded wait
+            // is only a cross-platform backstop for when the job couldn't be created (non-Windows
+            // or OS refusal) — on Windows it should never elapse.
+            job?.Dispose();
+            var drain = Task.WhenAll(stdoutTask, stderrTask);
+            if (await Task.WhenAny(drain, Task.Delay(PumpDrainGrace, CancellationToken.None)) != drain)
+            {
+                _logger.LogWarning(
+                    "stdout/stderr did not reach EOF {Grace}s after {Agent} run={RunId} exited (a backgrounded child likely holds the pipe) — abandoning drain",
+                    PumpDrainGrace.TotalSeconds, ctx.AgentName, run.RunId);
+                linked.Cancel(); // unblocks ReadLineAsync(ct); killReg is a no-op since proc already exited
+                try { await drain; } catch { /* pumps observe cancellation */ }
+            }
+            try { steerTask.Dispose(); } catch { /* best-effort cleanup */ }
             run.OnEvent -= counter;
-            return new SpawnResult(null, assistantCount, true, hitQuota == 1);
+            return new SpawnResult(exit, assistantCount, false, hitQuota == 1);
         }
-
-        await Task.WhenAll(stdoutTask, stderrTask);
-        try { steerTask.Dispose(); } catch { /* best-effort cleanup */ }
-        run.OnEvent -= counter;
-        return new SpawnResult(exit, assistantCount, false, hitQuota == 1);
+        finally
+        {
+            job?.Dispose();
+        }
     }
+
+    // How long to wait for stdout/stderr to reach EOF after the claude process exits before
+    // giving up on the drain. Buffered output flushes near-instantly; this only elapses when a
+    // backgrounded grandchild keeps the inherited pipe open.
+    private static readonly TimeSpan PumpDrainGrace = TimeSpan.FromSeconds(10);
 
     private static async Task<string> BuildPromptAsync(ClaudeRunContext ctx, string skillContent, bool isResume, CancellationToken ct)
     {
