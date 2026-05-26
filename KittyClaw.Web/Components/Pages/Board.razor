@@ -1115,7 +1115,11 @@ else
         }
 
         if (TicketId.HasValue && _selectedTicket?.Id != TicketId)
+        {
+            _escTicketPanel?.Dispose();
+            _escTicketPanel = null;
             _selectedTicket = await TicketService.GetTicketAsync(Slug, TicketId.Value);
+        }
         else if (!TicketId.HasValue && _selectedTicket is not null)
             _selectedTicket = null;
     }
@@ -1158,6 +1162,8 @@ else
 
             StateHasChanged();
         }
+        if (_selectedTicket is not null && _escTicketPanel is null)
+            _escTicketPanel = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { ClosePanel(); StateHasChanged(); }));
         if (!string.IsNullOrEmpty(_fullscreenTarget) && !_pasteListenerAttached)
         {
             _pasteListenerAttached = true;
