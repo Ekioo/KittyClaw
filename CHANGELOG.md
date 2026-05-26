@@ -2,6 +2,62 @@
 
 All notable changes to KittyClaw.
 
+## [v0.7] — 2026-05-26
+
+Agentic chat polish, dashboard reliability, and tag-based versioning.
+
+### Highlights
+
+This release turns the chat drawer into a real conversational surface: you can now steer agents mid-thinking, answer their questions as interactive bubbles, paste images, and resume runs that hit the max-turns ceiling — with messages that never silently drop on the floor.
+
+The dashboard side becomes durable: tile refreshes and trigger runs persist their last-run timestamp and catch up after a restart, paused projects no longer waste cycles, and a friendly frequency picker covers the common "every N minutes / daily at HH:MM" cases.
+
+Under the hood, versioning now flows from git tags via MinVer — which is exactly what made this release possible without touching a single csproj — and the automation engine has been split into a `TriggerHandler` + `RunStateManager` pair for easier reasoning.
+
+Escape-key handling makes progress: the label and member managers now close on Escape with focus restored, and the legacy label/member buttons have been removed from the Board view. Several popups (ticket edition, title/description editors, tile add and edit, run history after navigating into an agent) still need wiring — expect more coverage in the next release.
+
+### Added
+- **Real-time steering**: inject text mid-thinking; messages dropped mid-turn are auto-replayed on the next turn.
+- **AskUserQuestion bubbles** rendered as interactive prompts in the chat drawer.
+- **Continue banner** when an agent hits max-turns, with one-click resume.
+- **Image paste support** in the chat drawer.
+- **Per-ticket worktrees**: helper scripts and a `{ticketId}` placeholder in `concurrencyGroup`, `mutuallyExclusiveWith`, and PowerShell args.
+- **Per-ticket chain serialization** with debounce-on-completion to avoid duplicate runs.
+- **Retry button** on the agent run drawer for failed runs.
+- **Quota fallback model** triggered on rate-limit and usage-limit events.
+- **Persist dashboard tile state**: `LastRefreshedAt` per tile with startup catch-up; same for interval/cron triggers via `LastRunAt`.
+- **Pause-aware refresh**: skip dashboard tile refresh for paused projects.
+- **Friendly frequency picker** for dashboard tiles, with daily-at scheduling.
+- **Heatmap tile** enhanced with per-color intensity and an optional legend.
+- **Escape key stack** broadened across popups (label/member managers included), with focus restoration.
+- **Bidirectional column sort** via right-click context menu.
+- **Agent running indicator** on project cards.
+- **Release-update banner** with version compare and a dev simulate endpoint.
+- **Markdown fallback** for deep content in chat; shared markdown pipeline now renders comment line breaks.
+- `KITTYCLAW_TICKET_ID` env var exposed to agent subprocesses.
+
+### Changed
+- **Versioning via MinVer**: assembly version is derived from the latest `vX.Y.Z` git tag — no more manual csproj edits.
+- **Endpoints split** into per-domain `Endpoints.*.cs` partial files.
+- **AutomationEngine refactor**: extracted `TriggerHandler` and `RunStateManager`.
+- **Member DELETE** cascade-clears assignments and protects the owner with HTTP 409.
+- **OpenAPI**: typed response schemas, `Produces`/`ProducesProblem` annotations, `TicketSummary` vs `Ticket` distinction.
+- **Legacy label/member management** buttons and popups removed from the Board view.
+- **BoardFilterState** registered as scoped to isolate filter state per browser tab.
+
+### Fixed
+- `MainLayout` set to `InteractiveServer` rendermode to avoid a Body serialization crash.
+- `FlattenJson` falls back to raw JSON when no body is extractable.
+- `ReorderTicketAsync` now raises `TicketStatusChanged` when a column changes.
+- `ticketInColumn` trigger now fires on unassigned tickets.
+- `commitAsync` deferred until successful run completion to avoid partial commits on failure.
+- Drop `--remote-control` and close stdin so claude runs don't deadlock; skipped entirely for chat sessions to prevent `payload.json` IPC conflict.
+- `commitAgentMemory` uses the nested `.agents` git repo when present.
+- PowerShell 5.1 fallback when `pwsh` is absent on Windows.
+- Auto-continue chat run when steering messages are dropped mid-turn.
+
+---
+
 ## [v0.6] — 2026-05-15
 
 Dashboard tile pipeline overhaul, agent run robustness, and UX polish.
