@@ -7,7 +7,7 @@ namespace KittyClaw.Core.Tests;
 public class ReadmeDashboardSectionTests
 {
     private static readonly string RepoRoot = Path.GetFullPath(
-        Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
 
     private static string ReadmeContent =>
         File.ReadAllText(Path.Combine(RepoRoot, "README.md"));
