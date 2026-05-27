@@ -426,28 +426,78 @@ public sealed class ClaudeRunner
                 try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { /* cleanup, process may already be exiting */ }
             });
 
+            // Terminal-result watchdog. claude emits a `result` (or `max_turns`) event when its
+            // turn is done and normally exits right after. But if the agent left a child process
+            // alive (e.g. qa-tester backgrounding an isolated test server), claude (Node) can stay
+            // alive holding that child, so WaitForExitAsync would never return and the run would
+            // hang forever even though the work is finished — which is precisely what closing the
+            // job after WaitForExitAsync can't fix (we never get there). Once we see the terminal
+            // event, give the process a short grace to exit on its own, then force-kill the tree
+            // and complete based on the result we already captured.
+            using var resultGraceCts = new CancellationTokenSource();
+            var resultOutcome = 0; // 0 = none yet, 1 = success result, -1 = error / max_turns
+            Action<StreamEvent> resultWatch = ev =>
+            {
+                if (ev.Kind == "result")
+                {
+                    var ok = !(ev.Detail?.Contains("\"is_error\":true", StringComparison.OrdinalIgnoreCase) ?? false);
+                    Interlocked.CompareExchange(ref resultOutcome, ok ? 1 : -1, 0);
+                    resultGraceCts.CancelAfter(ResultExitGrace);
+                }
+                else if (ev.Kind == "max_turns")
+                {
+                    Interlocked.CompareExchange(ref resultOutcome, -1, 0);
+                    resultGraceCts.CancelAfter(ResultExitGrace);
+                }
+            };
+            run.OnEvent += resultWatch;
+
+            using var waitCts = CancellationTokenSource.CreateLinkedTokenSource(linked.Token, resultGraceCts.Token);
+
             int? exit;
             try
             {
-                await proc.WaitForExitAsync(linked.Token);
+                await proc.WaitForExitAsync(waitCts.Token);
                 try { proc.StandardInput.Close(); } catch { /* stdin may already be closed */ }
                 exit = proc.ExitCode;
             }
             catch (OperationCanceledException)
             {
-                try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { /* cleanup on cancellation */ }
-                job?.Dispose(); // also terminate any descendant the agent backgrounded
-                _runs.Complete(run.RunId, AgentRunStatus.Stopped, null);
-                AppendDebugLog(ctx, $"STOPPED {ctx.AgentName} run={run.RunId}");
-                run.OnEvent -= counter;
-                return new SpawnResult(null, assistantCount, true, hitQuota == 1);
+                if (proc.HasExited)
+                {
+                    // Exited right as we were cancelling — take the real exit code.
+                    exit = proc.ExitCode;
+                }
+                else if (linked.IsCancellationRequested)
+                {
+                    // Genuine stop / external cancellation.
+                    try { proc.Kill(entireProcessTree: true); } catch { /* cleanup on cancellation */ }
+                    job?.Dispose(); // also terminate any descendant the agent backgrounded
+                    _runs.Complete(run.RunId, AgentRunStatus.Stopped, null);
+                    AppendDebugLog(ctx, $"STOPPED {ctx.AgentName} run={run.RunId}");
+                    run.OnEvent -= counter;
+                    run.OnEvent -= resultWatch;
+                    return new SpawnResult(null, assistantCount, true, hitQuota == 1);
+                }
+                else
+                {
+                    // Result-grace watchdog fired: the turn finished but the process won't exit
+                    // (a backgrounded child is keeping it alive). Kill the whole tree so the run
+                    // can complete; trust the result event we already saw for the outcome.
+                    _logger.LogWarning(
+                        "{Agent} run={RunId} emitted its result but did not exit within {Grace}s; killing the process tree (a backgrounded child likely kept it alive)",
+                        ctx.AgentName, run.RunId, ResultExitGrace.TotalSeconds);
+                    try { proc.Kill(entireProcessTree: true); } catch { /* best-effort */ }
+                    exit = resultOutcome == 1 ? 0 : 1;
+                }
             }
 
-            // claude has exited. Close the job NOW to terminate any descendant it left running
-            // (e.g. a backgrounded dev server). That releases the inherited write handle so the
-            // stdout/stderr pipe reaches EOF and the pumps below finish promptly. The bounded wait
-            // is only a cross-platform backstop for when the job couldn't be created (non-Windows
-            // or OS refusal) — on Windows it should never elapse.
+            run.OnEvent -= resultWatch;
+
+            // Close the job to terminate any descendant the agent left running (e.g. a backgrounded
+            // server). That releases the inherited write handle so the stdout/stderr pipe reaches
+            // EOF and the pumps below finish promptly. The bounded wait is only a cross-platform
+            // backstop for when the job couldn't be created (non-Windows or OS refusal).
             job?.Dispose();
             var drain = Task.WhenAll(stdoutTask, stderrTask);
             if (await Task.WhenAny(drain, Task.Delay(PumpDrainGrace, CancellationToken.None)) != drain)
@@ -472,6 +522,13 @@ public sealed class ClaudeRunner
     // giving up on the drain. Buffered output flushes near-instantly; this only elapses when a
     // backgrounded grandchild keeps the inherited pipe open.
     private static readonly TimeSpan PumpDrainGrace = TimeSpan.FromSeconds(10);
+
+    // How long to wait after claude emits its terminal `result` event for the process to exit on
+    // its own before force-killing the tree. claude normally exits within ~1s of the result; this
+    // only elapses when a backgrounded child keeps the process alive. Instance-settable so tests
+    // can shorten it instead of waiting the full grace.
+    private TimeSpan _resultExitGrace = TimeSpan.FromSeconds(15);
+    internal TimeSpan ResultExitGrace { get => _resultExitGrace; set => _resultExitGrace = value; }
 
     private static async Task<string> BuildPromptAsync(ClaudeRunContext ctx, string skillContent, bool isResume, CancellationToken ct)
     {

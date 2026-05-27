@@ -131,4 +131,58 @@ public class ClaudeRunnerMockIntegrationTests
         Assert.Equal(AgentRunStatus.Failed, run.Status);
         Assert.Equal(1, run.ExitCode);
     }
+
+    // Regression for ticket #221: claude (Node) can emit its terminal `result` event yet never
+    // exit, because the agent left a child process alive (e.g. qa-tester backgrounding an isolated
+    // test server) that keeps the runtime from terminating. WaitForExitAsync would then block
+    // forever and the run would stay Running indefinitely (the spinner that never stops). The
+    // ResultExitGrace watchdog must force-kill the tree shortly after the result and complete the
+    // run instead of hanging.
+    [Fact]
+    public async Task ResultEmittedButProcessNeverExits_CompletesViaWatchdog()
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("hang-test");
+        var workspace = projects.ResolveWorkspacePath(project);
+        Directory.CreateDirectory(workspace);
+
+        // Scenario: emit a success result, then "hang" via a 10-minute delay so the mock process
+        // stays alive long past its result (standing in for a backgrounded child keeping it alive).
+        var scenarioDir = Path.Combine(tmp.Path, "mock-scenarios");
+        Directory.CreateDirectory(scenarioDir);
+        await File.WriteAllTextAsync(Path.Combine(scenarioDir, "result-then-hang.ndjson"), string.Join('\n', new[]
+        {
+            "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"{{session_id}}\",\"model\":\"mock\"}",
+            "{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Work done. Posting verdict.\"}]}}",
+            "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":42,\"num_turns\":1}",
+            "{\"_meta\":{\"delay_ms\":600000}}",
+        }));
+
+        TestSkillBuilder.Create(workspace, "test-agent", scenario: "result-then-hang");
+
+        var runner = new ClaudeRunner(new SessionRegistry(), new AgentRunRegistry(), new RunConcurrencyGate(1),
+            NullLogger<ClaudeRunner>.Instance)
+        {
+            ResultExitGrace = TimeSpan.FromSeconds(1), // don't wait the full 15s in the test
+        };
+
+        var ctx = new ClaudeRunContext
+        {
+            ProjectSlug = project.Slug,
+            WorkspacePath = workspace,
+            AgentName = "test-agent",
+            SkillFile = "test-agent/SKILL.md",
+            MaxTurns = 1,
+            Env = new Dictionary<string, string> { ["KITTYCLAW_MOCK_SCENARIOS_DIR"] = scenarioDir },
+        };
+
+        // The run must finish well within the mock's 10-minute hang; a 30s budget proves the
+        // watchdog fired rather than the test merely waiting out the mock.
+        var run = await runner.RunAsync(ctx, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(30));
+
+        Assert.Equal(AgentRunStatus.Completed, run.Status);
+        Assert.Equal(0, run.ExitCode);
+        Assert.Contains(run.SnapshotBuffer(), e => e.Kind == "result");
+    }
 }
