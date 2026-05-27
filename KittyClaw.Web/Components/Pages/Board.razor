@@ -829,6 +829,8 @@ else
     // Fullscreen editor
     private string _fullscreenTarget = ""; // "description", "newComment", "editComment"
     private string _fullscreenText = "";
+    private string _fullscreenOriginalText = "";
+    private IDisposable? _escFullscreenEditor;
     private ElementReference _editorTextarea;
     private ElementReference _createTicketDescTextarea;
     private bool _pasteListenerAttached = false;
@@ -853,10 +855,26 @@ else
             "editComment" => _editComment,
             _ => ""
         };
+        _fullscreenOriginalText = _fullscreenText;
+        _escFullscreenEditor = EscapeStack.PushWithFocus(JS, async () =>
+        {
+            await InvokeAsync(async () =>
+            {
+                if (_fullscreenText != _fullscreenOriginalText)
+                {
+                    bool discard = await JS.InvokeAsync<bool>("confirm", L["DiscardChangesConfirm"]);
+                    if (!discard) return;
+                }
+                CancelFullscreen();
+                StateHasChanged();
+            });
+        });
     }
 
     private void CancelFullscreen()
     {
+        _escFullscreenEditor?.Dispose();
+        _escFullscreenEditor = null;
         _fullscreenTarget = "";
         _fullscreenText = "";
         _pasteListenerAttached = false;
@@ -864,6 +882,8 @@ else
 
     private async Task SaveFullscreen()
     {
+        _escFullscreenEditor?.Dispose();
+        _escFullscreenEditor = null;
         var target = _fullscreenTarget;
         var text = _fullscreenText;
         _fullscreenTarget = "";
