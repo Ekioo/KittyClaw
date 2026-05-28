@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="branding/KittyClaw.png" alt="KittyClaw" width="220" />
-</p>
-
 # KittyClaw
 
 <p align="center">
