@@ -49,7 +49,7 @@ Both wrap `dotnet watch --project KittyClaw.Web --non-interactive` and serve the
 From the home page, type a name and click **Create**. A popup asks you to set a workspace folder (absolute path to a repo/folder) and offers to create it if missing. Click **Initialize** to:
 
 1. Create the project registry entry + per-project SQLite DB.
-2. Copy the project template from `ProjectTemplate/` (`preamble.md`, `{agent}/SKILL.md`, empty `memory.md`, `automations.json`, `CLAUDE.md`) into the workspace — agent files under `<workspace>/.agents/`, `CLAUDE.md` at the workspace root.
+2. Copy the project template from `ProjectTemplate/` (`preamble.md`, `{agent}/SKILL.md`, `{agent}/memory/MEMORY.md` index, `memory-consolidation.md`, `automations.json`, `CLAUDE.md`) into the workspace — agent files under `<workspace>/.agents/`, `CLAUDE.md` at the workspace root.
 3. Run `git init` if the workspace is not already a git repo (skipped if `git` isn't installed).
 4. Create a member for each agent slug found in the template.
 5. Navigate to the board.
@@ -66,7 +66,7 @@ All KittyClaw data is stored locally in `%APPDATA%/KittyClaw/`:
 - `runs/{runId}.json` — agent run snapshots (events, status, exit code)
 - `settings.json` — language + onboarding flag
 
-Per-project agent state lives **in the workspace**: `<workspace>/.agents/{agent}/memory.md`, `<workspace>/.agents/channel/` (session state), etc.
+Per-project agent state lives **in the workspace**: `<workspace>/.agents/{agent}/memory/` (scored `MEMORY.md` index + per-topic lesson files), `<workspace>/.agents/channel/` (session state), etc.
 
 ## Project Structure
 
@@ -183,7 +183,7 @@ Tiles can be created from the dashboard's AI chat panel by describing what you w
 - **Conditions**: `ticketInColumn`, `ticketCountInColumn`, `fieldLength`, `priority`, `labels`, `assignedTo`, `hasParent`, `allSubTicketsInStatus`, `ticketAge`.
 - **Actions**: `runAgent`, `moveTicketStatus`, `setLabels`, `assignTicket`, `addComment`, `consolidateAgentMemory`, `commitAgentMemory`, `executePowerShell`.
 - `{assignee}` placeholder in `runAgent.agent` / `runAgent.concurrencyGroup` resolves from the firing ticket's `assignedTo`.
-- Canonical post-run chain: `runAgent` → `consolidateAgentMemory` (focused claude pass that compacts the agent's `memory.md`) → `commitAgentMemory` (commits the result).
+- Canonical post-run chain: `runAgent` → `consolidateAgentMemory` (focused claude pass that curates the agent's `memory/` index + topic files) → `commitAgentMemory` (commits the result).
 
 ---
 
