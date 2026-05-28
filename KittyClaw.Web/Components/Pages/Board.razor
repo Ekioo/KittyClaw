@@ -98,7 +98,7 @@ else
         @foreach (var col in _columns)
         {
             var colIndex = _columns.IndexOf(col);
-            <div class="column @(_draggedColumn?.Id == col.Id ? "column-dragging" : "")"
+            <div @key="col.Id" class="column @(_draggedColumn?.Id == col.Id ? "column-dragging" : "")"
                  style="--col-color: @col.Color"
                  @ondragover="(e) => OnDragOverColumn(col.Name, e)"
                  @ondragover:preventDefault
@@ -677,6 +677,7 @@ else
     private Project? _project;
     private List<TicketSummary> _tickets = [];
     private List<BoardColumn> _columns = [];
+    private bool _restoreScrollAfterRender;
     private Ticket? _selectedTicket;
     private TicketSummary? _draggedTicket;
     private string? _dragOverStatus;
@@ -1182,8 +1183,13 @@ else
 
             StateHasChanged();
         }
+        if (_restoreScrollAfterRender)
+        {
+            _restoreScrollAfterRender = false;
+            await JS.InvokeVoidAsync("restoreColumnScrollPositions");
+        }
         if (_selectedTicket is not null && _escTicketPanel is null)
-            _escTicketPanel = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { ClosePanel(); StateHasChanged(); }));
+            _escTicketPanel = EscapeStack.PushWithFocus(JS, () => InvokeAsync(async () => { await ClosePanel(); StateHasChanged(); }));
         if (!string.IsNullOrEmpty(_fullscreenTarget) && !_pasteListenerAttached)
         {
             _pasteListenerAttached = true;
@@ -1667,13 +1673,15 @@ else
 
     private async Task SelectTicket(TicketSummary ticket)
     {
+        await JS.InvokeVoidAsync("saveColumnScrollPositions");
+        _restoreScrollAfterRender = true;
         _confirmDelete = false;
         _editingTitle = false;
         _editingCommentId = null;
         _fullscreenTarget = "";
         _selectedTicket = await TicketService.GetTicketAsync(Slug, ticket.Id);
         _escTicketPanel?.Dispose();
-        _escTicketPanel = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { ClosePanel(); StateHasChanged(); }));
+        _escTicketPanel = EscapeStack.PushWithFocus(JS, () => InvokeAsync(async () => { await ClosePanel(); StateHasChanged(); }));
 
         // Clear the "updated" indicator only for the ticket actually opened.
         await MarkTicketViewedAsync(ticket.Id);
@@ -1684,8 +1692,10 @@ else
             Navigation.NavigateTo($"/board/{Slug}/ticket/{ticket.Id}", replace: true);
     }
 
-    private void ClosePanel()
+    private async Task ClosePanel()
     {
+        await JS.InvokeVoidAsync("saveColumnScrollPositions");
+        _restoreScrollAfterRender = true;
         _selectedTicket = null;
         _escTicketPanel?.Dispose();
         _escTicketPanel = null;
