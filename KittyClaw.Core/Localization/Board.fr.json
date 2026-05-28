@@ -102,5 +102,6 @@
   "UndoCreate": "Créer",
   "UndoPriority": "Priorité",
   "UndoColumn": "Colonne",
-  "UndoComment": "Commentaire"
+  "UndoComment": "Commentaire",
+  "DiscardChangesConfirm": "Abandonner les modifications non enregistrées ?"
 }
