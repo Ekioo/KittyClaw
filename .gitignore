@@ -46,3 +46,5 @@ Thumbs.db
 # TDD gate scratch (dotnet test/build stdout/stderr written into each worktree)
 .gate-*.out
 .gate-*.err
+.judge-*.out
+.judge-*.err
