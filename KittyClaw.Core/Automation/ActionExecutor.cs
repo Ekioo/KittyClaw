@@ -639,8 +639,8 @@ internal sealed class ActionExecutor
 
             var run = await _runner.RunAsync(runCtx, ct);
 
-            var memoryRel = $".agents/{agent}/memory.md";
-            var diff = await RunGitAsync(rt.Workspace!, $"diff --shortstat HEAD -- \"{memoryRel}\"");
+            var memoryPaths = $"\".agents/{agent}/memory\" \".agents/{agent}/memory.md\"";
+            var diff = await RunGitAsync(rt.Workspace!, $"diff --shortstat HEAD -- {memoryPaths}");
             var diffSummary = diff.stdout.Trim();
             _logger.LogInformation("consolidate {Agent}: run {Status} (exit {Exit}){Diff}",
                 agent, run.Status, run.ExitCode,
@@ -733,11 +733,16 @@ internal sealed class ActionExecutor
             }
 
             var workspace = rt.Workspace!;
-            var memoryRel = $".agents/{agent}/memory.md";
-            var memoryAbs = Path.Combine(workspace, memoryRel.Replace('/', Path.DirectorySeparatorChar));
-            if (!File.Exists(memoryAbs))
+            // Memory lives either in the new per-topic layout (.agents/{agent}/memory/) or, until an
+            // agent has consolidated, in the legacy flat file (.agents/{agent}/memory.md). Commit
+            // whichever exist — both, during the migration window.
+            var memoryDirAbs = Path.Combine(workspace, ".agents", agent, "memory");
+            var legacyAbs = Path.Combine(workspace, ".agents", agent, "memory.md");
+            var hasDir = Directory.Exists(memoryDirAbs);
+            var hasLegacy = File.Exists(legacyAbs);
+            if (!hasDir && !hasLegacy)
             {
-                _logger.LogInformation("commitAgentMemory: no memory file found for {Agent} at {Path}", agent, memoryAbs);
+                _logger.LogInformation("commitAgentMemory: no memory found for {Agent} under {Path}", agent, Path.GetDirectoryName(legacyAbs));
                 return;
             }
 
@@ -745,16 +750,16 @@ internal sealed class ActionExecutor
             // Otherwise fall back to the main workspace repo.
             var agentsDir = Path.Combine(workspace, ".agents");
             string gitCwd;
-            string pathArg;
+            string relBase;
             if (Directory.Exists(Path.Combine(agentsDir, ".git")))
             {
                 gitCwd = agentsDir;
-                pathArg = $"{agent}/memory.md";
+                relBase = $"{agent}";
             }
             else if (Directory.Exists(Path.Combine(workspace, ".git")))
             {
                 gitCwd = workspace;
-                pathArg = memoryRel;
+                relBase = $".agents/{agent}";
             }
             else
             {
@@ -762,17 +767,24 @@ internal sealed class ActionExecutor
                 return;
             }
 
+            // Pathspecs cover the new memory/ dir (recursively) and the legacy flat file. Git tolerates
+            // pathspecs for paths that don't exist on disk (e.g. only the dir is present), so list both.
+            var pathArgs = $"\"{relBase}/memory\" \"{relBase}/memory.md\"";
+
             await _gitLock.WaitAsync();
             try
             {
-                var diff = await RunGitAsync(gitCwd, $"diff --quiet --exit-code -- \"{pathArg}\"");
-                if (diff.exitCode == 0)
+                var diff = await RunGitAsync(gitCwd, $"diff --quiet --exit-code -- {pathArgs}");
+                // diff --quiet returns 1 when there are tracked-file changes; untracked new topic
+                // files are invisible to it, so also check `status --porcelain` before bailing.
+                var status = await RunGitAsync(gitCwd, $"status --porcelain -- {pathArgs}");
+                if (diff.exitCode == 0 && string.IsNullOrWhiteSpace(status.stdout))
                 {
                     _logger.LogDebug("commitAgentMemory: {Agent} memory is clean, nothing to commit", agent);
                     return;
                 }
 
-                var add = await RunGitAsync(gitCwd, $"add -- \"{pathArg}\"");
+                var add = await RunGitAsync(gitCwd, $"add -- {pathArgs}");
                 if (add.exitCode != 0)
                 {
                     _logger.LogWarning("commitAgentMemory: git add failed for {Agent}: {Err}", agent, add.stderr);
@@ -781,15 +793,14 @@ internal sealed class ActionExecutor
 
                 var ticketSuffix = firing?.TicketId is int tid ? $" (#{tid})" : "";
                 var msg = $"chore(memory): {agent}{ticketSuffix}";
-                var commit = await RunGitAsync(gitCwd, $"commit --no-verify -m \"{msg}\" -- \"{pathArg}\"");
+                var commit = await RunGitAsync(gitCwd, $"commit --no-verify -m \"{msg}\" -- {pathArgs}");
                 if (commit.exitCode != 0)
                 {
                     _logger.LogWarning("commitAgentMemory: git commit failed for {Agent}: {Err}", agent, commit.stderr);
                     return;
                 }
 
-                var lineCount = (await File.ReadAllTextAsync(memoryAbs)).Split('\n').Length;
-                _logger.LogInformation("commitAgentMemory: committed {Agent} memory ({Lines} lines)", agent, lineCount);
+                _logger.LogInformation("commitAgentMemory: committed {Agent} memory", agent);
             }
             finally { _gitLock.Release(); }
         }

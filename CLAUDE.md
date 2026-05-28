@@ -47,7 +47,7 @@ tools/                     Repo helpers (publish-stable.ps1, …).
 ## Project template embedding
 
 Files under `ProjectTemplate/` are the source of truth for new-project initialization:
-- `ProjectTemplate/Agents/preamble.md`, `*/SKILL.md`, `*/memory.md`, `automations.json` are embedded with `LogicalName` `KittyClaw.Core.AgentsTemplate/…` and written to `<workspace>/.agents/` on Initialize. The source folder is `Agents/` (no leading dot) so the repo's `.agents` gitignore doesn't hide template files; only the destination at runtime is `.agents/`.
+- `ProjectTemplate/Agents/preamble.md`, `*/SKILL.md`, `*/memory/MEMORY.md`, `memory-consolidation.md`, `automations.json` are embedded with `LogicalName` `KittyClaw.Core.AgentsTemplate/…` and written to `<workspace>/.agents/` on Initialize. The source folder is `Agents/` (no leading dot) so the repo's `.agents` gitignore doesn't hide template files; only the destination at runtime is `.agents/`. Agent memory uses a per-topic layout: `memory/MEMORY.md` is a scored index (always injected), with one topic file per subject created at runtime (read on demand); the consolidation pass curates it.
 - Everything else under `ProjectTemplate/` (e.g. `CLAUDE.md`) is embedded with `LogicalName` `KittyClaw.Core.AgentsTemplateRoot/…` and written to the workspace root.
 
 `AgentsTemplateService` enumerates the embedded resources by these prefixes and copies them out via `InitializeAsync(workspace, overwrite)` (called by the project-creation flow). Keep `ProjectTemplate/**` **generic** (no KittyClaw-specific stack references) since the same files ship to every initialized project.

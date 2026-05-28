@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="branding/KittyClaw.png" alt="KittyClaw" width="220" />
-</p>
-
 # KittyClaw
 
 <p align="center">
@@ -53,7 +49,7 @@ Both wrap `dotnet watch --project KittyClaw.Web --non-interactive` and serve the
 From the home page, type a name and click **Create**. A popup asks you to set a workspace folder (absolute path to a repo/folder) and offers to create it if missing. Click **Initialize** to:
 
 1. Create the project registry entry + per-project SQLite DB.
-2. Copy the project template from `ProjectTemplate/` (`preamble.md`, `{agent}/SKILL.md`, empty `memory.md`, `automations.json`, `CLAUDE.md`) into the workspace — agent files under `<workspace>/.agents/`, `CLAUDE.md` at the workspace root.
+2. Copy the project template from `ProjectTemplate/` (`preamble.md`, `{agent}/SKILL.md`, `{agent}/memory/MEMORY.md` index, `memory-consolidation.md`, `automations.json`, `CLAUDE.md`) into the workspace — agent files under `<workspace>/.agents/`, `CLAUDE.md` at the workspace root.
 3. Run `git init` if the workspace is not already a git repo (skipped if `git` isn't installed).
 4. Create a member for each agent slug found in the template.
 5. Navigate to the board.
@@ -70,7 +66,7 @@ All KittyClaw data is stored locally in `%APPDATA%/KittyClaw/`:
 - `runs/{runId}.json` — agent run snapshots (events, status, exit code)
 - `settings.json` — language + onboarding flag
 
-Per-project agent state lives **in the workspace**: `<workspace>/.agents/{agent}/memory.md`, `<workspace>/.agents/channel/` (session state), etc.
+Per-project agent state lives **in the workspace**: `<workspace>/.agents/{agent}/memory/` (scored `MEMORY.md` index + per-topic lesson files), `<workspace>/.agents/channel/` (session state), etc.
 
 ## Project Structure
 
@@ -131,13 +127,63 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 - Label and member management
 - Image upload in descriptions and comments
 
+## Dashboard
+
+Each project has a customizable **Dashboard** view alongside the kanban board. Tiles are free-dragged, auto-refresh on a schedule, and can be created or edited from the in-app AI chat panel — the agent writes the tile's folder for you.
+
+<p align="center">
+  <img src="docs/assets/dashboard.png" alt="KittyClaw dashboard" width="800" />
+</p>
+
+### Tile types
+
+| Template id   | What it renders                                                       |
+| ------------- | --------------------------------------------------------------------- |
+| `markdown`    | Free-form Markdown content                                            |
+| `table`       | Tabular data with headers and rows                                    |
+| `kpi`         | Single large number with label and optional delta                     |
+| `kpi-grid`    | Grid of multiple KPI cards                                            |
+| `progress`    | Progress bar with current / target values                             |
+| `sparkline`   | Compact inline trend line                                             |
+| `bar-chart`   | Vertical or horizontal bar chart                                      |
+| `donut`       | Donut / pie chart of categorical proportions                          |
+| `gauge`       | Radial gauge for a bounded value                                      |
+| `status-grid` | Grid of colored status pills (up/down/warn)                           |
+| `heatmap`     | Calendar-style heatmap of intensity over time                         |
+| `leaderboard` | Ranked list with scores                                               |
+| `timeline`    | Chronological list of events                                          |
+| `image`       | Static or refreshed image                                             |
+| `mermaid`     | Mermaid diagram (flowchart, sequence, …)                              |
+
+### Folder layout
+
+Each tile lives in its own folder under `.dashboard/` in the project workspace:
+
+```
+.dashboard/
+  <tile-slug>/
+    tile.yaml        # template, title, refresh schedule, prompt
+    script.ps1       # optional refresh script (or script.sh, script.py, …)
+    output.json      # last refresh output consumed by the template
+```
+
+### `tile.yaml` key fields
+
+- `template` — one of the ids in the table above.
+- `title` — display name shown in the tile header.
+- `refresh` — interval (e.g. `5m`, `1h`) for periodic refresh.
+- `refreshAt` — cron-style time-of-day refresh (alternative to `refresh`).
+- `prompt` — instructions sent to the agent when (re)generating `output.json`.
+
+Tiles can be created from the dashboard's AI chat panel by describing what you want — the agent picks a template, writes `tile.yaml`, generates the refresh script, and produces the initial `output.json`.
+
 ## Automation model
 
 - **Triggers**: `interval`, `ticketInColumn`, `statusChange`, `subTicketStatus`, `ticketCommentAdded`, `gitCommit`, `boardIdle`, `agentInactivity`.
 - **Conditions**: `ticketInColumn`, `ticketCountInColumn`, `fieldLength`, `priority`, `labels`, `assignedTo`, `hasParent`, `allSubTicketsInStatus`, `ticketAge`.
 - **Actions**: `runAgent`, `moveTicketStatus`, `setLabels`, `assignTicket`, `addComment`, `consolidateAgentMemory`, `commitAgentMemory`, `executePowerShell`.
 - `{assignee}` placeholder in `runAgent.agent` / `runAgent.concurrencyGroup` resolves from the firing ticket's `assignedTo`.
-- Canonical post-run chain: `runAgent` → `consolidateAgentMemory` (focused claude pass that compacts the agent's `memory.md`) → `commitAgentMemory` (commits the result).
+- Canonical post-run chain: `runAgent` → `consolidateAgentMemory` (focused claude pass that curates the agent's `memory/` index + topic files) → `commitAgentMemory` (commits the result).
 
 ---
 

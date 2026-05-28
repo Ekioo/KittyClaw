@@ -92,6 +92,14 @@ internal static class ProcessLifecycleManager
         foreach (var a in args) psi.ArgumentList.Add(a);
 
         psi.Environment["CLAUDE_AGENT"] = ctx.AgentName;
+        // Disable Claude Code's built-in "auto memory" feature for dispatched agents. It is
+        // on by default and injects instructions to maintain a per-host memory store under
+        // ~/.claude/projects/<hash>/memory/ (MEMORY.md index + topic files) written with the
+        // ordinary Write/Edit tools — so `--disallowed-tools Memory` does NOT stop it. KittyClaw
+        // owns the agent memory layer (.agents/{agent}/memory.md, committed to the workspace),
+        // so we suppress the native one to avoid two divergent, uncommitted memory stores.
+        // Scoped to the subprocess only — the host user's own main-session memory is untouched.
+        psi.Environment["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1";
         if (ctx.TicketId is int tid) psi.Environment["KITTYCLAW_TICKET_ID"] = tid.ToString();
         // Tell skills which API URL to talk to. Skills resolve `${KITTYCLAW_API_URL:-http://localhost:5230}`
         // so they hit the *current* host instance even when running on a non-default port (e.g. an

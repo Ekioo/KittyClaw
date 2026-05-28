@@ -13,7 +13,7 @@ Under `%APPDATA%/KittyClaw/`:
 - `settings.json` — language + onboarding flag.
 
 Inside each workspace:
-- `<workspace>/.agents/{agent}/memory.md` — per-agent memory.
+- `<workspace>/.agents/{agent}/memory/` — per-agent memory: `MEMORY.md` is a scored index (always injected) and each topic file holds the lessons (read on demand). Legacy flat `memory.md` is still supported until an agent's consolidation pass migrates it.
 - `<workspace>/.agents/{agent}/SKILL.md` — per-agent skill (seeded from the [project template](./project-template.md)).
 - `<workspace>/.agents/channel/` — session state.
 - `<workspace>/.agents/automations.json` — per-project automation config.
