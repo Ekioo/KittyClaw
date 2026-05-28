@@ -48,7 +48,6 @@
                         @onclick="() => TogglePause(project)" @onclick:stopPropagation>
                     @(project.IsPaused ? "▶" : "⏸")
                 </button>
-                <button class="project-delete-btn" title="@L["Delete"]" @onclick="() => AskDelete(project)">&times;</button>
             </div>
         }
     }
@@ -78,20 +77,6 @@
            @onkeydown="HandleKeyDown" />
     <button @onclick="CreateProject" disabled="@string.IsNullOrWhiteSpace(_newProjectName)">@L["Create"]</button>
 </div>
-}
-
-@if (_deleteTarget is not null)
-{
-    <div class="confirm-overlay" @onclick="CancelDelete">
-        <div class="confirm-dialog" @onclick:stopPropagation>
-            <p>@L["DeleteProjectConfirm"] <strong>@_deleteTarget.Name</strong>&#160;?</p>
-            <p class="confirm-warning">@L["DeleteProjectWarning"]</p>
-            <div class="confirm-actions">
-                <button class="cancel-btn" @onclick="CancelDelete">@L["Cancel"]</button>
-                <button class="delete-btn" @onclick="ConfirmDelete">@L["Delete"]</button>
-            </div>
-        </div>
-    </div>
 }
 
 @if (_showOnboarding)
@@ -210,8 +195,6 @@
         "updated" => p.UpdatedAt,
         _ => (IComparable)p.Name
     };
-    private Project? _deleteTarget;
-
     private string? _pendingName;
     private string _newWorkspacePath = "";
     private bool _browsing, _canBrowse;
@@ -226,7 +209,6 @@
     private (string text, string css)? _creationStatus;
     private IDisposable? _escOnboarding;
     private IDisposable? _escPending;
-    private IDisposable? _escDelete;
 
     protected override void OnInitialized()
     {
@@ -263,10 +245,6 @@
         else if (_pendingName is null && _escPending is not null)
         { _escPending.Dispose(); _escPending = null; }
 
-        if (_deleteTarget is not null && _escDelete is null)
-            _escDelete = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CancelDelete(); StateHasChanged(); }));
-        else if (_deleteTarget is null && _escDelete is not null)
-        { _escDelete.Dispose(); _escDelete = null; }
     }
 
     private async Task LoadProjectsAsync()
@@ -444,17 +422,6 @@
         }
     }
 
-    private void AskDelete(Project project) => _deleteTarget = project;
-    private void CancelDelete() => _deleteTarget = null;
-
-    private async Task ConfirmDelete()
-    {
-        if (_deleteTarget is null) return;
-        await ProjectService.DeleteProjectAsync(_deleteTarget.Slug);
-        _deleteTarget = null;
-        _projects = await ProjectService.ListProjectsAsync();
-    }
-
     private void ShowSortMenu(MouseEventArgs e)
     {
         _sortMenuX = e.ClientX;
@@ -479,6 +446,5 @@
         RunsState.OnChange -= OnRunsChanged;
         _escOnboarding?.Dispose();
         _escPending?.Dispose();
-        _escDelete?.Dispose();
     }
 }

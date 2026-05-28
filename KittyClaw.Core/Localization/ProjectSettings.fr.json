@@ -21,5 +21,9 @@
   "FallbackOpus47": "Opus 4.7 (claude-opus-4-7)",
   "OpenAutomationsEditor": "Ouvrir l'éditeur d'automations →",
   "DeleteMemberConfirm": "Supprimer le membre",
-  "DeleteLabelConfirm": "Supprimer le label"
+  "DeleteLabelConfirm": "Supprimer le label",
+  "DangerZone": "Zone de danger",
+  "DeleteProject": "Supprimer le projet",
+  "DeleteProjectConfirm": "Supprimer le projet",
+  "DeleteProjectWarning": "Tous les tickets et données associés seront définitivement supprimés. Le dossier de workspace sur le disque N'EST PAS supprimé."
 }

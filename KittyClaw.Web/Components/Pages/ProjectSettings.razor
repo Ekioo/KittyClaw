@@ -221,6 +221,23 @@ else
         <section class="settings-section">
             <a class="settings-primary" href="/board/@Slug/automations">@L["OpenAutomationsEditor"]</a>
         </section>
+
+        <section class="settings-section danger-zone">
+            <h2>@L["DangerZone"]</h2>
+            @if (!_deleteConfirmProject)
+            {
+                <button class="delete-btn" @onclick="() => _deleteConfirmProject = true">@L["DeleteProject"]</button>
+            }
+            else
+            {
+                <p>@L["DeleteProjectConfirm"] <strong>@_project!.Name</strong>&#160;?</p>
+                <p class="confirm-warning">@L["DeleteProjectWarning"]</p>
+                <div class="confirm-actions">
+                    <button class="cancel-btn" @onclick="() => _deleteConfirmProject = false">@L["Cancel"]</button>
+                    <button class="delete-btn" @onclick="ConfirmDeleteProject">@L["Delete"]</button>
+                </div>
+            }
+        </section>
     </div>
 
     @if (_deleteConfirmMember is not null)
@@ -298,6 +315,8 @@ else
     private string _newLabelName = "";
     private string _newLabelColor = "#6366f1";
     private Label? _deleteConfirmLabel;
+
+    private bool _deleteConfirmProject;
 
     protected override async Task OnInitializedAsync()
     {
@@ -499,6 +518,19 @@ else
         {
             _newLabelName = "";
             _labels = await LabelService.ListLabelsAsync(Slug);
+        }
+    }
+
+    private async Task ConfirmDeleteProject()
+    {
+        try
+        {
+            await ProjectService.DeleteProjectAsync(Slug);
+            Nav.NavigateTo("/");
+        }
+        catch
+        {
+            _deleteConfirmProject = false;
         }
     }
 

@@ -149,32 +149,10 @@ a:hover { color: var(--accent-hover); }
     position: relative;
     display: inline-flex;
 }
-.project-card-wrap .project-delete-btn {
-    position: absolute;
-    top: 0.4rem;
-    right: 0.4rem;
-    width: 22px;
-    height: 22px;
-    padding: 0;
-    border: none;
-    border-radius: 50%;
-    background: transparent;
-    color: var(--text-muted);
-    font-size: 1rem;
-    line-height: 1;
-    cursor: pointer;
-    opacity: 0;
-    transition: opacity 0.15s, background 0.15s, color 0.15s;
-}
-.project-card-wrap:hover .project-delete-btn { opacity: 1; }
-.project-card-wrap .project-delete-btn:hover {
-    background: var(--s-blocked);
-    color: #fff;
-}
 .project-card-wrap .project-pause-btn {
     position: absolute;
     top: 0.4rem;
-    right: 1.8rem;
+    right: 0.4rem;
     width: 22px;
     height: 22px;
     padding: 0;

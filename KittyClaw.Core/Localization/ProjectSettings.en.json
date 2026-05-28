@@ -21,5 +21,9 @@
   "FallbackOpus47": "Opus 4.7 (claude-opus-4-7)",
   "OpenAutomationsEditor": "Open automations editor →",
   "DeleteMemberConfirm": "Delete member",
-  "DeleteLabelConfirm": "Delete label"
+  "DeleteLabelConfirm": "Delete label",
+  "DangerZone": "Danger zone",
+  "DeleteProject": "Delete project",
+  "DeleteProjectConfirm": "Delete project",
+  "DeleteProjectWarning": "All tickets and associated data will be permanently deleted. The workspace folder on disk is NOT deleted."
 }
