@@ -278,20 +278,40 @@ internal sealed class ActionExecutor
         List<ActionSpec> remainingActions,
         string? chainKey)
     {
+        var (skip, runTask, agentName) = await StartAgentRunAsync(rt, firing, a, ct);
+        if (skip || runTask is null) return true;
+
+        var statusBefore = state.StatusBeforeMove;
+        var statusAfter = state.StatusAfterMove;
+        var assigneeBefore = state.AssigneeBeforeMove;
+        _ = HandleRunCompletionAsync(runTask, rt, firing, a, agentName, statusBefore, statusAfter, assigneeBefore, remainingActions, commitAsync, chainKey, ct);
+        state.LastRun = null;
+        return false;
+    }
+
+    // Resolves the agent name, applies the skip gate, and starts the run (without awaiting it).
+    // Returns skip=true when the run must not proceed (placeholder unresolved or gate skip);
+    // otherwise runTask is the in-flight run and agentName the resolved slug.
+    private async Task<(bool skip, Task<AgentRun>? runTask, string agentName)> StartAgentRunAsync(
+        ProjectRuntime rt,
+        TriggerFiring firing,
+        RunAgentActionSpec a,
+        CancellationToken ct)
+    {
         var agentName = a.Agent;
         if (agentName.Contains("{assignee}"))
         {
             if (firing.TicketId is null)
             {
                 _logger.LogWarning("Placeholder {{assignee}} in Agent but no ticketId in firing — skipping");
-                return true;
+                return (true, null, agentName);
             }
             var t = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
             var assignee = t?.AssignedTo;
             if (string.IsNullOrEmpty(assignee))
             {
                 _logger.LogWarning("Placeholder {{assignee}} in Agent but ticket #{Id} has no assignee — skipping", firing.TicketId);
-                return true;
+                return (true, null, agentName);
             }
             agentName = agentName.Replace("{assignee}", assignee);
         }
@@ -303,7 +323,7 @@ internal sealed class ActionExecutor
                 .Replace("{assignee}", agentName)
                 .Replace("{ticketId}", firing.TicketId?.ToString() ?? "none");
 
-        if (await _runState.ShouldSkipAsync(rt, a, firing, agentName, group)) return true;
+        if (await _runState.ShouldSkipAsync(rt, a, firing, agentName, group)) return (true, null, agentName);
 
         var project = await _projects.GetProjectAsync(rt.Slug);
         var fallbackModel = project?.FallbackModel;
@@ -332,13 +352,7 @@ internal sealed class ActionExecutor
             catch { /* non-blocking */ }
         }
 
-        var runTask = _runner.RunAsync(runCtx, ct);
-        var statusBefore = state.StatusBeforeMove;
-        var statusAfter = state.StatusAfterMove;
-        var assigneeBefore = state.AssigneeBeforeMove;
-        _ = HandleRunCompletionAsync(runTask, rt, firing, a, agentName, statusBefore, statusAfter, assigneeBefore, remainingActions, commitAsync, chainKey, ct);
-        state.LastRun = null;
-        return false;
+        return (false, _runner.RunAsync(runCtx, ct), agentName);
     }
 
     private async Task HandleRunCompletionAsync(
@@ -402,29 +416,77 @@ internal sealed class ActionExecutor
             catch (Exception ex) { _logger.LogWarning(ex, "Failed to restore ticket #{Id} status", firing.TicketId); }
         }
 
-        foreach (var post in remainingActions)
-        {
-            try
-            {
-                switch (post)
-                {
-                    case CommitAgentMemoryActionSpec cm: await ExecuteCommitAgentMemoryActionAsync(rt, cm, firing); break;
-                    case ConsolidateAgentMemoryActionSpec csm: await ExecuteConsolidateAgentMemoryActionAsync(rt, csm, firing, run, ct); break;
-                    case AddCommentActionSpec ac when firing.TicketId is not null: await ExecuteAddCommentActionAsync(rt, firing, ac); break;
-                    case SetLabelsActionSpec sl when firing.TicketId is not null: await ExecuteSetLabelsActionAsync(rt, firing, sl); break;
-                    case AssignTicketActionSpec at when firing.TicketId is not null: await ExecuteAssignTicketActionAsync(rt, firing, at); break;
-                    case ExecutePowerShellActionSpec ps: await ExecutePowerShellAsync(ps, rt.Workspace!, rt.Slug, firing, ct); break;
-                    // A second RunAgent post-run is not supported — skip silently.
-                }
-            }
-            catch (Exception ex) { _logger.LogWarning(ex, "Post-run action {Type} failed", post.GetType().Name); }
-        }
+        await ProcessPostRunActionsAsync(rt, firing, run, remainingActions, commitAsync, ct);
 
         } // end try
         finally
         {
             if (chainKey is not null)
                 _inFlightChains.TryRemove(chainKey, out _);
+        }
+    }
+
+    // Runs the side-effect actions that follow a runAgent. A second runAgent in the chain
+    // (e.g. the judge that decides whether to advance the ticket) is dispatched here, awaited,
+    // and its own trailing actions are processed recursively. Without this, the chained judge
+    // run would never fire and tickets would stall in their column.
+    private async Task ProcessPostRunActionsAsync(
+        ProjectRuntime rt,
+        TriggerFiring firing,
+        AgentRun precedingRun,
+        List<ActionSpec> actions,
+        Func<DateTime?, Task> commitAsync,
+        CancellationToken ct)
+    {
+        for (int i = 0; i < actions.Count; i++)
+        {
+            var post = actions[i];
+            try
+            {
+                switch (post)
+                {
+                    case CommitAgentMemoryActionSpec cm: await ExecuteCommitAgentMemoryActionAsync(rt, cm, firing); break;
+                    case ConsolidateAgentMemoryActionSpec csm: await ExecuteConsolidateAgentMemoryActionAsync(rt, csm, firing, precedingRun, ct); break;
+                    case AddCommentActionSpec ac when firing.TicketId is not null: await ExecuteAddCommentActionAsync(rt, firing, ac); break;
+                    case SetLabelsActionSpec sl when firing.TicketId is not null: await ExecuteSetLabelsActionAsync(rt, firing, sl); break;
+                    case AssignTicketActionSpec at when firing.TicketId is not null: await ExecuteAssignTicketActionAsync(rt, firing, at); break;
+                    case ExecutePowerShellActionSpec ps: await ExecutePowerShellAsync(ps, rt.Workspace!, rt.Slug, firing, ct); break;
+                    case RunAgentActionSpec ra:
+                    {
+                        var (skip, runTask, agentName) = await StartAgentRunAsync(rt, firing, ra, ct);
+                        if (skip || runTask is null) return;
+
+                        AgentRun chainedRun;
+                        try { chainedRun = await runTask; }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "chained runAgent {Agent} crashed for ticket #{Id}", agentName, firing.TicketId);
+                            return;
+                        }
+
+                        if (chainedRun.Status == AgentRunStatus.Completed)
+                            await commitAsync(DateTime.UtcNow);
+
+                        if (firing.TicketId is not null)
+                        {
+                            var statusKey = chainedRun.Status switch
+                            {
+                                AgentRunStatus.Completed => "ActAgentCompleted",
+                                AgentRunStatus.Failed    => "ActAgentFailed",
+                                AgentRunStatus.Stopped   => "ActAgentStopped",
+                                _                        => "ActAgentCompleted",
+                            };
+                            try { await _tickets.AddActivityAsync(rt.Slug, firing.TicketId.Value, _loc.Get(statusKey, agentName), "automation"); }
+                            catch { /* non-blocking */ }
+                        }
+
+                        var rest = actions.Skip(i + 1).ToList();
+                        await ProcessPostRunActionsAsync(rt, firing, chainedRun, rest, commitAsync, ct);
+                        return;
+                    }
+                }
+            }
+            catch (Exception ex) { _logger.LogWarning(ex, "Post-run action {Type} failed", post.GetType().Name); }
         }
     }
 
