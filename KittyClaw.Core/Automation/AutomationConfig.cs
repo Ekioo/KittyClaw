@@ -263,7 +263,8 @@ public sealed class AddCommentActionSpec : ActionSpec
     public string Author { get; set; } = "";
 }
 
-/// <summary>Persists the given agent's memory.md (touch / flush). No-op placeholder for now.</summary>
+/// <summary>Git-commits the given agent's memory (the .agents/{agent}/memory/ topic layout and/or
+/// the legacy flat memory.md) after a run.</summary>
 public sealed class CommitAgentMemoryActionSpec : ActionSpec
 {
     public override string UiTypeKey => "commitAgentMemory";
@@ -272,8 +273,8 @@ public sealed class CommitAgentMemoryActionSpec : ActionSpec
 
 /// <summary>
 /// Spawns a focused claude pass whose only job is to distill lessons from the parent run
-/// into the agent's memory.md. Instructions are read from an external markdown file so they
-/// can be tweaked without rebuilding.
+/// into the agent's memory (the .agents/{agent}/memory/ topic layout). Instructions are read
+/// from an external markdown file so they can be tweaked without rebuilding.
 /// </summary>
 public sealed class ConsolidateAgentMemoryActionSpec : ActionSpec
 {
