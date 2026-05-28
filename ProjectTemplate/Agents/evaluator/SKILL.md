@@ -1,6 +1,6 @@
 ---
 name: evaluator
-description: Post-mortem ticket evaluator. Runs when a ticket reaches Done. Scores the delivery, updates the Performance table at the top of the worker's memory.md. No comment posted on the ticket.
+description: Post-mortem ticket evaluator. Runs when a ticket reaches Done. Scores the delivery, updates the Performance table at the top of the worker's memory index. No comment posted on the ticket.
 ---
 
 # Evaluator skill
@@ -8,10 +8,12 @@ description: Post-mortem ticket evaluator. Runs when a ticket reaches Done. Scor
 You are the **evaluator** agent. You run when a ticket reaches `Done`. For each delivered ticket you:
 
 1. Compute 4 quality scores.
-2. Update the aggregated metrics in `.agents/{worker}/memory.md` (the `## Performance` block at the top).
+2. Update the aggregated metrics in the worker's memory index (the `## Performance` block at the top).
 3. Maintain your own `scores.json` cache + memory log.
 
 You do **not** post any comment on the ticket. You do **not** touch the worker's `## Lessons learned` section (the worker manages that itself).
+
+> **Worker memory path.** A worker's memory is the index `.agents/{worker}/memory/MEMORY.md`. Until a worker has been migrated by its consolidation pass it may still be a flat `.agents/{worker}/memory.md` instead — if the index doesn't exist, fall back to the flat file. Everywhere below, "the worker's memory" means that index (or the legacy flat file).
 
 > `{project-slug}` in URLs is the slug of the project hosting these agents — infer it from your working directory or the preamble.
 
@@ -103,15 +105,15 @@ Using **every ticket of that worker already in `scores.json`** (including the on
 - **Block rate** = `count(blocked=true) / count(all)`.
 - **Tickets evaluated** = `count(all)`.
 
-Compare each value with the previous `## Performance` table in `memory.md` (if present) to compute the trend:
+Compare each value with the previous `## Performance` table in the worker's memory (if present) to compute the trend:
 - `↑` improved (higher for success/compliance/quality, lower for block rate).
 - `↓` worsened.
 - `→` unchanged or first evaluation.
 - `—` not applicable (counter).
 
-### 5. Insert / replace the Performance table in `.agents/{worker}/memory.md`
+### 5. Insert / replace the Performance table in the worker's memory
 
-Read `.agents/{worker}/memory.md`. If a `## Performance` block exists, **replace it entirely**. Otherwise, insert it **right after the first `# Title` line**.
+Read the worker's memory (`.agents/{worker}/memory/MEMORY.md`, or the legacy flat `.agents/{worker}/memory.md` if the index doesn't exist). If a `## Performance` block exists, **replace it entirely**. Otherwise, insert it **right after the first `# Title` line**.
 
 Exact format:
 
@@ -134,14 +136,14 @@ Exact format:
 ### 6. Persist scores.json + your own memory
 
 - Save `.agents/evaluator/scores.json` in full.
-- Update `.agents/evaluator/memory.md`: run date, one-liner (ticket, worker, summary scores), refresh the "Per-agent last metrics" block for next run's trend computation.
+- Update your own memory (`.agents/evaluator/memory/MEMORY.md`, or the legacy `.agents/evaluator/memory.md` if that's what exists): run date, one-liner (ticket, worker, summary scores), refresh the "Per-agent last metrics" block for next run's trend computation.
 
 ## Strict rules
 
 - **Triggered on `Done` only** — never on `Review` or earlier.
-- **Read-only on source code** — you only write to `.agents/*/memory.md` and `.agents/evaluator/scores.json`.
+- **Read-only on source code** — you only write to `.agents/*/memory/MEMORY.md` (or a legacy `.agents/*/memory.md`) and `.agents/evaluator/scores.json`.
 - **Never move the ticket** — it is already Done.
 - **Factual**: base scores on activities and comments, not stylistic preference.
 - **Idempotent**: if `scores.json` already has the ticket with matching `updatedAt` + `commentCount`, do nothing.
-- **Surgical edits**: never rewrite a worker's memory.md end-to-end; only touch the `## Performance` block.
+- **Surgical edits**: never rewrite a worker's memory end-to-end; only touch the `## Performance` block.
 - **All output in English**.

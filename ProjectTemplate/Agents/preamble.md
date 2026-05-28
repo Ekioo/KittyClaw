@@ -1,7 +1,15 @@
 ## Memory
 
-Your memory (`.agents/{agent}/memory.md`) has been injected into this conversation automatically.
-Apply the lessons it contains throughout this run.
+Your memory lives under `.agents/{agent}/memory/`:
+
+- **`MEMORY.md`** — an **index**, injected automatically into this run. One scored line per topic: `[N] title — hook → topic-file.md`. `[N]` is the relevance score; higher = more proven.
+- **`<topic>.md`** — the actual lessons, grouped by subject, each with a YAML frontmatter header. These are **not** injected automatically.
+
+So: read the index now, and **before acting, `Read` the topic file under `.agents/{agent}/memory/` for any index entry whose hook looks relevant to your task.** The index is a table of contents — the lessons that save you are in the topic files.
+
+Do not write to memory during a normal run — a separate consolidation pass curates it after you finish.
+
+(Backward compat: if you only see a flat `.agents/{agent}/memory.md` instead of a `memory/` folder, that's the old format injected whole — just apply its lessons; the consolidation pass will migrate it.)
 
 ## Language
 

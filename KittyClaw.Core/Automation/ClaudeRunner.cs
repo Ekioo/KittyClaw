@@ -598,14 +598,56 @@ public sealed class ClaudeRunner
             sb.AppendLine();
         }
 
-        var memoryFile = Path.Combine(ctx.WorkspacePath, ".agents", ctx.AgentName, "memory.md");
-        if (File.Exists(memoryFile))
-        {
-            sb.AppendLine(await File.ReadAllTextAsync(memoryFile, ct));
-            sb.AppendLine();
-        }
+        await AppendMemoryAsync(sb, ctx, ct);
 
         return sb.ToString();
+    }
+
+    // Injects the agent's memory into the run prompt.
+    //
+    // New layout: .agents/{agent}/memory/ — a MEMORY.md index (always loaded; one scored line
+    // per topic) plus one file per topic (the actual lessons, lazily read by the agent).
+    //  - Normal runs inject the index ONLY. The agent Reads the relevant topic files on demand,
+    //    which keeps the always-on context small as memory grows.
+    //  - Consolidation runs (SessionScope == "consolidate") inject the index AND every topic file,
+    //    so the curator can dedup and rebalance scores across the whole memory in one pass.
+    //
+    // Backward compat: when the memory/ dir is absent we fall back to the legacy flat memory.md
+    // (injected whole, the old eager behaviour). An agent keeps the legacy path until its next
+    // consolidation migrates its content into the index layout, so nothing regresses abruptly.
+    private static async Task AppendMemoryAsync(StringBuilder sb, ClaudeRunContext ctx, CancellationToken ct)
+    {
+        var agentDir = Path.Combine(ctx.WorkspacePath, ".agents", ctx.AgentName);
+        var memDir = Path.Combine(agentDir, "memory");
+        var indexFile = Path.Combine(memDir, "MEMORY.md");
+        var isConsolidate = ctx.SessionScope == "consolidate";
+
+        if (File.Exists(indexFile))
+        {
+            sb.AppendLine(await File.ReadAllTextAsync(indexFile, ct));
+            sb.AppendLine();
+
+            if (isConsolidate)
+            {
+                foreach (var topic in Directory.EnumerateFiles(memDir, "*.md")
+                    .Where(f => !Path.GetFileName(f).Equals("MEMORY.md", StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(f => f, StringComparer.Ordinal))
+                {
+                    sb.AppendLine($"--- memory topic: {Path.GetFileName(topic)} ---");
+                    sb.AppendLine(await File.ReadAllTextAsync(topic, ct));
+                    sb.AppendLine();
+                }
+            }
+        }
+
+        // Legacy flat file: inject it when there's no index yet (full backward compat), or during
+        // consolidation while it still exists (so the curator can migrate it into the new layout).
+        var legacyFile = Path.Combine(agentDir, "memory.md");
+        if (File.Exists(legacyFile) && (!File.Exists(indexFile) || isConsolidate))
+        {
+            sb.AppendLine(await File.ReadAllTextAsync(legacyFile, ct));
+            sb.AppendLine();
+        }
     }
 
     internal static string FlattenJson(JsonElement e)

@@ -37,8 +37,10 @@
       <LogicalName>KittyClaw.Core.AgentsTemplate/%(RecursiveDir)SKILL.md</LogicalName>
       <WithCulture>false</WithCulture>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\ProjectTemplate\Agents\**\memory.md">
-      <LogicalName>KittyClaw.Core.AgentsTemplate/%(RecursiveDir)memory.md</LogicalName>
+    <!-- New per-topic memory layout: each agent ships a memory/MEMORY.md index skeleton. Topic
+         files are created at runtime by the consolidation pass, so only the index is embedded. -->
+    <EmbeddedResource Include="..\ProjectTemplate\Agents\**\memory\*.md">
+      <LogicalName>KittyClaw.Core.AgentsTemplate/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
       <WithCulture>false</WithCulture>
     </EmbeddedResource>
     <!-- Files copied to the workspace root on Initialize (e.g. CLAUDE.md). The glob excludes
