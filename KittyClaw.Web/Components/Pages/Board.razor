@@ -632,6 +632,19 @@ else
     </div>
 }
 
+@if (_showDiscardConfirm)
+{
+    <div class="modal-backdrop">
+        <div class="modal-dialog">
+            <p>@L["DiscardChangesConfirm"]</p>
+            <div class="modal-actions">
+                <button @onclick="ConfirmDiscard">@L["Discard"]</button>
+                <button class="cancel-btn" @onclick="CancelDiscard">@L["Cancel"]</button>
+            </div>
+        </div>
+    </div>
+}
+
 @if (_activeRunDrawerId is not null)
 {
     <ErrorBoundary>
@@ -831,6 +844,7 @@ else
     private string _fullscreenText = "";
     private string _fullscreenOriginalText = "";
     private IDisposable? _escFullscreenEditor;
+    private bool _showDiscardConfirm;
     private ElementReference _editorTextarea;
     private ElementReference _createTicketDescTextarea;
     private bool _pasteListenerAttached = false;
@@ -856,17 +870,20 @@ else
             _ => ""
         };
         _fullscreenOriginalText = _fullscreenText;
-        _escFullscreenEditor = EscapeStack.PushWithFocus(JS, async () =>
+        _escFullscreenEditor = EscapeStack.PushWithFocus(JS, () =>
         {
-            await InvokeAsync(async () =>
+            InvokeAsync(() =>
             {
                 if (_fullscreenText != _fullscreenOriginalText)
                 {
-                    bool discard = await JS.InvokeAsync<bool>("confirm", L["DiscardChangesConfirm"]);
-                    if (!discard) return;
+                    _showDiscardConfirm = true;
+                    StateHasChanged();
                 }
-                CancelFullscreen();
-                StateHasChanged();
+                else
+                {
+                    CancelFullscreen();
+                    StateHasChanged();
+                }
             });
         });
     }
@@ -875,9 +892,39 @@ else
     {
         _escFullscreenEditor?.Dispose();
         _escFullscreenEditor = null;
+        _showDiscardConfirm = false;
         _fullscreenTarget = "";
         _fullscreenText = "";
         _pasteListenerAttached = false;
+    }
+
+    private void ConfirmDiscard()
+    {
+        _showDiscardConfirm = false;
+        CancelFullscreen();
+    }
+
+    private void CancelDiscard()
+    {
+        _showDiscardConfirm = false;
+        // Re-register ESC handler so subsequent ESC still triggers the dirty-check
+        _escFullscreenEditor?.Dispose();
+        _escFullscreenEditor = EscapeStack.PushWithFocus(JS, () =>
+        {
+            InvokeAsync(() =>
+            {
+                if (_fullscreenText != _fullscreenOriginalText)
+                {
+                    _showDiscardConfirm = true;
+                    StateHasChanged();
+                }
+                else
+                {
+                    CancelFullscreen();
+                    StateHasChanged();
+                }
+            });
+        });
     }
 
     private async Task SaveFullscreen()
