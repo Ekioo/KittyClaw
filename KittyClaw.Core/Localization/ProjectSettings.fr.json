@@ -18,6 +18,8 @@
   "FallbackModel": "Modèle de repli (quota)",
   "FallbackModelHint": "Si une automation atteint la limite d'usage de son modèle (Sonnet par ex.), le run est automatiquement relancé avec ce modèle. Laisser désactivé pour ne pas faire de repli.",
   "FallbackDisabled": "Désactivé",
+  "FallbackOpus48": "Opus 4.8 (claude-opus-4-8)",
+  "FallbackOpus48_1m": "Opus 4.8 1M (claude-opus-4-8-1m)",
   "FallbackOpus47": "Opus 4.7 (claude-opus-4-7)",
   "OpenAutomationsEditor": "Ouvrir l'éditeur d'automations →",
   "DeleteMemberConfirm": "Supprimer le membre",

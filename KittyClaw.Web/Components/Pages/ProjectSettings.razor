@@ -64,6 +64,8 @@ else
             <div class="settings-row">
                 <select class="settings-input" style="max-width:340px" @bind="_fallbackModel">
                     <option value="">@L["FallbackDisabled"]</option>
+                    <option value="claude-opus-4-8">@L["FallbackOpus48"]</option>
+                    <option value="claude-opus-4-8-1m">@L["FallbackOpus48_1m"]</option>
                     <option value="claude-opus-4-7">@L["FallbackOpus47"]</option>
                 </select>
                 <button class="settings-primary" @onclick="SaveFallbackModel" disabled="@_savingFallback">
