@@ -98,7 +98,7 @@ else
         @foreach (var col in _columns)
         {
             var colIndex = _columns.IndexOf(col);
-            <div class="column @(_draggedColumn?.Id == col.Id ? "column-dragging" : "")"
+            <div @key="col.Id" class="column @(_draggedColumn?.Id == col.Id ? "column-dragging" : "")"
                  style="--col-color: @col.Color"
                  @ondragover="(e) => OnDragOverColumn(col.Name, e)"
                  @ondragover:preventDefault
@@ -632,6 +632,19 @@ else
     </div>
 }
 
+@if (_showDiscardConfirm)
+{
+    <div class="modal-backdrop">
+        <div class="modal-dialog">
+            <p>@L["DiscardChangesConfirm"]</p>
+            <div class="modal-actions">
+                <button @onclick="ConfirmDiscard">@L["Discard"]</button>
+                <button class="cancel-btn" @onclick="CancelDiscard">@L["Cancel"]</button>
+            </div>
+        </div>
+    </div>
+}
+
 @if (_activeRunDrawerId is not null)
 {
     <ErrorBoundary>
@@ -677,6 +690,7 @@ else
     private Project? _project;
     private List<TicketSummary> _tickets = [];
     private List<BoardColumn> _columns = [];
+    private bool _restoreScrollAfterRender;
     private Ticket? _selectedTicket;
     private TicketSummary? _draggedTicket;
     private string? _dragOverStatus;
@@ -831,6 +845,7 @@ else
     private string _fullscreenText = "";
     private string _fullscreenOriginalText = "";
     private IDisposable? _escFullscreenEditor;
+    private bool _showDiscardConfirm;
     private ElementReference _editorTextarea;
     private ElementReference _createTicketDescTextarea;
     private bool _pasteListenerAttached = false;
@@ -856,17 +871,20 @@ else
             _ => ""
         };
         _fullscreenOriginalText = _fullscreenText;
-        _escFullscreenEditor = EscapeStack.PushWithFocus(JS, async () =>
+        _escFullscreenEditor = EscapeStack.PushWithFocus(JS, () =>
         {
-            await InvokeAsync(async () =>
+            InvokeAsync(() =>
             {
                 if (_fullscreenText != _fullscreenOriginalText)
                 {
-                    bool discard = await JS.InvokeAsync<bool>("confirm", L["DiscardChangesConfirm"]);
-                    if (!discard) return;
+                    _showDiscardConfirm = true;
+                    StateHasChanged();
                 }
-                CancelFullscreen();
-                StateHasChanged();
+                else
+                {
+                    CancelFullscreen();
+                    StateHasChanged();
+                }
             });
         });
     }
@@ -875,9 +893,39 @@ else
     {
         _escFullscreenEditor?.Dispose();
         _escFullscreenEditor = null;
+        _showDiscardConfirm = false;
         _fullscreenTarget = "";
         _fullscreenText = "";
         _pasteListenerAttached = false;
+    }
+
+    private void ConfirmDiscard()
+    {
+        _showDiscardConfirm = false;
+        CancelFullscreen();
+    }
+
+    private void CancelDiscard()
+    {
+        _showDiscardConfirm = false;
+        // Re-register ESC handler so subsequent ESC still triggers the dirty-check
+        _escFullscreenEditor?.Dispose();
+        _escFullscreenEditor = EscapeStack.PushWithFocus(JS, () =>
+        {
+            InvokeAsync(() =>
+            {
+                if (_fullscreenText != _fullscreenOriginalText)
+                {
+                    _showDiscardConfirm = true;
+                    StateHasChanged();
+                }
+                else
+                {
+                    CancelFullscreen();
+                    StateHasChanged();
+                }
+            });
+        });
     }
 
     private async Task SaveFullscreen()
@@ -1182,8 +1230,13 @@ else
 
             StateHasChanged();
         }
+        if (_restoreScrollAfterRender)
+        {
+            _restoreScrollAfterRender = false;
+            await JS.InvokeVoidAsync("restoreColumnScrollPositions");
+        }
         if (_selectedTicket is not null && _escTicketPanel is null)
-            _escTicketPanel = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { ClosePanel(); StateHasChanged(); }));
+            _escTicketPanel = EscapeStack.PushWithFocus(JS, () => InvokeAsync(async () => { await ClosePanel(); StateHasChanged(); }));
         if (!string.IsNullOrEmpty(_fullscreenTarget) && !_pasteListenerAttached)
         {
             _pasteListenerAttached = true;
@@ -1667,13 +1720,15 @@ else
 
     private async Task SelectTicket(TicketSummary ticket)
     {
+        await JS.InvokeVoidAsync("saveColumnScrollPositions");
+        _restoreScrollAfterRender = true;
         _confirmDelete = false;
         _editingTitle = false;
         _editingCommentId = null;
         _fullscreenTarget = "";
         _selectedTicket = await TicketService.GetTicketAsync(Slug, ticket.Id);
         _escTicketPanel?.Dispose();
-        _escTicketPanel = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { ClosePanel(); StateHasChanged(); }));
+        _escTicketPanel = EscapeStack.PushWithFocus(JS, () => InvokeAsync(async () => { await ClosePanel(); StateHasChanged(); }));
 
         // Clear the "updated" indicator only for the ticket actually opened.
         await MarkTicketViewedAsync(ticket.Id);
@@ -1684,8 +1739,10 @@ else
             Navigation.NavigateTo($"/board/{Slug}/ticket/{ticket.Id}", replace: true);
     }
 
-    private void ClosePanel()
+    private async Task ClosePanel()
     {
+        await JS.InvokeVoidAsync("saveColumnScrollPositions");
+        _restoreScrollAfterRender = true;
         _selectedTicket = null;
         _escTicketPanel?.Dispose();
         _escTicketPanel = null;

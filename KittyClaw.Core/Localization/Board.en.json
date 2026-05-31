@@ -103,5 +103,6 @@
   "UndoPriority": "Priority",
   "UndoColumn": "Column",
   "UndoComment": "Comment",
-  "DiscardChangesConfirm": "Discard unsaved changes?"
+  "DiscardChangesConfirm": "Discard unsaved changes?",
+  "Discard": "Discard"
 }

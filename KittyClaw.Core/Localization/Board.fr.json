@@ -103,5 +103,6 @@
   "UndoPriority": "Priorité",
   "UndoColumn": "Colonne",
   "UndoComment": "Commentaire",
-  "DiscardChangesConfirm": "Abandonner les modifications non enregistrées ?"
+  "DiscardChangesConfirm": "Abandonner les modifications non enregistrées ?",
+  "Discard": "Abandonner"
 }
