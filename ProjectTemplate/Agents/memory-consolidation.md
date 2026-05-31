@@ -30,14 +30,17 @@ Your memory lives under `.agents/{agentSlug}/memory/`:
 
 In a **normal** run only `MEMORY.md` is injected — the agent reads the relevant topic files on demand. So the index hook must be good enough to make the agent want to open the file. In **this** consolidation run, the index AND every topic file are injected, so you can see and curate everything.
 
-## Migration (only when a legacy `memory.md` is present)
+## Migration (when a legacy flat `memory.md` is still present)
 
-If you still see a flat `.agents/{agentSlug}/memory.md` (old format: `[N]` lessons under `## Lessons learned` etc., no `memory/` index):
+Migrate the flat `.agents/{agentSlug}/memory.md` into the `memory/` layout **without losing anything**. Hard rules — violating these strands lessons:
 
-1. Create `.agents/{agentSlug}/memory/` with a `MEMORY.md` index and one topic file per coherent group of the old lessons (carry over the existing `[N]` scores onto the index lines; preserve the `## Performance` table verbatim into the index).
-2. Once everything is moved, **delete the legacy `memory.md`**.
+- **Never write an index line for a topic file you have not created in this same pass.** Every `MEMORY.md` entry MUST resolve to a real file sitting beside it. An index full of pointers to files that don't exist is the failure mode to avoid.
+- **Migrate in atomic chunks.** Each pass, pick a few coherent groups; for *each* group, create its `<topic>.md` (frontmatter + the **full** lessons, not just a hook) AND add its index line — together. Leave every not-yet-migrated lesson **in the flat `memory.md`, untouched**. Do NOT pre-list un-migrated topics in the index.
+- Copy the `## Performance` table verbatim into the index (it is not a topic file).
+- **Keep the flat `memory.md` until EVERY lesson has been moved into a topic file.** Delete it only when nothing useful remains in it. While it exists it is still injected, so recall is never lost mid-migration.
+- **Repair earlier damage.** If the index already has lines pointing to non-existent topic files (from a previous incomplete pass), fix them this pass: create each missing `<topic>.md` from the matching content still in the flat `memory.md`, or delete the dangling line if the content is gone.
 
-Do this migration incrementally if the file is large — it's fine to migrate part now and the rest on later passes, as long as you never lose a lesson and never leave a lesson in both places.
+A large memory legitimately takes several passes — that is expected. Better to migrate three groups correctly than to write a complete index whose files don't exist.
 
 ## Your task (steady state)
 
@@ -65,7 +68,8 @@ Do this migration incrementally if the file is large — it's fine to migrate pa
 
 ## Output rules
 
-- Edit/create files **only** under `.agents/{agentSlug}/memory/` (and delete the legacy `memory.md` once migrated). Touch nothing else.
+- **Invariant: every line in `MEMORY.md` must point to a topic file that exists beside it.** Before finishing, make sure you did not leave a pointer to a missing file.
+- Edit/create files **only** under `.agents/{agentSlug}/memory/` (and delete the legacy `memory.md` once fully migrated). Touch nothing else.
 - Do NOT post comments on tickets. Do NOT call the API.
 - Do NOT print a summary — silent edits only. The git commit that follows is your audit trail.
 

@@ -640,10 +640,14 @@ public sealed class ClaudeRunner
             }
         }
 
-        // Legacy flat file: inject it when there's no index yet (full backward compat), or during
-        // consolidation while it still exists (so the curator can migrate it into the new layout).
+        // Legacy flat file: inject it whenever it still exists. While an agent is mid-migration the
+        // index may already exist but only some lessons have been moved into topic files (the rest
+        // still live in the flat file, and the index may even point to topic files not yet created).
+        // Injecting the flat file as long as it is present guarantees no recall is lost during that
+        // window. Once the consolidation pass has moved everything and deleted the flat file, only
+        // the index is injected (pure lazy) and the agent reads topic files on demand.
         var legacyFile = Path.Combine(agentDir, "memory.md");
-        if (File.Exists(legacyFile) && (!File.Exists(indexFile) || isConsolidate))
+        if (File.Exists(legacyFile))
         {
             sb.AppendLine(await File.ReadAllTextAsync(legacyFile, ct));
             sb.AppendLine();
