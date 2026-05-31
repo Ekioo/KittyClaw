@@ -15,6 +15,8 @@
   "LabelsSection": "Labels",
   "LabelsHint": "Reusable tags to categorize tickets.",
   "NewLabelSettingsPlaceholder": "New label\u2026",
+  "LocalModel": "Local model (Ollama)",
+  "LocalModelHint": "Configure an Ollama-compatible endpoint for local model dispatch. Set the proxy base URL (e.g. http://localhost:11434) and the model name (e.g. qwen3-coder:30b). Members using the \"Local (Ollama)\" model option will use these settings.",
   "FallbackModel": "Fallback model (quota)",
   "FallbackModelHint": "When an automation hits its model's usage limit (e.g. Sonnet weekly cap), the run is automatically retried with this model. Leave disabled to skip the fallback.",
   "FallbackDisabled": "Disabled",

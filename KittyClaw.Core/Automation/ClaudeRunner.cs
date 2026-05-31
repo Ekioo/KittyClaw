@@ -72,6 +72,9 @@ public sealed class ClaudeRunContext
 
     /// <summary>Absolute paths to user-pasted image files saved under the workspace's channel/tmp. BuildPromptAsync surfaces them under an [Attached images] block; the runner best-effort deletes them after the process exits.</summary>
     public IReadOnlyList<string>? ImagePaths { get; init; }
+
+    /// <summary>When non-null, the runner emits an error event and returns immediately without launching a subprocess.</summary>
+    public string? OllamaValidationError { get; init; }
 }
 
 public sealed class ClaudeRunner
@@ -105,6 +108,13 @@ public sealed class ClaudeRunner
         };
         if (ctx.OnEventHook is not null) run.OnEvent += ctx.OnEventHook;
         _runs.Register(run);
+
+        if (ctx.OllamaValidationError is not null)
+        {
+            run.Push(new StreamEvent(DateTime.UtcNow, "error", ctx.OllamaValidationError));
+            _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
+            return run;
+        }
 
         string skillContent;
         if (ctx.InlineSkillContent is not null)
