@@ -18,6 +18,8 @@
   "FallbackModel": "Fallback model (quota)",
   "FallbackModelHint": "When an automation hits its model's usage limit (e.g. Sonnet weekly cap), the run is automatically retried with this model. Leave disabled to skip the fallback.",
   "FallbackDisabled": "Disabled",
+  "FallbackOpus48": "Opus 4.8 (claude-opus-4-8)",
+  "FallbackOpus48_1m": "Opus 4.8 1M (claude-opus-4-8-1m)",
   "FallbackOpus47": "Opus 4.7 (claude-opus-4-7)",
   "OpenAutomationsEditor": "Open automations editor →",
   "DeleteMemberConfirm": "Delete member",
