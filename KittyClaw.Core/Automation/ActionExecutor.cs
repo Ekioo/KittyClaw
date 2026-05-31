@@ -328,6 +328,35 @@ internal sealed class ActionExecutor
         var project = await _projects.GetProjectAsync(rt.Slug);
         var fallbackModel = project?.FallbackModel;
 
+        var effectiveModel = a.Model;
+        var effectiveEnv = a.Env;
+        string? ollamaValidationError = null;
+
+        if (a.Model == "openai-compatible")
+        {
+            var baseUrl = project?.LocalModelBaseUrl;
+            var localModel = project?.LocalModelName;
+            if (string.IsNullOrWhiteSpace(baseUrl))
+            {
+                ollamaValidationError = "openai-compatible model: LocalModelBaseUrl is not configured for this project";
+            }
+            else if (string.IsNullOrWhiteSpace(localModel))
+            {
+                ollamaValidationError = "openai-compatible model: LocalModelName is not configured for this project";
+            }
+            else
+            {
+                effectiveModel = localModel;
+                var env = new Dictionary<string, string>(effectiveEnv)
+                {
+                    ["ANTHROPIC_BASE_URL"] = baseUrl,
+                    ["ANTHROPIC_AUTH_TOKEN"] = "ollama",
+                    ["ANTHROPIC_MODEL"] = localModel,
+                };
+                effectiveEnv = env;
+            }
+        }
+
         var runCtx = new ClaudeRunContext
         {
             ProjectSlug = rt.Slug,
@@ -339,11 +368,12 @@ internal sealed class ActionExecutor
             TicketStatus = firing.TicketStatus,
             MaxTurns = a.MaxTurns,
             ConcurrencyGroup = group,
-            Env = a.Env,
-            Model = a.Model,
+            Env = effectiveEnv,
+            Model = effectiveModel,
             FallbackModel = fallbackModel,
             ExtraContext = a.Context,
             RetryOnResumeFailure = true,
+            OllamaValidationError = ollamaValidationError,
         };
         _sessions.SetLastDispatched(rt.Workspace!, agentName, DateTime.UtcNow);
         if (firing.TicketId is not null)

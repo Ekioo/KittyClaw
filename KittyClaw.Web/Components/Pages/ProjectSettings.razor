@@ -79,6 +79,22 @@ else
         </section>
 
         <section class="settings-section">
+            <h2>@L["LocalModel"]</h2>
+            <p class="settings-hint">@L["LocalModelHint"]</p>
+            <div class="settings-row">
+                <input class="settings-input" placeholder="http://localhost:11434" @bind="_localModelBaseUrl" style="max-width:280px" />
+                <input class="settings-input" placeholder="qwen3-coder:30b" @bind="_localModelName" style="max-width:200px" />
+                <button class="settings-primary" @onclick="SaveLocalModelConfig" disabled="@_savingLocalModel">
+                    @(_savingLocalModel ? "…" : L["Save"])
+                </button>
+            </div>
+            @if (_localModelStatus is not null)
+            {
+                <div class="settings-status @_localModelStatus.Value.css">@_localModelStatus.Value.text</div>
+            }
+        </section>
+
+        <section class="settings-section">
             <h2>@L["Members"]</h2>
             <p class="settings-hint">@L["MembersHint"]</p>
             <table class="settings-list">
@@ -296,6 +312,11 @@ else
     private bool _savingFallback;
     private (string text, string css)? _fallbackStatus;
 
+    private string _localModelBaseUrl = "";
+    private string _localModelName = "";
+    private bool _savingLocalModel;
+    private (string text, string css)? _localModelStatus;
+
     private List<Member> _members = new();
     private int? _editingMemberId;
     private string _editingMemberName = "";
@@ -327,6 +348,8 @@ else
         if (_project is null) return;
         _workspacePath = _project.WorkspacePath ?? "";
         _fallbackModel = _project.FallbackModel ?? "";
+        _localModelBaseUrl = _project.LocalModelBaseUrl ?? "";
+        _localModelName = _project.LocalModelName ?? "";
         await ReloadAllAsync();
         await ProbeBrowseAsync();
     }
@@ -412,6 +435,23 @@ else
             if (resp.IsSuccessStatusCode) _project = await ProjectService.GetProjectAsync(Slug);
         }
         finally { _savingFallback = false; }
+    }
+
+    private async Task SaveLocalModelConfig()
+    {
+        _savingLocalModel = true;
+        _localModelStatus = null;
+        try
+        {
+            await ProjectService.SaveLocalModelConfigAsync(Slug, _localModelBaseUrl, _localModelName);
+            _project = await ProjectService.GetProjectAsync(Slug);
+            _localModelStatus = (L["Saved"], "settings-status-ok");
+        }
+        catch (Exception ex)
+        {
+            _localModelStatus = ($"{L["Error"]}: {ex.Message}", "settings-status-err");
+        }
+        finally { _savingLocalModel = false; }
     }
 
     private async Task OnMemberKey(KeyboardEventArgs e) { if (e.Key == "Enter") await CreateMember(); }

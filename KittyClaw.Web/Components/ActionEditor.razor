@@ -44,7 +44,7 @@
                     <option value="">@L["ModelDefault"]</option>
                     @foreach (var m in DefaultModels)
                     {
-                        <option value="@m">@m</option>
+                        <option value="@m">@(m == "openai-compatible" ? "Local (Ollama)" : m)</option>
                     }
                     @if (!string.IsNullOrEmpty(s.Model) && !DefaultModels.Contains(s.Model))
                     {
@@ -198,6 +198,7 @@
         "claude-opus-4-7-1m",
         "claude-sonnet-4-6",
         "claude-haiku-4-5",
+        "openai-compatible",
     };
 
     private string CurrentType => Action switch
