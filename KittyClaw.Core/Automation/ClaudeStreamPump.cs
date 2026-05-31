@@ -53,6 +53,8 @@ internal static class ClaudeStreamPump
                                 var toolName = part.TryGetProperty("name", out var n) ? n.GetString() ?? "tool" : "tool";
                                 var toolInput = part.TryGetProperty("input", out var inp) ? inp.ToString() : "{}";
                                 var eventKind = toolName == "AskUserQuestion" ? "ask_user_question" : "tool_use";
+                                if (eventKind == "ask_user_question")
+                                    run.IsAwaitingUserAnswer = true;
                                 run.Push(new StreamEvent(DateTime.UtcNow, eventKind, toolName, toolInput));
                             }
                         }

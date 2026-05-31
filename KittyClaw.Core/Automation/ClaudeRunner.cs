@@ -166,6 +166,23 @@ public sealed class ClaudeRunner
             var attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume, modelOverride: null, ct);
             if (attempt.Cancelled) return run;
 
+            // If the agent invoked AskUserQuestion, wait for the user's answer via the SteeringQueue.
+            if (run.IsAwaitingUserAnswer)
+            {
+                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, run.Cancellation.Token);
+                try
+                {
+                    var answer = await run.SteeringQueue.Reader.ReadAsync(linked.Token);
+                    run.IsAwaitingUserAnswer = false;
+                    run.AddPendingSteerMessage(answer);
+                }
+                catch (OperationCanceledException)
+                {
+                    run.IsAwaitingUserAnswer = false;
+                }
+            }
+
             if (ctx.RetryOnResumeFailure && isResume && (attempt.Exit ?? -1) != 0 && attempt.AssistantEventCount == 0)
             {
                 run.Push(new StreamEvent(DateTime.UtcNow, "reset",

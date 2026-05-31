@@ -29,6 +29,7 @@ public sealed class AgentRun
 
     public Channel<string> SteeringQueue { get; } = Channel.CreateUnbounded<string>();
     public CancellationTokenSource Cancellation { get; } = new();
+    public bool IsAwaitingUserAnswer { get; set; }
     public event Action<StreamEvent>? OnEvent;
 
     private readonly List<string> _pendingSteerMessages = new();
