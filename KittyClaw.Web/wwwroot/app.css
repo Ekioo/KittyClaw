@@ -3015,7 +3015,7 @@ body.flow-dnd-active * { cursor: grabbing !important; }
 }
 
 /* ─── AskUserQuestion prompts in chat drawer ───────────────────────────── */
-.chat-ask-user { justify-content: flex-start; }
+.chat-ask-user { justify-content: flex-start; width: 100%; }
 .chat-ask-user .chat-bubble {
     background: var(--surface2);
     border: 1px solid var(--accent-info);
@@ -3028,25 +3028,25 @@ body.flow-dnd-active * { cursor: grabbing !important; }
     gap: 0.5rem;
 }
 .chat-ask-user-answered .chat-bubble { opacity: 0.6; }
-.chat-ask-prompt { margin: 0; font-weight: 500; color: #c1d3fe; }
+.chat-ask-prompt { margin: 0; font-weight: 500; color: var(--text); }
 .chat-ask-option {
     background: var(--surface3);
     border: 1px solid var(--accent-info);
     border-radius: 6px;
-    color: #a5b4fc;
+    color: var(--text);
     padding: 0.35rem 0.8rem;
     cursor: pointer;
     text-align: left;
 }
-.chat-ask-option:hover:not(:disabled) { background: #3b52a8; }
+.chat-ask-option:hover:not(:disabled) { background: color-mix(in srgb, var(--accent-info) 20%, var(--surface3)); }
 .chat-ask-option:disabled { opacity: 0.5; cursor: default; }
 .chat-ask-textarea {
     width: 100%;
     min-height: 60px;
-    background: #111827;
-    border: 1px solid #374151;
+    background: var(--surface);
+    border: 1px solid var(--border);
     border-radius: 6px;
-    color: #e5e7eb;
+    color: var(--text);
     padding: 0.4rem;
     font-size: 0.9rem;
     resize: vertical;
@@ -3056,7 +3056,7 @@ body.flow-dnd-active * { cursor: grabbing !important; }
     background: var(--accent-info);
     border: none;
     border-radius: 6px;
-    color: #fff;
+    color: var(--text);
     padding: 0.35rem 0.8rem;
     cursor: pointer;
 }
