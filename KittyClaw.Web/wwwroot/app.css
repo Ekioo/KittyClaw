@@ -3015,7 +3015,7 @@ body.flow-dnd-active * { cursor: grabbing !important; }
 }
 
 /* ─── AskUserQuestion prompts in chat drawer ───────────────────────────── */
-.chat-ask-user { justify-content: flex-start; }
+.chat-ask-user { justify-content: flex-start; width: 100%; }
 .chat-ask-user .chat-bubble {
     background: var(--surface2);
     border: 1px solid var(--accent-info);
@@ -3056,7 +3056,7 @@ body.flow-dnd-active * { cursor: grabbing !important; }
     background: var(--accent-info);
     border: none;
     border-radius: 6px;
-    color: #fff;
+    color: var(--text);
     padding: 0.35rem 0.8rem;
     cursor: pointer;
 }

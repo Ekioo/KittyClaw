@@ -98,7 +98,7 @@
                             {
                                 <textarea class="chat-ask-textarea" disabled="@askMsg.IsAnswered"
                                           @bind="askMsg.InputText" placeholder="Type your answer…"></textarea>
-                                <button class="chat-ask-submit" disabled="@(askMsg.IsAnswered || _activeRunId == null || string.IsNullOrWhiteSpace(askMsg.InputText))"
+                                <button class="chat-ask-submit" disabled="@(askMsg.IsAnswered || string.IsNullOrWhiteSpace(askMsg.InputText))"
                                         @onclick="() => SubmitAskUserQuestion(askMsg, askMsg.InputText)">Submit</button>
                             }
                         </div>
@@ -224,7 +224,7 @@
     private record ChatMessage(string Role, string Text);
     private sealed record ToolCallMessage(string ToolName, string Preview, string Detail)
         : ChatMessage("tool_use", ToolName);
-    private sealed record AskUserQuestionMessage(string Prompt, string[] Options)
+    private sealed record AskUserQuestionMessage(string Prompt, string[] Options, string? RunId = null)
         : ChatMessage("ask_user_question", Prompt)
     {
         public bool IsAnswered { get; set; }
@@ -538,7 +538,7 @@
         if (kind == "ask_user_question")
         {
             var (prompt, options) = ParseAskUserQuestionDetail(detail);
-            _messages.Add(new AskUserQuestionMessage(prompt, options));
+            _messages.Add(new AskUserQuestionMessage(prompt, options, _activeStreamId));
         }
         else if (kind == "tool_use" && !string.IsNullOrWhiteSpace(text))
         {
@@ -634,13 +634,14 @@
 
     private async Task SubmitAskUserQuestion(AskUserQuestionMessage msg, string answer)
     {
-        if (_activeRunId == null) return;
+        var runId = msg.RunId ?? _activeRunId;
+        if (runId == null) return;
         msg.IsAnswered = true;
         StateHasChanged();
         using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
         try
         {
-            await http.PostAsJsonAsync($"/api/projects/{ProjectSlug}/runs/{_activeRunId}/steer", new { text = answer });
+            await http.PostAsJsonAsync($"/api/projects/{ProjectSlug}/runs/{runId}/steer", new { text = answer });
         }
         catch { /* best-effort */ }
     }
