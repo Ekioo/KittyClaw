@@ -602,16 +602,32 @@
         {
             using var doc = System.Text.Json.JsonDocument.Parse(detail);
             var root = doc.RootElement;
-            // Support "prompt" (mock/documented schema) and "question" (Claude CLI field name)
-            var prompt = root.TryGetProperty("prompt", out var p) ? p.GetString() ?? ""
+
+            // Real CLI schema: {questions:[{question:"...",header:"...",options:[{label:"...",description:"..."}],multiSelect:false}]}
+            if (root.TryGetProperty("questions", out var qs)
+                && qs.ValueKind == System.Text.Json.JsonValueKind.Array
+                && qs.GetArrayLength() > 0)
+            {
+                var q0 = qs[0];
+                var prompt = q0.TryGetProperty("question", out var qt) ? qt.GetString() ?? "" : "";
+                var options = q0.TryGetProperty("options", out var opts) && opts.ValueKind == System.Text.Json.JsonValueKind.Array
+                    ? opts.EnumerateArray()
+                          .Select(o => o.TryGetProperty("label", out var lbl) ? lbl.GetString() ?? "" : "")
+                          .Where(s => s.Length > 0)
+                          .ToArray()
+                    : Array.Empty<string>();
+                return (prompt, options);
+            }
+
+            // Fallback: legacy mock schema {prompt:"...", options:["..."]} for backward compat
+            var fallbackPrompt = root.TryGetProperty("prompt", out var p) ? p.GetString() ?? ""
                 : root.TryGetProperty("question", out var q) ? q.GetString() ?? "" : "";
-            // Support "options" (documented schema) and "choices" (alternate field name)
-            var options = root.TryGetProperty("options", out var o) && o.ValueKind == System.Text.Json.JsonValueKind.Array
+            var fallbackOptions = root.TryGetProperty("options", out var o) && o.ValueKind == System.Text.Json.JsonValueKind.Array
                 ? o.EnumerateArray().Select(x => x.GetString() ?? "").Where(s => s.Length > 0).ToArray()
                 : root.TryGetProperty("choices", out var c) && c.ValueKind == System.Text.Json.JsonValueKind.Array
                     ? c.EnumerateArray().Select(x => x.GetString() ?? "").Where(s => s.Length > 0).ToArray()
                     : Array.Empty<string>();
-            return (prompt, options);
+            return (fallbackPrompt, fallbackOptions);
         }
         catch { return ("", []); }
     }
