@@ -525,7 +525,18 @@ public sealed class ClaudeRunner
                 linked.Cancel(); // unblocks ReadLineAsync(ct); killReg is a no-op since proc already exited
                 try { await drain; } catch { /* pumps observe cancellation */ }
             }
-            try { steerTask.Dispose(); } catch { /* best-effort cleanup */ }
+            // Cancel linked so PumpSteeringAsync stops: without this it competes with
+            // RunAsync's IsAwaitingUserAnswer wait for messages on the same SteeringQueue,
+            // consuming the user's answer and preventing the run from resuming promptly.
+            if (!linked.IsCancellationRequested) linked.Cancel();
+            try { await steerTask; } catch { }
+            // Drain any messages that arrived after process exit into PendingSteerMessages,
+            // unless IsAwaitingUserAnswer is set — RunAsync will read the answer itself.
+            if (!run.IsAwaitingUserAnswer)
+            {
+                while (run.SteeringQueue.Reader.TryRead(out var queuedMsg))
+                    run.AddPendingSteerMessage(queuedMsg);
+            }
             run.OnEvent -= counter;
             return new SpawnResult(exit, assistantCount, false, hitQuota == 1);
         }

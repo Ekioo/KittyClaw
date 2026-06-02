@@ -602,10 +602,15 @@
         {
             using var doc = System.Text.Json.JsonDocument.Parse(detail);
             var root = doc.RootElement;
-            var prompt = root.TryGetProperty("prompt", out var p) ? p.GetString() ?? "" : "";
+            // Support "prompt" (mock/documented schema) and "question" (Claude CLI field name)
+            var prompt = root.TryGetProperty("prompt", out var p) ? p.GetString() ?? ""
+                : root.TryGetProperty("question", out var q) ? q.GetString() ?? "" : "";
+            // Support "options" (documented schema) and "choices" (alternate field name)
             var options = root.TryGetProperty("options", out var o) && o.ValueKind == System.Text.Json.JsonValueKind.Array
-                ? o.EnumerateArray().Select(x => x.GetString() ?? "").ToArray()
-                : Array.Empty<string>();
+                ? o.EnumerateArray().Select(x => x.GetString() ?? "").Where(s => s.Length > 0).ToArray()
+                : root.TryGetProperty("choices", out var c) && c.ValueKind == System.Text.Json.JsonValueKind.Array
+                    ? c.EnumerateArray().Select(x => x.GetString() ?? "").Where(s => s.Length > 0).ToArray()
+                    : Array.Empty<string>();
             return (prompt, options);
         }
         catch { return ("", []); }
