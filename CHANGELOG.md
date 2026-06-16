@@ -2,6 +2,45 @@
 
 All notable changes to KittyClaw.
 
+## [v0.8] — 2026-06-16
+
+Escape-key coverage, scroll preservation, real AskUserQuestion schema, and a much tighter agent process lifecycle.
+
+### Highlights
+
+This release finishes the Escape-key story started in v0.7: fullscreen editors now share a native confirm modal with dirty-check, the URL-loaded ticket panel is properly wired into the Escape stack, and handlers are re-registered after cancel so the second press still works.
+
+The AskUserQuestion chat widget moves from prototype to production: it consumes the real CLI schema (`questions[].options[].label`), exposes an `IsAwaitingUserAnswer` flag, has a steering timeout, and a long-standing `SteeringQueue` race that swallowed mid-turn answers is fixed. The widget now renders with proper CSS variables instead of stray hex colors.
+
+Agent process lifecycle gets two important fixes: claude subprocess trees are confined to a Win32 **job object** so a run can never leak children, and a force-kill kicks in after the `result` event if the process refuses to exit — no more hangs holding workspaces hostage. Chained `runAgent` actions (notably the judge) are now correctly dispatched in post-run processing.
+
+The board preserves column scroll position on ticket open/close, the project delete control is relocated from the home card to a proper **danger zone** in ProjectSettings, and agent memory adopts a per-topic index layout (with the legacy `memory.md` still injected during the migration window).
+
+### Added
+- **Claude Opus 4.8** and **4.8-1M** model support across ActionEditor, Dashboard, and ProjectSettings.
+- **Real AskUserQuestion CLI schema**: `questions[].options[].label` with `question`/`choices` aliases.
+- **`IsAwaitingUserAnswer` flag** + steering timeout for AskUserQuestion turns.
+- **Column scroll preservation** on ticket open/close via `board.js`.
+- **Danger zone** in ProjectSettings: delete relocated from the home card.
+- **Adversarial testing step** in the qa-tester skill.
+- **Per-topic memory index**: `memory/MEMORY.md` scored index + on-demand topic files; native auto-memory disabled for agents.
+- **README Dashboard section** with tile catalog and screenshot.
+
+### Changed
+- **EscapeKeyStack** wired into fullscreen editors (push in `OpenFullscreen` with dirty-check, dispose in Cancel/Save) and into the URL-loaded ticket panel.
+- **Fullscreen ESC** uses an integrated native Blazor confirm modal; handler re-registered after cancel.
+
+### Fixed
+- **SteeringQueue race** that dropped mid-turn answers to AskUserQuestion.
+- **AskUserQuestion widget**: submit button restored, CSS variables instead of hex colors.
+- **Claude subprocess tree confined to a Win32 job object** so runs never leak children or hang the workspace.
+- **Force-kill claude** after its `result` event when the process refuses to exit.
+- **Chained `runAgent`** (judge) correctly dispatched in post-run action processing.
+- **Legacy `memory.md` still injected** when present, to avoid recall loss mid-migration.
+- **`board.js` loaded** so the column scroll-save JS interop resolves.
+
+---
+
 ## [v0.7] — 2026-05-26
 
 Agentic chat polish, dashboard reliability, and tag-based versioning.
