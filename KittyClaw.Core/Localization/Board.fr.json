@@ -36,7 +36,6 @@
   "DeleteTicketConfirm": "Supprimer le ticket",
   "NewTicket": "Nouveau ticket",
   "NewInstruction": "Nouvelle instruction",
-  "ModelDefault": "(défaut)",
   "ChatEmpty": "Posez une question ou donnez une instruction à Claude\u2026",
   "ChatPlaceholder": "Votre message\u2026 (Entrée pour envoyer)",
   "ChatInjectPlaceholder": "Injecter un message\u2026 (Entrée pour injecter)",
