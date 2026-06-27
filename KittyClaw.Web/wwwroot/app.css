@@ -2772,6 +2772,33 @@ body.flow-dnd-active * { cursor: grabbing !important; }
     margin-left: auto;
     margin-right: 0.5rem;
 }
+.chat-drawer-model-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--surface2, #1e2736);
+    border: 1px solid var(--border, #333);
+    border-radius: 4px;
+    color: #c8d0e0;
+    font-size: 0.8rem;
+    padding: 0.2rem 1.6rem 0.2rem 0.4rem;
+    cursor: pointer;
+    max-width: 160px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='%237a7a96'><path d='M0 0h12L6 8z'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 0.4rem center;
+    background-size: 8px 5px;
+    margin-left: auto;
+    margin-right: 0.5rem;
+}
+.chat-drawer-model-select option,
+.chat-drawer-model-select optgroup {
+    background: var(--surface2, #1e2736);
+    color: #c8d0e0;
+}
+.chat-drawer-model-select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
 .chat-messages {
     flex: 1;
     min-height: 0;
