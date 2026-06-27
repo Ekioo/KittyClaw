@@ -230,6 +230,7 @@
     private bool _hitMaxTurns = false;
 
     private string _selectedModel = "";
+    private string? _sessionModel; // model used by the current session (for detecting changes)
     private List<string> _ollamaModels = new();
     private static readonly List<string> ClaudeModels = new()
     {
@@ -525,8 +526,10 @@
         using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
         try
         {
+            var effectiveModel = string.IsNullOrEmpty(_selectedModel) ? null : _selectedModel;
+            var forceNew = effectiveModel != _sessionModel && _sessionModel is not null;
             var resp = await http.PostAsJsonAsync($"/api/projects/{ProjectSlug}/chat/start",
-                new { message = text, target = _activeTarget.Slug, ticketId = TicketId, images = imagesPayload, model = string.IsNullOrEmpty(_selectedModel) ? null : _selectedModel });
+                new { message = text, target = _activeTarget.Slug, ticketId = TicketId, images = imagesPayload, model = effectiveModel, forceNew });
             if (!resp.IsSuccessStatusCode)
             {
                 _messages.Add(new ChatMessage("error", $"Error {resp.StatusCode}"));
@@ -537,6 +540,7 @@
             var body = await resp.Content.ReadFromJsonAsync<ChatStartResponse>();
             if (body is null) { _loading = false; StateHasChanged(); return; }
 
+            _sessionModel = effectiveModel;
             _activeRun = RunsState.Get(body.RunId);
             if (_activeRun is not null)
             {
@@ -586,6 +590,10 @@
         else if (kind == "reset")
         {
             _messages.Add(new ChatMessage("reset", text));
+        }
+        else if (kind is "error" or "stderr")
+        {
+            _messages.Add(new ChatMessage("error", text));
         }
         else if (kind == "assistant")
         {
@@ -672,8 +680,8 @@
 
     private async Task SubmitAskUserQuestion(AskUserQuestionMessage msg, string answer)
     {
+        if (_activeRunId is null) return;
         var runId = msg.RunId ?? _activeRunId;
-        if (runId == null) return;
         msg.IsAnswered = true;
         StateHasChanged();
         using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
