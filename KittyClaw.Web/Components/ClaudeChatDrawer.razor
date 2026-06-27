@@ -45,10 +45,24 @@
                     <span class="chat-drawer-ticket-ref" title="@TicketTitle">· #@tid @(string.IsNullOrEmpty(TicketTitle) ? "" : "— " + Truncate(TicketTitle!, 40))</span>
                 }
             </span>
-            @if (!string.IsNullOrEmpty(_activeRun?.Model))
-            {
-                <span class="chat-drawer-model" title="Model">@_activeRun.Model</span>
-            }
+            <select class="chat-drawer-model-select" @bind="_selectedModel">
+                <option value="">@L["ModelDefault"]</option>
+                <optgroup label="Claude">
+                    @foreach (var m in ClaudeModels)
+                    {
+                        <option value="@m">@m</option>
+                    }
+                </optgroup>
+                @if (_ollamaModels.Count > 0)
+                {
+                    <optgroup label="Local (Ollama)">
+                        @foreach (var m in _ollamaModels)
+                        {
+                            <option value="@m">@m</option>
+                        }
+                    </optgroup>
+                }
+            </select>
             <button class="chat-newsession-btn" @onclick="StartNewSession" title="@L["NewSession"]">＋</button>
             <button class="agent-close-btn" @onclick="Close" title="@L["Close"]">×</button>
         </div>
@@ -215,6 +229,18 @@
     private string? _activeStreamId;
     private bool _hitMaxTurns = false;
 
+    private string _selectedModel = "";
+    private List<string> _ollamaModels = new();
+    private static readonly List<string> ClaudeModels = new()
+    {
+        "claude-opus-4-8",
+        "claude-opus-4-8-1m",
+        "claude-opus-4-7",
+        "claude-opus-4-7-1m",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5",
+    };
+
     // Image paste (#115). Accepted clipboard images await Send() in this buffer; rejections
     // surface in _pasteError as a small inline banner.
     public sealed record PendingImage(string DataUrl, string Mime, string Name, long SizeBytes);
@@ -236,6 +262,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await FetchOllamaModelsAsync();
         // Ticket-scoped or pre-targeted chat: skip the picker entirely.
         if (!string.IsNullOrWhiteSpace(InitialAgent))
         {
@@ -269,6 +296,17 @@
         }
         catch { /* leave _view = Selection */ }
         finally { _ready = true; }
+    }
+
+    private async Task FetchOllamaModelsAsync()
+    {
+        if (string.IsNullOrWhiteSpace(ProjectSlug)) return;
+        try
+        {
+            using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+            _ollamaModels = await http.GetFromJsonAsync<List<string>>($"/api/projects/{ProjectSlug}/ollama-models") ?? new();
+        }
+        catch { _ollamaModels = new(); }
     }
 
     private async Task EnterConversationAsync(ChatTarget target)
@@ -488,7 +526,7 @@
         try
         {
             var resp = await http.PostAsJsonAsync($"/api/projects/{ProjectSlug}/chat/start",
-                new { message = text, target = _activeTarget.Slug, ticketId = TicketId, images = imagesPayload });
+                new { message = text, target = _activeTarget.Slug, ticketId = TicketId, images = imagesPayload, model = string.IsNullOrEmpty(_selectedModel) ? null : _selectedModel });
             if (!resp.IsSuccessStatusCode)
             {
                 _messages.Add(new ChatMessage("error", $"Error {resp.StatusCode}"));
