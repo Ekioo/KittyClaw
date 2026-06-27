@@ -19,7 +19,7 @@
   "ConcurrencyGroup": "Groupe de concurrence (exclusif)",
   "ConcurrencyPlaceholder": "code, producer, ceo\u2026",
   "MutuallyExclusive": "Exclusif avec (groupes, séparés par virgules)",
-  "ClaudeModel": "Modèle Claude (optionnel)",
+  "Model": "Modèle",
   "ModelDefault": "(défaut)",
   "ModelCustom": "(custom)",
   "NewColumn": "Nouvelle colonne",

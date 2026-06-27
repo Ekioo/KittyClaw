@@ -356,6 +356,25 @@ internal sealed class ActionExecutor
                 effectiveEnv = env;
             }
         }
+        else if (a.Model is not null && !a.Model.StartsWith("claude-"))
+        {
+            var baseUrl = project?.LocalModelBaseUrl;
+            if (string.IsNullOrWhiteSpace(baseUrl))
+            {
+                ollamaValidationError = $"Local model '{a.Model}': LocalModelBaseUrl is not configured for this project";
+            }
+            else
+            {
+                effectiveModel = a.Model;
+                var env = new Dictionary<string, string>(effectiveEnv)
+                {
+                    ["ANTHROPIC_BASE_URL"] = baseUrl,
+                    ["ANTHROPIC_AUTH_TOKEN"] = "ollama",
+                    ["ANTHROPIC_MODEL"] = a.Model,
+                };
+                effectiveEnv = env;
+            }
+        }
 
         var runCtx = new ClaudeRunContext
         {

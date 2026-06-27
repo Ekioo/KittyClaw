@@ -20,5 +20,6 @@ public static partial class Endpoints
         MapChat(api);
         MapImages(api);
         MapDashboard(api);
+        MapOllama(api);
     }
 }

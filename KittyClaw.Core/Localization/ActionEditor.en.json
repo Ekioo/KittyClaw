@@ -19,7 +19,7 @@
   "ConcurrencyGroup": "Concurrency group (exclusive)",
   "ConcurrencyPlaceholder": "code, producer, ceo\u2026",
   "MutuallyExclusive": "Mutually exclusive with (groups, comma-separated)",
-  "ClaudeModel": "Claude model (optional)",
+  "Model": "Model",
   "ModelDefault": "(default)",
   "ModelCustom": "(custom)",
   "NewColumn": "New column",
