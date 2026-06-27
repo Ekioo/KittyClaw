@@ -76,14 +76,15 @@ public static partial class Endpoints
             finally { run.OnEvent -= handler; }
         }).WithTags("Runs");
 
-        api.MapPost("/projects/{slug}/runs/{runId}/steer", async (string slug, string runId, SteerRunRequest req, AgentRunRegistry reg, ChatService cs) =>
+        api.MapPost("/projects/{slug}/runs/{runId}/steer", async (string slug, string runId, SteerRunRequest req, AgentRunRegistry reg, ChatService cs, string? model) =>
         {
             var run = reg.Get(runId);
             if (run is null || run.ProjectSlug != slug) return Results.NotFound();
             if (run.Status != AgentRunStatus.Running) return Results.BadRequest(new { error = "Run is not active." });
             await run.SteeringQueue.Writer.WriteAsync(req.Text);
+            var targetModel = model ?? run.Model; // Use provided model or the run's current model
             if (!string.IsNullOrEmpty(run.ChatTarget))
-                await cs.AppendAsync(slug, run.ChatTarget, "inject", req.Text);
+                await cs.AppendAsync(slug, run.ChatTarget, "inject", req.Text, targetModel);
             return Results.NoContent();
         }).WithTags("Runs");
 

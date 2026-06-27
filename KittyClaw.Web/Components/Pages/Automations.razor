@@ -216,7 +216,7 @@ else
                                          OnDelete="() => { a.Conditions.RemoveAt(_selectedSub); _selectedSub = 0; _selectedKind = NodeKind.Trigger; StateHasChanged(); }" />
                         break;
                     case NodeKind.Action:
-                        <ActionEditor Action="a.Actions[_selectedSub]" Skills="_skills" Columns="_columns" Members="_members"
+                        <ActionEditor Action="a.Actions[_selectedSub]" Skills="_skills" Columns="_columns" Members="_members" Slug="@Slug"
                                       OnReplace="spec => { a.Actions[_selectedSub] = spec; StateHasChanged(); }"
                                       OnDelete="() => { a.Actions.RemoveAt(_selectedSub); _selectedSub = 0; _selectedKind = NodeKind.Trigger; StateHasChanged(); }" />
                         break;

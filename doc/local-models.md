@@ -5,39 +5,47 @@ KittyClaw can dispatch agents to a local model served by Ollama instead of Anthr
 ## Prerequisites
 
 1. Install Ollama from [ollama.com](https://ollama.com) (Windows installer available).
-2. Pull the model:
+2. Pull the model(s):
    ```
-   ollama pull qwen3-coder:30b
+   ollama pull qwen2.5-coder:14b
+   ollama pull mistral-small:24b
    ```
 3. Ollama starts automatically and listens on `http://localhost:11434`.
 
 ## Configuration in KittyClaw
 
 1. Open **Project Settings** for your project.
-2. In the **Local model (Ollama)** section, enter:
-   - **Base URL**: `http://localhost:11434` (or the address if Ollama runs on another machine)
-   - **Model name**: `qwen3-coder:30b` (must match the pulled model name exactly)
-3. Click **Save**.
+2. In the **Local model (Ollama)** section, enter the **Base URL** (e.g. `http://localhost:11434`).
+3. Click **Discover** — KittyClaw fetches the available models from Ollama's `/api/tags` endpoint.
+4. Select a default model from the dropdown and click **Save**.
+5. The model list is also available in the **Automation Editor** where each action can pick any discovered Ollama model.
 
-These values are stored as `LocalModelBaseUrl` and `LocalModelName` on the project record.
+## Assigning a member to use an Ollama model
 
-## Assigning a member to use the local model
+In the **Automations editor**, open a `runAgent` action and use the **Model** dropdown. All discovered Ollama models appear under a "Local (Ollama)" group alongside the standard Claude models.
 
-In the **Automations editor**, select the member action and set the **Model** dropdown to **Local (Ollama)**. The stored sentinel value is `openai-compatible`.
+## How dispatch resolves the model
 
-At dispatch time, `ActionExecutor` resolves the sentinel and injects into the `claude` subprocess environment:
+At dispatch time, `ActionExecutor` checks the model name:
+
+- If it starts with `claude-` → sent to the Anthropic cloud API.
+- Otherwise → treated as an Ollama model. The executor injects into the `claude` subprocess environment:
 
 | Variable | Value |
 |---|---|
 | `ANTHROPIC_BASE_URL` | The configured base URL (e.g. `http://localhost:11434`) |
 | `ANTHROPIC_AUTH_TOKEN` | `ollama` (required by the CLI, ignored by Ollama) |
-| `ANTHROPIC_MODEL` | The configured model name (e.g. `qwen3-coder:30b`) |
+| `ANTHROPIC_MODEL` | The selected model name (e.g. `qwen2.5-coder:14b`) |
 
-The `--model` flag passed to the subprocess is also replaced by the local model name.
+The `--model` flag passed to the subprocess is also replaced by the model name.
+
+## Backward compat
+
+The old `openai-compatible` sentinel value still works for existing automations. It resolves to the project's saved default model name (`LocalModelName`).
 
 ## Error handling
 
-If the member model is set to `openai-compatible` but **Base URL** or **Model name** is empty, the dispatcher emits an `error` stream event and marks the run as `Failed` without launching a subprocess. The validation message is visible in the run log.
+If a non-Claude model is selected but no **Base URL** is configured, the dispatcher emits an `error` stream event and marks the run as `Failed` without launching a subprocess. The validation message is visible in the run log.
 
 ## Verifying a run
 
@@ -49,4 +57,4 @@ The Ollama Anthropic-compat layer does not support: token counting, prompt cachi
 
 ## Architecture note
 
-One local model endpoint is configured per project. All members in that project that use the `openai-compatible` sentinel share the same base URL and model name. Multiple distinct endpoints are out of scope for this feature.
+One Ollama endpoint (base URL) is configured per project. All members in that project that use an Ollama model share the same base URL. Model discovery calls `{baseUrl}/api/tags` via the `GET /api/projects/{slug}/ollama-models` endpoint.
