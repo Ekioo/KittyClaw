@@ -367,12 +367,17 @@ public sealed class ClaudeRunner
             "--output-format", "stream-json",
             "--dangerously-skip-permissions",
             "--max-turns", ctx.MaxTurns.ToString(),
-            // KittyClaw owns the agent memory layer (.agents/{agent}/memory.md committed to
-            // the workspace repo). Disable claude's built-in Memory tool so agents don't
-            // also write to their per-host memory store and end up with two divergent
-            // sources of truth.
-            "--disallowed-tools", "Memory",
         };
+        // KittyClaw owns the agent memory layer (.agents/{agent}/memory.md committed to
+        // the workspace repo). Disable claude's built-in Memory tool so agents don't
+        // also write to their per-host memory store and end up with two divergent
+        // sources of truth. Only applicable on Anthropic API — Ollama models don't
+        // expose a Memory tool and the CLI rejects unknown tool names.
+        if (ctx.Model is null || ctx.Model.StartsWith("claude-"))
+        {
+            args.Add("--disallowed-tools");
+            args.Add("Memory");
+        }
         // No --remote-control: it has no effect on non-interactive `claude --print` runs and
         // its file-based IPC (payload.json in the working directory) is keyed on the cwd, so
         // any two concurrent runs in the same workspace would read each other's IPC file and
