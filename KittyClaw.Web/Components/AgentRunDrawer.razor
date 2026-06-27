@@ -94,7 +94,7 @@
                     if (!string.IsNullOrWhiteSpace(msgBody))
                     {
                         var isShortMsg = msgBody.Length <= 300;
-                        var msgPreview = Truncate(msgBody, 200);
+                        var msgPreview = SharedRenderHelpers.Truncate(msgBody, 200);
                         <div class="console-line console-@ev.Kind">
                             <span class="console-time">@ev.At.ToLocalTime().ToString("HH:mm:ss")</span>
                             <details class="console-msg-block" open="@(isShortMsg ? "open" : null)">
@@ -105,7 +105,7 @@
                                         <span class="console-msg-preview">@msgPreview</span>
                                     }
                                 </summary>
-                                @if (IsJson(msgBody))
+                                @if (SharedRenderHelpers.IsJson(msgBody))
                                 {
                                     <pre class="console-tool-detail console-msg-json">@((MarkupString)HighlightJson(msgBody))</pre>
                                 }
@@ -282,8 +282,7 @@
         return body;
     }
 
-    private static string Truncate(string text, int max) =>
-        text.Length <= max ? text : text[..max] + "…";
+    private static string Truncate(string text, int max) => SharedRenderHelpers.Truncate(text, max);
 
     private static (string? Tag, string Body) ParseBracketTag(string? text)
     {
@@ -331,86 +330,10 @@
         return Truncate(text, 80);
     }
 
-    private static string GetToolPreview(string toolName, string? detail)
-    {
-        if (string.IsNullOrWhiteSpace(detail) || detail == "{}") return "";
-        try
-        {
-            using var doc = System.Text.Json.JsonDocument.Parse(detail);
-            var root = doc.RootElement;
-            string? val = toolName switch
-            {
-                "Bash" => root.TryGetProperty("command", out var c) ? c.GetString() : null,
-                "Read" => root.TryGetProperty("file_path", out var fp) ? fp.GetString() : null,
-                "Write" => root.TryGetProperty("file_path", out var fp2) ? fp2.GetString() : null,
-                "Edit" => root.TryGetProperty("file_path", out var fp3) ? fp3.GetString() : null,
-                "Glob" => root.TryGetProperty("pattern", out var p) ? p.GetString() : null,
-                "Grep" => root.TryGetProperty("pattern", out var gp) ? gp.GetString() : null,
-                "WebFetch" or "WebSearch" => root.TryGetProperty("url", out var u) ? u.GetString()
-                    : root.TryGetProperty("query", out var q) ? q.GetString() : null,
-                _ => root.EnumerateObject().Select(x => x.Value.GetString()).FirstOrDefault()
-            };
-            return val is null ? "" : val.Length <= 80 ? val : val[..80] + "…";
-        }
-        catch { return ""; }
-    }
+    private static string GetToolPreview(string toolName, string? detail) =>
+        SharedRenderHelpers.GetToolPreview(toolName, detail);
 
-    private static bool IsJson(string text)
-    {
-        var t = text.TrimStart();
-        if (t.Length == 0) return false;
-        if (t[0] != '{' && t[0] != '[') return false;
-        try { System.Text.Json.JsonDocument.Parse(t); return true; } catch { return false; }
-    }
-
-    private static string FormatJson(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return "";
-        try
-        {
-            using var doc = System.Text.Json.JsonDocument.Parse(json);
-            return System.Text.Json.JsonSerializer.Serialize(doc.RootElement, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-        }
-        catch { return json; }
-    }
-
-    private static readonly System.Text.RegularExpressions.Regex _jsonTokenRe =
-        new(@"(""(?:[^""\\]|\\.)*"")\s*(:)|""(?:[^""\\]|\\.)*""|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|true|false|null",
-            System.Text.RegularExpressions.RegexOptions.Compiled);
-
-    private static string HighlightJson(string? json)
-    {
-        var pretty = FormatJson(json);
-        if (string.IsNullOrWhiteSpace(pretty)) return "";
-        var sb = new System.Text.StringBuilder();
-        var pos = 0;
-        foreach (System.Text.RegularExpressions.Match m in _jsonTokenRe.Matches(pretty))
-        {
-            if (m.Index > pos)
-                sb.Append(System.Net.WebUtility.HtmlEncode(pretty[pos..m.Index]));
-            var encoded = System.Net.WebUtility.HtmlEncode(m.Value);
-            if (m.Groups[2].Success)
-            {
-                var keyEncoded = System.Net.WebUtility.HtmlEncode(m.Groups[1].Value);
-                sb.Append($"<span class=\"json-key\">{keyEncoded}</span>{m.Groups[2].Value}");
-            }
-            else if (m.Value.StartsWith('"'))
-                sb.Append($"<span class=\"json-string\">{encoded}</span>");
-            else if (m.Groups[3].Success)
-                sb.Append($"<span class=\"json-number\">{encoded}</span>");
-            else
-                sb.Append(m.Value switch
-                {
-                    "true" or "false" => $"<span class=\"json-bool\">{encoded}</span>",
-                    "null" => $"<span class=\"json-null\">{encoded}</span>",
-                    _ => encoded
-                });
-            pos = m.Index + m.Length;
-        }
-        if (pos < pretty.Length)
-            sb.Append(System.Net.WebUtility.HtmlEncode(pretty[pos..]));
-        return sb.ToString();
-    }
+    private static string HighlightJson(string? json) => SharedRenderHelpers.HighlightJson(json);
 
     private static readonly MarkdownPipeline _mdPipeline =
         new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
