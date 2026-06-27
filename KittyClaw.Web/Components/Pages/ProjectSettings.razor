@@ -82,33 +82,18 @@ else
             <h2>@L["LocalModel"]</h2>
             <p class="settings-hint">@L["LocalModelHint"]</p>
             <div class="settings-row">
-                <input class="settings-input" placeholder="http://localhost:11434" @bind="_localModelBaseUrl" style="max-width:280px" @oninput="OnLocalBaseUrlChanged" />
+                <input class="settings-input" placeholder="http://localhost:11434" @bind="_localModelBaseUrl" @bind:event="oninput" style="max-width:280px" />
                 <button class="settings-primary" @onclick="DiscoverLocalModels" disabled="@_discoveringLocal">
                     @(_discoveringLocal ? "…" : L["Discover"])
                 </button>
             </div>
-            @if (_availableLocalModels.Count > 0)
+            @if (_discoveredModels.Count > 0)
             {
-                <div class="settings-row">
-                    <select class="settings-input" @bind="_localModelName" style="max-width:300px">
-                        <option value="">@L["SelectModel"]</option>
-                        @foreach (var m in _availableLocalModels)
-                        {
-                            <option value="@m">@m</option>
-                        }
-                    </select>
-                    <button class="settings-primary" @onclick="SaveLocalModelConfig" disabled="@_savingLocalModel">
-                        @(_savingLocalModel ? "…" : L["Save"])
-                    </button>
-                </div>
+                <div class="settings-status settings-status-ok">@_discoveredModels.Count @L["ModelsFound"]</div>
             }
             @if (_localModelsError is not null)
             {
                 <div class="settings-status settings-status-err">@_localModelsError</div>
-            }
-            @if (_localModelStatus is not null)
-            {
-                <div class="settings-status @_localModelStatus.Value.css">@_localModelStatus.Value.text</div>
             }
         </section>
 
@@ -331,12 +316,9 @@ else
     private (string text, string css)? _fallbackStatus;
 
     private string _localModelBaseUrl = "";
-    private string _localModelName = "";
-    private bool _savingLocalModel;
     private bool _discoveringLocal;
-    private List<string> _availableLocalModels = new();
+    private List<string> _discoveredModels = new();
     private string? _localModelsError;
-    private (string text, string css)? _localModelStatus;
 
     private List<Member> _members = new();
     private int? _editingMemberId;
@@ -370,7 +352,6 @@ else
         _workspacePath = _project.WorkspacePath ?? "";
         _fallbackModel = _project.FallbackModel ?? "";
         _localModelBaseUrl = _project.LocalModelBaseUrl ?? "";
-        _localModelName = _project.LocalModelName ?? "";
         await ReloadAllAsync();
         await ProbeBrowseAsync();
         if (!string.IsNullOrWhiteSpace(_localModelBaseUrl)) await DiscoverLocalModels();
@@ -459,44 +440,18 @@ else
         finally { _savingFallback = false; }
     }
 
-    private async Task SaveLocalModelConfig()
-    {
-        _savingLocalModel = true;
-        _localModelStatus = null;
-        try
-        {
-            await ProjectService.SaveLocalModelConfigAsync(Slug, _localModelBaseUrl, _localModelName);
-            _project = await ProjectService.GetProjectAsync(Slug);
-            _localModelStatus = (L["Saved"], "settings-status-ok");
-        }
-        catch (Exception ex)
-        {
-            _localModelStatus = ($"{L["Error"]}: {ex.Message}", "settings-status-err");
-        }
-        finally { _savingLocalModel = false; }
-    }
-
-    private void OnLocalBaseUrlChanged(ChangeEventArgs e)
-    {
-        _localModelBaseUrl = (string?)e.Value ?? "";
-        _availableLocalModels.Clear();
-        _localModelsError = null;
-        _localModelName = "";
-    }
-
     private async Task DiscoverLocalModels()
     {
         _discoveringLocal = true;
         _localModelsError = null;
-        _availableLocalModels.Clear();
+        _discoveredModels.Clear();
         try
         {
+            await ProjectService.SaveLocalModelConfigAsync(Slug, _localModelBaseUrl, null);
             var models = await NewHttp().GetFromJsonAsync<List<string>>($"/api/projects/{Slug}/ollama-models");
-            _availableLocalModels = models ?? new();
-            if (_availableLocalModels.Count == 0)
+            _discoveredModels = models ?? new();
+            if (_discoveredModels.Count == 0)
                 _localModelsError = L["NoModelsFound"];
-            else if (!string.IsNullOrWhiteSpace(_project?.LocalModelName) && _availableLocalModels.Contains(_project.LocalModelName))
-                _localModelName = _project.LocalModelName;
         }
         catch (Exception ex)
         {
