@@ -46,7 +46,6 @@
                 }
             </span>
             <select class="chat-drawer-model-select" @bind="_selectedModel">
-                <option value="">@L["ModelDefault"]</option>
                 <optgroup label="Claude">
                     @foreach (var m in ClaudeModels)
                     {
@@ -238,7 +237,7 @@
     private string? _activeStreamId;
     private bool _hitMaxTurns = false;
 
-    private string _selectedModel = "";
+    private string _selectedModel = ClaudeModels[0];
     private string? _sessionModel; // model used by the current session (for detecting changes)
     private string? _streamingText;
     private List<string> _ollamaModels = new();
@@ -539,10 +538,9 @@
         using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
         try
         {
-            var effectiveModel = string.IsNullOrEmpty(_selectedModel) ? null : _selectedModel;
-            var forceNew = effectiveModel != _sessionModel && _sessionModel is not null;
+            var forceNew = _selectedModel != _sessionModel && _sessionModel is not null;
             var resp = await http.PostAsJsonAsync($"/api/projects/{ProjectSlug}/chat/start",
-                new { message = text, target = _activeTarget.Slug, ticketId = TicketId, images = imagesPayload, model = effectiveModel, forceNew });
+                new { message = text, target = _activeTarget.Slug, ticketId = TicketId, images = imagesPayload, model = _selectedModel, forceNew });
             if (!resp.IsSuccessStatusCode)
             {
                 _messages.Add(new ChatMessage("error", $"Error {resp.StatusCode}"));
@@ -553,7 +551,7 @@
             var body = await resp.Content.ReadFromJsonAsync<ChatStartResponse>();
             if (body is null) { _loading = false; StateHasChanged(); return; }
 
-            _sessionModel = effectiveModel;
+            _sessionModel = _selectedModel;
             _activeRun = RunsState.Get(body.RunId);
             if (_activeRun is not null)
             {
