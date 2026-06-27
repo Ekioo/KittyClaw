@@ -591,9 +591,17 @@
         {
             _messages.Add(new ChatMessage("reset", text));
         }
-        else if (kind is "error" or "stderr")
+        else if (kind == "error")
         {
             _messages.Add(new ChatMessage("error", text));
+        }
+        else if (kind == "stderr")
+        {
+            // Suppress the non-actionable connectors warning that Claude CLI emits
+            // whenever ANTHROPIC_AUTH_TOKEN/API_KEY is set (always true for Ollama).
+            if (text.Contains("claude.ai connectors are disabled", StringComparison.OrdinalIgnoreCase))
+                return Task.CompletedTask;
+            _messages.Add(new ChatMessage("stderr", text));
         }
         else if (kind == "assistant")
         {
