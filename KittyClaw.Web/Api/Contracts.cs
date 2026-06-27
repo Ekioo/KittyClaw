@@ -19,6 +19,7 @@ public record CreateMemberRequest(string Name);
 public record UpdateMemberRequest(string? Name = null);
 public record SetParentRequest(int ParentId);
 public record UpdateProjectRequest(string? WorkspacePath = null, string? FallbackModel = null, bool UpdateFallbackModel = false);
+public record SaveLocalModelConfigRequest(string? LocalModelBaseUrl = null, string? LocalModelName = null);
 public record SteerRunRequest(string Text);
 public record BrowseFolderRequest(string? InitialPath = null);
 public record ChatImageDto(string DataUrl, string Mime, string Name, long SizeBytes);
