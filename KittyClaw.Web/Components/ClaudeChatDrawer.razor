@@ -138,7 +138,16 @@
             @if (_loading)
             {
                 <div class="chat-message chat-message-assistant">
-                    <div class="chat-bubble chat-bubble-loading">…</div>
+                    <div class="chat-bubble chat-bubble-loading">
+                        @if (string.IsNullOrEmpty(_streamingText))
+                        {
+                            <text>…</text>
+                        }
+                        else
+                        {
+                            @((MarkupString)RenderMarkdown(_streamingText))
+                        }
+                    </div>
                 </div>
             }
             @if (_messages.Count == 0 && !_loading)
@@ -231,6 +240,7 @@
 
     private string _selectedModel = "";
     private string? _sessionModel; // model used by the current session (for detecting changes)
+    private string? _streamingText;
     private List<string> _ollamaModels = new();
     private static readonly List<string> ClaudeModels = new()
     {
@@ -394,6 +404,7 @@
         _view = View.Selection;
         _activeTarget = null;
         _messages.Clear();
+        _streamingText = null;
         _loading = false;
         StateHasChanged();
     }
@@ -402,6 +413,7 @@
     {
         if (_activeTarget is null) return;
         await StopStream();
+        _streamingText = null;
         try
         {
             using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
@@ -512,6 +524,7 @@
         if ((string.IsNullOrEmpty(text) && _pendingImages.Count == 0) || _loading || _activeTarget is null) return;
 
         _hitMaxTurns = false;
+        _streamingText = null;
         if (!string.IsNullOrEmpty(text))
             _messages.Add(new ChatMessage("user", text));
         var imagesPayload = _pendingImages.Select(p => new { dataUrl = p.DataUrl, mime = p.Mime, name = p.Name, sizeBytes = p.SizeBytes }).ToList();
@@ -603,15 +616,29 @@
                 return Task.CompletedTask;
             _messages.Add(new ChatMessage("stderr", text));
         }
+        else if (kind == "content_block_delta")
+        {
+            // Streaming text delta — strip the "[content_block_delta] " prefix from FlattenJson
+            var delta = text.StartsWith("[content_block_delta] ") ? text[22..] : text;
+            _streamingText = (_streamingText ?? "") + delta;
+        }
         else if (kind == "assistant")
         {
-            // FlattenJson produces "[assistant] <response text>" for assistant turn events
-            // Skip if it only contains tool: references (those are emitted as separate tool_use events)
-            const string prefix = "[assistant] ";
-            var reply = text.StartsWith(prefix) ? text[prefix.Length..] : text;
-            reply = reply.Trim();
-            if (!string.IsNullOrWhiteSpace(reply) && !reply.StartsWith("tool:"))
-                _messages.Add(new ChatMessage("assistant", reply));
+            if (_streamingText is not null)
+            {
+                // Finalize from streamed deltas (content_block_delta already captured all text)
+                _messages.Add(new ChatMessage("assistant", _streamingText));
+                _streamingText = null;
+            }
+            else
+            {
+                // No streaming deltas — use the full assistant event text directly
+                const string prefix = "[assistant] ";
+                var reply = text.StartsWith(prefix) ? text[prefix.Length..] : text;
+                reply = reply.Trim();
+                if (!string.IsNullOrWhiteSpace(reply) && !reply.StartsWith("tool:"))
+                    _messages.Add(new ChatMessage("assistant", reply));
+            }
         }
         return InvokeAsync(StateHasChanged);
     }
@@ -704,6 +731,7 @@
     public Task StreamEnded()
     {
         _loading = false;
+        _streamingText = null;
         if (_activeRun is not null)
             _activeRun.OnEvent -= HandleEvent;
         _activeRun = null;
