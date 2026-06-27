@@ -127,7 +127,12 @@ else
                     <span class="count">@GetTickets(col.Name).Count</span>
                 </div>
                 <div class="column-body">
-                    @{ var columnTickets = GetTickets(col.Name); }
+                    @{
+                        var allTickets = GetTickets(col.Name);
+                        _loadedPerColumn.TryGetValue(col.Name, out var loaded);
+                        if (loaded <= 0) loaded = int.MaxValue;
+                        var columnTickets = allTickets.Take(loaded).ToList();
+                    }
                     @for (int i = 0; i <= columnTickets.Count; i++)
                     {
                         var slotIndex = i;
@@ -215,6 +220,14 @@ else
                                 </div>
                             </div>
                         }
+                    }
+                    @if (allTickets.Count > loaded)
+                    {
+                        <div class="load-more-container">
+                            <button class="load-more-btn" @onclick="() => LoadMore(col.Name)">
+                                @L["LoadMoreTickets"] (@(allTickets.Count - loaded) @L["Remaining"])
+                            </button>
+                        </div>
                     }
                 </div>
                 @if (col == _columns[0])
@@ -772,6 +785,9 @@ else
     // _lastVisitedAt is a board-wide fallback used only for tickets the user has
     // never explicitly opened — that way users with no per-ticket data still see
     // sensible "what changed since last activity" behavior.
+    private const int InitialPageSize = 20;
+    private const int LoadMoreSize = 10;
+    private Dictionary<string, int> _loadedPerColumn = new();
     private DateTime? _lastVisitedAt;
     private Dictionary<int, DateTime> _viewedAt = new();
 
@@ -854,7 +870,14 @@ else
     private string _filterText
     {
         get => FilterState.FilterText;
-        set => FilterState.FilterText = value;
+        set
+        {
+            if (FilterState.FilterText != value)
+            {
+                FilterState.FilterText = value;
+                ResetLoadedColumns();
+            }
+        }
     }
     private bool _filterHintVisible = false;
 
@@ -1119,6 +1142,7 @@ else
         if (_project is not null)
         {
             _columns = await ColumnService.ListColumnsAsync(Slug);
+            ResetLoadedColumns();
             _tickets = await TicketService.ListTicketsAsync(Slug);
             _allLabels = await LabelService.ListLabelsAsync(Slug);
             _allMembers = await MemberService.ListMembersAsync(Slug);
@@ -1139,6 +1163,7 @@ else
         InvokeAsync(async () =>
         {
             _columns = await ColumnService.ListColumnsAsync(Slug);
+            ResetLoadedColumns();
             _tickets = await TicketService.ListTicketsAsync(Slug);
             _allLabels = await LabelService.ListLabelsAsync(Slug);
             _allMembers = await MemberService.ListMembersAsync(Slug);
@@ -1278,6 +1303,19 @@ else
         return tickets.ToList();
     }
 
+    private void ResetLoadedColumns()
+    {
+        _loadedPerColumn = _columns.ToDictionary(c => c.Name, _ => InitialPageSize);
+    }
+
+    private void LoadMore(string columnName)
+    {
+        if (!_loadedPerColumn.ContainsKey(columnName))
+            _loadedPerColumn[columnName] = InitialPageSize;
+        else
+            _loadedPerColumn[columnName] += LoadMoreSize;
+    }
+
     private static readonly KittyClaw.Web.Services.ColumnSortMode[] _sortModes = new[]
     {
         KittyClaw.Web.Services.ColumnSortMode.Title,
@@ -1308,6 +1346,7 @@ else
     {
         if (_sortMenuOpenFor is null) return;
         SortState.Set(Slug, _sortMenuOpenFor, mode, direction);
+        _loadedPerColumn[_sortMenuOpenFor] = InitialPageSize;
         _sortMenuOpenFor = null;
         await PersistSortAsync();
     }
