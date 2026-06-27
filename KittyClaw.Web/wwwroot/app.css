@@ -2875,6 +2875,13 @@ body.flow-dnd-active * { cursor: grabbing !important; }
     color: #f06b6b;
     border-bottom-left-radius: 3px;
 }
+.chat-message-stderr .chat-bubble {
+    background: #f0a03015;
+    color: #d4a040;
+    font-size: 0.82rem;
+    font-family: monospace;
+    border-bottom-left-radius: 3px;
+}
 .chat-bubble-loading {
     color: var(--muted, #8a99b0);
     font-style: italic;
