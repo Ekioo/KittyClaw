@@ -104,5 +104,7 @@
   "UndoColumn": "Colonne",
   "UndoComment": "Commentaire",
   "DiscardChangesConfirm": "Abandonner les modifications non enregistrées ?",
-  "Discard": "Abandonner"
+  "Discard": "Abandonner",
+  "LoadMoreTickets": "Charger plus",
+  "Remaining": "restants"
 }

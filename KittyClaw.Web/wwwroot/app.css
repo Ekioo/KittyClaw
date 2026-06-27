@@ -345,6 +345,27 @@ a:hover { color: var(--accent-hover); }
     scrollbar-color: var(--border-strong) transparent;
 }
 
+.load-more-container {
+    padding: 0.5rem 0;
+    text-align: center;
+}
+.load-more-btn {
+    background: transparent;
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    padding: 0.4rem 0.8rem;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+    width: 100%;
+}
+.load-more-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--surface2);
+}
+
 /* Column header delete button */
 .column-header {
     position: relative;
