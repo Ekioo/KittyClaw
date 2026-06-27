@@ -43,7 +43,7 @@
                        @onchange="e => s.MutuallyExclusiveWith = SplitGroups((string?)e.Value)" />
             </label>
             <label>@L["Model"]
-                <select value="@(s.Model ?? ClaudeModels[0])" @onchange="e => s.Model = string.IsNullOrEmpty((string?)e.Value) ? ClaudeModels[0] : (string)e.Value!">
+                <select @key="(s.Model ?? DefaultModel) + AllModels.Count" value="@(s.Model ?? DefaultModel)" @onchange="e => s.Model = string.IsNullOrEmpty((string?)e.Value) ? DefaultModel : (string)e.Value!">
                     <optgroup label="Claude">
                         @foreach (var m in ClaudeModels)
                         {
@@ -204,13 +204,14 @@
     [Parameter] public EventCallback<ActionSpec> OnReplace { get; set; }
     [Parameter] public EventCallback OnDelete { get; set; }
 
+    private const string DefaultModel = "claude-sonnet-4-6";
     private static readonly List<string> ClaudeModels = new()
     {
         "claude-opus-4-8",
         "claude-opus-4-8-1m",
         "claude-opus-4-7",
         "claude-opus-4-7-1m",
-        "claude-sonnet-4-6",
+        DefaultModel,
         "claude-haiku-4-5",
     };
 
