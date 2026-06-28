@@ -41,7 +41,7 @@ public class OllamaLocalModelTests
         return (executor, rt, runs, project);
     }
 
-    private static AutomationRule MakeAutomation(string model) => new()
+    private static AutomationRule MakeAutomation(string? model) => new()
     {
         Id = "test-ollama",
         Enabled = true,
@@ -77,16 +77,21 @@ public class OllamaLocalModelTests
         Assert.Equal("qwen3-coder:30b", loaded.LocalModelName);
     }
 
-    // Case 2: Dispatch with openai-compatible uses LocalModelName as the effective model
+    // Case 2: Dispatch with null model uses member.DefaultModel
     [Fact]
-    public async Task Dispatch_OpenAiCompatible_SetsEffectiveModelToLocalModelName()
+    public async Task Dispatch_NullModel_UsesMemberDefaultModel()
     {
         using var tmp = new TempDir();
         var (executor, rt, runs, project) = await BuildAsync(tmp.Path, "ollama-dispatch-test");
         var projects = new ProjectService(tmp.Path);
-        await projects.SaveLocalModelConfigAsync(project.Slug, "http://localhost:11434", "qwen3-coder:30b");
+        await projects.SaveLocalModelConfigAsync(project.Slug, "http://localhost:11434", null);
 
-        var automation = MakeAutomation("openai-compatible");
+        // Set member.DefaultModel
+        var members = new MemberService(projects);
+        var member = await members.CreateMemberAsync(project.Slug, "local-agent");
+        await members.UpdateMemberAsync(project.Slug, member.Id, defaultModel: "qwen3-coder:30b");
+
+        var automation = MakeAutomation(null);
         var firing = new TriggerFiring(null, null, "Done");
         await executor.ExecuteAutomationAsync(rt, automation, firing, CancellationToken.None);
 
@@ -95,7 +100,42 @@ public class OllamaLocalModelTests
         Assert.Equal("qwen3-coder:30b", run.Model);
     }
 
-    // Case 3: Dispatch with an Anthropic model leaves the model name unchanged (non-regression)
+    // Case 3: Dispatch with null model and no member.DefaultModel falls back to project.LocalModelName
+    [Fact]
+    public async Task Dispatch_NullModel_FallsBackToLocalModelName()
+    {
+        using var tmp = new TempDir();
+        var (executor, rt, runs, project) = await BuildAsync(tmp.Path, "ollama-fallback-test");
+        var projects = new ProjectService(tmp.Path);
+        await projects.SaveLocalModelConfigAsync(project.Slug, "http://localhost:11434", "qwen3-coder:30b");
+
+        // No member.DefaultModel set
+        var automation = MakeAutomation(null);
+        var firing = new TriggerFiring(null, null, "Done");
+        await executor.ExecuteAutomationAsync(rt, automation, firing, CancellationToken.None);
+
+        var run = await WaitForRunEndAsync(runs, rt.Slug, TimeSpan.FromSeconds(15));
+        Assert.NotNull(run);
+        Assert.Equal("qwen3-coder:30b", run.Model);
+    }
+
+    // Case 4: Dispatch with explicit model uses it directly
+    [Fact]
+    public async Task Dispatch_ExplicitModel_UsesItDirectly()
+    {
+        using var tmp = new TempDir();
+        var (executor, rt, runs, _) = await BuildAsync(tmp.Path, "explicit-model-test");
+
+        var automation = MakeAutomation("qwen3-coder:30b");
+        var firing = new TriggerFiring(null, null, "Done");
+        await executor.ExecuteAutomationAsync(rt, automation, firing, CancellationToken.None);
+
+        var run = await WaitForRunEndAsync(runs, rt.Slug, TimeSpan.FromSeconds(15));
+        Assert.NotNull(run);
+        Assert.Equal("qwen3-coder:30b", run.Model);
+    }
+
+    // Case 5: Dispatch with an Anthropic model leaves the model name unchanged
     [Fact]
     public async Task Dispatch_AnthropicModel_ModelNameUnchanged()
     {
@@ -111,35 +151,14 @@ public class OllamaLocalModelTests
         Assert.Equal("claude-sonnet-4-6", run.Model);
     }
 
-    // Case 4: openai-compatible with empty LocalModelBaseUrl → error event, subprocess not launched
+    // Case 6: Explicit local model with empty LocalModelBaseUrl → error event, subprocess not launched
     [Fact]
-    public async Task Dispatch_OpenAiCompatible_EmptyBaseUrl_EmitsErrorWithoutLaunch()
+    public async Task Dispatch_ExplicitLocalModel_EmptyBaseUrl_EmitsErrorWithoutLaunch()
     {
         using var tmp = new TempDir();
-        var (executor, rt, runs, project) = await BuildAsync(tmp.Path, "ollama-empty-url-test");
-        await new ProjectService(tmp.Path).SaveLocalModelConfigAsync(project.Slug, "", "qwen3-coder:30b");
+        var (executor, rt, runs, _) = await BuildAsync(tmp.Path, "local-empty-url-test");
 
-        var automation = MakeAutomation("openai-compatible");
-        var firing = new TriggerFiring(null, null, "Done");
-        await executor.ExecuteAutomationAsync(rt, automation, firing, CancellationToken.None);
-
-        await Task.Delay(500);
-        var run = runs.AllForProject(rt.Slug).FirstOrDefault();
-        Assert.NotNull(run);
-        var events = run.SnapshotBuffer();
-        Assert.Contains(events, e => e.Kind == "error");
-        Assert.DoesNotContain(events, e => e.Kind == "launch");
-    }
-
-    // Case 5: openai-compatible with empty LocalModelName → error event, subprocess not launched
-    [Fact]
-    public async Task Dispatch_OpenAiCompatible_EmptyModelName_EmitsErrorWithoutLaunch()
-    {
-        using var tmp = new TempDir();
-        var (executor, rt, runs, project) = await BuildAsync(tmp.Path, "ollama-empty-name-test");
-        await new ProjectService(tmp.Path).SaveLocalModelConfigAsync(project.Slug, "http://localhost:11434", "");
-
-        var automation = MakeAutomation("openai-compatible");
+        var automation = MakeAutomation("qwen3-coder:30b");
         var firing = new TriggerFiring(null, null, "Done");
         await executor.ExecuteAutomationAsync(rt, automation, firing, CancellationToken.None);
 

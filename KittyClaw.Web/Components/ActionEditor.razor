@@ -43,7 +43,8 @@
                        @onchange="e => s.MutuallyExclusiveWith = SplitGroups((string?)e.Value)" />
             </label>
             <label>@L["Model"]
-                <select @key="(s.Model ?? DefaultModel) + AllModels.Count" value="@(s.Model ?? DefaultModel)" @onchange="e => s.Model = string.IsNullOrEmpty((string?)e.Value) ? DefaultModel : (string)e.Value!">
+                <select @key="@($"{s.Model}#{AllModels.Count}")" value="@(s.Model ?? "")" @onchange="e => s.Model = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
+                    <option value="">@L["ModelDefault"]</option>
                     <optgroup label="Claude">
                         @foreach (var m in ClaudeModels)
                         {

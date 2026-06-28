@@ -21,6 +21,7 @@
   "MutuallyExclusive": "Exclusif avec (groupes, séparés par virgules)",
   "Model": "Modèle",
   "ModelCustom": "(custom)",
+  "ModelDefault": "(défaut du membre)",
   "NewColumn": "Nouvelle colonne",
   "DeleteAction": "Supprimer l'action",
   "ActionCommitAgentMemory": "Persister la mémoire de l'agent",

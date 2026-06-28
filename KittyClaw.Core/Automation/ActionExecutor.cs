@@ -332,45 +332,28 @@ internal sealed class ActionExecutor
         var effectiveEnv = a.Env;
         string? ollamaValidationError = null;
 
-        if (a.Model == "openai-compatible")
+        // Resolve model from member's DefaultModel if action model is null
+        if (effectiveModel is null)
         {
-            var baseUrl = project?.LocalModelBaseUrl;
-            var localModel = project?.LocalModelName;
-            if (string.IsNullOrWhiteSpace(baseUrl))
-            {
-                ollamaValidationError = "openai-compatible model: LocalModelBaseUrl is not configured for this project";
-            }
-            else if (string.IsNullOrWhiteSpace(localModel))
-            {
-                ollamaValidationError = "openai-compatible model: LocalModelName is not configured for this project";
-            }
-            else
-            {
-                effectiveModel = localModel;
-                var env = new Dictionary<string, string>(effectiveEnv)
-                {
-                    ["ANTHROPIC_BASE_URL"] = baseUrl,
-                    ["ANTHROPIC_AUTH_TOKEN"] = "ollama",
-                    ["ANTHROPIC_MODEL"] = localModel,
-                };
-                effectiveEnv = env;
-            }
+            var member = await _members.GetMemberBySlugAsync(rt.Slug, agentName);
+            var memberDefault = member?.DefaultModel ?? project?.LocalModelName;
+            effectiveModel = memberDefault;
         }
-        else if (a.Model is not null && !a.Model.StartsWith("claude-"))
+
+        if (effectiveModel is not null && !effectiveModel.StartsWith("claude-"))
         {
             var baseUrl = project?.LocalModelBaseUrl;
             if (string.IsNullOrWhiteSpace(baseUrl))
             {
-                ollamaValidationError = $"Local model '{a.Model}': LocalModelBaseUrl is not configured for this project";
+                ollamaValidationError = $"Local model '{effectiveModel}': LocalModelBaseUrl is not configured for this project";
             }
             else
             {
-                effectiveModel = a.Model;
                 var env = new Dictionary<string, string>(effectiveEnv)
                 {
                     ["ANTHROPIC_BASE_URL"] = baseUrl,
                     ["ANTHROPIC_AUTH_TOKEN"] = "ollama",
-                    ["ANTHROPIC_MODEL"] = a.Model,
+                    ["ANTHROPIC_MODEL"] = effectiveModel,
                 };
                 effectiveEnv = env;
             }

@@ -101,7 +101,7 @@ else
             <h2>@L["Members"]</h2>
             <p class="settings-hint">@L["MembersHint"]</p>
             <table class="settings-list">
-                <thead><tr><th>@L["Name"]</th><th>@L["Slug"]</th><th></th></tr></thead>
+                <thead><tr><th>@L["Name"]</th><th>@L["Slug"]</th><th>@L["Model"]</th><th></th></tr></thead>
                 <tbody>
                     @foreach (var m in _members)
                     {
@@ -117,6 +117,37 @@ else
                                 }
                             </td>
                             <td><code>@m.Slug</code></td>
+                            <td>
+                                @if (_editingMemberId == m.Id)
+                                {
+                                    <select class="settings-input" @bind="_editingMemberModel" style="max-width:220px">
+                                        <option value="">@L["DefaultModelPlaceholder"]</option>
+                                        <optgroup label="Claude">
+                                            @foreach (var model in ClaudeModels)
+                                            {
+                                                <option value="@model">@model</option>
+                                            }
+                                        </optgroup>
+                                        @if (_discoveredModels.Count > 0)
+                                        {
+                                            <optgroup label="Local (Ollama)">
+                                                @foreach (var model in _discoveredModels)
+                                                {
+                                                    <option value="@model">@model</option>
+                                                }
+                                            </optgroup>
+                                        }
+                                        @if (!string.IsNullOrEmpty(_editingMemberModel) && !AllModels.Contains(_editingMemberModel))
+                                        {
+                                            <option value="@_editingMemberModel">@_editingMemberModel</option>
+                                        }
+                                    </select>
+                                }
+                                else
+                                {
+                                    <code>@(m.DefaultModel ?? "-")</code>
+                                }
+                            </td>
                             <td class="row-actions">
                                 @if (_editingMemberId == m.Id)
                                 {
@@ -125,7 +156,7 @@ else
                                 }
                                 else
                                 {
-                                    <button class="icon-btn" @onclick="() => { _editingMemberId = m.Id; _editingMemberName = m.Name; }">✎</button>
+                                    <button class="icon-btn" @onclick="() => { _editingMemberId = m.Id; _editingMemberName = m.Name; _editingMemberModel = m.DefaultModel; }">✎</button>
                                     <button class="icon-btn delete-icon" @onclick="() => _deleteConfirmMember = m">🗑</button>
                                 }
                             </td>
@@ -133,6 +164,7 @@ else
                     }
                     <tr class="add-row">
                         <td><input placeholder="@L["NewMemberSettingsPlaceholder"]" @bind="_newMemberName" @bind:event="oninput" @onkeydown="OnMemberKey" /></td>
+                        <td></td>
                         <td></td>
                         <td><button class="settings-primary" @onclick="CreateMember" disabled="@string.IsNullOrWhiteSpace(_newMemberName)">@L["Add"]</button></td>
                     </tr>
@@ -319,10 +351,21 @@ else
     private bool _discoveringLocal;
     private List<string> _discoveredModels = new();
     private string? _localModelsError;
+    private static readonly List<string> ClaudeModels = new()
+    {
+        "claude-opus-4-8",
+        "claude-opus-4-8-1m",
+        "claude-opus-4-7",
+        "claude-opus-4-7-1m",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5",
+    };
+    private List<string> AllModels => ClaudeModels.Concat(_discoveredModels).ToList();
 
     private List<Member> _members = new();
     private int? _editingMemberId;
     private string _editingMemberName = "";
+    private string? _editingMemberModel;
     private string _newMemberName = "";
     private Member? _deleteConfirmMember;
 
@@ -476,7 +519,8 @@ else
     private async Task SaveMember(Member m)
     {
         if (string.IsNullOrWhiteSpace(_editingMemberName)) { _editingMemberId = null; return; }
-        var resp = await NewHttp().PatchAsJsonAsync($"/api/projects/{Slug}/members/{m.Id}", new { name = _editingMemberName.Trim() });
+        var body = new { name = _editingMemberName.Trim(), defaultModel = _editingMemberModel };
+        var resp = await NewHttp().PatchAsJsonAsync($"/api/projects/{Slug}/members/{m.Id}", body);
         if (resp.IsSuccessStatusCode)
         {
             _editingMemberId = null;

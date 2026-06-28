@@ -3,11 +3,13 @@
 @using System.Text.Json
 @using System.Text.RegularExpressions
 @using Markdig
+@using System.Net.Http.Json
 @using KittyClaw.Core.Automation
 @using KittyClaw.Core.Models
 @using KittyClaw.Core.Services
 @using KittyClaw.Web.Services
 @inject ProjectService ProjectService
+@inject IHttpClientFactory HttpFactory
 @inject DashboardService DashboardService
 @inject ClaudeRunner ClaudeRunner
 @inject DashboardTileGate TileGate
@@ -253,9 +255,20 @@ else
                         <label>@L["TileConfigModel"]</label>
                         <select @bind="_configModel">
                             <option value="">@L["TileConfigModelHint"]</option>
-                            @foreach (var m in AvailableModels)
+                            <optgroup label="Claude">
+                                @foreach (var m in AvailableModels)
+                                {
+                                    <option value="@m">@m</option>
+                                }
+                            </optgroup>
+                            @if (_ollamaModels.Count > 0)
                             {
-                                <option value="@m">@m</option>
+                                <optgroup label="Local (Ollama)">
+                                    @foreach (var m in _ollamaModels)
+                                    {
+                                        <option value="@m">@m</option>
+                                    }
+                                </optgroup>
                             }
                         </select>
                     </div>
@@ -287,16 +300,17 @@ else
 
     private Project? _project;
     private string _workspace = "";
-    // Mirror of ActionEditor.DefaultModels — keep in sync when adding a new Claude model.
-    private static readonly string[] AvailableModels =
-    [
+    private List<string> _ollamaModels = new();
+    private static readonly List<string> AvailableModels = new()
+    {
         "claude-opus-4-8",
         "claude-opus-4-8-1m",
         "claude-opus-4-7",
         "claude-opus-4-7-1m",
         "claude-sonnet-4-6",
         "claude-haiku-4-5",
-    ];
+    };
+    private List<string> AllModels => AvailableModels.Concat(_ollamaModels).ToList();
 
     private List<DashboardTileLayout> _tiles = [];
     private List<string> _availableSlugs = [];
@@ -346,6 +360,17 @@ else
         ? 600
         : Math.Max(600, _tiles.Max(t => t.Y + t.Height) + 80);
 
+    private async Task LoadOllamaModelsAsync()
+    {
+        try
+        {
+            var http = HttpFactory.CreateClient();
+            http.BaseAddress = new Uri(Navigation.BaseUri);
+            _ollamaModels = await http.GetFromJsonAsync<List<string>>($"/api/projects/{Slug}/ollama-models") ?? new();
+        }
+        catch { _ollamaModels = new(); }
+    }
+
     private static string TileId(string tileSlug) =>
         "tile-" + tileSlug.Replace("-", "_");
 
@@ -363,6 +388,7 @@ else
         _workspace = ProjectService.ResolveWorkspacePath(_project);
         _availableSlugs = DashboardService.GetAvailableSlugs(_workspace);
         _tiles = await DashboardService.GetTilesAsync(Slug);
+        await LoadOllamaModelsAsync();
 
         var missing = _tiles.Where(t => !_availableSlugs.Contains(t.Slug)).ToList();
         if (missing.Count > 0)
