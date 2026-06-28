@@ -24,9 +24,19 @@ KittyClaw can dispatch agents to a local model served by Ollama instead of Anthr
 
 In the **Automations editor**, open a `runAgent` action and use the **Model** dropdown. All discovered Ollama models appear under a "Local (Ollama)" group alongside the standard Claude models.
 
+## Member default model
+
+Each member (agent) can have a **DefaultModel** configured in the Project Settings page. When an automation action has `model: null`, the runtime resolves the agent's `DefaultModel` and uses it. This lets `{assignee}` actions dynamically pick the assignee's configured model.
+
 ## How dispatch resolves the model
 
-At dispatch time, `ActionExecutor` checks the model name:
+At dispatch time, `ActionExecutor` resolves the model in this order:
+
+1. If the action has an explicit `model` → use it (override).
+2. If the action `model` is `null` → use the member's `DefaultModel`.
+3. If the member has no `DefaultModel` → fall back to the project's `LocalModelName`.
+
+Then it checks the effective model name:
 
 - If it starts with `claude-` → sent to the Anthropic cloud API.
 - Otherwise → treated as an Ollama model. The executor injects into the `claude` subprocess environment:
@@ -38,10 +48,6 @@ At dispatch time, `ActionExecutor` checks the model name:
 | `ANTHROPIC_MODEL` | The selected model name (e.g. `qwen2.5-coder:14b`) |
 
 The `--model` flag passed to the subprocess is also replaced by the model name.
-
-## Backward compat
-
-The old `openai-compatible` sentinel value still works for existing automations. It resolves to the project's saved default model name (`LocalModelName`).
 
 ## Error handling
 

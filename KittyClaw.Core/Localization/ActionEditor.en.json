@@ -21,6 +21,7 @@
   "MutuallyExclusive": "Mutually exclusive with (groups, comma-separated)",
   "Model": "Model",
   "ModelCustom": "(custom)",
+  "ModelDefault": "(member default)",
   "NewColumn": "New column",
   "DeleteAction": "Delete action",
   "ActionCommitAgentMemory": "Commit agent memory",
