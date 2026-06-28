@@ -337,7 +337,7 @@ internal sealed class ActionExecutor
         {
             var member = await _members.GetMemberBySlugAsync(rt.Slug, agentName);
             var memberDefault = member?.DefaultModel ?? project?.LocalModelName;
-            effectiveModel = memberDefault;
+            effectiveModel = string.IsNullOrWhiteSpace(memberDefault) ? null : memberDefault;
         }
 
         if (effectiveModel is not null && !effectiveModel.StartsWith("claude-"))

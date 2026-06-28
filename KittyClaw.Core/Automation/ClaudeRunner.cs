@@ -75,6 +75,10 @@ public sealed class ClaudeRunContext
 
     /// <summary>When non-null, the runner emits an error event and returns immediately without launching a subprocess.</summary>
     public string? OllamaValidationError { get; init; }
+
+    /// <summary>Maximum wall-clock duration for this run. When exceeded, the subprocess is killed and the run fails.
+    /// Null means no timeout (e.g. chat sessions). Defaults to 30 minutes for automation runs if not set.</summary>
+    public TimeSpan? MaxRunDuration { get; init; }
 }
 
 public sealed class ClaudeRunner
@@ -449,11 +453,14 @@ public sealed class ClaudeRunner
             }
 
             var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, run.Cancellation.Token);
-            var stdoutTask = ClaudeStreamPump.PumpStdoutAsync(proc, run, linked.Token);
-            var stderrTask = ClaudeStreamPump.PumpStderrAsync(proc, run, linked.Token);
-            var steerTask = ClaudeStreamPump.PumpSteeringAsync(proc, run, linked.Token);
+            var runTimeout = ctx.MaxRunDuration ?? TimeSpan.FromMinutes(30);
+            using var timeoutCts = new CancellationTokenSource(runTimeout);
+            using var linkedWithTimeout = CancellationTokenSource.CreateLinkedTokenSource(linked.Token, timeoutCts.Token);
+            var stdoutTask = ClaudeStreamPump.PumpStdoutAsync(proc, run, linkedWithTimeout.Token);
+            var stderrTask = ClaudeStreamPump.PumpStderrAsync(proc, run, linkedWithTimeout.Token);
+            var steerTask = ClaudeStreamPump.PumpSteeringAsync(proc, run, linkedWithTimeout.Token);
 
-            using var killReg = linked.Token.Register(() =>
+            using var killReg = linkedWithTimeout.Token.Register(() =>
             {
                 try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { /* cleanup, process may already be exiting */ }
             });
@@ -484,7 +491,7 @@ public sealed class ClaudeRunner
             };
             run.OnEvent += resultWatch;
 
-            using var waitCts = CancellationTokenSource.CreateLinkedTokenSource(linked.Token, resultGraceCts.Token);
+            using var waitCts = CancellationTokenSource.CreateLinkedTokenSource(linkedWithTimeout.Token, resultGraceCts.Token);
 
             int? exit;
             try
@@ -500,7 +507,21 @@ public sealed class ClaudeRunner
                     // Exited right as we were cancelling — take the real exit code.
                     exit = proc.ExitCode;
                 }
-                else if (linked.IsCancellationRequested)
+                else if (timeoutCts.IsCancellationRequested)
+                {
+                    // Run exceeded MaxRunDuration. Kill the process and fail the run.
+                    _logger.LogWarning(
+                        "{Agent} run={RunId} timed out after {Duration}; killing the process tree",
+                        ctx.AgentName, run.RunId, runTimeout);
+                    try { proc.Kill(entireProcessTree: true); } catch { /* best-effort */ }
+                    job?.Dispose();
+                    run.Push(new StreamEvent(DateTime.UtcNow, "error",
+                        $"Run exceeded maximum duration of {runTimeout.TotalMinutes:F0} minutes and was killed"));
+                    run.OnEvent -= counter;
+                    run.OnEvent -= resultWatch;
+                    return new SpawnResult(-1, assistantCount, false, false);
+                }
+                else if (linkedWithTimeout.IsCancellationRequested)
                 {
                     // Genuine stop / external cancellation.
                     try { proc.Kill(entireProcessTree: true); } catch { /* cleanup on cancellation */ }
@@ -537,13 +558,13 @@ public sealed class ClaudeRunner
                 _logger.LogWarning(
                     "stdout/stderr did not reach EOF {Grace}s after {Agent} run={RunId} exited (a backgrounded child likely holds the pipe) — abandoning drain",
                     PumpDrainGrace.TotalSeconds, ctx.AgentName, run.RunId);
-                linked.Cancel(); // unblocks ReadLineAsync(ct); killReg is a no-op since proc already exited
+                linkedWithTimeout.Cancel(); // unblocks ReadLineAsync(ct); killReg is a no-op since proc already exited
                 try { await drain; } catch { /* pumps observe cancellation */ }
             }
-            // Cancel linked so PumpSteeringAsync stops: without this it competes with
+            // Cancel linkedWithTimeout so PumpSteeringAsync stops: without this it competes with
             // RunAsync's IsAwaitingUserAnswer wait for messages on the same SteeringQueue,
             // consuming the user's answer and preventing the run from resuming promptly.
-            if (!linked.IsCancellationRequested) linked.Cancel();
+            if (!linkedWithTimeout.IsCancellationRequested) linkedWithTimeout.Cancel();
             try { await steerTask; } catch { }
             // Drain any messages that arrived after process exit into PendingSteerMessages,
             // unless IsAwaitingUserAnswer is set — RunAsync will read the answer itself.
