@@ -61,9 +61,8 @@ A tile folder without a sidecar is treated as a static tile; rendering falls bac
 ## Entry points
 - **UI**: "Dashboard" tab in the project topbar, alongside the Kanban view.
 - **REST API** (all under `/api/projects/{slug}/dashboard/`):
-  - `GET  /tiles` — list tiles with layout.
-  - `POST /tiles` — register an existing `.dashboard/<tileSlug>/` folder as a tile (low-level: does not create the folder or sidecar).
-  - `DELETE /tiles/{tileSlug}` — remove from layout AND delete the entire `.dashboard/<tileSlug>/` folder. Pass `?keepFiles=true` to only unregister.
+  - `GET  /tiles` — list tiles, derived from `.dashboard/` folders on disk merged with any stored layout; no registration needed.
+  - `DELETE /tiles/{tileSlug}` — remove from layout AND delete the entire `.dashboard/<tileSlug>/` folder.
   - `PATCH /tiles/{tileSlug}/position` — move a tile (`x`, `y`).
   - `PATCH /tiles/{tileSlug}/size` — resize a tile (`width`, `height`).
   - `GET  /tiles/{tileSlug}/output` — return the text content of the tile's output file. Use `/output/raw` for binary content.

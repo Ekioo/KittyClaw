@@ -99,7 +99,6 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "POST /api/images",
         // Dashboard
         "GET /api/projects/{slug}/dashboard/tiles",
-        "POST /api/projects/{slug}/dashboard/tiles",
         "DELETE /api/projects/{slug}/dashboard/tiles/{tileSlug}",
         "PATCH /api/projects/{slug}/dashboard/tiles/{tileSlug}/position",
         "PATCH /api/projects/{slug}/dashboard/tiles/{tileSlug}/size",
@@ -181,7 +180,6 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         ["POST /api/projects/{slug}/chat/start"] = "Chat",
         ["POST /api/images"] = "Images",
         ["GET /api/projects/{slug}/dashboard/tiles"] = "Dashboard",
-        ["POST /api/projects/{slug}/dashboard/tiles"] = "Dashboard",
         ["DELETE /api/projects/{slug}/dashboard/tiles/{tileSlug}"] = "Dashboard",
         ["PATCH /api/projects/{slug}/dashboard/tiles/{tileSlug}/position"] = "Dashboard",
         ["PATCH /api/projects/{slug}/dashboard/tiles/{tileSlug}/size"] = "Dashboard",

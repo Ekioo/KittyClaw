@@ -27,6 +27,5 @@ public record ChatStartRequest(string Message, string Target = "owner-chat", boo
 public record ChatTargetDto(string Slug, string Name, string Kind);
 public record ChatTargetsResponse(string? LastTarget, List<ChatTargetDto> Targets);
 public record ChatMessageDto(string Role, string Text, string? ToolName, string? Detail, string CreatedAt);
-public record AddTileRequest(string TileSlug); // required -- folder name (slug) for the new tile
 public record MoveTileRequest(int X, int Y); // required — pixel coords snapped to 20px grid
 public record ResizeTileRequest(int Width, int Height); // required — pixels snapped to 20px grid

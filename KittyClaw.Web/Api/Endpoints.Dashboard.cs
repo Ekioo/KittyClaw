@@ -9,14 +9,12 @@ public static partial class Endpoints
     {
         // Dashboard (folder-per-tile layout: .dashboard/<tileSlug>/{tile.yaml,script.*,output.*})
 
-        api.MapGet("/projects/{slug}/dashboard/tiles", async (string slug, DashboardService ds) =>
-            Results.Ok(await ds.GetTilesAsync(slug)))
-            .WithTags("Dashboard");
-
-        api.MapPost("/projects/{slug}/dashboard/tiles", async (string slug, AddTileRequest req, DashboardService ds) =>
+        // Derived from .dashboard/ folders on disk, merged with any stored layout; no registration needed.
+        api.MapGet("/projects/{slug}/dashboard/tiles", async (string slug, ProjectService ps, DashboardService ds) =>
         {
-            var tile = await ds.AddTileAsync(slug, req.TileSlug);
-            return Results.Created($"/api/projects/{slug}/dashboard/tiles/{req.TileSlug}", tile);
+            var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
+            if (workspace is null) return Results.NotFound();
+            return Results.Ok(await ds.GetTilesAsync(slug, workspace));
         }).WithTags("Dashboard");
 
         // Removes the tile from the layout AND deletes the entire .dashboard/<tileSlug>/ folder.
@@ -30,15 +28,19 @@ public static partial class Endpoints
             return Results.NoContent();
         }).WithTags("Dashboard");
 
-        api.MapPatch("/projects/{slug}/dashboard/tiles/{tileSlug}/position", async (string slug, string tileSlug, MoveTileRequest req, DashboardService ds) =>
+        api.MapPatch("/projects/{slug}/dashboard/tiles/{tileSlug}/position", async (string slug, string tileSlug, MoveTileRequest req, ProjectService ps, DashboardService ds) =>
         {
-            var tile = await ds.MoveTileAsync(slug, tileSlug, req.X, req.Y);
+            var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
+            if (workspace is null) return Results.NotFound();
+            var tile = await ds.MoveTileAsync(slug, workspace, tileSlug, req.X, req.Y);
             return tile is null ? Results.NotFound() : Results.Ok(tile);
         }).WithTags("Dashboard");
 
-        api.MapPatch("/projects/{slug}/dashboard/tiles/{tileSlug}/size", async (string slug, string tileSlug, ResizeTileRequest req, DashboardService ds) =>
+        api.MapPatch("/projects/{slug}/dashboard/tiles/{tileSlug}/size", async (string slug, string tileSlug, ResizeTileRequest req, ProjectService ps, DashboardService ds) =>
         {
-            var tile = await ds.ResizeTileAsync(slug, tileSlug, req.Width, req.Height);
+            var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
+            if (workspace is null) return Results.NotFound();
+            var tile = await ds.ResizeTileAsync(slug, workspace, tileSlug, req.Width, req.Height);
             return tile is null ? Results.NotFound() : Results.Ok(tile);
         }).WithTags("Dashboard");
 

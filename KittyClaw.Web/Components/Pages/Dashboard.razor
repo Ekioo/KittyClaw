@@ -379,15 +379,8 @@ else
 
         _workspace = ProjectService.ResolveWorkspacePath(_project);
         _availableSlugs = DashboardService.GetAvailableSlugs(_workspace);
-        _tiles = await DashboardService.GetTilesAsync(Slug);
+        _tiles = await DashboardService.GetTilesAsync(Slug, _workspace);
         await LoadOllamaModelsAsync();
-
-        var missing = _tiles.Where(t => !_availableSlugs.Contains(t.Slug)).ToList();
-        if (missing.Count > 0)
-        {
-            foreach (var m in missing) await DashboardService.RemoveTileAsync(Slug, m.Slug);
-            _tiles = _tiles.Where(t => _availableSlugs.Contains(t.Slug)).ToList();
-        }
 
         await LoadAllContentAsync();
         AutoStartEmptyTiles();
@@ -782,8 +775,7 @@ else
         await DashboardService.WriteSidecarAsync(_workspace, tileSlug, sidecar);
 
         _availableSlugs = DashboardService.GetAvailableSlugs(_workspace);
-        await DashboardService.AddTileAsync(Slug, tileSlug);
-        _tiles = await DashboardService.GetTilesAsync(Slug);
+        _tiles = await DashboardService.GetTilesAsync(Slug, _workspace);
         _sidecars[tileSlug] = sidecar;
         _contentCache[tileSlug] = "";
         _tileConfigOpen = false;
@@ -955,8 +947,8 @@ else
     [JSInvokable]
     public async Task OnTileMoveEnd(string tileSlug, int x, int y)
     {
-        await DashboardService.MoveTileAsync(Slug, tileSlug, x, y);
-        _tiles = await DashboardService.GetTilesAsync(Slug);
+        await DashboardService.MoveTileAsync(Slug, _workspace, tileSlug, x, y);
+        _tiles = await DashboardService.GetTilesAsync(Slug, _workspace);
         await InvokeAsync(StateHasChanged);
     }
 
@@ -975,8 +967,8 @@ else
     public async Task OnResizeEnd(string tileSlug, int width, int height)
     {
         _resizingTile = null;
-        await DashboardService.ResizeTileAsync(Slug, tileSlug, width, height);
-        _tiles = await DashboardService.GetTilesAsync(Slug);
+        await DashboardService.ResizeTileAsync(Slug, _workspace, tileSlug, width, height);
+        _tiles = await DashboardService.GetTilesAsync(Slug, _workspace);
         await InvokeAsync(StateHasChanged);
     }
 }

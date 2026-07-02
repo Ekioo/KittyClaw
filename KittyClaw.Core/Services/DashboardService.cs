@@ -44,7 +44,7 @@ public class DashboardService
         await cmd.ExecuteNonQueryAsync();
     }
 
-    public async Task<List<DashboardTileLayout>> GetTilesAsync(string slug)
+    private async Task<List<DashboardTileLayout>> GetStoredTilesAsync(string slug)
     {
         await EnsureTableAsync(slug);
         var dbPath = _projectService.GetProjectDbPath(slug);
@@ -56,6 +56,25 @@ public class DashboardService
         if (result is null) return [];
         try { return JsonSerializer.Deserialize<List<DashboardTileLayout>>(result.ToString()!, _json) ?? []; }
         catch { return []; }
+    }
+
+    // Disk-driven: a tile is visible as soon as its .dashboard/<slug>/ folder exists, no
+    // registration required. Layout comes from the stored SQLite row if present, else a
+    // deterministic grid default computed from the slug's position in the folder listing.
+    public async Task<List<DashboardTileLayout>> GetTilesAsync(string projectSlug, string workspace)
+    {
+        var slugs = GetAvailableSlugs(workspace);
+        var stored = (await GetStoredTilesAsync(projectSlug)).ToDictionary(t => t.Slug);
+        return slugs
+            .Select((slug, i) => stored.TryGetValue(slug, out var t) ? t : DefaultLayout(slug, i))
+            .ToList();
+    }
+
+    private static DashboardTileLayout DefaultLayout(string slug, int index)
+    {
+        var col = index % 4;
+        var row = index / 4;
+        return new DashboardTileLayout(slug, X: col * 320, Y: row * 220);
     }
 
     private async Task SaveTilesAsync(string slug, List<DashboardTileLayout> tiles)
@@ -73,53 +92,37 @@ public class DashboardService
         await cmd.ExecuteNonQueryAsync();
     }
 
-    public async Task<DashboardTileLayout?> AddTileAsync(string projectSlug, string tileSlug)
-    {
-        var tiles = await GetTilesAsync(projectSlug);
-        if (tiles.Any(t => t.Slug == tileSlug)) return tiles.First(t => t.Slug == tileSlug);
-
-        var idx = tiles.Count;
-        var col = idx % 4;
-        var row = idx / 4;
-        var tile = new DashboardTileLayout(tileSlug, X: col * 320, Y: row * 220);
-        tiles.Add(tile);
-        await SaveTilesAsync(projectSlug, tiles);
-        return tile;
-    }
-
     public async Task<bool> RemoveTileAsync(string projectSlug, string tileSlug)
     {
-        var tiles = await GetTilesAsync(projectSlug);
+        var tiles = await GetStoredTilesAsync(projectSlug);
         var removed = tiles.RemoveAll(t => t.Slug == tileSlug) > 0;
         if (removed) await SaveTilesAsync(projectSlug, tiles);
         return removed;
     }
 
-    public async Task<DashboardTileLayout?> MoveTileAsync(string projectSlug, string tileSlug, int x, int y)
+    // Seeds a DB row from the grid default on first move/resize -- no separate "register" step.
+    private async Task<DashboardTileLayout?> UpsertTileAsync(
+        string projectSlug, string workspace, string tileSlug, Func<DashboardTileLayout, DashboardTileLayout> apply)
     {
-        var tiles = await GetTilesAsync(projectSlug);
+        if (!Directory.Exists(GetTileDirPath(workspace, tileSlug))) return null;
+
+        var tiles = await GetStoredTilesAsync(projectSlug);
         var idx = tiles.FindIndex(t => t.Slug == tileSlug);
-        if (idx < 0) return null;
-        x = Snap(Math.Max(0, x));
-        y = Snap(Math.Max(0, y));
-        var updated = tiles[idx] with { X = x, Y = y };
-        tiles[idx] = updated;
+        var current = idx >= 0
+            ? tiles[idx]
+            : DefaultLayout(tileSlug, GetAvailableSlugs(workspace).IndexOf(tileSlug));
+
+        var updated = apply(current);
+        if (idx >= 0) tiles[idx] = updated; else tiles.Add(updated);
         await SaveTilesAsync(projectSlug, tiles);
         return updated;
     }
 
-    public async Task<DashboardTileLayout?> ResizeTileAsync(string projectSlug, string tileSlug, int width, int height)
-    {
-        var tiles = await GetTilesAsync(projectSlug);
-        var idx = tiles.FindIndex(t => t.Slug == tileSlug);
-        if (idx < 0) return null;
-        width = Snap(Math.Max(100, width));
-        height = Snap(Math.Max(60, height));
-        var updated = tiles[idx] with { Width = width, Height = height };
-        tiles[idx] = updated;
-        await SaveTilesAsync(projectSlug, tiles);
-        return updated;
-    }
+    public Task<DashboardTileLayout?> MoveTileAsync(string projectSlug, string workspace, string tileSlug, int x, int y) =>
+        UpsertTileAsync(projectSlug, workspace, tileSlug, t => t with { X = Snap(Math.Max(0, x)), Y = Snap(Math.Max(0, y)) });
+
+    public Task<DashboardTileLayout?> ResizeTileAsync(string projectSlug, string workspace, string tileSlug, int width, int height) =>
+        UpsertTileAsync(projectSlug, workspace, tileSlug, t => t with { Width = Snap(Math.Max(100, width)), Height = Snap(Math.Max(60, height)) });
 
     private static int Snap(int v) => (int)Math.Round((double)v / 20) * 20;
 
