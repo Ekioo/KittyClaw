@@ -72,6 +72,13 @@ public sealed class ClaudeRunContext
 
     /// <summary>Absolute paths to user-pasted image files saved under the workspace's channel/tmp. BuildPromptAsync surfaces them under an [Attached images] block; the runner best-effort deletes them after the process exits.</summary>
     public IReadOnlyList<string>? ImagePaths { get; init; }
+
+    /// <summary>When non-null, the runner emits an error event and returns immediately without launching a subprocess.</summary>
+    public string? OllamaValidationError { get; init; }
+
+    /// <summary>Maximum wall-clock duration for this run. When exceeded, the subprocess is killed and the run fails.
+    /// Null means no timeout (e.g. chat sessions). Defaults to 30 minutes for automation runs if not set.</summary>
+    public TimeSpan? MaxRunDuration { get; init; }
 }
 
 public sealed class ClaudeRunner
@@ -105,6 +112,13 @@ public sealed class ClaudeRunner
         };
         if (ctx.OnEventHook is not null) run.OnEvent += ctx.OnEventHook;
         _runs.Register(run);
+
+        if (ctx.OllamaValidationError is not null)
+        {
+            run.Push(new StreamEvent(DateTime.UtcNow, "error", ctx.OllamaValidationError));
+            _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
+            return run;
+        }
 
         string skillContent;
         if (ctx.InlineSkillContent is not null)
@@ -357,12 +371,14 @@ public sealed class ClaudeRunner
             "--output-format", "stream-json",
             "--dangerously-skip-permissions",
             "--max-turns", ctx.MaxTurns.ToString(),
-            // KittyClaw owns the agent memory layer (.agents/{agent}/memory.md committed to
-            // the workspace repo). Disable claude's built-in Memory tool so agents don't
-            // also write to their per-host memory store and end up with two divergent
-            // sources of truth.
-            "--disallowed-tools", "Memory",
         };
+        // KittyClaw owns the agent memory layer (.agents/{agent}/memory.md committed to
+        // the workspace repo). We previously passed `--disallowed-tools Memory` to keep
+        // agents off any built-in memory store, but the Claude Code CLI exposes no tool
+        // named "Memory" — the rule matched nothing and only emitted a startup warning
+        // ("Permission deny rule \"Memory\" matches no known tool") into the run stream.
+        // The CLI's memory is file-based (read as context, not a tool), so there is
+        // nothing to disallow here.
         // No --remote-control: it has no effect on non-interactive `claude --print` runs and
         // its file-based IPC (payload.json in the working directory) is keyed on the cwd, so
         // any two concurrent runs in the same workspace would read each other's IPC file and
@@ -434,11 +450,14 @@ public sealed class ClaudeRunner
             }
 
             var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, run.Cancellation.Token);
-            var stdoutTask = ClaudeStreamPump.PumpStdoutAsync(proc, run, linked.Token);
-            var stderrTask = ClaudeStreamPump.PumpStderrAsync(proc, run, linked.Token);
-            var steerTask = ClaudeStreamPump.PumpSteeringAsync(proc, run, linked.Token);
+            var runTimeout = ctx.MaxRunDuration ?? TimeSpan.FromMinutes(60);
+            using var timeoutCts = new CancellationTokenSource(runTimeout);
+            using var linkedWithTimeout = CancellationTokenSource.CreateLinkedTokenSource(linked.Token, timeoutCts.Token);
+            var stdoutTask = ClaudeStreamPump.PumpStdoutAsync(proc, run, linkedWithTimeout.Token);
+            var stderrTask = ClaudeStreamPump.PumpStderrAsync(proc, run, linkedWithTimeout.Token);
+            var steerTask = ClaudeStreamPump.PumpSteeringAsync(proc, run, linkedWithTimeout.Token);
 
-            using var killReg = linked.Token.Register(() =>
+            using var killReg = linkedWithTimeout.Token.Register(() =>
             {
                 try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { /* cleanup, process may already be exiting */ }
             });
@@ -469,7 +488,7 @@ public sealed class ClaudeRunner
             };
             run.OnEvent += resultWatch;
 
-            using var waitCts = CancellationTokenSource.CreateLinkedTokenSource(linked.Token, resultGraceCts.Token);
+            using var waitCts = CancellationTokenSource.CreateLinkedTokenSource(linkedWithTimeout.Token, resultGraceCts.Token);
 
             int? exit;
             try
@@ -485,7 +504,21 @@ public sealed class ClaudeRunner
                     // Exited right as we were cancelling — take the real exit code.
                     exit = proc.ExitCode;
                 }
-                else if (linked.IsCancellationRequested)
+                else if (timeoutCts.IsCancellationRequested)
+                {
+                    // Run exceeded MaxRunDuration. Kill the process and fail the run.
+                    _logger.LogWarning(
+                        "{Agent} run={RunId} timed out after {Duration}; killing the process tree",
+                        ctx.AgentName, run.RunId, runTimeout);
+                    try { proc.Kill(entireProcessTree: true); } catch { /* best-effort */ }
+                    job?.Dispose();
+                    run.Push(new StreamEvent(DateTime.UtcNow, "error",
+                        $"Run exceeded maximum duration of {runTimeout.TotalMinutes:F0} minutes and was killed"));
+                    run.OnEvent -= counter;
+                    run.OnEvent -= resultWatch;
+                    return new SpawnResult(-1, assistantCount, false, false);
+                }
+                else if (linkedWithTimeout.IsCancellationRequested)
                 {
                     // Genuine stop / external cancellation.
                     try { proc.Kill(entireProcessTree: true); } catch { /* cleanup on cancellation */ }
@@ -522,13 +555,13 @@ public sealed class ClaudeRunner
                 _logger.LogWarning(
                     "stdout/stderr did not reach EOF {Grace}s after {Agent} run={RunId} exited (a backgrounded child likely holds the pipe) — abandoning drain",
                     PumpDrainGrace.TotalSeconds, ctx.AgentName, run.RunId);
-                linked.Cancel(); // unblocks ReadLineAsync(ct); killReg is a no-op since proc already exited
+                linkedWithTimeout.Cancel(); // unblocks ReadLineAsync(ct); killReg is a no-op since proc already exited
                 try { await drain; } catch { /* pumps observe cancellation */ }
             }
-            // Cancel linked so PumpSteeringAsync stops: without this it competes with
+            // Cancel linkedWithTimeout so PumpSteeringAsync stops: without this it competes with
             // RunAsync's IsAwaitingUserAnswer wait for messages on the same SteeringQueue,
             // consuming the user's answer and preventing the run from resuming promptly.
-            if (!linked.IsCancellationRequested) linked.Cancel();
+            if (!linkedWithTimeout.IsCancellationRequested) linkedWithTimeout.Cancel();
             try { await steerTask; } catch { }
             // Drain any messages that arrived after process exit into PendingSteerMessages,
             // unless IsAwaitingUserAnswer is set — RunAsync will read the answer itself.

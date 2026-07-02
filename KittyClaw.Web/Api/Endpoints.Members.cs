@@ -20,7 +20,7 @@ public static partial class Endpoints
 
         api.MapPatch("/projects/{slug}/members/{memberId:int}", async (string slug, int memberId, UpdateMemberRequest req, MemberService ms, BoardUpdateNotifier notifier) =>
         {
-            var member = await ms.UpdateMemberAsync(slug, memberId, req.Name);
+            var member = await ms.UpdateMemberAsync(slug, memberId, req.Name, req.DefaultModel);
             if (member is not null) notifier.NotifyProjectUpdated(slug);
             return member is null ? Results.NotFound() : Results.Ok(member);
         }).WithTags("Members");

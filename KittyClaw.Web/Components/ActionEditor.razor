@@ -1,5 +1,8 @@
+@using System.Net.Http.Json
 @using KittyClaw.Core.Automation
 @inject LocalizationService L
+@inject IHttpClientFactory HttpFactory
+@inject NavigationManager Nav
 
 <div class="node-editor">
     <label>@L["ActionType"]
@@ -39,14 +42,25 @@
                 <input value="@JoinGroups(s.MutuallyExclusiveWith)"
                        @onchange="e => s.MutuallyExclusiveWith = SplitGroups((string?)e.Value)" />
             </label>
-            <label>@L["ClaudeModel"]
-                <select value="@(s.Model ?? "")" @onchange="e => s.Model = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
+            <label>@L["Model"]
+                <select @key="@($"{s.Model}#{AllModels.Count}")" value="@(s.Model ?? "")" @onchange="e => s.Model = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
                     <option value="">@L["ModelDefault"]</option>
-                    @foreach (var m in DefaultModels)
+                    <optgroup label="Claude">
+                        @foreach (var m in ClaudeModels)
+                        {
+                            <option value="@m">@m</option>
+                        }
+                    </optgroup>
+                    @if (_ollamaModels.Count > 0)
                     {
-                        <option value="@m">@m</option>
+                        <optgroup label="Local (Ollama)">
+                            @foreach (var m in _ollamaModels)
+                            {
+                                <option value="@m">@m</option>
+                            }
+                        </optgroup>
                     }
-                    @if (!string.IsNullOrEmpty(s.Model) && !DefaultModels.Contains(s.Model))
+                    @if (!string.IsNullOrEmpty(s.Model) && !AllModels.Contains(s.Model))
                     {
                         <option value="@s.Model">@s.Model @L["ModelCustom"]</option>
                     }
@@ -187,18 +201,28 @@
     [Parameter] public List<string> Skills { get; set; } = new();
     [Parameter] public List<string> Columns { get; set; } = new();
     [Parameter] public List<string> Members { get; set; } = new();
+    [Parameter] public string Slug { get; set; } = "";
     [Parameter] public EventCallback<ActionSpec> OnReplace { get; set; }
     [Parameter] public EventCallback OnDelete { get; set; }
 
-    private static readonly List<string> DefaultModels = new()
+    private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
+
+    private List<string> _ollamaModels = new();
+    private List<string> AllModels => ClaudeModels.Concat(_ollamaModels).ToList();
+
+    protected override async Task OnInitializedAsync()
     {
-        "claude-opus-4-8",
-        "claude-opus-4-8-1m",
-        "claude-opus-4-7",
-        "claude-opus-4-7-1m",
-        "claude-sonnet-4-6",
-        "claude-haiku-4-5",
-    };
+        if (!string.IsNullOrWhiteSpace(Slug))
+        {
+            try
+            {
+                var http = HttpFactory.CreateClient();
+                http.BaseAddress = new Uri(Nav.BaseUri);
+                _ollamaModels = await http.GetFromJsonAsync<List<string>>($"/api/projects/{Slug}/ollama-models") ?? new();
+            }
+            catch { /* non-blocking */ }
+        }
+    }
 
     private string CurrentType => Action switch
     {

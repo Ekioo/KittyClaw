@@ -1,4 +1,5 @@
 using System.IO;
+using KittyClaw.Core.Models;
 using Xunit;
 
 namespace KittyClaw.Core.Tests.Web;
@@ -15,12 +16,6 @@ public class Opus48ModelSupportTests
         return dir!;
     }
 
-    private static string ActionEditor() =>
-        File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "ActionEditor.razor"));
-
-    private static string Dashboard() =>
-        File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Dashboard.razor"));
-
     private static string ProjectSettings() =>
         File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "Pages", "ProjectSettings.razor"));
 
@@ -30,35 +25,40 @@ public class Opus48ModelSupportTests
     private static string LocalizationFr() =>
         File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Core", "Localization", "ProjectSettings.fr.json"));
 
-    // Case 1: ActionEditor DefaultModels contains opus-4-8
+    // The model selectors (action editor, chat drawer, dashboard, member defaults)
+    // all bind to ClaudeModelCatalog.Models, so the catalog is the single thing to assert on.
 
     [Fact]
-    public void ActionEditor_DefaultModels_ContainsOpus48()
+    public void Catalog_Contains_Opus48()
     {
-        Assert.Contains("\"claude-opus-4-8\"", ActionEditor());
+        Assert.Contains("claude-opus-4-8", ClaudeModelCatalog.Models);
     }
 
     [Fact]
-    public void ActionEditor_DefaultModels_ContainsOpus48_1m()
+    public void Catalog_Contains_Opus48_1m()
     {
-        Assert.Contains("\"claude-opus-4-8-1m\"", ActionEditor());
-    }
-
-    // Case 2: Dashboard AvailableModels contains opus-4-8
-
-    [Fact]
-    public void Dashboard_AvailableModels_ContainsOpus48()
-    {
-        Assert.Contains("\"claude-opus-4-8\"", Dashboard());
+        Assert.Contains("claude-opus-4-8-1m", ClaudeModelCatalog.Models);
     }
 
     [Fact]
-    public void Dashboard_AvailableModels_ContainsOpus48_1m()
+    public void Catalog_Contains_Fable5()
     {
-        Assert.Contains("\"claude-opus-4-8-1m\"", Dashboard());
+        Assert.Contains("claude-fable-5", ClaudeModelCatalog.Models);
     }
 
-    // Case 3: ProjectSettings fallback select has opus-4-8 option
+    [Fact]
+    public void Catalog_Contains_Sonnet5()
+    {
+        Assert.Contains("claude-sonnet-5", ClaudeModelCatalog.Models);
+    }
+
+    [Fact]
+    public void Catalog_DefaultModel_IsInModels()
+    {
+        Assert.Contains(ClaudeModelCatalog.DefaultModel, ClaudeModelCatalog.Models);
+    }
+
+    // ProjectSettings keeps a separate, hardcoded "fallback model" dropdown.
 
     [Fact]
     public void ProjectSettings_FallbackSelect_ContainsOpus48Option()
@@ -66,7 +66,7 @@ public class Opus48ModelSupportTests
         Assert.Contains("claude-opus-4-8", ProjectSettings());
     }
 
-    // Case edge: localization keys present in both languages
+    // Localization keys present in both languages
 
     [Fact]
     public void Localization_En_ContainsFallbackOpus48Key()

@@ -60,6 +60,32 @@ public static partial class Endpoints
             var project = await ps.GetProjectAsync(slug);
             if (project is null) return Results.NotFound();
 
+            // Resolve model for Ollama dispatch
+            string? effectiveModel = null;
+            IDictionary<string, string>? modelEnv = null;
+            if (!string.IsNullOrEmpty(req.Model))
+            {
+                if (req.Model.StartsWith("claude-"))
+                {
+                    effectiveModel = req.Model;
+                }
+                else
+                {
+                    var baseUrl = project.LocalModelBaseUrl;
+                    if (!string.IsNullOrWhiteSpace(baseUrl))
+                    {
+                        effectiveModel = req.Model;
+                        modelEnv = new Dictionary<string, string>
+                        {
+                            ["ANTHROPIC_BASE_URL"] = baseUrl.TrimEnd('/'),
+                            ["ANTHROPIC_AUTH_TOKEN"] = "ollama",
+                            ["ANTHROPIC_MODEL"] = req.Model,
+                        };
+                    }
+                    // If no base URL configured, model stays null (CLI default)
+                }
+            }
+
             var target = string.IsNullOrWhiteSpace(req.Target) ? "owner-chat" : req.Target;
             var runId = Guid.NewGuid().ToString("N");
             var workspacePath = ps.ResolveWorkspacePath(project);
@@ -173,6 +199,8 @@ public static partial class Endpoints
                     SkillFile = "chat",
                     InlineSkillContent = ticketContext is null ? sb.ToString() : sb.ToString() + "\n" + ticketContext,
                     ExtraContext = req.Message,
+                    Model = effectiveModel,
+                    Env = modelEnv ?? new Dictionary<string, string>(),
                     MaxTurns = 20,
                     ConcurrencyGroup = $"chat:{slug}:{target}",
                     PresetRunId = runId,
@@ -234,6 +262,8 @@ public static partial class Endpoints
                     SkillFile = hasSkillFile ? $"{baseAgent}/SKILL.md" : "(inline)",
                     InlineSkillContent = inlineContent,
                     ExtraContext = req.Message,
+                    Model = effectiveModel,
+                    Env = modelEnv ?? new Dictionary<string, string>(),
                     MaxTurns = 20,
                     ConcurrencyGroup = $"chat:{slug}:{target}",
                     PresetRunId = runId,

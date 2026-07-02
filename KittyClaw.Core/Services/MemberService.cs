@@ -38,6 +38,8 @@ public class MemberService
         catch { /* column already exists */ }
         try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Members ADD COLUMN IsAgent INTEGER NOT NULL DEFAULT 0"); }
         catch { /* column already exists */ }
+        try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Members ADD COLUMN DefaultModel TEXT NULL"); }
+        catch { /* column already exists */ }
 
         // Owner is the human user — referenced by string literal "owner" throughout the
         // codebase (createdBy default, mention rendering, assignee dropdown). Seed it here
@@ -55,6 +57,14 @@ public class MemberService
         await EnsureMemberTableAsync(db);
         await BackfillSlugsAsync(db);
         return await db.Members.OrderBy(m => m.Name).ToListAsync();
+    }
+
+    public async Task<Member?> GetMemberBySlugAsync(string projectSlug, string slug)
+    {
+        await using var db = _projectService.GetProjectDb(projectSlug);
+        await EnsureMemberTableAsync(db);
+        await BackfillSlugsAsync(db);
+        return await db.Members.FirstOrDefaultAsync(m => m.Slug == slug);
     }
 
     public async Task<bool> MemberExistsAsync(string projectSlug, string slug)
@@ -88,7 +98,7 @@ public class MemberService
         return member;
     }
 
-    public async Task<Member?> UpdateMemberAsync(string projectSlug, int memberId, string? name = null)
+    public async Task<Member?> UpdateMemberAsync(string projectSlug, int memberId, string? name = null, string? defaultModel = null)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureMemberTableAsync(db);
@@ -99,6 +109,7 @@ public class MemberService
             member.Name = name;
             member.Slug = Member.ToSlug(name);
         }
+        if (defaultModel is not null) member.DefaultModel = defaultModel;
         await db.SaveChangesAsync();
         return member;
     }

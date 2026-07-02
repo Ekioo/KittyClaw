@@ -8,7 +8,7 @@ namespace KittyClaw.Core.Tests.Api;
 /// <summary>
 /// Guard tests for ticket #158: split Endpoints.cs into per-domain partial-class files.
 /// Encodes the architect's contract:
-///   - Route inventory (path, verb) set must remain identical to the current 65-route baseline.
+///   - Route inventory (path, verb) set must remain identical to the current 64-route baseline.
 ///   - Each route keeps its existing OpenAPI tag.
 ///   - Each domain still answers a representative request through the in-process host.
 ///   - Endpoints.cs becomes a thin orchestrator and per-domain partial files exist.
@@ -76,6 +76,8 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "POST /api/browse/folder",
         // Skills
         "GET /api/projects/{slug}/skills",
+        // Ollama
+        "GET /api/projects/{slug}/ollama-models",
         // Automations
         "GET /api/projects/{slug}/automations",
         "PUT /api/projects/{slug}/automations",
@@ -108,9 +110,6 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "PUT /api/projects/{slug}/dashboard/tiles/{tileSlug}/sidecar",
         "GET /api/projects/{slug}/dashboard/tiles/{tileSlug}/script",
         "POST /api/projects/{slug}/dashboard/tiles/{tileSlug}/refresh",
-        // Dev utilities
-        "POST /api/dev/update-check/reset",
-        "POST /api/dev/update-check/simulate",
     };
 
     [Fact]
@@ -165,6 +164,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         ["GET /api/browse/capabilities"] = "Browse",
         ["POST /api/browse/folder"] = "Browse",
         ["GET /api/projects/{slug}/skills"] = "Automations",
+        ["GET /api/projects/{slug}/ollama-models"] = "Ollama",
         ["GET /api/projects/{slug}/automations"] = "Automations",
         ["PUT /api/projects/{slug}/automations"] = "Automations",
         ["POST /api/projects/{slug}/automations/reload"] = "Automations",
@@ -278,6 +278,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
             "Endpoints.Chat.cs",
             "Endpoints.Images.cs",
             "Endpoints.Dashboard.cs",
+            "Endpoints.Ollama.cs",
         };
         var missing = expected.Where(f => !File.Exists(Path.Combine(apiDir, f))).ToList();
         Assert.True(missing.Count == 0,
