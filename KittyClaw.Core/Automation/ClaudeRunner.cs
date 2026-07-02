@@ -373,15 +373,12 @@ public sealed class ClaudeRunner
             "--max-turns", ctx.MaxTurns.ToString(),
         };
         // KittyClaw owns the agent memory layer (.agents/{agent}/memory.md committed to
-        // the workspace repo). Disable claude's built-in Memory tool so agents don't
-        // also write to their per-host memory store and end up with two divergent
-        // sources of truth. Only applicable on Anthropic API — Ollama models don't
-        // expose a Memory tool and the CLI rejects unknown tool names.
-        if (ctx.Model is null || ctx.Model.StartsWith("claude-"))
-        {
-            args.Add("--disallowed-tools");
-            args.Add("Memory");
-        }
+        // the workspace repo). We previously passed `--disallowed-tools Memory` to keep
+        // agents off any built-in memory store, but the Claude Code CLI exposes no tool
+        // named "Memory" — the rule matched nothing and only emitted a startup warning
+        // ("Permission deny rule \"Memory\" matches no known tool") into the run stream.
+        // The CLI's memory is file-based (read as context, not a tool), so there is
+        // nothing to disallow here.
         // No --remote-control: it has no effect on non-interactive `claude --print` runs and
         // its file-based IPC (payload.json in the working directory) is keyed on the cwd, so
         // any two concurrent runs in the same workspace would read each other's IPC file and
@@ -453,7 +450,7 @@ public sealed class ClaudeRunner
             }
 
             var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, run.Cancellation.Token);
-            var runTimeout = ctx.MaxRunDuration ?? TimeSpan.FromMinutes(30);
+            var runTimeout = ctx.MaxRunDuration ?? TimeSpan.FromMinutes(60);
             using var timeoutCts = new CancellationTokenSource(runTimeout);
             using var linkedWithTimeout = CancellationTokenSource.CreateLinkedTokenSource(linked.Token, timeoutCts.Token);
             var stdoutTask = ClaudeStreamPump.PumpStdoutAsync(proc, run, linkedWithTimeout.Token);
