@@ -39,5 +39,11 @@ public static partial class Endpoints
             var project = await ps.TogglePauseAsync(slug);
             return project is null ? Results.NotFound() : Results.Ok(project);
         }).WithTags("Projects");
+
+        api.MapPatch("/projects/{slug}/local-model", async (string slug, SaveLocalModelConfigRequest req, ProjectService ps) =>
+        {
+            var project = await ps.SaveLocalModelConfigAsync(slug, req.LocalModelBaseUrl, req.LocalModelName);
+            return project is null ? Results.NotFound() : Results.Ok(project);
+        }).WithTags("Projects");
     }
 }

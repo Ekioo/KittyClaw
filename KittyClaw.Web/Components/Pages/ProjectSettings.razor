@@ -79,10 +79,29 @@ else
         </section>
 
         <section class="settings-section">
+            <h2>@L["LocalModel"]</h2>
+            <p class="settings-hint">@L["LocalModelHint"]</p>
+            <div class="settings-row">
+                <input class="settings-input" placeholder="http://localhost:11434" @bind="_localModelBaseUrl" @bind:event="oninput" style="max-width:280px" />
+                <button class="settings-primary" @onclick="DiscoverLocalModels" disabled="@_discoveringLocal">
+                    @(_discoveringLocal ? "…" : L["Discover"])
+                </button>
+            </div>
+            @if (_discoveredModels.Count > 0)
+            {
+                <div class="settings-status settings-status-ok">@_discoveredModels.Count @L["ModelsFound"]</div>
+            }
+            @if (_localModelsError is not null)
+            {
+                <div class="settings-status settings-status-err">@_localModelsError</div>
+            }
+        </section>
+
+        <section class="settings-section">
             <h2>@L["Members"]</h2>
             <p class="settings-hint">@L["MembersHint"]</p>
             <table class="settings-list">
-                <thead><tr><th>@L["Name"]</th><th>@L["Slug"]</th><th></th></tr></thead>
+                <thead><tr><th>@L["Name"]</th><th>@L["Slug"]</th><th>@L["Model"]</th><th></th></tr></thead>
                 <tbody>
                     @foreach (var m in _members)
                     {
@@ -98,6 +117,37 @@ else
                                 }
                             </td>
                             <td><code>@m.Slug</code></td>
+                            <td>
+                                @if (_editingMemberId == m.Id)
+                                {
+                                    <select class="settings-input" @bind="_editingMemberModel" style="max-width:220px">
+                                        <option value="">@L["DefaultModelPlaceholder"]</option>
+                                        <optgroup label="Claude">
+                                            @foreach (var model in ClaudeModels)
+                                            {
+                                                <option value="@model">@model</option>
+                                            }
+                                        </optgroup>
+                                        @if (_discoveredModels.Count > 0)
+                                        {
+                                            <optgroup label="Local (Ollama)">
+                                                @foreach (var model in _discoveredModels)
+                                                {
+                                                    <option value="@model">@model</option>
+                                                }
+                                            </optgroup>
+                                        }
+                                        @if (!string.IsNullOrEmpty(_editingMemberModel) && !AllModels.Contains(_editingMemberModel))
+                                        {
+                                            <option value="@_editingMemberModel">@_editingMemberModel</option>
+                                        }
+                                    </select>
+                                }
+                                else
+                                {
+                                    <code>@(m.DefaultModel ?? "-")</code>
+                                }
+                            </td>
                             <td class="row-actions">
                                 @if (_editingMemberId == m.Id)
                                 {
@@ -106,7 +156,7 @@ else
                                 }
                                 else
                                 {
-                                    <button class="icon-btn" @onclick="() => { _editingMemberId = m.Id; _editingMemberName = m.Name; }">✎</button>
+                                    <button class="icon-btn" @onclick="() => { _editingMemberId = m.Id; _editingMemberName = m.Name; _editingMemberModel = m.DefaultModel; }">✎</button>
                                     <button class="icon-btn delete-icon" @onclick="() => _deleteConfirmMember = m">🗑</button>
                                 }
                             </td>
@@ -114,6 +164,7 @@ else
                     }
                     <tr class="add-row">
                         <td><input placeholder="@L["NewMemberSettingsPlaceholder"]" @bind="_newMemberName" @bind:event="oninput" @onkeydown="OnMemberKey" /></td>
+                        <td></td>
                         <td></td>
                         <td><button class="settings-primary" @onclick="CreateMember" disabled="@string.IsNullOrWhiteSpace(_newMemberName)">@L["Add"]</button></td>
                     </tr>
@@ -296,9 +347,17 @@ else
     private bool _savingFallback;
     private (string text, string css)? _fallbackStatus;
 
+    private string _localModelBaseUrl = "";
+    private bool _discoveringLocal;
+    private List<string> _discoveredModels = new();
+    private string? _localModelsError;
+    private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
+    private List<string> AllModels => ClaudeModels.Concat(_discoveredModels).ToList();
+
     private List<Member> _members = new();
     private int? _editingMemberId;
     private string _editingMemberName = "";
+    private string? _editingMemberModel;
     private string _newMemberName = "";
     private Member? _deleteConfirmMember;
 
@@ -327,8 +386,10 @@ else
         if (_project is null) return;
         _workspacePath = _project.WorkspacePath ?? "";
         _fallbackModel = _project.FallbackModel ?? "";
+        _localModelBaseUrl = _project.LocalModelBaseUrl ?? "";
         await ReloadAllAsync();
         await ProbeBrowseAsync();
+        if (!string.IsNullOrWhiteSpace(_localModelBaseUrl)) await DiscoverLocalModels();
     }
 
     private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
@@ -414,6 +475,26 @@ else
         finally { _savingFallback = false; }
     }
 
+    private async Task DiscoverLocalModels()
+    {
+        _discoveringLocal = true;
+        _localModelsError = null;
+        _discoveredModels.Clear();
+        try
+        {
+            await ProjectService.SaveLocalModelConfigAsync(Slug, _localModelBaseUrl, null);
+            var models = await NewHttp().GetFromJsonAsync<List<string>>($"/api/projects/{Slug}/ollama-models");
+            _discoveredModels = models ?? new();
+            if (_discoveredModels.Count == 0)
+                _localModelsError = L["NoModelsFound"];
+        }
+        catch (Exception ex)
+        {
+            _localModelsError = $"{L["Error"]}: {ex.Message}";
+        }
+        finally { _discoveringLocal = false; }
+    }
+
     private async Task OnMemberKey(KeyboardEventArgs e) { if (e.Key == "Enter") await CreateMember(); }
 
     private async Task CreateMember()
@@ -430,7 +511,8 @@ else
     private async Task SaveMember(Member m)
     {
         if (string.IsNullOrWhiteSpace(_editingMemberName)) { _editingMemberId = null; return; }
-        var resp = await NewHttp().PatchAsJsonAsync($"/api/projects/{Slug}/members/{m.Id}", new { name = _editingMemberName.Trim() });
+        var body = new { name = _editingMemberName.Trim(), defaultModel = _editingMemberModel };
+        var resp = await NewHttp().PatchAsJsonAsync($"/api/projects/{Slug}/members/{m.Id}", body);
         if (resp.IsSuccessStatusCode)
         {
             _editingMemberId = null;

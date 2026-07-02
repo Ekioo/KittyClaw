@@ -2,6 +2,36 @@
 
 All notable changes to KittyClaw.
 
+## [v0.9] — 2026-07-02
+
+Ollama local model support, per-action model selection, and a centralized model catalog.
+
+### Highlights
+
+This release brings first-class local-model support: Ollama models are now selectable per-action and per-member through an OpenAI-compatible provider, with a model discovery endpoint and dedicated selectors in the chat drawer and member settings. Claude model support is centralized in a new `ClaudeModelCatalog`, which now also lists Fable 5 and Sonnet 5.
+
+Reliability also improves: background agent runs get a longer default timeout, empty model selections no longer leak through as invalid state, and the `--disallowed-tools Memory` flag is no longer sent where it's a no-op or unsupported (Ollama models).
+
+### Added
+- **Ollama local model support** via an OpenAI-compatible provider, with a model discovery endpoint (`SaveLocalModelConfig`) and per-action / per-member model selectors.
+- **`Member.DefaultModel`** with runtime model resolution used across chat and actions.
+- **`ClaudeModelCatalog`**: centralizes the supported Claude model list; adds `claude-fable-5` and `claude-sonnet-5`.
+- **Chat drawer model selector** (New Instruction), theme-consistent with the rest of the UI.
+- **Streamed loading bubble**: `content_block_delta` text now streams directly into the chat drawer's loading bubble.
+- **SSE error/stderr surfacing** in the chat drawer, with a forced new session on model change.
+- **Kanban column pagination**: sorted columns load 20 tickets initially, 10 more per load-more.
+
+### Changed
+- Removed the "(default)" model option; unset selections fall back to `claude-sonnet-4-6`.
+- Default background run timeout bumped from 30 to 60 minutes.
+- Chat drawer stderr events are muted from the visible log; connectors warning suppressed.
+
+### Fixed
+- Empty model string now normalizes to `null` in `ActionExecutor` instead of leaking through as an invalid value.
+- `--disallowed-tools Memory` dropped as a no-op flag, and skipped entirely for Ollama models.
+
+---
+
 ## [v0.8] — 2026-06-16
 
 Escape-key coverage, scroll preservation, real AskUserQuestion schema, and a much tighter agent process lifecycle.

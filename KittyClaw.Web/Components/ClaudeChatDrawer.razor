@@ -42,13 +42,26 @@
                 @_activeTarget!.Name
                 @if (TicketId is int tid)
                 {
-                    <span class="chat-drawer-ticket-ref" title="@TicketTitle">· #@tid @(string.IsNullOrEmpty(TicketTitle) ? "" : "— " + Truncate(TicketTitle!, 40))</span>
+                    <span class="chat-drawer-ticket-ref" title="@TicketTitle">· #@tid @(string.IsNullOrEmpty(TicketTitle) ? "" : "— " + SharedRenderHelpers.Truncate(TicketTitle!, 40))</span>
                 }
             </span>
-            @if (!string.IsNullOrEmpty(_activeRun?.Model))
-            {
-                <span class="chat-drawer-model" title="Model">@_activeRun.Model</span>
-            }
+            <select class="chat-drawer-model-select" @bind="_selectedModel">
+                <optgroup label="Claude">
+                    @foreach (var m in ClaudeModels)
+                    {
+                        <option value="@m">@m</option>
+                    }
+                </optgroup>
+                @if (_ollamaModels.Count > 0)
+                {
+                    <optgroup label="Local (Ollama)">
+                        @foreach (var m in _ollamaModels)
+                        {
+                            <option value="@m">@m</option>
+                        }
+                    </optgroup>
+                }
+            </select>
             <button class="chat-newsession-btn" @onclick="StartNewSession" title="@L["NewSession"]">＋</button>
             <button class="agent-close-btn" @onclick="Close" title="@L["Close"]">×</button>
         </div>
@@ -124,7 +137,16 @@
             @if (_loading)
             {
                 <div class="chat-message chat-message-assistant">
-                    <div class="chat-bubble chat-bubble-loading">…</div>
+                    <div class="chat-bubble chat-bubble-loading">
+                        @if (string.IsNullOrEmpty(_streamingText))
+                        {
+                            <text>…</text>
+                        }
+                        else
+                        {
+                            @((MarkupString)RenderMarkdown(_streamingText))
+                        }
+                    </div>
                 </div>
             }
             @if (_messages.Count == 0 && !_loading)
@@ -215,6 +237,13 @@
     private string? _activeStreamId;
     private bool _hitMaxTurns = false;
 
+    private string _selectedModel = DefaultModel;
+    private string? _sessionModel; // model used by the current session (for detecting changes)
+    private string? _streamingText;
+    private List<string> _ollamaModels = new();
+    private const string DefaultModel = ClaudeModelCatalog.DefaultModel;
+    private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
+
     // Image paste (#115). Accepted clipboard images await Send() in this buffer; rejections
     // surface in _pasteError as a small inline banner.
     public sealed record PendingImage(string DataUrl, string Mime, string Name, long SizeBytes);
@@ -236,6 +265,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await FetchOllamaModelsAsync();
         // Ticket-scoped or pre-targeted chat: skip the picker entirely.
         if (!string.IsNullOrWhiteSpace(InitialAgent))
         {
@@ -269,6 +299,17 @@
         }
         catch { /* leave _view = Selection */ }
         finally { _ready = true; }
+    }
+
+    private async Task FetchOllamaModelsAsync()
+    {
+        if (string.IsNullOrWhiteSpace(ProjectSlug)) return;
+        try
+        {
+            using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+            _ollamaModels = await http.GetFromJsonAsync<List<string>>($"/api/projects/{ProjectSlug}/ollama-models") ?? new();
+        }
+        catch { _ollamaModels = new(); }
     }
 
     private async Task EnterConversationAsync(ChatTarget target)
@@ -355,6 +396,7 @@
         _view = View.Selection;
         _activeTarget = null;
         _messages.Clear();
+        _streamingText = null;
         _loading = false;
         StateHasChanged();
     }
@@ -363,6 +405,7 @@
     {
         if (_activeTarget is null) return;
         await StopStream();
+        _streamingText = null;
         try
         {
             using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
@@ -473,6 +516,7 @@
         if ((string.IsNullOrEmpty(text) && _pendingImages.Count == 0) || _loading || _activeTarget is null) return;
 
         _hitMaxTurns = false;
+        _streamingText = null;
         if (!string.IsNullOrEmpty(text))
             _messages.Add(new ChatMessage("user", text));
         var imagesPayload = _pendingImages.Select(p => new { dataUrl = p.DataUrl, mime = p.Mime, name = p.Name, sizeBytes = p.SizeBytes }).ToList();
@@ -487,8 +531,9 @@
         using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
         try
         {
+            var forceNew = _selectedModel != _sessionModel && _sessionModel is not null;
             var resp = await http.PostAsJsonAsync($"/api/projects/{ProjectSlug}/chat/start",
-                new { message = text, target = _activeTarget.Slug, ticketId = TicketId, images = imagesPayload });
+                new { message = text, target = _activeTarget.Slug, ticketId = TicketId, images = imagesPayload, model = _selectedModel, forceNew });
             if (!resp.IsSuccessStatusCode)
             {
                 _messages.Add(new ChatMessage("error", $"Error {resp.StatusCode}"));
@@ -499,6 +544,7 @@
             var body = await resp.Content.ReadFromJsonAsync<ChatStartResponse>();
             if (body is null) { _loading = false; StateHasChanged(); return; }
 
+            _sessionModel = _selectedModel;
             _activeRun = RunsState.Get(body.RunId);
             if (_activeRun is not null)
             {
@@ -549,15 +595,41 @@
         {
             _messages.Add(new ChatMessage("reset", text));
         }
+        else if (kind == "error")
+        {
+            _messages.Add(new ChatMessage("error", text));
+        }
+        else if (kind == "stderr")
+        {
+            // Suppress the non-actionable connectors warning that Claude CLI emits
+            // whenever ANTHROPIC_AUTH_TOKEN/API_KEY is set (always true for Ollama).
+            if (text.Contains("claude.ai connectors are disabled", StringComparison.OrdinalIgnoreCase))
+                return Task.CompletedTask;
+            _messages.Add(new ChatMessage("stderr", text));
+        }
+        else if (kind == "content_block_delta")
+        {
+            // Streaming text delta — strip the "[content_block_delta] " prefix from FlattenJson
+            var delta = text.StartsWith("[content_block_delta] ") ? text[22..] : text;
+            _streamingText = (_streamingText ?? "") + delta;
+        }
         else if (kind == "assistant")
         {
-            // FlattenJson produces "[assistant] <response text>" for assistant turn events
-            // Skip if it only contains tool: references (those are emitted as separate tool_use events)
-            const string prefix = "[assistant] ";
-            var reply = text.StartsWith(prefix) ? text[prefix.Length..] : text;
-            reply = reply.Trim();
-            if (!string.IsNullOrWhiteSpace(reply) && !reply.StartsWith("tool:"))
-                _messages.Add(new ChatMessage("assistant", reply));
+            if (_streamingText is not null)
+            {
+                // Finalize from streamed deltas (content_block_delta already captured all text)
+                _messages.Add(new ChatMessage("assistant", _streamingText));
+                _streamingText = null;
+            }
+            else
+            {
+                // No streaming deltas — use the full assistant event text directly
+                const string prefix = "[assistant] ";
+                var reply = text.StartsWith(prefix) ? text[prefix.Length..] : text;
+                reply = reply.Trim();
+                if (!string.IsNullOrWhiteSpace(reply) && !reply.StartsWith("tool:"))
+                    _messages.Add(new ChatMessage("assistant", reply));
+            }
         }
         return InvokeAsync(StateHasChanged);
     }
@@ -569,31 +641,8 @@
         await Send();
     }
 
-    private static string GetToolPreview(string toolName, string? detail)
-    {
-        if (string.IsNullOrWhiteSpace(detail) || detail == "{}") return "";
-        try
-        {
-            using var doc = System.Text.Json.JsonDocument.Parse(detail);
-            var root = doc.RootElement;
-            return toolName switch
-            {
-                "Bash" => Truncate(root.TryGetProperty("command", out var c) ? c.GetString() : null),
-                "Read" => Truncate(root.TryGetProperty("file_path", out var fp) ? fp.GetString() : null),
-                "Write" => Truncate(root.TryGetProperty("file_path", out var fp2) ? fp2.GetString() : null),
-                "Edit" => Truncate(root.TryGetProperty("file_path", out var fp3) ? fp3.GetString() : null),
-                "Glob" => Truncate(root.TryGetProperty("pattern", out var p) ? p.GetString() : null),
-                "Grep" => Truncate(root.TryGetProperty("pattern", out var gp) ? gp.GetString() : null),
-                "WebFetch" or "WebSearch" => Truncate(root.TryGetProperty("url", out var u) ? u.GetString()
-                    : root.TryGetProperty("query", out var q) ? q.GetString() : null),
-                _ => Truncate(root.EnumerateObject().FirstOrDefault().Value.GetString())
-            };
-        }
-        catch { return ""; }
-    }
-
-    private static string Truncate(string? s, int max = 80) =>
-        s is null ? "" : s.Length <= max ? s : s[..max] + "…";
+    private static string GetToolPreview(string toolName, string? detail) =>
+        SharedRenderHelpers.GetToolPreview(toolName, detail);
 
     private static (string Prompt, string[] Options) ParseAskUserQuestionDetail(string? detail)
     {
@@ -634,8 +683,8 @@
 
     private async Task SubmitAskUserQuestion(AskUserQuestionMessage msg, string answer)
     {
+        if (_activeRunId is null) return;
         var runId = msg.RunId ?? _activeRunId;
-        if (runId == null) return;
         msg.IsAnswered = true;
         StateHasChanged();
         using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
@@ -650,6 +699,7 @@
     public Task StreamEnded()
     {
         _loading = false;
+        _streamingText = null;
         if (_activeRun is not null)
             _activeRun.OnEvent -= HandleEvent;
         _activeRun = null;

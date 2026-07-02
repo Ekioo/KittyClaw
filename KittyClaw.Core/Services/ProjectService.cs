@@ -39,6 +39,10 @@ public partial class ProjectService
             catch { /* column already exists */ }
             try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN UpdatedAt TEXT NOT NULL DEFAULT '1970-01-01 00:00:00'"); }
             catch { /* column already exists */ }
+            try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN LocalModelBaseUrl TEXT NULL"); }
+            catch { /* column already exists */ }
+            try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN LocalModelName TEXT NULL"); }
+            catch { /* column already exists */ }
             _dbInitialized = true;
         }
         finally
@@ -114,6 +118,19 @@ public partial class ProjectService
         {
             project.FallbackModel = string.IsNullOrWhiteSpace(fallbackModel) ? null : fallbackModel.Trim();
         }
+        project.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return project;
+    }
+
+    public async Task<Project?> SaveLocalModelConfigAsync(string slug, string? baseUrl, string? modelName)
+    {
+        await EnsureRegistryInitializedAsync();
+        await using var db = new RegistryDbContext(_registryPath);
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Slug == slug);
+        if (project is null) return null;
+        project.LocalModelBaseUrl = string.IsNullOrWhiteSpace(baseUrl) ? null : baseUrl.Trim();
+        project.LocalModelName = string.IsNullOrWhiteSpace(modelName) ? null : modelName.Trim();
         project.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
         return project;

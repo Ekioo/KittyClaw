@@ -104,5 +104,7 @@
   "UndoColumn": "Column",
   "UndoComment": "Comment",
   "DiscardChangesConfirm": "Discard unsaved changes?",
-  "Discard": "Discard"
+  "Discard": "Discard",
+  "LoadMoreTickets": "Load more",
+  "Remaining": "remaining"
 }
