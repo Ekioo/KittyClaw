@@ -28,6 +28,22 @@ public class AgentRunRegistryTests
     }
 
     [Fact]
+    public void Push_UpdatesLastActivityAt_ToEventTimestamp()
+    {
+        var run = new AgentRun
+        {
+            RunId = "r1", ProjectSlug = "p", TicketId = null,
+            AgentName = "a", SkillFile = "a/SKILL.md",
+            ConcurrencyGroup = "a", StartedAt = DateTime.UtcNow,
+        };
+
+        var t = DateTime.UtcNow.AddSeconds(5);
+        run.Push(new StreamEvent(t, "assistant", "heartbeat"));
+
+        Assert.Equal(t, run.LastActivityAt);
+    }
+
+    [Fact]
     public void Constructor_ReconcilesStaleLRunningSnapshots_ToStopped()
     {
         using var tmp = new TempDir();

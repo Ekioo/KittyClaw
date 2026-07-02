@@ -19,6 +19,31 @@ public static partial class Endpoints
             })))
             .WithTags("Runs");
 
+        // Observability (feature #2, ticket #98): list the concurrency groups currently locked for a
+        // project — i.e. groups that have at least one Running run. Without this a zombie lock (a hung
+        // run that never completes) is invisible until KittyClaw restarts. The lock holder is the
+        // earliest-started active run in the group (that is the one HasActiveInGroup keys on).
+        api.MapGet("/projects/{slug}/concurrency-groups", (string slug, AgentRunRegistry reg) =>
+            Results.Ok(reg.ActiveForProject(slug)
+                .GroupBy(r => r.ConcurrencyGroup)
+                .Select(g =>
+                {
+                    var holder = g.OrderBy(r => r.StartedAt).First();
+                    return new
+                    {
+                        group = g.Key,
+                        runId = holder.RunId,
+                        agentName = holder.AgentName,
+                        ticketId = holder.TicketId,
+                        lockedAt = holder.StartedAt,
+                        lastActivityAt = holder.LastActivityAt,
+                        lockTimeoutMinutes = holder.LockTimeoutMinutes,
+                        activeRuns = g.Count(),
+                    };
+                })
+                .OrderBy(x => x.group)))
+            .WithTags("Runs");
+
         api.MapGet("/projects/{slug}/runs/{runId}", (string slug, string runId, AgentRunRegistry reg) =>
         {
             var run = reg.Get(runId);

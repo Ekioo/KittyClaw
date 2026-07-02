@@ -79,6 +79,11 @@ public sealed class ClaudeRunContext
     /// <summary>Maximum wall-clock duration for this run. When exceeded, the subprocess is killed and the run fails.
     /// Null means no timeout (e.g. chat sessions). Defaults to 30 minutes for automation runs if not set.</summary>
     public TimeSpan? MaxRunDuration { get; init; }
+
+    /// <summary>Minutes of inactivity after which the concurrency-lock reaper force-releases this run's group
+    /// (dead man's switch for a hung subprocess that never returns nor throws). Null disables it.
+    /// Propagated onto the AgentRun so the reaper can enforce it.</summary>
+    public int? LockTimeoutMinutes { get; init; }
 }
 
 public sealed class ClaudeRunner
@@ -109,6 +114,7 @@ public sealed class ClaudeRunner
             StartedAt = DateTime.UtcNow,
             Model = ctx.Model,
             ChatTarget = ctx.ChatTarget,
+            LockTimeoutMinutes = ctx.LockTimeoutMinutes,
         };
         if (ctx.OnEventHook is not null) run.OnEvent += ctx.OnEventHook;
         _runs.Register(run);
@@ -297,6 +303,14 @@ public sealed class ClaudeRunner
         }
         finally
         {
+            // Safety net (feature #1): guarantee the concurrency lock is released however RunAsync
+            // exits. Complete is idempotent — a run that already reached a terminal status on the
+            // nominal/catch paths is untouched. This only rescues a path that returned or threw
+            // without completing the run, which would otherwise leave it Running forever (a zombie
+            // lock that silently skips every later dispatch in the same group). It does NOT cover a
+            // pure hang where the method never returns and this finally never runs — that is the
+            // reaper's job (feature #3).
+            _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
             slot.Dispose();
             CleanupImageTempFiles(ctx);
         }

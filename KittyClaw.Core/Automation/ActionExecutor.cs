@@ -370,6 +370,7 @@ internal sealed class ActionExecutor
             TicketStatus = firing.TicketStatus,
             MaxTurns = a.MaxTurns,
             ConcurrencyGroup = group,
+            LockTimeoutMinutes = a.LockTimeoutMinutes,
             Env = effectiveEnv,
             Model = effectiveModel,
             FallbackModel = fallbackModel,

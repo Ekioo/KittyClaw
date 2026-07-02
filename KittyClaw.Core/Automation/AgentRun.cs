@@ -23,6 +23,16 @@ public sealed class AgentRun
     public DateTime? EndedAt { get; set; }
     public int? ExitCode { get; set; }
 
+    /// <summary>Minutes of inactivity after which the concurrency-lock reaper force-releases this run's
+    /// group (dead man's switch). Null disables the timeout. Set from the automation's
+    /// <c>lockTimeoutMinutes</c> via <see cref="ClaudeRunContext.LockTimeoutMinutes"/>.</summary>
+    public int? LockTimeoutMinutes { get; init; }
+
+    /// <summary>UTC timestamp of the last StreamEvent pushed onto this run — its heartbeat. Updated on
+    /// every <see cref="Push"/>. The reaper compares <c>now - LastActivityAt</c> against
+    /// <see cref="LockTimeoutMinutes"/> to detect a hung run whose subprocess stopped emitting.</summary>
+    public DateTime LastActivityAt { get; private set; } = DateTime.UtcNow;
+
     private readonly object _logLock = new();
     private readonly LinkedList<StreamEvent> _buffer = new();
     private const int MaxBuffer = 500;
@@ -61,6 +71,7 @@ public sealed class AgentRun
         {
             _buffer.AddLast(ev);
             while (_buffer.Count > MaxBuffer) _buffer.RemoveFirst();
+            LastActivityAt = ev.At;
         }
         OnEvent?.Invoke(ev);
     }
@@ -222,6 +233,10 @@ public sealed class AgentRunRegistry
 
     public IEnumerable<AgentRun> ActiveForProject(string projectSlug) =>
         _runs.Values.Where(r => r.ProjectSlug == projectSlug && r.Status == AgentRunStatus.Running);
+
+    /// <summary>All currently-Running runs across every project. Used by the concurrency-lock reaper.</summary>
+    public IEnumerable<AgentRun> AllActive() =>
+        _runs.Values.Where(r => r.Status == AgentRunStatus.Running);
 
     public IEnumerable<AgentRun> ActiveForTicket(string projectSlug, int ticketId) =>
         _runs.Values.Where(r => r.ProjectSlug == projectSlug && r.TicketId == ticketId && r.Status == AgentRunStatus.Running);

@@ -9,12 +9,21 @@ public class AutomationConfigJsonTests
     [Fact]
     public void RunAgentActionSpec_round_trip()
     {
-        var spec = new RunAgentActionSpec { Agent = "programmer", MaxTurns = 50, ConcurrencyGroup = "code" };
+        var spec = new RunAgentActionSpec { Agent = "programmer", MaxTurns = 50, ConcurrencyGroup = "code", LockTimeoutMinutes = 20 };
         ActionSpec roundtrip = JsonSerializer.Deserialize<ActionSpec>(JsonSerializer.Serialize<ActionSpec>(spec, Opts), Opts)!;
         var a = Assert.IsType<RunAgentActionSpec>(roundtrip);
         Assert.Equal("programmer", a.Agent);
         Assert.Equal(50, a.MaxTurns);
         Assert.Equal("code", a.ConcurrencyGroup);
+        Assert.Equal(20, a.LockTimeoutMinutes);
+    }
+
+    [Fact]
+    public void RunAgentActionSpec_lockTimeout_defaults_to_null()
+    {
+        var spec = new RunAgentActionSpec { Agent = "programmer" };
+        ActionSpec r = JsonSerializer.Deserialize<ActionSpec>(JsonSerializer.Serialize<ActionSpec>(spec, Opts), Opts)!;
+        Assert.Null(Assert.IsType<RunAgentActionSpec>(r).LockTimeoutMinutes);
     }
 
     [Fact]

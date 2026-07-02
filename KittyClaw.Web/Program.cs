@@ -69,6 +69,8 @@ builder.Services.AddSingleton<AutomationEngine>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomationEngine>());
 builder.Services.AddSingleton<GitRepositoryWatcher>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<GitRepositoryWatcher>());
+// Dead man's switch: force-release concurrency locks held by hung runs (ticket #98, feature #3).
+builder.Services.AddHostedService<KittyClaw.Core.Services.ConcurrencyLockReaper>();
 builder.Services.AddSingleton<KittyClaw.Core.Services.DashboardTileGate>();
 builder.Services.AddSingleton<KittyClaw.Core.Services.DashboardScriptRunner>();
 builder.Services.AddSingleton<KittyClaw.Core.Services.DashboardRefreshService>();

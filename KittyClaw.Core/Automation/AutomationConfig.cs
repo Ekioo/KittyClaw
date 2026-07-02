@@ -225,6 +225,10 @@ public sealed class RunAgentActionSpec : ActionSpec
     public required string Agent { get; set; }
     public int MaxTurns { get; set; } = 200;
     public string? ConcurrencyGroup { get; set; }
+    /// <summary>Dead man's switch: if the run holding this concurrency group emits no activity for
+    /// this many minutes, the reaper force-releases the lock. Null (default) disables the timeout.
+    /// Guards against a hung subprocess that never returns nor throws (see ticket #98).</summary>
+    public int? LockTimeoutMinutes { get; set; }
     public List<string> MutuallyExclusiveWith { get; set; } = new();
     public string? Context { get; set; }
     public Dictionary<string, string> Env { get; set; } = new();
