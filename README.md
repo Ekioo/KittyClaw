@@ -22,6 +22,7 @@ A kanban board that **orchestrates agentic projects**. Each column is a workflow
 - **SQLite** via Entity Framework Core (one DB per project)
 - **OpenAPI** with auto-generated Markdown docs
 - External: **[Claude Code CLI](https://docs.claude.com/en/docs/claude-code/overview)** + **[Git](https://git-scm.com/downloads)** (required on PATH for agent dispatch and auto-commits)
+- Optional: **[Ollama](https://ollama.com)** — dispatch agents to a local model instead of the Anthropic cloud API ([details](doc/local-models.md))
 
 ## Getting Started
 
@@ -126,6 +127,7 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 - Column management (create, reorder, customize colors)
 - Label and member management
 - Image upload in descriptions and comments
+- Local model support ([Ollama](doc/local-models.md)): per-project base URL with model autodiscovery, per-member default model, per-action override in the Automation Editor
 
 ## Dashboard
 
