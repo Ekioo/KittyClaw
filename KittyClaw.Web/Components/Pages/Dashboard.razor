@@ -301,15 +301,7 @@ else
     private Project? _project;
     private string _workspace = "";
     private List<string> _ollamaModels = new();
-    private static readonly List<string> AvailableModels = new()
-    {
-        "claude-opus-4-8",
-        "claude-opus-4-8-1m",
-        "claude-opus-4-7",
-        "claude-opus-4-7-1m",
-        "claude-sonnet-4-6",
-        "claude-haiku-4-5",
-    };
+    private static readonly IReadOnlyList<string> AvailableModels = ClaudeModelCatalog.Models;
     private List<string> AllModels => AvailableModels.Concat(_ollamaModels).ToList();
 
     private List<DashboardTileLayout> _tiles = [];

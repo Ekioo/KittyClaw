@@ -351,15 +351,7 @@ else
     private bool _discoveringLocal;
     private List<string> _discoveredModels = new();
     private string? _localModelsError;
-    private static readonly List<string> ClaudeModels = new()
-    {
-        "claude-opus-4-8",
-        "claude-opus-4-8-1m",
-        "claude-opus-4-7",
-        "claude-opus-4-7-1m",
-        "claude-sonnet-4-6",
-        "claude-haiku-4-5",
-    };
+    private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
     private List<string> AllModels => ClaudeModels.Concat(_discoveredModels).ToList();
 
     private List<Member> _members = new();

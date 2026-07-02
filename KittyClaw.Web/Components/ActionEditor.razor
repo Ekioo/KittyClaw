@@ -205,16 +205,7 @@
     [Parameter] public EventCallback<ActionSpec> OnReplace { get; set; }
     [Parameter] public EventCallback OnDelete { get; set; }
 
-    private const string DefaultModel = "claude-sonnet-4-6";
-    private static readonly List<string> ClaudeModels = new()
-    {
-        "claude-opus-4-8",
-        "claude-opus-4-8-1m",
-        "claude-opus-4-7",
-        "claude-opus-4-7-1m",
-        DefaultModel,
-        "claude-haiku-4-5",
-    };
+    private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
 
     private List<string> _ollamaModels = new();
     private List<string> AllModels => ClaudeModels.Concat(_ollamaModels).ToList();

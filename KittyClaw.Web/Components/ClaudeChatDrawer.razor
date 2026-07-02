@@ -241,16 +241,8 @@
     private string? _sessionModel; // model used by the current session (for detecting changes)
     private string? _streamingText;
     private List<string> _ollamaModels = new();
-    private const string DefaultModel = "claude-sonnet-4-6";
-    private static readonly List<string> ClaudeModels = new()
-    {
-        "claude-opus-4-8",
-        "claude-opus-4-8-1m",
-        "claude-opus-4-7",
-        "claude-opus-4-7-1m",
-        DefaultModel,
-        "claude-haiku-4-5",
-    };
+    private const string DefaultModel = ClaudeModelCatalog.DefaultModel;
+    private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
 
     // Image paste (#115). Accepted clipboard images await Send() in this buffer; rejections
     // surface in _pasteError as a small inline banner.
