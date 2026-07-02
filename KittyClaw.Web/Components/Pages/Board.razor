@@ -212,6 +212,11 @@ else
                                     </div>
                                 }
                                 <div class="ticket-card-bottom">
+                                    @if (ticket.FireAt is not null)
+                                    {
+                                        var days = (ticket.FireAt.Value.Date - DateTime.UtcNow.Date).Days;
+                                        <span class="schedule-badge" title="@ticket.FireAt.Value.ToString("yyyy-MM-dd HH:mm") UTC → @(ticket.ScheduleTarget ?? "Todo")">@(days <= 0 ? "J" : $"J-{days}")</span>
+                                    }
                                     @if (!string.IsNullOrEmpty(ticket.AssignedTo))
                                     {
                                         <span class="assignee-badge" title="@ticket.AssignedTo">@MemberDisplayName(ticket.AssignedTo)</span>
@@ -1299,6 +1304,9 @@ else
         var sort = SortState.Get(Slug, status);
         if (sort.Mode != KittyClaw.Web.Services.ColumnSortMode.Manual)
             tickets = KittyClaw.Web.Services.BoardSortState.ApplySort(tickets, sort.Mode, sort.Direction);
+        else if (status == "Scheduled")
+            // Scheduled column defaults to soonest-fire-first so upcoming reactivations sit on top.
+            tickets = tickets.OrderBy(t => t.FireAt ?? DateTime.MaxValue).ThenBy(t => t.SortOrder);
 
         return tickets.ToList();
     }

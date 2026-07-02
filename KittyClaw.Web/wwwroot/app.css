@@ -604,6 +604,16 @@ a:hover { color: var(--accent-hover); }
     text-overflow: ellipsis;
     max-width: 90px;
 }
+.schedule-badge {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    background: color-mix(in srgb, #eab308 18%, transparent);
+    color: #eab308;
+    white-space: nowrap;
+}
 .ticket-author {
     font-size: 0.7rem;
     color: var(--text-muted);

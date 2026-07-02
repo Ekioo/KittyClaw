@@ -84,6 +84,21 @@ public class TicketService
         catch { /* column already exists */ }
     }
 
+    // Adds the Scheduled-status columns (feature #99) to databases created before this feature.
+    private static async Task EnsureScheduleColumnsAsync(TodoDbContext db)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE Tickets ADD COLUMN FireAt TEXT NULL");
+        }
+        catch { /* column already exists */ }
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE Tickets ADD COLUMN ScheduleTarget TEXT NULL");
+        }
+        catch { /* column already exists */ }
+    }
+
     public async Task<List<TicketSummary>> ListTicketsAsync(string projectSlug, string? statusFilter = null, TicketPriority? priorityFilter = null, string? assignedTo = null, string? createdBy = null, string? search = null, int? parentId = null)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
@@ -92,6 +107,7 @@ public class TicketService
         await EnsureSortOrderColumnAsync(db);
         await EnsureAssignedToColumnAsync(db);
         await EnsureParentIdColumnAsync(db);
+        await EnsureScheduleColumnsAsync(db);
         await ColumnService.EnsureBoardColumnsTableAsync(db);
         var query = db.Tickets.Include(t => t.Labels).AsQueryable();
         if (statusFilter is not null)
@@ -116,7 +132,11 @@ public class TicketService
                 t.Comments.Count,
                 t.Activities.Max(a => (DateTime?)a.CreatedAt),
                 t.ParentId,
-                new List<SubTicketInfo>()))
+                new List<SubTicketInfo>())
+                {
+                    FireAt = t.FireAt,
+                    ScheduleTarget = t.ScheduleTarget
+                })
             .ToListAsync();
 
         // Load children for ALL returned parents, ignoring the status filter so that
@@ -144,6 +164,7 @@ public class TicketService
         await EnsureLabelTablesAsync(db);
         await EnsureParentIdColumnAsync(db);
         await EnsureAssignedToColumnAsync(db);
+        await EnsureScheduleColumnsAsync(db);
         var ticket = await db.Tickets
             .Include(t => t.Comments.OrderBy(c => c.CreatedAt))
             .Include(t => t.Activities.OrderBy(a => a.CreatedAt))
@@ -229,6 +250,92 @@ public class TicketService
         });
         await db.SaveChangesAsync();
         TicketStatusChanged?.Invoke(projectSlug, ticketId, oldStatus, newStatus);
+        return ticket;
+    }
+
+    /// <summary>
+    /// Moves a ticket into the "Scheduled" column with a future <paramref name="fireAt"/> instant.
+    /// The <see cref="ScheduledPromotionService"/> promotes it to <paramref name="targetStatus"/> once
+    /// <paramref name="fireAt"/> is reached. This keeps calendar-dated work out of "Blocked".
+    /// </summary>
+    public async Task<Ticket?> ScheduleTicketAsync(string projectSlug, int ticketId, DateTime fireAt, string targetStatus = "Todo", string author = "owner")
+    {
+        if (string.IsNullOrWhiteSpace(author))
+            throw new InvalidOperationException("Le champ 'author' est requis.");
+        if (string.IsNullOrWhiteSpace(targetStatus))
+            targetStatus = "Todo";
+        await using var db = _projectService.GetProjectDb(projectSlug);
+        await EnsureActivityTableAsync(db);
+        await EnsureScheduleColumnsAsync(db);
+        await ColumnService.EnsureBoardColumnsTableAsync(db);
+        var scheduledExists = await db.BoardColumns.AnyAsync(c => c.Name == "Scheduled");
+        if (!scheduledExists)
+            throw new InvalidOperationException("La colonne 'Scheduled' n'existe pas.");
+        var targetExists = await db.BoardColumns.AnyAsync(c => c.Name == targetStatus);
+        if (!targetExists)
+            throw new InvalidOperationException($"La colonne cible '{targetStatus}' n'existe pas.");
+        var ticket = await db.Tickets.FindAsync(ticketId);
+        if (ticket is null) return null;
+        var oldStatus = ticket.Status;
+        ticket.Status = "Scheduled";
+        ticket.FireAt = fireAt;
+        ticket.ScheduleTarget = targetStatus;
+        ticket.UpdatedAt = DateTime.UtcNow;
+        db.ActivityEntries.Add(new ActivityEntry
+        {
+            TicketId = ticketId,
+            Author = author,
+            Text = $"a planifié le ticket pour {fireAt:yyyy-MM-dd HH:mm} UTC → {targetStatus}"
+        });
+        await db.SaveChangesAsync();
+        if (!string.Equals(oldStatus, "Scheduled", StringComparison.OrdinalIgnoreCase))
+            TicketStatusChanged?.Invoke(projectSlug, ticketId, oldStatus, "Scheduled");
+        return ticket;
+    }
+
+    /// <summary>
+    /// Returns the ids of Scheduled tickets whose <c>FireAt</c> is due (&lt;= <paramref name="now"/>).
+    /// </summary>
+    public async Task<List<int>> ListDueScheduledTicketIdsAsync(string projectSlug, DateTime now)
+    {
+        await using var db = _projectService.GetProjectDb(projectSlug);
+        await EnsureScheduleColumnsAsync(db);
+        return await db.Tickets
+            .Where(t => t.Status == "Scheduled" && t.FireAt != null && t.FireAt <= now)
+            .OrderBy(t => t.FireAt)
+            .Select(t => t.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Promotes a Scheduled ticket to its <c>ScheduleTarget</c> (default "Todo"), clears
+    /// <c>FireAt</c>, and fires <see cref="TicketStatusChanged"/> so automations (e.g. a
+    /// <c>statusChange { from: "Scheduled" }</c> trigger) run. No-op if the ticket is not Scheduled.
+    /// </summary>
+    public async Task<Ticket?> PromoteScheduledAsync(string projectSlug, int ticketId, string author = "automation")
+    {
+        await using var db = _projectService.GetProjectDb(projectSlug);
+        await EnsureActivityTableAsync(db);
+        await EnsureScheduleColumnsAsync(db);
+        await ColumnService.EnsureBoardColumnsTableAsync(db);
+        var ticket = await db.Tickets.FindAsync(ticketId);
+        if (ticket is null || !string.Equals(ticket.Status, "Scheduled", StringComparison.OrdinalIgnoreCase))
+            return null;
+        var target = string.IsNullOrWhiteSpace(ticket.ScheduleTarget) ? "Todo" : ticket.ScheduleTarget!;
+        var targetExists = await db.BoardColumns.AnyAsync(c => c.Name == target);
+        if (!targetExists) target = "Todo";
+        ticket.Status = target;
+        ticket.FireAt = null;
+        ticket.ScheduleTarget = null;
+        ticket.UpdatedAt = DateTime.UtcNow;
+        db.ActivityEntries.Add(new ActivityEntry
+        {
+            TicketId = ticketId,
+            Author = author,
+            Text = $"planification déclenchée : Scheduled → {target}"
+        });
+        await db.SaveChangesAsync();
+        TicketStatusChanged?.Invoke(projectSlug, ticketId, "Scheduled", target);
         return ticket;
     }
 

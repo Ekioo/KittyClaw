@@ -73,6 +73,23 @@ public static partial class Endpoints
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status404NotFound);
 
+        api.MapPatch("/projects/{slug}/tickets/{id:int}/schedule", async (string slug, int id, ScheduleTicketRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
+        {
+            try
+            {
+                var ticket = await ts.ScheduleTicketAsync(slug, id, req.FireAt, req.TargetStatus ?? "Todo", req.Author);
+                if (ticket is not null) notifier.NotifyProjectUpdated(slug);
+                return ticket is null ? Results.NotFound() : Results.Ok(ticket);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).WithTags("Tickets")
+        .Produces<Ticket>()
+        .ProducesProblem(StatusCodes.Status400BadRequest)
+        .ProducesProblem(StatusCodes.Status404NotFound);
+
         api.MapDelete("/projects/{slug}/tickets/{id:int}", async (string slug, int id, TicketService ts, BoardUpdateNotifier notifier) =>
         {
             var deleted = await ts.DeleteTicketAsync(slug, id);

@@ -19,6 +19,7 @@ public class ColumnService
         ("Todo",         "#4a9eff"),
         ("InProgress",   "#f59e42"),
         ("Blocked",      "#f06b6b"),
+        ("Scheduled",    "#eab308"),
         ("Review",       "#a78bfa"),
         ("Done",         "#3ecf8e"),
     ];
@@ -49,6 +50,27 @@ public class ColumnService
             }
             await db.SaveChangesAsync();
         }
+        else
+        {
+            // Existing boards (feature #99): add the "Scheduled" column once if missing.
+            await EnsureScheduledColumnAsync(db);
+        }
+    }
+
+    // Idempotently inserts the "Scheduled" column (feature #99) on boards that predate it.
+    // Placed just after "Blocked" when present; columns stay user-reorderable afterwards.
+    private static async Task EnsureScheduledColumnAsync(TodoDbContext db)
+    {
+        if (await db.BoardColumns.AnyAsync(c => c.Name == "Scheduled")) return;
+
+        var columns = await db.BoardColumns.OrderBy(c => c.SortOrder).ToListAsync();
+        var blockedIndex = columns.FindIndex(c => c.Name == "Blocked");
+        var insertAt = blockedIndex >= 0 ? blockedIndex + 1 : columns.Count;
+        columns.Insert(insertAt, new BoardColumn { Name = "Scheduled", Color = "#eab308" });
+        for (int i = 0; i < columns.Count; i++)
+            columns[i].SortOrder = i;
+        db.BoardColumns.Add(columns[insertAt]);
+        await db.SaveChangesAsync();
     }
 
     public async Task<List<BoardColumn>> ListColumnsAsync(string projectSlug)

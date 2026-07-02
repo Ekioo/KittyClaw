@@ -6,6 +6,7 @@ public record CreateProjectRequest(string Name);
 public record CreateTicketRequest(string Title, string CreatedBy, string Status, string Description = "", List<int>? LabelIds = null, TicketPriority Priority = TicketPriority.NiceToHave, string? AssignedTo = null, int? ParentId = null);
 public record UpdateTicketRequest(string Author, string? Title = null, string? Description = null, TicketPriority? Priority = null, string? AssignedTo = null, List<int>? LabelIds = null);
 public record MoveTicketRequest(string Status, string Author);
+public record ScheduleTicketRequest(DateTime FireAt, string Author, string? TargetStatus = "Todo");
 public record AddCommentRequest(string Content, string Author);
 public record UpdateCommentRequest(string Content, string Author);
 public record CreateLabelRequest(string Name, string Color = "#6366f1");

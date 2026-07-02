@@ -75,6 +75,8 @@ builder.Services.AddSingleton<KittyClaw.Core.Services.DashboardTileGate>();
 builder.Services.AddSingleton<KittyClaw.Core.Services.DashboardScriptRunner>();
 builder.Services.AddSingleton<KittyClaw.Core.Services.DashboardRefreshService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<KittyClaw.Core.Services.DashboardRefreshService>());
+// Auto-promote Scheduled tickets to their target column once FireAt fires (feature #99).
+builder.Services.AddHostedService<KittyClaw.Core.Services.ScheduledPromotionService>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.AgentRunsState>();
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<KittyClaw.Web.Services.UpdateCheckService>();

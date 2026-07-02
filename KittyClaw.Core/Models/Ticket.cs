@@ -14,6 +14,17 @@ public class Ticket
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     public int? ParentId { get; set; }
 
+    /// <summary>
+    /// When set (and Status == "Scheduled"), the ticket auto-promotes to <see cref="ScheduleTarget"/>
+    /// once this UTC instant is reached. Cleared on promotion.
+    /// </summary>
+    public DateTime? FireAt { get; set; }
+
+    /// <summary>
+    /// Column the ticket moves to when <see cref="FireAt"/> fires. Defaults to "Todo".
+    /// </summary>
+    public string? ScheduleTarget { get; set; }
+
     public List<Comment> Comments { get; set; } = [];
     public List<ActivityEntry> Activities { get; set; } = [];
     public List<Label> Labels { get; set; } = [];

@@ -44,6 +44,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "DELETE /api/projects/{slug}",
         "PATCH /api/projects/{slug}",
         "POST /api/projects/{slug}/pause",
+        "PATCH /api/projects/{slug}/local-model",
         // Tickets
         "GET /api/projects/{slug}/tickets",
         "POST /api/projects/{slug}/tickets",
@@ -58,6 +59,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "DELETE /api/projects/{slug}/tickets/{id}/comments/{commentId}",
         "GET /api/projects/{slug}/tickets/{id}/activity",
         "PATCH /api/projects/{slug}/tickets/{id}/reorder",
+        "PATCH /api/projects/{slug}/tickets/{id}/schedule",
         // Labels
         "GET /api/projects/{slug}/labels",
         "POST /api/projects/{slug}/labels",
@@ -89,6 +91,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "POST /api/projects/{slug}/runs/{runId}/steer",
         "POST /api/projects/{slug}/runs/{runId}/stop",
         "POST /api/projects/{slug}/runs/{runId}/retry",
+        "GET /api/projects/{slug}/concurrency-groups",
         // Chat
         "GET /api/projects/{slug}/chat/targets",
         "GET /api/projects/{slug}/chat/messages",
@@ -136,6 +139,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         ["DELETE /api/projects/{slug}"] = "Projects",
         ["PATCH /api/projects/{slug}"] = "Projects",
         ["POST /api/projects/{slug}/pause"] = "Projects",
+        ["PATCH /api/projects/{slug}/local-model"] = "Projects",
         ["GET /api/projects/{slug}/tickets"] = "Tickets",
         ["POST /api/projects/{slug}/tickets"] = "Tickets",
         ["PATCH /api/projects/{slug}/tickets/{id}"] = "Tickets",
@@ -149,6 +153,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         ["DELETE /api/projects/{slug}/tickets/{id}/comments/{commentId}"] = "Comments",
         ["GET /api/projects/{slug}/tickets/{id}/activity"] = "Activity",
         ["PATCH /api/projects/{slug}/tickets/{id}/reorder"] = "Tickets",
+        ["PATCH /api/projects/{slug}/tickets/{id}/schedule"] = "Tickets",
         ["GET /api/projects/{slug}/labels"] = "Labels",
         ["POST /api/projects/{slug}/labels"] = "Labels",
         ["DELETE /api/projects/{slug}/labels/{labelId}"] = "Labels",
@@ -173,6 +178,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         ["POST /api/projects/{slug}/runs/{runId}/steer"] = "Runs",
         ["POST /api/projects/{slug}/runs/{runId}/stop"] = "Runs",
         ["POST /api/projects/{slug}/runs/{runId}/retry"] = "Runs",
+        ["GET /api/projects/{slug}/concurrency-groups"] = "Runs",
         ["GET /api/projects/{slug}/chat/targets"] = "Chat",
         ["GET /api/projects/{slug}/chat/messages"] = "Chat",
         ["GET /api/projects/{slug}/chat/active"] = "Chat",
