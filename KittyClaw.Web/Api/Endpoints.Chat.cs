@@ -97,6 +97,11 @@ public static partial class Endpoints
             var (baseAgent, parsedTicketId) = ParseChatTarget(target);
             var effectiveTicketId = req.TicketId ?? parsedTicketId;
 
+            // baseAgent is composed into filesystem paths (.agents/{baseAgent}/SKILL.md) and
+            // session keys — reject anything that isn't a plain slug before touching disk.
+            if (!baseAgent.All(c => char.IsAsciiLetterLower(c) || char.IsAsciiDigit(c) || c is '-' or '_'))
+                return Results.BadRequest(new { error = "invalid_target", reason = $"Invalid agent slug '{baseAgent}'." });
+
             // Drain undelivered steer messages from the most recent completed run for this chat target.
             // Drain (not read) so they are not replayed on subsequent turns.
             var pendingSteerMessages = runReg.LastCompletedForChatTarget(slug, target)?.DrainPendingSteerMessages();
