@@ -157,6 +157,7 @@ public static partial class Endpoints
                 FallbackModel = project.FallbackModel,
                 RetryOnResumeFailure = true,
                 PresetRunId = newRunId,
+                MaxRunDuration = TimeSpan.FromMinutes(30),
             };
             _ = runner.RunAsync(ctx, CancellationToken.None);
             return Results.Ok(new { runId = newRunId });

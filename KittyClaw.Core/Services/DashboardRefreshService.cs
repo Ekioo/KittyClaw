@@ -232,6 +232,9 @@ public sealed class DashboardRefreshService : BackgroundService
             Model = sidecar.Model,
             SessionScope = "dashboard",
             PersistSession = false,
+            // Tile refreshes hold the global dashboard gate: a hung run would starve every
+            // dashboard in every project, so keep this bound tight.
+            MaxRunDuration = TimeSpan.FromMinutes(15),
             OnEventHook = ev =>
             {
                 if (ev.Kind != "assistant" || string.IsNullOrWhiteSpace(ev.Text)) return;

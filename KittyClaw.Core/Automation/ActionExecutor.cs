@@ -377,6 +377,7 @@ internal sealed class ActionExecutor
             ExtraContext = a.Context,
             RetryOnResumeFailure = true,
             OllamaValidationError = ollamaValidationError,
+            MaxRunDuration = TimeSpan.FromMinutes(30),
         };
         _sessions.SetLastDispatched(rt.Workspace!, agentName, DateTime.UtcNow);
         if (firing.TicketId is not null)
@@ -668,6 +669,8 @@ internal sealed class ActionExecutor
                     : eventsSummary,
                 SessionScope = scope,
                 Model = null,
+                RetryOnResumeFailure = true,
+                MaxRunDuration = TimeSpan.FromMinutes(30),
             };
 
             var run = await _runner.RunAsync(runCtx, ct);

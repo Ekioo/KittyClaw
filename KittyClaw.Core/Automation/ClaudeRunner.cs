@@ -50,6 +50,8 @@ public sealed class ClaudeRunContext
         ChatTarget = ChatTarget,
         PendingSteerMessages = null,
         ImagePaths = null,
+        MaxRunDuration = MaxRunDuration,
+        LockTimeoutMinutes = LockTimeoutMinutes,
     };
 
     /// <summary>Optional namespace prefix for the SessionRegistry key (e.g. "chat" → "chat:agent:sweep"). Keeps chat sessions isolated from automation sessions for the same agent.</summary>
@@ -281,6 +283,8 @@ public sealed class ClaudeRunner
                     FallbackModel = ctx.FallbackModel,
                     Env = ctx.Env,
                     PendingSteerMessages = run.PendingSteerMessages,
+                    MaxRunDuration = ctx.MaxRunDuration,
+                    LockTimeoutMinutes = ctx.LockTimeoutMinutes,
                 };
                 _ = Task.Run(() => RunAsync(followCtx, CancellationToken.None));
             }
@@ -463,9 +467,12 @@ public sealed class ClaudeRunner
                 run.Push(new StreamEvent(DateTime.UtcNow, "error", $"stdin write failed: {ex.Message}"));
             }
 
-            var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, run.Cancellation.Token);
-            var runTimeout = ctx.MaxRunDuration ?? TimeSpan.FromMinutes(60);
-            using var timeoutCts = new CancellationTokenSource(runTimeout);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, run.Cancellation.Token);
+            // Null MaxRunDuration = no wall-clock timeout (chat sessions); hung processes are
+            // still covered by the terminal-result watchdog and the concurrency-lock reaper.
+            using var timeoutCts = ctx.MaxRunDuration is { } maxDuration
+                ? new CancellationTokenSource(maxDuration)
+                : new CancellationTokenSource();
             using var linkedWithTimeout = CancellationTokenSource.CreateLinkedTokenSource(linked.Token, timeoutCts.Token);
             var stdoutTask = ClaudeStreamPump.PumpStdoutAsync(proc, run, linkedWithTimeout.Token);
             var stderrTask = ClaudeStreamPump.PumpStderrAsync(proc, run, linkedWithTimeout.Token);
@@ -523,11 +530,11 @@ public sealed class ClaudeRunner
                     // Run exceeded MaxRunDuration. Kill the process and fail the run.
                     _logger.LogWarning(
                         "{Agent} run={RunId} timed out after {Duration}; killing the process tree",
-                        ctx.AgentName, run.RunId, runTimeout);
+                        ctx.AgentName, run.RunId, ctx.MaxRunDuration);
                     try { proc.Kill(entireProcessTree: true); } catch { /* best-effort */ }
                     job?.Dispose();
                     run.Push(new StreamEvent(DateTime.UtcNow, "error",
-                        $"Run exceeded maximum duration of {runTimeout.TotalMinutes:F0} minutes and was killed"));
+                        $"Run exceeded maximum duration of {ctx.MaxRunDuration?.TotalMinutes:F0} minutes and was killed"));
                     run.OnEvent -= counter;
                     run.OnEvent -= resultWatch;
                     return new SpawnResult(-1, assistantCount, false, false);
