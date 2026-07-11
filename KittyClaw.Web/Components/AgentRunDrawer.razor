@@ -206,10 +206,15 @@
 
     private void HandleEvent(StreamEvent ev)
     {
-        _events.Add(ev);
-        while (_events.Count > 500) _events.RemoveAt(0);
-        _needsScroll = true;
-        InvokeAsync(StateHasChanged);
+        // OnEvent fires on the runner's background thread; _events is enumerated by the
+        // renderer, so mutate it on the sync context only.
+        InvokeAsync(() =>
+        {
+            _events.Add(ev);
+            while (_events.Count > 500) _events.RemoveAt(0);
+            _needsScroll = true;
+            StateHasChanged();
+        });
     }
 
     private async Task Close()
