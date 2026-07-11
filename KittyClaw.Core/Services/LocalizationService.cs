@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
 
@@ -22,13 +23,29 @@ public class LocalizationService
 
     public string Get(string key)
     {
-        var lang = Lang;
-        if (_cache.TryGetValue(lang, out var dict) && dict.TryGetValue(key, out var value))
+        // Fallback chain: active language → English → the raw key. Without the English hop,
+        // any en/fr drift shows literal keys in the UI of the lagging language.
+        if (_cache.TryGetValue(Lang, out var dict) && dict.TryGetValue(key, out var value))
             return value;
+        if (_cache.TryGetValue("en", out var en) && en.TryGetValue(key, out var enValue))
+            return enValue;
         return key;
     }
 
-    public string Get(string key, params object[] args) => string.Format(Get(key), args);
+    public string Get(string key, params object[] args)
+    {
+        var template = Get(key);
+        try
+        {
+            // Invariant so numbers/dates don't follow the server culture; guarded because a
+            // missing key returns the raw key, which may contain braces and make Format throw.
+            return string.Format(CultureInfo.InvariantCulture, template, args);
+        }
+        catch (FormatException)
+        {
+            return template;
+        }
+    }
 
     private void Load()
     {
