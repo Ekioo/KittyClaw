@@ -246,7 +246,12 @@ public class DashboardService
 
     public void DeleteTileFolder(string workspace, string tileSlug)
     {
-        var dir = GetTileDirPath(workspace, tileSlug);
+        // Defense in depth against traversal slugs: this deletes recursively, so never
+        // trust the caller to have validated tileSlug.
+        var dashDir = Path.GetFullPath(GetDashboardDir(workspace));
+        var dir = Path.GetFullPath(GetTileDirPath(workspace, tileSlug));
+        if (!dir.StartsWith(dashDir + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            throw new ArgumentException($"Tile slug '{tileSlug}' resolves outside the dashboard directory.", nameof(tileSlug));
         if (Directory.Exists(dir))
             Directory.Delete(dir, recursive: true);
     }

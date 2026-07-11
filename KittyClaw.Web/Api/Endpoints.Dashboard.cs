@@ -20,11 +20,12 @@ public static partial class Endpoints
         // Removes the tile from the layout AND deletes the entire .dashboard/<tileSlug>/ folder.
         api.MapDelete("/projects/{slug}/dashboard/tiles/{tileSlug}", async (string slug, string tileSlug, ProjectService ps, DashboardService ds) =>
         {
+            var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
+            if (workspace is null) return Results.NotFound();
+            if (!IsInsideTileDir(workspace, tileSlug, ds)) return Results.BadRequest();
             var removed = await ds.RemoveTileAsync(slug, tileSlug);
             if (!removed) return Results.NotFound();
-            var project = await ps.GetProjectAsync(slug);
-            if (project is not null)
-                ds.DeleteTileFolder(ps.ResolveWorkspacePath(project), tileSlug);
+            ds.DeleteTileFolder(workspace, tileSlug);
             return Results.NoContent();
         }).WithTags("Dashboard");
 
@@ -32,6 +33,7 @@ public static partial class Endpoints
         {
             var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
             if (workspace is null) return Results.NotFound();
+            if (!IsInsideTileDir(workspace, tileSlug, ds)) return Results.BadRequest();
             var tile = await ds.MoveTileAsync(slug, workspace, tileSlug, req.X, req.Y);
             return tile is null ? Results.NotFound() : Results.Ok(tile);
         }).WithTags("Dashboard");
@@ -40,6 +42,7 @@ public static partial class Endpoints
         {
             var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
             if (workspace is null) return Results.NotFound();
+            if (!IsInsideTileDir(workspace, tileSlug, ds)) return Results.BadRequest();
             var tile = await ds.ResizeTileAsync(slug, workspace, tileSlug, req.Width, req.Height);
             return tile is null ? Results.NotFound() : Results.Ok(tile);
         }).WithTags("Dashboard");
@@ -129,6 +132,7 @@ public static partial class Endpoints
         {
             var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
             if (workspace is null) return Results.NotFound();
+            if (!IsInsideTileDir(workspace, tileSlug, ds)) return Results.BadRequest();
             // Actual refresh is fire-and-forget; caller polls via the gate snapshot or SSE.
             _ = Task.Run(() => refreshSvc.ManualRefreshAsync(slug, workspace, tileSlug, CancellationToken.None));
             return Results.Accepted();
