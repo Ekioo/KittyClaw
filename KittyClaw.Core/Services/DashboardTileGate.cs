@@ -118,10 +118,12 @@ public sealed class DashboardTileGate : IDisposable
 
     private void TryDispatchNext()
     {
+        if (!_sem.Wait(0)) return;
+
+        // From here on we hold the gate's only permit: every exit path must either hand it
+        // to a winner (TrySetResult true — RunAsync releases it in its finally) or Release it.
         while (true)
         {
-            if (!_sem.Wait(0)) return;
-
             QueueEntry? winner;
             lock (_lock)
             {
@@ -131,6 +133,7 @@ public sealed class DashboardTileGate : IDisposable
             }
 
             if (winner.Tcs.TrySetResult(true)) return;
+            // Winner was concurrently cancelled: keep the held permit and pick the next entry.
         }
     }
 
