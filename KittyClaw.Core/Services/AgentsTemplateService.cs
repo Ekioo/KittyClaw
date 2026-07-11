@@ -151,20 +151,9 @@ public sealed class AgentsTemplateService
     {
         try
         {
-            var psi = new ProcessStartInfo(file, args)
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-            if (!string.IsNullOrEmpty(workingDirectory)) psi.WorkingDirectory = workingDirectory;
-            using var p = Process.Start(psi);
-            if (p is null) return (false, "");
-            var stdout = p.StandardOutput.ReadToEnd();
-            var stderr = p.StandardError.ReadToEnd();
-            p.WaitForExit(10_000);
-            return (p.ExitCode == 0, stdout + stderr);
+            var res = ProcessRunner.RunAsync(file, args, workingDirectory, TimeSpan.FromSeconds(10))
+                .GetAwaiter().GetResult();
+            return (res.Success, res.Stdout + res.Stderr);
         }
         catch { return (false, ""); }
     }

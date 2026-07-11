@@ -23,8 +23,10 @@ internal sealed class ActionExecutor
     private readonly RunStateManager _runState;
     private readonly ILogger _logger;
 
-    // Serializes in-process git operations across multiple automations.
-    private static readonly SemaphoreSlim _gitLock = new(1, 1);
+    // Serializes in-process git operations per repository. Keyed by the git cwd so one
+    // repo's slow/hung git (bounded by ProcessRunner's timeout) can't stall other projects.
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> _gitLocks =
+        new(StringComparer.OrdinalIgnoreCase);
 
     // Tracks in-flight action chains keyed by "{automationId}:{ticketId}".
     // Prevents concurrent chains for the same (automation, ticket) pair.
@@ -807,7 +809,8 @@ internal sealed class ActionExecutor
             // pathspecs for paths that don't exist on disk (e.g. only the dir is present), so list both.
             var pathArgs = $"\"{relBase}/memory\" \"{relBase}/memory.md\"";
 
-            await _gitLock.WaitAsync();
+            var gitLock = _gitLocks.GetOrAdd(gitCwd, _ => new SemaphoreSlim(1, 1));
+            await gitLock.WaitAsync();
             try
             {
                 var diff = await RunGitAsync(gitCwd, $"diff --quiet --exit-code -- {pathArgs}");
@@ -838,7 +841,7 @@ internal sealed class ActionExecutor
 
                 _logger.LogInformation("commitAgentMemory: committed {Agent} memory", agent);
             }
-            finally { _gitLock.Release(); }
+            finally { gitLock.Release(); }
         }
         catch (Exception ex)
         {
@@ -876,42 +879,33 @@ internal sealed class ActionExecutor
                 : "";
 
             var pwshBin = ShellResolver.ResolvePowerShell();
-            var psi = new System.Diagnostics.ProcessStartInfo
+            var res = await ProcessRunner.RunAsync(
+                pwshBin,
+                $"-NonInteractive -NoProfile {scriptArg}{extraArgs}",
+                workspacePath,
+                TimeSpan.FromSeconds(spec.TimeoutSeconds),
+                spec.Env,
+                ct);
+
+            if (res.TimedOut)
             {
-                FileName = pwshBin,
-                Arguments = $"-NonInteractive -NoProfile {scriptArg}{extraArgs}",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                WorkingDirectory = workspacePath,
-            };
-            foreach (var (k, v) in spec.Env)
-                psi.Environment[k] = v;
+                _logger.LogWarning("executePowerShell timed out after {Timeout}s; process tree killed", spec.TimeoutSeconds);
+                return spec.AbortOnFailure;
+            }
 
-            using var proc = System.Diagnostics.Process.Start(psi)
-                ?? throw new InvalidOperationException($"Failed to start {pwshBin} process");
-
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(spec.TimeoutSeconds));
-
-            var stdout = await proc.StandardOutput.ReadToEndAsync(cts.Token);
-            var stderr = await proc.StandardError.ReadToEndAsync(cts.Token);
-            await proc.WaitForExitAsync(cts.Token);
-
-            var exitCode = proc.ExitCode;
             _logger.LogInformation("executePowerShell exited {Code}. stdout={Stdout} stderr={Stderr}",
-                exitCode, stdout.Trim(), stderr.Trim());
+                res.ExitCode, res.Stdout.Trim(), res.Stderr.Trim());
 
-            if (exitCode != 0)
+            if (res.ExitCode != 0)
             {
-                _logger.LogWarning("executePowerShell non-zero exit ({Code}); abortOnFailure={Abort}", exitCode, spec.AbortOnFailure);
+                _logger.LogWarning("executePowerShell non-zero exit ({Code}); abortOnFailure={Abort}", res.ExitCode, spec.AbortOnFailure);
                 return spec.AbortOnFailure;
             }
         }
         catch (OperationCanceledException)
         {
-            _logger.LogWarning("executePowerShell timed out after {Timeout}s", spec.TimeoutSeconds);
+            // Engine shutdown / chain cancellation — the process tree was already killed.
+            _logger.LogWarning("executePowerShell cancelled");
             if (spec.AbortOnFailure) return true;
         }
         catch (Exception ex)
@@ -926,21 +920,10 @@ internal sealed class ActionExecutor
 
     private static async Task<(int exitCode, string stdout, string stderr)> RunGitAsync(string cwd, string args)
     {
-        var psi = new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = "git",
-            Arguments = args,
-            WorkingDirectory = cwd,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        using var proc = System.Diagnostics.Process.Start(psi)!;
-        var stdout = await proc.StandardOutput.ReadToEndAsync();
-        var stderr = await proc.StandardError.ReadToEndAsync();
-        await proc.WaitForExitAsync();
-        return (proc.ExitCode, stdout, stderr);
+        // 2-minute cap: a git blocked on a credential prompt or a stale index.lock must not
+        // hold the per-repo git lock forever.
+        var res = await ProcessRunner.RunAsync("git", args, cwd, TimeSpan.FromMinutes(2));
+        return (res.ExitCode ?? -1, res.Stdout, res.TimedOut ? "git timed out after 2 minutes" : res.Stderr);
     }
 
     private static string BuildEventsSummary(AgentRun? run)
