@@ -1,0 +1,30 @@
+# Build + test on every push/PR. KittyClaw.ClaudeMock is built explicitly so the hermetic
+# ClaudeRunner integration tests find the mock claude.exe instead of falling back to a real
+# CLI (MockClaudeBinFixture walks the repo tree for a previously built binary).
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        run: |
+          dotnet build KittyClaw.Web -c Release --nologo
+          dotnet build KittyClaw.ClaudeMock -c Release --nologo
+          dotnet build KittyClaw.Core.Tests -c Release --nologo
+
+      - name: Test
+        run: dotnet test KittyClaw.Core.Tests -c Release --no-build --nologo --logger "console;verbosity=minimal"
