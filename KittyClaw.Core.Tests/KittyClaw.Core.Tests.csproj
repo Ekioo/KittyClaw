@@ -23,6 +23,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Several fixtures mutate process-wide env vars (KITTYCLAW_DATA_DIR, KITTYCLAW_CLAUDE_BIN);
+         parallel collections race on them and can deadlock the whole run. -->
+    <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
     <Using Include="KittyClaw.Core.Automation" />
     <Using Include="KittyClaw.Core.Automation.Triggers" />

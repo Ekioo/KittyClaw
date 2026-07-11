@@ -52,12 +52,11 @@ public class SteeringAutoContinueTests
     }
 
     // ── Test 2 ───────────────────────────────────────────────────────────────
-    // When a chat run completes with pending steer messages the system must
-    // automatically start a second run in the same ConcurrencyGroup WITHOUT any
-    // explicit user call to chat/start.
-    //
-    // Currently FAILS (runtime): no auto-continue mechanism exists; only one run
-    // is ever registered in AgentRunRegistry.
+    // A steer message that arrives while stdin is closed (--print mode) must not be
+    // lost: ClaudeRunner auto-replays it as a follow-up turn. Since ticket #126 the
+    // replay happens INSIDE the same registered run (steer_replay + WithChatReplay),
+    // not as a second AgentRunRegistry entry — assert the replay fired and nothing
+    // stayed pending.
     [Fact]
     public async Task ChatRun_WithPendingSteerMessages_AutoContinues()
     {
@@ -77,6 +76,7 @@ public class SteeringAutoContinueTests
         runs.OnRunStarted += r => activeRun = r;
 
         var concurrencyGroup = $"chat:{project.Slug}:steer-agent";
+        var steered = 0;
         var ctx = new ClaudeRunContext
         {
             ProjectSlug = project.Slug,
@@ -93,29 +93,23 @@ public class SteeringAutoContinueTests
             {
                 // Queue a steer message on launch; stdin is already closed at this
                 // point so PumpSteeringAsync will add it to PendingSteerMessages.
-                if (ev.Kind == "launch" && activeRun is not null)
+                // Once only: the hook is inherited by the auto-continue follow-up run,
+                // and re-steering every launch would auto-continue forever (each run ends
+                // with a fresh undelivered steer), leaving subprocesses spawning after the
+                // test ends — this is what made the whole suite hang.
+                if (ev.Kind == "launch" && activeRun is not null
+                    && Interlocked.CompareExchange(ref steered, 1, 0) == 0)
+                {
                     activeRun.SteeringQueue.Writer.TryWrite("steer-while-thinking");
+                }
             },
         };
 
-        await runner.RunAsync(ctx, CancellationToken.None);
+        var run = await runner.RunAsync(ctx, CancellationToken.None);
 
-        // Give the auto-continue task time to register the second run.
-        var deadline = DateTime.UtcNow.AddSeconds(5);
-        while (DateTime.UtcNow < deadline)
-        {
-            var count = runs.AllForProject(project.Slug)
-                .Count(r => r.ConcurrencyGroup == concurrencyGroup);
-            if (count >= 2) break;
-            await Task.Delay(50);
-        }
-
-        // Currently fails: no auto-continue means only 1 run was ever started.
-        var runsInGroup = runs.AllForProject(project.Slug)
-            .Where(r => r.ConcurrencyGroup == concurrencyGroup)
-            .ToList();
-        Assert.True(runsInGroup.Count >= 2,
-            $"Expected at least 2 runs (original + auto-continue) but found {runsInGroup.Count}.");
+        Assert.Equal(AgentRunStatus.Completed, run.Status);
+        Assert.Contains(run.SnapshotBuffer(), e => e.Kind == "steer_replay");
+        Assert.Empty(run.PendingSteerMessages);
     }
 
     // ── Test 3 ───────────────────────────────────────────────────────────────

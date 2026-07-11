@@ -26,11 +26,9 @@ public class SteeringDeliveryTests
 {
     // ── Test 1 ───────────────────────────────────────────────────────────────
     // When a steer message is written to the queue while stdin is already
-    // closed, PumpSteeringAsync must NOT silently discard it. It must append
-    // the message to AgentRun.PendingSteerMessages so the caller can replay
-    // it on the next --resume invocation.
-    //
-    // Currently FAILS (compilation): AgentRun has no PendingSteerMessages.
+    // closed, PumpSteeringAsync must NOT silently discard it: it lands in
+    // AgentRun.PendingSteerMessages and ClaudeRunner auto-replays it as a
+    // steer_replay turn inside the same run, leaving nothing pending at the end.
     [Fact]
     public async Task SteeringMessage_QueuedWhileStdinClosed_IsPreservedInPendingSteerMessages()
     {
@@ -66,8 +64,13 @@ public class SteeringDeliveryTests
             {
                 // "launch" fires after stdin has been closed; queue a steer message
                 // that PumpSteeringAsync will read but cannot write to the closed pipe.
-                if (ev.Kind == "launch" && activeRun is not null)
+                // Once only: the hook fires again on the replay turn's launch, and
+                // re-steering there keeps the replay loop alive forever.
+                if (ev.Kind == "launch" && activeRun is not null
+                    && Interlocked.CompareExchange(ref _steered, 1, 0) == 0)
+                {
                     activeRun.SteeringQueue.Writer.TryWrite("steer-payload-alpha");
+                }
             },
         };
 
@@ -83,11 +86,15 @@ public class SteeringDeliveryTests
         await runStartedTcs.Task;
         var run = await runTask;
 
-        // The steer message could not be written to stdin (already closed).
-        // It MUST appear in PendingSteerMessages so the next --resume can replay it.
-        // Currently fails: AgentRun.PendingSteerMessages does not exist.
-        Assert.Contains("steer-payload-alpha", run.PendingSteerMessages);
+        // The steer message could not be written to stdin (already closed). It must have
+        // been queued (steer event), auto-replayed (steer_replay turn), and not dropped.
+        var events = run.SnapshotBuffer();
+        Assert.Contains(events, e => e.Kind == "steer" && e.Text == "steer-payload-alpha");
+        Assert.Contains(events, e => e.Kind == "steer_replay");
+        Assert.Empty(run.PendingSteerMessages);
     }
+
+    private int _steered;
 
     // ── Test 2 ───────────────────────────────────────────────────────────────
     // When ClaudeRunContext carries PendingSteerMessages, BuildPromptAsync must
@@ -198,6 +205,9 @@ public class SteeringDeliveryTests
         AgentRun? activeRun = null;
         runs.OnRunStarted += r => activeRun = r;
 
+        // Once only: the hook also fires on the in-run replay turn's launch; re-steering
+        // there would refill PendingSteerMessages forever and RunAsync would never return.
+        var steered = 0;
         var ctx1 = new ClaudeRunContext
         {
             ProjectSlug = project.Slug,
@@ -211,7 +221,8 @@ public class SteeringDeliveryTests
             ConcurrencyGroup = $"chat:{project.Slug}:steer-agent",
             OnEventHook = ev =>
             {
-                if (ev.Kind == "launch" && activeRun is not null)
+                if (ev.Kind == "launch" && activeRun is not null
+                    && Interlocked.CompareExchange(ref steered, 1, 0) == 0)
                 {
                     activeRun.SteeringQueue.Writer.TryWrite("steer-for-next-turn-A");
                     activeRun.SteeringQueue.Writer.TryWrite("steer-for-next-turn-B");
@@ -221,13 +232,14 @@ public class SteeringDeliveryTests
 
         var run1 = await runner.RunAsync(ctx1, CancellationToken.None);
 
-        // After turn 1 ends, any undelivered steer messages must be present.
-        // Currently FAILS (compilation): PendingSteerMessages doesn't exist.
-        Assert.Equal(2, run1.PendingSteerMessages.Count);
-        Assert.Equal("steer-for-next-turn-A", run1.PendingSteerMessages[0]);
-        Assert.Equal("steer-for-next-turn-B", run1.PendingSteerMessages[1]);
+        // Undelivered steers are auto-replayed inside run 1 (steer_replay turn) and must
+        // not be left pending afterwards.
+        Assert.Equal(AgentRunStatus.Completed, run1.Status);
+        Assert.Contains(run1.SnapshotBuffer(), e => e.Kind == "steer_replay");
+        Assert.Empty(run1.PendingSteerMessages);
 
-        // Caller passes them to the next turn context.
+        // The explicit hand-off API (used by POST /chat/start when a previous run left
+        // messages pending): the next turn context carries them and must inject them.
         var ctx2 = new ClaudeRunContext
         {
             ProjectSlug = project.Slug,
@@ -236,7 +248,7 @@ public class SteeringDeliveryTests
             SkillFile = "(inline)",
             InlineSkillContent = "# steer-agent\n\n<!--scenario:default-->",
             ExtraContext = "turn two",
-            PendingSteerMessages = run1.PendingSteerMessages,
+            PendingSteerMessages = new[] { "steer-for-next-turn-A", "steer-for-next-turn-B" },
             MaxTurns = 1,
             SessionScope = "chat",
             ConcurrencyGroup = $"chat:{project.Slug}:steer-agent",
