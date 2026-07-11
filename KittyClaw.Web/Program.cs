@@ -109,7 +109,14 @@ Directory.CreateDirectory(uploadsDir);
 app.UseStaticFiles(new Microsoft.AspNetCore.Builder.StaticFileOptions
 {
     FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(uploadsDir),
-    RequestPath = "/uploads"
+    RequestPath = "/uploads",
+    // Uploads are user/agent-supplied: forbid content-type sniffing and any active content
+    // (e.g. a pre-existing SVG) from executing in the app's origin.
+    OnPrepareResponse = ctx =>
+    {
+        ctx.Context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        ctx.Context.Response.Headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
+    }
 });
 
 app.UseAntiforgery();
