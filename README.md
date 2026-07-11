@@ -185,6 +185,16 @@ Tiles can be created from the dashboard's AI chat panel by describing what you w
 - `{assignee}` placeholder in `runAgent.agent` / `runAgent.concurrencyGroup` resolves from the firing ticket's `assignedTo`.
 - Canonical post-run chain: `runAgent` → `consolidateAgentMemory` (focused claude pass that curates the agent's `memory/` index + topic files) → `commitAgentMemory` (commits the result).
 
+## Telemetry
+
+KittyClaw sends **one anonymous heartbeat per day** to a self-hosted-friendly analytics service ([Umami](https://umami.is)) so we know how many instances are alive and which versions run in the wild. The payload contains exactly three fields and nothing else:
+
+- a random instance id (a GUID generated locally on first run — not tied to any user, machine, or project data)
+- the KittyClaw version
+- the OS family (`Windows` / `macOS` / `Linux`)
+
+No ticket content, project names, hostnames, or usage details are ever sent. Failures are silent and never affect the app. Development instances never send telemetry.
+
 ---
 
 ## More Projects & Contact

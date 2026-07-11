@@ -81,6 +81,12 @@ builder.Services.AddSingleton<KittyClaw.Web.Services.AgentRunsState>();
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<KittyClaw.Web.Services.UpdateCheckService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<KittyClaw.Web.Services.UpdateCheckService>());
+// Anonymous daily usage heartbeat (see README "Telemetry" and doc/telemetry.md).
+// Never in Development: excludes dotnet watch sessions and QaRunner test instances.
+if (!builder.Environment.IsDevelopment())
+{
+    builder.Services.AddHostedService<KittyClaw.Web.Services.TelemetryService>();
+}
 
 // Folder picker: only on Windows hosts (local or MAUI-Windows). Cloud deployments
 // register nothing, so the UI hides the Parcourir button.

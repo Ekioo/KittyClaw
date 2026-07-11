@@ -61,6 +61,31 @@ public class AppSettingsService
         }
     }
 
+    /// <summary>Random, non-reversible instance identifier; generated once, never tied to any user data.</summary>
+    public string TelemetryInstanceId
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(_data.TelemetryInstanceId))
+            {
+                _data.TelemetryInstanceId = Guid.NewGuid().ToString();
+                Save();
+            }
+            return _data.TelemetryInstanceId;
+        }
+    }
+
+    public DateTime? TelemetryLastSent
+    {
+        get => _data.TelemetryLastSent;
+        set
+        {
+            if (_data.TelemetryLastSent == value) return;
+            _data.TelemetryLastSent = value;
+            Save();
+        }
+    }
+
     private void Load()
     {
         if (!File.Exists(_settingsPath)) return;
@@ -84,5 +109,7 @@ public class AppSettingsService
         public bool OnboardingSeen { get; set; } = false;
         public string? UpdateDismissedVersion { get; set; }
         public DateTime? UpdateCheckLastRun { get; set; }
+        public string? TelemetryInstanceId { get; set; }
+        public DateTime? TelemetryLastSent { get; set; }
     }
 }
