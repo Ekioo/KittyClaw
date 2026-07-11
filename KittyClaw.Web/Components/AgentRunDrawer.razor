@@ -336,7 +336,7 @@
     private static string HighlightJson(string? json) => SharedRenderHelpers.HighlightJson(json);
 
     private static readonly MarkdownPipeline _mdPipeline =
-        new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+        new MarkdownPipelineBuilder().UseAdvancedExtensions().DisableHtml().Build();
 
     private static string RenderMarkdown(string? text) =>
         string.IsNullOrEmpty(text) ? "" : Markdig.Markdown.ToHtml(text, _mdPipeline);

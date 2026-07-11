@@ -16,7 +16,7 @@ public static class TileRenderer
     // Soft-line breaks become <br> so agents can output multi-line content (haikus, lists,
     // ASCII art) without having to remember Markdown's two-space line-break trick.
     private static readonly MarkdownPipeline _md =
-        new MarkdownPipelineBuilder().UseAdvancedExtensions().UseSoftlineBreakAsHardlineBreak().Build();
+        new MarkdownPipelineBuilder().UseAdvancedExtensions().UseSoftlineBreakAsHardlineBreak().DisableHtml().Build();
 
     private static readonly string[] _palette =
     [
@@ -176,11 +176,11 @@ public static class TileRenderer
             var label = item.TryGetProperty("label", out var l) ? l.GetString() ?? "" : "";
             var val = item.TryGetProperty("value", out var vv) && vv.ValueKind == JsonValueKind.Number ? vv.GetDouble() : 0;
             var max = item.TryGetProperty("max", out var mm) && mm.ValueKind == JsonValueKind.Number ? mm.GetDouble() : 100;
-            var color = item.TryGetProperty("color", out var cc) ? cc.GetString() ?? "" : "";
+            var color = SafeCssColor(item.TryGetProperty("color", out var cc) ? cc.GetString() : null);
             var pct = max > 0 ? Math.Clamp(val / max * 100, 0, 100) : 0;
             var style = string.IsNullOrEmpty(color)
                 ? $"width:{pct.ToString("0.#", CultureInfo.InvariantCulture)}%"
-                : $"width:{pct.ToString("0.#", CultureInfo.InvariantCulture)}%;background:{Esc(color)}";
+                : $"width:{pct.ToString("0.#", CultureInfo.InvariantCulture)}%;background:{color}";
             sb.Append($"""
                 <div class="tile-progress-row">
                   <div class="tile-progress-head"><span class="tile-progress-label">{Esc(label)}</span><span class="tile-progress-val">{Fmt(val)} / {Fmt(max)}</span></div>
@@ -285,7 +285,7 @@ public static class TileRenderer
         {
             Label = s.TryGetProperty("label", out var l) ? l.GetString() ?? "" : "",
             Value = s.TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : 0,
-            Color = s.TryGetProperty("color", out var c) && !string.IsNullOrEmpty(c.GetString()) ? c.GetString()! : _palette[i % _palette.Length],
+            Color = s.TryGetProperty("color", out var c) && SafeCssColor(c.GetString()) is { Length: > 0 } safe ? safe : _palette[i % _palette.Length],
         }).ToList();
 
         var total = entries.Sum(e => e.Value);
@@ -307,7 +307,7 @@ public static class TileRenderer
         foreach (var e in entries)
         {
             var pct = e.Value / total * 100;
-            legend.Append($"<li><span class=\"tile-donut-swatch\" style=\"background:{Esc(e.Color)}\"></span><span class=\"tile-donut-label\">{Esc(e.Label)}</span><span class=\"tile-donut-pct\">{pct.ToString("0.#", CultureInfo.InvariantCulture)}%</span></li>");
+            legend.Append($"<li><span class=\"tile-donut-swatch\" style=\"background:{e.Color}\"></span><span class=\"tile-donut-label\">{Esc(e.Label)}</span><span class=\"tile-donut-pct\">{pct.ToString("0.#", CultureInfo.InvariantCulture)}%</span></li>");
         }
         legend.Append("</ul>");
 
@@ -491,7 +491,7 @@ public static class TileRenderer
             {
                 if (item.ValueKind != JsonValueKind.Object) continue;
                 var label = item.TryGetProperty("label", out var lEl) ? Esc(lEl.GetString() ?? "") : "";
-                var color = item.TryGetProperty("color", out var cEl) ? Esc(cEl.GetString() ?? "") : "";
+                var color = item.TryGetProperty("color", out var cEl) ? SafeCssColor(cEl.GetString()) : "";
                 var swatchStyle = color.Length > 0 ? $" style=\"background:{color}\"" : "";
                 sb.Append($"<span class=\"tile-heatmap-legend-item\"><span class=\"tile-heatmap-legend-swatch\"{swatchStyle}></span>{label}</span>");
             }
@@ -507,19 +507,34 @@ public static class TileRenderer
         var h = hex.TrimStart('#');
         if (h.Length == 6)
         {
-            r = Convert.ToInt32(h[..2], 16);
-            g = Convert.ToInt32(h[2..4], 16);
-            b = Convert.ToInt32(h[4..6], 16);
-            return true;
+            return int.TryParse(h[..2], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out r)
+                && int.TryParse(h[2..4], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out g)
+                && int.TryParse(h[4..6], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out b);
         }
         if (h.Length == 3)
         {
-            r = Convert.ToInt32(new string(h[0], 2), 16);
-            g = Convert.ToInt32(new string(h[1], 2), 16);
-            b = Convert.ToInt32(new string(h[2], 2), 16);
-            return true;
+            return int.TryParse(new string(h[0], 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out r)
+                && int.TryParse(new string(h[1], 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out g)
+                && int.TryParse(new string(h[2], 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out b);
         }
         return false;
+    }
+
+    /// <summary>
+    /// Tile content is agent/API-supplied; colors land inside style attributes where HtmlEncode is
+    /// not enough (it leaves ';', ':', '(' intact). Only hex colors and plain named colors pass;
+    /// anything else collapses to "" so callers fall back to their default.
+    /// </summary>
+    private static string SafeCssColor(string? color)
+    {
+        if (string.IsNullOrEmpty(color)) return "";
+        var c = color.Trim();
+        if (c.StartsWith('#'))
+        {
+            var h = c[1..];
+            return (h.Length is 3 or 4 or 6 or 8) && h.All(Uri.IsHexDigit) ? c : "";
+        }
+        return c.Length <= 30 && c.All(char.IsAsciiLetter) ? c : "";
     }
 
     // ── Leaderboard ──────────────────────────────────────────────────────────
