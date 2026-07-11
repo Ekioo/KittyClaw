@@ -68,10 +68,11 @@ public sealed class TicketInColumnTrigger : ITrigger
     {
         if (_spec.DebounceSeconds > 0 && firing.TicketId is int tid)
         {
-            var state = ctx.Sessions.Load(ctx.WorkspacePath);
-            var bucket = GetLastFiredBucket(state, ctx.Automation.Id);
-            bucket[tid.ToString()] = (completedAt ?? ctx.Now).ToString("o");
-            ctx.Sessions.Save(ctx.WorkspacePath, state);
+            ctx.Sessions.Update(ctx.WorkspacePath, state =>
+            {
+                var bucket = GetLastFiredBucket(state, ctx.Automation.Id);
+                bucket[tid.ToString()] = (completedAt ?? ctx.Now).ToString("o");
+            });
         }
         return Task.CompletedTask;
     }

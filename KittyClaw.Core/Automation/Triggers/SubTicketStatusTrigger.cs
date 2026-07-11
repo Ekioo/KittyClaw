@@ -104,14 +104,15 @@ public sealed class SubTicketStatusTrigger : ITrigger
         if (ticket is null) return;
         var csv = ComputeCsv(ticket.SubTickets);
 
-        var state = ctx.Sessions.Load(ctx.WorkspacePath);
         var agentKey = ctx.Automation.Id;
-        var bucket = state[agentKey] as JsonObject;
-        if (bucket is null) { bucket = new JsonObject(); state[agentKey] = bucket; }
-        var lastSubs = bucket["lastSubStatuses"] as JsonObject;
-        if (lastSubs is null) { lastSubs = new JsonObject(); bucket["lastSubStatuses"] = lastSubs; }
-        lastSubs[tid.ToString()] = csv;
-        ctx.Sessions.Save(ctx.WorkspacePath, state);
+        ctx.Sessions.Update(ctx.WorkspacePath, state =>
+        {
+            var bucket = state[agentKey] as JsonObject;
+            if (bucket is null) { bucket = new JsonObject(); state[agentKey] = bucket; }
+            var lastSubs = bucket["lastSubStatuses"] as JsonObject;
+            if (lastSubs is null) { lastSubs = new JsonObject(); bucket["lastSubStatuses"] = lastSubs; }
+            lastSubs[tid.ToString()] = csv;
+        });
     }
 
     public DateTime? GetNextRunAt(DateTime now) =>

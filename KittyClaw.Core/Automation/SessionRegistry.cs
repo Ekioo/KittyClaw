@@ -8,6 +8,10 @@ namespace KittyClaw.Core.Automation;
 /// compatibility with the legacy dispatcher.mjs files (keys: _sessions,
 /// _lastProcessedCommit, _ticketSnapshot, _learnedTickets, _committedTickets,
 /// producer.lastSubStatuses, {agent}.lastDispatched).
+///
+/// The concurrency gate allows several runs in the same workspace at once, so every
+/// read-modify-write of the file must go through <see cref="Update"/> — a bare
+/// Load → mutate → Save cycle loses whichever writer finishes first.
 /// </summary>
 public sealed class SessionRegistry
 {
@@ -18,25 +22,46 @@ public sealed class SessionRegistry
 
     public JsonObject Load(string workspacePath)
     {
-        var path = StatePath(workspacePath);
         lock (_fileLock)
         {
-            if (!File.Exists(path)) return new JsonObject();
-            var text = File.ReadAllText(path);
-            return string.IsNullOrWhiteSpace(text)
-                ? new JsonObject()
-                : (JsonNode.Parse(text) as JsonObject) ?? new JsonObject();
+            return LoadUnlocked(workspacePath);
         }
     }
 
     public void Save(string workspacePath, JsonObject state)
     {
-        var path = StatePath(workspacePath);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         lock (_fileLock)
         {
-            File.WriteAllText(path, state.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            SaveUnlocked(workspacePath, state);
         }
+    }
+
+    /// <summary>Atomic read-modify-write: the lock is held across the whole cycle.</summary>
+    public void Update(string workspacePath, Action<JsonObject> mutate)
+    {
+        lock (_fileLock)
+        {
+            var state = LoadUnlocked(workspacePath);
+            mutate(state);
+            SaveUnlocked(workspacePath, state);
+        }
+    }
+
+    private static JsonObject LoadUnlocked(string workspacePath)
+    {
+        var path = StatePath(workspacePath);
+        if (!File.Exists(path)) return new JsonObject();
+        var text = File.ReadAllText(path);
+        return string.IsNullOrWhiteSpace(text)
+            ? new JsonObject()
+            : (JsonNode.Parse(text) as JsonObject) ?? new JsonObject();
+    }
+
+    private static void SaveUnlocked(string workspacePath, JsonObject state)
+    {
+        var path = StatePath(workspacePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, state.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
 
     public string? GetSessionId(string workspacePath, string agent, int? ticketId)
@@ -50,22 +75,22 @@ public sealed class SessionRegistry
     public void SetSessionId(string workspacePath, string agent, int? ticketId, string sessionId)
     {
         var key = SessionKey(agent, ticketId);
-        var s = Load(workspacePath);
-        var sessions = s["_sessions"] as JsonObject ?? new JsonObject();
-        sessions[key] = sessionId;
-        s["_sessions"] = sessions;
-        Save(workspacePath, s);
+        Update(workspacePath, s =>
+        {
+            var sessions = s["_sessions"] as JsonObject ?? new JsonObject();
+            sessions[key] = sessionId;
+            s["_sessions"] = sessions;
+        });
     }
 
     public void Clear(string workspacePath, string agent, int? ticketId)
     {
         var key = SessionKey(agent, ticketId);
-        var s = Load(workspacePath);
-        if (s["_sessions"] is JsonObject sessions && sessions.ContainsKey(key))
+        Update(workspacePath, s =>
         {
-            sessions.Remove(key);
-            Save(workspacePath, s);
-        }
+            if (s["_sessions"] is JsonObject sessions)
+                sessions.Remove(key);
+        });
     }
 
     /// <summary>
@@ -80,9 +105,7 @@ public sealed class SessionRegistry
 
     public void SetLastProcessedCommit(string workspacePath, string sha)
     {
-        var s = Load(workspacePath);
-        s["_lastProcessedCommit"] = sha;
-        Save(workspacePath, s);
+        Update(workspacePath, s => s["_lastProcessedCommit"] = sha);
     }
 
     public Dictionary<int, string> TicketSnapshot(string workspacePath)
@@ -99,11 +122,12 @@ public sealed class SessionRegistry
 
     public void SaveTicketSnapshot(string workspacePath, IReadOnlyDictionary<int, string> snap)
     {
-        var s = Load(workspacePath);
-        var obj = new JsonObject();
-        foreach (var kv in snap) obj[kv.Key.ToString()] = kv.Value;
-        s["_ticketSnapshot"] = obj;
-        Save(workspacePath, s);
+        Update(workspacePath, s =>
+        {
+            var obj = new JsonObject();
+            foreach (var kv in snap) obj[kv.Key.ToString()] = kv.Value;
+            s["_ticketSnapshot"] = obj;
+        });
     }
 
     public DateTime? LastDispatched(string workspacePath, string agent)
@@ -116,10 +140,11 @@ public sealed class SessionRegistry
 
     public void SetLastDispatched(string workspacePath, string agent, DateTime at)
     {
-        var s = Load(workspacePath);
-        var agentNode = s[agent] as JsonObject ?? new JsonObject();
-        agentNode["lastDispatched"] = at.ToString("o");
-        s[agent] = agentNode;
-        Save(workspacePath, s);
+        Update(workspacePath, s =>
+        {
+            var agentNode = s[agent] as JsonObject ?? new JsonObject();
+            agentNode["lastDispatched"] = at.ToString("o");
+            s[agent] = agentNode;
+        });
     }
 }

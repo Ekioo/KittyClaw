@@ -93,10 +93,11 @@ public sealed class TicketCommentAddedTrigger : ITrigger
 
     private static void SaveLastCommentIds(TriggerContext ctx, Dictionary<int, int> ids)
     {
-        var state = ctx.Sessions.Load(ctx.WorkspacePath);
-        var obj = new JsonObject();
-        foreach (var kv in ids) obj[kv.Key.ToString()] = kv.Value;
-        state["_lastCommentIds"] = obj;
-        ctx.Sessions.Save(ctx.WorkspacePath, state);
+        ctx.Sessions.Update(ctx.WorkspacePath, state =>
+        {
+            var obj = new JsonObject();
+            foreach (var kv in ids) obj[kv.Key.ToString()] = kv.Value;
+            state["_lastCommentIds"] = obj;
+        });
     }
 }
