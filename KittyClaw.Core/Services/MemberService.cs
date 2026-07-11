@@ -122,6 +122,9 @@ public class MemberService
         if (member is null) return DeleteMemberResult.NotFound;
         if (member.Slug == "owner") return DeleteMemberResult.ProtectedOwner;
         var slug = member.Slug;
+        // Removal and unassignment must land atomically; a crash in between would leave
+        // tickets assigned to a member that no longer exists.
+        await using var tx = await db.Database.BeginTransactionAsync();
         db.Members.Remove(member);
         await db.SaveChangesAsync();
         if (!string.IsNullOrEmpty(slug))
@@ -129,6 +132,7 @@ public class MemberService
             await db.Database.ExecuteSqlRawAsync(
                 "UPDATE Tickets SET AssignedTo = NULL WHERE AssignedTo = {0}", slug);
         }
+        await tx.CommitAsync();
         return DeleteMemberResult.Deleted;
     }
 }

@@ -102,6 +102,10 @@ public class ColumnService
         await EnsureBoardColumnsTableAsync(db);
         var column = await db.BoardColumns.FindAsync(columnId);
         if (column is null) return null;
+        // Ticket re-pointing and the column rename must land atomically: ExecuteSqlRawAsync
+        // auto-commits on its own, and a crash before SaveChangesAsync would strand every
+        // ticket in a column name that no longer exists.
+        await using var tx = await db.Database.BeginTransactionAsync();
         if (name is not null && name != column.Name)
         {
             // Rename: update tickets whose Status points at the old name.
@@ -112,6 +116,7 @@ public class ColumnService
         }
         if (color is not null) column.Color = color;
         await db.SaveChangesAsync();
+        await tx.CommitAsync();
         return column;
     }
 
@@ -126,12 +131,14 @@ public class ColumnService
         var targetExists = await db.BoardColumns.AnyAsync(c => c.Name == moveTicketsTo && c.Id != columnId);
         if (!targetExists) return false;
 
-        // Move tickets from this column to the target
+        // Move tickets from this column to the target, atomically with the column removal.
+        await using var tx = await db.Database.BeginTransactionAsync();
         await db.Database.ExecuteSqlRawAsync(
             "UPDATE Tickets SET Status = {0} WHERE Status = {1}", moveTicketsTo, column.Name);
 
         db.BoardColumns.Remove(column);
         await db.SaveChangesAsync();
+        await tx.CommitAsync();
         return true;
     }
 

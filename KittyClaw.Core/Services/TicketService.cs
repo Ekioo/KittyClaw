@@ -213,6 +213,9 @@ public class TicketService
             var labels = await db.Labels.Where(l => labelIds.Contains(l.Id)).ToListAsync();
             ticket.Labels = labels;
         }
+        // Two SaveChanges (the entry needs the generated ticket id) — keep them atomic so a
+        // crash can't produce a ticket without its creation activity.
+        await using var tx = await db.Database.BeginTransactionAsync();
         db.Tickets.Add(ticket);
         await db.SaveChangesAsync();
         db.ActivityEntries.Add(new ActivityEntry
@@ -222,6 +225,7 @@ public class TicketService
             Text = "a créé le ticket"
         });
         await db.SaveChangesAsync();
+        await tx.CommitAsync();
         return ticket;
     }
 
