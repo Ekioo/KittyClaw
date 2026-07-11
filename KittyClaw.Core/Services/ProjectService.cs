@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -156,17 +157,29 @@ public partial class ProjectService
         if (File.Exists(dbPath)) File.Delete(dbPath);
         if (File.Exists(dbPath + "-shm")) File.Delete(dbPath + "-shm");
         if (File.Exists(dbPath + "-wal")) File.Delete(dbPath + "-wal");
+        // A future project reusing this slug starts from a fresh file: forget the memoized
+        // schema/migration state so it gets recreated and remigrated.
+        _schemaCreated.TryRemove(dbPath, out _);
+        KittyClaw.Core.Data.MigrationGate.Invalidate(dbPath);
         return true;
     }
 
     public string GetProjectDbPath(string slug) => Path.Combine(_dataDir, "projects", $"{slug}.db");
+
+    private static readonly ConcurrentDictionary<string, bool> _schemaCreated = new(StringComparer.OrdinalIgnoreCase);
 
     public TodoDbContext GetProjectDb(string slug)
     {
         var path = GetProjectDbPath(slug);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var db = new TodoDbContext(path);
-        db.Database.EnsureCreated();
+        // EnsureCreated is a full schema comparison on every call — run it once per db file.
+        // A concurrently deleted file is handled by the Invalidate call in DeleteProjectAsync.
+        if (_schemaCreated.TryAdd(path, true))
+        {
+            try { db.Database.EnsureCreated(); }
+            catch { _schemaCreated.TryRemove(path, out _); throw; }
+        }
         return db;
     }
 

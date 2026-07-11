@@ -22,24 +22,24 @@ public class MemberService
 
     private static async Task EnsureMemberTableAsync(TodoDbContext db)
     {
-        await db.Database.ExecuteSqlRawAsync("""
-            CREATE TABLE IF NOT EXISTS Members (
-                Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-                Name TEXT NOT NULL,
-                Slug TEXT NOT NULL DEFAULT '',
-                IsAgent INTEGER NOT NULL DEFAULT 0
-            )
-        """);
-        // Add Slug column if missing (migration for existing DBs)
-        try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Members ADD COLUMN Slug TEXT NOT NULL DEFAULT ''"); }
-        catch { /* column already exists */ }
-        // Old Skill column, kept around for DBs that have it (unused now).
-        try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Members ADD COLUMN Skill TEXT NULL"); }
-        catch { /* column already exists */ }
-        try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Members ADD COLUMN IsAgent INTEGER NOT NULL DEFAULT 0"); }
-        catch { /* column already exists */ }
-        try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Members ADD COLUMN DefaultModel TEXT NULL"); }
-        catch { /* column already exists */ }
+        // DDL is memoized; the owner seed below is data-dependent and stays per-call.
+        await MigrationGate.RunOnceAsync(db, "members-table", static async d =>
+        {
+            await d.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS Members (
+                    Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    Name TEXT NOT NULL,
+                    Slug TEXT NOT NULL DEFAULT '',
+                    IsAgent INTEGER NOT NULL DEFAULT 0
+                )
+            """);
+            // Add Slug column if missing (migration for existing DBs)
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE Members ADD COLUMN Slug TEXT NOT NULL DEFAULT ''");
+            // Old Skill column, kept around for DBs that have it (unused now).
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE Members ADD COLUMN Skill TEXT NULL");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE Members ADD COLUMN IsAgent INTEGER NOT NULL DEFAULT 0");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE Members ADD COLUMN DefaultModel TEXT NULL");
+        });
 
         // Owner is the human user — referenced by string literal "owner" throughout the
         // codebase (createdBy default, mention rendering, assignee dropdown). Seed it here

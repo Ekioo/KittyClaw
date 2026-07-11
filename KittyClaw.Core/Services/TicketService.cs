@@ -28,76 +28,70 @@ public class TicketService
     }
 
     // Ensures the ActivityEntries table exists (for databases created before this feature)
-    private static async Task EnsureActivityTableAsync(TodoDbContext db) =>
-        await db.Database.ExecuteSqlRawAsync("""
-            CREATE TABLE IF NOT EXISTS ActivityEntries (
-                Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-                TicketId INTEGER NOT NULL,
-                Author TEXT NOT NULL,
-                Text TEXT NOT NULL,
-                CreatedAt TEXT NOT NULL
-            )
-        """);
-
-    private static async Task EnsureLabelTablesAsync(TodoDbContext db)
-    {
-        await db.Database.ExecuteSqlRawAsync("""
-            CREATE TABLE IF NOT EXISTS Labels (
-                Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-                Name TEXT NOT NULL,
-                Color TEXT NOT NULL DEFAULT '#6366f1'
-            )
-        """);
-        await db.Database.ExecuteSqlRawAsync("""
-            CREATE TABLE IF NOT EXISTS TicketLabels (
-                TicketsId INTEGER NOT NULL,
-                LabelsId INTEGER NOT NULL,
-                PRIMARY KEY (TicketsId, LabelsId)
-            )
-        """);
-    }
-
-    private static async Task EnsureSortOrderColumnAsync(TodoDbContext db)
-    {
-        try
+    private static Task EnsureActivityTableAsync(TodoDbContext db) =>
+        MigrationGate.RunOnceAsync(db, "activity-table", static async d =>
         {
-            await db.Database.ExecuteSqlRawAsync("ALTER TABLE Tickets ADD COLUMN SortOrder INTEGER NOT NULL DEFAULT 0");
-        }
-        catch { /* column already exists */ }
-    }
+            await d.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS ActivityEntries (
+                    Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    TicketId INTEGER NOT NULL,
+                    Author TEXT NOT NULL,
+                    Text TEXT NOT NULL,
+                    CreatedAt TEXT NOT NULL
+                )
+            """);
+            await d.Database.ExecuteSqlRawAsync(
+                "CREATE INDEX IF NOT EXISTS IX_ActivityEntries_TicketId ON ActivityEntries(TicketId)");
+        });
 
-    private static async Task EnsureAssignedToColumnAsync(TodoDbContext db)
-    {
-        try
+    private static Task EnsureLabelTablesAsync(TodoDbContext db) =>
+        MigrationGate.RunOnceAsync(db, "label-tables", static async d =>
         {
-            await db.Database.ExecuteSqlRawAsync("ALTER TABLE Tickets ADD COLUMN AssignedTo TEXT NULL");
-        }
-        catch { /* column already exists */ }
-    }
+            await d.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS Labels (
+                    Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    Name TEXT NOT NULL,
+                    Color TEXT NOT NULL DEFAULT '#6366f1'
+                )
+            """);
+            await d.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS TicketLabels (
+                    TicketsId INTEGER NOT NULL,
+                    LabelsId INTEGER NOT NULL,
+                    PRIMARY KEY (TicketsId, LabelsId)
+                )
+            """);
+        });
 
-    private static async Task EnsureParentIdColumnAsync(TodoDbContext db)
-    {
-        try
-        {
-            await db.Database.ExecuteSqlRawAsync("ALTER TABLE Tickets ADD COLUMN ParentId INTEGER NULL");
-        }
-        catch { /* column already exists */ }
-    }
+    private static Task EnsureSortOrderColumnAsync(TodoDbContext db) =>
+        MigrationGate.RunOnceAsync(db, "tickets-sortorder", static d =>
+            MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE Tickets ADD COLUMN SortOrder INTEGER NOT NULL DEFAULT 0"));
+
+    private static Task EnsureAssignedToColumnAsync(TodoDbContext db) =>
+        MigrationGate.RunOnceAsync(db, "tickets-assignedto", static d =>
+            MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE Tickets ADD COLUMN AssignedTo TEXT NULL"));
+
+    private static Task EnsureParentIdColumnAsync(TodoDbContext db) =>
+        MigrationGate.RunOnceAsync(db, "tickets-parentid", static d =>
+            MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE Tickets ADD COLUMN ParentId INTEGER NULL"));
 
     // Adds the Scheduled-status columns (feature #99) to databases created before this feature.
-    private static async Task EnsureScheduleColumnsAsync(TodoDbContext db)
-    {
-        try
+    private static Task EnsureScheduleColumnsAsync(TodoDbContext db) =>
+        MigrationGate.RunOnceAsync(db, "tickets-schedule", static async d =>
         {
-            await db.Database.ExecuteSqlRawAsync("ALTER TABLE Tickets ADD COLUMN FireAt TEXT NULL");
-        }
-        catch { /* column already exists */ }
-        try
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE Tickets ADD COLUMN FireAt TEXT NULL");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE Tickets ADD COLUMN ScheduleTarget TEXT NULL");
+        });
+
+    // Hot-path indexes: status/parent filters run on every board render, and the activity
+    // subquery in ListTicketsAsync scans per ticket. Must run after the column migrations.
+    private static Task EnsureTicketIndexesAsync(TodoDbContext db) =>
+        MigrationGate.RunOnceAsync(db, "ticket-indexes", static async d =>
         {
-            await db.Database.ExecuteSqlRawAsync("ALTER TABLE Tickets ADD COLUMN ScheduleTarget TEXT NULL");
-        }
-        catch { /* column already exists */ }
-    }
+            await d.Database.ExecuteSqlRawAsync("CREATE INDEX IF NOT EXISTS IX_Tickets_Status ON Tickets(Status)");
+            await d.Database.ExecuteSqlRawAsync("CREATE INDEX IF NOT EXISTS IX_Tickets_ParentId ON Tickets(ParentId)");
+            await d.Database.ExecuteSqlRawAsync("CREATE INDEX IF NOT EXISTS IX_Comments_TicketId ON Comments(TicketId)");
+        });
 
     public async Task<List<TicketSummary>> ListTicketsAsync(string projectSlug, string? statusFilter = null, TicketPriority? priorityFilter = null, string? assignedTo = null, string? createdBy = null, string? search = null, int? parentId = null)
     {
@@ -108,6 +102,7 @@ public class TicketService
         await EnsureAssignedToColumnAsync(db);
         await EnsureParentIdColumnAsync(db);
         await EnsureScheduleColumnsAsync(db);
+        await EnsureTicketIndexesAsync(db);
         await ColumnService.EnsureBoardColumnsTableAsync(db);
         var query = db.Tickets.Include(t => t.Labels).AsQueryable();
         if (statusFilter is not null)

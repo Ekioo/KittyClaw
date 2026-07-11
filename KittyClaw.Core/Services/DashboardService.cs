@@ -1,6 +1,7 @@
 ﻿using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using KittyClaw.Core.Data;
 using Microsoft.Data.Sqlite;
 
 namespace KittyClaw.Core.Services;
@@ -29,19 +30,22 @@ public class DashboardService
 
     // -- Layout (per-project SQLite) ---------------------------------------------
 
-    private async Task EnsureTableAsync(string slug)
+    private Task EnsureTableAsync(string slug)
     {
         var dbPath = _projectService.GetProjectDbPath(slug);
-        await using var conn = new SqliteConnection($"Data Source={dbPath}");
-        await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            CREATE TABLE IF NOT EXISTS DashboardLayout (
-                Id INTEGER NOT NULL PRIMARY KEY CHECK (Id = 1),
-                LayoutJson TEXT NOT NULL DEFAULT '[]'
-            )
-            """;
-        await cmd.ExecuteNonQueryAsync();
+        return MigrationGate.RunOnceAsync(dbPath, "dashboard-layout", async () =>
+        {
+            await using var conn = new SqliteConnection($"Data Source={dbPath}");
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                CREATE TABLE IF NOT EXISTS DashboardLayout (
+                    Id INTEGER NOT NULL PRIMARY KEY CHECK (Id = 1),
+                    LayoutJson TEXT NOT NULL DEFAULT '[]'
+                )
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        });
     }
 
     private async Task<List<DashboardTileLayout>> GetStoredTilesAsync(string slug)
@@ -128,20 +132,23 @@ public class DashboardService
 
     // -- Tile refresh state (per-project SQLite) ---------------------------------
 
-    private async Task EnsureRefreshStateTableAsync(string projectSlug)
+    private Task EnsureRefreshStateTableAsync(string projectSlug)
     {
         var dbPath = _projectService.GetProjectDbPath(projectSlug);
-        Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
-        await using var conn = new SqliteConnection($"Data Source={dbPath}");
-        await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            CREATE TABLE IF NOT EXISTS dashboard_tile_refresh_state (
-                TileKey TEXT NOT NULL PRIMARY KEY,
-                LastRefreshedAt TEXT NOT NULL
-            )
-            """;
-        await cmd.ExecuteNonQueryAsync();
+        return MigrationGate.RunOnceAsync(dbPath, "dashboard-refresh-state", async () =>
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+            await using var conn = new SqliteConnection($"Data Source={dbPath}");
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                CREATE TABLE IF NOT EXISTS dashboard_tile_refresh_state (
+                    TileKey TEXT NOT NULL PRIMARY KEY,
+                    LastRefreshedAt TEXT NOT NULL
+                )
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        });
     }
 
     public async Task<DateTime?> GetLastRefreshedAtAsync(string projectSlug, string tileSlug)

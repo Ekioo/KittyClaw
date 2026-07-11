@@ -15,6 +15,9 @@ public class TodoDbContext : DbContext
 
     private readonly string _dbPath;
 
+    /// <summary>Absolute path of the SQLite file — used as the MigrationGate memoization key.</summary>
+    public string DbPath => _dbPath;
+
     public TodoDbContext(string dbPath)
     {
         _dbPath = dbPath;

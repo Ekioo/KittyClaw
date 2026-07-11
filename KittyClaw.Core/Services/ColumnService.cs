@@ -26,14 +26,17 @@ public class ColumnService
 
     internal static async Task EnsureBoardColumnsTableAsync(TodoDbContext db)
     {
-        await db.Database.ExecuteSqlRawAsync("""
-            CREATE TABLE IF NOT EXISTS BoardColumns (
-                Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-                Name TEXT NOT NULL,
-                Color TEXT NOT NULL DEFAULT '#5a6a80',
-                SortOrder INTEGER NOT NULL DEFAULT 0
-            )
-        """);
+        // Only the DDL is memoized: the seed/back-fill below is data-dependent (deleting the
+        // Scheduled column must back-fill it on the next read) and must run on every call.
+        await MigrationGate.RunOnceAsync(db, "board-columns-table", static d =>
+            d.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS BoardColumns (
+                    Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    Name TEXT NOT NULL,
+                    Color TEXT NOT NULL DEFAULT '#5a6a80',
+                    SortOrder INTEGER NOT NULL DEFAULT 0
+                )
+            """));
 
         // Seed defaults if table is empty
         var count = await db.BoardColumns.CountAsync();
