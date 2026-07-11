@@ -6,6 +6,12 @@
       "runtimeExecutable": "dotnet",
       "runtimeArgs": ["watch", "--project", "KittyClaw.Web", "--non-interactive"],
       "port": 5230
+    },
+    {
+      "name": "kittyclaw-web-devcheck",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["watch", "--project", "KittyClaw.Web", "--non-interactive", "--", "--urls", "http://localhost:5231"],
+      "port": 5231
     }
   ]
 }

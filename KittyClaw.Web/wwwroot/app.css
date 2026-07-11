@@ -2763,6 +2763,27 @@ body.flow-dnd-active * { cursor: grabbing !important; }
     background: #f06b6b22; color: #f06b6b; border: 1px solid #f06b6b44;
     padding: 0.4rem 0.7rem; border-radius: 4px; cursor: pointer; width: 100%;
 }
+.weekday-picker { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.weekday-check {
+    display: flex !important; flex-direction: row !important; align-items: center;
+    gap: 0.3rem; cursor: pointer; font-size: 0.8rem; color: #c8d0e0;
+    padding: 0.3rem 0.5rem; background: #11141b; border: 1px solid var(--border, #333);
+    border-radius: 4px; width: auto;
+}
+.weekday-check input[type="checkbox"] { width: 14px; height: 14px; margin: 0; }
+.time-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.time-row { display: flex; flex-direction: row !important; align-items: flex-end; gap: 0.5rem; }
+.time-row label { flex: 1; }
+.node-editor .icon-btn {
+    background: none; border: none; color: var(--muted, #8a99b0);
+    cursor: pointer; padding: 0.35rem; font-size: 0.85rem;
+}
+.node-editor .icon-btn:hover { color: #f06b6b; }
+.node-editor .link-btn {
+    background: none; border: none; color: var(--accent, #6ea8fe);
+    cursor: pointer; padding: 0.2rem 0; font-size: 0.85rem; text-align: left; align-self: flex-start;
+}
+.node-editor .link-btn:hover { text-decoration: underline; }
 
 /* ── Claude Chat Drawer ── */
 .chat-drawer-overlay {

@@ -36,8 +36,12 @@ public abstract class TriggerSpec
 public sealed class IntervalTriggerSpec : TriggerSpec
 {
     public override string UiTypeKey => "interval";
-    public int? Seconds { get; set; }
     public string? Cron { get; set; }
+    /// <summary>Legacy fixed-interval seconds, pre-dating the cron-only model. Converted to an
+    /// equivalent cron expression at trigger-build time if <see cref="Cron"/> is unset (see
+    /// <c>IntervalTrigger.SecondsToCron</c>). The trigger editor UI no longer writes this field —
+    /// new automations should always set <see cref="Cron"/>.</summary>
+    public int? Seconds { get; set; }
 }
 
 public sealed class TicketInColumnTriggerSpec : TriggerSpec

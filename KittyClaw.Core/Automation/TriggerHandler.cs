@@ -63,9 +63,12 @@ internal sealed class TriggerHandler
             var rt = _runtimeManager.GetRuntime(project.Slug);
             if (rt.ConfigDirty)
             {
-                // Disk changed; wait for explicit reload via API. Just log once.
-                _logger.LogInformation("Config change detected on disk for {Slug} — reload requested via UI/API", project.Slug);
-                rt.ConfigDirty = false;
+                // Disk changed outside the PUT /automations API (e.g. an agent editing automations.json
+                // directly) — reload now so newly added/edited automations aren't silently unregistered
+                // until someone happens to hit the UI's "Reload" button. See ticket lain#181/kittyclaw-front#116:
+                // automations added this way sat dormant in rt.Triggers for weeks with no error or indication.
+                _logger.LogInformation("Config change detected on disk for {Slug} — reloading", project.Slug);
+                await _runtimeManager.ReloadProjectAsync(project.Slug);
             }
             if (rt.Config is null) continue;
             foreach (var automation in rt.Config.Automations)

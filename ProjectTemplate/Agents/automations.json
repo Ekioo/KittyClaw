@@ -201,7 +201,7 @@
       "enabled": true,
       "trigger": {
         "type": "interval",
-        "seconds": 86400
+        "cron": "0 3 * * *"
       },
       "conditions": [],
       "actions": [

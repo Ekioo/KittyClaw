@@ -332,7 +332,7 @@ public static class OpenApiMarkdownGenerator
         sb.AppendLine("|------|--------|-------------|");
         sb.AppendLine("| `ticketInColumn` | `columns` (string[]), `assigneeSlug?`, `seconds` | Fires when an assigned ticket sits in one of the given columns |");
         sb.AppendLine("| `statusChange` | `from?`, `to?`, `pollSeconds`, `debounceSeconds?` | Fires when a ticket changes status |");
-        sb.AppendLine("| `interval` | `seconds` **or** `cron` (cron format) | Fires periodically |");
+        sb.AppendLine("| `interval` | `cron` (5-field cron expression) | Fires on a schedule; the trigger editor UI builds the expression from day/time pickers |");
         sb.AppendLine("| `gitCommit` | `pollSeconds` | Fires after a new commit is detected |");
         sb.AppendLine("| `subTicketStatus` | `parentColumn?`, `pollSeconds`, `debounceSeconds?` | Fires when a parent's sub-tickets change |");
         sb.AppendLine("| `boardIdle` | `idleColumns[]`, `pollSeconds` | Fires when every ticket is in an idle column |");

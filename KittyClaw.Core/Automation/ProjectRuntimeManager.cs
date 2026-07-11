@@ -98,8 +98,31 @@ internal sealed class ProjectRuntimeManager
             ITrigger trigger;
             if (a.Trigger is IntervalTriggerSpec its)
             {
-                var lastRunAt = await _triggerState.GetLastRunAtAsync(slug, a.Id) ?? DateTime.MinValue;
-                trigger = new IntervalTrigger(its, lastRunAt, _triggerState, slug, a.Id);
+                try
+                {
+                    var nextRunAt = await _triggerState.GetNextRunAtAsync(slug, a.Id);
+                    if (nextRunAt is null)
+                    {
+                        // Never migrated to the NextRunAt model. Two cases:
+                        //  - pre-existing install: a legacy LastRunAt is on record — anchor the seed to
+                        //    it so a genuinely missed occurrence still catches up instead of silently
+                        //    resetting to "next occurrence from now".
+                        //  - brand-new automation: no legacy data — seed from now.
+                        // Either way, persist immediately so a restart before the scheduled moment
+                        // doesn't lose it and silently skip to the following occurrence.
+                        var legacyLastRunAt = await _triggerState.GetLegacyLastRunAtAsync(slug, a.Id);
+                        nextRunAt = IntervalTrigger.ComputeInitialNextRunAt(its, legacyLastRunAt ?? DateTime.UtcNow);
+                        await _triggerState.SetNextRunAtAsync(slug, a.Id, nextRunAt.Value);
+                    }
+                    trigger = new IntervalTrigger(its, nextRunAt.Value, _triggerState, slug, a.Id);
+                }
+                catch (Exception ex)
+                {
+                    // A malformed spec (neither Cron nor Seconds set) must not take down every other
+                    // automation in this project's reload — skip just this one.
+                    _logger.LogWarning(ex, "Skipping interval trigger for automation {Id}: invalid schedule", a.Id);
+                    trigger = new NullTrigger();
+                }
             }
             else
             {

@@ -602,7 +602,7 @@ else
 
     private TriggerSpec BuildTrigger(string type) => type switch
     {
-        "interval" => new IntervalTriggerSpec { Seconds = 60 },
+        "interval" => new IntervalTriggerSpec { Cron = "0 9 * * *" },
         "ticketInColumn" => new TicketInColumnTriggerSpec {
             Columns = new List<string> { _columns.FirstOrDefault() ?? "Todo" }, Seconds = 30 },
         "gitCommit" => new GitCommitTriggerSpec { PollSeconds = 60 },
@@ -610,7 +610,7 @@ else
         "subTicketStatus" => new SubTicketStatusTriggerSpec { PollSeconds = 30 },
         "boardIdle" => new BoardIdleTriggerSpec { PollSeconds = 60 },
         "agentInactivity" => new AgentInactivityTriggerSpec { PollSeconds = 60, MinutesIdle = 45 },
-        _ => new IntervalTriggerSpec { Seconds = 60 },
+        _ => new IntervalTriggerSpec { Cron = "0 9 * * *" },
     };
 
     private ConditionSpec BuildCondition(string type) => type switch
@@ -653,7 +653,7 @@ else
             Id = id,
             Name = L["NewAutomationName"],
             Enabled = false,
-            Trigger = new IntervalTriggerSpec { Seconds = 60 },
+            Trigger = new IntervalTriggerSpec { Cron = "0 9 * * *" },
             Actions = new List<ActionSpec> { new RunAgentActionSpec { Agent = "producer" } },
         });
         await SaveAll();
