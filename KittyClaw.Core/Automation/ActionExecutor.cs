@@ -201,6 +201,7 @@ internal sealed class ActionExecutor
         var state = new ActionState();
         bool committed = false;
         bool runAgentDispatched = false;
+        bool detached = false;
 
         async Task CommitAsync(DateTime? completedAt = null)
         {
@@ -210,11 +211,42 @@ internal sealed class ActionExecutor
             catch (Exception ex) { _logger.LogWarning(ex, "CommitFiring failed for {Id}", automation.Id); }
         }
 
-        try
+        // The engine tick awaits ExecuteAutomationAsync, so nothing here may block for long:
+        // one long action would freeze trigger evaluation for every project. Fast actions run
+        // inline; at the first long-running action (a consolidation subprocess, a PowerShell
+        // script) the remaining chain is detached to a background task, guarded against
+        // overlapping executions of the same (automation, ticket).
+        async Task<AgentRun?> ExecuteFromAsync(int startIndex, bool background)
         {
-            for (int i = 0; i < automation.Actions.Count; i++)
+            for (int i = startIndex; i < automation.Actions.Count; i++)
             {
                 var action = automation.Actions[i];
+
+                if (!background && action is ConsolidateAgentMemoryActionSpec or ExecutePowerShellActionSpec)
+                {
+                    var guardKey = chainKey ?? $"{automation.Id}:detached";
+                    if (chainKey is null && !_inFlightChains.TryAdd(guardKey, 0))
+                    {
+                        _logger.LogDebug("Detached actions for {Id} already in flight — skipping", automation.Id);
+                        return state.LastRun;
+                    }
+                    detached = true;
+                    var idx = i;
+                    _ = Task.Run(async () =>
+                    {
+                        try { await ExecuteFromAsync(idx, background: true); }
+                        catch (OperationCanceledException) { /* engine shutdown */ }
+                        catch (Exception ex) { _logger.LogWarning(ex, "Detached automation actions failed for {Id}", automation.Id); }
+                        finally
+                        {
+                            // Mirrors the outer finally: a dispatched runAgent hands chain
+                            // ownership to HandleRunCompletionAsync.
+                            if (!runAgentDispatched) _inFlightChains.TryRemove(guardKey, out _);
+                        }
+                    }, CancellationToken.None);
+                    return state.LastRun;
+                }
+
                 switch (action)
                 {
                     case RunAgentActionSpec a:
@@ -260,9 +292,14 @@ internal sealed class ActionExecutor
             await CommitAsync(DateTime.UtcNow);
             return state.LastRun;
         }
+
+        try
+        {
+            return await ExecuteFromAsync(0, background: false);
+        }
         finally
         {
-            if (chainKey is not null && !runAgentDispatched)
+            if (chainKey is not null && !runAgentDispatched && !detached)
                 _inFlightChains.TryRemove(chainKey, out _);
         }
     }
