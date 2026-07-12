@@ -9,5 +9,5 @@
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Step 8 of many."}]},"_delay_ms":100}
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Step 9 of many."}]},"_delay_ms":100}
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Final step."}]}}
-{"type":"result","subtype":"success","is_error":false,"duration_ms":1000,"num_turns":1}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":1000,"num_turns":1,"total_cost_usd":0.1567,"usage":{"input_tokens":600,"output_tokens":2400,"cache_read_input_tokens":41000,"cache_creation_input_tokens":3200}}
 {"_meta":{"exit":0}}

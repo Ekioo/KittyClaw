@@ -61,6 +61,11 @@ internal static class ClaudeStreamPump
                     }
                     else
                     {
+                        // The terminal result event carries the whole turn's token usage and
+                        // priced cost — record it before the max_turns remap below, because an
+                        // error_max_turns result still reports the tokens it burned.
+                        if (kind == "result")
+                            TryRecordUsage(doc.RootElement, run);
                         if (kind == "result" &&
                             doc.RootElement.TryGetProperty("subtype", out var subtype) &&
                             subtype.GetString() == "error_max_turns")
@@ -85,6 +90,37 @@ internal static class ClaudeStreamPump
             try { run.Push(new StreamEvent(DateTime.UtcNow, "error", $"stdout pump failed: {ex.Message}")); } catch { /* subscriber may throw */ }
         }
     }
+
+    // Extracts `usage` (input/output/cache token counts) and `total_cost_usd` from a result
+    // event and accumulates them on the run. Accumulate — not assign — because one AgentRun can
+    // spawn several subprocesses (resume retry, quota fallback, steer replay), each with its own
+    // result event.
+    private static void TryRecordUsage(JsonElement root, AgentRun run)
+    {
+        try
+        {
+            int input = 0, output = 0, cacheRead = 0, cacheWrite = 0;
+            if (root.TryGetProperty("usage", out var usage) && usage.ValueKind == JsonValueKind.Object)
+            {
+                input = ReadInt(usage, "input_tokens");
+                output = ReadInt(usage, "output_tokens");
+                cacheRead = ReadInt(usage, "cache_read_input_tokens");
+                cacheWrite = ReadInt(usage, "cache_creation_input_tokens");
+            }
+            decimal? cost = null;
+            if (root.TryGetProperty("total_cost_usd", out var c) &&
+                c.ValueKind == JsonValueKind.Number && c.TryGetDecimal(out var cv))
+            {
+                cost = cv;
+            }
+            if (input > 0 || output > 0 || cacheRead > 0 || cacheWrite > 0 || cost is not null)
+                run.AddUsage(input, output, cacheRead, cacheWrite, cost);
+        }
+        catch { /* usage telemetry must never break the stream pump */ }
+    }
+
+    private static int ReadInt(JsonElement obj, string name) =>
+        obj.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var i) ? i : 0;
 
     internal static async Task PumpStderrAsync(Process proc, AgentRun run, CancellationToken ct)
     {

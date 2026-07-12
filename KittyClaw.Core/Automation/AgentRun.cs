@@ -23,6 +23,29 @@ public sealed class AgentRun
     public DateTime? EndedAt { get; set; }
     public int? ExitCode { get; set; }
 
+    // Token usage accumulated from the claude CLI's terminal `result` events. A single AgentRun
+    // can spawn several subprocesses (resume retry, quota fallback, chat steer replay), each
+    // emitting its own result event, so these are sums — not the last event's values.
+    public int InputTokens { get; private set; }
+    public int OutputTokens { get; private set; }
+    public int CacheReadTokens { get; private set; }
+    public int CacheWriteTokens { get; private set; }
+    public decimal? TotalCostUsd { get; private set; }
+    public long TotalTokens => (long)InputTokens + OutputTokens + CacheReadTokens + CacheWriteTokens;
+    public bool HasUsage => TotalTokens > 0 || TotalCostUsd is not null;
+
+    public void AddUsage(int inputTokens, int outputTokens, int cacheReadTokens, int cacheWriteTokens, decimal? costUsd)
+    {
+        lock (_logLock)
+        {
+            InputTokens += inputTokens;
+            OutputTokens += outputTokens;
+            CacheReadTokens += cacheReadTokens;
+            CacheWriteTokens += cacheWriteTokens;
+            if (costUsd is not null) TotalCostUsd = (TotalCostUsd ?? 0m) + costUsd.Value;
+        }
+    }
+
     /// <summary>Minutes of inactivity after which the concurrency-lock reaper force-releases this run's
     /// group (dead man's switch). Null disables the timeout. Set from the automation's
     /// <c>lockTimeoutMinutes</c> via <see cref="ClaudeRunContext.LockTimeoutMinutes"/>.</summary>
@@ -95,6 +118,11 @@ public sealed class AgentRunSnapshot
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public AgentRunStatus Status { get; set; }
     public int? ExitCode { get; set; }
+    public int InputTokens { get; set; }
+    public int OutputTokens { get; set; }
+    public int CacheReadTokens { get; set; }
+    public int CacheWriteTokens { get; set; }
+    public decimal? TotalCostUsd { get; set; }
     public List<StreamEvent> Events { get; set; } = [];
     public List<string> PendingSteerMessages { get; set; } = [];
 }
@@ -131,6 +159,11 @@ public sealed class RunLogStore
             Model = run.Model,
             Status = run.Status,
             ExitCode = run.ExitCode,
+            InputTokens = run.InputTokens,
+            OutputTokens = run.OutputTokens,
+            CacheReadTokens = run.CacheReadTokens,
+            CacheWriteTokens = run.CacheWriteTokens,
+            TotalCostUsd = run.TotalCostUsd,
             Events = run.SnapshotBuffer().ToList(),
             PendingSteerMessages = run.PendingSteerMessages.ToList(),
         };
@@ -173,6 +206,8 @@ public sealed class RunLogStore
             run.Status = snapshot.Status;
             run.EndedAt = snapshot.EndedAt;
             run.ExitCode = snapshot.ExitCode;
+            run.AddUsage(snapshot.InputTokens, snapshot.OutputTokens,
+                snapshot.CacheReadTokens, snapshot.CacheWriteTokens, snapshot.TotalCostUsd);
             foreach (var ev in snapshot.Events)
                 run.Push(ev);
             foreach (var msg in snapshot.PendingSteerMessages)

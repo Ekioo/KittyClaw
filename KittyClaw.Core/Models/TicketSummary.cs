@@ -22,6 +22,12 @@ public record TicketSummary(
 
     /// <summary>Column a Scheduled ticket promotes to when it fires.</summary>
     public string? ScheduleTarget { get; init; }
+
+    /// <summary>Cumulative tokens consumed by agent runs on this ticket (all token classes).</summary>
+    public long AgentTokens { get; init; }
+
+    /// <summary>Cumulative USD cost of agent runs on this ticket, as priced by the claude CLI.</summary>
+    public double AgentCostUsd { get; init; }
 }
 
 public record SubTicketInfo(int Id, string Title, string Status, string? AssignedTo);

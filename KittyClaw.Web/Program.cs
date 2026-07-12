@@ -65,6 +65,8 @@ var maxConcurrent = int.TryParse(Environment.GetEnvironmentVariable("KITTYCLAW_M
 builder.Services.AddSingleton(new RunConcurrencyGate(maxConcurrent));
 builder.Services.AddSingleton<ClaudeRunner>();
 builder.Services.AddSingleton<CostTracker>();
+// Durable cost records: cost-log.jsonl (daily budget) + per-ticket token/USD totals.
+builder.Services.AddHostedService<RunCostRecorder>();
 builder.Services.AddSingleton<AutomationEngine>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomationEngine>());
 builder.Services.AddSingleton<GitRepositoryWatcher>();

@@ -1,4 +1,4 @@
 {"type":"system","subtype":"init","session_id":"{{session_id}}","model":"mock"}
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Hello from mock claude. Scenario=default."}]}}
-{"type":"result","subtype":"success","is_error":false,"duration_ms":42,"num_turns":1}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":42,"num_turns":1,"total_cost_usd":0.0345,"usage":{"input_tokens":120,"output_tokens":450,"cache_read_input_tokens":9500,"cache_creation_input_tokens":800}}
 {"_meta":{"exit":0}}

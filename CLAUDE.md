@@ -12,6 +12,10 @@ dotnet test KittyClaw.Core.Tests
 
 Keep the `dotnet watch` process running — it serves the UI and the automation engine. If `dotnet build` shows MSB3027 / MSB3021 file-lock errors, they are NOT compile errors; only `error CS####` matters.
 
+### Debug instance (isolated)
+
+To verify changes end-to-end without touching the main instance or spending tokens, use the `kittyclaw-web-debug` launch config (`.claude/launch.json`): port **5232**, data dir `%APPDATA%/KittyClaw-debug` (own registry/projects/runs), and the **mock claude CLI** (`KittyClaw.ClaudeMock`, built on start and injected via `KITTYCLAW_CLAUDE_BIN`) so agent dispatches replay canned NDJSON scenarios instead of calling the real CLI. Never verify against the main instance on :5230 — it runs the user's real projects and live agent runs. Note: `kittyclaw-web-devcheck` (:5231) shares the main data dir — its AutomationEngine dispatches REAL agents on real projects; prefer `kittyclaw-web-debug`.
+
 ## Repository layout
 
 ```

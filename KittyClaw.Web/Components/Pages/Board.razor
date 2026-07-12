@@ -217,6 +217,10 @@ else
                                         var days = (ticket.FireAt.Value.Date - DateTime.UtcNow.Date).Days;
                                         <span class="schedule-badge" title="@ticket.FireAt.Value.ToString("yyyy-MM-dd HH:mm") UTC → @(ticket.ScheduleTarget ?? "Todo")">@(days <= 0 ? "J" : $"J-{days}")</span>
                                     }
+                                    @if (ticket.AgentTokens > 0)
+                                    {
+                                        <span class="token-badge" title="@($"{ticket.AgentTokens:N0} tokens · {KittyClaw.Web.Services.TokenDisplay.Usd(ticket.AgentCostUsd)}")">⛁ @KittyClaw.Web.Services.TokenDisplay.Compact(ticket.AgentTokens)</span>
+                                    }
                                     @if (!string.IsNullOrEmpty(ticket.AssignedTo))
                                     {
                                         <span class="assignee-badge" title="@ticket.AssignedTo">@MemberDisplayName(ticket.AssignedTo)</span>
@@ -519,6 +523,10 @@ else
                     <span>@_selectedTicket.Status</span>
                     <span>@_selectedTicket.CreatedBy</span>
                     <span>@_selectedTicket.CreatedAt.ToString("d")</span>
+                    @if (_selectedTicket.AgentTokens > 0)
+                    {
+                        <span class="token-badge" title="@($"{_selectedTicket.AgentTokens:N0} tokens")">⛁ @KittyClaw.Web.Services.TokenDisplay.Compact(_selectedTicket.AgentTokens) · @KittyClaw.Web.Services.TokenDisplay.Usd(_selectedTicket.AgentCostUsd)</span>
+                    }
                 </div>
             </div>
 

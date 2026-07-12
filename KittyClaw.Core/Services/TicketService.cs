@@ -83,6 +83,14 @@ public class TicketService
             await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE Tickets ADD COLUMN ScheduleTarget TEXT NULL");
         });
 
+    // Adds the cumulative agent token-usage columns to databases created before this feature.
+    private static Task EnsureAgentUsageColumnsAsync(TodoDbContext db) =>
+        MigrationGate.RunOnceAsync(db, "tickets-agent-usage", static async d =>
+        {
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE Tickets ADD COLUMN AgentTokens INTEGER NOT NULL DEFAULT 0");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE Tickets ADD COLUMN AgentCostUsd REAL NOT NULL DEFAULT 0");
+        });
+
     // Hot-path indexes: status/parent filters run on every board render, and the activity
     // subquery in ListTicketsAsync scans per ticket. Must run after the column migrations.
     private static Task EnsureTicketIndexesAsync(TodoDbContext db) =>
@@ -102,6 +110,7 @@ public class TicketService
         await EnsureAssignedToColumnAsync(db);
         await EnsureParentIdColumnAsync(db);
         await EnsureScheduleColumnsAsync(db);
+        await EnsureAgentUsageColumnsAsync(db);
         await EnsureTicketIndexesAsync(db);
         await ColumnService.EnsureBoardColumnsTableAsync(db);
         var query = db.Tickets.Include(t => t.Labels).AsQueryable();
@@ -130,7 +139,9 @@ public class TicketService
                 new List<SubTicketInfo>())
                 {
                     FireAt = t.FireAt,
-                    ScheduleTarget = t.ScheduleTarget
+                    ScheduleTarget = t.ScheduleTarget,
+                    AgentTokens = t.AgentTokens,
+                    AgentCostUsd = t.AgentCostUsd
                 })
             .ToListAsync();
 
@@ -160,6 +171,7 @@ public class TicketService
         await EnsureParentIdColumnAsync(db);
         await EnsureAssignedToColumnAsync(db);
         await EnsureScheduleColumnsAsync(db);
+        await EnsureAgentUsageColumnsAsync(db);
         var ticket = await db.Tickets
             .Include(t => t.Comments.OrderBy(c => c.CreatedAt))
             .Include(t => t.Activities.OrderBy(a => a.CreatedAt))
@@ -172,6 +184,26 @@ public class TicketService
             .Select(t => new SubTicketInfo(t.Id, t.Title, t.Status, t.AssignedTo))
             .ToListAsync();
         return ticket;
+    }
+
+    /// <summary>
+    /// Accumulates a completed agent run's token usage onto the ticket. Durable counterpart of
+    /// the in-memory run registry (whose runs are purged after 24h) — called by RunCostRecorder.
+    /// </summary>
+    public async Task AddAgentUsageAsync(string projectSlug, int ticketId, long tokens, double costUsd)
+    {
+        if (tokens <= 0 && costUsd <= 0) return;
+        await using var db = _projectService.GetProjectDb(projectSlug);
+        await EnsureSortOrderColumnAsync(db);
+        await EnsureAssignedToColumnAsync(db);
+        await EnsureParentIdColumnAsync(db);
+        await EnsureScheduleColumnsAsync(db);
+        await EnsureAgentUsageColumnsAsync(db);
+        var ticket = await db.Tickets.FindAsync(ticketId);
+        if (ticket is null) return;
+        ticket.AgentTokens += tokens;
+        ticket.AgentCostUsd += costUsd;
+        await db.SaveChangesAsync();
     }
 
     public async Task<Ticket> CreateTicketAsync(string projectSlug, string title, string description = "", string createdBy = "owner", string status = "Backlog", List<int>? labelIds = null, TicketPriority priority = TicketPriority.NiceToHave, string? assignedTo = null, int? parentId = null)

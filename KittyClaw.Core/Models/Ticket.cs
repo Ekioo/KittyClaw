@@ -25,6 +25,15 @@ public class Ticket
     /// </summary>
     public string? ScheduleTarget { get; set; }
 
+    /// <summary>
+    /// Cumulative tokens consumed by agent runs on this ticket (input + output + cache read/write),
+    /// accumulated at run completion. Durable — survives the 24h run-log purge.
+    /// </summary>
+    public long AgentTokens { get; set; }
+
+    /// <summary>Cumulative USD cost of agent runs on this ticket, as priced by the claude CLI.</summary>
+    public double AgentCostUsd { get; set; }
+
     public List<Comment> Comments { get; set; } = [];
     public List<ActivityEntry> Activities { get; set; } = [];
     public List<Label> Labels { get; set; } = [];

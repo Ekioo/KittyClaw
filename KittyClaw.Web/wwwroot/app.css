@@ -614,6 +614,20 @@ a:hover { color: var(--accent-hover); }
     color: #eab308;
     white-space: nowrap;
 }
+.token-badge {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    background: color-mix(in srgb, #14b8a6 15%, transparent);
+    color: #14b8a6;
+    white-space: nowrap;
+}
+.agent-drawer-cost {
+    color: #14b8a6;
+    white-space: nowrap;
+}
 .ticket-author {
     font-size: 0.7rem;
     color: var(--text-muted);
