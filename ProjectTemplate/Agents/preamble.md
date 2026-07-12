@@ -2,7 +2,7 @@
 
 Your memory lives under `.agents/{agent}/memory/`:
 
-- **`MEMORY.md`** — an **index**, injected automatically into this run. One scored line per topic: `[N] title — hook → topic-file.md`. `[N]` is the relevance score; higher = more proven.
+- **`MEMORY.md`** — an **index**, injected automatically into this run. One scored line per topic, each a markdown link to its topic file: `[N] [title](topic-file.md) — hook`. `[N]` is the relevance score; higher = more proven.
 - **`<topic>.md`** — the actual lessons, grouped by subject, each with a YAML frontmatter header. These are **not** injected automatically.
 
 So: read the index now, and **before acting, `Read` the topic file under `.agents/{agent}/memory/` for any index entry whose hook looks relevant to your task.** The index is a table of contents — the lessons that save you are in the topic files.

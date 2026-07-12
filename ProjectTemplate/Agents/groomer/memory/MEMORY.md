@@ -1,7 +1,7 @@
 # Memory index — groomer
 
 > Index of this agent's memory. Always loaded. One scored line per topic file:
-> `- [N] title — one-line hook -> topic-file.md` ([N] = relevance score, higher = more proven).
+> `- [N] [title](topic-file.md) — one-line hook` ([N] = relevance score, higher = more proven; the link target is the topic file beside this index).
 > Topic files live beside this file (`.agents/groomer/memory/`) and hold the lessons; they
 > are read on demand. A consolidation pass curates this file after each run.
 

@@ -10,11 +10,11 @@ Your last run produced the events below. Lessons live there. The user prompt tha
 
 Your memory lives under `.agents/{agentSlug}/memory/`:
 
-- **`MEMORY.md`** — the **index**. Always loaded into every future run. One scored line per topic file, grouped by section:
+- **`MEMORY.md`** — the **index**. Always loaded into every future run. One scored line per topic file, grouped by section. Each line is a **markdown link to its topic file** followed by a short hook describing what the file holds:
   ```
-  - [N] short title — one-line hook → topic-file.md
+  - [N] [short title](topic-file.md) — one-line hook
   ```
-  `[N]` is the **relevance score** and the index is its **single source of truth** — do NOT duplicate the score into the topic files.
+  `[N]` is the **relevance score** and the index is its **single source of truth** — do NOT duplicate the score into the topic files. Rewrite any legacy plain-text line (`title — hook → topic-file.md`) into this link format when you touch it.
 - **`<topic>.md`** — one file per **topic** (a group of related lessons), NOT one file per lesson. Each topic file starts with YAML frontmatter, then the lessons as bullet points:
   ```
   ---
@@ -68,7 +68,7 @@ A large memory legitimately takes several passes — that is expected. Better to
 
 ## Output rules
 
-- **Invariant: every line in `MEMORY.md` must point to a topic file that exists beside it.** Before finishing, make sure you did not leave a pointer to a missing file.
+- **Invariant: every line in `MEMORY.md` must be a markdown link to a topic file that exists beside it.** Before finishing, make sure you did not leave a pointer to a missing file or a line without its link.
 - Edit/create files **only** under `.agents/{agentSlug}/memory/` (and delete the legacy `memory.md` once fully migrated). Touch nothing else.
 - Do NOT post comments on tickets. Do NOT call the API.
 - Do NOT print a summary — silent edits only. The git commit that follows is your audit trail.
