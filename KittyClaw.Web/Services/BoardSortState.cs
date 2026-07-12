@@ -12,7 +12,7 @@ public enum ColumnSortMode
     Priority,
     Assignee,
     CreatedAt,
-    DueDate
+    UpdatedAt
 }
 
 public enum SortDirection
@@ -78,7 +78,7 @@ public sealed class BoardSortState
                 Comparer<string>.Create((a, b) => string.Compare(a, b, StringComparison.OrdinalIgnoreCase)),
                 direction),
             ColumnSortMode.CreatedAt => OrderBy(list, t => t.CreatedAt, Comparer<DateTime>.Default, direction, nullsLast: false),
-            ColumnSortMode.DueDate => OrderByNullable(list, t => t.DueDate, Comparer<DateTime>.Default, direction),
+            ColumnSortMode.UpdatedAt => OrderBy(list, t => t.UpdatedAt, Comparer<DateTime>.Default, direction, nullsLast: false),
             _ => list
         };
     }

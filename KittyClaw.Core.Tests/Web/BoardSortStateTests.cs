@@ -15,7 +15,7 @@ public class BoardSortStateTests
         TicketPriority priority = TicketPriority.NiceToHave,
         string? assignedTo = null,
         DateTime? createdAt = null,
-        DateTime? dueDate = null)
+        DateTime? updatedAt = null)
         => new TicketSummary(
             Id: id,
             Title: title,
@@ -26,15 +26,12 @@ public class BoardSortStateTests
             AssignedTo: assignedTo,
             CreatedBy: "owner",
             CreatedAt: createdAt ?? new DateTime(2026, 1, 1),
-            UpdatedAt: new DateTime(2026, 1, 1),
+            UpdatedAt: updatedAt ?? new DateTime(2026, 1, 1),
             Labels: new List<Label>(),
             CommentCount: 0,
             LastActivityAt: null,
             ParentId: null,
-            SubTickets: new List<SubTicketInfo>())
-        {
-            DueDate = dueDate
-        };
+            SubTickets: new List<SubTicketInfo>());
 
     [Fact]
     public void Manual_returns_input_order_unchanged()
@@ -151,18 +148,33 @@ public class BoardSortStateTests
     }
 
     [Fact]
-    public void DueDate_ascending_places_nulls_last()
+    public void UpdatedAt_descending_returns_most_recently_modified_first()
     {
         var input = new[]
         {
-            T(1, dueDate: new DateTime(2026, 1, 1)),
-            T(2, dueDate: null),
-            T(3, dueDate: new DateTime(2025, 6, 1)),
+            T(1, updatedAt: new DateTime(2025, 1, 1)),
+            T(2, updatedAt: new DateTime(2026, 6, 1)),
+            T(3, updatedAt: new DateTime(2025, 12, 1)),
         };
 
-        var result = BoardSortState.ApplySort(input, ColumnSortMode.DueDate, SortDirection.Ascending).ToList();
+        var result = BoardSortState.ApplySort(input, ColumnSortMode.UpdatedAt, SortDirection.Descending).ToList();
 
-        Assert.Equal(new[] { 3, 1, 2 }, result.Select(t => t.Id));
+        Assert.Equal(new[] { 2, 3, 1 }, result.Select(t => t.Id));
+    }
+
+    [Fact]
+    public void UpdatedAt_ascending_returns_oldest_modified_first()
+    {
+        var input = new[]
+        {
+            T(1, updatedAt: new DateTime(2025, 1, 1)),
+            T(2, updatedAt: new DateTime(2026, 6, 1)),
+            T(3, updatedAt: new DateTime(2025, 12, 1)),
+        };
+
+        var result = BoardSortState.ApplySort(input, ColumnSortMode.UpdatedAt, SortDirection.Ascending).ToList();
+
+        Assert.Equal(new[] { 1, 3, 2 }, result.Select(t => t.Id));
     }
 
     [Fact]
@@ -182,7 +194,7 @@ public class BoardSortStateTests
     [InlineData(ColumnSortMode.Priority, SortDirection.Descending)]
     [InlineData(ColumnSortMode.Assignee, SortDirection.Ascending)]
     [InlineData(ColumnSortMode.CreatedAt, SortDirection.Descending)]
-    [InlineData(ColumnSortMode.DueDate, SortDirection.Ascending)]
+    [InlineData(ColumnSortMode.UpdatedAt, SortDirection.Ascending)]
     public void Empty_input_returns_empty(ColumnSortMode mode, SortDirection direction)
     {
         var result = BoardSortState.ApplySort(Array.Empty<TicketSummary>(), mode, direction);

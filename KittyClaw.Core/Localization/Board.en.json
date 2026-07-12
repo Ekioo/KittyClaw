@@ -5,7 +5,7 @@
   "SortByPriority": "Priority",
   "SortByAssignee": "Assignee",
   "SortByCreated": "Created date",
-  "SortByDueDate": "Due date",
+  "SortByUpdated": "Modified date",
   "SortAsc": "Ascending",
   "SortDesc": "Descending",
   "KanbanView": "Kanban",

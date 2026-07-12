@@ -17,8 +17,6 @@ public record TicketSummary(
     int? ParentId,
     List<SubTicketInfo> SubTickets)
 {
-    public DateTime? DueDate { get; init; }
-
     /// <summary>Auto-promotion instant for Scheduled tickets (UTC), null otherwise.</summary>
     public DateTime? FireAt { get; init; }
 
