@@ -262,6 +262,7 @@ public class TicketService
             throw new InvalidOperationException("Le champ 'author' est requis.");
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureActivityTableAsync(db);
+        await EnsureScheduleColumnsAsync(db);
         await ColumnService.EnsureBoardColumnsTableAsync(db);
         var columnExists = await db.BoardColumns.AnyAsync(c => c.Name == newStatus);
         if (!columnExists)
@@ -272,6 +273,13 @@ public class TicketService
         if (string.Equals(oldStatus, newStatus, StringComparison.OrdinalIgnoreCase))
             return ticket; // already in target status — no-op
         ticket.Status = newStatus;
+        if (string.Equals(oldStatus, "Scheduled", StringComparison.OrdinalIgnoreCase))
+        {
+            // Leaving Scheduled by hand cancels the pending promotion — otherwise the stale
+            // FireAt keeps showing a countdown badge and would fire instantly if re-scheduled.
+            ticket.FireAt = null;
+            ticket.ScheduleTarget = null;
+        }
         ticket.UpdatedAt = DateTime.UtcNow;
         db.ActivityEntries.Add(new ActivityEntry
         {

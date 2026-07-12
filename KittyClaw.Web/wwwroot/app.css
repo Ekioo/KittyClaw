@@ -1380,6 +1380,46 @@ button:disabled { opacity: 0.4; cursor: default; }
     font-weight: 500;
     white-space: nowrap;
 }
+.ticket-schedule-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+}
+.ticket-schedule-row .schedule-value {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #eab308;
+}
+.ticket-schedule-row .schedule-arrow {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+.schedule-input,
+.schedule-target-select {
+    background: var(--surface2);
+    border: 1px solid var(--border-strong);
+    color: var(--text);
+    padding: 0.25rem 0.45rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+}
+.schedule-add-btn {
+    background: none;
+    border: 1px dashed var(--border-strong);
+    color: var(--text-muted);
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+.schedule-add-btn:hover {
+    color: #eab308;
+    border-color: #eab308;
+}
 .assignee-pill {
     display: inline-flex;
     align-items: center;

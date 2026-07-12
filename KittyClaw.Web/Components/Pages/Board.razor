@@ -530,6 +530,46 @@ else
                 </div>
             </div>
 
+            @* ── Schedule row ── *@
+            @if (_editingSchedule)
+            {
+                <div class="ticket-schedule-row">
+                    <span class="section-label-sm">⏰ @L["ScheduledForLabel"]</span>
+                    <input type="datetime-local" class="schedule-input" @bind="_editFireAtLocal" @bind:event="oninput" />
+                    <span class="schedule-arrow">&#8594;</span>
+                    <select class="schedule-target-select" @bind="_editScheduleTarget">
+                        @foreach (var c in _columns.Where(c => c.Name != "Scheduled"))
+                        {
+                            <option value="@c.Name">@c.Name</option>
+                        }
+                    </select>
+                    <button class="icon-btn save-btn" title="@L["Save"]" disabled="@(_editFireAtLocal is null)" @onclick="SaveSchedule">&#10003;</button>
+                    <button class="icon-btn cancel-icon-btn" title="@L["Cancel"]" @onclick="() => _editingSchedule = false">&#10005;</button>
+                </div>
+            }
+            else if (_selectedTicket.FireAt is not null || _selectedTicket.Status == "Scheduled")
+            {
+                <div class="ticket-schedule-row">
+                    <span class="section-label-sm">⏰ @L["ScheduledForLabel"]</span>
+                    @if (_selectedTicket.FireAt is DateTime fireAtUtc)
+                    {
+                        <span class="schedule-value">@UtcToLocal(fireAtUtc).ToString("g")</span>
+                        <span class="schedule-arrow">&#8594; @(_selectedTicket.ScheduleTarget ?? "Todo")</span>
+                    }
+                    else
+                    {
+                        <span class="schedule-value empty-hint">@L["ScheduleNoDate"]</span>
+                    }
+                    <button class="icon-btn pencil-btn" title="@L["ScheduleEdit"]" @onclick="StartEditSchedule">&#9998;</button>
+                </div>
+            }
+            else if (_columns.Any(c => c.Name == "Scheduled"))
+            {
+                <div class="ticket-schedule-row">
+                    <button class="schedule-add-btn" @onclick="StartEditSchedule">⏰ @L["ScheduleButton"]</button>
+                </div>
+            }
+
             @* ── Sub-tickets section ── *@
             @{ var selectedSummary = _tickets.FirstOrDefault(t => t.Id == _selectedTicket.Id); }
             @if (selectedSummary?.SubTickets is { Count: > 0 })
@@ -761,6 +801,11 @@ else
     private bool _editingTitle = false;
     private string _editTitle = "";
     private int? _editingCommentId = null;
+
+    // Schedule editing state (FireAt is stored UTC; the input works in local time)
+    private bool _editingSchedule = false;
+    private DateTime? _editFireAtLocal;
+    private string _editScheduleTarget = "Todo";
     private string _editComment = "";
 
     // Priority picker
@@ -1781,6 +1826,7 @@ else
         _restoreScrollAfterRender = true;
         _confirmDelete = false;
         _editingTitle = false;
+        _editingSchedule = false;
         _editingCommentId = null;
         _fullscreenTarget = "";
         _selectedTicket = await TicketService.GetTicketAsync(Slug, ticket.Id);
@@ -1805,6 +1851,7 @@ else
         _escTicketPanel = null;
         _confirmDelete = false;
         _editingTitle = false;
+        _editingSchedule = false;
         _editingCommentId = null;
         _fullscreenTarget = "";
         ClosePriorityPicker();
@@ -1876,6 +1923,36 @@ else
     {
         if (e.Key == "Enter") await SaveTitle();
         else if (e.Key == "Escape") _editingTitle = false;
+    }
+
+    private static DateTime UtcToLocal(DateTime utc) =>
+        DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime();
+
+    private void StartEditSchedule()
+    {
+        if (_selectedTicket is null) return;
+        _editFireAtLocal = _selectedTicket.FireAt is DateTime fireAt
+            ? UtcToLocal(fireAt)
+            : DateTime.Now.Date.AddDays(1).AddHours(9);
+        var target = _selectedTicket.ScheduleTarget;
+        _editScheduleTarget = !string.IsNullOrWhiteSpace(target) && _columns.Any(c => c.Name == target)
+            ? target!
+            : _columns.FirstOrDefault(c => c.Name == "Todo")?.Name
+              ?? _columns.FirstOrDefault(c => c.Name != "Scheduled")?.Name ?? "Todo";
+        _editingSchedule = true;
+    }
+
+    private async Task SaveSchedule()
+    {
+        if (_selectedTicket is null) return;
+        if (_editFireAtLocal is not DateTime local) return;
+        var fireAtUtc = DateTime.SpecifyKind(local, DateTimeKind.Local).ToUniversalTime();
+        var ticketId = _selectedTicket.Id;
+        await TicketService.ScheduleTicketAsync(Slug, ticketId, fireAtUtc, _editScheduleTarget);
+        _editingSchedule = false;
+        _selectedTicket = await TicketService.GetTicketAsync(Slug, ticketId);
+        await RefreshTicketsAndTouch();
+        await RebuildPipelineAsync();
     }
 
     // Description editing

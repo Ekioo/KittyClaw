@@ -97,6 +97,22 @@ public sealed class ScheduledTicketTests
     }
 
     [Fact]
+    public async Task MoveTicketAsync_OutOfScheduled_ClearsFireAtAndTarget()
+    {
+        using var tmp = new TempDir();
+        var (_, svc, slug) = BuildSut(tmp);
+        var ticket = await svc.CreateTicketAsync(slug, "Post X", status: "Todo");
+        await svc.ScheduleTicketAsync(slug, ticket.Id, DateTime.UtcNow.AddDays(2), "Todo", "owner");
+
+        var moved = await svc.MoveTicketAsync(slug, ticket.Id, "Backlog");
+
+        Assert.NotNull(moved);
+        Assert.Equal("Backlog", moved!.Status);
+        Assert.Null(moved.FireAt);
+        Assert.Null(moved.ScheduleTarget);
+    }
+
+    [Fact]
     public async Task PromoteScheduledAsync_IsNoOp_WhenTicketNotScheduled()
     {
         using var tmp = new TempDir();

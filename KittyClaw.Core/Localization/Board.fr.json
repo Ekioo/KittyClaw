@@ -106,5 +106,9 @@
   "DiscardChangesConfirm": "Abandonner les modifications non enregistrées ?",
   "Discard": "Abandonner",
   "LoadMoreTickets": "Charger plus",
-  "Remaining": "restants"
+  "Remaining": "restants",
+  "ScheduledForLabel": "Planifié :",
+  "ScheduleEdit": "Modifier la planification",
+  "ScheduleButton": "Planifier…",
+  "ScheduleNoDate": "Aucune date définie"
 }

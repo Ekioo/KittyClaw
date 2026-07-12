@@ -106,5 +106,9 @@
   "DiscardChangesConfirm": "Discard unsaved changes?",
   "Discard": "Discard",
   "LoadMoreTickets": "Load more",
-  "Remaining": "remaining"
+  "Remaining": "remaining",
+  "ScheduledForLabel": "Scheduled:",
+  "ScheduleEdit": "Edit schedule",
+  "ScheduleButton": "Schedule…",
+  "ScheduleNoDate": "No date set"
 }
