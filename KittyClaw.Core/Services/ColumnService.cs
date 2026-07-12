@@ -38,6 +38,15 @@ public class ColumnService
                 )
             """));
 
+        // Duplicate column names crash the board (ToDictionary by name) and make ticket
+        // Status ambiguous. Heal boards that already contain duplicates (the pre-index
+        // EnsureScheduledColumnAsync check-then-insert could race), then lock the invariant in.
+        await MigrationGate.RunOnceAsync(db, "board-columns-unique-name", static d =>
+            d.Database.ExecuteSqlRawAsync("""
+                DELETE FROM BoardColumns WHERE Id NOT IN (SELECT MIN(Id) FROM BoardColumns GROUP BY Name);
+                CREATE UNIQUE INDEX IF NOT EXISTS IX_BoardColumns_Name ON BoardColumns(Name);
+            """));
+
         // Seed defaults if table is empty
         var count = await db.BoardColumns.CountAsync();
         if (count == 0)
@@ -73,8 +82,15 @@ public class ColumnService
         for (int i = 0; i < columns.Count; i++)
             columns[i].SortOrder = i;
         db.BoardColumns.Add(columns[insertAt]);
-        await db.SaveChangesAsync();
+        try { await db.SaveChangesAsync(); }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            // Lost the check-then-insert race against a concurrent caller — the column exists now.
+        }
     }
+
+    private static bool IsUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is Microsoft.Data.Sqlite.SqliteException { SqliteErrorCode: 19 };
 
     public async Task<List<BoardColumn>> ListColumnsAsync(string projectSlug)
     {
@@ -87,6 +103,10 @@ public class ColumnService
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureBoardColumnsTableAsync(db);
+        // Idempotent on name: ticket Status references columns by name, so a second
+        // column with the same name would be indistinguishable — return the existing one.
+        var existing = await db.BoardColumns.FirstOrDefaultAsync(c => c.Name == name);
+        if (existing is not null) return existing;
         var maxSort = await db.BoardColumns.Select(c => (int?)c.SortOrder).MaxAsync() ?? -1;
         var column = new BoardColumn
         {
@@ -95,7 +115,12 @@ public class ColumnService
             SortOrder = maxSort + 1
         };
         db.BoardColumns.Add(column);
-        await db.SaveChangesAsync();
+        try { await db.SaveChangesAsync(); }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            db.Entry(column).State = EntityState.Detached;
+            return await db.BoardColumns.FirstAsync(c => c.Name == name);
+        }
         return column;
     }
 
@@ -111,6 +136,10 @@ public class ColumnService
         await using var tx = await db.Database.BeginTransactionAsync();
         if (name is not null && name != column.Name)
         {
+            // Refuse renames that would collide with another column: the unique index
+            // would reject it anyway, and silently merging two columns loses one of them.
+            if (await db.BoardColumns.AnyAsync(c => c.Name == name && c.Id != columnId))
+                return null;
             // Rename: update tickets whose Status points at the old name.
             var oldName = column.Name;
             column.Name = name;

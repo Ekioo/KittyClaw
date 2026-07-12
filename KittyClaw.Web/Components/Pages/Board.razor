@@ -1313,7 +1313,9 @@ else
 
     private void ResetLoadedColumns()
     {
-        _loadedPerColumn = _columns.ToDictionary(c => c.Name, _ => InitialPageSize);
+        // GroupBy: duplicate column names are prevented upstream (unique index), but a board
+        // that somehow still contains them must degrade to showing one, not crash the page.
+        _loadedPerColumn = _columns.GroupBy(c => c.Name).ToDictionary(g => g.Key, _ => InitialPageSize);
     }
 
     private void LoadMore(string columnName)
