@@ -13,7 +13,9 @@ public static class GrokCli
     //   0. KITTYCLAW_GROK_BIN env var (escape hatch / test injection)
     //   1. Sibling of host exe: <baseDir>/grok(.exe)
     //   2. <baseDir>/tools/grok(.exe)
-    //   3. PATH probe — unlike claude we probe explicitly (checking .exe/.cmd/.bat on Windows)
+    //   3. ~/.grok/bin/grok(.exe) — the official installer's default location, which may not be
+    //      on the PATH of a service/host process even when it is on the user's shell PATH.
+    //   4. PATH probe — unlike claude we probe explicitly (checking .exe/.cmd/.bat on Windows)
     //      because "installed" drives UI visibility, not just spawn-time resolution.
     private static Lazy<string?> _binary = new(ResolveBinary);
 
@@ -89,12 +91,18 @@ public static class GrokCli
             : new[] { "grok" };
         var baseDir = AppContext.BaseDirectory;
 
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         foreach (var name in names)
         {
             var sibling = Path.Combine(baseDir, name);
             if (File.Exists(sibling)) return sibling;
             var tools = Path.Combine(baseDir, "tools", name);
             if (File.Exists(tools)) return tools;
+            if (!string.IsNullOrEmpty(home))
+            {
+                var installDir = Path.Combine(home, ".grok", "bin", name);
+                if (File.Exists(installDir)) return installDir;
+            }
         }
 
         var pathVar = Environment.GetEnvironmentVariable("PATH") ?? "";
