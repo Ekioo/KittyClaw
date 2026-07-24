@@ -151,6 +151,16 @@ public class GrokSupportTests
         Assert.Null(fb.FallbackModel);
     }
 
+    [Fact]
+    public void QuotaSignal_GrokPaymentRequired_IsDetected()
+    {
+        // Real-world grok CLI error when the Grok Build usage balance is exhausted (402).
+        // Must register as a quota signal so the configured fallback model kicks in.
+        var ev = new StreamEvent(DateTime.UtcNow, "error",
+            "Internal error: { \"message\": \"API error (status 402 Payment Required): Grok Build usage balance exhausted\", \"http_status\": 402 }");
+        Assert.True(AgentRunner.IsQuotaSignal(ev));
+    }
+
     // ── GrokCli helpers ─────────────────────────────────────────────────────
 
     [Theory]

@@ -381,8 +381,10 @@ public sealed class AgentRunner
     private readonly record struct SpawnResult(int? Exit, int AssistantEventCount, bool Cancelled, bool HitQuota);
 
     // Heuristic patterns matching quota / usage-limit / rate-limit messages emitted by the
-    // claude CLI (via stream-json result events or stderr). Kept broad on purpose — false
-    // positives only cause one extra retry on the fallback model, which is recoverable.
+    // claude CLI (via stream-json result events or stderr) or the grok CLI (e.g.
+    // "API error (status 402 Payment Required): Grok Build usage balance exhausted").
+    // Kept broad on purpose — false positives only cause one extra retry on the fallback
+    // model, which is recoverable.
     private static readonly string[] QuotaMarkers =
     {
         "usage limit",
@@ -391,6 +393,10 @@ public sealed class AgentRunner
         "quota exceeded",
         "weekly limit",
         "5-hour limit",
+        "payment required",
+        "balance exhausted",
+        "usage balance",
+        "insufficient credits",
     };
 
     private static bool LooksLikeQuotaError(string? text)
