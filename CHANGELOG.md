@@ -2,6 +2,60 @@
 
 All notable changes to KittyClaw.
 
+## [v0.10] — 2026-07-24
+
+Scheduled tickets, per-ticket token cost, a rebuilt cron scheduler — and a deep security & reliability hardening pass.
+
+### Highlights
+
+Tickets can now be **scheduled**: park a ticket in the new "Scheduled" column with a fire date and a target column, and a background service auto-promotes it once due — calendar-dated work gets a dedicated home instead of polluting "Blocked". The schedule is visible and editable directly in the ticket panel, and scheduled cards show a countdown badge on the board.
+
+Agent runs now report **what they cost**: token usage and USD cost are captured from the CLI, accumulated per run, and persisted as durable per-ticket totals — with badges on board cards, the ticket panel, and the run drawer, which also makes the daily budget gate real.
+
+Interval/cron triggers were rebuilt around a **persisted NextRunAt schedule**: a restart that straddles the scheduled moment still fires on time, a missed occurrence catches up with one immediate fire, external edits to `automations.json` are picked up automatically, and raw cron text entry is replaced with a day/time picker. A **concurrency-lock dead man's switch** force-stops hung runs that would otherwise hold their group's lock forever, with a new endpoint listing currently-locked groups.
+
+This release also lands a broad hardening pass: stored XSS in markdown rendering, path traversal in dashboard tiles and project/agent slugs, and unsafe image uploads are all fixed, two vulnerable transitive dependencies are pinned, and a series of concurrency defects (lost session-registry writes, a dashboard tile gate permit leak, engine-tick starvation, deadlock-prone subprocess runners) are resolved.
+
+### Added
+
+- **Scheduled tickets** (feature #99): "Scheduled" status/column with `FireAt` + target column, 30s auto-promotion service, `PATCH …/tickets/{id}/schedule` endpoint, countdown badge and soonest-first sort on the board.
+- **Ticket panel schedule editor**: view/edit the schedule in local time, "Schedule…" button on non-scheduled tickets; moving a ticket out of Scheduled clears its schedule.
+- **Per-ticket token cost**: usage and `total_cost_usd` captured from CLI result events, per-run accumulation, durable per-ticket totals and workspace cost-log; badges on board card, ticket panel, and run drawer; runs API exposes token fields.
+- **Concurrency-lock dead man's switch** (ticket #98): opt-in per-automation inactivity timeout (`LockTimeoutMinutes`), per-run activity heartbeat, a reaper that force-stops idle runs, and `GET /projects/{slug}/concurrency-groups` for lock observability.
+- **Anonymous daily usage heartbeat** to Umami Cloud: one event per instance per 24h (instance GUID, version, OS family), silent-fail, disabled in Development.
+- **Isolated debug instance**: `kittyclaw-web-debug` launch config on :5232 with its own data dir and a mock claude CLI, so end-to-end verification never touches real projects.
+- **CI**: GitHub Actions build + test workflow on every push/PR to main/dev, with the mock claude built explicitly for hermetic integration tests.
+- **Memory index links**: agent `MEMORY.md` index lines are now markdown links to their topic files; the consolidation pass rewrites legacy lines on touch.
+
+### Changed
+
+- **Interval/cron triggers reworked** around a persisted `NextRunAt`: cron-only schedule computed at registration, restart-safe firing, one-shot catch-up of missed occurrences, automatic reload when `automations.json` changes on disk, day/time picker instead of raw cron text (legacy `Seconds` migrated to cron).
+- **Dashboard tile registration is no longer required**: tiles appear as soon as their `.dashboard/<slug>/` folder exists; layout rows are created lazily on first move/resize.
+- **MaxRunDuration contract honored**: chat sessions are no longer force-killed at 60 min; automation runs and memory consolidation get 30 min, dashboard tile refreshes 15 min, and `null` genuinely means no wall-clock timeout.
+- **Column sort by due date replaced with modified date** — the due-date sort was a no-op (tickets have no due-date field); persisted sort preferences remain valid.
+
+### Fixed
+
+- **Duplicate board columns crashed the board**: self-healing dedupe migration, UNIQUE index on column names, idempotent column creation, rename-onto-taken-name refused, and the board now degrades instead of crashing on corrupted data.
+- **SessionRegistry lost concurrent writes**: read-modify-write cycles are now atomic under the file lock, ending lost session IDs and regressed commit cursors.
+- **DashboardTileGate permit leak**: a cancelled refresh winner permanently blocked all subsequent tile refreshes across all projects.
+- **Engine tick starvation**: long inline automation actions (memory consolidation, PowerShell) detach to a background task instead of blocking every trigger in every project.
+- **Ad-hoc subprocess runners consolidated** onto a hardened `ProcessRunner`: concurrent pipe drain (no more deadlocks), enforced wall-clock timeouts, process-tree kill, and a per-repository git semaphore so one slow repo no longer stalls all memory commits.
+- **Multi-statement writes wrapped in transactions**: no more orphaned tickets after a crash mid column-rename/delete or member delete.
+- **Migration overhead**: inline migrations now run once per database file instead of on every query, with new indexes on the board's hot paths; ALTER TABLE errors are no longer silently swallowed.
+- **AgentRunDrawer** no longer kills the Blazor circuit with "Collection was modified" — event-buffer mutation moved onto the sync context.
+- **Localization** falls back to English when a key is missing from the active language, and formats invariantly.
+- **Test suite unhung**: steering tests no longer respawn mock subprocesses forever; full suite 472/472 in 17s.
+
+### Security
+
+- **Stored XSS**: all Markdig pipelines now `DisableHtml()`, and tile style attributes only accept validated CSS colors.
+- **Path traversal** blocked on dashboard tile delete/move/resize/refresh (the delete sink validates the resolved path as defense in depth), and project/agent slugs are validated before touching the filesystem.
+- **Image upload hardened**: real format sniffed from magic bytes (png/jpg/gif/webp only, no SVG), 10 MB cap, nosniff + sandboxing CSP on `/uploads/` responses.
+- **Dependency pins**: SQLitePCLRaw 3.0.3 (CVE-2025-6965) and Microsoft.OpenApi 2.10.0 (GHSA-v5pm-xwqc-g5wc).
+
+---
+
 ## [v0.9] — 2026-07-02
 
 Ollama local model support, per-action model selection, and a centralized model catalog.
