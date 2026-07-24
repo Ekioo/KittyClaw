@@ -18,6 +18,10 @@ public sealed class ClaudeRunContext
     public IDictionary<string, string> Env { get; init; } = new Dictionary<string, string>();
     public string? Model { get; init; }
 
+    /// <summary>Which CLI runs this dispatch. Grok is set by ModelRouting when a grok-* model
+    /// is selected and the Grok Build CLI is installed; everything else runs the claude CLI.</summary>
+    public CliProvider Provider { get; init; } = CliProvider.Claude;
+
     /// <summary>Project-wide fallback model. If a run hits a quota / usage-limit error from the claude CLI,
     /// the runner retries once with this model in the same AgentRun. Null disables the fallback.</summary>
     public string? FallbackModel { get; init; }
@@ -40,6 +44,7 @@ public sealed class ClaudeRunContext
         ConcurrencyGroup = ConcurrencyGroup,
         Env = Env,
         Model = Model,
+        Provider = Provider,
         FallbackModel = FallbackModel,
         ExtraContext = steerText,
         InlineSkillContent = InlineSkillContent,
@@ -75,8 +80,9 @@ public sealed class ClaudeRunContext
     /// <summary>Absolute paths to user-pasted image files saved under the workspace's channel/tmp. BuildPromptAsync surfaces them under an [Attached images] block; the runner best-effort deletes them after the process exits.</summary>
     public IReadOnlyList<string>? ImagePaths { get; init; }
 
-    /// <summary>When non-null, the runner emits an error event and returns immediately without launching a subprocess.</summary>
-    public string? OllamaValidationError { get; init; }
+    /// <summary>When non-null, the runner emits an error event and returns immediately without launching
+    /// a subprocess (invalid model selection: Ollama without base URL, Grok without the CLI installed).</summary>
+    public string? ModelValidationError { get; init; }
 
     /// <summary>Maximum wall-clock duration for this run. When exceeded, the subprocess is killed and the run fails.
     /// Null means no timeout (e.g. chat sessions). Defaults to 30 minutes for automation runs if not set.</summary>
@@ -121,9 +127,9 @@ public sealed class ClaudeRunner
         if (ctx.OnEventHook is not null) run.OnEvent += ctx.OnEventHook;
         _runs.Register(run);
 
-        if (ctx.OllamaValidationError is not null)
+        if (ctx.ModelValidationError is not null)
         {
-            run.Push(new StreamEvent(DateTime.UtcNow, "error", ctx.OllamaValidationError));
+            run.Push(new StreamEvent(DateTime.UtcNow, "error", ctx.ModelValidationError));
             _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
             return run;
         }
@@ -154,6 +160,10 @@ public sealed class ClaudeRunner
         // SessionScope optionally namespaces the key (e.g. "chat:agent:sweep") so chat
         // sessions don't collide with automation sessions for the same agent.
         var scopedAgent = ctx.SessionScope is null ? ctx.AgentName : $"{ctx.SessionScope}:{ctx.AgentName}";
+        // Grok sessions live in the grok CLI's own store (~/.grok/sessions) — a claude session id
+        // is meaningless there and vice versa. Namespace the key so switching a member between
+        // providers never tries to --resume a foreign session.
+        if (ctx.Provider == CliProvider.Grok) scopedAgent = $"grok:{scopedAgent}";
         var existingSessionId = ctx.PersistSession
             ? _sessions.GetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId)
             : null;
@@ -280,6 +290,7 @@ public sealed class ClaudeRunner
                     OnEventHook = ctx.OnEventHook,
                     ChatTarget = ctx.ChatTarget,
                     Model = ctx.Model,
+                    Provider = ctx.Provider,
                     FallbackModel = ctx.FallbackModel,
                     Env = ctx.Env,
                     PendingSteerMessages = run.PendingSteerMessages,
@@ -383,36 +394,59 @@ public sealed class ClaudeRunner
         var prompt = await BuildPromptAsync(ctx, skillContent, isResume, ct);
         var sessionName = ctx.TicketId is not null ? $"{ctx.AgentName} #{ctx.TicketId}" : ctx.AgentName;
 
-        var args = new List<string>
-        {
-            "--print", "--verbose",
-            "--output-format", "stream-json",
-            "--dangerously-skip-permissions",
-            "--max-turns", ctx.MaxTurns.ToString(),
-        };
-        // KittyClaw owns the agent memory layer (.agents/{agent}/memory.md committed to
-        // the workspace repo). We previously passed `--disallowed-tools Memory` to keep
-        // agents off any built-in memory store, but the Claude Code CLI exposes no tool
-        // named "Memory" — the rule matched nothing and only emitted a startup warning
-        // ("Permission deny rule \"Memory\" matches no known tool") into the run stream.
-        // The CLI's memory is file-based (read as context, not a tool), so there is
-        // nothing to disallow here.
-        // No --remote-control: it has no effect on non-interactive `claude --print` runs and
-        // its file-based IPC (payload.json in the working directory) is keyed on the cwd, so
-        // any two concurrent runs in the same workspace would read each other's IPC file and
-        // either cross-contaminate sessions or deadlock at startup. Mid-run steering does not
-        // depend on it — PumpSteeringAsync queues messages for replay on the next --resume.
-        if (isResume) { args.Add("--resume"); args.Add(sessionId); }
-        else { args.Add("-n"); args.Add(sessionName); args.Add("--session-id"); args.Add(sessionId); }
         var effectiveModel = modelOverride ?? ctx.Model;
-        if (effectiveModel is not null) { args.Add("--model"); args.Add(effectiveModel); }
+        var isGrok = ctx.Provider == CliProvider.Grok;
+
+        List<string> args;
+        if (isGrok)
+        {
+            // Grok Build CLI headless mode. The prompt travels as the -p argument (grok does not
+            // read it from stdin); --always-approve is grok's --dangerously-skip-permissions;
+            // --no-auto-update keeps background update checks out of automated runs.
+            args = new List<string>
+            {
+                "--output-format", "streaming-json",
+                "--always-approve",
+                "--no-auto-update",
+                "--max-turns", ctx.MaxTurns.ToString(),
+            };
+            if (isResume) { args.Add("--resume"); args.Add(sessionId); }
+            else { args.Add("--session-id"); args.Add(sessionId); }
+            if (effectiveModel is not null) { args.Add("--model"); args.Add(effectiveModel); }
+            args.Add("-p"); args.Add(prompt);
+        }
+        else
+        {
+            args = new List<string>
+            {
+                "--print", "--verbose",
+                "--output-format", "stream-json",
+                "--dangerously-skip-permissions",
+                "--max-turns", ctx.MaxTurns.ToString(),
+            };
+            // KittyClaw owns the agent memory layer (.agents/{agent}/memory.md committed to
+            // the workspace repo). We previously passed `--disallowed-tools Memory` to keep
+            // agents off any built-in memory store, but the Claude Code CLI exposes no tool
+            // named "Memory" — the rule matched nothing and only emitted a startup warning
+            // ("Permission deny rule \"Memory\" matches no known tool") into the run stream.
+            // The CLI's memory is file-based (read as context, not a tool), so there is
+            // nothing to disallow here.
+            // No --remote-control: it has no effect on non-interactive `claude --print` runs and
+            // its file-based IPC (payload.json in the working directory) is keyed on the cwd, so
+            // any two concurrent runs in the same workspace would read each other's IPC file and
+            // either cross-contaminate sessions or deadlock at startup. Mid-run steering does not
+            // depend on it — PumpSteeringAsync queues messages for replay on the next --resume.
+            if (isResume) { args.Add("--resume"); args.Add(sessionId); }
+            else { args.Add("-n"); args.Add(sessionName); args.Add("--session-id"); args.Add(sessionId); }
+            if (effectiveModel is not null) { args.Add("--model"); args.Add(effectiveModel); }
+        }
 
         var psi = ProcessLifecycleManager.BuildProcessStartInfo(ctx, args);
 
         AppendDebugLog(ctx, $"LAUNCHING {ctx.AgentName} {(isResume ? "(resume)" : "(new)")} ticket=#{ctx.TicketId} session={sessionId}");
         _logger.LogInformation("LAUNCH {Agent} {Mode} ticket=#{TicketId} session={SessionId} cmd={Bin} {Args}",
             ctx.AgentName, isResume ? "(resume)" : "(new)", ctx.TicketId, sessionId,
-            ProcessLifecycleManager.ClaudeBinary, string.Join(" ", args));
+            psi.FileName, string.Join(" ", isGrok ? args.SkipLast(1).Append("<prompt>") : args));
 
         System.Diagnostics.Process proc;
         try
@@ -454,12 +488,16 @@ public sealed class ClaudeRunner
 
             try
             {
-                await proc.StandardInput.WriteAsync(prompt);
-                await proc.StandardInput.FlushAsync();
                 // `claude --print` reads its prompt from stdin and blocks until EOF before
-                // processing anything, so close stdin now. Mid-run steering does not reach the
-                // process this way — PumpSteeringAsync queues steered messages for replay on the
-                // next --resume invocation (see its comment).
+                // processing anything, so close stdin now. grok takes its prompt as the -p
+                // argument and reads nothing from stdin — just close it. Mid-run steering does
+                // not reach the process this way — PumpSteeringAsync queues steered messages
+                // for replay on the next --resume invocation (see its comment).
+                if (!isGrok)
+                {
+                    await proc.StandardInput.WriteAsync(prompt);
+                    await proc.StandardInput.FlushAsync();
+                }
                 proc.StandardInput.Close();
             }
             catch (Exception ex)
@@ -474,7 +512,7 @@ public sealed class ClaudeRunner
                 ? new CancellationTokenSource(maxDuration)
                 : new CancellationTokenSource();
             using var linkedWithTimeout = CancellationTokenSource.CreateLinkedTokenSource(linked.Token, timeoutCts.Token);
-            var stdoutTask = ClaudeStreamPump.PumpStdoutAsync(proc, run, linkedWithTimeout.Token);
+            var stdoutTask = ClaudeStreamPump.PumpStdoutAsync(proc, run, ctx.Provider, linkedWithTimeout.Token);
             var stderrTask = ClaudeStreamPump.PumpStderrAsync(proc, run, linkedWithTimeout.Token);
             var steerTask = ClaudeStreamPump.PumpSteeringAsync(proc, run, linkedWithTimeout.Token);
 

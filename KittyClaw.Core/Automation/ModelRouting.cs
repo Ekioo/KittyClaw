@@ -1,0 +1,56 @@
+namespace KittyClaw.Core.Automation;
+
+/// <summary>Which CLI runs the agent subprocess for a dispatch.</summary>
+public enum CliProvider
+{
+    /// <summary>The `claude` CLI — Anthropic cloud models, and Ollama local models via ANTHROPIC_BASE_URL.</summary>
+    Claude,
+    /// <summary>xAI's Grok Build CLI (`grok`) — used when a grok-* model is selected and the CLI is installed.</summary>
+    Grok,
+}
+
+/// <summary>
+/// Single place that decides, from an effective model name, which CLI provider runs the
+/// dispatch, which extra environment the subprocess needs, and whether the selection is
+/// invalid. Used by both the automation dispatcher (ActionExecutor) and the chat endpoint.
+/// </summary>
+public static class ModelRouting
+{
+    public sealed record Resolution(
+        CliProvider Provider,
+        IReadOnlyDictionary<string, string>? ExtraEnv,
+        string? Error);
+
+    /// <summary>
+    /// Routing rules:
+    /// - null or claude-* → claude CLI, no extra env.
+    /// - grok-* → grok CLI when installed; otherwise an error (run fails without launching).
+    /// - anything else → Ollama local model through the claude CLI: requires the project's
+    ///   LocalModelBaseUrl and injects the ANTHROPIC_* env overrides.
+    /// </summary>
+    public static Resolution Resolve(string? model, string? localModelBaseUrl)
+    {
+        if (model is null || model.StartsWith("claude-", StringComparison.OrdinalIgnoreCase))
+            return new Resolution(CliProvider.Claude, null, null);
+
+        if (GrokCli.IsGrokModel(model))
+        {
+            if (!GrokCli.IsInstalled)
+                return new Resolution(CliProvider.Claude, null,
+                    $"Grok model '{model}': the Grok Build CLI (grok) was not found on this machine. " +
+                    "Install it from https://x.ai/cli or point KITTYCLAW_GROK_BIN at the binary.");
+            return new Resolution(CliProvider.Grok, null, null);
+        }
+
+        if (string.IsNullOrWhiteSpace(localModelBaseUrl))
+            return new Resolution(CliProvider.Claude, null,
+                $"Local model '{model}': LocalModelBaseUrl is not configured for this project");
+
+        return new Resolution(CliProvider.Claude, new Dictionary<string, string>
+        {
+            ["ANTHROPIC_BASE_URL"] = localModelBaseUrl.TrimEnd('/'),
+            ["ANTHROPIC_AUTH_TOKEN"] = "ollama",
+            ["ANTHROPIC_MODEL"] = model,
+        }, null);
+    }
+}

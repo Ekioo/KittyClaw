@@ -75,7 +75,9 @@ internal static class ProcessLifecycleManager
     {
         var psi = new ProcessStartInfo
         {
-            FileName = _claudeBinary.Value,
+            // Grok dispatches run xAI's Grok Build CLI instead of claude; GrokCli resolved the
+            // binary at routing time (a Grok provider is only ever set when it is installed).
+            FileName = ctx.Provider == CliProvider.Grok ? GrokCli.Binary ?? "grok" : _claudeBinary.Value,
             WorkingDirectory = ctx.WorkspacePath,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,

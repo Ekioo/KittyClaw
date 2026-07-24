@@ -51,6 +51,15 @@
                             <option value="@m">@m</option>
                         }
                     </optgroup>
+                    @if (_grokModels.Count > 0)
+                    {
+                        <optgroup label="Grok">
+                            @foreach (var m in _grokModels)
+                            {
+                                <option value="@m">@m</option>
+                            }
+                        </optgroup>
+                    }
                     @if (_ollamaModels.Count > 0)
                     {
                         <optgroup label="Local (Ollama)">
@@ -208,7 +217,8 @@
     private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
 
     private List<string> _ollamaModels = new();
-    private List<string> AllModels => ClaudeModels.Concat(_ollamaModels).ToList();
+    private List<string> _grokModels = new();
+    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_ollamaModels).ToList();
 
     protected override async Task OnInitializedAsync()
     {
@@ -219,6 +229,7 @@
                 var http = HttpFactory.CreateClient();
                 http.BaseAddress = new Uri(Nav.BaseUri);
                 _ollamaModels = await http.GetFromJsonAsync<List<string>>($"/api/projects/{Slug}/ollama-models") ?? new();
+                _grokModels = await http.GetFromJsonAsync<List<string>>("/api/grok-models") ?? new();
             }
             catch { /* non-blocking */ }
         }

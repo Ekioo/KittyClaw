@@ -6,7 +6,10 @@ namespace KittyClaw.Core.Automation;
 /// <summary>Pumps stdout, stderr, and steering stdin between a claude subprocess and an AgentRun.</summary>
 internal static class ClaudeStreamPump
 {
-    internal static async Task PumpStdoutAsync(Process proc, AgentRun run, CancellationToken ct)
+    internal static Task PumpStdoutAsync(Process proc, AgentRun run, CancellationToken ct) =>
+        PumpStdoutAsync(proc, run, CliProvider.Claude, ct);
+
+    internal static async Task PumpStdoutAsync(Process proc, AgentRun run, CliProvider provider, CancellationToken ct)
     {
         var reader = proc.StandardOutput;
         try
@@ -26,6 +29,11 @@ internal static class ClaudeStreamPump
                 try
                 {
                     using var doc = JsonDocument.Parse(line);
+                    // Grok's streaming-json events use different type names and shapes; the
+                    // adapter normalizes the ones we understand to claude-style kinds. Lines it
+                    // doesn't recognize fall through to the generic handling below.
+                    if (provider == CliProvider.Grok && GrokStreamAdapter.TryMap(doc.RootElement, line, run))
+                        continue;
                     var kind = doc.RootElement.TryGetProperty("type", out var t) ? t.GetString() ?? "event" : "event";
                     // For assistant message events: emit the assistant text first, then separate tool_use events
                     if (kind == "assistant" &&

@@ -60,30 +60,29 @@ public static partial class Endpoints
             var project = await ps.GetProjectAsync(slug);
             if (project is null) return Results.NotFound();
 
-            // Resolve model for Ollama dispatch
+            // Resolve which CLI runs this chat turn (claude, claude+Ollama env, or grok).
             string? effectiveModel = null;
             IDictionary<string, string>? modelEnv = null;
+            var provider = CliProvider.Claude;
+            string? modelValidationError = null;
             if (!string.IsNullOrEmpty(req.Model))
             {
-                if (req.Model.StartsWith("claude-"))
+                var routing = ModelRouting.Resolve(req.Model, project.LocalModelBaseUrl);
+                if (routing.Error is null)
                 {
                     effectiveModel = req.Model;
+                    provider = routing.Provider;
+                    modelEnv = routing.ExtraEnv is null ? null : new Dictionary<string, string>(routing.ExtraEnv);
                 }
-                else
+                else if (GrokCli.IsGrokModel(req.Model))
                 {
-                    var baseUrl = project.LocalModelBaseUrl;
-                    if (!string.IsNullOrWhiteSpace(baseUrl))
-                    {
-                        effectiveModel = req.Model;
-                        modelEnv = new Dictionary<string, string>
-                        {
-                            ["ANTHROPIC_BASE_URL"] = baseUrl.TrimEnd('/'),
-                            ["ANTHROPIC_AUTH_TOKEN"] = "ollama",
-                            ["ANTHROPIC_MODEL"] = req.Model,
-                        };
-                    }
-                    // If no base URL configured, model stays null (CLI default)
+                    // Surface "grok CLI not installed" in the chat stream rather than silently
+                    // answering with the default claude model.
+                    effectiveModel = req.Model;
+                    modelValidationError = routing.Error;
                 }
+                // Ollama model without a configured base URL: historical chat behavior —
+                // model stays null and the turn runs on the CLI default.
             }
 
             var target = string.IsNullOrWhiteSpace(req.Target) ? "owner-chat" : req.Target;
@@ -205,6 +204,8 @@ public static partial class Endpoints
                     InlineSkillContent = ticketContext is null ? sb.ToString() : sb.ToString() + "\n" + ticketContext,
                     ExtraContext = req.Message,
                     Model = effectiveModel,
+                    Provider = provider,
+                    ModelValidationError = modelValidationError,
                     Env = modelEnv ?? new Dictionary<string, string>(),
                     MaxTurns = 20,
                     ConcurrencyGroup = $"chat:{slug}:{target}",
@@ -268,6 +269,8 @@ public static partial class Endpoints
                     InlineSkillContent = inlineContent,
                     ExtraContext = req.Message,
                     Model = effectiveModel,
+                    Provider = provider,
+                    ModelValidationError = modelValidationError,
                     Env = modelEnv ?? new Dictionary<string, string>(),
                     MaxTurns = 20,
                     ConcurrencyGroup = $"chat:{slug}:{target}",

@@ -80,6 +80,8 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "GET /api/projects/{slug}/skills",
         // Ollama
         "GET /api/projects/{slug}/ollama-models",
+        // Grok
+        "GET /api/grok-models",
         // Automations
         "GET /api/projects/{slug}/automations",
         "PUT /api/projects/{slug}/automations",
@@ -169,6 +171,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         ["POST /api/browse/folder"] = "Browse",
         ["GET /api/projects/{slug}/skills"] = "Automations",
         ["GET /api/projects/{slug}/ollama-models"] = "Ollama",
+        ["GET /api/grok-models"] = "Grok",
         ["GET /api/projects/{slug}/automations"] = "Automations",
         ["PUT /api/projects/{slug}/automations"] = "Automations",
         ["POST /api/projects/{slug}/automations/reload"] = "Automations",

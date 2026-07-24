@@ -20,5 +20,6 @@ Runs an agent as a `claude` CLI subprocess, streams its stdout/stderr in near-re
 
 ## External dependencies
 - `claude` CLI on PATH — the actual agent runtime.
+- Optionally the `grok` CLI — runs the dispatch instead of claude when a `grok-*` model is selected (see [Grok Build](./grok-build.md)).
 - Workspace-side `.agents/<agent>/` files (skill, memory, preamble) seeded by the [project template](./project-template.md).
 - [Storage](./storage.md) — run snapshots persisted under `%APPDATA%/KittyClaw/runs/`.

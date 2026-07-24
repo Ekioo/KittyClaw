@@ -21,5 +21,6 @@ public static partial class Endpoints
         MapImages(api);
         MapDashboard(api);
         MapOllama(api);
+        MapGrok(api);
     }
 }

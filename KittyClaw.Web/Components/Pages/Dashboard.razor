@@ -261,6 +261,15 @@ else
                                     <option value="@m">@m</option>
                                 }
                             </optgroup>
+                            @if (_grokModels.Count > 0)
+                            {
+                                <optgroup label="Grok">
+                                    @foreach (var m in _grokModels)
+                                    {
+                                        <option value="@m">@m</option>
+                                    }
+                                </optgroup>
+                            }
                             @if (_ollamaModels.Count > 0)
                             {
                                 <optgroup label="Local (Ollama)">
@@ -301,8 +310,9 @@ else
     private Project? _project;
     private string _workspace = "";
     private List<string> _ollamaModels = new();
+    private List<string> _grokModels = new();
     private static readonly IReadOnlyList<string> AvailableModels = ClaudeModelCatalog.Models;
-    private List<string> AllModels => AvailableModels.Concat(_ollamaModels).ToList();
+    private List<string> AllModels => AvailableModels.Concat(_grokModels).Concat(_ollamaModels).ToList();
 
     private List<DashboardTileLayout> _tiles = [];
     private List<string> _availableSlugs = [];
@@ -354,13 +364,18 @@ else
 
     private async Task LoadOllamaModelsAsync()
     {
+        var http = HttpFactory.CreateClient();
+        http.BaseAddress = new Uri(Navigation.BaseUri);
         try
         {
-            var http = HttpFactory.CreateClient();
-            http.BaseAddress = new Uri(Navigation.BaseUri);
             _ollamaModels = await http.GetFromJsonAsync<List<string>>($"/api/projects/{Slug}/ollama-models") ?? new();
         }
         catch { _ollamaModels = new(); }
+        try
+        {
+            _grokModels = await http.GetFromJsonAsync<List<string>>("/api/grok-models") ?? new();
+        }
+        catch { _grokModels = new(); }
     }
 
     private static string TileId(string tileSlug) =>
@@ -855,6 +870,7 @@ else
                     if (!string.IsNullOrWhiteSpace(sidecar.Prompt))
                     {
                         var output = new StringBuilder();
+                        var routing = ModelRouting.Resolve(sidecar.Model, _project?.LocalModelBaseUrl);
                         var ctx = new ClaudeRunContext
                         {
                             ProjectSlug = Slug,
@@ -865,6 +881,9 @@ else
                             MaxTurns = 5,
                             ConcurrencyGroup = $"dashboard-{Slug}-{SanitizeName(tileSlug)}",
                             Model = sidecar.Model,
+                            Provider = routing.Provider,
+                            ModelValidationError = routing.Error,
+                            Env = routing.ExtraEnv is null ? new Dictionary<string, string>() : new Dictionary<string, string>(routing.ExtraEnv),
                             SessionScope = "dashboard",
                             PersistSession = false,
                             PresetRunId = runId,

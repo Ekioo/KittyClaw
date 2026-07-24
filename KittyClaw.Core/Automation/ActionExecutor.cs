@@ -369,7 +369,6 @@ internal sealed class ActionExecutor
 
         var effectiveModel = a.Model;
         var effectiveEnv = a.Env;
-        string? ollamaValidationError = null;
 
         // Resolve model from member's DefaultModel if action model is null
         if (effectiveModel is null)
@@ -379,23 +378,13 @@ internal sealed class ActionExecutor
             effectiveModel = string.IsNullOrWhiteSpace(memberDefault) ? null : memberDefault;
         }
 
-        if (effectiveModel is not null && !effectiveModel.StartsWith("claude-"))
+        // Decide which CLI runs this dispatch (claude, claude+Ollama env, or grok).
+        var routing = ModelRouting.Resolve(effectiveModel, project?.LocalModelBaseUrl);
+        if (routing.ExtraEnv is not null)
         {
-            var baseUrl = project?.LocalModelBaseUrl;
-            if (string.IsNullOrWhiteSpace(baseUrl))
-            {
-                ollamaValidationError = $"Local model '{effectiveModel}': LocalModelBaseUrl is not configured for this project";
-            }
-            else
-            {
-                var env = new Dictionary<string, string>(effectiveEnv)
-                {
-                    ["ANTHROPIC_BASE_URL"] = baseUrl,
-                    ["ANTHROPIC_AUTH_TOKEN"] = "ollama",
-                    ["ANTHROPIC_MODEL"] = effectiveModel,
-                };
-                effectiveEnv = env;
-            }
+            var env = new Dictionary<string, string>(effectiveEnv);
+            foreach (var kv in routing.ExtraEnv) env[kv.Key] = kv.Value;
+            effectiveEnv = env;
         }
 
         var runCtx = new ClaudeRunContext
@@ -412,10 +401,12 @@ internal sealed class ActionExecutor
             LockTimeoutMinutes = a.LockTimeoutMinutes,
             Env = effectiveEnv,
             Model = effectiveModel,
-            FallbackModel = fallbackModel,
+            Provider = routing.Provider,
+            // The project fallback model is a claude-* id — meaningless to a grok subprocess.
+            FallbackModel = routing.Provider == CliProvider.Claude ? fallbackModel : null,
             ExtraContext = a.Context,
             RetryOnResumeFailure = true,
-            OllamaValidationError = ollamaValidationError,
+            ModelValidationError = routing.Error,
             MaxRunDuration = TimeSpan.FromMinutes(30),
         };
         _sessions.SetLastDispatched(rt.Workspace!, agentName, DateTime.UtcNow);

@@ -146,6 +146,7 @@ public static partial class Endpoints
             }
 
             var newRunId = Guid.NewGuid().ToString("N");
+            var routing = ModelRouting.Resolve(run.Model, project.LocalModelBaseUrl);
             var ctx = new ClaudeRunContext
             {
                 ProjectSlug = slug,
@@ -157,7 +158,10 @@ public static partial class Endpoints
                 TicketStatus = ticketStatus,
                 ConcurrencyGroup = run.ConcurrencyGroup,
                 Model = run.Model,
-                FallbackModel = project.FallbackModel,
+                Provider = routing.Provider,
+                ModelValidationError = routing.Error,
+                Env = routing.ExtraEnv is null ? new Dictionary<string, string>() : new Dictionary<string, string>(routing.ExtraEnv),
+                FallbackModel = routing.Provider == CliProvider.Claude ? project.FallbackModel : null,
                 RetryOnResumeFailure = true,
                 PresetRunId = newRunId,
                 MaxRunDuration = TimeSpan.FromMinutes(30),

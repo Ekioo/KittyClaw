@@ -36,9 +36,10 @@ At dispatch time, `ActionExecutor` resolves the model in this order:
 2. If the action `model` is `null` → use the member's `DefaultModel`.
 3. If the member has no `DefaultModel` → fall back to the project's `LocalModelName`.
 
-Then it checks the effective model name:
+Then it checks the effective model name (via `ModelRouting.Resolve`):
 
 - If it starts with `claude-` → sent to the Anthropic cloud API.
+- If it starts with `grok-` → dispatched to the Grok Build CLI (see [Grok Build](./grok-build.md)).
 - Otherwise → treated as an Ollama model. The executor injects into the `claude` subprocess environment:
 
 | Variable | Value |

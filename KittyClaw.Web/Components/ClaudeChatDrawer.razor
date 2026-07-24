@@ -52,6 +52,15 @@
                         <option value="@m">@m</option>
                     }
                 </optgroup>
+                @if (_grokModels.Count > 0)
+                {
+                    <optgroup label="Grok">
+                        @foreach (var m in _grokModels)
+                        {
+                            <option value="@m">@m</option>
+                        }
+                    </optgroup>
+                }
                 @if (_ollamaModels.Count > 0)
                 {
                     <optgroup label="Local (Ollama)">
@@ -241,6 +250,7 @@
     private string? _sessionModel; // model used by the current session (for detecting changes)
     private string? _streamingText;
     private List<string> _ollamaModels = new();
+    private List<string> _grokModels = new();
     private const string DefaultModel = ClaudeModelCatalog.DefaultModel;
     private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
 
@@ -304,12 +314,17 @@
     private async Task FetchOllamaModelsAsync()
     {
         if (string.IsNullOrWhiteSpace(ProjectSlug)) return;
+        using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
         try
         {
-            using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
             _ollamaModels = await http.GetFromJsonAsync<List<string>>($"/api/projects/{ProjectSlug}/ollama-models") ?? new();
         }
         catch { _ollamaModels = new(); }
+        try
+        {
+            _grokModels = await http.GetFromJsonAsync<List<string>>("/api/grok-models") ?? new();
+        }
+        catch { _grokModels = new(); }
     }
 
     private async Task EnterConversationAsync(ChatTarget target)

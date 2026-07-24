@@ -128,6 +128,15 @@ else
                                                 <option value="@model">@model</option>
                                             }
                                         </optgroup>
+                                        @if (_grokModels.Count > 0)
+                                        {
+                                            <optgroup label="Grok">
+                                                @foreach (var model in _grokModels)
+                                                {
+                                                    <option value="@model">@model</option>
+                                                }
+                                            </optgroup>
+                                        }
                                         @if (_discoveredModels.Count > 0)
                                         {
                                             <optgroup label="Local (Ollama)">
@@ -350,9 +359,10 @@ else
     private string _localModelBaseUrl = "";
     private bool _discoveringLocal;
     private List<string> _discoveredModels = new();
+    private List<string> _grokModels = new();
     private string? _localModelsError;
     private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
-    private List<string> AllModels => ClaudeModels.Concat(_discoveredModels).ToList();
+    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_discoveredModels).ToList();
 
     private List<Member> _members = new();
     private int? _editingMemberId;
@@ -390,6 +400,8 @@ else
         await ReloadAllAsync();
         await ProbeBrowseAsync();
         if (!string.IsNullOrWhiteSpace(_localModelBaseUrl)) await DiscoverLocalModels();
+        try { _grokModels = (await KittyClaw.Core.Automation.GrokCli.ListModelsAsync()).ToList(); }
+        catch { _grokModels = new(); }
     }
 
     private void OnLanguageChanged() => InvokeAsync(StateHasChanged);

@@ -19,7 +19,7 @@
       "runtimeArgs": [
         "-NoProfile",
         "-Command",
-        "$env:KITTYCLAW_DATA_DIR = \"$env:APPDATA\\KittyClaw-debug\"; dotnet build KittyClaw.ClaudeMock -v q | Out-Null; $env:KITTYCLAW_CLAUDE_BIN = (Resolve-Path 'KittyClaw.ClaudeMock\\bin\\Debug\\net10.0\\claude.exe').Path; $env:ASPNETCORE_ENVIRONMENT = 'Development'; dotnet run --project KittyClaw.Web --no-launch-profile --urls http://localhost:5232"
+        "$env:KITTYCLAW_DATA_DIR = \"$env:APPDATA\\KittyClaw-debug\"; dotnet build KittyClaw.ClaudeMock -v q | Out-Null; $env:KITTYCLAW_CLAUDE_BIN = (Resolve-Path 'KittyClaw.ClaudeMock\\bin\\Debug\\net10.0\\claude.exe').Path; $env:KITTYCLAW_GROK_BIN = $env:KITTYCLAW_CLAUDE_BIN; $env:ASPNETCORE_ENVIRONMENT = 'Development'; dotnet run --project KittyClaw.Web --no-launch-profile --urls http://localhost:5232"
       ],
       "port": 5232
     }
