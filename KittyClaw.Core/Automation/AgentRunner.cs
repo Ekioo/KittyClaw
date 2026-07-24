@@ -22,9 +22,19 @@ public sealed class AgentRunContext
     /// is selected and the Grok Build CLI is installed; everything else runs the claude CLI.</summary>
     public CliProvider Provider { get; init; } = CliProvider.Claude;
 
-    /// <summary>Project-wide fallback model. If a run hits a quota / usage-limit error from the claude CLI,
-    /// the runner retries once with this model in the same AgentRun. Null disables the fallback.</summary>
+    /// <summary>Project-wide fallback model. If a run hits a quota / usage-limit error,
+    /// the runner retries once with this model in the same AgentRun. Null disables the fallback.
+    /// Any provider is allowed: the dispatcher resolves <see cref="FallbackProvider"/> and
+    /// <see cref="FallbackEnv"/> via ModelRouting so the retry runs on the right CLI.</summary>
     public string? FallbackModel { get; init; }
+
+    /// <summary>CLI provider for <see cref="FallbackModel"/>, resolved by the dispatcher.</summary>
+    public CliProvider FallbackProvider { get; init; } = CliProvider.Claude;
+
+    /// <summary>Subprocess env for the fallback retry (base action env + the fallback model's routing
+    /// extras — NOT the primary model's, so e.g. an Ollama primary's ANTHROPIC_* overrides don't leak
+    /// into a claude fallback). Null falls back to <see cref="Env"/>.</summary>
+    public IDictionary<string, string>? FallbackEnv { get; init; }
 
     public string? ExtraContext { get; init; }
     public string? InlineSkillContent { get; init; }
@@ -46,6 +56,8 @@ public sealed class AgentRunContext
         Model = Model,
         Provider = Provider,
         FallbackModel = FallbackModel,
+        FallbackProvider = FallbackProvider,
+        FallbackEnv = FallbackEnv,
         ExtraContext = steerText,
         InlineSkillContent = InlineSkillContent,
         SessionScope = SessionScope,
@@ -55,6 +67,37 @@ public sealed class AgentRunContext
         ChatTarget = ChatTarget,
         PendingSteerMessages = null,
         ImagePaths = null,
+        MaxRunDuration = MaxRunDuration,
+        LockTimeoutMinutes = LockTimeoutMinutes,
+    };
+
+    /// <summary>Returns a copy of this context for the quota-fallback retry: the fallback model
+    /// becomes the primary (with its own provider and env), and the fallback itself is cleared
+    /// so the retry cannot loop.</summary>
+    internal AgentRunContext WithFallback() => new AgentRunContext
+    {
+        ProjectSlug = ProjectSlug,
+        WorkspacePath = WorkspacePath,
+        AgentName = AgentName,
+        SkillFile = SkillFile,
+        TicketId = TicketId,
+        TicketTitle = TicketTitle,
+        TicketStatus = TicketStatus,
+        MaxTurns = MaxTurns,
+        ConcurrencyGroup = ConcurrencyGroup,
+        Env = FallbackEnv ?? Env,
+        Model = FallbackModel,
+        Provider = FallbackProvider,
+        FallbackModel = null,
+        ExtraContext = ExtraContext,
+        InlineSkillContent = InlineSkillContent,
+        SessionScope = SessionScope,
+        RetryOnResumeFailure = RetryOnResumeFailure,
+        PersistSession = PersistSession,
+        OnEventHook = OnEventHook,
+        ChatTarget = ChatTarget,
+        PendingSteerMessages = PendingSteerMessages,
+        ImagePaths = ImagePaths,
         MaxRunDuration = MaxRunDuration,
         LockTimeoutMinutes = LockTimeoutMinutes,
     };
@@ -195,7 +238,7 @@ public sealed class AgentRunner
 
         try
         {
-            var attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume, modelOverride: null, ct);
+            var attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume, ct);
             if (attempt.Cancelled) return run;
 
             // If the agent invoked AskUserQuestion, wait for the user's answer via the SteeringQueue.
@@ -224,7 +267,7 @@ public sealed class AgentRunner
                 run.SessionId = sessionId;
                 _sessions.SetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId, sessionId);
 
-                attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume: false, modelOverride: null, ct);
+                attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume: false, ct);
                 if (attempt.Cancelled) return run;
             }
 
@@ -246,7 +289,9 @@ public sealed class AgentRunner
                 run.SessionId = sessionId;
                 if (ctx.PersistSession)
                     _sessions.SetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId, sessionId);
-                attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume: false, modelOverride: ctx.FallbackModel, ct);
+                // The fallback may live on a different provider (e.g. claude primary → grok
+                // fallback): WithFallback swaps in the fallback model, provider, and env.
+                attempt = await SpawnAndWaitAsync(ctx.WithFallback(), run, skillContent, sessionId, isResume: false, ct);
                 if (attempt.Cancelled) return run;
             }
 
@@ -259,7 +304,7 @@ public sealed class AgentRunner
                 run.Push(new StreamEvent(DateTime.UtcNow, "steer_replay",
                     $"Replaying {steers.Count} injected message(s) from previous turn"));
                 var replayCtx = ctx.WithChatReplay(steerText);
-                attempt = await SpawnAndWaitAsync(replayCtx, run, skillContent, sessionId, isResume: true, modelOverride: null, ct);
+                attempt = await SpawnAndWaitAsync(replayCtx, run, skillContent, sessionId, isResume: true, ct);
                 if (attempt.Cancelled) return run;
             }
 
@@ -292,6 +337,8 @@ public sealed class AgentRunner
                     Model = ctx.Model,
                     Provider = ctx.Provider,
                     FallbackModel = ctx.FallbackModel,
+                    FallbackProvider = ctx.FallbackProvider,
+                    FallbackEnv = ctx.FallbackEnv,
                     Env = ctx.Env,
                     PendingSteerMessages = run.PendingSteerMessages,
                     MaxRunDuration = ctx.MaxRunDuration,
@@ -389,12 +436,12 @@ public sealed class AgentRunner
 
     private async Task<SpawnResult> SpawnAndWaitAsync(
         AgentRunContext ctx, AgentRun run, string skillContent,
-        string sessionId, bool isResume, string? modelOverride, CancellationToken ct)
+        string sessionId, bool isResume, CancellationToken ct)
     {
         var prompt = await BuildPromptAsync(ctx, skillContent, isResume, ct);
         var sessionName = ctx.TicketId is not null ? $"{ctx.AgentName} #{ctx.TicketId}" : ctx.AgentName;
 
-        var effectiveModel = modelOverride ?? ctx.Model;
+        var effectiveModel = ctx.Model;
         var isGrok = ctx.Provider == CliProvider.Grok;
 
         List<string> args;

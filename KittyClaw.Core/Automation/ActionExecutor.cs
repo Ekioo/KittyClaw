@@ -387,6 +387,26 @@ internal sealed class ActionExecutor
             effectiveEnv = env;
         }
 
+        // The quota fallback can be any available model — resolve its own provider/env. An
+        // unusable fallback (grok CLI missing, Ollama without base URL) disables the fallback
+        // rather than failing the primary run. The fallback env starts from the raw action env
+        // so the primary's routing extras (e.g. Ollama's ANTHROPIC_*) don't leak into it.
+        var fallbackRouting = fallbackModel is null ? null : ModelRouting.Resolve(fallbackModel, project?.LocalModelBaseUrl);
+        if (fallbackRouting?.Error is not null)
+        {
+            _logger.LogWarning("Fallback model '{Fallback}' is unusable ({Error}) — fallback disabled for this run",
+                fallbackModel, fallbackRouting.Error);
+            fallbackModel = null;
+            fallbackRouting = null;
+        }
+        Dictionary<string, string>? fallbackEnv = null;
+        if (fallbackModel is not null)
+        {
+            fallbackEnv = new Dictionary<string, string>(a.Env);
+            if (fallbackRouting?.ExtraEnv is not null)
+                foreach (var kv in fallbackRouting.ExtraEnv) fallbackEnv[kv.Key] = kv.Value;
+        }
+
         var runCtx = new AgentRunContext
         {
             ProjectSlug = rt.Slug,
@@ -402,8 +422,9 @@ internal sealed class ActionExecutor
             Env = effectiveEnv,
             Model = effectiveModel,
             Provider = routing.Provider,
-            // The project fallback model is a claude-* id — meaningless to a grok subprocess.
-            FallbackModel = routing.Provider == CliProvider.Claude ? fallbackModel : null,
+            FallbackModel = fallbackModel,
+            FallbackProvider = fallbackRouting?.Provider ?? CliProvider.Claude,
+            FallbackEnv = fallbackEnv,
             ExtraContext = a.Context,
             RetryOnResumeFailure = true,
             ModelValidationError = routing.Error,

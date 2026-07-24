@@ -124,6 +124,33 @@ public class GrokSupportTests
         }
     }
 
+    [Fact]
+    public void WithFallback_SwapsModelProviderAndEnv_AndClearsFallback()
+    {
+        var ctx = new AgentRunContext
+        {
+            ProjectSlug = "p",
+            WorkspacePath = "w",
+            AgentName = "a",
+            SkillFile = "a/SKILL.md",
+            Model = "qwen3-coder:30b",
+            Provider = CliProvider.Claude,
+            Env = new Dictionary<string, string> { ["ANTHROPIC_BASE_URL"] = "http://localhost:11434" },
+            FallbackModel = "grok-4.5",
+            FallbackProvider = CliProvider.Grok,
+            FallbackEnv = new Dictionary<string, string>(),
+        };
+
+        var fb = ctx.WithFallback();
+
+        Assert.Equal("grok-4.5", fb.Model);
+        Assert.Equal(CliProvider.Grok, fb.Provider);
+        // The primary's Ollama env overrides must not leak into the fallback subprocess.
+        Assert.Empty(fb.Env);
+        // The retry must not chain into another fallback.
+        Assert.Null(fb.FallbackModel);
+    }
+
     // ── GrokCli helpers ─────────────────────────────────────────────────────
 
     [Theory]

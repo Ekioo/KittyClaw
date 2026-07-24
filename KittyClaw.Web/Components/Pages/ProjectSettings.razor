@@ -64,9 +64,34 @@ else
             <div class="settings-row">
                 <select class="settings-input" style="max-width:340px" @bind="_fallbackModel">
                     <option value="">@L["FallbackDisabled"]</option>
-                    <option value="claude-opus-4-8">@L["FallbackOpus48"]</option>
-                    <option value="claude-opus-4-8-1m">@L["FallbackOpus48_1m"]</option>
-                    <option value="claude-opus-4-7">@L["FallbackOpus47"]</option>
+                    <optgroup label="Claude">
+                        @foreach (var model in ClaudeModels)
+                        {
+                            <option value="@model">@model</option>
+                        }
+                    </optgroup>
+                    @if (_grokModels.Count > 0)
+                    {
+                        <optgroup label="Grok">
+                            @foreach (var model in _grokModels)
+                            {
+                                <option value="@model">@model</option>
+                            }
+                        </optgroup>
+                    }
+                    @if (_discoveredModels.Count > 0)
+                    {
+                        <optgroup label="Local (Ollama)">
+                            @foreach (var model in _discoveredModels)
+                            {
+                                <option value="@model">@model</option>
+                            }
+                        </optgroup>
+                    }
+                    @if (!string.IsNullOrEmpty(_fallbackModel) && !AllModels.Contains(_fallbackModel))
+                    {
+                        <option value="@_fallbackModel">@_fallbackModel</option>
+                    }
                 </select>
                 <button class="settings-primary" @onclick="SaveFallbackModel" disabled="@_savingFallback">
                     @(_savingFallback ? "…" : L["Save"])

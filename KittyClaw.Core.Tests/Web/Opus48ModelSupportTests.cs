@@ -58,25 +58,24 @@ public class Opus48ModelSupportTests
         Assert.Contains(ClaudeModelCatalog.DefaultModel, ClaudeModelCatalog.Models);
     }
 
-    // ProjectSettings keeps a separate, hardcoded "fallback model" dropdown.
+    // The fallback-model dropdown is no longer hardcoded to Opus ids: it renders the full
+    // ClaudeModelCatalog (which the Catalog_* facts above pin) plus the discovered Grok and
+    // Ollama models. Assert the select is catalog-driven rather than hardcoded.
 
     [Fact]
-    public void ProjectSettings_FallbackSelect_ContainsOpus48Option()
+    public void ProjectSettings_FallbackSelect_IsCatalogDriven()
     {
-        Assert.Contains("claude-opus-4-8", ProjectSettings());
+        var src = ProjectSettings();
+        Assert.Contains("@bind=\"_fallbackModel\"", src);
+        Assert.DoesNotContain("FallbackOpus48", src);
     }
 
-    // Localization keys present in both languages
+    // The old per-option localization keys must be gone from both languages.
 
     [Fact]
-    public void Localization_En_ContainsFallbackOpus48Key()
+    public void Localization_HasNoObsoleteFallbackOptionKeys()
     {
-        Assert.Contains("FallbackOpus48", LocalizationEn());
-    }
-
-    [Fact]
-    public void Localization_Fr_ContainsFallbackOpus48Key()
-    {
-        Assert.Contains("FallbackOpus48", LocalizationFr());
+        Assert.DoesNotContain("FallbackOpus", LocalizationEn());
+        Assert.DoesNotContain("FallbackOpus", LocalizationFr());
     }
 }

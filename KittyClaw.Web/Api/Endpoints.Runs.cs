@@ -147,6 +147,11 @@ public static partial class Endpoints
 
             var newRunId = Guid.NewGuid().ToString("N");
             var routing = ModelRouting.Resolve(run.Model, project.LocalModelBaseUrl);
+            // Same cross-provider fallback resolution as ActionExecutor: an unusable fallback
+            // is dropped rather than failing the retry.
+            var fallbackModel = project.FallbackModel;
+            var fallbackRouting = fallbackModel is null ? null : ModelRouting.Resolve(fallbackModel, project.LocalModelBaseUrl);
+            if (fallbackRouting?.Error is not null) { fallbackModel = null; fallbackRouting = null; }
             var ctx = new AgentRunContext
             {
                 ProjectSlug = slug,
@@ -161,7 +166,9 @@ public static partial class Endpoints
                 Provider = routing.Provider,
                 ModelValidationError = routing.Error,
                 Env = routing.ExtraEnv is null ? new Dictionary<string, string>() : new Dictionary<string, string>(routing.ExtraEnv),
-                FallbackModel = routing.Provider == CliProvider.Claude ? project.FallbackModel : null,
+                FallbackModel = fallbackModel,
+                FallbackProvider = fallbackRouting?.Provider ?? CliProvider.Claude,
+                FallbackEnv = fallbackRouting?.ExtraEnv is null ? null : new Dictionary<string, string>(fallbackRouting.ExtraEnv),
                 RetryOnResumeFailure = true,
                 PresetRunId = newRunId,
                 MaxRunDuration = TimeSpan.FromMinutes(30),
