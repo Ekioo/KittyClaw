@@ -5,9 +5,8 @@
 # resolved relative to KittyClaw.Web.exe).
 #
 # Versioning: the assembly version is derived automatically by MinVer from the
-# latest `vX.Y.Z` git tag. The release ritual is therefore:
-#     git tag vX.Y.Z && git push --tags
-# No manual edits to any csproj are required. Builds between tags are emitted
+# latest `vX.Y.Z` git tag (full release ritual: see RELEASING.md at the repo
+# root). No manual edits to any csproj are required. Builds between tags are emitted
 # as pre-releases (e.g. 0.7.1-alpha.0.3). MinVer needs full git history, so
 # avoid `git clone --depth 1` when invoking this script.
 [CmdletBinding()]
