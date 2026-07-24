@@ -16,7 +16,7 @@ public static partial class Endpoints
 
             var targets = new List<ChatTargetDto>
             {
-                new("owner-chat", "Claude", "claude"),
+                new("owner-chat", "KittyClaw", "claude"),
             };
             var members = await ms.ListMembersAsync(slug);
             foreach (var m in members)
