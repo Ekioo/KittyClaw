@@ -35,7 +35,7 @@ public class ActionExecutorDeferredCommitTests
         var sessions = new SessionRegistry();
         var runs = new AgentRunRegistry();
         var gate = new RunConcurrencyGate(maxConcurrent: 4);
-        var runner = new ClaudeRunner(sessions, runs, gate, NullLogger<ClaudeRunner>.Instance);
+        var runner = new AgentRunner(sessions, runs, gate, NullLogger<AgentRunner>.Instance);
         var cost = new CostTracker();
         var appSettings = new AppSettingsService(dataDir);
         var loc = new LocalizationService(appSettings);

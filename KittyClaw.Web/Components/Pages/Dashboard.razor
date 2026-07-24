@@ -11,7 +11,7 @@
 @inject ProjectService ProjectService
 @inject IHttpClientFactory HttpFactory
 @inject DashboardService DashboardService
-@inject ClaudeRunner ClaudeRunner
+@inject AgentRunner AgentRunner
 @inject DashboardTileGate TileGate
 @inject DashboardScriptRunner ScriptRunner
 @inject AgentRunsState RunsState
@@ -324,7 +324,7 @@ else
 
     // ── Tile refresh runs ──
 
-    // tileSlug → runId of active ClaudeRunner refresh run
+    // tileSlug → runId of active AgentRunner refresh run
     private readonly Dictionary<string, string> _refreshRunIds = new();
     private readonly Dictionary<string, string> _refreshErrors = new();
     private string? _activeRunDrawerId;
@@ -594,7 +594,7 @@ else
             var output = new StringBuilder();
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
 
-            var ctx = new ClaudeRunContext
+            var ctx = new AgentRunContext
             {
                 ProjectSlug = Slug,
                 WorkspacePath = _workspace,
@@ -615,7 +615,7 @@ else
                 },
             };
 
-            var run = await ClaudeRunner.RunAsync(ctx, cts.Token);
+            var run = await AgentRunner.RunAsync(ctx, cts.Token);
             var response = output.ToString().Trim();
 
             if (run.Status == AgentRunStatus.Failed || string.IsNullOrEmpty(response))
@@ -871,7 +871,7 @@ else
                     {
                         var output = new StringBuilder();
                         var routing = ModelRouting.Resolve(sidecar.Model, _project?.LocalModelBaseUrl);
-                        var ctx = new ClaudeRunContext
+                        var ctx = new AgentRunContext
                         {
                             ProjectSlug = Slug,
                             WorkspacePath = _workspace,
@@ -897,7 +897,7 @@ else
                             },
                         };
 
-                        var run = await ClaudeRunner.RunAsync(ctx, gct);
+                        var run = await AgentRunner.RunAsync(ctx, gct);
                         var text = output.ToString().Trim();
 
                         if (sidecar.Template != TileTemplate.Image && !string.IsNullOrWhiteSpace(text))

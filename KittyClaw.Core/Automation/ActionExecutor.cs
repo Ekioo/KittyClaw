@@ -16,7 +16,7 @@ internal sealed class ActionExecutor
     private readonly LabelService _labels;
     private readonly SessionRegistry _sessions;
     private readonly AgentRunRegistry _runs;
-    private readonly ClaudeRunner _runner;
+    private readonly AgentRunner _runner;
     private readonly CostTracker _cost;
     private readonly LocalizationService _loc;
     private readonly ProjectService _projects;
@@ -38,7 +38,7 @@ internal sealed class ActionExecutor
         LabelService labels,
         SessionRegistry sessions,
         AgentRunRegistry runs,
-        ClaudeRunner runner,
+        AgentRunner runner,
         CostTracker cost,
         LocalizationService loc,
         ProjectService projects,
@@ -387,7 +387,7 @@ internal sealed class ActionExecutor
             effectiveEnv = env;
         }
 
-        var runCtx = new ClaudeRunContext
+        var runCtx = new AgentRunContext
         {
             ProjectSlug = rt.Slug,
             WorkspacePath = rt.Workspace!,
@@ -685,7 +685,7 @@ internal sealed class ActionExecutor
             const string scope = "consolidate";
             _sessions.Clear(rt.Workspace!, $"{scope}:{agent}", ticketId: null);
 
-            var runCtx = new ClaudeRunContext
+            var runCtx = new AgentRunContext
             {
                 ProjectSlug = rt.Slug,
                 WorkspacePath = rt.Workspace!,

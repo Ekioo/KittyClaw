@@ -48,7 +48,7 @@ public sealed class AgentRun
 
     /// <summary>Minutes of inactivity after which the concurrency-lock reaper force-releases this run's
     /// group (dead man's switch). Null disables the timeout. Set from the automation's
-    /// <c>lockTimeoutMinutes</c> via <see cref="ClaudeRunContext.LockTimeoutMinutes"/>.</summary>
+    /// <c>lockTimeoutMinutes</c> via <see cref="AgentRunContext.LockTimeoutMinutes"/>.</summary>
     public int? LockTimeoutMinutes { get; init; }
 
     /// <summary>UTC timestamp of the last StreamEvent pushed onto this run — its heartbeat. Updated on

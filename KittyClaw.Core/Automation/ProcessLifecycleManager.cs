@@ -71,7 +71,7 @@ internal static class ProcessLifecycleManager
         return "claude";
     }
 
-    internal static ProcessStartInfo BuildProcessStartInfo(ClaudeRunContext ctx, IList<string> args)
+    internal static ProcessStartInfo BuildProcessStartInfo(AgentRunContext ctx, IList<string> args)
     {
         var psi = new ProcessStartInfo
         {

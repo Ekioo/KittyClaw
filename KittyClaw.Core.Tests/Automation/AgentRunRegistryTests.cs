@@ -69,7 +69,7 @@ public class AgentRunRegistryTests
 }
 
 [Collection("MockClaude")]
-public class ClaudeRunnerPumpExceptionTests
+public class AgentRunnerPumpExceptionTests
 {
     /// <summary>
     /// An OnEvent subscriber that throws must not leave the run in Running state.
@@ -87,10 +87,10 @@ public class ClaudeRunnerPumpExceptionTests
         TestSkillBuilder.Create(workspace, "test-agent", scenario: "default");
 
         var runs = new AgentRunRegistry();
-        var runner = new ClaudeRunner(new SessionRegistry(), runs, new RunConcurrencyGate(1),
-            NullLogger<ClaudeRunner>.Instance);
+        var runner = new AgentRunner(new SessionRegistry(), runs, new RunConcurrencyGate(1),
+            NullLogger<AgentRunner>.Instance);
 
-        var ctx = new ClaudeRunContext
+        var ctx = new AgentRunContext
         {
             ProjectSlug = project.Slug,
             WorkspacePath = workspace,

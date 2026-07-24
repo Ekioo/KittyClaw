@@ -19,11 +19,11 @@ public sealed class DashboardRefreshServicePauseTests
         dashboard = new DashboardService(projects);
         var gate = new DashboardTileGate(projects);
         var scriptRunner = new DashboardScriptRunner(NullLogger<DashboardScriptRunner>.Instance);
-        var runner = new ClaudeRunner(
+        var runner = new AgentRunner(
             new SessionRegistry(),
             new AgentRunRegistry(),
             new RunConcurrencyGate(1),
-            NullLogger<ClaudeRunner>.Instance);
+            NullLogger<AgentRunner>.Instance);
         return new DashboardRefreshService(
             projects, dashboard, runner, gate, scriptRunner,
             NullLogger<DashboardRefreshService>.Instance);

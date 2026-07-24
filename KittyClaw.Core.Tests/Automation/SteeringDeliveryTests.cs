@@ -7,7 +7,7 @@ namespace KittyClaw.Core.Tests.Automation;
 // Tests for steering message delivery.
 //
 // Root cause of the bug (ticket #126):
-//   ClaudeRunner closes stdin immediately after writing the initial prompt
+//   AgentRunner closes stdin immediately after writing the initial prompt
 //   (SpawnAndWaitAsync line ~290), BEFORE PumpSteeringAsync starts. When a
 //   steering message arrives, PumpSteeringAsync checks CanWrite — which is
 //   false — and silently drops the message. The comment "queued for replay on
@@ -16,7 +16,7 @@ namespace KittyClaw.Core.Tests.Automation;
 // Required fix (drives the tests below):
 //   1. AgentRun.PendingSteerMessages — a list populated by PumpSteeringAsync
 //      when a message cannot be written to stdin.
-//   2. ClaudeRunContext.PendingSteerMessages — caller-supplied list of messages
+//   2. AgentRunContext.PendingSteerMessages — caller-supplied list of messages
 //      to prepend to the next chat-resume prompt.
 //   3. BuildPromptAsync for chat resumes must prepend PendingSteerMessages so
 //      the next --resume turn actually delivers them to the agent.
@@ -27,7 +27,7 @@ public class SteeringDeliveryTests
     // ── Test 1 ───────────────────────────────────────────────────────────────
     // When a steer message is written to the queue while stdin is already
     // closed, PumpSteeringAsync must NOT silently discard it: it lands in
-    // AgentRun.PendingSteerMessages and ClaudeRunner auto-replays it as a
+    // AgentRun.PendingSteerMessages and AgentRunner auto-replays it as a
     // steer_replay turn inside the same run, leaving nothing pending at the end.
     [Fact]
     public async Task SteeringMessage_QueuedWhileStdinClosed_IsPreservedInPendingSteerMessages()
@@ -45,11 +45,11 @@ public class SteeringDeliveryTests
         AgentRun? activeRun = null;
         var runs = new AgentRunRegistry();
 
-        var runner = new ClaudeRunner(
+        var runner = new AgentRunner(
             new SessionRegistry(), runs, new RunConcurrencyGate(1),
-            NullLogger<ClaudeRunner>.Instance);
+            NullLogger<AgentRunner>.Instance);
 
-        var ctx = new ClaudeRunContext
+        var ctx = new AgentRunContext
         {
             ProjectSlug = project.Slug,
             WorkspacePath = workspace,
@@ -97,7 +97,7 @@ public class SteeringDeliveryTests
     private int _steered;
 
     // ── Test 2 ───────────────────────────────────────────────────────────────
-    // When ClaudeRunContext carries PendingSteerMessages, BuildPromptAsync must
+    // When AgentRunContext carries PendingSteerMessages, BuildPromptAsync must
     // prepend them to the chat-resume prompt so the agent actually receives them
     // in the next turn.
     //
@@ -115,7 +115,7 @@ public class SteeringDeliveryTests
     // PendingSteerMessages must emit a "steer" kind event for each pending
     // message BEFORE the assistant event — confirming they were injected.
     //
-    // Currently FAILS (compilation): ClaudeRunContext has no PendingSteerMessages.
+    // Currently FAILS (compilation): AgentRunContext has no PendingSteerMessages.
     [Fact]
     public async Task ChatResume_WithPendingSteerMessages_PrependsThemToPrompt()
     {
@@ -126,12 +126,12 @@ public class SteeringDeliveryTests
         Directory.CreateDirectory(workspace);
 
         var sessions = new SessionRegistry();
-        var runner = new ClaudeRunner(
+        var runner = new AgentRunner(
             sessions, new AgentRunRegistry(), new RunConcurrencyGate(1),
-            NullLogger<ClaudeRunner>.Instance);
+            NullLogger<AgentRunner>.Instance);
 
         // First turn — fresh session.
-        var ctx1 = new ClaudeRunContext
+        var ctx1 = new AgentRunContext
         {
             ProjectSlug = project.Slug,
             WorkspacePath = workspace,
@@ -151,9 +151,9 @@ public class SteeringDeliveryTests
         // BuildPromptAsync must prepend this to the prompt sent to the process.
         // The agent (or mock) will see it as part of its context.
         //
-        // Currently FAILS (compilation): ClaudeRunContext.PendingSteerMessages
+        // Currently FAILS (compilation): AgentRunContext.PendingSteerMessages
         // does not exist.
-        var ctx2 = new ClaudeRunContext
+        var ctx2 = new AgentRunContext
         {
             ProjectSlug = project.Slug,
             WorkspacePath = workspace,
@@ -184,7 +184,7 @@ public class SteeringDeliveryTests
     // ── Test 3 ───────────────────────────────────────────────────────────────
     // End-to-end: steer messages that arrive on turn N are included in turn N+1.
     // Verifies the full pipeline: PendingSteerMessages collected → passed via
-    // ClaudeRunContext → prepended by BuildPromptAsync.
+    // AgentRunContext → prepended by BuildPromptAsync.
     //
     // Currently FAILS (compilation): depends on both PendingSteerMessages APIs.
     [Fact]
@@ -198,9 +198,9 @@ public class SteeringDeliveryTests
 
         var sessions = new SessionRegistry();
         var runs = new AgentRunRegistry();
-        var runner = new ClaudeRunner(
+        var runner = new AgentRunner(
             sessions, runs, new RunConcurrencyGate(1),
-            NullLogger<ClaudeRunner>.Instance);
+            NullLogger<AgentRunner>.Instance);
 
         AgentRun? activeRun = null;
         runs.OnRunStarted += r => activeRun = r;
@@ -208,7 +208,7 @@ public class SteeringDeliveryTests
         // Once only: the hook also fires on the in-run replay turn's launch; re-steering
         // there would refill PendingSteerMessages forever and RunAsync would never return.
         var steered = 0;
-        var ctx1 = new ClaudeRunContext
+        var ctx1 = new AgentRunContext
         {
             ProjectSlug = project.Slug,
             WorkspacePath = workspace,
@@ -240,7 +240,7 @@ public class SteeringDeliveryTests
 
         // The explicit hand-off API (used by POST /chat/start when a previous run left
         // messages pending): the next turn context carries them and must inject them.
-        var ctx2 = new ClaudeRunContext
+        var ctx2 = new AgentRunContext
         {
             ProjectSlug = project.Slug,
             WorkspacePath = workspace,

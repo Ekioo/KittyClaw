@@ -39,9 +39,9 @@ public class RunTokenUsageTests : IDisposable
         Directory.CreateDirectory(workspace);
         TestSkillBuilder.Create(workspace, "test-agent", scenario: "usage");
 
-        var runner = new ClaudeRunner(new SessionRegistry(), new AgentRunRegistry(),
-            new RunConcurrencyGate(1), NullLogger<ClaudeRunner>.Instance);
-        var run = await runner.RunAsync(new ClaudeRunContext
+        var runner = new AgentRunner(new SessionRegistry(), new AgentRunRegistry(),
+            new RunConcurrencyGate(1), NullLogger<AgentRunner>.Instance);
+        var run = await runner.RunAsync(new AgentRunContext
         {
             ProjectSlug = project.Slug,
             WorkspacePath = workspace,

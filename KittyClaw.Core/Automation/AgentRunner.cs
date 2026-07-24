@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace KittyClaw.Core.Automation;
 
-public sealed class ClaudeRunContext
+public sealed class AgentRunContext
 {
     public required string ProjectSlug { get; init; }
     public required string WorkspacePath { get; init; }
@@ -31,7 +31,7 @@ public sealed class ClaudeRunContext
     public string? PresetRunId { get; init; }
 
     /// <summary>Returns a copy of this context suitable for auto-replaying steer messages in the same run, with ExtraContext replaced and non-repeatable fields cleared.</summary>
-    internal ClaudeRunContext WithChatReplay(string steerText) => new ClaudeRunContext
+    internal AgentRunContext WithChatReplay(string steerText) => new AgentRunContext
     {
         ProjectSlug = ProjectSlug,
         WorkspacePath = WorkspacePath,
@@ -94,14 +94,14 @@ public sealed class ClaudeRunContext
     public int? LockTimeoutMinutes { get; init; }
 }
 
-public sealed class ClaudeRunner
+public sealed class AgentRunner
 {
     private readonly SessionRegistry _sessions;
     private readonly AgentRunRegistry _runs;
     private readonly RunConcurrencyGate _gate;
-    private readonly ILogger<ClaudeRunner> _logger;
+    private readonly ILogger<AgentRunner> _logger;
 
-    public ClaudeRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<ClaudeRunner> logger)
+    public AgentRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<AgentRunner> logger)
     {
         _sessions = sessions;
         _runs = runs;
@@ -109,7 +109,7 @@ public sealed class ClaudeRunner
         _logger = logger;
     }
 
-    public async Task<AgentRun> RunAsync(ClaudeRunContext ctx, CancellationToken ct)
+    public async Task<AgentRun> RunAsync(AgentRunContext ctx, CancellationToken ct)
     {
         var run = new AgentRun
         {
@@ -271,7 +271,7 @@ public sealed class ClaudeRunner
             // to send another message.
             if (isChat && run.Status == AgentRunStatus.Completed && run.PendingSteerMessages.Count > 0)
             {
-                var followCtx = new ClaudeRunContext
+                var followCtx = new AgentRunContext
                 {
                     ProjectSlug = ctx.ProjectSlug,
                     WorkspacePath = ctx.WorkspacePath,
@@ -311,7 +311,7 @@ public sealed class ClaudeRunner
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled exception in ClaudeRunner for {Agent} run={RunId}", ctx.AgentName, run.RunId);
+            _logger.LogError(ex, "Unhandled exception in AgentRunner for {Agent} run={RunId}", ctx.AgentName, run.RunId);
             try { run.Push(new StreamEvent(DateTime.UtcNow, "error", $"Internal runner error: {ex.Message}")); } catch { /* subscriber may throw */ }
             _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
             return run;
@@ -388,7 +388,7 @@ public sealed class ClaudeRunner
     }
 
     private async Task<SpawnResult> SpawnAndWaitAsync(
-        ClaudeRunContext ctx, AgentRun run, string skillContent,
+        AgentRunContext ctx, AgentRun run, string skillContent,
         string sessionId, bool isResume, string? modelOverride, CancellationToken ct)
     {
         var prompt = await BuildPromptAsync(ctx, skillContent, isResume, ct);
@@ -512,9 +512,9 @@ public sealed class ClaudeRunner
                 ? new CancellationTokenSource(maxDuration)
                 : new CancellationTokenSource();
             using var linkedWithTimeout = CancellationTokenSource.CreateLinkedTokenSource(linked.Token, timeoutCts.Token);
-            var stdoutTask = ClaudeStreamPump.PumpStdoutAsync(proc, run, ctx.Provider, linkedWithTimeout.Token);
-            var stderrTask = ClaudeStreamPump.PumpStderrAsync(proc, run, linkedWithTimeout.Token);
-            var steerTask = ClaudeStreamPump.PumpSteeringAsync(proc, run, linkedWithTimeout.Token);
+            var stdoutTask = AgentStreamPump.PumpStdoutAsync(proc, run, ctx.Provider, linkedWithTimeout.Token);
+            var stderrTask = AgentStreamPump.PumpStderrAsync(proc, run, linkedWithTimeout.Token);
+            var steerTask = AgentStreamPump.PumpSteeringAsync(proc, run, linkedWithTimeout.Token);
 
             using var killReg = linkedWithTimeout.Token.Register(() =>
             {
@@ -650,7 +650,7 @@ public sealed class ClaudeRunner
     private TimeSpan _resultExitGrace = TimeSpan.FromSeconds(15);
     internal TimeSpan ResultExitGrace { get => _resultExitGrace; set => _resultExitGrace = value; }
 
-    private static async Task<string> BuildPromptAsync(ClaudeRunContext ctx, string skillContent, bool isResume, CancellationToken ct)
+    private static async Task<string> BuildPromptAsync(AgentRunContext ctx, string skillContent, bool isResume, CancellationToken ct)
     {
         var imagesBlock = BuildAttachedImagesBlock(ctx);
 
@@ -685,7 +685,7 @@ public sealed class ClaudeRunner
             : $"{prefix}{skillContent}\n\n{ctx.ExtraContext}{imagesBlock}";
     }
 
-    private static string BuildAttachedImagesBlock(ClaudeRunContext ctx)
+    private static string BuildAttachedImagesBlock(AgentRunContext ctx)
     {
         if (!(ctx.ImagePaths != null && ctx.ImagePaths.Count > 0)) return "";
         var sb = new StringBuilder();
@@ -697,7 +697,7 @@ public sealed class ClaudeRunner
         return sb.ToString();
     }
 
-    private static void CleanupImageTempFiles(ClaudeRunContext ctx)
+    private static void CleanupImageTempFiles(AgentRunContext ctx)
     {
         if (ctx.ImagePaths is null || ctx.ImagePaths.Count == 0) return;
         foreach (var p in ctx.ImagePaths)
@@ -706,7 +706,7 @@ public sealed class ClaudeRunner
         }
     }
 
-    private static async Task<string> BuildPreambleAsync(ClaudeRunContext ctx, CancellationToken ct)
+    private static async Task<string> BuildPreambleAsync(AgentRunContext ctx, CancellationToken ct)
     {
         var sb = new StringBuilder();
 
@@ -735,7 +735,7 @@ public sealed class ClaudeRunner
     // Backward compat: when the memory/ dir is absent we fall back to the legacy flat memory.md
     // (injected whole, the old eager behaviour). An agent keeps the legacy path until its next
     // consolidation migrates its content into the index layout, so nothing regresses abruptly.
-    private static async Task AppendMemoryAsync(StringBuilder sb, ClaudeRunContext ctx, CancellationToken ct)
+    private static async Task AppendMemoryAsync(StringBuilder sb, AgentRunContext ctx, CancellationToken ct)
     {
         var agentDir = Path.Combine(ctx.WorkspacePath, ".agents", ctx.AgentName);
         var memDir = Path.Combine(agentDir, "memory");
@@ -822,7 +822,7 @@ public sealed class ClaudeRunner
         return typePrefix.Append(body).ToString();
     }
 
-    private static void AppendDebugLog(ClaudeRunContext ctx, string line)
+    private static void AppendDebugLog(AgentRunContext ctx, string line)
     {
         try
         {

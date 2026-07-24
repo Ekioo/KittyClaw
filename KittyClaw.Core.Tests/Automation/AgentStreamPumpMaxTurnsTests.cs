@@ -5,20 +5,20 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace KittyClaw.Core.Tests.Automation;
 
 /// <summary>
-/// Integration tests for the max-turns detection in ClaudeStreamPump.
+/// Integration tests for the max-turns detection in AgentStreamPump.
 ///
 /// Test cases 3–6 from the architect plan (Continue clicked, user types, drawer reopen,
-/// stop-then-reopen) exercise ClaudeChatDrawer — a Blazor component in KittyClaw.Web.
+/// stop-then-reopen) exercise ChatDrawer — a Blazor component in KittyClaw.Web.
 /// Testing those from Core.Tests requires bunit; they are out of scope here.
 /// </summary>
 [Collection("MockClaude")]
-public class ClaudeStreamPumpMaxTurnsTests : IDisposable
+public class AgentStreamPumpMaxTurnsTests : IDisposable
 {
     // Write the max-turns scenario to a temp dir so the ClaudeMock binary can find it
     // via KITTYCLAW_MOCK_SCENARIOS_DIR — avoids committing non-test files.
     private readonly string _scenariosDir = Path.Combine(Path.GetTempPath(), $"kc-scenarios-{Guid.NewGuid():N}");
 
-    public ClaudeStreamPumpMaxTurnsTests()
+    public AgentStreamPumpMaxTurnsTests()
     {
         Directory.CreateDirectory(_scenariosDir);
         File.WriteAllText(
@@ -96,9 +96,9 @@ public class ClaudeStreamPumpMaxTurnsTests : IDisposable
         var sessions = new SessionRegistry();
         var runs = new AgentRunRegistry();
         var gate = new RunConcurrencyGate(maxConcurrent: 1);
-        var runner = new ClaudeRunner(sessions, runs, gate, NullLogger<ClaudeRunner>.Instance);
+        var runner = new AgentRunner(sessions, runs, gate, NullLogger<AgentRunner>.Instance);
 
-        var ctx = new ClaudeRunContext
+        var ctx = new AgentRunContext
         {
             ProjectSlug = slug,
             WorkspacePath = workspace,

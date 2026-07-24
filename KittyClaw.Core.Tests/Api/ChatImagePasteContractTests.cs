@@ -41,17 +41,17 @@ public class ChatImagePasteContractTests
     }
 
     [Fact]
-    public void ClaudeRunContext_exposes_ImagePaths()
+    public void AgentRunContext_exposes_ImagePaths()
     {
-        var src = Read("KittyClaw.Core/Automation/ClaudeRunner.cs");
-        Assert.Matches(new Regex(@"ClaudeRunContext[\s\S]+?ImagePaths"), src);
+        var src = Read("KittyClaw.Core/Automation/AgentRunner.cs");
+        Assert.Matches(new Regex(@"AgentRunContext[\s\S]+?ImagePaths"), src);
         Assert.Matches(new Regex(@"IReadOnlyList<\s*string\s*>\??\s+ImagePaths"), src);
     }
 
     [Fact]
-    public void ClaudeRunner_prompt_appends_attached_images_block_when_paths_present()
+    public void AgentRunner_prompt_appends_attached_images_block_when_paths_present()
     {
-        var src = Read("KittyClaw.Core/Automation/ClaudeRunner.cs");
+        var src = Read("KittyClaw.Core/Automation/AgentRunner.cs");
         // Plan: BuildPromptAsync must emit an "[Attached images]" header listing the absolute paths.
         Assert.Contains("[Attached images]", src);
         // The block must be guarded by an ImagePaths null/empty check.
@@ -59,9 +59,9 @@ public class ChatImagePasteContractTests
     }
 
     [Fact]
-    public void ClaudeRunner_cleans_up_image_temp_files_after_run()
+    public void AgentRunner_cleans_up_image_temp_files_after_run()
     {
-        var src = Read("KittyClaw.Core/Automation/ClaudeRunner.cs");
+        var src = Read("KittyClaw.Core/Automation/AgentRunner.cs");
         // Plan: best-effort File.Delete on each ImagePaths entry after the process exits.
         Assert.Matches(new Regex(@"File\.Delete\([\s\S]{0,200}?ImagePaths|foreach[\s\S]{0,200}?ImagePaths[\s\S]{0,300}?File\.Delete"), src);
     }
@@ -89,7 +89,7 @@ public class ChatImagePasteContractTests
         var src = Read("KittyClaw.Web/Api/Endpoints.Chat.cs");
         // Plan: decode data URL, write under <workspace>/.agents/channel/tmp/.
         Assert.Matches(new Regex(@"channel[/\\]+tmp"), src);
-        // Forwards to ClaudeRunContext.ImagePaths.
+        // Forwards to AgentRunContext.ImagePaths.
         Assert.Matches(new Regex(@"ImagePaths\s*="), src);
     }
 
@@ -104,7 +104,7 @@ public class ChatImagePasteContractTests
     [Fact]
     public void ChatDrawer_razor_installs_paste_handler_and_wires_jsinvokable_callbacks()
     {
-        var src = Read("KittyClaw.Web/Components/ClaudeChatDrawer.razor");
+        var src = Read("KittyClaw.Web/Components/ChatDrawer.razor");
         Assert.Contains("chatDrawerInstallPasteHandler", src);
         Assert.Contains("OnImagePasted", src);
         Assert.Contains("OnImagePasteError", src);

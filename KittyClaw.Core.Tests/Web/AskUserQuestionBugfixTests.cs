@@ -26,15 +26,15 @@ public class AskUserQuestionBugfixTests
         LoadFile(Path.Combine("KittyClaw.Core", "Automation", "AgentRun.cs"));
 
     private static string StreamPumpSrc() =>
-        LoadFile(Path.Combine("KittyClaw.Core", "Automation", "ClaudeStreamPump.cs"));
+        LoadFile(Path.Combine("KittyClaw.Core", "Automation", "AgentStreamPump.cs"));
 
-    private static string ClaudeRunnerSrc() =>
-        LoadFile(Path.Combine("KittyClaw.Core", "Automation", "ClaudeRunner.cs"));
+    private static string AgentRunnerSrc() =>
+        LoadFile(Path.Combine("KittyClaw.Core", "Automation", "AgentRunner.cs"));
 
     private static string AppCss() =>
         LoadFile(Path.Combine("KittyClaw.Web", "wwwroot", "app.css"));
 
-    // Case A: ClaudeStreamPump sets run.IsAwaitingUserAnswer = true when emitting ask_user_question
+    // Case A: AgentStreamPump sets run.IsAwaitingUserAnswer = true when emitting ask_user_question
     [Fact]
     public void StreamPump_SetsIsAwaitingUserAnswer_True_OnAskUserQuestion()
     {
@@ -45,11 +45,11 @@ public class AskUserQuestionBugfixTests
         Assert.Matches(new Regex(@"IsAwaitingUserAnswer\s*=\s*true", RegexOptions.Multiline), pump);
     }
 
-    // Case B: ClaudeRunner reads answer from SteeringQueue, resets flag, adds to PendingSteerMessages
+    // Case B: AgentRunner reads answer from SteeringQueue, resets flag, adds to PendingSteerMessages
     [Fact]
-    public void ClaudeRunner_ResetsIsAwaitingUserAnswer_AfterReadingSteeringQueue()
+    public void AgentRunner_ResetsIsAwaitingUserAnswer_AfterReadingSteeringQueue()
     {
-        var runner = ClaudeRunnerSrc();
+        var runner = AgentRunnerSrc();
         // Runner must wait on SteeringQueue when IsAwaitingUserAnswer is true
         Assert.Matches(new Regex(@"IsAwaitingUserAnswer", RegexOptions.Multiline), runner);
         // After reading, flag must be reset to false
@@ -58,11 +58,11 @@ public class AskUserQuestionBugfixTests
         Assert.Contains("AddPendingSteerMessage", runner);
     }
 
-    // Case C: ClaudeRunner wait has a timeout to avoid deadlock if user never answers
+    // Case C: AgentRunner wait has a timeout to avoid deadlock if user never answers
     [Fact]
-    public void ClaudeRunner_WaitForAnswer_HasTimeout()
+    public void AgentRunner_WaitForAnswer_HasTimeout()
     {
-        var runner = ClaudeRunnerSrc();
+        var runner = AgentRunnerSrc();
         // Must use a cancellation token or explicit TimeSpan timeout near the SteeringQueue read
         Assert.Matches(new Regex(
             @"IsAwaitingUserAnswer[\s\S]{0,800}(TimeSpan|CancellationToken|timeout|Timeout|WaitAsync|TryRead|ReadAsync)",

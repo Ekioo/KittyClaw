@@ -17,7 +17,7 @@ with an explanatory error event before any subprocess is launched.
   dispatch site (automation actions, chat, run retry, dashboard tiles): `claude-*` or null →
   claude CLI; `grok-*` → grok CLI (error when not installed); anything else → Ollama via the
   claude CLI with `ANTHROPIC_*` env overrides (see [Local models](./local-models.md)).
-- `KittyClaw.Core/Automation/ClaudeRunner.cs` — when `ClaudeRunContext.Provider == Grok`, builds
+- `KittyClaw.Core/Automation/AgentRunner.cs` — when `AgentRunContext.Provider == Grok`, builds
   grok headless args instead of claude's: `--output-format streaming-json --always-approve
   --no-auto-update --max-turns N`, `--session-id <uuid>` (new) / `--resume <id>` (resume),
   `--model <id>`, and the prompt as the `-p` argument (grok does not read it from stdin).
@@ -29,7 +29,7 @@ with an explanatory error event before any subprocess is launched.
   `tool_call` → `tool_use`, `error` → `error`, and the terminal summary (usage/cost/stopReason)
   → `result` with token usage accumulated onto the run (feeds per-ticket cost tracking). Field
   names are matched tolerantly (snake_case and camelCase); unrecognized lines fall through to
-  the generic passthrough in `ClaudeStreamPump`.
+  the generic passthrough in `AgentStreamPump`.
 - `KittyClaw.Web/Api/Endpoints.Grok.cs` — `GET /api/grok-models`, host-global (unlike the
   per-project Ollama endpoint); returns `[]` when the CLI is not installed.
 

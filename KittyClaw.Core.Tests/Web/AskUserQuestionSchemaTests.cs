@@ -23,7 +23,7 @@ public class AskUserQuestionSchemaTests
     }
 
     private static string ChatDrawer() =>
-        LoadFile(Path.Combine("KittyClaw.Web", "Components", "ClaudeChatDrawer.razor"));
+        LoadFile(Path.Combine("KittyClaw.Web", "Components", "ChatDrawer.razor"));
 
     private static string MockNdjson() =>
         LoadFile(Path.Combine("KittyClaw.ClaudeMock", "scenarios", "ask-user-question.ndjson"));
@@ -50,8 +50,8 @@ public class AskUserQuestionSchemaTests
         // The "questions" branch must come BEFORE the fallback "prompt" branch so real schema takes priority
         var idxQuestions = src.IndexOf("\"questions\"", StringComparison.Ordinal);
         var idxFallbackPrompt = src.LastIndexOf("\"prompt\"", StringComparison.Ordinal);
-        Assert.True(idxQuestions >= 0, "\"questions\" not found in ClaudeChatDrawer.razor");
-        Assert.True(idxFallbackPrompt >= 0, "\"prompt\" not found in ClaudeChatDrawer.razor");
+        Assert.True(idxQuestions >= 0, "\"questions\" not found in ChatDrawer.razor");
+        Assert.True(idxFallbackPrompt >= 0, "\"prompt\" not found in ChatDrawer.razor");
         Assert.True(idxQuestions < idxFallbackPrompt,
             "\"questions\" branch must appear before fallback \"prompt\" branch in ParseAskUserQuestionDetail");
     }

@@ -27,8 +27,9 @@ public static class GrokCli
         model is not null && model.StartsWith("grok-", StringComparison.OrdinalIgnoreCase);
 
     // Shown when `grok models` cannot be run or its output yields nothing parseable.
-    // grok-build-0.1 is the CLI's own coding model; grok-4 the flagship API id.
-    internal static readonly IReadOnlyList<string> FallbackModels = new[] { "grok-build-0.1", "grok-4" };
+    // Per https://docs.x.ai/developers/models: grok-build-0.1 is the CLI's own coding model,
+    // grok-4.5 the recommended code/chat model, grok-4.3 the stable general-purpose one.
+    internal static readonly IReadOnlyList<string> FallbackModels = new[] { "grok-build-0.1", "grok-4.5", "grok-4.3" };
 
     private static Task<IReadOnlyList<string>>? _modelsTask;
 

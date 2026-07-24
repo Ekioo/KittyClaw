@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace KittyClaw.Core.Tests.Automation;
 
 // Finds KittyClaw.ClaudeMock/bin/**/claude(.exe) by walking up from the test assembly and sets
-// KITTYCLAW_CLAUDE_BIN before any ClaudeRunner is constructed, because ResolveClaudeBinary is a
+// KITTYCLAW_CLAUDE_BIN before any AgentRunner is constructed, because ResolveClaudeBinary is a
 // static Lazy that caches on first access — the env var must be in place before that happens.
 [CollectionDefinition("MockClaude")]
 public sealed class MockClaudeCollection : ICollectionFixture<MockClaudeBinFixture> { }
@@ -33,7 +33,7 @@ public sealed class MockClaudeBinFixture : IDisposable
 }
 
 [Collection("MockClaude")]
-public class ClaudeRunnerMockIntegrationTests
+public class AgentRunnerMockIntegrationTests
 {
     [Fact]
     public async Task DispatchedAgent_ReceivesStreamEventsFromMock()
@@ -49,9 +49,9 @@ public class ClaudeRunnerMockIntegrationTests
         var sessions = new SessionRegistry();
         var runs = new AgentRunRegistry();
         var gate = new RunConcurrencyGate(maxConcurrent: 1);
-        var runner = new ClaudeRunner(sessions, runs, gate, NullLogger<ClaudeRunner>.Instance);
+        var runner = new AgentRunner(sessions, runs, gate, NullLogger<AgentRunner>.Instance);
 
-        var ctx = new ClaudeRunContext
+        var ctx = new AgentRunContext
         {
             ProjectSlug = project.Slug,
             WorkspacePath = workspace,
@@ -80,10 +80,10 @@ public class ClaudeRunnerMockIntegrationTests
         var workspace = projects.ResolveWorkspacePath(project);
         Directory.CreateDirectory(workspace);
 
-        var runner = new ClaudeRunner(new SessionRegistry(), new AgentRunRegistry(), new RunConcurrencyGate(1),
-            NullLogger<ClaudeRunner>.Instance);
+        var runner = new AgentRunner(new SessionRegistry(), new AgentRunRegistry(), new RunConcurrencyGate(1),
+            NullLogger<AgentRunner>.Instance);
 
-        var ctx = new ClaudeRunContext
+        var ctx = new AgentRunContext
         {
             ProjectSlug = project.Slug,
             WorkspacePath = workspace,
@@ -114,10 +114,10 @@ public class ClaudeRunnerMockIntegrationTests
 
         TestSkillBuilder.Create(workspace, "test-agent", scenario: "error-exit");
 
-        var runner = new ClaudeRunner(new SessionRegistry(), new AgentRunRegistry(), new RunConcurrencyGate(1),
-            NullLogger<ClaudeRunner>.Instance);
+        var runner = new AgentRunner(new SessionRegistry(), new AgentRunRegistry(), new RunConcurrencyGate(1),
+            NullLogger<AgentRunner>.Instance);
 
-        var ctx = new ClaudeRunContext
+        var ctx = new AgentRunContext
         {
             ProjectSlug = project.Slug,
             WorkspacePath = workspace,
@@ -161,13 +161,13 @@ public class ClaudeRunnerMockIntegrationTests
 
         TestSkillBuilder.Create(workspace, "test-agent", scenario: "result-then-hang");
 
-        var runner = new ClaudeRunner(new SessionRegistry(), new AgentRunRegistry(), new RunConcurrencyGate(1),
-            NullLogger<ClaudeRunner>.Instance)
+        var runner = new AgentRunner(new SessionRegistry(), new AgentRunRegistry(), new RunConcurrencyGate(1),
+            NullLogger<AgentRunner>.Instance)
         {
             ResultExitGrace = TimeSpan.FromSeconds(1), // don't wait the full 15s in the test
         };
 
-        var ctx = new ClaudeRunContext
+        var ctx = new AgentRunContext
         {
             ProjectSlug = project.Slug,
             WorkspacePath = workspace,

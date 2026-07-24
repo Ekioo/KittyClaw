@@ -53,7 +53,7 @@ public class SteeringAutoContinueTests
 
     // ── Test 2 ───────────────────────────────────────────────────────────────
     // A steer message that arrives while stdin is closed (--print mode) must not be
-    // lost: ClaudeRunner auto-replays it as a follow-up turn. Since ticket #126 the
+    // lost: AgentRunner auto-replays it as a follow-up turn. Since ticket #126 the
     // replay happens INSIDE the same registered run (steer_replay + WithChatReplay),
     // not as a second AgentRunRegistry entry — assert the replay fired and nothing
     // stayed pending.
@@ -68,16 +68,16 @@ public class SteeringAutoContinueTests
 
         var sessions = new SessionRegistry();
         var runs = new AgentRunRegistry();
-        var runner = new ClaudeRunner(
+        var runner = new AgentRunner(
             sessions, runs, new RunConcurrencyGate(1),
-            NullLogger<ClaudeRunner>.Instance);
+            NullLogger<AgentRunner>.Instance);
 
         AgentRun? activeRun = null;
         runs.OnRunStarted += r => activeRun = r;
 
         var concurrencyGroup = $"chat:{project.Slug}:steer-agent";
         var steered = 0;
-        var ctx = new ClaudeRunContext
+        var ctx = new AgentRunContext
         {
             ProjectSlug = project.Slug,
             WorkspacePath = workspace,
@@ -129,9 +129,9 @@ public class SteeringAutoContinueTests
 
         var sessions = new SessionRegistry();
         var runs = new AgentRunRegistry();
-        var runner = new ClaudeRunner(
+        var runner = new AgentRunner(
             sessions, runs, new RunConcurrencyGate(1),
-            NullLogger<ClaudeRunner>.Instance);
+            NullLogger<AgentRunner>.Instance);
 
         AgentRun? activeRun = null;
         runs.OnRunStarted += r => activeRun = r;
@@ -139,7 +139,7 @@ public class SteeringAutoContinueTests
         var concurrencyGroup = $"chat:{project.Slug}:steer-agent";
         using var cts = new CancellationTokenSource();
 
-        var ctx = new ClaudeRunContext
+        var ctx = new AgentRunContext
         {
             ProjectSlug = project.Slug,
             WorkspacePath = workspace,

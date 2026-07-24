@@ -29,7 +29,7 @@ foreach ($proj in 'KittyClaw.Web', 'KittyClaw.QaRunner') {
 }
 
 # ClaudeMock: published into a qa-mock/ subfolder so it does NOT sit next to KittyClaw.Web.exe
-# as `claude.exe`. Otherwise ClaudeRunner.ResolveClaudeBinary() would prefer the mock for *all*
+# as `claude.exe`. Otherwise AgentRunner.ResolveClaudeBinary() would prefer the mock for *all*
 # agents, not just QA. The QaRunner's TestInstance picks it up explicitly via KITTYCLAW_CLAUDE_BIN.
 $mockOut = Join-Path $Out 'qa-mock'
 Write-Host "  -> KittyClaw.ClaudeMock (-> $mockOut)" -ForegroundColor DarkGray

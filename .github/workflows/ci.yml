@@ -1,5 +1,5 @@
 # Build + test on every push/PR. KittyClaw.ClaudeMock is built explicitly so the hermetic
-# ClaudeRunner integration tests find the mock claude.exe instead of falling back to a real
+# AgentRunner integration tests find the mock claude.exe instead of falling back to a real
 # CLI (MockClaudeBinFixture walks the repo tree for a previously built binary).
 name: CI
 

@@ -9,7 +9,7 @@ namespace KittyClaw.Core.Services;
 ///
 /// A RunAgent automation's concurrency group is "locked" for as long as a run in that group is
 /// <see cref="AgentRunStatus.Running"/>. The nominal end paths and the <c>finally</c> safety net in
-/// <see cref="ClaudeRunner"/> release the lock on any managed exit. But a pure hang — a claude
+/// <see cref="AgentRunner"/> release the lock on any managed exit. But a pure hang — a claude
 /// subprocess stuck on a network call that never returns and never throws — leaves the run Running
 /// forever, so every later dispatch in that group is skipped silently until KittyClaw restarts.
 ///

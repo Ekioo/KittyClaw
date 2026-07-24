@@ -16,7 +16,7 @@ public sealed class DashboardRefreshService : BackgroundService
 {
     private readonly ProjectService _projects;
     private readonly DashboardService _dashboard;
-    private readonly ClaudeRunner _runner;
+    private readonly AgentRunner _runner;
     private readonly DashboardTileGate _gate;
     private readonly DashboardScriptRunner _scriptRunner;
     private readonly ILogger<DashboardRefreshService> _logger;
@@ -27,7 +27,7 @@ public sealed class DashboardRefreshService : BackgroundService
     public DashboardRefreshService(
         ProjectService projects,
         DashboardService dashboard,
-        ClaudeRunner runner,
+        AgentRunner runner,
         DashboardTileGate gate,
         DashboardScriptRunner scriptRunner,
         ILogger<DashboardRefreshService> logger)
@@ -223,7 +223,7 @@ public sealed class DashboardRefreshService : BackgroundService
         var project = await _projects.GetProjectAsync(projectSlug);
         var routing = ModelRouting.Resolve(sidecar.Model, project?.LocalModelBaseUrl);
 
-        var ctx = new ClaudeRunContext
+        var ctx = new AgentRunContext
         {
             ProjectSlug = projectSlug,
             WorkspacePath = workspace,

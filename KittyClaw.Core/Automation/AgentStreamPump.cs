@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace KittyClaw.Core.Automation;
 
 /// <summary>Pumps stdout, stderr, and steering stdin between a claude subprocess and an AgentRun.</summary>
-internal static class ClaudeStreamPump
+internal static class AgentStreamPump
 {
     internal static Task PumpStdoutAsync(Process proc, AgentRun run, CancellationToken ct) =>
         PumpStdoutAsync(proc, run, CliProvider.Claude, ct);
@@ -52,7 +52,7 @@ internal static class ClaudeStreamPump
                         }
                         if (hasText)
                         {
-                            run.Push(new StreamEvent(DateTime.UtcNow, kind, ClaudeRunner.FlattenJson(doc.RootElement)));
+                            run.Push(new StreamEvent(DateTime.UtcNow, kind, AgentRunner.FlattenJson(doc.RootElement)));
                         }
                         foreach (var part in content.EnumerateArray())
                         {
@@ -84,7 +84,7 @@ internal static class ClaudeStreamPump
                         // the quota detector can inspect their fields (status, result text)
                         // regardless of how FlattenJson collapses the event for display.
                         var detail = kind is "result" or "rate_limit_event" ? line : null;
-                        run.Push(new StreamEvent(DateTime.UtcNow, kind, ClaudeRunner.FlattenJson(doc.RootElement), detail));
+                        run.Push(new StreamEvent(DateTime.UtcNow, kind, AgentRunner.FlattenJson(doc.RootElement), detail));
                     }
                 }
                 catch

@@ -8,7 +8,7 @@ namespace KittyClaw.Core.Automation;
 /// ("assistant", "tool_use", "result", "error"). The grok stream is OpenCode-style and
 /// its field names are not pinned by public docs, so every extraction here is tolerant:
 /// multiple candidate field names, and a false return (→ generic passthrough in
-/// ClaudeStreamPump) whenever a line doesn't look like something we understand.
+/// AgentStreamPump) whenever a line doesn't look like something we understand.
 /// </summary>
 internal static class GrokStreamAdapter
 {

@@ -17,7 +17,7 @@ var builder = WebApplication.CreateBuilder(args);
 // overwrite that config and break the qa launch profile, QaRunner test instances, etc.
 //
 // Also propagate to ASPNETCORE_URLS so downstream consumers that read the env var directly
-// (e.g. ClaudeRunner.ResolveApiUrl, which builds the API URL passed to skills) see the same
+// (e.g. AgentRunner.ResolveApiUrl, which builds the API URL passed to skills) see the same
 // port Kestrel is actually binding.
 if (string.IsNullOrEmpty(builder.Configuration["urls"]))
 {
@@ -63,7 +63,7 @@ builder.Services.AddSingleton<AgentRunRegistry>(sp => new AgentRunRegistry(sp.Ge
 // KITTYCLAW_MAX_CONCURRENT_AGENTS env var if 3 is too tight or too loose for the host.
 var maxConcurrent = int.TryParse(Environment.GetEnvironmentVariable("KITTYCLAW_MAX_CONCURRENT_AGENTS"), out var mc) && mc > 0 ? mc : 3;
 builder.Services.AddSingleton(new RunConcurrencyGate(maxConcurrent));
-builder.Services.AddSingleton<ClaudeRunner>();
+builder.Services.AddSingleton<AgentRunner>();
 builder.Services.AddSingleton<CostTracker>();
 // Durable cost records: cost-log.jsonl (daily budget) + per-ticket token/USD totals.
 builder.Services.AddHostedService<RunCostRecorder>();

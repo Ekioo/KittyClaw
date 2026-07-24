@@ -55,7 +55,7 @@ public static partial class Endpoints
             return Results.NoContent();
         }).WithTags("Chat");
 
-        api.MapPost("/projects/{slug}/chat/start", async (string slug, ChatStartRequest req, ProjectService ps, MemberService ms, ChatService cs, TicketService ts, ClaudeRunner runner, SessionRegistry sessions, AgentRunRegistry runReg, HttpContext http) =>
+        api.MapPost("/projects/{slug}/chat/start", async (string slug, ChatStartRequest req, ProjectService ps, MemberService ms, ChatService cs, TicketService ts, AgentRunner runner, SessionRegistry sessions, AgentRunRegistry runReg, HttpContext http) =>
         {
             var project = await ps.GetProjectAsync(slug);
             if (project is null) return Results.NotFound();
@@ -91,7 +91,7 @@ public static partial class Endpoints
 
             // A ticket-scoped chat target looks like "{agent}#ticket-{id}". The hash-suffix
             // namespaces ChatService rows so each ticket has its own thread with the agent.
-            // We pass the parsed ticketId to ClaudeRunContext.TicketId so the underlying
+            // We pass the parsed ticketId to AgentRunContext.TicketId so the underlying
             // claude session is also per-ticket (session key "chat:{agent}:{ticketId}").
             var (baseAgent, parsedTicketId) = ParseChatTarget(target);
             var effectiveTicketId = req.TicketId ?? parsedTicketId;
@@ -158,7 +158,7 @@ public static partial class Endpoints
                 }
             }
 
-            ClaudeRunContext ctx;
+            AgentRunContext ctx;
             if (target == "owner-chat")
             {
                 var sb = new StringBuilder();
@@ -195,7 +195,7 @@ public static partial class Endpoints
                 sb.AppendLine($"- GET  {baseUrl}/api/projects/{slug}/columns — list columns");
                 sb.AppendLine($"- Full API doc: {baseUrl}/api/docs");
 
-                ctx = new ClaudeRunContext
+                ctx = new AgentRunContext
                 {
                     ProjectSlug = slug,
                     WorkspacePath = workspacePath,
@@ -260,7 +260,7 @@ public static partial class Endpoints
                 }
                 var inlineContent = chatPreamble.ToString() + skillSection + (ticketContext is null ? "" : "\n" + ticketContext);
 
-                ctx = new ClaudeRunContext
+                ctx = new AgentRunContext
                 {
                     ProjectSlug = slug,
                     WorkspacePath = workspacePath,
@@ -316,7 +316,7 @@ public static partial class Endpoints
 
     /// <summary>
     /// Validates and persists pasted images to <c>&lt;workspace&gt;/.agents/channel/tmp/</c>.
-    /// Returns the list of absolute paths to forward to <see cref="ClaudeRunContext.ImagePaths"/>,
+    /// Returns the list of absolute paths to forward to <see cref="AgentRunContext.ImagePaths"/>,
     /// or a non-null reason string for a 400 "image_rejected" response.
     /// </summary>
     private static async Task<(IReadOnlyList<string>? Paths, string? RejectReason)> PersistChatImagesAsync(

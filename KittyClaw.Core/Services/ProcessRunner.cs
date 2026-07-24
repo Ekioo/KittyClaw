@@ -8,7 +8,7 @@ namespace KittyClaw.Core.Services;
 /// stdout/stderr drain (a sequential ReadToEnd deadlocks once the child fills the other
 /// pipe's buffer), a wall-clock timeout, and best-effort kill of the whole process tree
 /// on timeout or cancellation so no zombie keeps running after we stop waiting.
-/// Agent subprocesses have their own lifecycle (ClaudeRunner) and do not use this.
+/// Agent subprocesses have their own lifecycle (AgentRunner) and do not use this.
 /// </summary>
 public static class ProcessRunner
 {

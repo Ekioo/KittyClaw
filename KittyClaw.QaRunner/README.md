@@ -7,7 +7,7 @@ Headless Playwright .NET runner that:
 3. Uploads any screenshots to a *target* KittyClaw API (typically the stable orchestrator that owns the ticket being validated).
 4. Emits a `ScenarioResult` JSON on stdout.
 
-Used by the KittyClaw self-development qa-tester to e2e-validate UI changes without polluting production state and without burning Anthropic tokens (the spawned instance uses the mock claude found by `ClaudeRunner`'s dynamic discovery).
+Used by the KittyClaw self-development qa-tester to e2e-validate UI changes without polluting production state and without burning Anthropic tokens (the spawned instance uses the mock claude found by `AgentRunner`'s dynamic discovery).
 
 ## Invocation
 

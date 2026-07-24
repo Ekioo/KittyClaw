@@ -3,7 +3,7 @@ using KittyClaw.Core.Automation;
 
 namespace KittyClaw.Core.Tests.Automation;
 
-public class ClaudeRunnerFlattenJsonTests
+public class AgentRunnerFlattenJsonTests
 {
     private static JsonElement Parse(string json) =>
         JsonDocument.Parse(json).RootElement;
@@ -11,7 +11,7 @@ public class ClaudeRunnerFlattenJsonTests
     [Fact]
     public void NonObject_ReturnsToString()
     {
-        var result = ClaudeRunner.FlattenJson(Parse("\"hello\""));
+        var result = AgentRunner.FlattenJson(Parse("\"hello\""));
         Assert.Equal("hello", result);
     }
 
@@ -19,7 +19,7 @@ public class ClaudeRunnerFlattenJsonTests
     public void AssistantWithTextContent_ExtractsText()
     {
         var json = """{"type":"assistant","message":{"content":[{"type":"text","text":"Hello world"}]}}""";
-        var result = ClaudeRunner.FlattenJson(Parse(json));
+        var result = AgentRunner.FlattenJson(Parse(json));
         Assert.Equal("[assistant] Hello world", result);
     }
 
@@ -28,7 +28,7 @@ public class ClaudeRunnerFlattenJsonTests
     {
         // tool_use parts are emitted as separate tool_use events — FlattenJson must not duplicate them
         var json = """{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{}}]}}""";
-        var result = ClaudeRunner.FlattenJson(Parse(json));
+        var result = AgentRunner.FlattenJson(Parse(json));
         Assert.DoesNotContain("tool:Read", result);
     }
 
@@ -36,7 +36,7 @@ public class ClaudeRunnerFlattenJsonTests
     public void AssistantWithTextAndToolUse_OnlyEmitsText()
     {
         var json = """{"type":"assistant","message":{"content":[{"type":"text","text":"Thinking…"},{"type":"tool_use","name":"Bash","input":{}}]}}""";
-        var result = ClaudeRunner.FlattenJson(Parse(json));
+        var result = AgentRunner.FlattenJson(Parse(json));
         Assert.Contains("Thinking…", result);
         Assert.DoesNotContain("tool:Bash", result);
     }
@@ -45,7 +45,7 @@ public class ClaudeRunnerFlattenJsonTests
     public void UserWithToolResultArrayContent_ExtractsNestedText()
     {
         var json = """{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"abc","content":[{"type":"text","text":"result data"}]}]}}""";
-        var result = ClaudeRunner.FlattenJson(Parse(json));
+        var result = AgentRunner.FlattenJson(Parse(json));
         Assert.Equal("[user] result data", result);
     }
 
@@ -53,7 +53,7 @@ public class ClaudeRunnerFlattenJsonTests
     public void UserWithToolResultStringContent_ExtractsString()
     {
         var json = """{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"abc","content":"plain result"}]}}""";
-        var result = ClaudeRunner.FlattenJson(Parse(json));
+        var result = AgentRunner.FlattenJson(Parse(json));
         Assert.Equal("[user] plain result", result);
     }
 
@@ -61,7 +61,7 @@ public class ClaudeRunnerFlattenJsonTests
     public void EventWithNoExtractableContent_FallsBackToRawJson()
     {
         var json = """{"type":"system","subtype":"init","session_id":"xyz"}""";
-        var result = ClaudeRunner.FlattenJson(Parse(json));
+        var result = AgentRunner.FlattenJson(Parse(json));
         // No body extracted — falls back to full JSON string
         Assert.Contains("session_id", result);
     }
@@ -70,7 +70,7 @@ public class ClaudeRunnerFlattenJsonTests
     public void DeltaText_Extracted()
     {
         var json = """{"type":"content_block_delta","delta":{"type":"text_delta","text":"streaming text"}}""";
-        var result = ClaudeRunner.FlattenJson(Parse(json));
+        var result = AgentRunner.FlattenJson(Parse(json));
         Assert.Equal("[content_block_delta] streaming text", result);
     }
 
@@ -78,7 +78,7 @@ public class ClaudeRunnerFlattenJsonTests
     public void MessageWithStringContent_Extracted()
     {
         var json = """{"type":"user","message":{"content":"direct string"}}""";
-        var result = ClaudeRunner.FlattenJson(Parse(json));
+        var result = AgentRunner.FlattenJson(Parse(json));
         Assert.Equal("[user] direct string", result);
     }
 }

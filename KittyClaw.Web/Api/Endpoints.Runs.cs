@@ -125,7 +125,7 @@ public static partial class Endpoints
         }).WithTags("Runs");
 
         api.MapPost("/projects/{slug}/runs/{runId}/retry", async (string slug, string runId,
-            AgentRunRegistry reg, ProjectService ps, TicketService ts, ClaudeRunner runner) =>
+            AgentRunRegistry reg, ProjectService ps, TicketService ts, AgentRunner runner) =>
         {
             var run = reg.Get(runId);
             if (run is null || run.ProjectSlug != slug) return Results.NotFound();
@@ -147,7 +147,7 @@ public static partial class Endpoints
 
             var newRunId = Guid.NewGuid().ToString("N");
             var routing = ModelRouting.Resolve(run.Model, project.LocalModelBaseUrl);
-            var ctx = new ClaudeRunContext
+            var ctx = new AgentRunContext
             {
                 ProjectSlug = slug,
                 WorkspacePath = ps.ResolveWorkspacePath(project),

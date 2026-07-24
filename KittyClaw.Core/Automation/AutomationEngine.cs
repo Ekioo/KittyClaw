@@ -21,7 +21,7 @@ public sealed class AutomationEngine : BackgroundService
         TriggerStateStore triggerState,
         SessionRegistry sessions,
         AgentRunRegistry runs,
-        ClaudeRunner runner,
+        AgentRunner runner,
         CostTracker cost,
         LocalizationService loc,
         ILogger<AutomationEngine> logger)

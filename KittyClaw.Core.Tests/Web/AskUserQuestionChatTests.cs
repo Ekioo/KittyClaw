@@ -23,15 +23,15 @@ public class AskUserQuestionChatTests
     }
 
     private static string ChatDrawer() =>
-        LoadFile(Path.Combine("KittyClaw.Web", "Components", "ClaudeChatDrawer.razor"));
+        LoadFile(Path.Combine("KittyClaw.Web", "Components", "ChatDrawer.razor"));
 
     private static string EndpointsChat() =>
         LoadFile(Path.Combine("KittyClaw.Web", "Api", "Endpoints.Chat.cs"));
 
     private static string StreamPump() =>
-        LoadFile(Path.Combine("KittyClaw.Core", "Automation", "ClaudeStreamPump.cs"));
+        LoadFile(Path.Combine("KittyClaw.Core", "Automation", "AgentStreamPump.cs"));
 
-    // ClaudeStreamPump — Case 1: AskUserQuestion tool_use must be emitted as "ask_user_question" kind
+    // AgentStreamPump — Case 1: AskUserQuestion tool_use must be emitted as "ask_user_question" kind
     [Fact]
     public void StreamPump_EmitsAskUserQuestionKind_ForAskUserQuestionToolUse()
     {
@@ -40,7 +40,7 @@ public class AskUserQuestionChatTests
         Assert.Matches(new Regex(@"""ask_user_question"""), src);
     }
 
-    // ClaudeChatDrawer — Case 1: AskUserQuestionMessage record is defined
+    // ChatDrawer — Case 1: AskUserQuestionMessage record is defined
     [Fact]
     public void ChatDrawer_DefinesAskUserQuestionMessage_Record()
     {
@@ -48,7 +48,7 @@ public class AskUserQuestionChatTests
         Assert.Contains("AskUserQuestionMessage", src);
     }
 
-    // ClaudeChatDrawer — Case 1: ReceiveSse handles "ask_user_question" kind and adds AskUserQuestionMessage
+    // ChatDrawer — Case 1: ReceiveSse handles "ask_user_question" kind and adds AskUserQuestionMessage
     [Fact]
     public void ChatDrawer_ReceiveSse_HandlesAskUserQuestionKind_And_AddsMessage()
     {
@@ -57,7 +57,7 @@ public class AskUserQuestionChatTests
         Assert.Matches(new Regex(@"new\s+AskUserQuestionMessage"), src);
     }
 
-    // ClaudeChatDrawer — Case 2: free-text prompt renders a textarea element
+    // ChatDrawer — Case 2: free-text prompt renders a textarea element
     [Fact]
     public void ChatDrawer_Renders_TextareaForFreeTextPrompt()
     {
@@ -65,7 +65,7 @@ public class AskUserQuestionChatTests
         Assert.Matches(new Regex(@"AskUserQuestionMessage[\s\S]{0,2000}<textarea", RegexOptions.Multiline), src);
     }
 
-    // ClaudeChatDrawer — Case 3: multiple-choice prompt iterates over Options to render buttons
+    // ChatDrawer — Case 3: multiple-choice prompt iterates over Options to render buttons
     [Fact]
     public void ChatDrawer_Renders_ChoiceButtonsForOptions()
     {
@@ -73,7 +73,7 @@ public class AskUserQuestionChatTests
         Assert.Matches(new Regex(@"AskUserQuestionMessage[\s\S]{0,2000}\.Options", RegexOptions.Multiline), src);
     }
 
-    // ClaudeChatDrawer — Case 4: SubmitAskUserQuestion method exists
+    // ChatDrawer — Case 4: SubmitAskUserQuestion method exists
     [Fact]
     public void ChatDrawer_HasSubmitAskUserQuestion_Method()
     {
@@ -81,7 +81,7 @@ public class AskUserQuestionChatTests
         Assert.Contains("SubmitAskUserQuestion", src);
     }
 
-    // ClaudeChatDrawer — Case 4: prompt widget becomes disabled/answered after submission
+    // ChatDrawer — Case 4: prompt widget becomes disabled/answered after submission
     [Fact]
     public void ChatDrawer_PromptBecomesAnswered_AfterSubmit()
     {
@@ -90,7 +90,7 @@ public class AskUserQuestionChatTests
         Assert.Matches(new Regex(@"AskUserQuestionMessage[\s\S]{0,3000}(IsAnswered|isAnswered|Answered\s*=\s*true|answered)", RegexOptions.Multiline), src);
     }
 
-    // ClaudeChatDrawer — Case 5: history reload reconstructs AskUserQuestionMessage for role "ask_user_question"
+    // ChatDrawer — Case 5: history reload reconstructs AskUserQuestionMessage for role "ask_user_question"
     [Fact]
     public void ChatDrawer_HistoryReload_ReconstructsAskUserQuestionMessage()
     {
@@ -100,7 +100,7 @@ public class AskUserQuestionChatTests
             RegexOptions.Multiline), src);
     }
 
-    // ClaudeChatDrawer — Case 6: submit is guarded against null _activeRunId
+    // ChatDrawer — Case 6: submit is guarded against null _activeRunId
     [Fact]
     public void ChatDrawer_SubmitGuard_ChecksActiveRunIdIsNotNull()
     {
@@ -108,7 +108,7 @@ public class AskUserQuestionChatTests
         Assert.Matches(new Regex(@"SubmitAskUserQuestion[\s\S]{0,600}_activeRunId\s*(==|is)\s*null|_activeRunId\s*(==|is)\s*null[\s\S]{0,600}SubmitAskUserQuestion", RegexOptions.Multiline), src);
     }
 
-    // ClaudeChatDrawer — Case 7: empty prompt text falls back to a placeholder string
+    // ChatDrawer — Case 7: empty prompt text falls back to a placeholder string
     [Fact]
     public void ChatDrawer_EmptyPromptText_ShowsFallbackPlaceholder()
     {

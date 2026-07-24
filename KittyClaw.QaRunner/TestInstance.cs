@@ -7,7 +7,7 @@ namespace KittyClaw.QaRunner;
 /// <summary>
 /// Spawns an isolated KittyClaw.Web process on a free port with a throwaway data dir,
 /// waits for it to be ready, and tears it down on dispose. Pairs with the dynamic claude
-/// discovery in ClaudeRunner: as long as KittyClaw.ClaudeMock has been built, it will be
+/// discovery in AgentRunner: as long as KittyClaw.ClaudeMock has been built, it will be
 /// found as a sibling of the web exe and used by the test instance automatically.
 /// </summary>
 public sealed class TestInstance : IAsyncDisposable
