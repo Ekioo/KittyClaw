@@ -6,11 +6,14 @@ public static partial class Endpoints
     {
         // Capability probe — lets the UI hide the browse button when no picker is available
         // (e.g. cloud-hosted deployment where the server has no desktop).
-        api.MapGet("/browse/capabilities", (KittyClaw.Core.Platform.IFolderPicker? picker) =>
+        // [FromServices] is required: IFolderPicker is only registered on Windows, and without
+        // the attribute minimal APIs infer the unregistered parameter as a request body,
+        // which throws at startup on non-Windows hosts.
+        api.MapGet("/browse/capabilities", ([Microsoft.AspNetCore.Mvc.FromServices] KittyClaw.Core.Platform.IFolderPicker? picker) =>
             Results.Ok(new { folderPicker = picker?.IsAvailable == true }))
             .WithTags("Browse");
 
-        api.MapPost("/browse/folder", async (BrowseFolderRequest? req, KittyClaw.Core.Platform.IFolderPicker? picker, CancellationToken ct) =>
+        api.MapPost("/browse/folder", async (BrowseFolderRequest? req, [Microsoft.AspNetCore.Mvc.FromServices] KittyClaw.Core.Platform.IFolderPicker? picker, CancellationToken ct) =>
         {
             if (picker is null || !picker.IsAvailable)
                 return Results.StatusCode(StatusCodes.Status501NotImplemented);
