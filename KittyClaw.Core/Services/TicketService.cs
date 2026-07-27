@@ -502,10 +502,13 @@ public class TicketService
         return true;
     }
 
-    public async Task<Comment?> AddCommentAsync(string projectSlug, int ticketId, string content, string author = "owner")
+    public async Task<Comment?> AddCommentAsync(string projectSlug, int ticketId, string? content, string author = "owner")
     {
         if (string.IsNullOrWhiteSpace(author))
             throw new InvalidOperationException("Le champ 'author' est requis.");
+        if (string.IsNullOrWhiteSpace(content))
+            throw new InvalidOperationException("Le champ 'content' est requis.");
+        content = content.Trim();
         await using var db = _projectService.GetProjectDb(projectSlug);
         var ticket = await db.Tickets.FindAsync(ticketId);
         if (ticket is null) return null;
@@ -534,10 +537,13 @@ public class TicketService
         return true;
     }
 
-    public async Task<bool> UpdateCommentAsync(string projectSlug, int ticketId, int commentId, string content, string author = "owner")
+    public async Task<bool> UpdateCommentAsync(string projectSlug, int ticketId, int commentId, string? content, string author = "owner")
     {
         if (string.IsNullOrWhiteSpace(author))
             throw new InvalidOperationException("Le champ 'author' est requis.");
+        if (string.IsNullOrWhiteSpace(content))
+            throw new InvalidOperationException("Le champ 'content' est requis.");
+        content = content.Trim();
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureActivityTableAsync(db);
         var comment = await db.Comments.FindAsync(commentId);

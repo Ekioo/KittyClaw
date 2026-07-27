@@ -119,9 +119,10 @@ public static partial class Endpoints
         {
             try
             {
-                var comment = await ts.AddCommentAsync(slug, id, req.Content, req.Author);
+                // Author defaults to "owner" when omitted (UI path); empty content is rejected.
+                var comment = await ts.AddCommentAsync(slug, id, req.Content, req.Author ?? "owner");
                 if (comment is not null) notifier.NotifyProjectUpdated(slug);
-                return comment is null ? Results.NotFound() : Results.Created($"/api/projects/{slug}/tickets/{id}", comment);
+                return comment is null ? Results.NotFound() : Results.Created($"/api/projects/{slug}/tickets/{id}/comments/{comment.Id}", comment);
             }
             catch (InvalidOperationException ex)
             {
@@ -133,7 +134,7 @@ public static partial class Endpoints
         {
             try
             {
-                var ok = await ts.UpdateCommentAsync(slug, id, commentId, req.Content, req.Author);
+                var ok = await ts.UpdateCommentAsync(slug, id, commentId, req.Content, req.Author ?? "owner");
                 if (ok) notifier.NotifyProjectUpdated(slug);
                 return ok ? Results.NoContent() : Results.NotFound();
             }

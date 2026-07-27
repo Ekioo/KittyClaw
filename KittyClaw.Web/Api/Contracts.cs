@@ -7,8 +7,10 @@ public record CreateTicketRequest(string Title, string CreatedBy, string Status,
 public record UpdateTicketRequest(string Author, string? Title = null, string? Description = null, TicketPriority? Priority = null, string? AssignedTo = null, List<int>? LabelIds = null);
 public record MoveTicketRequest(string Status, string Author);
 public record ScheduleTicketRequest(DateTime FireAt, string Author, string? TargetStatus = "Todo");
-public record AddCommentRequest(string Content, string Author);
-public record UpdateCommentRequest(string Content, string Author);
+// Content/Author are nullable so missing JSON fields deserialize cleanly; the service
+// rejects null/whitespace with 400 rather than letting SQLite throw NOT NULL (500).
+public record AddCommentRequest(string? Content, string? Author);
+public record UpdateCommentRequest(string? Content, string? Author);
 public record CreateLabelRequest(string Name, string Color = "#6366f1");
 public record UpdateLabelRequest(string? Name = null, string? Color = null);
 public record SetTicketLabelsRequest(List<int> LabelIds);
