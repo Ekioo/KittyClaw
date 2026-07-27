@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
@@ -67,6 +68,28 @@ public sealed class AgentRun
 
     private readonly List<string> _pendingSteerMessages = new();
     public IReadOnlyList<string> PendingSteerMessages => _pendingSteerMessages;
+
+    // Grok (and any token-streamed provider) assembles assistant text across many small
+    // content_block_delta events; the final assistant/result event drains this buffer so
+    // chat history gets one complete message instead of hundreds of single-token rows.
+    private readonly StringBuilder _streamText = new();
+
+    public void AppendStreamText(string chunk)
+    {
+        if (string.IsNullOrEmpty(chunk)) return;
+        lock (_logLock) _streamText.Append(chunk);
+    }
+
+    /// <summary>Returns the accumulated stream text and clears the buffer.</summary>
+    public string TakeStreamText()
+    {
+        lock (_logLock)
+        {
+            var s = _streamText.ToString();
+            _streamText.Clear();
+            return s;
+        }
+    }
 
     public void AddPendingSteerMessage(string msg)
     {

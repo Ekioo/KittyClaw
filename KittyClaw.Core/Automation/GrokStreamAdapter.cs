@@ -3,12 +3,15 @@ using System.Text.Json;
 namespace KittyClaw.Core.Automation;
 
 /// <summary>
-/// Maps NDJSON lines from `grok --output-format streaming-json` onto an AgentRun,
+/// Maps NDJSON lines from <c>grok --output-format streaming-json</c> onto an AgentRun,
 /// normalizing them to the claude-style event kinds the rest of the pipeline consumes
-/// ("assistant", "tool_use", "result", "error"). The grok stream is OpenCode-style and
-/// its field names are not pinned by public docs, so every extraction here is tolerant:
-/// multiple candidate field names, and a false return (→ generic passthrough in
-/// AgentStreamPump) whenever a line doesn't look like something we understand.
+/// ("assistant", "content_block_delta", "tool_use", "result", "error").
+/// <para>
+/// Observed real stream (grok 0.2.x): token chunks as <c>{"type":"text","data":"…"}</c>
+/// and a terminal <c>{"type":"end","stopReason":"EndTurn","usage":…,"total_cost_usd":…}</c>.
+/// Field names are not pinned by public docs, so extraction is tolerant (multiple candidate
+/// names); unrecognized lines return false → generic passthrough in <see cref="AgentStreamPump"/>.
+/// </para>
 /// </summary>
 internal static class GrokStreamAdapter
 {
@@ -28,16 +31,21 @@ internal static class GrokStreamAdapter
             case "assistant":
             {
                 var text = ExtractText(root);
-                // No extractable text → not a shape we know (e.g. a claude-style assistant
-                // envelope from a mock) — let the generic handler deal with it.
-                if (string.IsNullOrWhiteSpace(text)) return false;
-                run.Push(new StreamEvent(DateTime.UtcNow, "assistant", $"[assistant] {text}"));
+                // null = unknown shape (e.g. claude-style assistant envelope) → fall through.
+                // Empty string = handled no-op. Non-empty (including whitespace tokens) streams.
+                if (text is null) return false;
+                if (text.Length == 0) return true;
+                run.AppendStreamText(text);
+                // Same live-streaming path the chat drawer uses for claude content_block_delta.
+                run.Push(new StreamEvent(DateTime.UtcNow, "content_block_delta", text));
                 return true;
             }
             case "tool_use":
             case "tool_call":
             case "tool":
             {
+                // Flush any text that preceded this tool call so the chat shows it before the tool row.
+                FlushAssistant(run);
                 var name = FirstString(root, "name", "tool", "toolName", "tool_name") ?? "tool";
                 var input = FirstRawJson(root, "input", "args", "arguments", "parameters") ?? "{}";
                 run.Push(new StreamEvent(DateTime.UtcNow, "tool_use", name, input));
@@ -45,21 +53,23 @@ internal static class GrokStreamAdapter
             }
             case "error":
             {
-                var msg = FirstString(root, "message", "error", "text") ?? line;
+                FlushAssistant(run);
+                var msg = FirstString(root, "message", "error", "text", "data") ?? line;
                 run.Push(new StreamEvent(DateTime.UtcNow, "error", msg, line));
                 return true;
             }
         }
 
-        // Terminal summary: the event (typed "result"/"step_finish"/"summary" or untyped) that
-        // carries usage/cost/stopReason. Record usage and surface it as the "result" event the
-        // runner's watchdog and cost tracking key on.
-        if (type is "result" or "step_finish" or "summary" || (type == "" && LooksLikeSummary(root)))
+        // Terminal summary: "end" is what the real grok CLI emits; also accept result /
+        // step_finish / summary and untyped usage payloads.
+        if (type is "end" or "result" or "step_finish" or "summary" || (type == "" && LooksLikeSummary(root)))
         {
-            var isFinal = type is "result" or "summary" || type == "" || HasAny(root, "stopReason", "stop_reason");
+            var isFinal = type is "end" or "result" or "summary" || type == ""
+                || HasAny(root, "stopReason", "stop_reason");
             RecordUsage(root, run);
             if (isFinal)
             {
+                FlushAssistant(run);
                 var text = ExtractText(root);
                 run.Push(new StreamEvent(DateTime.UtcNow, "result",
                     string.IsNullOrWhiteSpace(text) ? "[result]" : $"[result] {text}", line));
@@ -70,22 +80,30 @@ internal static class GrokStreamAdapter
         return false;
     }
 
+    private static void FlushAssistant(AgentRun run)
+    {
+        var accumulated = run.TakeStreamText();
+        if (accumulated.Length == 0) return;
+        run.Push(new StreamEvent(DateTime.UtcNow, "assistant", $"[assistant] {accumulated}"));
+    }
+
     private static bool LooksLikeSummary(JsonElement root) =>
-        HasAny(root, "usage", "cost", "stopReason", "stop_reason");
+        HasAny(root, "usage", "cost", "total_cost_usd", "stopReason", "stop_reason");
 
     private static bool HasAny(JsonElement obj, params string[] names) =>
         names.Any(n => obj.TryGetProperty(n, out _));
 
     private static string? ExtractText(JsonElement root)
     {
-        var direct = FirstString(root, "text", "content", "delta");
+        // Real grok streaming-json uses "data" for token chunks; also accept text/content/delta.
+        var direct = FirstString(root, "data", "text", "content", "delta");
         if (direct is not null) return direct;
         // Nested shapes: {part: {text}}, {delta: {text}}, {message: {content: "..."}}
-        foreach (var container in new[] { "part", "delta", "message" })
+        foreach (var container in new[] { "part", "delta", "message", "data" })
         {
             if (root.TryGetProperty(container, out var c) && c.ValueKind == JsonValueKind.Object)
             {
-                var nested = FirstString(c, "text", "content");
+                var nested = FirstString(c, "text", "content", "data");
                 if (nested is not null) return nested;
             }
         }
@@ -119,7 +137,7 @@ internal static class GrokStreamAdapter
             {
                 input = FirstInt(usage, "input_tokens", "inputTokens", "prompt_tokens", "promptTokens");
                 output = FirstInt(usage, "output_tokens", "outputTokens", "completion_tokens", "completionTokens");
-                cacheRead = FirstInt(usage, "cache_read_input_tokens", "cachedTokens", "cached_tokens");
+                cacheRead = FirstInt(usage, "cache_read_input_tokens", "cacheReadInputTokens", "cachedTokens", "cached_tokens");
             }
             decimal? cost = ReadCost(root);
             if (input > 0 || output > 0 || cacheRead > 0 || cost is not null)
@@ -130,12 +148,19 @@ internal static class GrokStreamAdapter
 
     private static decimal? ReadCost(JsonElement root)
     {
-        if (!root.TryGetProperty("cost", out var c)) return null;
-        if (c.ValueKind == JsonValueKind.Number && c.TryGetDecimal(out var v)) return v;
-        if (c.ValueKind == JsonValueKind.Object)
-            foreach (var n in new[] { "total", "usd", "total_usd", "totalUsd" })
-                if (c.TryGetProperty(n, out var nested) && nested.ValueKind == JsonValueKind.Number && nested.TryGetDecimal(out var nv))
-                    return nv;
+        // Real grok "end" events put the total at the top level as total_cost_usd.
+        foreach (var n in new[] { "total_cost_usd", "totalCostUsd", "cost" })
+        {
+            if (!root.TryGetProperty(n, out var c)) continue;
+            if (c.ValueKind == JsonValueKind.Number && c.TryGetDecimal(out var v)) return v;
+            if (c.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var nestedName in new[] { "total", "usd", "total_usd", "totalUsd" })
+                    if (c.TryGetProperty(nestedName, out var nested) && nested.ValueKind == JsonValueKind.Number
+                        && nested.TryGetDecimal(out var nv))
+                        return nv;
+            }
+        }
         return null;
     }
 

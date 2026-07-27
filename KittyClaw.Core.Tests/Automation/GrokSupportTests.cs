@@ -223,13 +223,36 @@ public class GrokSupportTests
     // ── Stream adapter ──────────────────────────────────────────────────────
 
     [Fact]
-    public void Adapter_TextEvent_BecomesAssistantEvent()
+    public void Adapter_TextEvent_BecomesContentBlockDelta()
     {
         var run = NewRun();
         Assert.True(TryMap("""{"type":"text","text":"Hello from grok"}""", run));
         var ev = Assert.Single(run.SnapshotBuffer());
-        Assert.Equal("assistant", ev.Kind);
-        Assert.Equal("[assistant] Hello from grok", ev.Text);
+        Assert.Equal("content_block_delta", ev.Kind);
+        Assert.Equal("Hello from grok", ev.Text);
+    }
+
+    [Fact]
+    public void Adapter_RealGrokDataChunks_StreamThenFlushOnEnd()
+    {
+        // Verbatim shape from a real grok-4.5 chat run (token chunks use "data", terminal is "end").
+        var run = NewRun();
+        Assert.True(TryMap("""{"type":"text","data":"Tu"}""", run));
+        Assert.True(TryMap("""{"type":"text","data":" "}""", run));
+        Assert.True(TryMap("""{"type":"text","data":"brief"}""", run));
+        Assert.True(TryMap(
+            """{"type":"end","stopReason":"EndTurn","usage":{"input_tokens":100,"cache_read_input_tokens":50,"output_tokens":3},"total_cost_usd":0.01}""",
+            run));
+
+        var events = run.SnapshotBuffer();
+        Assert.Equal(3, events.Count(e => e.Kind == "content_block_delta"));
+        var assistant = Assert.Single(events, e => e.Kind == "assistant");
+        Assert.Equal("[assistant] Tu brief", assistant.Text);
+        Assert.Contains(events, e => e.Kind == "result");
+        Assert.Equal(100, run.InputTokens);
+        Assert.Equal(3, run.OutputTokens);
+        Assert.Equal(50, run.CacheReadTokens);
+        Assert.Equal(0.01m, run.TotalCostUsd);
     }
 
     [Fact]
@@ -241,6 +264,19 @@ public class GrokSupportTests
         Assert.Equal("tool_use", ev.Kind);
         Assert.Equal("bash", ev.Text);
         Assert.Contains("ls", ev.Detail);
+    }
+
+    [Fact]
+    public void Adapter_ToolUse_FlushesPrecedingTextAsAssistant()
+    {
+        var run = NewRun();
+        Assert.True(TryMap("""{"type":"text","data":"Looking up…"}""", run));
+        Assert.True(TryMap("""{"type":"tool_use","name":"bash","input":{"command":"ls"}}""", run));
+        var events = run.SnapshotBuffer();
+        Assert.Equal("content_block_delta", events[0].Kind);
+        Assert.Equal("assistant", events[1].Kind);
+        Assert.Equal("[assistant] Looking up…", events[1].Text);
+        Assert.Equal("tool_use", events[2].Kind);
     }
 
     [Fact]

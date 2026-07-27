@@ -31,11 +31,12 @@ with an explanatory error event before any subprocess is launched.
   provider and env separately, and the retry runs on the fallback's own CLI
   (`AgentRunContext.WithFallback`).
 - `KittyClaw.Core/Automation/GrokStreamAdapter.cs` — normalizes grok's streaming-json NDJSON
-  events to the claude-style kinds the pipeline consumes: `text` → `assistant`, `tool_use`/
-  `tool_call` → `tool_use`, `error` → `error`, and the terminal summary (usage/cost/stopReason)
-  → `result` with token usage accumulated onto the run (feeds per-ticket cost tracking). Field
-  names are matched tolerantly (snake_case and camelCase); unrecognized lines fall through to
-  the generic passthrough in `AgentStreamPump`.
+  events to the claude-style kinds the pipeline consumes. Real grok 0.2.x streams token chunks
+  as `{"type":"text","data":"…"}` (mapped to `content_block_delta` for live chat streaming,
+  accumulated, then flushed as one `assistant` message) and a terminal
+  `{"type":"end",…usage…,total_cost_usd}` (mapped to `result` with cost/tokens). Also accepts
+  `tool_use`/`tool_call`, `error`, and legacy `result`/`text` field names. Unrecognized lines
+  fall through to the generic passthrough in `AgentStreamPump`.
 - `KittyClaw.Web/Api/Endpoints.Grok.cs` — `GET /api/grok-models`, host-global (unlike the
   per-project Ollama endpoint); returns `[]` when the CLI is not installed.
 
