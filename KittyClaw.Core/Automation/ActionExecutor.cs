@@ -481,7 +481,44 @@ internal sealed class ActionExecutor
             catch { /* non-blocking */ }
         }
 
-        if (spec.RestoreStatusOnFail
+        // Quota/spend failures: park in Blocked regardless of restoreStatusOnFail.
+        // Otherwise assignee-dispatch (restore → Todo → re-fire every 30s) and assignee-resume
+        // (leave InProgress → re-fire every 30s) both spin forever against a hard limit.
+        if (run.HitQuota
+            && run.Status is AgentRunStatus.Failed or AgentRunStatus.Stopped
+            && firing.TicketId is not null)
+        {
+            try
+            {
+                var ticket = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
+                if (ticket is not null
+                    && !string.Equals(ticket.Status, "Blocked", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(ticket.Status, "Done", StringComparison.OrdinalIgnoreCase))
+                {
+                    await _tickets.MoveTicketAsync(rt.Slug, firing.TicketId.Value, "Blocked", "automation");
+                    try
+                    {
+                        await _tickets.AddCommentAsync(rt.Slug, firing.TicketId.Value,
+                            "Agent stopped: usage/quota limit (primary and fallback exhausted). " +
+                            "Parked in Blocked to avoid a re-dispatch loop. " +
+                            "Move back to Todo when quota recovers or after changing the project fallback model.",
+                            "automation");
+                    }
+                    catch { /* comment is best-effort */ }
+                    _logger.LogWarning(
+                        "Parked #{Id} in Blocked after quota failure (agent {Agent})",
+                        firing.TicketId, agentName);
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                _logger.LogWarning(
+                    "Quota failure on #{Id} (agent {Agent}) but no Blocked column — leaving ticket in place",
+                    firing.TicketId, agentName);
+            }
+            catch (Exception ex) { _logger.LogWarning(ex, "Failed to park #{Id} after quota", firing.TicketId); }
+        }
+        else if (spec.RestoreStatusOnFail
             && run.Status is AgentRunStatus.Failed or AgentRunStatus.Stopped
             && statusBeforeMove is not null && statusAfterMove is not null
             && firing.TicketId is not null)

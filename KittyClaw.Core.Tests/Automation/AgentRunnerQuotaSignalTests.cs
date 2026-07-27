@@ -55,6 +55,14 @@ public class AgentRunnerQuotaSignalTests
     }
 
     [Fact]
+    public void ResultEvent_WithMonthlySpendLimit_IsQuotaSignal()
+    {
+        // Real Claude CLI wording when the org monthly spend cap is hit (ekioo loop 2026-07).
+        Assert.True(AgentRunner.IsQuotaSignal(
+            Ev("result", "You've hit your monthly spend limit · raise it at claude.ai/settings/usage")));
+    }
+
+    [Fact]
     public void ResultEvent_NormalText_IsNotQuotaSignal()
     {
         Assert.False(AgentRunner.IsQuotaSignal(Ev("result", "Task completed successfully")));

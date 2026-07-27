@@ -314,6 +314,11 @@ public sealed class AgentRunner
                 if (attempt.Cancelled) return run;
             }
 
+            // Final attempt still quota-throttled → surface on the run so restoreStatusOnFail
+            // can park the ticket instead of bouncing Todo ↔ InProgress forever.
+            if (attempt.HitQuota && attempt.Exit != 0)
+                run.HitQuota = true;
+
             _runs.Complete(run.RunId, attempt.Exit == 0 ? AgentRunStatus.Completed : AgentRunStatus.Failed, attempt.Exit);
             AppendDebugLog(ctx, $"FINISHED {ctx.AgentName} run={run.RunId} exit={attempt.Exit}");
 
@@ -394,6 +399,8 @@ public sealed class AgentRunner
     private static readonly string[] QuotaMarkers =
     {
         "usage limit",
+        "spend limit",
+        "monthly spend",
         "rate_limit_error",
         "rate limit",
         "quota exceeded",

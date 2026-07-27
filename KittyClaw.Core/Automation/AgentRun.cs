@@ -24,6 +24,13 @@ public sealed class AgentRun
     public DateTime? EndedAt { get; set; }
     public int? ExitCode { get; set; }
 
+    /// <summary>
+    /// True when the final subprocess attempt failed with a quota / spend / rate-limit signal
+    /// (including after a fallback retry). Used by <c>restoreStatusOnFail</c> to park the ticket
+    /// in Blocked instead of restoring Todo and re-dispatching every poll.
+    /// </summary>
+    public bool HitQuota { get; set; }
+
     // Token usage accumulated from the claude CLI's terminal `result` events. A single AgentRun
     // can spawn several subprocesses (resume retry, quota fallback, chat steer replay), each
     // emitting its own result event, so these are sums — not the last event's values.
