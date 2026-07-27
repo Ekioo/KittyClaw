@@ -77,6 +77,32 @@ public class OllamaLocalModelTests
         Assert.Equal("qwen3-coder:30b", loaded.LocalModelName);
     }
 
+    [Fact]
+    public async Task UpdateProject_FallbackModel_PersistsGrokAndSurvivesReload()
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("fallback-grok-test");
+
+        var updated = await projects.UpdateProjectAsync(
+            project.Slug, workspacePath: null, fallbackModel: "grok-4.5", updateFallback: true);
+        Assert.Equal("grok-4.5", updated!.FallbackModel);
+
+        var loaded = await projects.GetProjectAsync(project.Slug);
+        Assert.Equal("grok-4.5", loaded!.FallbackModel);
+
+        // Workspace-only update must not clear the fallback.
+        await projects.UpdateProjectAsync(project.Slug, workspacePath: @"C:\work", updateFallback: false);
+        loaded = await projects.GetProjectAsync(project.Slug);
+        Assert.Equal("grok-4.5", loaded!.FallbackModel);
+        Assert.Equal(@"C:\work", loaded.WorkspacePath);
+
+        // Explicit clear.
+        await projects.UpdateProjectAsync(project.Slug, loaded.WorkspacePath, fallbackModel: null, updateFallback: true);
+        loaded = await projects.GetProjectAsync(project.Slug);
+        Assert.Null(loaded!.FallbackModel);
+    }
+
     // Case 2: Dispatch with null model uses member.DefaultModel
     [Fact]
     public async Task Dispatch_NullModel_UsesMemberDefaultModel()

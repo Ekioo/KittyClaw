@@ -62,7 +62,12 @@ else
             <h2>@L["FallbackModel"]</h2>
             <p class="settings-hint">@L["FallbackModelHint"]</p>
             <div class="settings-row">
-                <select class="settings-input" style="max-width:340px" @bind="_fallbackModel">
+                @* value+onchange (not @bind): Blazor @bind on a <select> with optgroups can fail to
+                   show the selected value after reload when the option list is built asynchronously. *@
+                <select class="settings-input" style="max-width:340px"
+                        value="@_fallbackModel"
+                        @onchange="OnFallbackModelChanged"
+                        @key="@($"fallback-select-{_grokModels.Count}-{_discoveredModels.Count}-{_fallbackModel}")">
                     <option value="">@L["FallbackDisabled"]</option>
                     <optgroup label="Claude">
                         @foreach (var model in ClaudeModels)
@@ -420,14 +425,19 @@ else
         _project = await ProjectService.GetProjectAsync(Slug);
         if (_project is null) return;
         _workspacePath = _project.WorkspacePath ?? "";
-        _fallbackModel = _project.FallbackModel ?? "";
         _localModelBaseUrl = _project.LocalModelBaseUrl ?? "";
         await ReloadAllAsync();
         await ProbeBrowseAsync();
+        // Load model catalogs first, then apply the saved fallback so the <select> has a
+        // matching <option> on first paint (avoids showing "Disabled" while value is set).
         if (!string.IsNullOrWhiteSpace(_localModelBaseUrl)) await DiscoverLocalModels();
         try { _grokModels = (await KittyClaw.Core.Automation.GrokCli.ListModelsAsync()).ToList(); }
         catch { _grokModels = new(); }
+        _fallbackModel = _project.FallbackModel ?? "";
     }
+
+    private void OnFallbackModelChanged(ChangeEventArgs e) =>
+        _fallbackModel = e.Value?.ToString() ?? "";
 
     private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
     private void OnLangChanged(ChangeEventArgs e) => AppSettings.Language = (string?)e.Value ?? "fr";
@@ -497,17 +507,24 @@ else
         _fallbackStatus = null;
         try
         {
-            var body = new
+            // Persist via ProjectService (same path as load) rather than HTTP self-call, so the
+            // updateFallbackModel flag cannot be lost to JSON binding and the in-process state
+            // matches what the next page open will read.
+            var workspace = string.IsNullOrWhiteSpace(_workspacePath) ? null : _workspacePath.Trim();
+            var model = string.IsNullOrWhiteSpace(_fallbackModel) ? null : _fallbackModel.Trim();
+            var updated = await ProjectService.UpdateProjectAsync(Slug, workspace, model, updateFallback: true);
+            if (updated is null)
             {
-                workspacePath = string.IsNullOrWhiteSpace(_workspacePath) ? null : _workspacePath.Trim(),
-                fallbackModel = string.IsNullOrWhiteSpace(_fallbackModel) ? null : _fallbackModel.Trim(),
-                updateFallbackModel = true,
-            };
-            var resp = await NewHttp().PatchAsJsonAsync($"/api/projects/{Slug}", body);
-            _fallbackStatus = resp.IsSuccessStatusCode
-                ? (L["Saved"], "settings-status-ok")
-                : ($"{L["Error"]}: {resp.StatusCode}", "settings-status-err");
-            if (resp.IsSuccessStatusCode) _project = await ProjectService.GetProjectAsync(Slug);
+                _fallbackStatus = (L["Error"], "settings-status-err");
+                return;
+            }
+            _project = updated;
+            _fallbackModel = updated.FallbackModel ?? "";
+            _fallbackStatus = (L["Saved"], "settings-status-ok");
+        }
+        catch (Exception ex)
+        {
+            _fallbackStatus = ($"{L["Error"]}: {ex.Message}", "settings-status-err");
         }
         finally { _savingFallback = false; }
     }

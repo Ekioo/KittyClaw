@@ -66,7 +66,9 @@ public class Opus48ModelSupportTests
     public void ProjectSettings_FallbackSelect_IsCatalogDriven()
     {
         var src = ProjectSettings();
-        Assert.Contains("@bind=\"_fallbackModel\"", src);
+        // value+onchange (not @bind) so the selected Grok/Ollama option survives reload.
+        Assert.Contains("OnFallbackModelChanged", src);
+        Assert.Contains("_fallbackModel", src);
         Assert.DoesNotContain("FallbackOpus48", src);
     }
 
