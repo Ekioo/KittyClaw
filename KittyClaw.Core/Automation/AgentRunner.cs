@@ -201,12 +201,10 @@ public sealed class AgentRunner
         // We persist sessions for ALL runs — even those without a ticket (groomer,
         // documentalist, code-janitor, evaluator) — so they keep their context across restarts.
         // SessionScope optionally namespaces the key (e.g. "chat:agent:sweep") so chat
-        // sessions don't collide with automation sessions for the same agent.
-        var scopedAgent = ctx.SessionScope is null ? ctx.AgentName : $"{ctx.SessionScope}:{ctx.AgentName}";
-        // Grok sessions live in the grok CLI's own store (~/.grok/sessions) — a claude session id
-        // is meaningless there and vice versa. Namespace the key so switching a member between
-        // providers never tries to --resume a foreign session.
-        if (ctx.Provider == CliProvider.Grok) scopedAgent = $"grok:{scopedAgent}";
+        // sessions don't collide with automation sessions for the same agent. Grok sessions
+        // get an extra "grok:" prefix (see SessionScopeKey) so a Claude session id is never
+        // resumed on the grok CLI and vice versa.
+        var scopedAgent = SessionScopeKey(ctx.AgentName, ctx.SessionScope, ctx.Provider);
         var existingSessionId = ctx.PersistSession
             ? _sessions.GetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId)
             : null;
@@ -283,15 +281,23 @@ public sealed class AgentRunner
                 _logger.LogWarning("Quota hit for {Agent} (model={Model}); falling back to {Fallback}",
                     ctx.AgentName, ctx.Model, ctx.FallbackModel);
                 run.Model = ctx.FallbackModel;
-                // Start the retry in a fresh session: the first attempt already consumed
-                // `sessionId`, so reusing it with --session-id would fail ("already in use").
+                // Fresh session id: the primary attempt already consumed `sessionId`, and the
+                // fallback may be a different CLI (claude → grok) whose session store is separate.
+                // Persist under the FALLBACK provider's namespace only — writing a grok session
+                // id under the primary (claude) key would make the next primary dispatch try to
+                // --resume a foreign id (one wasted failed spawn before RetryOnResumeFailure).
+                // The primary key is left alone so a later primary run can still resume that session
+                // once quota recovers.
+                var fallbackCtx = ctx.WithFallback();
                 sessionId = Guid.NewGuid().ToString();
                 run.SessionId = sessionId;
                 if (ctx.PersistSession)
-                    _sessions.SetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId, sessionId);
-                // The fallback may live on a different provider (e.g. claude primary → grok
-                // fallback): WithFallback swaps in the fallback model, provider, and env.
-                attempt = await SpawnAndWaitAsync(ctx.WithFallback(), run, skillContent, sessionId, isResume: false, ct);
+                {
+                    var fallbackScoped = SessionScopeKey(
+                        fallbackCtx.AgentName, fallbackCtx.SessionScope, fallbackCtx.Provider);
+                    _sessions.SetSessionId(ctx.WorkspacePath, fallbackScoped, ctx.TicketId, sessionId);
+                }
+                attempt = await SpawnAndWaitAsync(fallbackCtx, run, skillContent, sessionId, isResume: false, ct);
                 if (attempt.Cancelled) return run;
             }
 
@@ -450,12 +456,20 @@ public sealed class AgentRunner
         var effectiveModel = ctx.Model;
         var isGrok = ctx.Provider == CliProvider.Grok;
 
+        // Grok prompt file (when used). Cleaned up in the finally of every exit path below —
+        // spawn failure, early cancel, or normal process end.
+        string? grokPromptFile = null;
+
         List<string> args;
         if (isGrok)
         {
-            // Grok Build CLI headless mode. The prompt travels as the -p argument (grok does not
-            // read it from stdin); --always-approve is grok's --dangerously-skip-permissions;
-            // --no-auto-update keeps background update checks out of automated runs.
+            // Grok Build CLI headless mode. The prompt is written to a temp file and passed via
+            // --prompt-file rather than -p: on Windows CreateProcess caps the command line at
+            // ~32k characters, and a new-session chat/automation prompt (preamble + skill +
+            // memory + user text) routinely exceeds that (the resume path is short and can
+            // still spawn, so the failure only shows up after "Previous session expired").
+            // --always-approve is grok's --dangerously-skip-permissions; --no-auto-update keeps
+            // background update checks out of automated runs.
             args = new List<string>
             {
                 "--output-format", "streaming-json",
@@ -466,7 +480,11 @@ public sealed class AgentRunner
             if (isResume) { args.Add("--resume"); args.Add(sessionId); }
             else { args.Add("--session-id"); args.Add(sessionId); }
             if (effectiveModel is not null) { args.Add("--model"); args.Add(effectiveModel); }
-            args.Add("-p"); args.Add(prompt);
+
+            grokPromptFile = Path.Combine(Path.GetTempPath(), $"kittyclaw-grok-prompt-{Guid.NewGuid():N}.txt");
+            await File.WriteAllTextAsync(grokPromptFile, prompt, Encoding.UTF8, ct);
+            args.Add("--prompt-file");
+            args.Add(grokPromptFile);
         }
         else
         {
@@ -499,7 +517,7 @@ public sealed class AgentRunner
         AppendDebugLog(ctx, $"LAUNCHING {ctx.AgentName} {(isResume ? "(resume)" : "(new)")} ticket=#{ctx.TicketId} session={sessionId}");
         _logger.LogInformation("LAUNCH {Agent} {Mode} ticket=#{TicketId} session={SessionId} cmd={Bin} {Args}",
             ctx.AgentName, isResume ? "(resume)" : "(new)", ctx.TicketId, sessionId,
-            psi.FileName, string.Join(" ", isGrok ? args.SkipLast(1).Append("<prompt>") : args));
+            psi.FileName, string.Join(" ", isGrok ? args.SkipLast(1).Append("<prompt-file>") : args));
 
         System.Diagnostics.Process proc;
         try
@@ -508,6 +526,7 @@ public sealed class AgentRunner
         }
         catch (Exception ex)
         {
+            TryDeleteFile(grokPromptFile);
             run.Push(new StreamEvent(DateTime.UtcNow, "error", $"spawn failed: {ex.Message}"));
             return new SpawnResult(-1, 0, false, false);
         }
@@ -542,9 +561,9 @@ public sealed class AgentRunner
             try
             {
                 // `claude --print` reads its prompt from stdin and blocks until EOF before
-                // processing anything, so close stdin now. grok takes its prompt as the -p
-                // argument and reads nothing from stdin — just close it. Mid-run steering does
-                // not reach the process this way — PumpSteeringAsync queues steered messages
+                // processing anything, so close stdin now. grok takes its prompt via
+                // --prompt-file and reads nothing from stdin — just close it. Mid-run steering
+                // does not reach the process this way — PumpSteeringAsync queues steered messages
                 // for replay on the next --resume invocation (see its comment).
                 if (!isGrok)
                 {
@@ -688,7 +707,26 @@ public sealed class AgentRunner
         finally
         {
             job?.Dispose();
+            TryDeleteFile(grokPromptFile);
         }
+    }
+
+    private static void TryDeleteFile(string? path)
+    {
+        if (path is null) return;
+        try { File.Delete(path); } catch { /* best-effort cleanup */ }
+    }
+
+    /// <summary>
+    /// Builds the SessionRegistry agent key for a dispatch. Optionally prefixes with
+    /// <c>SessionScope</c> (e.g. <c>chat:</c>), then with <c>grok:</c> when the provider is
+    /// Grok so Claude and Grok session ids never share a registry slot.
+    /// </summary>
+    internal static string SessionScopeKey(string agentName, string? sessionScope, CliProvider provider)
+    {
+        var scoped = sessionScope is null ? agentName : $"{sessionScope}:{agentName}";
+        if (provider == CliProvider.Grok) scoped = $"grok:{scoped}";
+        return scoped;
     }
 
     // How long to wait for stdout/stderr to reach EOF after the claude process exits before

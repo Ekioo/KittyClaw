@@ -151,6 +151,15 @@ public class GrokSupportTests
         Assert.Null(fb.FallbackModel);
     }
 
+    [Theory]
+    [InlineData("lain", null, CliProvider.Claude, "lain")]
+    [InlineData("lain", "chat", CliProvider.Claude, "chat:lain")]
+    [InlineData("lain", null, CliProvider.Grok, "grok:lain")]
+    [InlineData("lain", "chat", CliProvider.Grok, "grok:chat:lain")]
+    public void SessionScopeKey_NamespacesByScopeAndProvider(
+        string agent, string? scope, CliProvider provider, string expected) =>
+        Assert.Equal(expected, AgentRunner.SessionScopeKey(agent, scope, provider));
+
     [Fact]
     public void QuotaSignal_GrokPaymentRequired_IsDetected()
     {
@@ -385,5 +394,63 @@ public class GrokSupportTests
         Assert.Equal("grok-4", run.Model);
         Assert.Equal(AgentRunStatus.Completed, run.Status);
         Assert.Contains(run.SnapshotBuffer(), e => e.Kind == "launch");
+    }
+
+    [Fact]
+    public async Task QuotaFallback_ClaudeToGrok_PersistsSessionUnderGrokNamespaceOnly()
+    {
+        // Fresh (non-resume) primary spawn so the skill body — and its <!--scenario:quota-->
+        // marker — is injected into the prompt. Fallback uses the same mock binary as grok,
+        // forced onto "default" via env so it succeeds. The fallback session id must land
+        // under grok:{agent}, not overwrite the claude key.
+        var mockBin = Environment.GetEnvironmentVariable("KITTYCLAW_CLAUDE_BIN");
+        Assert.False(string.IsNullOrEmpty(mockBin), "MockClaude fixture did not resolve the mock binary");
+        using var grok = new FakeGrokInstall(mockBin);
+
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("fallback-session-ns");
+        var workspace = projects.ResolveWorkspacePath(project);
+        Directory.CreateDirectory(workspace);
+        TestSkillBuilder.Create(workspace, "ticket-agent", scenario: "quota");
+
+        var sessions = new SessionRegistry();
+        var runs = new AgentRunRegistry();
+        var runner = new AgentRunner(sessions, runs, new RunConcurrencyGate(4), NullLogger<AgentRunner>.Instance);
+
+        const int ticketId = 42;
+        var primaryKey = AgentRunner.SessionScopeKey("ticket-agent", null, CliProvider.Claude);
+        var fallbackKey = AgentRunner.SessionScopeKey("ticket-agent", null, CliProvider.Grok);
+
+        var run = await runner.RunAsync(new AgentRunContext
+        {
+            ProjectSlug = project.Slug,
+            WorkspacePath = workspace,
+            AgentName = "ticket-agent",
+            SkillFile = "ticket-agent/SKILL.md",
+            TicketId = ticketId,
+            TicketTitle = "Fallback ns",
+            MaxTurns = 1,
+            Model = "claude-sonnet-4-6",
+            Provider = CliProvider.Claude,
+            FallbackModel = "grok-4.5",
+            FallbackProvider = CliProvider.Grok,
+            // Force the fallback mock spawn onto the success scenario (skill still says quota).
+            FallbackEnv = new Dictionary<string, string> { ["KITTYCLAW_MOCK_SCENARIO"] = "default" },
+            RetryOnResumeFailure = true,
+        }, CancellationToken.None);
+
+        Assert.Contains(run.SnapshotBuffer(), e => e.Kind == "fallback");
+        Assert.Equal("grok-4.5", run.Model);
+        Assert.Equal(AgentRunStatus.Completed, run.Status);
+
+        var claudeSession = sessions.GetSessionId(workspace, primaryKey, ticketId);
+        var grokSession = sessions.GetSessionId(workspace, fallbackKey, ticketId);
+        Assert.False(string.IsNullOrEmpty(claudeSession));
+        Assert.False(string.IsNullOrEmpty(grokSession));
+        // Distinct ids, each under its own provider namespace.
+        Assert.NotEqual(claudeSession, grokSession);
+        // run.SessionId is the last (fallback) attempt.
+        Assert.Equal(grokSession, run.SessionId);
     }
 }

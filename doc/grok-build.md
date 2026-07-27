@@ -20,11 +20,16 @@ with an explanatory error event before any subprocess is launched.
 - `KittyClaw.Core/Automation/AgentRunner.cs` — when `AgentRunContext.Provider == Grok`, builds
   grok headless args instead of claude's: `--output-format streaming-json --always-approve
   --no-auto-update --max-turns N`, `--session-id <uuid>` (new) / `--resume <id>` (resume),
-  `--model <id>`, and the prompt as the `-p` argument (grok does not read it from stdin).
-  Session keys are namespaced with a `grok:` prefix so switching a member between providers
-  never tries to resume a foreign session id. The project quota-fallback model can be any
-  available model (Claude, Grok, or Ollama): the dispatcher resolves its provider and env
-  separately, and the retry runs on the fallback's own CLI (`AgentRunContext.WithFallback`).
+  `--model <id>`, and the prompt via `--prompt-file` (written to a temp file; grok does not
+  read the prompt from stdin). Using a file avoids Windows' ~32k CreateProcess command-line
+  limit, which a new-session prompt (preamble + skill + memory) routinely exceeds. Session
+  keys are namespaced with a `grok:` prefix so switching a member between providers never
+  tries to resume a foreign session id. On a quota fallback to a different provider, the new
+  session id is written only under the fallback's namespace (the primary key is left alone so a
+  later primary dispatch can still resume once quota recovers). The project quota-fallback
+  model can be any available model (Claude, Grok, or Ollama): the dispatcher resolves its
+  provider and env separately, and the retry runs on the fallback's own CLI
+  (`AgentRunContext.WithFallback`).
 - `KittyClaw.Core/Automation/GrokStreamAdapter.cs` — normalizes grok's streaming-json NDJSON
   events to the claude-style kinds the pipeline consumes: `text` → `assistant`, `tool_use`/
   `tool_call` → `tool_use`, `error` → `error`, and the terminal summary (usage/cost/stopReason)
@@ -47,9 +52,6 @@ with an explanatory error event before any subprocess is launched.
   `curl -fsSL https://x.ai/cli/install.sh | bash`.
 
 ## Limitations
-- The prompt is passed as a command-line argument; on Windows the command line is capped at
-  ~32k characters, so an extremely large skill/memory/context prompt could fail to spawn (the
-  run surfaces a `spawn failed` error event).
 - Grok's streaming event schema is not formally published; the adapter is tolerant but unknown
   event shapes surface as raw passthrough events in the run log rather than formatted ones.
 - `AskUserQuestion` interactive widgets are claude-only. Quota detection patterns are tuned to
