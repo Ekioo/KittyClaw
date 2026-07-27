@@ -171,9 +171,18 @@ public static partial class Endpoints
     {
         api.MapPatch("/projects/{slug}/tickets/{id:int}/reorder", async (string slug, int id, ReorderTicketRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
         {
-            await ts.ReorderTicketAsync(slug, id, req.Status, req.Index);
-            notifier.NotifyProjectUpdated(slug);
-            return Results.NoContent();
-        }).WithTags("Tickets");
+            try
+            {
+                await ts.ReorderTicketAsync(slug, id, req.Status, req.Index);
+                notifier.NotifyProjectUpdated(slug);
+                return Results.NoContent();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).WithTags("Tickets")
+        .Produces(StatusCodes.Status204NoContent)
+        .ProducesProblem(StatusCodes.Status400BadRequest);
     }
 }

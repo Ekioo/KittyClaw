@@ -27,6 +27,24 @@ public class TicketService
         _memberService = memberService;
     }
 
+    /// <summary>
+    /// Ensures board columns exist, then returns the canonical column name for
+    /// <paramref name="status"/> (case-insensitive match). Throws when the column is missing
+    /// so tickets are never parked in a status the board cannot render.
+    /// </summary>
+    private static async Task<string> RequireColumnNameAsync(TodoDbContext db, string? status)
+    {
+        await ColumnService.EnsureBoardColumnsTableAsync(db);
+        if (string.IsNullOrWhiteSpace(status))
+            throw new InvalidOperationException("Le statut (colonne) est requis.");
+        status = status.Trim();
+        var names = await db.BoardColumns.Select(c => c.Name).ToListAsync();
+        var match = names.FirstOrDefault(n => string.Equals(n, status, StringComparison.OrdinalIgnoreCase));
+        if (match is null)
+            throw new InvalidOperationException($"La colonne '{status}' n'existe pas.");
+        return match;
+    }
+
     // Ensures the ActivityEntries table exists (for databases created before this feature)
     private static Task EnsureActivityTableAsync(TodoDbContext db) =>
         MigrationGate.RunOnceAsync(db, "activity-table", static async d =>
@@ -217,6 +235,9 @@ public class TicketService
         await EnsureLabelTablesAsync(db);
         await EnsureAssignedToColumnAsync(db);
         await EnsureParentIdColumnAsync(db);
+        // Reject unknown statuses so the ticket is never created into a column the board
+        // cannot render (invisible ticket). Canonical name matches BoardColumns.Name.
+        status = await RequireColumnNameAsync(db, status);
         if (parentId is not null)
         {
             var parentExists = await db.Tickets.AnyAsync(t => t.Id == parentId.Value);
@@ -263,10 +284,7 @@ public class TicketService
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureActivityTableAsync(db);
         await EnsureScheduleColumnsAsync(db);
-        await ColumnService.EnsureBoardColumnsTableAsync(db);
-        var columnExists = await db.BoardColumns.AnyAsync(c => c.Name == newStatus);
-        if (!columnExists)
-            throw new InvalidOperationException($"La colonne '{newStatus}' n'existe pas.");
+        newStatus = await RequireColumnNameAsync(db, newStatus);
         var ticket = await db.Tickets.FindAsync(ticketId);
         if (ticket is null) return null;
         var oldStatus = ticket.Status;
@@ -306,13 +324,8 @@ public class TicketService
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureActivityTableAsync(db);
         await EnsureScheduleColumnsAsync(db);
-        await ColumnService.EnsureBoardColumnsTableAsync(db);
-        var scheduledExists = await db.BoardColumns.AnyAsync(c => c.Name == "Scheduled");
-        if (!scheduledExists)
-            throw new InvalidOperationException("La colonne 'Scheduled' n'existe pas.");
-        var targetExists = await db.BoardColumns.AnyAsync(c => c.Name == targetStatus);
-        if (!targetExists)
-            throw new InvalidOperationException($"La colonne cible '{targetStatus}' n'existe pas.");
+        await RequireColumnNameAsync(db, "Scheduled");
+        targetStatus = await RequireColumnNameAsync(db, targetStatus);
         var ticket = await db.Tickets.FindAsync(ticketId);
         if (ticket is null) return null;
         var oldStatus = ticket.Status;
@@ -361,8 +374,12 @@ public class TicketService
         if (ticket is null || !string.Equals(ticket.Status, "Scheduled", StringComparison.OrdinalIgnoreCase))
             return null;
         var target = string.IsNullOrWhiteSpace(ticket.ScheduleTarget) ? "Todo" : ticket.ScheduleTarget!;
-        var targetExists = await db.BoardColumns.AnyAsync(c => c.Name == target);
-        if (!targetExists) target = "Todo";
+        try { target = await RequireColumnNameAsync(db, target); }
+        catch (InvalidOperationException)
+        {
+            // Fall back to Todo when the stored target was deleted; still require Todo to exist.
+            target = await RequireColumnNameAsync(db, "Todo");
+        }
         ticket.Status = target;
         ticket.FireAt = null;
         ticket.ScheduleTarget = null;
@@ -583,12 +600,15 @@ public class TicketService
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureSortOrderColumnAsync(db);
         await EnsureActivityTableAsync(db);
+        // Same column gate as MoveTicketAsync — drag-and-drop must not park tickets in a
+        // phantom status the board does not render.
+        newStatus = await RequireColumnNameAsync(db, newStatus);
 
         var ticket = await db.Tickets.FindAsync(ticketId);
         if (ticket is null) return;
 
         var oldStatus = ticket.Status;
-        var statusChanged = oldStatus != newStatus;
+        var statusChanged = !string.Equals(oldStatus, newStatus, StringComparison.OrdinalIgnoreCase);
         ticket.Status = newStatus;
         ticket.UpdatedAt = DateTime.UtcNow;
 
