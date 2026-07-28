@@ -11,7 +11,7 @@ Background service that watches each project for events and dispatches agents in
 - `KittyClaw.Core/Automation/ProjectRuntimeManager.cs` — per-project runtime dictionary and signal fan-out.
 - `KittyClaw.Core/Automation/ProjectRuntime.cs` — data class holding per-project run state.
 - `KittyClaw.Core/Automation/AutomationConfig.cs` — JSON-deserialized automation definitions (triggers, conditions, actions).
-- `KittyClaw.Core/Automation/AutomationStore.cs` — loads/persists `automations.json` from each workspace's `.agents/` folder.
+- `KittyClaw.Core/Automation/AutomationStore.cs` — loads/persists `automations.json` from each workspace's `.agents/` folder. Saves are merge-safe (ticket #115): under a per-project IO lock the file is re-read before writing, and any automation present on disk but missing from the payload is preserved unless the caller proves it edited the latest version by passing back the `fileStamp` (SHA-256 of the file) obtained at load. Divergences are logged as warnings. Unknown JSON fields round-trip via `[JsonExtensionData]`, so hand-added keys (e.g. custom pins) survive a UI save. Writes are atomic (temp file + rename).
 - `KittyClaw.Core/Automation/Triggers/` — trigger implementations.
 - `KittyClaw.Core/Automation/GitRepositoryWatcher.cs` — backs the `gitCommit` trigger.
 - `KittyClaw.Core/Automation/RunConcurrencyGate.cs` — serializes runs sharing a `concurrencyGroup`.

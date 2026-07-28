@@ -1,5 +1,6 @@
 {
   "ReloadFromDisk": "Reload automations.json from disk",
+  "SavedPreservedFromDisk": "Saved — {0} automation(s) added on disk in the meantime were preserved.",
   "Reload": "Reload",
   "NewAutomation": "+ Automation",
   "NoAutomations": "No automations. Click \"+ Automation\" to get started.",

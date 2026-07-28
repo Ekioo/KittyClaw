@@ -1,5 +1,6 @@
 {
   "ReloadFromDisk": "Relire automations.json depuis le disque",
+  "SavedPreservedFromDisk": "Enregistré — {0} automation(s) ajoutée(s) sur le disque entre-temps ont été conservée(s).",
   "Reload": "Recharger",
   "NewAutomation": "+ Automation",
   "NoAutomations": "Aucune automation. Clique sur \"+ Automation\" pour commencer.",

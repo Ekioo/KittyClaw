@@ -281,6 +281,7 @@ else
 
     private Project? _project;
     private AutomationConfig? _config;
+    private string? _fileStamp;
     private List<string> _skills = new();
     private List<string> _columns = new();
     private List<string> _members = new();
@@ -410,6 +411,7 @@ else
             if (doc.RootElement.TryGetProperty("config", out var cfg))
                 _config = JsonSerializer.Deserialize<AutomationConfig>(cfg.GetRawText(), AutomationStore.JsonOptions) ?? new();
             else _config = new();
+            _fileStamp = doc.RootElement.TryGetProperty("fileStamp", out var fs) ? fs.GetString() : null;
         }
         catch (Exception ex)
         {
@@ -493,10 +495,32 @@ else
             var http = NewHttp();
             var json = JsonSerializer.Serialize(_config, AutomationStore.JsonOptions);
             var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-            var resp = await http.PutAsync($"/api/projects/{Slug}/automations", content);
-            _statusMessage = resp.IsSuccessStatusCode
-                ? (L["Saved"], "settings-status-ok")
-                : ($"{L["Error"]}: {resp.StatusCode}", "settings-status-err");
+            var url = $"/api/projects/{Slug}/automations";
+            if (!string.IsNullOrEmpty(_fileStamp)) url += $"?baseStamp={Uri.EscapeDataString(_fileStamp)}";
+            var resp = await http.PutAsync(url, content);
+            if (resp.IsSuccessStatusCode)
+            {
+                var preservedCount = 0;
+                try
+                {
+                    var body = await resp.Content.ReadAsStringAsync();
+                    using var doc = JsonDocument.Parse(body);
+                    if (doc.RootElement.TryGetProperty("config", out var cfg))
+                        _config = JsonSerializer.Deserialize<AutomationConfig>(cfg.GetRawText(), AutomationStore.JsonOptions) ?? _config;
+                    if (doc.RootElement.TryGetProperty("fileStamp", out var fs))
+                        _fileStamp = fs.GetString();
+                    if (doc.RootElement.TryGetProperty("preservedIds", out var p) && p.ValueKind == JsonValueKind.Array)
+                        preservedCount = p.GetArrayLength();
+                }
+                catch { }
+                _statusMessage = preservedCount > 0
+                    ? (string.Format(L["SavedPreservedFromDisk"], preservedCount), "settings-status-ok")
+                    : (L["Saved"], "settings-status-ok");
+            }
+            else
+            {
+                _statusMessage = ($"{L["Error"]}: {resp.StatusCode}", "settings-status-err");
+            }
         }
         finally { _saving = false; }
     }

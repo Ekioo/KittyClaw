@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace KittyClaw.Core.Automation;
@@ -7,6 +8,11 @@ public sealed class AutomationConfig
     public List<Automation> Automations { get; set; } = new();
     public decimal? DailyBudgetUsd { get; set; }
     public int? MinDescriptionLength { get; set; }
+
+    /// <summary>Round-trips fields not modeled here (agents may annotate automations.json with
+    /// custom keys); without this they would be silently dropped on save (ticket #115).</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public sealed class Automation
@@ -17,6 +23,10 @@ public sealed class Automation
     public required TriggerSpec Trigger { get; set; }
     public List<ConditionSpec> Conditions { get; set; } = new();
     public List<ActionSpec> Actions { get; set; } = new();
+
+    /// <summary>Round-trips unknown per-automation fields (e.g. custom pins added by agents).</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
@@ -30,11 +40,17 @@ public sealed class Automation
 [JsonDerivedType(typeof(TicketCommentAddedTriggerSpec), "ticketCommentAdded")]
 public abstract class TriggerSpec
 {
+    [JsonIgnore]
     public abstract string UiTypeKey { get; }
+
+    /// <summary>Round-trips unknown trigger fields so a save never strips hand-added keys.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public sealed class IntervalTriggerSpec : TriggerSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "interval";
     public string? Cron { get; set; }
     /// <summary>Legacy fixed-interval seconds, pre-dating the cron-only model. Converted to an
@@ -46,6 +62,7 @@ public sealed class IntervalTriggerSpec : TriggerSpec
 
 public sealed class TicketInColumnTriggerSpec : TriggerSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "ticketInColumn";
     public int Seconds { get; set; } = 30;
     public List<string> Columns { get; set; } = new();
@@ -55,6 +72,7 @@ public sealed class TicketInColumnTriggerSpec : TriggerSpec
 
 public sealed class GitCommitTriggerSpec : TriggerSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "gitCommit";
     public int PollSeconds { get; set; } = 60;
     public List<string> IgnoreAuthors { get; set; } = new() { "noreply@anthropic.com" };
@@ -62,6 +80,7 @@ public sealed class GitCommitTriggerSpec : TriggerSpec
 
 public sealed class StatusChangeTriggerSpec : TriggerSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "statusChange";
     public int PollSeconds { get; set; } = 30;
     public string? From { get; set; }
@@ -71,6 +90,7 @@ public sealed class StatusChangeTriggerSpec : TriggerSpec
 
 public sealed class SubTicketStatusTriggerSpec : TriggerSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "subTicketStatus";
     public int PollSeconds { get; set; } = 30;
     public string? ParentColumn { get; set; }
@@ -79,6 +99,7 @@ public sealed class SubTicketStatusTriggerSpec : TriggerSpec
 
 public sealed class BoardIdleTriggerSpec : TriggerSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "boardIdle";
     public int PollSeconds { get; set; } = 60;
     public List<string> IdleColumns { get; set; } = new() { "Done", "Review" };
@@ -86,6 +107,7 @@ public sealed class BoardIdleTriggerSpec : TriggerSpec
 
 public sealed class AgentInactivityTriggerSpec : TriggerSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "agentInactivity";
     public int PollSeconds { get; set; } = 60;
     public int MinutesIdle { get; set; } = 45;
@@ -93,6 +115,7 @@ public sealed class AgentInactivityTriggerSpec : TriggerSpec
 
 public sealed class TicketCommentAddedTriggerSpec : TriggerSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "ticketCommentAdded";
     public int PollSeconds { get; set; } = 30;
     public List<string> Authors { get; set; } = new();
@@ -111,13 +134,19 @@ public sealed class TicketCommentAddedTriggerSpec : TriggerSpec
 [JsonDerivedType(typeof(TicketCountInColumnConditionSpec), "ticketCountInColumn")]
 public abstract class ConditionSpec
 {
+    [JsonIgnore]
     public abstract string UiTypeKey { get; }
     /// <summary>When true, the condition result is inverted (NOT logic).</summary>
     public bool Negate { get; set; }
+
+    /// <summary>Round-trips unknown condition fields so a save never strips hand-added keys.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public sealed class TicketInColumnConditionSpec : ConditionSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "ticketInColumn";
     public List<string> Columns { get; set; } = new();
     public string? AssigneeSlug { get; set; }
@@ -126,12 +155,14 @@ public sealed class TicketInColumnConditionSpec : ConditionSpec
 /// <summary>Kept for backward-compat with existing automations.json files.</summary>
 public sealed class MinDescriptionLengthConditionSpec : ConditionSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "minDescriptionLength";
     public int Length { get; set; } = 50;
 }
 
 public sealed class FieldLengthConditionSpec : ConditionSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "fieldLength";
     /// <summary>"title" or "description"</summary>
     public string Field { get; set; } = "description";
@@ -142,12 +173,14 @@ public sealed class FieldLengthConditionSpec : ConditionSpec
 
 public sealed class PriorityConditionSpec : ConditionSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "priority";
     public List<string> Priorities { get; set; } = new();
 }
 
 public sealed class LabelsConditionSpec : ConditionSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "labels";
     /// <summary>Ticket must have at least one of these labels.</summary>
     public List<string> Labels { get; set; } = new();
@@ -155,6 +188,7 @@ public sealed class LabelsConditionSpec : ConditionSpec
 
 public sealed class AssignedToConditionSpec : ConditionSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "assignedTo";
     /// <summary>Matches if ticket is assigned to one of these slugs. Empty = unassigned.</summary>
     public List<string> Slugs { get; set; } = new();
@@ -162,6 +196,7 @@ public sealed class AssignedToConditionSpec : ConditionSpec
 
 public sealed class HasParentConditionSpec : ConditionSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "hasParent";
     /// <summary>true = ticket must have a parent; false = ticket must be a root ticket.</summary>
     public bool Value { get; set; }
@@ -173,6 +208,7 @@ public sealed class HasParentConditionSpec : ConditionSpec
 /// </summary>
 public sealed class AllSubTicketsInStatusConditionSpec : ConditionSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "allSubTicketsInStatus";
     public List<string> Statuses { get; set; } = new() { "Done" };
 }
@@ -185,6 +221,7 @@ public sealed class AllSubTicketsInStatusConditionSpec : ConditionSpec
 /// </summary>
 public sealed class TicketCountInColumnConditionSpec : ConditionSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "ticketCountInColumn";
     public List<string> Columns { get; set; } = new();
     public string? AssigneeSlug { get; set; }
@@ -196,6 +233,7 @@ public sealed class TicketCountInColumnConditionSpec : ConditionSpec
 
 public sealed class TicketAgeConditionSpec : ConditionSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "ticketAge";
     /// <summary>"createdAt" or "updatedAt"</summary>
     public string Field { get; set; } = "createdAt";
@@ -216,11 +254,17 @@ public sealed class TicketAgeConditionSpec : ConditionSpec
 [JsonDerivedType(typeof(CreateTicketActionSpec), "createTicket")]
 public abstract class ActionSpec
 {
+    [JsonIgnore]
     public abstract string UiTypeKey { get; }
+
+    /// <summary>Round-trips unknown action fields so a save never strips hand-added keys.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public sealed class RunAgentActionSpec : ActionSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "runAgent";
     /// <summary>
     /// Name of the agent to run. Must match a member slug in the project.
@@ -242,12 +286,14 @@ public sealed class RunAgentActionSpec : ActionSpec
 
 public sealed class MoveTicketStatusActionSpec : ActionSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "moveTicketStatus";
     public required string To { get; set; }
 }
 
 public sealed class SetLabelsActionSpec : ActionSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "setLabels";
     /// <summary>Label names to add to the ticket.</summary>
     public List<string> Add { get; set; } = new();
@@ -257,6 +303,7 @@ public sealed class SetLabelsActionSpec : ActionSpec
 
 public sealed class AssignTicketActionSpec : ActionSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "assignTicket";
     /// <summary>Member slug to assign. Empty or null to unassign. Supports {previousAssignee} placeholder.</summary>
     public string? Slug { get; set; }
@@ -264,6 +311,7 @@ public sealed class AssignTicketActionSpec : ActionSpec
 
 public sealed class AddCommentActionSpec : ActionSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "addComment";
     /// <summary>Comment content. Supports placeholders: {ticketId}, {ticketTitle}, {assignee}.</summary>
     public string Content { get; set; } = "";
@@ -275,6 +323,7 @@ public sealed class AddCommentActionSpec : ActionSpec
 /// the legacy flat memory.md) after a run.</summary>
 public sealed class CommitAgentMemoryActionSpec : ActionSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "commitAgentMemory";
     public required string Agent { get; set; }
 }
@@ -286,6 +335,7 @@ public sealed class CommitAgentMemoryActionSpec : ActionSpec
 /// </summary>
 public sealed class ConsolidateAgentMemoryActionSpec : ActionSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "consolidateAgentMemory";
     /// <summary>Agent slug. Supports {assignee} placeholder.</summary>
     public required string Agent { get; set; }
@@ -302,6 +352,7 @@ public sealed class ConsolidateAgentMemoryActionSpec : ActionSpec
 /// </summary>
 public sealed class CreateTicketActionSpec : ActionSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "createTicket";
     /// <summary>Ticket title. Supports {date}, {monday}, {firstOfMonth}.</summary>
     public string Title { get; set; } = "";
@@ -321,6 +372,7 @@ public sealed class CreateTicketActionSpec : ActionSpec
 /// <summary>Runs a PowerShell script or file with optional arguments and timeout.</summary>
 public sealed class ExecutePowerShellActionSpec : ActionSpec
 {
+    [JsonIgnore]
     public override string UiTypeKey => "executePowerShell";
     public string Script { get; set; } = "";
     public string? ScriptFile { get; set; }

@@ -10,8 +10,8 @@ public static partial class Endpoints
         {
             try
             {
-                var (config, workspace, path) = await store.LoadAsync(slug);
-                return Results.Ok(new { config, workspace, path });
+                var (config, workspace, path, fileStamp) = await store.LoadWithStampAsync(slug);
+                return Results.Ok(new { config, workspace, path, fileStamp });
             }
             catch (InvalidOperationException ex)
             {
@@ -23,11 +23,20 @@ public static partial class Endpoints
             }
         }).WithTags("Automations");
 
-        api.MapPut("/projects/{slug}/automations", async (string slug, AutomationConfig config, AutomationStore store, AutomationEngine engine) =>
+        // baseStamp: fileStamp returned by the GET. When it matches the current file, the save is
+        // applied verbatim (deletions honored). When it is stale or omitted, automations present on
+        // disk but missing from the payload are preserved instead of being silently erased (#115).
+        api.MapPut("/projects/{slug}/automations", async (string slug, AutomationConfig config, string? baseStamp, AutomationStore store, AutomationEngine engine) =>
         {
-            await store.SaveAsync(slug, config);
+            var result = await store.SaveAsync(slug, config, string.IsNullOrEmpty(baseStamp) ? null : baseStamp);
             await engine.ReloadProjectAsync(slug);
-            return Results.NoContent();
+            return Results.Ok(new
+            {
+                config = result.Config,
+                fileStamp = result.FileStamp,
+                preservedIds = result.PreservedIds,
+                diverged = result.Diverged,
+            });
         }).WithTags("Automations");
 
         api.MapPost("/projects/{slug}/automations/reload", async (string slug, AutomationEngine engine) =>

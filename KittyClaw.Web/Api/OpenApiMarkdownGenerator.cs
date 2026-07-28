@@ -365,7 +365,7 @@ public static class OpenApiMarkdownGenerator
         sb.AppendLine();
         sb.AppendLine("### Life cycle");
         sb.AppendLine();
-        sb.AppendLine("1. **Create**: write `automations.json` or call `PUT /api/projects/{slug}/automations`.");
+        sb.AppendLine("1. **Create**: write `automations.json` or call `PUT /api/projects/{slug}/automations`. The PUT is merge-safe: pass the `fileStamp` returned by the GET as the `baseStamp` query parameter — if the file changed on disk in between, automations missing from your payload are preserved instead of erased (they are listed in the response's `preservedIds`). Without `baseStamp`, the save can only add or update automations, never remove them.");
         sb.AppendLine("2. **Reload**: `POST /api/projects/{slug}/automations/reload` to force a reload.");
         sb.AppendLine("3. **Execute**: the engine evaluates triggers continuously.");
         sb.AppendLine("4. **Watch**: `GET /api/projects/{slug}/runs` lists active runs. `GET /api/projects/{slug}/runs/{runId}/stream` for the real-time SSE stream.");
