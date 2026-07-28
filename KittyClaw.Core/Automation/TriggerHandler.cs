@@ -51,6 +51,8 @@ internal sealed class TriggerHandler
             if (!_runtimeManager.TryGetRuntime(entry.Slug, out var urt) || urt?.Config is null) continue;
             if (!await _executor.ConditionsMatchAsync(urt, entry.Automation, entry.Firing)) continue;
             var utctx = BuildTriggerContext(entry.Slug, urt.Workspace!, entry.Automation);
+            urt.LastFiredAt = DateTime.UtcNow;
+            urt.LastFiredAutomationId = entry.Automation.Id;
             await _executor.ExecuteAutomationAsync(urt, entry.Automation, entry.Firing, ct, entry.Trigger, utctx);
         }
 
@@ -82,6 +84,8 @@ internal sealed class TriggerHandler
                 foreach (var firing in firings)
                 {
                     if (!await _executor.ConditionsMatchAsync(rt, automation, firing)) continue;
+                    rt.LastFiredAt = DateTime.UtcNow;
+                    rt.LastFiredAutomationId = automation.Id;
                     // Awaited: the prep phase runs to completion before the next firing, reserving
                     // concurrency slots. The actual subprocess is fire-and-forget inside ExecuteRunAgentActionAsync.
                     await _executor.ExecuteAutomationAsync(rt, automation, firing, ct, trigger, tctx);

@@ -49,6 +49,16 @@ public sealed class AutomationEngine : BackgroundService
 
     public Task ReloadProjectAsync(string slug) => _runtimeManager.ReloadProjectAsync(slug);
 
+    /// <summary>UTC time the engine instance was created (process start, effectively).</summary>
+    public DateTime StartedAt { get; } = DateTime.UtcNow;
+
+    /// <summary>UTC time the last tick attempt finished. A stale value means the tick loop is
+    /// dead or hung — the exact failure mode ticket #114 asks to make visible.</summary>
+    public DateTime? LastTickAt { get; private set; }
+
+    /// <summary>Per-project health snapshot; null if the project was never loaded into the engine.</summary>
+    public ProjectEngineHealth? GetProjectHealth(string slug) => _runtimeManager.GetProjectHealth(slug);
+
     /// <summary>
     /// Push an external signal to all enabled automations of <paramref name="projectSlug"/>.
     /// Each trigger that implements <see cref="ITrigger.TryHandleExternalSignal"/> can produce
@@ -78,6 +88,7 @@ public sealed class AutomationEngine : BackgroundService
             {
                 _logger.LogError(ex, "AutomationEngine tick failed");
             }
+            LastTickAt = DateTime.UtcNow;
             _runs.PurgeOld(TimeSpan.FromHours(24));
             try { await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken); }
             catch (OperationCanceledException) { break; }

@@ -28,6 +28,10 @@ Background service that watches each project for events and dispatches agents in
 - **`statusChange` trigger re-fire on failure**: for `runAgent` actions backed by a `statusChange` (or `subTicketStatus`) trigger, `ActionExecutor` defers advancing the trigger snapshot (`commitAsync`) until after the run completes. If the run ends with `AgentRunStatus.Failed` or `Stopped`, the snapshot is left at the pre-transition value, so the next poll detects the transition again and re-dispatches the agent. On `Completed`, the snapshot advances normally and subsequent polls stay silent. This means a rate-limited or crashed agent is automatically retried on the next poll cycle (≤ `pollSeconds`) without any manual intervention.
 - **Debounce stamped at chain completion**: `ITrigger.CommitFiringAsync` accepts an optional `DateTime? completedAt` parameter. `ActionExecutor` passes `DateTime.UtcNow` at the moment the entire action chain finishes (including post-run actions), so interval/cron debounce timestamps reflect chain completion time rather than emission time. Triggers that ignore `completedAt` (most non-interval ones) use their own internal timestamp unchanged.
 
+## Observability
+- `GET /api/engine/health` (ticket #114) — anti-silent-outage endpoint. Engine-level: `startedAt`, `lastTickAt`, `lastTickAgeSeconds` (a stale value means the tick loop is dead or hung). Per project: `loaded`, automation counts, `scheduledRegistered` (cron/interval triggers actually registered), `nextRunAt`, `overdue` (scheduled tasks sitting >2 min past their fire time), and `lastFiredAt`/`lastFiredAutomationId` (in-memory, since process start).
+- `ProjectRuntimeManager.ReloadProjectAsync` builds the new trigger map before swapping `Config`/`Triggers` in, so a failed reload keeps the previous coherent pair instead of leaving automations without registered triggers.
+
 ## Entry points
 - Hosted at app startup via DI in `KittyClaw.Web/Program.cs`.
 - Per-project configuration loaded from `<workspace>/.agents/automations.json` (seeded by the [project template](./project-template.md)).

@@ -47,9 +47,13 @@ internal sealed class ProjectRuntimeManager
         try
         {
             var (config, workspace, _) = await _store.LoadAsync(slug);
+            // Build triggers BEFORE swapping anything in: if trigger construction throws, the
+            // runtime keeps its previous coherent config+triggers pair instead of ending up with
+            // a new config whose automations have no registered triggers (silent unregistration).
+            var triggers = await BuildTriggersAsync(slug, config);
             rt.Workspace = workspace;
             rt.Config = config;
-            rt.Triggers = await BuildTriggersAsync(slug, config);
+            rt.Triggers = triggers;
             _logger.LogInformation("Automations loaded for {Slug}: {Count} entries", slug, config.Automations.Count);
         }
         catch (Exception ex)
@@ -73,6 +77,42 @@ internal sealed class ProjectRuntimeManager
             result[a.Id] = trigger.GetNextRunAt(now);
         }
         return result;
+    }
+
+    /// <summary>
+    /// Health snapshot for GET /api/engine/health (ticket #114). Returns null when the project's
+    /// config has never been loaded into the engine (which is itself a signal for the caller).
+    /// </summary>
+    public ProjectEngineHealth? GetProjectHealth(string slug)
+    {
+        if (!_runtime.TryGetValue(slug, out var rt) || rt?.Config is null) return null;
+        var now = DateTime.UtcNow;
+        var scheduled = 0;
+        var overdue = 0;
+        DateTime? nextRunAt = null;
+        foreach (var a in rt.Config.Automations)
+        {
+            if (!a.Enabled) continue;
+            // Only cron/interval triggers count as "scheduled tasks": poll-based triggers also
+            // expose a next-poll time, but they recompute it each tick and cannot go overdue.
+            if (!rt.Triggers.TryGetValue(a.Id, out var trigger) || trigger is not IntervalTrigger) continue;
+            var next = trigger.GetNextRunAt(now);
+            if (next is null) continue;
+            scheduled++;
+            if (nextRunAt is null || next < nextRunAt) nextRunAt = next;
+            // 2-minute grace: the tick loop runs every second, so a NextRunAt sitting in the past
+            // longer than that means the schedule is not being served.
+            if (next < now.AddMinutes(-2)) overdue++;
+        }
+        return new ProjectEngineHealth(
+            rt.Slug,
+            rt.Config.Automations.Count,
+            rt.Config.Automations.Count(a => a.Enabled),
+            scheduled,
+            nextRunAt,
+            overdue,
+            rt.LastFiredAt,
+            rt.LastFiredAutomationId);
     }
 
     public async Task NotifySignalAsync(string slug, object signal)

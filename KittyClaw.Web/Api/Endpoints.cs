@@ -16,6 +16,7 @@ public static partial class Endpoints
         MapBrowse(api);
         MapSkills(api);
         MapAutomations(api);
+        MapEngine(api);
         MapRuns(api);
         MapChat(api);
         MapImages(api);
