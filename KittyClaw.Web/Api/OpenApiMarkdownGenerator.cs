@@ -187,6 +187,7 @@ public static class OpenApiMarkdownGenerator
         sb.AppendLine("## Conventions");
         sb.AppendLine();
         sb.AppendLine("- `author` **(required on all mutating endpoints)**: identifies who is performing the action. Use `\"owner\"` for the human user, or the agent name directly (e.g. `\"programmer\"`, `\"groomer\"`). Omitting it returns HTTP 400.");
+        sb.AppendLine("- **Moving a ticket**: always use `PATCH /api/projects/{slug}/tickets/{id}/status` — it validates the target column and notifies automations. The root `PATCH /api/projects/{slug}/tickets/{id}` rejects payloads containing `status` with HTTP 400 (it updates title/description/priority/assignee/labels only).");
         sb.AppendLine("- Fields marked `// required` in request body examples must be present; fields marked `// optional` may be omitted.");
         sb.AppendLine("- OpenAPI JSON: `GET /openapi/v1.json`");
         sb.AppendLine("- This documentation is auto-generated from the OpenAPI spec.");

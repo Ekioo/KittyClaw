@@ -31,6 +31,15 @@ public static partial class Endpoints
 
         api.MapPatch("/projects/{slug}/tickets/{id:int}", async (string slug, int id, UpdateTicketRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
         {
+            // This endpoint used to silently DROP a "status" field (HTTP 200, no activity) —
+            // agents believed their "restore Done" calls worked while the ticket never moved
+            // (kittyclaw-front#113). Reject explicitly and point to the dedicated endpoint.
+            if (req.Status is not null)
+                return Results.BadRequest(new
+                {
+                    error = $"The 'status' field is not applied by this endpoint. Use PATCH /api/projects/{slug}/tickets/{id}/status "
+                          + "(validates the target column and notifies automations).",
+                });
             try
             {
                 var ticket = await ts.UpdateTicketAsync(slug, id, req.Title, req.Description, req.Author, req.Priority, req.AssignedTo);
