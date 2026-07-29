@@ -22,8 +22,8 @@ public class SignalTests
     [Fact]
     public void CommentAddedSignal_has_value_equality()
     {
-        var a = new CommentAddedSignal(1, "owner", "hi");
-        var b = new CommentAddedSignal(1, "owner", "hi");
+        var a = new CommentAddedSignal(1, 7, "owner", "hi");
+        var b = new CommentAddedSignal(1, 7, "owner", "hi");
         Assert.Equal(a, b);
     }
 

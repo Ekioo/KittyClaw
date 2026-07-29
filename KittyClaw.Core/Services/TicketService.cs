@@ -17,9 +17,9 @@ public class TicketService
 
     /// <summary>
     /// Raised immediately after a comment is persisted.
-    /// Parameters: (projectSlug, ticketId, author, content)
+    /// Parameters: (projectSlug, ticketId, commentId, author, content)
     /// </summary>
-    public event Action<string, int, string, string>? TicketCommentAdded;
+    public event Action<string, int, int, string, string>? TicketCommentAdded;
 
     public TicketService(ProjectService projectService, MemberService memberService)
     {
@@ -538,7 +538,7 @@ public class TicketService
         db.Comments.Add(comment);
         ticket.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
-        TicketCommentAdded?.Invoke(projectSlug, ticketId, author, content);
+        TicketCommentAdded?.Invoke(projectSlug, ticketId, comment.Id, author, content);
         return comment;
     }
 

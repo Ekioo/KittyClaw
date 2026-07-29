@@ -43,8 +43,8 @@ public sealed class AutomationEngine : BackgroundService
         tickets.TicketStatusChanged += (slug, ticketId, from, to) =>
             _ = NotifySignalAsync(slug, new StatusChangeSignal(ticketId, from, to));
 
-        tickets.TicketCommentAdded += (slug, ticketId, author, content) =>
-            _ = NotifySignalAsync(slug, new CommentAddedSignal(ticketId, author, content));
+        tickets.TicketCommentAdded += (slug, ticketId, commentId, author, content) =>
+            _ = NotifySignalAsync(slug, new CommentAddedSignal(ticketId, commentId, author, content));
     }
 
     public Task ReloadProjectAsync(string slug) => _runtimeManager.ReloadProjectAsync(slug);

@@ -14,7 +14,7 @@ public class TicketCommentAddedTriggerTests
     public void empty_authors_filter_matches_any_comment()
     {
         var t = new TicketCommentAddedTrigger(new TicketCommentAddedTriggerSpec());
-        Assert.True(t.TryHandleExternalSignal(new CommentAddedSignal(12, "programmer", "done"), out var f));
+        Assert.True(t.TryHandleExternalSignal(new CommentAddedSignal(12, 1, "programmer", "done"), out var f));
         Assert.Equal(12, Assert.Single(f).TicketId);
     }
 
@@ -23,7 +23,7 @@ public class TicketCommentAddedTriggerTests
     {
         var spec = new TicketCommentAddedTriggerSpec { Authors = new() { "owner" } };
         var t = new TicketCommentAddedTrigger(spec);
-        Assert.True(t.TryHandleExternalSignal(new CommentAddedSignal(1, "owner", "hi"), out var f));
+        Assert.True(t.TryHandleExternalSignal(new CommentAddedSignal(1, 1, "owner", "hi"), out var f));
         Assert.NotEmpty(f);
     }
 
@@ -32,7 +32,7 @@ public class TicketCommentAddedTriggerTests
     {
         var spec = new TicketCommentAddedTriggerSpec { Authors = new() { "Owner" } };
         var t = new TicketCommentAddedTrigger(spec);
-        Assert.True(t.TryHandleExternalSignal(new CommentAddedSignal(1, "owner", "hi"), out _));
+        Assert.True(t.TryHandleExternalSignal(new CommentAddedSignal(1, 1, "owner", "hi"), out _));
     }
 
     [Fact]
@@ -40,7 +40,7 @@ public class TicketCommentAddedTriggerTests
     {
         var spec = new TicketCommentAddedTriggerSpec { Authors = new() { "owner" } };
         var t = new TicketCommentAddedTrigger(spec);
-        Assert.False(t.TryHandleExternalSignal(new CommentAddedSignal(1, "programmer", "hi"), out var f));
+        Assert.False(t.TryHandleExternalSignal(new CommentAddedSignal(1, 1, "programmer", "hi"), out var f));
         Assert.Empty(f);
     }
 }
