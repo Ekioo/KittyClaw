@@ -74,7 +74,7 @@ internal sealed class ActionExecutor
     private Task<bool> EvaluateSingleConditionAsync(ProjectRuntime rt, ConditionSpec cond, TriggerFiring firing) =>
         cond switch
         {
-            TicketInColumnConditionSpec c         => Task.FromResult(ConditionEvaluators.TicketInColumn(c, firing.TicketStatus)),
+            TicketInColumnConditionSpec c         => EvaluateTicketInColumnAsync(rt, c, firing),
             MinDescriptionLengthConditionSpec c    => EvaluateMinDescriptionLengthAsync(rt, c, firing),
             FieldLengthConditionSpec c             => EvaluateFieldLengthAsync(rt, c, firing),
             PriorityConditionSpec c                => EvaluatePriorityAsync(rt, c, firing),
@@ -86,6 +86,22 @@ internal sealed class ActionExecutor
             TicketAgeConditionSpec c               => EvaluateTicketAgeAsync(rt, c, firing),
             _                                      => Task.FromResult(true),
         };
+
+    // Signal-path firings (TryHandleExternalSignal, e.g. ticketCommentAdded) carry only the
+    // ticket id — no status. Without a live lookup the condition evaluates against null and
+    // ALWAYS fails, so event-driven automations with a column condition could only ever fire
+    // via the slow poll path, silently (ticket #135).
+    private async Task<bool> EvaluateTicketInColumnAsync(ProjectRuntime rt, TicketInColumnConditionSpec c, TriggerFiring firing)
+    {
+        var status = firing.TicketStatus;
+        if (status is null && firing.TicketId is not null)
+        {
+            var ticket = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
+            if (ticket is null) return false;
+            status = ticket.Status;
+        }
+        return ConditionEvaluators.TicketInColumn(c, status);
+    }
 
     private async Task<bool> EvaluateMinDescriptionLengthAsync(ProjectRuntime rt, MinDescriptionLengthConditionSpec c, TriggerFiring firing)
     {
