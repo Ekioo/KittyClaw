@@ -801,17 +801,26 @@ internal sealed class ActionExecutor
         }
     }
 
+    /// <summary>Expands date/time placeholders in createTicket title/description fields.</summary>
+    internal static string ResolveCreateTicketPlaceholders(string s, DateTime now)
+    {
+        var today = now.Date;
+        var monday = today.AddDays(-(((int)today.DayOfWeek + 6) % 7));
+        var firstOfMonth = new DateTime(today.Year, today.Month, 1);
+        return s
+            .Replace("{now}", now.ToString("yyyy-MM-dd HH:mm"))
+            .Replace("{date}", today.ToString("yyyy-MM-dd"))
+            .Replace("{time}", now.ToString("HH:mm"))
+            .Replace("{monday}", monday.ToString("yyyy-MM-dd"))
+            .Replace("{firstOfMonth}", firstOfMonth.ToString("yyyy-MM-dd"));
+    }
+
     private async Task ExecuteCreateTicketActionAsync(ProjectRuntime rt, CreateTicketActionSpec cta)
     {
         try
         {
-            var today = DateTime.Today;
-            var monday = today.AddDays(-(((int)today.DayOfWeek + 6) % 7));
-            var firstOfMonth = new DateTime(today.Year, today.Month, 1);
-            string Resolve(string s) => s
-                .Replace("{date}", today.ToString("yyyy-MM-dd"))
-                .Replace("{monday}", monday.ToString("yyyy-MM-dd"))
-                .Replace("{firstOfMonth}", firstOfMonth.ToString("yyyy-MM-dd"));
+            var now = DateTime.Now;
+            string Resolve(string s) => ResolveCreateTicketPlaceholders(s, now);
 
             var title = Resolve(cta.Title);
             if (string.IsNullOrWhiteSpace(title))

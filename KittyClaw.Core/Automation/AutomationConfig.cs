@@ -348,16 +348,16 @@ public sealed class ConsolidateAgentMemoryActionSpec : ActionSpec
 
 /// <summary>
 /// Creates a new ticket in the project. Works without a triggering ticket (interval, cron, board-idle, …).
-/// Supports date placeholders in Title and Description: {date} (today), {monday} (Monday of current week), {firstOfMonth}.
+/// Supports date/time placeholders in Title and Description: {now} (date + time), {date} (today), {time}, {monday} (Monday of current week), {firstOfMonth}.
 /// When <see cref="SkipIfExists"/> is true (default), creation is skipped if an open ticket with the resolved title already exists.
 /// </summary>
 public sealed class CreateTicketActionSpec : ActionSpec
 {
     [JsonIgnore]
     public override string UiTypeKey => "createTicket";
-    /// <summary>Ticket title. Supports {date}, {monday}, {firstOfMonth}.</summary>
+    /// <summary>Ticket title. Supports {now}, {date}, {time}, {monday}, {firstOfMonth}.</summary>
     public string Title { get; set; } = "";
-    /// <summary>Ticket description (optional). Supports {date}, {monday}, {firstOfMonth}.</summary>
+    /// <summary>Ticket description (optional). Supports {now}, {date}, {time}, {monday}, {firstOfMonth}.</summary>
     public string Description { get; set; } = "";
     public string Status { get; set; } = "Todo";
     public string? AssignedTo { get; set; }
