@@ -73,17 +73,33 @@ internal sealed class TriggerHandler
                 await _runtimeManager.ReloadProjectAsync(project.Slug);
             }
             if (rt.Config is null) continue;
+            // First-match-wins per ticket per tick (ticket #112): column-poll automations are
+            // evaluated in file order, and the first one that matches AND dispatches on a ticket
+            // consumes it for this tick. Without this, two ticketInColumn automations watching
+            // the same column race on the same ticket — one's runAgent effects land asynchronously
+            // and the other's state changes get overwritten (kalceo #1144–#1148: tickets moved to
+            // InProgress with an empty assignee, invisible to the router, stuck for 2 days).
+            var consumedTickets = new HashSet<int>();
             foreach (var automation in rt.Config.Automations)
             {
                 if (!automation.Enabled) continue;
                 if (!rt.Triggers.TryGetValue(automation.Id, out var trigger)) continue;
+                var isColumnPoll = trigger is TicketInColumnTrigger;
                 var tctx = BuildTriggerContext(project.Slug, rt.Workspace!, automation);
                 IReadOnlyList<TriggerFiring> firings;
                 try { firings = await trigger.EvaluateAsync(tctx, ct); }
                 catch (Exception ex) { _logger.LogWarning(ex, "Trigger eval failed for {Id}", automation.Id); continue; }
                 foreach (var firing in firings)
                 {
+                    if (isColumnPoll && firing.TicketId is int consumedId && consumedTickets.Contains(consumedId))
+                    {
+                        _logger.LogInformation(
+                            "Automation {Id} skipped ticket #{Ticket}: consumed by an earlier column-poll automation this tick (first-match-wins)",
+                            automation.Id, consumedId);
+                        continue;
+                    }
                     if (!await _executor.ConditionsMatchAsync(rt, automation, firing)) continue;
+                    if (isColumnPoll && firing.TicketId is int dispatchedId) consumedTickets.Add(dispatchedId);
                     rt.LastFiredAt = DateTime.UtcNow;
                     rt.LastFiredAutomationId = automation.Id;
                     // Awaited: the prep phase runs to completion before the next firing, reserving
