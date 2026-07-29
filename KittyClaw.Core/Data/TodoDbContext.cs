@@ -25,7 +25,8 @@ public class TodoDbContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder options)
     {
-        options.UseSqlite($"Data Source={_dbPath}");
+        options.UseSqlite($"Data Source={_dbPath}")
+            .AddInterceptors(SqliteConcurrencyInterceptor.Instance);
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
