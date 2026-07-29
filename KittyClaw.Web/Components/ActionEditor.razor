@@ -16,6 +16,7 @@
             <option value="consolidateAgentMemory">@L["ActionConsolidateAgentMemory"]</option>
             <option value="executePowerShell">@L["ActionExecutePowerShell"]</option>
             <option value="createTicket">@L["ActionCreateTicket"]</option>
+            <option value="httpRequest">@L["ActionHttpRequest"]</option>
         </select>
     </label>
 
@@ -198,6 +199,37 @@
                 @L["PsAbortOnFailure"]
             </label>
             break;
+        case HttpRequestActionSpec s:
+            <label>@L["HttpMethod"]
+                <select @bind="s.Method">
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="PATCH">PATCH</option>
+                    <option value="DELETE">DELETE</option>
+                </select>
+            </label>
+            <label>@L["HttpUrl"]
+                <input placeholder="@L["HttpUrlPlaceholder"]" @bind="s.Url" />
+            </label>
+            <label>@L["HttpBody"]
+                <textarea @bind="s.Body" placeholder="@L["HttpBodyPlaceholder"]" rows="4"></textarea>
+            </label>
+            <label>@L["HttpContentType"]
+                <input @bind="s.ContentType" />
+            </label>
+            <label>@L["HttpTimeout"]
+                <input type="number" @bind="s.TimeoutSeconds" />
+            </label>
+            <label class="checkbox-label">
+                <input type="checkbox" @bind="s.AbortOnFailure" />
+                @L["PsAbortOnFailure"]
+            </label>
+            <label class="checkbox-label" title="@L["HttpAllowLocalTargetsHint"]">
+                <input type="checkbox" @bind="s.AllowLocalTargets" />
+                @L["HttpAllowLocalTargets"]
+            </label>
+            break;
     }
 
     <div class="node-editor-actions">
@@ -246,6 +278,7 @@
         ConsolidateAgentMemoryActionSpec => "consolidateAgentMemory",
         ExecutePowerShellActionSpec => "executePowerShell",
         CreateTicketActionSpec => "createTicket",
+        HttpRequestActionSpec => "httpRequest",
         _ => throw new NotSupportedException($"No UI mapping for action type {Action.GetType().Name}. Register it in ActionEditor.razor."),
     };
 
@@ -268,6 +301,7 @@
             "consolidateAgentMemory" => new ConsolidateAgentMemoryActionSpec { Agent = Members.FirstOrDefault() ?? "programmer" },
             "executePowerShell" => new ExecutePowerShellActionSpec(),
             "createTicket" => new CreateTicketActionSpec(),
+            "httpRequest" => new HttpRequestActionSpec(),
             _ => throw new NotSupportedException($"Unknown action type key '{e.Value}'. Register it in ActionEditor.razor."),
         };
         await OnReplace.InvokeAsync(spec);

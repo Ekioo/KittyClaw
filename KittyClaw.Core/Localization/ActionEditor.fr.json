@@ -48,5 +48,15 @@
   "CtPriority": "Priorité",
   "CtLabels": "Labels (noms, séparés par virgule)",
   "CtCreatedBy": "Créé par",
-  "CtSkipIfExists": "Ne pas créer si un ticket ouvert avec le même titre existe déjà"
+  "CtSkipIfExists": "Ne pas créer si un ticket ouvert avec le même titre existe déjà",
+  "ActionHttpRequest": "Requête HTTP",
+  "HttpMethod": "Méthode",
+  "HttpUrl": "URL (http/https)",
+  "HttpUrlPlaceholder": "https://discord.com/api/webhooks/... — supporte {ticketId}, {ticketTitle}, {ticketStatus}, {assignee}",
+  "HttpBody": "Corps (optionnel)",
+  "HttpBodyPlaceholder": "{\"content\": \"Ticket #{ticketId} terminé : {ticketTitle}\"}",
+  "HttpContentType": "Content-Type",
+  "HttpTimeout": "Timeout (secondes)",
+  "HttpAllowLocalTargets": "Autoriser les cibles locales (loopback/link-local)",
+  "HttpAllowLocalTargetsHint": "Garde SSRF : sans cette option, les requêtes vers les adresses loopback et link-local (y compris les métadonnées cloud) sont refusées"
 }

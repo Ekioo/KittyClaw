@@ -238,7 +238,7 @@ internal sealed class ActionExecutor
             {
                 var action = automation.Actions[i];
 
-                if (!background && action is ConsolidateAgentMemoryActionSpec or ExecutePowerShellActionSpec)
+                if (!background && action is ConsolidateAgentMemoryActionSpec or ExecutePowerShellActionSpec or HttpRequestActionSpec)
                 {
                     var guardKey = chainKey ?? $"{automation.Id}:detached";
                     if (chainKey is null && !_inFlightChains.TryAdd(guardKey, 0))
@@ -292,6 +292,12 @@ internal sealed class ActionExecutor
                     case ConsolidateAgentMemoryActionSpec csm:
                         await ExecuteConsolidateAgentMemoryActionAsync(rt, csm, firing, parentRun: null, ct);
                         break;
+                    case HttpRequestActionSpec hr:
+                    {
+                        var abortHttp = await ExecuteHttpRequestActionAsync(hr, rt, firing, ct);
+                        if (abortHttp) return state.LastRun;
+                        break;
+                    }
                     case ExecutePowerShellActionSpec ps:
                     {
                         var abort = await ExecutePowerShellAsync(ps, rt.Workspace!, rt.Slug, firing, ct);
@@ -589,6 +595,9 @@ internal sealed class ActionExecutor
                     case SetLabelsActionSpec sl when firing.TicketId is not null: await ExecuteSetLabelsActionAsync(rt, firing, sl); break;
                     case AssignTicketActionSpec at when firing.TicketId is not null: await ExecuteAssignTicketActionAsync(rt, firing, at); break;
                     case ExecutePowerShellActionSpec ps: await ExecutePowerShellAsync(ps, rt.Workspace!, rt.Slug, firing, ct); break;
+                    case HttpRequestActionSpec hr:
+                        if (await ExecuteHttpRequestActionAsync(hr, rt, firing, ct)) return;
+                        break;
                     case RunAgentActionSpec ra:
                     {
                         var (skip, runTask, agentName) = await StartAgentRunAsync(rt, firing, ra, ct);
@@ -952,6 +961,107 @@ internal sealed class ActionExecutor
     }
 
     // Returns true when AbortOnFailure is set and the process exited with a non-zero code.
+    /// <summary>
+    /// Sends the outbound HTTP request of an httpRequest action (ticket #137). Returns true when
+    /// the remaining chain should abort (AbortOnFailure set and the request failed). Security:
+    /// http/https only; loopback/link-local targets refused at connect time unless
+    /// AllowLocalTargets (see <see cref="HttpActionClient"/>); redirects disabled; response read
+    /// capped; neither the full URL (webhook tokens live in paths) nor header values are logged.
+    /// </summary>
+    private async Task<bool> ExecuteHttpRequestActionAsync(HttpRequestActionSpec spec, ProjectRuntime rt, TriggerFiring firing, CancellationToken ct)
+    {
+        try
+        {
+            var url = await ResolveHttpPlaceholdersAsync(spec.Url, rt, firing);
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            {
+                _logger.LogWarning("httpRequest: invalid or non-http(s) URL — request refused");
+                return spec.AbortOnFailure;
+            }
+            var method = spec.Method.ToUpperInvariant() switch
+            {
+                "GET" => HttpMethod.Get,
+                "POST" => HttpMethod.Post,
+                "PUT" => HttpMethod.Put,
+                "PATCH" => HttpMethod.Patch,
+                "DELETE" => HttpMethod.Delete,
+                _ => null,
+            };
+            if (method is null)
+            {
+                _logger.LogWarning("httpRequest: unsupported method '{Method}' — request refused", spec.Method);
+                return spec.AbortOnFailure;
+            }
+
+            using var request = new HttpRequestMessage(method, uri);
+            if (!string.IsNullOrEmpty(spec.Body))
+                request.Content = new StringContent(
+                    await ResolveHttpPlaceholdersAsync(spec.Body, rt, firing),
+                    System.Text.Encoding.UTF8, spec.ContentType);
+            foreach (var (name, value) in spec.Headers)
+            {
+                var resolved = await ResolveHttpPlaceholdersAsync(value, rt, firing);
+                if (!request.Headers.TryAddWithoutValidation(name, resolved))
+                    request.Content?.Headers.TryAddWithoutValidation(name, resolved);
+            }
+
+            var client = spec.AllowLocalTargets ? HttpActionClient.Unguarded : HttpActionClient.Guarded;
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, spec.TimeoutSeconds)));
+
+            var started = DateTime.UtcNow;
+            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token);
+            // Drain at most MaxResponseBytes; the body is never stored.
+            await using (var stream = await response.Content.ReadAsStreamAsync(cts.Token))
+            {
+                var buffer = new byte[8192];
+                var remaining = HttpActionClient.MaxResponseBytes;
+                while (remaining > 0)
+                {
+                    var read = await stream.ReadAsync(buffer.AsMemory(0, Math.Min(buffer.Length, remaining)), cts.Token);
+                    if (read == 0) break;
+                    remaining -= read;
+                }
+            }
+            _logger.LogInformation("httpRequest {Method} {Host} -> {Status} in {Ms}ms",
+                method, uri.Host, (int)response.StatusCode, (int)(DateTime.UtcNow - started).TotalMilliseconds);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("httpRequest non-2xx ({Status}) from {Host}; abortOnFailure={Abort}",
+                    (int)response.StatusCode, uri.Host, spec.AbortOnFailure);
+                return spec.AbortOnFailure;
+            }
+            return false;
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogWarning("httpRequest timed out after {Timeout}s", spec.TimeoutSeconds);
+            return spec.AbortOnFailure;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "httpRequest failed");
+            return spec.AbortOnFailure;
+        }
+    }
+
+    private async Task<string> ResolveHttpPlaceholdersAsync(string template, ProjectRuntime rt, TriggerFiring firing)
+    {
+        var s = template.Replace("{ticketId}", firing.TicketId?.ToString() ?? "");
+        // Signal-path firings carry only the ticket id (no title/status snapshot) — resolve
+        // whatever the template needs from the live ticket, like the condition path does (#135).
+        var needsLookup = s.Contains("{assignee}") || s.Contains("{ticketStatus}")
+            || (s.Contains("{ticketTitle}") && firing.TicketTitle is null);
+        Models.Ticket? ticket = null;
+        if (needsLookup && firing.TicketId is int id)
+            ticket = await _tickets.GetTicketAsync(rt.Slug, id);
+        return s
+            .Replace("{ticketTitle}", firing.TicketTitle ?? ticket?.Title ?? "")
+            .Replace("{ticketStatus}", firing.TicketStatus ?? ticket?.Status ?? "")
+            .Replace("{assignee}", ticket?.AssignedTo ?? "");
+    }
+
     private async Task<bool> ExecutePowerShellAsync(ExecutePowerShellActionSpec spec, string workspacePath, string slug, TriggerFiring firing, CancellationToken ct)
     {
         try

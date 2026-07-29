@@ -662,6 +662,7 @@ else
         "consolidateAgentMemory" => new ConsolidateAgentMemoryActionSpec { Agent = _skills.FirstOrDefault() ?? "programmer" },
         "executePowerShell" => new ExecutePowerShellActionSpec(),
         "createTicket" => new CreateTicketActionSpec(),
+        "httpRequest" => new HttpRequestActionSpec(),
         _ => throw new NotSupportedException($"Unknown action type key '{type}'. Register it in Automations.razor BuildAction."),
     };
 
@@ -744,6 +745,10 @@ else
         return c.Negate ? $"NON {text}" : text;
     }
 
+    // Webhook URLs carry secrets in their path (e.g. Discord tokens): only ever show the host.
+    private static string SafeHost(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var u) ? u.Host : "?";
+
     private string DescribeAction(ActionSpec a) => a switch
     {
         RunAgentActionSpec s => s.Agent,
@@ -755,6 +760,7 @@ else
         AssignTicketActionSpec s => string.Format(L["ActionAssignTicketDesc"], s.Slug ?? "—"),
         CreateTicketActionSpec s => s.Title,
         ExecutePowerShellActionSpec => L["ActionExecutePowerShell"],
+        HttpRequestActionSpec s => string.Format(L["ActionHttpRequestDesc"], s.Method, SafeHost(s.Url)),
         _ => throw new NotSupportedException($"No UI description for action type {a.GetType().Name}. Register it in Automations.razor DescribeAction."),
     };
 }

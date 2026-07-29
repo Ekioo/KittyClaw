@@ -40,6 +40,7 @@
   "ActionAddComment": "ajouter commentaire",
   "ActionAssignTicketDesc": "assigner → {0}",
   "ActionExecutePowerShell": "exécuter PowerShell",
+  "ActionHttpRequestDesc": "HTTP {0} → {1}",
   "Initialize": "Initialiser",
   "InitializeHint": "Copier le gabarit .agents/ (skills, preamble, automations.json) dans le workspace de ce projet",
   "InitializeConfirmTitle": "Écraser les fichiers existants ?",

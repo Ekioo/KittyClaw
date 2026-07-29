@@ -252,6 +252,7 @@ public sealed class TicketAgeConditionSpec : ConditionSpec
 [JsonDerivedType(typeof(ConsolidateAgentMemoryActionSpec), "consolidateAgentMemory")]
 [JsonDerivedType(typeof(ExecutePowerShellActionSpec), "executePowerShell")]
 [JsonDerivedType(typeof(CreateTicketActionSpec), "createTicket")]
+[JsonDerivedType(typeof(HttpRequestActionSpec), "httpRequest")]
 public abstract class ActionSpec
 {
     [JsonIgnore]
@@ -367,6 +368,31 @@ public sealed class CreateTicketActionSpec : ActionSpec
     public string CreatedBy { get; set; } = "automation";
     /// <summary>Skip creation if an open ticket with the same resolved title already exists.</summary>
     public bool SkipIfExists { get; set; } = true;
+}
+
+/// <summary>
+/// Sends an outbound HTTP request — webhooks and integrations (notify Discord/Slack on a status
+/// change, trigger a CI job, ping an external service). Loopback and link-local targets
+/// (including cloud metadata endpoints) are refused unless <see cref="AllowLocalTargets"/> is
+/// set, so an automation edited by an agent cannot probe the host's internal network.
+/// </summary>
+public sealed class HttpRequestActionSpec : ActionSpec
+{
+    public override string UiTypeKey => "httpRequest";
+    /// <summary>One of GET, POST, PUT, PATCH, DELETE.</summary>
+    public string Method { get; set; } = "POST";
+    /// <summary>Target URL, http/https only. Supports {ticketId}, {ticketTitle}, {ticketStatus}, {assignee}.</summary>
+    public string Url { get; set; } = "";
+    /// <summary>Extra request headers. Values support the same placeholders and are never logged.</summary>
+    public Dictionary<string, string> Headers { get; set; } = new();
+    /// <summary>Request body (empty = none). Supports the same placeholders.</summary>
+    public string Body { get; set; } = "";
+    public string ContentType { get; set; } = "application/json";
+    public int TimeoutSeconds { get; set; } = 30;
+    /// <summary>Abort the remaining action chain when the request fails or returns non-2xx.</summary>
+    public bool AbortOnFailure { get; set; }
+    /// <summary>Opt-in: allow loopback/link-local targets (blocked by default — SSRF guard).</summary>
+    public bool AllowLocalTargets { get; set; }
 }
 
 /// <summary>Runs a PowerShell script or file with optional arguments and timeout.</summary>

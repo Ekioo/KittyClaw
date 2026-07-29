@@ -50,5 +50,7 @@
   "PalActExecutePowerShell": "Exécuter PowerShell",
   "PalActExecutePowerShellHint": "Exécute un script PowerShell sur le serveur",
   "PalActCreateTicket": "Créer un ticket",
-  "PalActCreateTicketHint": "Crée un nouveau ticket ; supporte les placeholders de date et le contrôle d'idempotence"
+  "PalActCreateTicketHint": "Crée un nouveau ticket ; supporte les placeholders de date et le contrôle d'idempotence",
+  "PalActHttpRequest": "Requête HTTP",
+  "PalActHttpRequestHint": "Envoie une requête HTTP sortante (webhooks, intégrations) ; cibles locales bloquées par défaut"
 }
