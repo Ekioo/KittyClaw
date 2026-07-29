@@ -16,11 +16,11 @@ public sealed record CommentAddedSignal(int TicketId, int CommentId, string Auth
 /// - Persistence is a single atomic monotonic merge (per-key max) inside SessionRegistry.Update,
 ///   never a whole-object overwrite: the old Load → await… → Save cycle could write a stale
 ///   snapshot over a newer one and resurrect already-consumed comments.
-/// - Comments dispatched through the urgent signal path are remembered in-memory so the next
-///   poll does not fire them a second time. This marking happens at signal time (before
-///   conditions), so a signal-matched comment is consumed even if conditions fail at that
-///   instant; the map is instance-local, so a reload rebuilds it empty and the persisted scan
-///   state bounds refires to at most one.
+/// - Comments dispatched through the urgent signal path are consumed via
+///   <see cref="ConsumeSignalFiringAsync"/> — called by the engine AFTER conditions pass,
+///   just before dispatch, and persisted (ticket #136). An event whose conditions fail at
+///   signal time therefore stays unconsumed and gets one retry from the next poll (whose
+///   eager cursor advance then consumes it — the deliberate #113 anti-loop tradeoff).
 /// - A first scan with no persisted state at all (neither the per-automation bucket nor the
 ///   legacy "_lastCommentIds" flat map) seeds silently: it records the current max IDs without
 ///   firing, instead of replaying the board's whole comment history. The legacy flat map, when
@@ -33,7 +33,9 @@ public sealed class TicketCommentAddedTrigger : ITrigger
 
     private DateTime _lastPolled = DateTime.MinValue;
     private readonly TicketCommentAddedTriggerSpec _spec;
-    private readonly Dictionary<int, int> _urgentConsumed = new();
+    // Comment IDs seen by TryHandleExternalSignal, per ticket — recorded only, NOT consumed:
+    // consumption happens in ConsumeSignalFiringAsync once the dispatch is actually happening.
+    private readonly Dictionary<int, int> _pendingSignal = new();
 
     public TicketCommentAddedTrigger(TicketCommentAddedTriggerSpec spec) { _spec = spec; }
 
@@ -56,14 +58,12 @@ public sealed class TicketCommentAddedTrigger : ITrigger
             if (ticket is null || ticket.Comments.Count == 0) continue;
 
             lastSeen.TryGetValue(summary.Id, out var prevMaxId);
-            _urgentConsumed.TryGetValue(summary.Id, out var urgentMaxId);
-            var consumedMax = Math.Max(prevMaxId, urgentMaxId);
 
             if (hasState)
             {
                 foreach (var comment in ticket.Comments)
                 {
-                    if (comment.Id <= consumedMax) continue;
+                    if (comment.Id <= prevMaxId) continue;
                     if (_spec.Authors.Count > 0 && !_spec.Authors.Contains(comment.Author, StringComparer.OrdinalIgnoreCase))
                         continue;
                     firings.Add(new TriggerFiring(ticket.Id, ticket.Title, ticket.Status));
@@ -146,13 +146,32 @@ public sealed class TicketCommentAddedTrigger : ITrigger
             return false;
         }
 
-        // Consume immediately so the next poll does not fire this comment a second time
-        // (the historical urgent+poll double fire).
-        _urgentConsumed.TryGetValue(s.TicketId, out var prev);
-        if (s.CommentId > prev) _urgentConsumed[s.TicketId] = s.CommentId;
+        // Record only — the event is consumed in ConsumeSignalFiringAsync when it actually
+        // dispatches. Marking it consumed here would silently drop a comment whose conditions
+        // fail at this instant (ticket #136).
+        _pendingSignal.TryGetValue(s.TicketId, out var prev);
+        if (s.CommentId > prev) _pendingSignal[s.TicketId] = s.CommentId;
 
         firings = [new TriggerFiring(s.TicketId, null, null)];
         return true;
+    }
+
+    /// <summary>
+    /// Persists the signaled comment as consumed (monotonic merge), so neither the next poll
+    /// nor a reload re-fires it. Falls back to the ticket's current max comment ID when the
+    /// pending entry was lost (e.g. a reload swapped the trigger instance between signal and
+    /// dispatch).
+    /// </summary>
+    public async Task ConsumeSignalFiringAsync(TriggerContext ctx, TriggerFiring firing)
+    {
+        if (firing.TicketId is not int ticketId) return;
+        if (!_pendingSignal.Remove(ticketId, out var commentId))
+        {
+            var ticket = await ctx.Tickets.GetTicketAsync(ctx.ProjectSlug, ticketId);
+            if (ticket is null || ticket.Comments.Count == 0) return;
+            commentId = ticket.Comments.Max(c => c.Id);
+        }
+        PersistMonotonic(ctx, new Dictionary<int, int> { [ticketId] = commentId });
     }
 
     public DateTime? GetNextRunAt(DateTime now) =>

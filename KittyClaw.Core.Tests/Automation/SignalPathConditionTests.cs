@@ -150,6 +150,33 @@ public class SignalPathConditionTests
     }
 
     [Fact]
+    public async Task SignalWithFailingConditions_IsRetriedByPoll_OnceConditionsPass()
+    {
+        using var tmp = new TempDir();
+        var h = await BuildAsync(tmp.Path);
+        // Dormant poll: the signal is the only active path at first (ticket #136 semantics).
+        await h.Store.SaveAsync(h.Slug, ReplyBotConfig(pollSeconds: 3600));
+        var ticket = await h.Tickets.CreateTicketAsync(h.Slug, "T", status: "Backlog");
+        await h.Handler.ProcessTickAsync(CancellationToken.None); // warm-up seed scan
+
+        // Signal arrives while the column condition fails → dropped, but NOT consumed.
+        var comment = await h.Tickets.AddCommentAsync(h.Slug, ticket.Id, "please check", "owner");
+        await h.Manager.NotifySignalAsync(h.Slug,
+            new CommentAddedSignal(ticket.Id, comment!.Id, "owner", "please check"));
+        await h.Handler.ProcessTickAsync(CancellationToken.None);
+        Assert.Equal(0, await BotCommentCountAsync(h, ticket.Id));
+
+        // Conditions become true; a reload swaps the trigger instance (pending map lost) —
+        // the persisted cursor must still hold the comment as unconsumed so the poll fires it.
+        await h.Tickets.MoveTicketAsync(h.Slug, ticket.Id, "InProgress", "owner");
+        await h.Store.SaveAsync(h.Slug, ReplyBotConfig(pollSeconds: 0));
+        await h.Manager.ReloadProjectAsync(h.Slug);
+        await h.Handler.ProcessTickAsync(CancellationToken.None);
+
+        Assert.Equal(1, await BotCommentCountAsync(h, ticket.Id));
+    }
+
+    [Fact]
     public async Task SignalDispatch_ThenPolls_DoesNotDoubleFire()
     {
         using var tmp = new TempDir();
