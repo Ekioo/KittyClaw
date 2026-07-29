@@ -2,6 +2,57 @@
 
 All notable changes to KittyClaw.
 
+## [v0.11] — 2026-07-30
+
+macOS/Linux support, a second agent backend (Grok CLI), outbound webhooks, and a deep automation-engine reliability pass driven by real production incidents.
+
+### Highlights
+
+KittyClaw now **runs on macOS and Linux**: a DI binding bug made the app crash at startup on every non-Windows host (thanks to Pedro R Zabala / @FoodBreakPedro for the diagnosis and fix in PR #3), `run.sh` ships executable, and CI now builds and tests on Ubuntu alongside Windows so this class of regression can't come back.
+
+Agents can now be dispatched through the **Grok CLI (xAI)** as an alternative backend: per-member/per-action model routing picks the right binary, Grok's streaming JSON is adapted onto the existing run drawer, sessions are namespaced per backend, and payment/quota errors feed the same quota-fallback machinery as Claude. The dispatch pipeline was renamed provider-neutral (`AgentRunner`, `AgentStreamPump`, `ChatDrawer`) to reflect it.
+
+Automations gain an **`httpRequest` action** — outbound webhooks to Discord/Slack/CI with placeholder support — hardened against SSRF at the socket level: loopback/link-local/cloud-metadata targets are refused at connect time (DNS rebinding can't bypass it), redirects are disabled, responses are capped, and neither URLs nor header values are ever logged.
+
+The engine went through a **reliability pass driven by four documented production outages** (tickets #112–#115): `automations.json` saves can no longer erase concurrently-added automations, the same owner comment can no longer re-fire an agent on every poll (up to 8 phantom runs observed), two column-poll automations can no longer race on the same ticket, and a reload can no longer silently unregister scheduled tasks. A new `GET /api/engine/health` endpoint makes any future silent outage visible: engine tick age, per-project registered/overdue schedules, and last-fired timestamps.
+
+### Added
+
+- **Grok CLI backend**: binary detection (incl. `~/.grok/bin`), `ModelRouting`, `GrokStreamAdapter` for streaming-json chunks, `GET /api/grok-models`, prompt delivery via `--prompt-file`, per-backend session namespacing, payment-error → quota signal, curated model fallback.
+- **`httpRequest` automation action**: GET/POST/PUT/PATCH/DELETE with `{ticketId}`/`{ticketTitle}`/`{ticketStatus}`/`{assignee}` placeholders in URL, body and headers; per-action timeout and `abortOnFailure`; SSRF guard enforced in the connect callback with an explicit `allowLocalTargets` opt-in; full editor UI (en/fr).
+- **`GET /api/engine/health`** (ticket #114): engine `startedAt`/`lastTickAt`/`lastTickAgeSeconds`, and per project the automation counts, registered cron schedules, next/overdue fire times, and last-fired automation — three independent signals that make a dead scheduler visible.
+- **Optimistic concurrency for `automations.json`** (ticket #115): `GET …/automations` returns a `fileStamp`, `PUT` accepts `?baseStamp=` — a stale stamp triggers a conservative merge that preserves concurrently-added automations and reports `preservedIds`.
+- **`{now}` and `{time}` placeholders** in `createTicket` title/description, alongside `{date}`/`{monday}`/`{firstOfMonth}`.
+- **Quota parking**: an agent run that fails on provider quota parks its ticket in Blocked with a comment instead of looping.
+- **Release tooling**: `RELEASING.md` ritual + `tools/publish-release.ps1` (zip build, MinVer/tag verification, GitHub release from the CHANGELOG entry).
+- **CI**: `ubuntu-latest` added to the build-test matrix.
+
+### Changed
+
+- **Provider-neutral dispatch pipeline**: `ClaudeRunner` → `AgentRunner`, `ClaudeStreamPump` → `AgentStreamPump`, `ClaudeChatDrawer` → `ChatDrawer`; owner-chat target renamed "KittyClaw".
+- **Round-trip-faithful automation config**: unknown/optional JSON fields (e.g. per-automation `model` pins) survive UI/API saves via `[JsonExtensionData]` across the spec hierarchy.
+- **First-match-wins dispatch** (ticket #112): column-poll automations evaluate in file order and the first one that matches and dispatches consumes the ticket for that tick — order routing automations before dispatch ones.
+
+### Fixed
+
+- **App crashed at startup on macOS/Linux** (GitHub issue #2 / PR #3 by @FoodBreakPedro): `IFolderPicker` is now bound from DI with `[FromServices]`; `run.sh` ships with the exec bit.
+- **`automations.json` saves erased concurrent edits** (ticket #115): saves now merge under a per-project lock with atomic write; divergences are logged with the preserved IDs.
+- **Same comment re-fired agents on every poll** (ticket #113, up to 8 phantom runs in production): consumed-comment state is now per automation and persisted via an atomic monotonic merge; the urgent signal path consumes at dispatch time, after conditions, and survives reloads (ticket #136).
+- **Column conditions never passed on the fast path** (ticket #135): signal firings carry no status snapshot — `ticketInColumn` conditions now resolve the live ticket status instead of always failing.
+- **Reload could leave automations without registered triggers** (ticket #114): the new trigger map is built before swapping config in, so a failed reload keeps the previous coherent state.
+- **Two column-poll automations raced on the same ticket** (ticket #112, tickets stuck for 2 days in production): per-tick per-ticket consumption ends the race.
+- **Root `PATCH /tickets/{id}` silently dropped the `status` field**: it now returns 400 pointing to the dedicated `/status` endpoint (which validates the column and notifies automations).
+- **Create/move into a non-existent board column is refused** instead of corrupting the board.
+- **Empty comment returned an SQLite 500** — now a clean 400.
+- **Quota fallback** preserves the configured fallback model across reloads and can fall back to any available model.
+
+### Security
+
+- **Prompt-injection spotlighting** (ticket #131): ticket-derived text (title, and by instruction description/comments) is wrapped in a delimited `<TICKET_UNTRUSTED>` block with a do-not-obey notice in every agent prompt; embedded delimiters are stripped recursively so fragments cannot reassemble and escape the block.
+- **`httpRequest` SSRF hardening**: connect-time target validation (immune to DNS rebinding), loopback/link-local/metadata/multicast blocked by default, no redirects, capped response reads, secret-safe logging.
+
+---
+
 ## [v0.10] — 2026-07-24
 
 Scheduled tickets, per-ticket token cost, a rebuilt cron scheduler — and a deep security & reliability hardening pass.
