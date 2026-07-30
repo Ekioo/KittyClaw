@@ -2184,6 +2184,18 @@ button:disabled { opacity: 0.4; cursor: default; }
 .console-text { color: #c8d0e0; white-space: pre-wrap; word-break: break-word; }
 .console-text.markdown { white-space: normal; font-size: 0.85rem; line-height: 1.55; }
 .console-error .console-text,  .console-stderr .console-text { color: #f06b6b; }
+.console-stderr { grid-template-columns: 65px 1fr; }
+.console-stderr-block { min-width: 0; overflow: hidden; border: 1px solid #5a3038; border-radius: 6px; background: #21171c; }
+.console-stderr-heading { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.7rem; color: #f5a0a0; }
+.console-stderr-icon { display: inline-grid; place-items: center; width: 1.15rem; height: 1.15rem; flex: 0 0 auto; border-radius: 50%; background: #f06b6b; color: #21171c; font-weight: 800; }
+.console-stderr-summary { min-width: 0; font-weight: 650; overflow-wrap: anywhere; }
+.console-stderr-count { margin-left: auto; flex: 0 0 auto; color: #a8787e; font-size: 0.7rem; }
+.console-stderr-preview, .console-stderr-raw pre { margin: 0; padding: 0.55rem 0.7rem; border-top: 1px solid #452a31; color: #d9a3a8; background: #171217; font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
+.console-stderr-raw { border-top: 1px solid #452a31; }
+.console-stderr-raw summary { padding: 0.45rem 0.7rem; color: #d28d94; cursor: pointer; user-select: none; }
+.console-stderr-raw pre { max-height: 500px; overflow: auto; color: #c8aeb0; }
+.console-copy-btn { margin: 0 0.7rem 0.45rem; padding: 0.22rem 0.5rem; border: 1px solid #684149; border-radius: 4px; background: #2b1d22; color: #e5b4b8; cursor: pointer; font: inherit; }
+.console-copy-btn:hover { background: #3a252c; }
 .console-steer .console-kind,  .console-user   .console-kind { color: #4a9eff; }
 .console-steer .console-text,  .console-user   .console-text { color: #9cc4ff; font-style: italic; }
 .console-empty { color: #5a6a80; font-style: italic; padding: 1rem; }

@@ -50,9 +50,29 @@
         </div>
 
         <div class="agent-drawer-console" @ref="_consoleRef">
-            @foreach (var ev in _events.ToList())
+            @foreach (var entry in RunDrawerEventPresentation.Group(_events.ToList()))
             {
-                @if (ev.Kind == "tool_use")
+                var ev = entry.Event;
+                @if (entry.Stderr is { } stderr)
+                {
+                    <div class="console-line console-stderr">
+                        <span class="console-time">@stderr.At.ToLocalTime().ToString("HH:mm:ss")</span>
+                        <div class="console-stderr-block">
+                            <div class="console-stderr-heading">
+                                <span class="console-stderr-icon">!</span>
+                                <span class="console-stderr-summary">@stderr.Summary</span>
+                                <span class="console-stderr-count">@stderr.EventCount line@(stderr.EventCount == 1 ? "" : "s")</span>
+                            </div>
+                            <pre class="console-stderr-preview">@stderr.Preview</pre>
+                            <details class="console-stderr-raw">
+                                <summary>Reveal full stderr</summary>
+                                <button type="button" class="console-copy-btn" @onclick="() => CopyText(stderr.Raw)">Copy raw stderr</button>
+                                <pre>@stderr.Raw</pre>
+                            </details>
+                        </div>
+                    </div>
+                }
+                else if (ev.Kind == "tool_use")
                 {
                     <div class="console-line console-tool_use">
                         <span class="console-time">@ev.At.ToLocalTime().ToString("HH:mm:ss")</span>
@@ -351,6 +371,12 @@
 
     private static string RenderMarkdown(string? text) =>
         string.IsNullOrEmpty(text) ? "" : Markdig.Markdown.ToHtml(text, _mdPipeline);
+
+    private async Task CopyText(string text)
+    {
+        _sseModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/agent-sse.js");
+        await _sseModule.InvokeVoidAsync("copyText", text);
+    }
 
     private static string FormatElapsed(DateTime start)
     {

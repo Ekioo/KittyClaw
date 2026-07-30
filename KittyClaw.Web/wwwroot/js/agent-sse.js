@@ -52,6 +52,10 @@ export function scrollIfNeeded() {
     }
 }
 
+export function copyText(text) {
+    return navigator.clipboard.writeText(text);
+}
+
 export function disposeAutoScroll() {
     if (_observer) { _observer.disconnect(); _observer = null; }
     if (_scrollEl && _scrollListening) _scrollEl.removeEventListener("scroll", _onScroll);
