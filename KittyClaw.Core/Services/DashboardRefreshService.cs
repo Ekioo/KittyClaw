@@ -232,10 +232,7 @@ public sealed class DashboardRefreshService : BackgroundService
             InlineSkillContent = sidecar.Prompt + TileTemplate.SchemaPrompt(sidecar.Template),
             MaxTurns = 5,
             ConcurrencyGroup = $"dashboard-{projectSlug}-{SanitizeName(tileSlug)}",
-            Model = sidecar.Model,
-            Provider = routing.Provider,
-            ModelValidationError = routing.Error,
-            Env = routing.ExtraEnv is null ? new Dictionary<string, string>() : new Dictionary<string, string>(routing.ExtraEnv),
+            Target = routing.ToTarget(sidecar.Model),
             SessionScope = "dashboard",
             PersistSession = false,
             // Tile refreshes hold the global dashboard gate: a hung run would starve every

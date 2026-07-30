@@ -15,26 +15,52 @@ public sealed class AgentRunContext
     public string? TicketStatus { get; init; }
     public int MaxTurns { get; init; } = 200;
     public string ConcurrencyGroup { get; init; } = "";
-    public IDictionary<string, string> Env { get; init; } = new Dictionary<string, string>();
-    public string? Model { get; init; }
 
-    /// <summary>Which CLI runs this dispatch. Grok is set by ModelRouting when a grok-* model
-    /// is selected and the Grok Build CLI is installed; everything else runs the claude CLI.</summary>
-    public CliProvider Provider { get; init; } = CliProvider.Claude;
+    /// <summary>Atomic model/backend/environment selection. Keeping these values together prevents
+    /// impossible combinations such as a Grok model with the Claude backend or leaked Ollama env.</summary>
+    public AgentDispatchTarget Target { get; init; } = AgentDispatchTarget.ClaudeDefault;
 
-    /// <summary>Project-wide fallback model. If a run hits a quota / usage-limit error,
-    /// the runner retries once with this model in the same AgentRun. Null disables the fallback.
-    /// Any provider is allowed: the dispatcher resolves <see cref="FallbackProvider"/> and
-    /// <see cref="FallbackEnv"/> via ModelRouting so the retry runs on the right CLI.</summary>
-    public string? FallbackModel { get; init; }
+    /// <summary>Optional atomic target used for one quota fallback attempt.</summary>
+    public AgentDispatchTarget? FallbackTarget { get; init; }
 
-    /// <summary>CLI provider for <see cref="FallbackModel"/>, resolved by the dispatcher.</summary>
-    public CliProvider FallbackProvider { get; init; } = CliProvider.Claude;
-
-    /// <summary>Subprocess env for the fallback retry (base action env + the fallback model's routing
-    /// extras — NOT the primary model's, so e.g. an Ollama primary's ANTHROPIC_* overrides don't leak
-    /// into a claude fallback). Null falls back to <see cref="Env"/>.</summary>
-    public IDictionary<string, string>? FallbackEnv { get; init; }
+    // Compatibility init accessors for existing callers. New production code should set Target /
+    // FallbackTarget directly; these keep external/test construction source-compatible.
+    public string? Model { get => Target.Model; init => Target = Target with { Model = value }; }
+    public CliProvider Provider { get => Target.Provider; init => Target = Target with { Provider = value }; }
+    public IDictionary<string, string> Env
+    {
+        get => new Dictionary<string, string>(Target.Environment);
+        init => Target = Target with { Environment = new Dictionary<string, string>(value) };
+    }
+    public string? ModelValidationError
+    {
+        get => Target.ValidationError;
+        init => Target = Target with { ValidationError = value };
+    }
+    public string? FallbackModel
+    {
+        get => FallbackTarget?.Model;
+        init => FallbackTarget = value is null
+            ? null
+            : (FallbackTarget ?? AgentDispatchTarget.ClaudeDefault) with { Model = value };
+    }
+    public CliProvider FallbackProvider
+    {
+        get => FallbackTarget?.Provider ?? CliProvider.Claude;
+        init => FallbackTarget = (FallbackTarget ?? AgentDispatchTarget.ClaudeDefault) with { Provider = value };
+    }
+    public IDictionary<string, string>? FallbackEnv
+    {
+        get => FallbackTarget is null ? null : new Dictionary<string, string>(FallbackTarget.Environment);
+        init
+        {
+            if (value is not null)
+                FallbackTarget = (FallbackTarget ?? AgentDispatchTarget.ClaudeDefault) with
+                {
+                    Environment = new Dictionary<string, string>(value),
+                };
+        }
+    }
 
     public string? ExtraContext { get; init; }
     public string? InlineSkillContent { get; init; }
@@ -52,12 +78,8 @@ public sealed class AgentRunContext
         TicketStatus = TicketStatus,
         MaxTurns = MaxTurns,
         ConcurrencyGroup = ConcurrencyGroup,
-        Env = Env,
-        Model = Model,
-        Provider = Provider,
-        FallbackModel = FallbackModel,
-        FallbackProvider = FallbackProvider,
-        FallbackEnv = FallbackEnv,
+        Target = Target,
+        FallbackTarget = FallbackTarget,
         ExtraContext = steerText,
         InlineSkillContent = InlineSkillContent,
         SessionScope = SessionScope,
@@ -85,10 +107,8 @@ public sealed class AgentRunContext
         TicketStatus = TicketStatus,
         MaxTurns = MaxTurns,
         ConcurrencyGroup = ConcurrencyGroup,
-        Env = FallbackEnv ?? Env,
-        Model = FallbackModel,
-        Provider = FallbackProvider,
-        FallbackModel = null,
+        Target = FallbackTarget ?? Target,
+        FallbackTarget = null,
         ExtraContext = ExtraContext,
         InlineSkillContent = InlineSkillContent,
         SessionScope = SessionScope,
@@ -122,10 +142,6 @@ public sealed class AgentRunContext
 
     /// <summary>Absolute paths to user-pasted image files saved under the workspace's channel/tmp. BuildPromptAsync surfaces them under an [Attached images] block; the runner best-effort deletes them after the process exits.</summary>
     public IReadOnlyList<string>? ImagePaths { get; init; }
-
-    /// <summary>When non-null, the runner emits an error event and returns immediately without launching
-    /// a subprocess (invalid model selection: Ollama without base URL, Grok without the CLI installed).</summary>
-    public string? ModelValidationError { get; init; }
 
     /// <summary>Maximum wall-clock duration for this run. When exceeded, the subprocess is killed and the run fails.
     /// Null means no timeout (e.g. chat sessions). Defaults to 30 minutes for automation runs if not set.</summary>
@@ -163,16 +179,16 @@ public sealed class AgentRunner
             SkillFile = ctx.SkillFile,
             ConcurrencyGroup = string.IsNullOrEmpty(ctx.ConcurrencyGroup) ? ctx.AgentName : ctx.ConcurrencyGroup,
             StartedAt = DateTime.UtcNow,
-            Model = ctx.Model,
+            Model = ctx.Target.Model,
             ChatTarget = ctx.ChatTarget,
             LockTimeoutMinutes = ctx.LockTimeoutMinutes,
         };
         if (ctx.OnEventHook is not null) run.OnEvent += ctx.OnEventHook;
         _runs.Register(run);
 
-        if (ctx.ModelValidationError is not null)
+        if (ctx.Target.ValidationError is not null)
         {
-            run.Push(new StreamEvent(DateTime.UtcNow, "error", ctx.ModelValidationError));
+            run.Push(new StreamEvent(DateTime.UtcNow, "error", ctx.Target.ValidationError));
             _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
             return run;
         }
@@ -201,17 +217,19 @@ public sealed class AgentRunner
         // We persist sessions for ALL runs — even those without a ticket (groomer,
         // documentalist, code-janitor, evaluator) — so they keep their context across restarts.
         // SessionScope optionally namespaces the key (e.g. "chat:agent:sweep") so chat
-        // sessions don't collide with automation sessions for the same agent. Grok sessions
-        // get an extra "grok:" prefix (see SessionScopeKey) so a Claude session id is never
-        // resumed on the grok CLI and vice versa.
-        var scopedAgent = SessionScopeKey(ctx.AgentName, ctx.SessionScope, ctx.Provider);
+        // sessions don't collide with automation sessions for the same agent. Provider prefixes
+        // prevent a session id from one CLI being resumed by another.
+        var backend = AgentCliBackend.For(ctx.Target.Provider);
+        var scopedAgent = SessionScopeKey(ctx.AgentName, ctx.SessionScope, ctx.Target.Provider);
         var existingSessionId = ctx.PersistSession
             ? _sessions.GetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId)
             : null;
         var sessionId = existingSessionId ?? Guid.NewGuid().ToString();
         var isResume = existingSessionId is not null;
-        run.SessionId = sessionId;
-        if (ctx.PersistSession)
+        // Claude and Grok accept a caller-selected id for new sessions. Codex generates its
+        // thread id and reports it in `thread.started`, so its adapter fills run.SessionId.
+        run.SessionId = !backend.CallerChoosesNewSessionId && !isResume ? null : sessionId;
+        if (ctx.PersistSession && (backend.CallerChoosesNewSessionId || isResume))
             _sessions.SetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId, sessionId);
 
         // Global concurrency gate: cap simultaneous claude subprocesses across all projects
@@ -238,6 +256,7 @@ public sealed class AgentRunner
         {
             var attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume, ct);
             if (attempt.Cancelled) return run;
+            PersistDiscoveredSession(ctx, scopedAgent, run);
 
             // If the agent invoked AskUserQuestion, wait for the user's answer via the SteeringQueue.
             if (run.IsAwaitingUserAnswer)
@@ -262,25 +281,27 @@ public sealed class AgentRunner
                     "Previous session expired, starting a new one"));
                 _sessions.Clear(ctx.WorkspacePath, scopedAgent, ctx.TicketId);
                 sessionId = Guid.NewGuid().ToString();
-                run.SessionId = sessionId;
-                _sessions.SetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId, sessionId);
+                run.SessionId = backend.CallerChoosesNewSessionId ? sessionId : null;
+                if (backend.CallerChoosesNewSessionId)
+                    _sessions.SetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId, sessionId);
 
                 attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume: false, ct);
                 if (attempt.Cancelled) return run;
+                PersistDiscoveredSession(ctx, scopedAgent, run);
             }
 
             // Quota / usage-limit fallback: if the CLI signalled a rate-limit or weekly quota
             // error and the project has a FallbackModel configured (and it differs from the
             // primary model that just failed), retry the run once with the fallback model.
             if (attempt.HitQuota
-                && !string.IsNullOrWhiteSpace(ctx.FallbackModel)
-                && !string.Equals(ctx.FallbackModel, ctx.Model, StringComparison.OrdinalIgnoreCase))
+                && ctx.FallbackTarget is not null
+                && !string.Equals(ctx.FallbackTarget.Model, ctx.Target.Model, StringComparison.OrdinalIgnoreCase))
             {
                 run.Push(new StreamEvent(DateTime.UtcNow, "fallback",
-                    $"Quota reached on {(ctx.Model ?? "default model")} — retrying with fallback model {ctx.FallbackModel}"));
+                    $"Quota reached on {(ctx.Target.Model ?? "default model")} — retrying with fallback model {ctx.FallbackTarget.Model}"));
                 _logger.LogWarning("Quota hit for {Agent} (model={Model}); falling back to {Fallback}",
-                    ctx.AgentName, ctx.Model, ctx.FallbackModel);
-                run.Model = ctx.FallbackModel;
+                    ctx.AgentName, ctx.Target.Model, ctx.FallbackTarget.Model);
+                run.Model = ctx.FallbackTarget.Model;
                 // Fresh session id: the primary attempt already consumed `sessionId`, and the
                 // fallback may be a different CLI (claude → grok) whose session store is separate.
                 // Persist under the FALLBACK provider's namespace only — writing a grok session
@@ -290,15 +311,19 @@ public sealed class AgentRunner
                 // once quota recovers.
                 var fallbackCtx = ctx.WithFallback();
                 sessionId = Guid.NewGuid().ToString();
-                run.SessionId = sessionId;
+                var fallbackBackend = AgentCliBackend.For(fallbackCtx.Target.Provider);
+                run.SessionId = fallbackBackend.CallerChoosesNewSessionId ? sessionId : null;
                 if (ctx.PersistSession)
                 {
                     var fallbackScoped = SessionScopeKey(
-                        fallbackCtx.AgentName, fallbackCtx.SessionScope, fallbackCtx.Provider);
-                    _sessions.SetSessionId(ctx.WorkspacePath, fallbackScoped, ctx.TicketId, sessionId);
+                        fallbackCtx.AgentName, fallbackCtx.SessionScope, fallbackCtx.Target.Provider);
+                    if (fallbackBackend.CallerChoosesNewSessionId)
+                        _sessions.SetSessionId(ctx.WorkspacePath, fallbackScoped, ctx.TicketId, sessionId);
                 }
                 attempt = await SpawnAndWaitAsync(fallbackCtx, run, skillContent, sessionId, isResume: false, ct);
                 if (attempt.Cancelled) return run;
+                PersistDiscoveredSession(fallbackCtx,
+                    SessionScopeKey(fallbackCtx.AgentName, fallbackCtx.SessionScope, fallbackCtx.Target.Provider), run);
             }
 
             // Auto-replay steer messages that arrived while stdin was closed (--print mode).
@@ -345,12 +370,8 @@ public sealed class AgentRunner
                     PersistSession = ctx.PersistSession,
                     OnEventHook = ctx.OnEventHook,
                     ChatTarget = ctx.ChatTarget,
-                    Model = ctx.Model,
-                    Provider = ctx.Provider,
-                    FallbackModel = ctx.FallbackModel,
-                    FallbackProvider = ctx.FallbackProvider,
-                    FallbackEnv = ctx.FallbackEnv,
-                    Env = ctx.Env,
+                    Target = ctx.Target,
+                    FallbackTarget = ctx.FallbackTarget,
                     PendingSteerMessages = run.PendingSteerMessages,
                     MaxRunDuration = ctx.MaxRunDuration,
                     LockTimeoutMinutes = ctx.LockTimeoutMinutes,
@@ -390,6 +411,12 @@ public sealed class AgentRunner
     }
 
     private readonly record struct SpawnResult(int? Exit, int AssistantEventCount, bool Cancelled, bool HitQuota);
+
+    private void PersistDiscoveredSession(AgentRunContext ctx, string scopedAgent, AgentRun run)
+    {
+        if (ctx.PersistSession && !string.IsNullOrWhiteSpace(run.SessionId))
+            _sessions.SetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId, run.SessionId);
+    }
 
     // Heuristic patterns matching quota / usage-limit / rate-limit messages emitted by the
     // claude CLI (via stream-json result events or stderr) or the grok CLI (e.g.
@@ -458,73 +485,15 @@ public sealed class AgentRunner
         string sessionId, bool isResume, CancellationToken ct)
     {
         var prompt = await BuildPromptAsync(ctx, skillContent, isResume, ct);
-        var sessionName = ctx.TicketId is not null ? $"{ctx.AgentName} #{ctx.TicketId}" : ctx.AgentName;
-
-        var effectiveModel = ctx.Model;
-        var isGrok = ctx.Provider == CliProvider.Grok;
-
-        // Grok prompt file (when used). Cleaned up in the finally of every exit path below —
-        // spawn failure, early cancel, or normal process end.
-        string? grokPromptFile = null;
-
-        List<string> args;
-        if (isGrok)
-        {
-            // Grok Build CLI headless mode. The prompt is written to a temp file and passed via
-            // --prompt-file rather than -p: on Windows CreateProcess caps the command line at
-            // ~32k characters, and a new-session chat/automation prompt (preamble + skill +
-            // memory + user text) routinely exceeds that (the resume path is short and can
-            // still spawn, so the failure only shows up after "Previous session expired").
-            // --always-approve is grok's --dangerously-skip-permissions; --no-auto-update keeps
-            // background update checks out of automated runs.
-            args = new List<string>
-            {
-                "--output-format", "streaming-json",
-                "--always-approve",
-                "--no-auto-update",
-                "--max-turns", ctx.MaxTurns.ToString(),
-            };
-            if (isResume) { args.Add("--resume"); args.Add(sessionId); }
-            else { args.Add("--session-id"); args.Add(sessionId); }
-            if (effectiveModel is not null) { args.Add("--model"); args.Add(effectiveModel); }
-
-            grokPromptFile = Path.Combine(Path.GetTempPath(), $"kittyclaw-grok-prompt-{Guid.NewGuid():N}.txt");
-            await File.WriteAllTextAsync(grokPromptFile, prompt, Encoding.UTF8, ct);
-            args.Add("--prompt-file");
-            args.Add(grokPromptFile);
-        }
-        else
-        {
-            args = new List<string>
-            {
-                "--print", "--verbose",
-                "--output-format", "stream-json",
-                "--dangerously-skip-permissions",
-                "--max-turns", ctx.MaxTurns.ToString(),
-            };
-            // KittyClaw owns the agent memory layer (.agents/{agent}/memory.md committed to
-            // the workspace repo). We previously passed `--disallowed-tools Memory` to keep
-            // agents off any built-in memory store, but the Claude Code CLI exposes no tool
-            // named "Memory" — the rule matched nothing and only emitted a startup warning
-            // ("Permission deny rule \"Memory\" matches no known tool") into the run stream.
-            // The CLI's memory is file-based (read as context, not a tool), so there is
-            // nothing to disallow here.
-            // No --remote-control: it has no effect on non-interactive `claude --print` runs and
-            // its file-based IPC (payload.json in the working directory) is keyed on the cwd, so
-            // any two concurrent runs in the same workspace would read each other's IPC file and
-            // either cross-contaminate sessions or deadlock at startup. Mid-run steering does not
-            // depend on it — PumpSteeringAsync queues messages for replay on the next --resume.
-            if (isResume) { args.Add("--resume"); args.Add(sessionId); }
-            else { args.Add("-n"); args.Add(sessionName); args.Add("--session-id"); args.Add(sessionId); }
-            if (effectiveModel is not null) { args.Add("--model"); args.Add(effectiveModel); }
-        }
-
-        var psi = ProcessLifecycleManager.BuildProcessStartInfo(ctx, args);
+        var backend = AgentCliBackend.For(ctx.Target.Provider);
+        var invocation = await backend.BuildInvocationAsync(ctx, prompt, sessionId, isResume, ct);
+        var psi = ProcessLifecycleManager.BuildProcessStartInfo(
+            ctx, invocation.Arguments, invocation.FileName);
 
         AppendDebugLog(ctx, $"LAUNCHING {ctx.AgentName} {(isResume ? "(resume)" : "(new)")} ticket=#{ctx.TicketId} session={sessionId}");
         _logger.LogInformation("LAUNCH {Agent} {Mode} ticket=#{TicketId} session={SessionId} cmd={Bin} {Args}",
             ctx.AgentName, isResume ? "(resume)" : "(new)", ctx.TicketId, sessionId,
-            psi.FileName, string.Join(" ", isGrok ? args.SkipLast(1).Append("<prompt-file>") : args));
+            psi.FileName, string.Join(" ", invocation.LogArguments ?? invocation.Arguments));
 
         System.Diagnostics.Process proc;
         try
@@ -533,7 +502,7 @@ public sealed class AgentRunner
         }
         catch (Exception ex)
         {
-            TryDeleteFile(grokPromptFile);
+            TryDeleteFile(invocation.TemporaryFile);
             run.Push(new StreamEvent(DateTime.UtcNow, "error", $"spawn failed: {ex.Message}"));
             return new SpawnResult(-1, 0, false, false);
         }
@@ -567,12 +536,11 @@ public sealed class AgentRunner
 
             try
             {
-                // `claude --print` reads its prompt from stdin and blocks until EOF before
-                // processing anything, so close stdin now. grok takes its prompt via
-                // --prompt-file and reads nothing from stdin — just close it. Mid-run steering
+                // Claude and Codex read the prompt from stdin and start after EOF. Grok takes it
+                // via --prompt-file and reads nothing from stdin. Mid-run steering
                 // does not reach the process this way — PumpSteeringAsync queues steered messages
                 // for replay on the next --resume invocation (see its comment).
-                if (!isGrok)
+                if (invocation.WritePromptToStdin)
                 {
                     await proc.StandardInput.WriteAsync(prompt);
                     await proc.StandardInput.FlushAsync();
@@ -591,8 +559,9 @@ public sealed class AgentRunner
                 ? new CancellationTokenSource(maxDuration)
                 : new CancellationTokenSource();
             using var linkedWithTimeout = CancellationTokenSource.CreateLinkedTokenSource(linked.Token, timeoutCts.Token);
-            var stdoutTask = AgentStreamPump.PumpStdoutAsync(proc, run, ctx.Provider, linkedWithTimeout.Token);
-            var stderrTask = AgentStreamPump.PumpStderrAsync(proc, run, linkedWithTimeout.Token);
+            var stdoutTask = AgentStreamPump.PumpStdoutAsync(proc, run, backend, linkedWithTimeout.Token);
+            var stderrTask = AgentStreamPump.PumpStderrAsync(
+                proc, run, backend, linkedWithTimeout.Token);
             var steerTask = AgentStreamPump.PumpSteeringAsync(proc, run, linkedWithTimeout.Token);
 
             using var killReg = linkedWithTimeout.Token.Register(() =>
@@ -714,7 +683,7 @@ public sealed class AgentRunner
         finally
         {
             job?.Dispose();
-            TryDeleteFile(grokPromptFile);
+            TryDeleteFile(invocation.TemporaryFile);
         }
     }
 
@@ -725,15 +694,12 @@ public sealed class AgentRunner
     }
 
     /// <summary>
-    /// Builds the SessionRegistry agent key for a dispatch. Optionally prefixes with
-    /// <c>SessionScope</c> (e.g. <c>chat:</c>), then with <c>grok:</c> when the provider is
-    /// Grok so Claude and Grok session ids never share a registry slot.
+    /// Builds the SessionRegistry key for a dispatch, namespaced by CLI provider.
     /// </summary>
     internal static string SessionScopeKey(string agentName, string? sessionScope, CliProvider provider)
     {
         var scoped = sessionScope is null ? agentName : $"{sessionScope}:{agentName}";
-        if (provider == CliProvider.Grok) scoped = $"grok:{scoped}";
-        return scoped;
+        return AgentCliBackend.For(provider).SessionPrefix + scoped;
     }
 
     // How long to wait for stdout/stderr to reach EOF after the claude process exits before
@@ -790,9 +756,13 @@ public sealed class AgentRunner
         if (ctx.SessionScope == "chat" && isResume)
         {
             var userMsg = ctx.ExtraContext ?? "";
+            const string languageReminder =
+                "[Interactive chat: reply in the language used by the owner unless they explicitly request another language. " +
+                "Keep persistent project artifacts in the language required by the project instructions.]";
             if (ctx.PendingSteerMessages?.Count > 0)
             {
                 var sb = new StringBuilder();
+                sb.AppendLine(languageReminder);
                 foreach (var steer in ctx.PendingSteerMessages)
                     sb.AppendLine($"[Steering message from previous turn]: {steer}");
                 sb.AppendLine();
@@ -800,7 +770,7 @@ public sealed class AgentRunner
                 sb.Append(imagesBlock);
                 return sb.ToString();
             }
-            return userMsg + imagesBlock;
+            return $"{languageReminder}\n\n{userMsg}{imagesBlock}";
         }
 
         // Automation resume on a ticket: ping the agent that the owner posted new feedback.

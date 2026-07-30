@@ -7,9 +7,13 @@ namespace KittyClaw.Core.Automation;
 internal static class AgentStreamPump
 {
     internal static Task PumpStdoutAsync(Process proc, AgentRun run, CancellationToken ct) =>
-        PumpStdoutAsync(proc, run, CliProvider.Claude, ct);
+        PumpStdoutAsync(proc, run, AgentCliBackend.For(CliProvider.Claude), ct);
 
     internal static async Task PumpStdoutAsync(Process proc, AgentRun run, CliProvider provider, CancellationToken ct)
+        => await PumpStdoutAsync(proc, run, AgentCliBackend.For(provider), ct);
+
+    internal static async Task PumpStdoutAsync(
+        Process proc, AgentRun run, AgentCliBackend backend, CancellationToken ct)
     {
         var reader = proc.StandardOutput;
         try
@@ -29,10 +33,9 @@ internal static class AgentStreamPump
                 try
                 {
                     using var doc = JsonDocument.Parse(line);
-                    // Grok's streaming-json events use different type names and shapes; the
-                    // adapter normalizes the ones we understand to claude-style kinds. Lines it
-                    // doesn't recognize fall through to the generic handling below.
-                    if (provider == CliProvider.Grok && GrokStreamAdapter.TryMap(doc.RootElement, line, run))
+                    // Native backends normalize their JSONL dialect. Claude returns false and
+                    // uses the established generic stream-json handling below.
+                    if (backend.TryMapEvent(doc.RootElement, line, run))
                         continue;
                     var kind = doc.RootElement.TryGetProperty("type", out var t) ? t.GetString() ?? "event" : "event";
                     // For assistant message events: emit the assistant text first, then separate tool_use events
@@ -131,6 +134,10 @@ internal static class AgentStreamPump
         obj.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var i) ? i : 0;
 
     internal static async Task PumpStderrAsync(Process proc, AgentRun run, CancellationToken ct)
+        => await PumpStderrAsync(proc, run, AgentCliBackend.For(CliProvider.Claude), ct);
+
+    internal static async Task PumpStderrAsync(
+        Process proc, AgentRun run, AgentCliBackend backend, CancellationToken ct)
     {
         var reader = proc.StandardError;
         try
@@ -147,7 +154,7 @@ internal static class AgentStreamPump
                 }
                 if (line is null) break;
                 if (string.IsNullOrWhiteSpace(line)) continue;
-                run.Push(new StreamEvent(DateTime.UtcNow, "stderr", line));
+                run.Push(new StreamEvent(DateTime.UtcNow, backend.MapStderrKind(line), line));
             }
         }
         catch (Exception ex)

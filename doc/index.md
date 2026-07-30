@@ -4,9 +4,11 @@ This folder documents how KittyClaw is structured, one file per feature.
 Each feature page covers its purpose, key components, entry points, and external dependencies.
 Concepts are explained in exactly one place — other pages cross-link via relative links.
 
-For a high-level overview see the root [README.md](../README.md). For repo layout and conventions see [CLAUDE.md](../CLAUDE.md).
+For a high-level overview see the root [README.md](../README.md). For repo layout and conventions see [AGENTS.md](../AGENTS.md).
 
 ## Features
+
+- [OpenAI Codex CLI](./codex-cli.md) — dispatching explicitly qualified `codex:*` models to the `codex` CLI.
 
 - [Automation engine](./automation-engine.md) — triggers, conditions, and actions that dispatch agents.
 - [Agent dispatch](./agent-dispatch.md) — running the `claude` CLI as a subprocess and streaming its output.

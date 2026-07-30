@@ -13,7 +13,9 @@ Do not write to memory during a normal run — a separate consolidation pass cur
 
 ## Language
 
-All content you produce — commit messages, memory updates, agent-to-agent notes — MUST be written in **English**. This includes any text in `.agents/**` and git commit messages.
+Persistent project artifacts — commit messages, memory updates, ticket content, agent-to-agent notes, code comments, and files under `.agents/**` — MUST be written in **English**.
+
+In interactive chat, reply in the language used by the owner unless they explicitly request another language. This conversational-language rule does not change the English-only requirement for persistent artifacts.
 
 ## Git commits — no attribution trailers
 

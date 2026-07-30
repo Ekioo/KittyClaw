@@ -152,6 +152,10 @@ public static partial class Endpoints
             var fallbackModel = project.FallbackModel;
             var fallbackRouting = fallbackModel is null ? null : ModelRouting.Resolve(fallbackModel, project.LocalModelBaseUrl);
             if (fallbackRouting?.Error is not null) { fallbackModel = null; fallbackRouting = null; }
+            var target = routing.ToTarget(run.Model);
+            var fallbackTarget = fallbackModel is null || fallbackRouting is null
+                ? null
+                : fallbackRouting.ToTarget(fallbackModel);
             var ctx = new AgentRunContext
             {
                 ProjectSlug = slug,
@@ -162,13 +166,8 @@ public static partial class Endpoints
                 TicketTitle = ticketTitle,
                 TicketStatus = ticketStatus,
                 ConcurrencyGroup = run.ConcurrencyGroup,
-                Model = run.Model,
-                Provider = routing.Provider,
-                ModelValidationError = routing.Error,
-                Env = routing.ExtraEnv is null ? new Dictionary<string, string>() : new Dictionary<string, string>(routing.ExtraEnv),
-                FallbackModel = fallbackModel,
-                FallbackProvider = fallbackRouting?.Provider ?? CliProvider.Claude,
-                FallbackEnv = fallbackRouting?.ExtraEnv is null ? null : new Dictionary<string, string>(fallbackRouting.ExtraEnv),
+                Target = target,
+                FallbackTarget = fallbackTarget,
                 RetryOnResumeFailure = true,
                 PresetRunId = newRunId,
                 MaxRunDuration = TimeSpan.FromMinutes(30),

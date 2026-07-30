@@ -61,6 +61,15 @@
                         }
                     </optgroup>
                 }
+                @if (_codexModels.Count > 0)
+                {
+                    <optgroup label="OpenAI Codex">
+                        @foreach (var m in _codexModels)
+                        {
+                            <option value="@m">@m</option>
+                        }
+                    </optgroup>
+                }
                 @if (_ollamaModels.Count > 0)
                 {
                     <optgroup label="Local (Ollama)">
@@ -251,6 +260,7 @@
     private string? _streamingText;
     private List<string> _ollamaModels = new();
     private List<string> _grokModels = new();
+    private List<string> _codexModels = new();
     private const string DefaultModel = ClaudeModelCatalog.DefaultModel;
     private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
 
@@ -325,6 +335,11 @@
             _grokModels = await http.GetFromJsonAsync<List<string>>("/api/grok-models") ?? new();
         }
         catch { _grokModels = new(); }
+        try
+        {
+            _codexModels = await http.GetFromJsonAsync<List<string>>("/api/codex-models") ?? new();
+        }
+        catch { _codexModels = new(); }
     }
 
     private async Task EnterConversationAsync(ChatTarget target)

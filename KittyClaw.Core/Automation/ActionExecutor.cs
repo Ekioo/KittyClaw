@@ -362,7 +362,6 @@ internal sealed class ActionExecutor
         var fallbackModel = project?.FallbackModel;
 
         var effectiveModel = a.Model;
-        var effectiveEnv = a.Env;
 
         // Resolve model from member's DefaultModel if action model is null
         if (effectiveModel is null)
@@ -374,12 +373,7 @@ internal sealed class ActionExecutor
 
         // Decide which CLI runs this dispatch (claude, claude+Ollama env, or grok).
         var routing = ModelRouting.Resolve(effectiveModel, project?.LocalModelBaseUrl);
-        if (routing.ExtraEnv is not null)
-        {
-            var env = new Dictionary<string, string>(effectiveEnv);
-            foreach (var kv in routing.ExtraEnv) env[kv.Key] = kv.Value;
-            effectiveEnv = env;
-        }
+        var target = routing.ToTarget(effectiveModel, a.Env);
 
         // The quota fallback can be any available model — resolve its own provider/env. An
         // unusable fallback (grok CLI missing, Ollama without base URL) disables the fallback
@@ -393,13 +387,9 @@ internal sealed class ActionExecutor
             fallbackModel = null;
             fallbackRouting = null;
         }
-        Dictionary<string, string>? fallbackEnv = null;
-        if (fallbackModel is not null)
-        {
-            fallbackEnv = new Dictionary<string, string>(a.Env);
-            if (fallbackRouting?.ExtraEnv is not null)
-                foreach (var kv in fallbackRouting.ExtraEnv) fallbackEnv[kv.Key] = kv.Value;
-        }
+        var fallbackTarget = fallbackModel is null || fallbackRouting is null
+            ? null
+            : fallbackRouting.ToTarget(fallbackModel, a.Env);
 
         var runCtx = new AgentRunContext
         {
@@ -413,15 +403,10 @@ internal sealed class ActionExecutor
             MaxTurns = a.MaxTurns,
             ConcurrencyGroup = group,
             LockTimeoutMinutes = a.LockTimeoutMinutes,
-            Env = effectiveEnv,
-            Model = effectiveModel,
-            Provider = routing.Provider,
-            FallbackModel = fallbackModel,
-            FallbackProvider = fallbackRouting?.Provider ?? CliProvider.Claude,
-            FallbackEnv = fallbackEnv,
+            Target = target,
+            FallbackTarget = fallbackTarget,
             ExtraContext = a.Context,
             RetryOnResumeFailure = true,
-            ModelValidationError = routing.Error,
             MaxRunDuration = TimeSpan.FromMinutes(30),
         };
         _sessions.SetLastDispatched(rt.Workspace!, agentName, DateTime.UtcNow);

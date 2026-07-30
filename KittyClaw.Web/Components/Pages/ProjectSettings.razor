@@ -84,6 +84,15 @@ else
                             }
                         </optgroup>
                     }
+                    @if (_codexModels.Count > 0)
+                    {
+                        <optgroup label="OpenAI Codex">
+                            @foreach (var model in _codexModels)
+                            {
+                                <option value="@model">@model</option>
+                            }
+                        </optgroup>
+                    }
                     @if (_discoveredModels.Count > 0)
                     {
                         <optgroup label="Local (Ollama)">
@@ -162,6 +171,15 @@ else
                                         {
                                             <optgroup label="Grok">
                                                 @foreach (var model in _grokModels)
+                                                {
+                                                    <option value="@model">@model</option>
+                                                }
+                                            </optgroup>
+                                        }
+                                        @if (_codexModels.Count > 0)
+                                        {
+                                            <optgroup label="OpenAI Codex">
+                                                @foreach (var model in _codexModels)
                                                 {
                                                     <option value="@model">@model</option>
                                                 }
@@ -390,9 +408,10 @@ else
     private bool _discoveringLocal;
     private List<string> _discoveredModels = new();
     private List<string> _grokModels = new();
+    private List<string> _codexModels = new();
     private string? _localModelsError;
     private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
-    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_discoveredModels).ToList();
+    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_discoveredModels).ToList();
 
     private List<Member> _members = new();
     private int? _editingMemberId;
@@ -433,6 +452,8 @@ else
         if (!string.IsNullOrWhiteSpace(_localModelBaseUrl)) await DiscoverLocalModels();
         try { _grokModels = (await KittyClaw.Core.Automation.GrokCli.ListModelsAsync()).ToList(); }
         catch { _grokModels = new(); }
+        try { _codexModels = (await KittyClaw.Core.Automation.CodexCli.ListModelsAsync()).ToList(); }
+        catch { _codexModels = new(); }
         _fallbackModel = _project.FallbackModel ?? "";
     }
 

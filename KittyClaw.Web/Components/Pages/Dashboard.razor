@@ -270,6 +270,15 @@ else
                                     }
                                 </optgroup>
                             }
+                            @if (_codexModels.Count > 0)
+                            {
+                                <optgroup label="OpenAI Codex">
+                                    @foreach (var m in _codexModels)
+                                    {
+                                        <option value="@m">@m</option>
+                                    }
+                                </optgroup>
+                            }
                             @if (_ollamaModels.Count > 0)
                             {
                                 <optgroup label="Local (Ollama)">
@@ -311,8 +320,9 @@ else
     private string _workspace = "";
     private List<string> _ollamaModels = new();
     private List<string> _grokModels = new();
+    private List<string> _codexModels = new();
     private static readonly IReadOnlyList<string> AvailableModels = ClaudeModelCatalog.Models;
-    private List<string> AllModels => AvailableModels.Concat(_grokModels).Concat(_ollamaModels).ToList();
+    private List<string> AllModels => AvailableModels.Concat(_grokModels).Concat(_codexModels).Concat(_ollamaModels).ToList();
 
     private List<DashboardTileLayout> _tiles = [];
     private List<string> _availableSlugs = [];
@@ -376,6 +386,11 @@ else
             _grokModels = await http.GetFromJsonAsync<List<string>>("/api/grok-models") ?? new();
         }
         catch { _grokModels = new(); }
+        try
+        {
+            _codexModels = await http.GetFromJsonAsync<List<string>>("/api/codex-models") ?? new();
+        }
+        catch { _codexModels = new(); }
     }
 
     private static string TileId(string tileSlug) =>
@@ -880,10 +895,7 @@ else
                             InlineSkillContent = sidecar.Prompt + TileTemplate.SchemaPrompt(sidecar.Template),
                             MaxTurns = 5,
                             ConcurrencyGroup = $"dashboard-{Slug}-{SanitizeName(tileSlug)}",
-                            Model = sidecar.Model,
-                            Provider = routing.Provider,
-                            ModelValidationError = routing.Error,
-                            Env = routing.ExtraEnv is null ? new Dictionary<string, string>() : new Dictionary<string, string>(routing.ExtraEnv),
+                            Target = routing.ToTarget(sidecar.Model),
                             SessionScope = "dashboard",
                             PersistSession = false,
                             PresetRunId = runId,

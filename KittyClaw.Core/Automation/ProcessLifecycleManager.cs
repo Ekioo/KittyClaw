@@ -71,13 +71,17 @@ internal static class ProcessLifecycleManager
         return "claude";
     }
 
-    internal static ProcessStartInfo BuildProcessStartInfo(AgentRunContext ctx, IList<string> args)
+    internal static ProcessStartInfo BuildProcessStartInfo(
+        AgentRunContext ctx, IReadOnlyList<string> args, string? fileName = null)
     {
         var psi = new ProcessStartInfo
         {
-            // Grok dispatches run xAI's Grok Build CLI instead of claude; GrokCli resolved the
-            // binary at routing time (a Grok provider is only ever set when it is installed).
-            FileName = ctx.Provider == CliProvider.Grok ? GrokCli.Binary ?? "grok" : _claudeBinary.Value,
+            FileName = fileName ?? (ctx.Target.Provider switch
+            {
+                CliProvider.Grok => GrokCli.Binary ?? "grok",
+                CliProvider.Codex => CodexCli.Binary ?? "codex",
+                _ => _claudeBinary.Value,
+            }),
             WorkingDirectory = ctx.WorkspacePath,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -94,6 +98,7 @@ internal static class ProcessLifecycleManager
         foreach (var a in args) psi.ArgumentList.Add(a);
 
         psi.Environment["CLAUDE_AGENT"] = ctx.AgentName;
+        psi.Environment["KITTYCLAW_AGENT"] = ctx.AgentName;
         // Disable Claude Code's built-in "auto memory" feature for dispatched agents. It is
         // on by default and injects instructions to maintain a per-host memory store under
         // ~/.claude/projects/<hash>/memory/ (MEMORY.md index + topic files) written with the

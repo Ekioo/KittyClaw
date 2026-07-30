@@ -7,6 +7,8 @@ public enum CliProvider
     Claude,
     /// <summary>xAI's Grok Build CLI (`grok`) — used when a grok-* model is selected and the CLI is installed.</summary>
     Grok,
+    /// <summary>OpenAI Codex CLI (`codex`) — used for explicitly qualified codex:* models.</summary>
+    Codex,
 }
 
 /// <summary>
@@ -19,7 +21,19 @@ public static class ModelRouting
     public sealed record Resolution(
         CliProvider Provider,
         IReadOnlyDictionary<string, string>? ExtraEnv,
-        string? Error);
+        string? Error,
+        string? ResolvedModel = null)
+    {
+        public AgentDispatchTarget ToTarget(string? model, IReadOnlyDictionary<string, string>? baseEnvironment = null)
+        {
+            var env = baseEnvironment is null
+                ? new Dictionary<string, string>()
+                : new Dictionary<string, string>(baseEnvironment);
+            if (ExtraEnv is not null)
+                foreach (var pair in ExtraEnv) env[pair.Key] = pair.Value;
+            return new AgentDispatchTarget(ResolvedModel ?? model, Provider, env, Error);
+        }
+    }
 
     /// <summary>
     /// Routing rules:
@@ -32,6 +46,15 @@ public static class ModelRouting
     {
         if (model is null || model.StartsWith("claude-", StringComparison.OrdinalIgnoreCase))
             return new Resolution(CliProvider.Claude, null, null);
+
+        if (CodexCli.IsCodexModel(model))
+        {
+            if (!CodexCli.IsInstalled)
+                return new Resolution(CliProvider.Claude, null,
+                    $"OpenAI model '{model}': the Codex CLI (codex) was not found on this machine. " +
+                    "Install it from https://developers.openai.com/codex/cli or point KITTYCLAW_CODEX_BIN at the binary.");
+            return new Resolution(CliProvider.Codex, null, null, CodexCli.ToCliModel(model));
+        }
 
         if (GrokCli.IsGrokModel(model))
         {

@@ -52,6 +52,8 @@ public static partial class Endpoints
             var workspacePath = ps.ResolveWorkspacePath(project);
             await cs.ClearAsync(slug, target);
             sessions.Clear(workspacePath, $"chat:{target}", null);
+            sessions.Clear(workspacePath, $"grok:chat:{target}", null);
+            sessions.Clear(workspacePath, $"codex:chat:{target}", null);
             return Results.NoContent();
         }).WithTags("Chat");
 
@@ -62,7 +64,7 @@ public static partial class Endpoints
 
             // Resolve which CLI runs this chat turn (claude, claude+Ollama env, or grok).
             string? effectiveModel = null;
-            IDictionary<string, string>? modelEnv = null;
+            Dictionary<string, string>? modelEnv = null;
             var provider = CliProvider.Claude;
             string? modelValidationError = null;
             if (!string.IsNullOrEmpty(req.Model))
@@ -70,20 +72,22 @@ public static partial class Endpoints
                 var routing = ModelRouting.Resolve(req.Model, project.LocalModelBaseUrl);
                 if (routing.Error is null)
                 {
-                    effectiveModel = req.Model;
+                    effectiveModel = routing.ResolvedModel ?? req.Model;
                     provider = routing.Provider;
                     modelEnv = routing.ExtraEnv is null ? null : new Dictionary<string, string>(routing.ExtraEnv);
                 }
-                else if (GrokCli.IsGrokModel(req.Model))
+                else if (GrokCli.IsGrokModel(req.Model) || CodexCli.IsCodexModel(req.Model))
                 {
-                    // Surface "grok CLI not installed" in the chat stream rather than silently
-                    // answering with the default claude model.
+                    // Surface a missing native CLI in the chat stream rather than silently
+                    // answering with the default Claude model.
                     effectiveModel = req.Model;
                     modelValidationError = routing.Error;
                 }
                 // Ollama model without a configured base URL: historical chat behavior —
                 // model stays null and the turn runs on the CLI default.
             }
+            var dispatchTarget = new AgentDispatchTarget(
+                effectiveModel, provider, modelEnv ?? new Dictionary<string, string>(), modelValidationError);
 
             var target = string.IsNullOrWhiteSpace(req.Target) ? "owner-chat" : req.Target;
             var runId = Guid.NewGuid().ToString("N");
@@ -203,10 +207,7 @@ public static partial class Endpoints
                     SkillFile = "chat",
                     InlineSkillContent = ticketContext is null ? sb.ToString() : sb.ToString() + "\n" + ticketContext,
                     ExtraContext = req.Message,
-                    Model = effectiveModel,
-                    Provider = provider,
-                    ModelValidationError = modelValidationError,
-                    Env = modelEnv ?? new Dictionary<string, string>(),
+                    Target = dispatchTarget,
                     MaxTurns = 20,
                     ConcurrencyGroup = $"chat:{slug}:{target}",
                     PresetRunId = runId,
@@ -241,6 +242,7 @@ public static partial class Endpoints
                 chatPreamble.AppendLine("- Do NOT ask the owner to post their request as a ticket comment — they are speaking to you here.");
                 chatPreamble.AppendLine("- Do NOT search ticket comments for instructions; treat the chat itself as the source of truth.");
                 chatPreamble.AppendLine("- Respond conversationally and concisely. Use tools (Bash, Edit, etc.) when the owner asks you to perform an action.");
+                chatPreamble.AppendLine("- Reply in the language used by the owner unless they explicitly request another language. Keep persistent project artifacts in the language required by the project instructions.");
                 if (ticketContext is not null)
                     chatPreamble.AppendLine($"- The current ticket below is the topic of this thread. Modify it via the API (PATCH `/api/projects/{slug}/tickets/{effectiveTicketId}`) or other tools when asked.");
                 chatPreamble.AppendLine();
@@ -268,10 +270,7 @@ public static partial class Endpoints
                     SkillFile = hasSkillFile ? $"{baseAgent}/SKILL.md" : "(inline)",
                     InlineSkillContent = inlineContent,
                     ExtraContext = req.Message,
-                    Model = effectiveModel,
-                    Provider = provider,
-                    ModelValidationError = modelValidationError,
-                    Env = modelEnv ?? new Dictionary<string, string>(),
+                    Target = dispatchTarget,
                     MaxTurns = 20,
                     ConcurrencyGroup = $"chat:{slug}:{target}",
                     PresetRunId = runId,

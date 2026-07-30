@@ -5,7 +5,9 @@ Source of truth for new-project initialization. When a project is created, these
 
 ## Key components
 - `ProjectTemplate/Agents/` — per-agent folders (`SKILL.md`, a `memory/MEMORY.md` index skeleton), shared `preamble.md`, `memory-consolidation.md`, and `automations.json`. Embedded with `LogicalName` `KittyClaw.Core.AgentsTemplate/…` and written to `<workspace>/.agents/` on Initialize. Memory topic files are not shipped — the consolidation pass creates them at runtime beside the index.
-- `ProjectTemplate/CLAUDE.md` (and any other root-level files) — embedded with `LogicalName` `KittyClaw.Core.AgentsTemplateRoot/…` and written to the workspace root.
+- `ProjectTemplate/AGENTS.md` — the single source of truth for workspace-wide agent guidance, read natively by Codex and Grok.
+- `ProjectTemplate/CLAUDE.md` — a one-line `@AGENTS.md` compatibility import for Claude Code; it contains no competing instructions.
+- These root-level files are embedded with `LogicalName` `KittyClaw.Core.AgentsTemplateRoot/…` and written to the workspace root.
 - `KittyClaw.Core/Services/AgentsTemplateService.cs` — enumerates the embedded resources by prefix and copies them out via `InitializeAsync(workspace, overwrite)`.
 
 ## Notes
