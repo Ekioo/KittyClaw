@@ -1,61 +1,26 @@
 @using KittyClaw.Core.Services
 @inject LocalizationService L
-@inject IJSRuntime JS
 
-@* Game-style "loading screen tips", adapted to an app with no loading screens: a quiet,
-   fixed line in the bottom-right corner of the home. One tip per day per browser,
-   deterministic (day number cycles through the pool), with next / hide-today /
-   never-again controls — all client-side in localStorage. The pool mixes feature
-   discovery with security reminders (local-only tool, agents run code here). *@
+@* Game-style "loading screen tips", adapted to an app with no loading screens: a plain
+   borderless line of text blended into the page background, always visible in the
+   bottom-right corner of the home. One tip per day, deterministic (day number cycles
+   the pool). No controls, no persistence — it is décor, not a dialog; pointer-events
+   is disabled so it can never intercept a click on content beneath it. The pool mixes
+   feature discovery with security reminders (local-only tool, agents run code here). *@
 
-@if (_visible)
-{
-    <div class="tip-of-the-day" role="note">
-        <span class="tip-icon">💡</span>
-        <span class="tip-text"><b>@L["TipLabel"]</b> — @L[$"Tip{_tipIndex + 1}"]</span>
-        <button class="tip-btn" title="@L["TipNext"]" @onclick="NextTip">↻</button>
-        <button class="tip-btn tip-disable-btn" @onclick="DisableForever">@L["TipDisable"]</button>
-        <button class="tip-btn" title="@L["TipHide"]" @onclick="HideToday">✕</button>
-    </div>
-}
+<div class="tip-of-the-day" role="note">
+    <span class="tip-text">💡 <b>@L["TipLabel"]</b> — @L[$"Tip{_tipIndex + 1}"]</span>
+</div>
 
 @code {
     // Must match the number of TipN keys in Tips.en.json / Tips.fr.json (contract-tested).
     public const int TipCount = 14;
 
-    private bool _visible;
     private int _tipIndex;
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    protected override void OnInitialized()
     {
-        if (!firstRender) return;
-        try
-        {
-            var disabled = await JS.InvokeAsync<string?>("localStorage.getItem", "kc-tips-disabled");
-            if (disabled == "1") return;
-            var hiddenOn = await JS.InvokeAsync<string?>("localStorage.getItem", "kc-tip-hidden-on");
-            if (hiddenOn == Today()) return;
-            // Same tip all day, and the day number walks the whole pool before repeating.
-            _tipIndex = DateOnly.FromDateTime(DateTime.Now).DayNumber % TipCount;
-            _visible = true;
-            StateHasChanged();
-        }
-        catch { /* localStorage unavailable — no tip, no error */ }
-    }
-
-    private static string Today() => DateTime.Now.ToString("yyyy-MM-dd");
-
-    private void NextTip() => _tipIndex = (_tipIndex + 1) % TipCount;
-
-    private async Task HideToday()
-    {
-        _visible = false;
-        await JS.InvokeVoidAsync("localStorage.setItem", "kc-tip-hidden-on", Today());
-    }
-
-    private async Task DisableForever()
-    {
-        _visible = false;
-        await JS.InvokeVoidAsync("localStorage.setItem", "kc-tips-disabled", "1");
+        // Same tip all day; the day number walks the whole pool before repeating.
+        _tipIndex = DateOnly.FromDateTime(DateTime.Now).DayNumber % TipCount;
     }
 }

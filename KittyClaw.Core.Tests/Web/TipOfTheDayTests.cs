@@ -5,10 +5,11 @@ using Xunit;
 namespace KittyClaw.Core.Tests.Web;
 
 /// <summary>
-/// Contract tests for the game-style tip-of-the-day on the unified home: one tip per
-/// day per browser in a quiet fixed corner, next / hide-today / never-again controls,
-/// en/fr tip pools kept in lockstep with the component's TipCount, and at least one
-/// security reminder (local-only tool) in the pool.
+/// Contract tests for the game-style tip-of-the-day on the unified home: a plain
+/// borderless always-visible line in the bottom-right corner (décor, not a dialog —
+/// no dismiss controls), one deterministic tip per day, en/fr tip pools kept in
+/// lockstep with the component's TipCount, and at least one security reminder
+/// (local-only tool) in the pool.
 /// </summary>
 public class TipOfTheDayTests
 {
@@ -76,10 +77,14 @@ public class TipOfTheDayTests
     }
 
     [Fact]
-    public void TipOfTheDay_PersistsDismissalsClientSide()
+    public void TipOfTheDay_IsDecorNotADialog()
     {
+        // Owner direction: plain text blended into the page background, always visible —
+        // no dismiss buttons, no persistence, and it must never intercept clicks.
         var src = File.ReadAllText(ComponentPath());
-        Assert.Contains("kc-tips-disabled", src);
-        Assert.Contains("kc-tip-hidden-on", src);
+        Assert.DoesNotContain("button", src);
+        Assert.DoesNotContain("localStorage", src);
+        var css = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "wwwroot", "app.css"));
+        Assert.Contains("pointer-events: none;", css[css.IndexOf(".tip-of-the-day", StringComparison.Ordinal)..]);
     }
 }

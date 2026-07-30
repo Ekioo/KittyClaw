@@ -1,8 +1,5 @@
 {
   "TipLabel": "Astuce",
-  "TipNext": "Astuce suivante",
-  "TipHide": "Masquer jusqu'à demain",
-  "TipDisable": "Ne plus afficher",
   "Tip1": "Clic droit sur l'en-tête d'une colonne pour trier ses tickets — par titre, priorité, assigné ou date. Le choix est partagé entre le kanban de l'accueil et le board du projet.",
   "Tip2": "Glissez un ticket sur un autre pour en faire un sous-ticket. Le badge 📂 du parent ouvre son propre sous-kanban.",
   "Tip3": "Ctrl+Z annule vos dernières actions sur le board — déplacements, suppressions, renommages, priorités — jusqu'à 30 étapes en arrière.",

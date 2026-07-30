@@ -4747,46 +4747,22 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     padding: 0.3rem 0.85rem;
 }
 
-/* ── Tip of the day (unified home, bottom-right) ─────────────────────────── */
+/* ── Tip of the day (unified home, bottom-right) ──────────────────────────
+   Plain text blended into the page background: no border, no box, always
+   visible; pointer-events none so it never intercepts clicks on content. */
 .tip-of-the-day {
     position: fixed;
     right: 1rem;
-    bottom: 1rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    max-width: min(560px, calc(100vw - 2rem));
-    padding: 0.45rem 0.4rem 0.45rem 0.75rem;
-    background: color-mix(in srgb, var(--surface) 92%, transparent);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font-size: 0.78rem;
-    color: var(--text-muted);
+    bottom: 0.75rem;
+    max-width: min(620px, calc(100vw - 2rem));
+    font-size: 0.76rem;
+    color: var(--text-dim);
+    text-align: right;
+    pointer-events: none;
     z-index: 40; /* below every modal/panel overlay (100+) */
 }
 
 .tip-of-the-day .tip-text b {
-    color: var(--text);
+    color: var(--text-muted);
     font-weight: 600;
-}
-
-.tip-of-the-day .tip-btn {
-    background: transparent;
-    border: none;
-    padding: 0.15rem 0.4rem;
-    color: var(--text-dim);
-    font-size: 0.78rem;
-    cursor: pointer;
-    border-radius: 4px;
-    line-height: 1;
-}
-
-.tip-of-the-day .tip-btn:hover {
-    color: var(--text);
-    background: var(--border);
-}
-
-.tip-of-the-day .tip-disable-btn {
-    font-size: 0.7rem;
-    white-space: nowrap;
 }

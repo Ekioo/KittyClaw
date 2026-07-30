@@ -1,8 +1,5 @@
 {
   "TipLabel": "Tip",
-  "TipNext": "Next tip",
-  "TipHide": "Hide until tomorrow",
-  "TipDisable": "Don't show tips",
   "Tip1": "Right-click a column header to sort its tickets — by title, priority, assignee or date. The choice is shared between the home kanban and the project board.",
   "Tip2": "Drag a ticket onto another one to turn it into a sub-ticket. The 📂 badge on the parent opens its own sub-kanban.",
   "Tip3": "Ctrl+Z undoes your last board actions — moves, deletes, renames, priority changes — up to 30 steps back.",
