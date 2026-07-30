@@ -29,6 +29,7 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 - Markdown rendering with `@mention`, `#id`, and `#{slug}:{id}` cross-project ticket references.
 - Advanced search syntax: `#42`, `@owner`, `>date`, `priority:critical`, `label:bug`, `by:owner`.
 - Sub-tickets with parent/child relationships and progress tracking.
+- Ticket scheduling from the ticket panel, with a due-date badge and chronological ordering in the Scheduled column. See [ticket scheduling](./ticket-scheduling.md).
 - Column management (create, reorder, customize colors), image upload. Label and member management are available from the dedicated Settings page.
 - Column scroll preservation: opening or closing the ticket detail panel saves all `.column-body` scroll positions via `board.js` (`saveColumnScrollPositions`) and restores them in `OnAfterRenderAsync` via `restoreColumnScrollPositions` once Blazor has re-rendered.
 - Right-click context menu on column headers to sort tickets bidirectionally (Title, Priority, Assignee, Created date, Due date) or reset to manual order. Sort state is held in `BoardSortState` and survives navigation within the same circuit.

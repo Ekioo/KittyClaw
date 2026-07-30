@@ -7,7 +7,7 @@ Persists all KittyClaw data locally. Splits app-wide state from per-project data
 
 Under `%APPDATA%/KittyClaw/`:
 - `registry.db` — SQLite project registry (slug, name, workspace path, …).
-- `projects/{slug}.db` — per-project SQLite DB (tickets, comments, labels, columns, members).
+- `projects/{slug}.db` — per-project SQLite DB (tickets, comments, labels, columns, members, and [ticket schedules](./ticket-scheduling.md)).
 - `uploads/` — uploaded images referenced by descriptions and comments.
 - `runs/{runId}.json` — agent run snapshots (events, status, exit code).
 - `settings.json` — language + onboarding flag.

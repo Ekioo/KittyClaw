@@ -8,14 +8,15 @@ For a high-level overview see the root [README.md](../README.md). For repo layou
 
 ## Features
 
+- [Onboarding](./onboarding.md) — step-by-step first project guide, from workspace initialization to an agent-assisted ticket.
 - [OpenAI Codex CLI](./codex-cli.md) — dispatching explicitly qualified `codex:*` models to the `codex` CLI.
-
 - [Automation engine](./automation-engine.md) — triggers, conditions, and actions that dispatch agents.
 - [Agent dispatch](./agent-dispatch.md) — running the `claude` CLI as a subprocess and streaming its output.
 - [Project template](./project-template.md) — embedded `ProjectTemplate/` files copied into each workspace on Initialize.
 - [REST API](./rest-api.md) — OpenAPI-driven endpoints under `/api`, with auto-generated Markdown docs.
 - [Storage](./storage.md) — SQLite registry, per-project DBs, run logs, and workspace-side agent state.
 - [Kanban UI](./kanban-ui.md) — Blazor Server board, ticket panel, agent run drawer.
+- [Ticket scheduling](./ticket-scheduling.md) — park tickets until a future time, then promote them into the workflow.
 - [Dashboard](./dashboard.md) — free-form tile view backed by `.dashboard/` Markdown files with drag-and-drop layout.
 - [Graphic charter](./graphic-charter.md) — palette, typography, spacing, form controls, button variants. Reference before adding any new UI.
 - [Update check](./update-check.md) — background poll of GitHub Releases that surfaces a dismissible "new version available" banner in the app shell.
