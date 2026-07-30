@@ -113,21 +113,17 @@ http=$(curl -s -o ./qa-resp.json -w "%{http_code}" \
 
 **BLOCKED** (tooling missing, environment broken, cannot exercise the change) → move the ticket to `Blocked`, comment with what's missing, what you tried, and what is needed to unblock. Never PASS by default when you couldn't actually test.
 
-**FAIL** → comment with the specific points to fix, then return to `Todo`. Same discipline — body via `Write`, `-d @file`, check `%{http_code}`:
+**FAIL** → comment with the specific points to fix, then hand the ticket back in ONE call. Same discipline — body via `Write`, `-d @file`, check `%{http_code}`:
 
 ```bash
 http=$(curl -s -o ./qa-resp.json -w "%{http_code}" \
   -X PATCH ${KITTYCLAW_API_URL}/api/projects/{project-slug}/tickets/{id} \
   -H "Content-Type: application/json" \
-  -d @./qa-assign.json)   # {"assignedTo":"programmer","author":"qa-tester"}
-[[ "$http" =~ ^2 ]] || { echo "PATCH assignedTo failed http=$http"; cat ./qa-resp.json; exit 1; }
-
-http=$(curl -s -o ./qa-resp.json -w "%{http_code}" \
-  -X PATCH ${KITTYCLAW_API_URL}/api/projects/{project-slug}/tickets/{id}/status \
-  -H "Content-Type: application/json" \
-  -d @./qa-status.json)   # {"status":"Todo","author":"qa-tester"}
-[[ "$http" =~ ^2 ]] || { echo "PATCH status failed http=$http"; cat ./qa-resp.json; exit 1; }
+  -d @./qa-handoff.json)   # {"status":"Todo","assignedTo":"programmer","author":"qa-tester"}
+[[ "$http" =~ ^2 ]] || { echo "PATCH hand-off failed http=$http"; cat ./qa-resp.json; exit 1; }
 ```
+
+Status and assignee travel in the **same request** on purpose: the automation engine reacts to ticket changes, and two separate calls would expose a half-done hand-off (new status, old assignee) it could act on.
 
 ## Strict rules
 

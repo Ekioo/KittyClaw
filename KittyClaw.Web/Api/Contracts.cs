@@ -4,11 +4,13 @@ namespace KittyClaw.Web.Api;
 
 public record CreateProjectRequest(string Name);
 public record CreateTicketRequest(string Title, string CreatedBy, string Status, string Description = "", List<int>? LabelIds = null, TicketPriority Priority = TicketPriority.NiceToHave, string? AssignedTo = null, int? ParentId = null);
-// Status is NOT applied by the root PATCH — it exists only so a payload that mistakenly
-// includes it gets an explicit 400 pointing to PATCH /tickets/{id}/status (which validates
-// the target column and raises the TicketStatusChanged signal) instead of a silent no-op
-// that kept a prod ticket stuck in a loop for 30 minutes (kittyclaw-front#113, lain 14/07).
-public record UpdateTicketRequest(string Author, string? Title = null, string? Description = null, TicketPriority? Priority = null, string? AssignedTo = null, List<int>? LabelIds = null, string? Status = null);
+// The root PATCH applies every provided field — Status included — in ONE atomic write,
+// through the same semantics as the dedicated /status endpoint (column validation,
+// Scheduled cleanup, activity, engine signal after commit). This is the hand-off
+// primitive: {"status":"Todo","assignedTo":"programmer"} can never be observed
+// half-applied by the automation engine. ExpectedStatus is optimistic concurrency:
+// when set, the update only applies while the ticket is still in that status (else 409).
+public record UpdateTicketRequest(string Author, string? Title = null, string? Description = null, TicketPriority? Priority = null, string? AssignedTo = null, List<int>? LabelIds = null, string? Status = null, string? ExpectedStatus = null);
 public record MoveTicketRequest(string Status, string Author);
 public record ScheduleTicketRequest(DateTime FireAt, string Author, string? TargetStatus = "Todo");
 // Content/Author are nullable so missing JSON fields deserialize cleanly; the service

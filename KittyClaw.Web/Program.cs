@@ -96,7 +96,14 @@ if (OperatingSystem.IsWindows())
     builder.Services.AddSingleton<KittyClaw.Core.Platform.IFolderPicker, KittyClaw.Core.Platform.WindowsFolderPicker>();
 
 builder.Services.ConfigureHttpJsonOptions(options =>
-    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+{
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    // Reject request bodies carrying fields the endpoint does not support (400) instead of
+    // silently dropping them. Most API callers are LLM agents that GUESS field names from
+    // REST conventions; a wrong guess must be told, not swallowed — a silently-ignored
+    // "status" once kept a prod ticket looping for 30 minutes (kittyclaw-front#113).
+    options.SerializerOptions.UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow;
+});
 builder.Services.AddOpenApi();
 
 builder.Services.AddRazorComponents()
@@ -128,6 +135,23 @@ app.UseStaticFiles(new Microsoft.AspNetCore.Builder.StaticFileOptions
 });
 
 app.UseAntiforgery();
+
+// Surface strict-JSON binding failures (unknown field, malformed body) as a 400 with the
+// offending property named in the payload — the default is a bare 400, useless to an
+// agent that needs to know WHICH field to fix.
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next(context);
+    }
+    catch (Microsoft.AspNetCore.Http.BadHttpRequestException ex)
+        when (ex.InnerException is JsonException jex && !context.Response.HasStarted)
+    {
+        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+        await context.Response.WriteAsJsonAsync(new { error = jex.Message });
+    }
+});
 
 app.MapOpenApi();
 app.MapTodoApi();

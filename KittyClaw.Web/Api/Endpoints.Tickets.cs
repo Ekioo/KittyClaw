@@ -31,22 +31,21 @@ public static partial class Endpoints
 
         api.MapPatch("/projects/{slug}/tickets/{id:int}", async (string slug, int id, UpdateTicketRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
         {
-            // This endpoint used to silently DROP a "status" field (HTTP 200, no activity) —
-            // agents believed their "restore Done" calls worked while the ticket never moved
-            // (kittyclaw-front#113). Reject explicitly and point to the dedicated endpoint.
-            if (req.Status is not null)
-                return Results.BadRequest(new
-                {
-                    error = $"The 'status' field is not applied by this endpoint. Use PATCH /api/projects/{slug}/tickets/{id}/status "
-                          + "(validates the target column and notifies automations).",
-                });
+            // Every provided field — status included — is applied in ONE atomic write
+            // (kittyclaw-front#113 follow-up, backport analysis §2.2): agents hand a ticket
+            // off with a single {"status","assignedTo"} call and the automation engine can
+            // never observe the transition half-applied. ExpectedStatus mismatches map to 409.
             try
             {
-                var ticket = await ts.UpdateTicketAsync(slug, id, req.Title, req.Description, req.Author, req.Priority, req.AssignedTo);
+                var ticket = await ts.UpdateTicketAsync(slug, id, req.Title, req.Description, req.Author, req.Priority, req.AssignedTo, req.Status, req.ExpectedStatus);
                 if (ticket is not null && req.LabelIds is not null)
                     await ts.SetTicketLabelsAsync(slug, id, req.LabelIds);
                 if (ticket is not null) notifier.NotifyProjectUpdated(slug);
                 return ticket is null ? Results.NotFound() : Results.Ok(ticket);
+            }
+            catch (TicketTransitionConflictException ex)
+            {
+                return Results.Conflict(new { error = ex.Message, actualStatus = ex.ActualStatus, expectedStatus = ex.ExpectedStatus });
             }
             catch (InvalidOperationException ex)
             {
@@ -55,7 +54,8 @@ public static partial class Endpoints
         }).WithTags("Tickets")
         .Produces<Ticket>()
         .ProducesProblem(StatusCodes.Status400BadRequest)
-        .ProducesProblem(StatusCodes.Status404NotFound);
+        .ProducesProblem(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict);
 
         api.MapGet("/projects/{slug}/tickets/{id:int}", async (string slug, int id, TicketService ts) =>
         {

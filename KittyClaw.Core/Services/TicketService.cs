@@ -277,38 +277,10 @@ public class TicketService
         return ticket;
     }
 
-    public async Task<Ticket?> MoveTicketAsync(string projectSlug, int ticketId, string newStatus, string author = "owner")
-    {
-        if (string.IsNullOrWhiteSpace(author))
-            throw new InvalidOperationException("Le champ 'author' est requis.");
-        await using var db = _projectService.GetProjectDb(projectSlug);
-        await EnsureActivityTableAsync(db);
-        await EnsureScheduleColumnsAsync(db);
-        newStatus = await RequireColumnNameAsync(db, newStatus);
-        var ticket = await db.Tickets.FindAsync(ticketId);
-        if (ticket is null) return null;
-        var oldStatus = ticket.Status;
-        if (string.Equals(oldStatus, newStatus, StringComparison.OrdinalIgnoreCase))
-            return ticket; // already in target status — no-op
-        ticket.Status = newStatus;
-        if (string.Equals(oldStatus, "Scheduled", StringComparison.OrdinalIgnoreCase))
-        {
-            // Leaving Scheduled by hand cancels the pending promotion — otherwise the stale
-            // FireAt keeps showing a countdown badge and would fire instantly if re-scheduled.
-            ticket.FireAt = null;
-            ticket.ScheduleTarget = null;
-        }
-        ticket.UpdatedAt = DateTime.UtcNow;
-        db.ActivityEntries.Add(new ActivityEntry
-        {
-            TicketId = ticketId,
-            Author = author,
-            Text = $"a déplacé le ticket : {oldStatus} → {newStatus}"
-        });
-        await db.SaveChangesAsync();
-        TicketStatusChanged?.Invoke(projectSlug, ticketId, oldStatus, newStatus);
-        return ticket;
-    }
+    // Delegates to UpdateTicketAsync so there is exactly ONE write path for status
+    // changes (column validation, Scheduled cleanup, activity, engine signal).
+    public Task<Ticket?> MoveTicketAsync(string projectSlug, int ticketId, string newStatus, string author = "owner")
+        => UpdateTicketAsync(projectSlug, ticketId, author: author, status: newStatus);
 
     /// <summary>
     /// Moves a ticket into the "Scheduled" column with a future <paramref name="fireAt"/> instant.
@@ -395,7 +367,17 @@ public class TicketService
         return ticket;
     }
 
-    public async Task<Ticket?> UpdateTicketAsync(string projectSlug, int ticketId, string? title = null, string? description = null, string author = "owner", TicketPriority? priority = null, string? assignedTo = null)
+    /// <summary>
+    /// Updates any combination of ticket fields — status included — in ONE SQLite write,
+    /// so a hand-off like {status, assignedTo} can never be observed half-applied by the
+    /// automation engine (backport analysis §2.2). Status changes go through the same
+    /// semantics as the dedicated move path: target column validated, Scheduled cleanup,
+    /// activity entry, and the TicketStatusChanged signal raised only after the full
+    /// state is committed. <paramref name="expectedStatus"/> is optimistic concurrency:
+    /// when set, the update only applies if the ticket is still in that status —
+    /// otherwise <see cref="TicketTransitionConflictException"/> (mapped to HTTP 409).
+    /// </summary>
+    public async Task<Ticket?> UpdateTicketAsync(string projectSlug, int ticketId, string? title = null, string? description = null, string author = "owner", TicketPriority? priority = null, string? assignedTo = null, string? status = null, string? expectedStatus = null)
     {
         if (string.IsNullOrWhiteSpace(author))
             throw new InvalidOperationException("Le champ 'author' est requis.");
@@ -404,8 +386,34 @@ public class TicketService
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureActivityTableAsync(db);
         await EnsureAssignedToColumnAsync(db);
+        await EnsureScheduleColumnsAsync(db);
+        if (status is not null)
+            status = await RequireColumnNameAsync(db, status);
         var ticket = await db.Tickets.FindAsync(ticketId);
         if (ticket is null) return null;
+
+        if (expectedStatus is not null && !string.Equals(ticket.Status, expectedStatus, StringComparison.OrdinalIgnoreCase))
+            throw new TicketTransitionConflictException(ticket.Status, expectedStatus);
+
+        string? oldStatus = null;
+        if (status is not null && !string.Equals(ticket.Status, status, StringComparison.OrdinalIgnoreCase))
+        {
+            oldStatus = ticket.Status;
+            ticket.Status = status;
+            if (string.Equals(oldStatus, "Scheduled", StringComparison.OrdinalIgnoreCase))
+            {
+                // Leaving Scheduled cancels the pending promotion — otherwise the stale
+                // FireAt keeps showing a countdown badge and would fire instantly if re-scheduled.
+                ticket.FireAt = null;
+                ticket.ScheduleTarget = null;
+            }
+            db.ActivityEntries.Add(new ActivityEntry
+            {
+                TicketId = ticketId,
+                Author = author,
+                Text = $"a déplacé le ticket : {oldStatus} → {status}"
+            });
+        }
 
         if (title is not null && title != ticket.Title)
         {
@@ -452,6 +460,9 @@ public class TicketService
         }
         ticket.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
+        // Signal AFTER commit: the engine can only ever observe the fully-written state.
+        if (oldStatus is not null)
+            TicketStatusChanged?.Invoke(projectSlug, ticketId, oldStatus, ticket.Status);
         return ticket;
     }
 
