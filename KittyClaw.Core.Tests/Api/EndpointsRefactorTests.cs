@@ -67,6 +67,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "PATCH /api/projects/{slug}/labels/{labelId}",
         "GET /api/projects/{slug}/tickets/{id}/labels",
         "PUT /api/projects/{slug}/tickets/{id}/labels",
+        "PATCH /api/projects/{slug}/tickets/{id}/labels",
         // Members
         "GET /api/projects/{slug}/members",
         "POST /api/projects/{slug}/members",

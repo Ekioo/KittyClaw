@@ -18,6 +18,10 @@ public record ScheduleTicketRequest(DateTime FireAt, string Author, string? Targ
 public record AddCommentRequest(string? Content, string? Author);
 public record UpdateCommentRequest(string? Content, string? Author);
 public record CreateLabelRequest(string Name, string Color = "#6366f1");
+// Incremental ticket-label patch: merges add/remove (label NAMES, case-insensitive) into
+// the ticket's current labels server-side — the safe primitive for concurrent writers.
+// Unknown names in Add are created on the fly; unknown names in Remove are ignored.
+public record PatchTicketLabelsRequest(string Author, List<string>? Add = null, List<string>? Remove = null);
 public record UpdateLabelRequest(string? Name = null, string? Color = null);
 public record SetTicketLabelsRequest(List<int> LabelIds);
 public record ReorderTicketRequest(string Status, int Index);

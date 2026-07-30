@@ -565,6 +565,76 @@ public class TicketService
         return true;
     }
 
+    // Serializes incremental label patches in-process: every API call goes through this
+    // singleton, so the lock is enough to make concurrent read-merge-write cycles safe.
+    private readonly SemaphoreSlim _labelPatchLock = new(1, 1);
+
+    /// <summary>
+    /// Incremental label patch (backport analysis §2.3): merges <paramref name="add"/> and
+    /// <paramref name="remove"/> (by name, case-insensitive) into the ticket's CURRENT
+    /// labels server-side, in one write. Unlike the replace-all SetTicketLabelsAsync, two
+    /// agents adding different labels concurrently both keep theirs — no lost update, and
+    /// no client is ever forced to send back "the whole list" it may hold stale. Unknown
+    /// names in add are created on the fly (UI default color); unknown names in remove are
+    /// ignored.
+    /// </summary>
+    public async Task<Ticket?> PatchTicketLabelsAsync(string projectSlug, int ticketId, IReadOnlyList<string> add, IReadOnlyList<string> remove, string author = "owner")
+    {
+        if (string.IsNullOrWhiteSpace(author))
+            throw new InvalidOperationException("Le champ 'author' est requis.");
+        var addNames = add.Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var removeNames = remove.Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (addNames.Count == 0 && removeNames.Count == 0)
+            throw new InvalidOperationException("Au moins un label dans 'add' ou 'remove' est requis.");
+
+        await _labelPatchLock.WaitAsync();
+        try
+        {
+            await using var db = _projectService.GetProjectDb(projectSlug);
+            await EnsureLabelTablesAsync(db);
+            await EnsureActivityTableAsync(db);
+            var ticket = await db.Tickets.Include(t => t.Labels).FirstOrDefaultAsync(t => t.Id == ticketId);
+            if (ticket is null) return null;
+
+            var allLabels = await db.Labels.ToListAsync();
+            var current = ticket.Labels.ToList();
+
+            foreach (var name in addNames)
+            {
+                if (current.Any(l => string.Equals(l.Name, name, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+                var label = allLabels.FirstOrDefault(l => string.Equals(l.Name, name, StringComparison.OrdinalIgnoreCase));
+                if (label is null)
+                {
+                    label = new Label { Name = name, Color = "#6366f1" };
+                    db.Labels.Add(label);
+                    allLabels.Add(label);
+                }
+                current.Add(label);
+            }
+            foreach (var name in removeNames)
+                current.RemoveAll(l => string.Equals(l.Name, name, StringComparison.OrdinalIgnoreCase));
+
+            ticket.Labels = current;
+            ticket.UpdatedAt = DateTime.UtcNow;
+            var parts = new List<string>();
+            if (addNames.Count > 0) parts.Add(string.Join(", ", addNames.Select(n => $"+{n}")));
+            if (removeNames.Count > 0) parts.Add(string.Join(", ", removeNames.Select(n => $"-{n}")));
+            db.ActivityEntries.Add(new ActivityEntry
+            {
+                TicketId = ticketId,
+                Author = author,
+                Text = $"a modifié les labels : {string.Join(" ", parts)}"
+            });
+            await db.SaveChangesAsync();
+            return ticket;
+        }
+        finally
+        {
+            _labelPatchLock.Release();
+        }
+    }
+
     public async Task<bool> UpdateCommentAsync(string projectSlug, int ticketId, int commentId, string? content, string author = "owner")
     {
         if (string.IsNullOrWhiteSpace(author))
