@@ -88,6 +88,7 @@ public sealed class AgentRunContext
         OnEventHook = OnEventHook,
         ChatTarget = ChatTarget,
         PendingSteerMessages = null,
+        ConversationHandoff = null,
         ImagePaths = null,
         MaxRunDuration = MaxRunDuration,
         LockTimeoutMinutes = LockTimeoutMinutes,
@@ -117,6 +118,7 @@ public sealed class AgentRunContext
         OnEventHook = OnEventHook,
         ChatTarget = ChatTarget,
         PendingSteerMessages = PendingSteerMessages,
+        ConversationHandoff = ConversationHandoff,
         ImagePaths = ImagePaths,
         MaxRunDuration = MaxRunDuration,
         LockTimeoutMinutes = LockTimeoutMinutes,
@@ -139,6 +141,9 @@ public sealed class AgentRunContext
 
     /// <summary>Steering messages that could not be delivered to the previous run (stdin already closed). BuildPromptAsync prepends them to the next chat-resume prompt so the agent receives them.</summary>
     public IReadOnlyList<string>? PendingSteerMessages { get; init; }
+
+    /// <summary>Bounded transcript injected when an interactive chat changes CLI provider.</summary>
+    public string? ConversationHandoff { get; init; }
 
     /// <summary>Absolute paths to user-pasted image files saved under the workspace's channel/tmp. BuildPromptAsync surfaces them under an [Attached images] block; the runner best-effort deletes them after the process exits.</summary>
     public IReadOnlyList<string>? ImagePaths { get; init; }
@@ -696,7 +701,7 @@ public sealed class AgentRunner
     /// <summary>
     /// Builds the SessionRegistry key for a dispatch, namespaced by CLI provider.
     /// </summary>
-    internal static string SessionScopeKey(string agentName, string? sessionScope, CliProvider provider)
+    public static string SessionScopeKey(string agentName, string? sessionScope, CliProvider provider)
     {
         var scoped = sessionScope is null ? agentName : $"{sessionScope}:{agentName}";
         return AgentCliBackend.For(provider).SessionPrefix + scoped;
@@ -763,6 +768,8 @@ public sealed class AgentRunner
             {
                 var sb = new StringBuilder();
                 sb.AppendLine(languageReminder);
+                if (!string.IsNullOrWhiteSpace(ctx.ConversationHandoff))
+                    sb.AppendLine(ctx.ConversationHandoff);
                 foreach (var steer in ctx.PendingSteerMessages)
                     sb.AppendLine($"[Steering message from previous turn]: {steer}");
                 sb.AppendLine();
@@ -770,7 +777,10 @@ public sealed class AgentRunner
                 sb.Append(imagesBlock);
                 return sb.ToString();
             }
-            return $"{languageReminder}\n\n{userMsg}{imagesBlock}";
+            var handoff = string.IsNullOrWhiteSpace(ctx.ConversationHandoff)
+                ? ""
+                : $"\n\n{ctx.ConversationHandoff}";
+            return $"{languageReminder}{handoff}\n\n{userMsg}{imagesBlock}";
         }
 
         // Automation resume on a ticket: ping the agent that the owner posted new feedback.
@@ -781,9 +791,12 @@ public sealed class AgentRunner
 
         if (ctx.TicketId is not null && ctx.SessionScope != "chat")
             return $"{prefix}{skillContent}\n\n{TicketUntrustedNotice}\n\nFocus on ticket #{ctx.TicketId}: {SpotlightTicketField(ctx.TicketTitle)}";
+        var conversationHandoff = string.IsNullOrWhiteSpace(ctx.ConversationHandoff)
+            ? ""
+            : $"\n\n{ctx.ConversationHandoff}";
         return ctx.ExtraContext is null
-            ? $"{prefix}{skillContent}{imagesBlock}"
-            : $"{prefix}{skillContent}\n\n{ctx.ExtraContext}{imagesBlock}";
+            ? $"{prefix}{skillContent}{conversationHandoff}{imagesBlock}"
+            : $"{prefix}{skillContent}{conversationHandoff}\n\n{ctx.ExtraContext}{imagesBlock}";
     }
 
     private static string BuildAttachedImagesBlock(AgentRunContext ctx)

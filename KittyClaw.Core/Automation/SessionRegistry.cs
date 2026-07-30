@@ -93,6 +93,31 @@ public sealed class SessionRegistry
         });
     }
 
+    public string? GetLastChatProvider(string workspacePath, string target)
+    {
+        var state = Load(workspacePath);
+        return (state["_chatProviders"] as JsonObject)?[target]?.GetValue<string>();
+    }
+
+    public void SetLastChatProvider(string workspacePath, string target, string provider)
+    {
+        Update(workspacePath, state =>
+        {
+            var providers = state["_chatProviders"] as JsonObject ?? new JsonObject();
+            providers[target] = provider;
+            state["_chatProviders"] = providers;
+        });
+    }
+
+    public void ClearLastChatProvider(string workspacePath, string target)
+    {
+        Update(workspacePath, state =>
+        {
+            if (state["_chatProviders"] is JsonObject providers)
+                providers.Remove(target);
+        });
+    }
+
     /// <summary>
     /// Session key identical to the legacy dispatcher.mjs: `{agent}:{ticketId}` when
     /// bound to a ticket, or `{agent}:sweep` for global/stateless agents like groomer.

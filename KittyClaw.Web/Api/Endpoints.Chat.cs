@@ -105,6 +105,10 @@ public static partial class Endpoints
             if (!baseAgent.All(c => char.IsAsciiLetterLower(c) || char.IsAsciiDigit(c) || c is '-' or '_'))
                 return Results.BadRequest(new { error = "invalid_target", reason = $"Invalid agent slug '{baseAgent}'." });
 
+            var chatHistory = req.ForceNew
+                ? new List<KittyClaw.Core.Models.ChatMessageRow>()
+                : await cs.ListAsync(slug, target);
+
             // Drain undelivered steer messages from the most recent completed run for this chat target.
             // Drain (not read) so they are not replayed on subsequent turns.
             var pendingSteerMessages = runReg.LastCompletedForChatTarget(slug, target)?.DrainPendingSteerMessages();
@@ -113,7 +117,24 @@ public static partial class Endpoints
             {
                 await cs.ClearAsync(slug, target);
                 sessions.Clear(workspacePath, $"chat:{baseAgent}", effectiveTicketId);
+                sessions.Clear(workspacePath, $"grok:chat:{baseAgent}", effectiveTicketId);
+                sessions.Clear(workspacePath, $"codex:chat:{baseAgent}", effectiveTicketId);
+                sessions.ClearLastChatProvider(workspacePath, target);
             }
+
+            var providerName = dispatchTarget.Provider.ToString();
+            var previousProvider = sessions.GetLastChatProvider(workspacePath, target);
+            var scopedAgent = AgentRunner.SessionScopeKey(
+                baseAgent, "chat", dispatchTarget.Provider);
+            var selectedProviderHasSession =
+                sessions.GetSessionId(workspacePath, scopedAgent, effectiveTicketId) is not null;
+            var providerChanged = previousProvider is not null &&
+                !string.Equals(previousProvider, providerName, StringComparison.OrdinalIgnoreCase);
+            var needsHandoff = chatHistory.Count > 0 &&
+                (providerChanged || previousProvider is null || !selectedProviderHasSession);
+            var conversationHandoff = needsHandoff
+                ? ConversationHandoffBuilder.Build(chatHistory, previousProvider, dispatchTarget.Provider)
+                : null;
 
             // Image paste validation (#115). Enforce MIME allow-list, per-image size cap,
             // and per-turn count cap server-side regardless of what the JS sent.
@@ -122,6 +143,7 @@ public static partial class Endpoints
                 return Results.BadRequest(new { error = "image_rejected", reason = imageError });
 
             await cs.AppendAsync(slug, target, "user", req.Message);
+            sessions.SetLastChatProvider(workspacePath, target, providerName);
 
             // Build ticket-context block when this chat is scoped to a ticket.
             string? ticketContext = null;
@@ -217,6 +239,7 @@ public static partial class Endpoints
                     OnEventHook = ev => PersistChatEvent(cs, slug, target, ev),
                     ChatTarget = target,
                     PendingSteerMessages = pendingSteerMessages,
+                    ConversationHandoff = conversationHandoff,
                     ImagePaths = imagePaths,
                 };
             }
@@ -280,6 +303,7 @@ public static partial class Endpoints
                     OnEventHook = ev => PersistChatEvent(cs, slug, target, ev),
                     ChatTarget = target,
                     PendingSteerMessages = pendingSteerMessages,
+                    ConversationHandoff = conversationHandoff,
                     ImagePaths = imagePaths,
                 };
             }
