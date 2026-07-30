@@ -34,9 +34,13 @@ public class UnifiedBoardTests
     [Fact]
     public void UnifiedBoard_IsTheDefaultRoute()
     {
+        // The route carries the display mode: "/" and "/board" are the unified kanban,
+        // "/projects" is the cards grid. Both modes stay bookmarkable, and the server
+        // resolves the mode from the path with no client storage involved.
         var src = LoadUnifiedBoard();
         Assert.Contains("@page \"/\"", src);
         Assert.Contains("@page \"/board\"", src);
+        Assert.Contains("@page \"/projects\"", src);
     }
 
     [Fact]
@@ -76,7 +80,29 @@ public class UnifiedBoardTests
     public void UnifiedBoard_PersistsViewModeChoice()
     {
         var src = LoadUnifiedBoard();
+        // The toggle rewrites the URL in place and remembers the choice so the project
+        // board's back link can point at the matching home route.
+        Assert.Contains("history.pushState", src);
         Assert.Contains("unified-board-view", src);
+        var board = File.ReadAllText(WebPath("Components", "Pages", "Board.razor"));
+        Assert.Contains("_homeHref", board);
+        Assert.Contains("unified-board-view", board);
+    }
+
+    [Fact]
+    public void UnifiedBoard_ResolvesViewModeBeforeFirstRender()
+    {
+        // Returning to the home must paint the right mode immediately: the display mode is
+        // derived from the route in OnInitializedAsync — available during prerender — so
+        // neither a loading placeholder nor the wrong mode ever flashes, and cards mode
+        // never pays for the kanban lanes.
+        var src = LoadUnifiedBoard();
+        var init = src.IndexOf("OnInitializedAsync", StringComparison.Ordinal);
+        var afterRender = src.IndexOf("OnAfterRenderAsync", StringComparison.Ordinal);
+        Assert.True(init >= 0 && afterRender > init, "OnInitializedAsync must precede OnAfterRenderAsync");
+        var initBody = src[init..afterRender];
+        Assert.Contains("\"/projects\"", initBody);
+        Assert.Contains("ListProjectsAsync()", initBody);
     }
 
     [Fact]
@@ -130,25 +156,35 @@ public class UnifiedBoardTests
     // ── Ticket interactions ──────────────────────────────────────────────────
 
     [Fact]
-    public void UnifiedBoard_OpensTicketViaExistingBoardRoute()
+    public void UnifiedBoard_OpensTicketsInPlace_OverTheUnifiedView()
     {
-        // Clean URLs: no returnTo query — closing a route-opened ticket goes back through
-        // browser history (see Board.razor _ticketOpenedFromRoute + NavigationHistory).
+        // Opening a ticket must NOT navigate to the project board: the extracted TicketPanel
+        // renders over the unified view, and only the URL is updated (deep-linkable) through
+        // history.pushState. Clean URLs: no returnTo query, no sessionStorage return flag.
         var src = LoadUnifiedBoard();
+        Assert.Contains("<TicketPanel", src);
+        Assert.Contains("history.pushState", src);
         Assert.Contains("/board/{slug}/ticket/{ticketId}", src);
         Assert.DoesNotContain("returnTo", src);
+        Assert.DoesNotContain("kc-return-home", src);
     }
 
     [Fact]
-    public void Board_ClosesHomeOpenedTickets_BackToHome()
+    public void TicketPanel_IsExtracted_AndSharedWithTheProjectBoard()
     {
-        // The unified home marks the origin in sessionStorage; Board consumes the flag on
-        // close and goes back through browser history instead of forcing the board URL.
+        // One ticket detail implementation for both views. The panel owns its own data and
+        // escape handling; parents react through callbacks; the board wires its undo stack.
+        Assert.True(File.Exists(WebPath("Components", "TicketPanel.razor")));
+        var panel = File.ReadAllText(WebPath("Components", "TicketPanel.razor"));
+        Assert.Contains("EventCallback OnClose", panel);
+        Assert.Contains("EventCallback OnChanged", panel);
+        Assert.Contains("EventCallback OnDeleted", panel);
+        Assert.Contains("Action<string, Func<Task>>? PushUndo", panel);
+
         var board = File.ReadAllText(WebPath("Components", "Pages", "Board.razor"));
-        Assert.Contains("TryReturnToHomeAsync", board);
-        Assert.Contains("kc-return-home", board);
-        Assert.Contains("history.back", board);
-        Assert.Contains("kc-return-home", LoadUnifiedBoard());
+        Assert.Contains("<TicketPanel", board);
+        // The sessionStorage return-home flag died with the navigation it compensated for.
+        Assert.DoesNotContain("kc-return-home", board);
     }
 
     [Fact]

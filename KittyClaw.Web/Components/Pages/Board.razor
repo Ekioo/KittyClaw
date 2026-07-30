@@ -33,7 +33,7 @@
 else
 {
     <div class="page-header">
-        <a href="/" class="back-link">&larr; @L["BackToProjects"]</a>
+        <a href="@_homeHref" class="back-link">&larr; @L["BackToProjects"]</a>
         <h1>@_project.Name</h1>
         @if (_subKanbanParentId is not null && _subKanbanParent is not null)
         {
@@ -154,7 +154,7 @@ else
                             var ticket = columnTickets[i];
                             var index = i;
                             var isCardTarget = _draggedTicket is not null && _dragActiveSlot < 0 && _dragOverStatus == col.Name && _dragHoverIndex == index && _dropTargetTicketId == ticket.Id;
-                            <div class="ticket-card @(_selectedTicket?.Id == ticket.Id ? "selected" : "") @(_draggedTicket?.Id == ticket.Id ? "dragging" : "") @(isCardTarget ? "drop-target" : "") @(IsTicketUpdated(ticket) ? "ticket-updated" : "")"
+                            <div class="ticket-card @(_openTicketId == ticket.Id ? "selected" : "") @(_draggedTicket?.Id == ticket.Id ? "dragging" : "") @(isCardTarget ? "drop-target" : "") @(IsTicketUpdated(ticket) ? "ticket-updated" : "")"
                                  draggable="true"
                                  @ondragstart="() => OnDragStart(ticket)"
                                  @ondragend="OnDragEnd"
@@ -415,300 +415,18 @@ else
         </div>
     }
 
-    @if (_selectedTicket is not null)
+    @if (_openTicketId is int openTicketId)
     {
-        <div class="ticket-modal-overlay">
-            <div class="ticket-panel">
-            <div class="ticket-panel-header">
-                <div class="editable-field">
-                    <div class="priority-dot-btn" @onclick="TogglePriorityPicker" title="@L["ChangePriority"]">
-                        <span class="priority-dot priority-@GetPriorityClass(_selectedTicket.Priority)"></span>
-                    </div>
-                    @if (_showPriorityPicker)
-                    {
-                        <div class="priority-dropdown">
-                            @foreach (var p in Enum.GetValues<TicketPriority>())
-                            {
-                                <button class="priority-option @(_selectedTicket.Priority == p ? "active" : "")"
-                                        @onclick="() => SetPriorityAndClose(p)">
-                                    <span class="priority-dot priority-@GetPriorityClass(p)"></span>
-                                    @GetPriorityLabel(p)
-                                </button>
-                            }
-                        </div>
-                    }
-                    @if (_editingTitle)
-                    {
-                        <span class="ticket-id-prefix">#@_selectedTicket.Id &mdash;</span>
-                        <input class="edit-title-input" @bind="_editTitle" @onkeydown="HandleTitleKeyDown" />
-                        <button class="icon-btn save-btn" title="@L["Save"]" @onclick="SaveTitle">&#10003;</button>
-                        <button class="icon-btn cancel-icon-btn" title="@L["Cancel"]" @onclick="() => _editingTitle = false">&#10005;</button>
-                    }
-                    else
-                    {
-                        <h2>#@_selectedTicket.Id &mdash; @_selectedTicket.Title</h2>
-                        <button class="icon-btn pencil-btn" title="@L["EditTitle"]" @onclick="StartEditTitle">&#9998;</button>
-                    }
-                </div>
-                <div class="header-actions">
-                    <button class="close-btn" @onclick="ClosePanel">&times;</button>
-                </div>
-            </div>
-
-            @* ── Labels row ── *@
-            <div class="ticket-labels-row">
-                @foreach (var label in _selectedTicket.Labels)
-                {
-                    var lid = label.Id;
-                    <span class="label-pill label-removable" style="--lc: @label.Color">
-                        @label.Name
-                        <button class="label-remove-btn" @onclick="() => RemoveLabel(lid)" @onclick:stopPropagation>&times;</button>
-                    </span>
-                }
-                <div class="label-autocomplete">
-                    <input class="label-autocomplete-input"
-                           placeholder="+ Label..."
-                           @bind="_labelSearch"
-                           @bind:event="oninput"
-                           @onfocus="OpenLabelDropdown"
-                           @onblur="OnLabelBlur"
-                           @onkeydown="HandleLabelKeyDown" />
-                    @if (_labelDropdownOpen && GetLabelSuggestions().Any())
-                    {
-                        <div class="label-dropdown">
-                            @foreach (var suggestion in GetLabelSuggestions())
-                            {
-                                <button class="label-dropdown-item" style="--lc: @suggestion.Color"
-                                        @onmousedown="() => AddExistingLabel(suggestion)">
-                                    <span class="label-pill" style="--lc: @suggestion.Color">@suggestion.Name</span>
-                                </button>
-                            }
-                        </div>
-                    }
-                </div>
-            </div>
-
-            @* ── Assignee row ── *@
-            <div class="ticket-assignee-row">
-                <span class="section-label-sm">@L["AssignedToLabel"]</span>
-                @if (!string.IsNullOrEmpty(_selectedTicket.AssignedTo))
-                {
-                    <span class="assignee-pill">
-                        @MemberDisplayName(_selectedTicket.AssignedTo)
-                        <button class="label-remove-btn" @onclick="RemoveAssignee">&times;</button>
-                    </span>
-                }
-                <div class="label-autocomplete">
-                    <input class="label-autocomplete-input"
-                           placeholder="@(string.IsNullOrEmpty(_selectedTicket.AssignedTo) ? L["AssignPlaceholder"] : L["ChangePlaceholder"])"
-                           @bind="_assigneeSearch"
-                           @bind:event="oninput"
-                           @onfocus="OpenAssigneeDropdown"
-                           @onblur="OnAssigneeBlur"
-                           @onkeydown="HandleAssigneeKeyDown" />
-                    @if (_assigneeDropdownOpen && GetAssigneeSuggestions().Any())
-                    {
-                        <div class="label-dropdown">
-                            @foreach (var member in GetAssigneeSuggestions())
-                            {
-                                <button class="label-dropdown-item" @onmousedown="() => SetAssignee(member.Slug)">
-                                    <span class="assignee-pill">@member.Name</span>
-                                    <span class="member-slug-hint">@member.Slug</span>
-                                </button>
-                            }
-                        </div>
-                    }
-                </div>
-                <div class="ticket-meta">
-                    <span>@_selectedTicket.Status</span>
-                    <span>@_selectedTicket.CreatedBy</span>
-                    <span>@_selectedTicket.CreatedAt.ToString("d")</span>
-                    @if (_selectedTicket.AgentTokens > 0)
-                    {
-                        <span class="token-badge" title="@($"{_selectedTicket.AgentTokens:N0} tokens")">⛁ @KittyClaw.Web.Services.TokenDisplay.Compact(_selectedTicket.AgentTokens) · @KittyClaw.Web.Services.TokenDisplay.Usd(_selectedTicket.AgentCostUsd)</span>
-                    }
-                </div>
-            </div>
-
-            @* ── Schedule row ── *@
-            @if (_editingSchedule)
-            {
-                <div class="ticket-schedule-row">
-                    <span class="section-label-sm">⏰ @L["ScheduledForLabel"]</span>
-                    <input type="datetime-local" class="schedule-input" @bind="_editFireAtLocal" @bind:event="oninput" />
-                    <span class="schedule-arrow">&#8594;</span>
-                    <select class="schedule-target-select" @bind="_editScheduleTarget">
-                        @foreach (var c in _columns.Where(c => c.Name != "Scheduled"))
-                        {
-                            <option value="@c.Name">@c.Name</option>
-                        }
-                    </select>
-                    <button class="icon-btn save-btn" title="@L["Save"]" disabled="@(_editFireAtLocal is null)" @onclick="SaveSchedule">&#10003;</button>
-                    <button class="icon-btn cancel-icon-btn" title="@L["Cancel"]" @onclick="() => _editingSchedule = false">&#10005;</button>
-                </div>
-            }
-            else if (_selectedTicket.FireAt is not null || _selectedTicket.Status == "Scheduled")
-            {
-                <div class="ticket-schedule-row">
-                    <span class="section-label-sm">⏰ @L["ScheduledForLabel"]</span>
-                    @if (_selectedTicket.FireAt is DateTime fireAtUtc)
-                    {
-                        <span class="schedule-value">@UtcToLocal(fireAtUtc).ToString("g")</span>
-                        <span class="schedule-arrow">&#8594; @(_selectedTicket.ScheduleTarget ?? "Todo")</span>
-                    }
-                    else
-                    {
-                        <span class="schedule-value empty-hint">@L["ScheduleNoDate"]</span>
-                    }
-                    <button class="icon-btn pencil-btn" title="@L["ScheduleEdit"]" @onclick="StartEditSchedule">&#9998;</button>
-                </div>
-            }
-            else if (_columns.Any(c => c.Name == "Scheduled"))
-            {
-                <div class="ticket-schedule-row">
-                    <button class="schedule-add-btn" @onclick="StartEditSchedule">⏰ @L["ScheduleButton"]</button>
-                </div>
-            }
-
-            @* ── Sub-tickets section ── *@
-            @{ var selectedSummary = _tickets.FirstOrDefault(t => t.Id == _selectedTicket.Id); }
-            @if (selectedSummary?.SubTickets is { Count: > 0 })
-            {
-                <div class="sub-tickets-section">
-                    <div class="section-header">
-                        <span class="section-label">@L["SubTickets"] (@selectedSummary.SubTickets.Count)</span>
-                        <button class="sub-kanban-btn" @onclick="() => EnterSubKanban(selectedSummary)">@L["ViewAll"] &#8594;</button>
-                    </div>
-                    <div class="sub-ticket-list">
-                        @foreach (var sub in selectedSummary.SubTickets)
-                        {
-                            <div class="sub-ticket-row">
-                                <span class="sub-ticket-status-dot" style="background: @GetColumnColor(sub.Status)"></span>
-                                <span class="sub-ticket-id">#@sub.Id</span>
-                                <span class="sub-ticket-title">@sub.Title</span>
-                                <span class="sub-ticket-status">@sub.Status</span>
-                            </div>
-                        }
-                    </div>
-                </div>
-            }
-            @if (_selectedTicket.ParentId is not null)
-            {
-                var parentSummary = _tickets.FirstOrDefault(t => t.Id == _selectedTicket.ParentId);
-                <div class="parent-ticket-section">
-                    <span class="section-label-sm">@L["Parent"]</span>
-                    <span class="parent-ticket-link">#@_selectedTicket.ParentId @(parentSummary?.Title ?? "")</span>
-                </div>
-            }
-
-            @* ── Ticket body (thread layout) ── *@
-                <div class="ticket-panel-thread">
-                    <div class="section-header">
-                        <span class="section-label">@L["Description"]</span>
-                        <button class="icon-btn pencil-btn" title="@L["EditDescription"]" @onclick="StartEditDescription">&#9998;</button>
-                    </div>
-                    <div class="ticket-desc markdown">
-                        @if (_selectedTicket.Description is { Length: > 0 })
-                        {
-                            @((MarkupString)Markdown.ToHtml(_selectedTicket.Description, _mdPipeline))
-                        }
-                        else
-                        {
-                            <p class="empty-hint">@L["NoDescription"]</p>
-                        }
-                    </div>
-
-                    <div class="thread-section-divider">
-                        <div class="activity-header">
-                            <span class="section-label">@L["Activity"]</span>
-                            <div class="activity-header-actions">
-                                <button class="add-comment-btn-sm" @onclick="StartNewComment">@L["AddComment"]</button>
-                                <button class="chat-with-agent-btn"
-                                        @onclick="OpenTicketChat"
-                                        title="@(CanChatWithAssignee()
-                                            ? L.Get("ChatWithAssigneeTooltip", _chatInitialAgentNameForTooltip())
-                                            : L["ChatPickAgentTooltip"])">
-                                    💬 @L["ChatWithAssignee"]
-                                </button>
-                            </div>
-                        </div>
-                        @foreach (var item in GetTimeline())
-                        {
-                            @if (item.IsComment)
-                            {
-                                <div class="timeline-comment">
-                                    <div class="timeline-comment-header">
-                                        <strong>@item.Author</strong>
-                                        <small>@item.At.ToString("g")</small>
-                                        @if (_editingCommentId != item.Id)
-                                        {
-                                            <button class="icon-btn pencil-btn" title="Modifier" @onclick="() => StartEditComment(item.Id!.Value, item.Text)">&#9998;</button>
-                                        }
-                                    </div>
-                                    <div class="markdown">@((MarkupString)Markdown.ToHtml(item.Text, _mdPipeline))</div>
-                                </div>
-                            }
-                            else
-                            {
-                                <div class="timeline-event">
-                                    <span class="event-dot"></span>
-                                    <div class="event-content">
-                                        <span class="event-author">@item.Author</span>
-                                        <span class="event-text">@item.Text</span>
-                                        <small>@item.At.ToString("g")</small>
-                                    </div>
-                                </div>
-                            }
-                        }
-                    </div>
-
-                    <div class="panel-footer-actions">
-                        @if (_confirmDelete)
-                        {
-                            <span class="confirm-delete-label">@L["DeleteThisTicketConfirm"]</span>
-                            <button class="delete-btn" @onclick="DeleteSelectedTicket">@L["Confirm"]</button>
-                            <button class="cancel-btn" @onclick="() => _confirmDelete = false">@L["Cancel"]</button>
-                        }
-                        else
-                        {
-                            <button class="delete-btn" @onclick="() => _confirmDelete = true">@L["DeleteThisTicket"]</button>
-                        }
-                    </div>
-                </div>
-            </div>
-        </div>
+        <TicketPanel Slug="@Slug"
+                     TicketId="openTicketId"
+                     RefreshToken="_panelRefreshToken"
+                     PushUndo="PushUndo"
+                     OnClose="ClosePanel"
+                     OnChanged="OnPanelChanged"
+                     OnDeleted="OnPanelDeleted"
+                     OnEnterSubKanban="EnterSubKanbanById" />
     }
 
-}
-
-@if (!string.IsNullOrEmpty(_fullscreenTarget))
-{
-    <div class="fullscreen-editor-overlay">
-        <div class="fullscreen-editor">
-            <div class="fullscreen-editor-header">
-                <span>@(_fullscreenTarget == "description" ? L["FullscreenDescription"] : L["FullscreenComment"])</span>
-                <button class="icon-btn cancel-icon-btn" @onclick="CancelFullscreen">&#10005;</button>
-            </div>
-            <textarea @ref="_editorTextarea" @bind="_fullscreenText" @bind:event="oninput"></textarea>
-            <div class="fullscreen-editor-footer">
-                <button @onclick="SaveFullscreen">@L["Save"]</button>
-                <button class="cancel-btn" @onclick="CancelFullscreen">@L["Cancel"]</button>
-            </div>
-        </div>
-    </div>
-}
-
-@if (_showDiscardConfirm)
-{
-    <div class="modal-backdrop">
-        <div class="modal-dialog">
-            <p>@L["DiscardChangesConfirm"]</p>
-            <div class="modal-actions">
-                <button @onclick="ConfirmDiscard">@L["Discard"]</button>
-                <button class="cancel-btn" @onclick="CancelDiscard">@L["Cancel"]</button>
-            </div>
-        </div>
-    </div>
 }
 
 @if (_activeRunDrawerId is not null)
@@ -757,7 +475,13 @@ else
     private List<TicketSummary> _tickets = [];
     private List<BoardColumn> _columns = [];
     private bool _restoreScrollAfterRender;
-    private Ticket? _selectedTicket;
+    // "← Projects" target: the home route matching the display mode last used there.
+    private string _homeHref = "/";
+    // The ticket detail itself lives in the extracted TicketPanel component; the board only
+    // tracks WHICH ticket is open and bumps _panelRefreshToken to force a panel reload
+    // after board-side mutations the panel can't observe (undo).
+    private int? _openTicketId;
+    private int _panelRefreshToken;
     private TicketSummary? _draggedTicket;
     private string? _dragOverStatus;
     private int _dragHoverIndex = -1;
@@ -766,8 +490,6 @@ else
     // Column drag & drop
     private BoardColumn? _draggedColumn;
     private int _colDropIndex = -1;
-    private string _newComment = "";
-    private bool _confirmDelete = false;
 
     // Create popup
     private bool _showCreatePopup = false;
@@ -797,33 +519,9 @@ else
     private int? _chatTicketId;
     private string? _chatTicketTitle;
 
-    // Inline editing state
-    private bool _editingTitle = false;
-    private string _editTitle = "";
-    private int? _editingCommentId = null;
-
-    // Schedule editing state (FireAt is stored UTC; the input works in local time)
-    private bool _editingSchedule = false;
-    private DateTime? _editFireAtLocal;
-    private string _editScheduleTarget = "Todo";
-    private string _editComment = "";
-
-    // Priority picker
-    private bool _showPriorityPicker = false;
-
-    // Label autocomplete
-    private string _labelSearch = "";
-    private bool _labelDropdownOpen = false;
-
     // Members
     private List<Member> _allMembers = [];
     private string _newTicketAssignedTo = "";
-
-    // Assignee autocomplete
-    private string _assigneeSearch = "";
-    private bool _assigneeDropdownOpen = false;
-
-    // Settings popup
 
     // Sub-ticket / sub-kanban
     private int? _subKanbanParentId = null;
@@ -908,21 +606,12 @@ else
         await action.Undo();
         await RefreshTicketsAndTouch();
         _columns = await ColumnService.ListColumnsAsync(Slug);
-        if (_selectedTicket is not null)
-            _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
-        await RebuildPipelineAsync();
+        // The panel loads its own data — bump the token so an open panel reloads too.
+        _panelRefreshToken++;
         StateHasChanged();
     }
 
-    // Fullscreen editor
-    private string _fullscreenTarget = ""; // "description", "newComment", "editComment"
-    private string _fullscreenText = "";
-    private string _fullscreenOriginalText = "";
-    private IDisposable? _escFullscreenEditor;
-    private bool _showDiscardConfirm;
-    private ElementReference _editorTextarea;
     private ElementReference _createTicketDescTextarea;
-    private bool _pasteListenerAttached = false;
 
     // Filter bar
     private string _filterText
@@ -941,176 +630,6 @@ else
 
     private void OnFilterBlur() => _filterHintVisible = false;
 
-    private void OpenFullscreen(string target)
-    {
-        _fullscreenTarget = target;
-        _fullscreenText = target switch
-        {
-            "description" => _selectedTicket?.Description ?? "",
-            "newComment" => "",
-            "editComment" => _editComment,
-            _ => ""
-        };
-        _fullscreenOriginalText = _fullscreenText;
-        _escFullscreenEditor = EscapeStack.PushWithFocus(JS, () =>
-        {
-            InvokeAsync(() =>
-            {
-                if (_fullscreenText != _fullscreenOriginalText)
-                {
-                    _showDiscardConfirm = true;
-                    StateHasChanged();
-                }
-                else
-                {
-                    CancelFullscreen();
-                    StateHasChanged();
-                }
-            });
-        });
-    }
-
-    private void CancelFullscreen()
-    {
-        _escFullscreenEditor?.Dispose();
-        _escFullscreenEditor = null;
-        _showDiscardConfirm = false;
-        _fullscreenTarget = "";
-        _fullscreenText = "";
-        _pasteListenerAttached = false;
-    }
-
-    private void ConfirmDiscard()
-    {
-        _showDiscardConfirm = false;
-        CancelFullscreen();
-    }
-
-    private void CancelDiscard()
-    {
-        _showDiscardConfirm = false;
-        // Re-register ESC handler so subsequent ESC still triggers the dirty-check
-        _escFullscreenEditor?.Dispose();
-        _escFullscreenEditor = EscapeStack.PushWithFocus(JS, () =>
-        {
-            InvokeAsync(() =>
-            {
-                if (_fullscreenText != _fullscreenOriginalText)
-                {
-                    _showDiscardConfirm = true;
-                    StateHasChanged();
-                }
-                else
-                {
-                    CancelFullscreen();
-                    StateHasChanged();
-                }
-            });
-        });
-    }
-
-    private async Task SaveFullscreen()
-    {
-        _escFullscreenEditor?.Dispose();
-        _escFullscreenEditor = null;
-        var target = _fullscreenTarget;
-        var text = _fullscreenText;
-        _fullscreenTarget = "";
-        _fullscreenText = "";
-
-        switch (target)
-        {
-            case "description":
-                if (_selectedTicket is not null)
-                {
-                    var oldDesc = _selectedTicket.Description;
-                    var descTicketId = _selectedTicket.Id;
-                    await TicketService.UpdateTicketAsync(Slug, descTicketId, description: text);
-                    PushUndo($"{L["UndoDescription"]} #{descTicketId}", async () =>
-                        await TicketService.UpdateTicketAsync(Slug, descTicketId, description: oldDesc));
-                    _selectedTicket = await TicketService.GetTicketAsync(Slug, descTicketId);
-                }
-                break;
-            case "newComment":
-                if (_selectedTicket is not null && !string.IsNullOrWhiteSpace(text))
-                {
-                    await TicketService.AddCommentAsync(Slug, _selectedTicket.Id, text.Trim());
-                    _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
-                }
-                break;
-            case "editComment":
-                if (_selectedTicket is not null && _editingCommentId is not null)
-                {
-                    var oldComment = _editComment;
-                    var commentId = _editingCommentId.Value;
-                    var editTicketId = _selectedTicket.Id;
-                    await TicketService.UpdateCommentAsync(Slug, editTicketId, commentId, text.Trim());
-                    PushUndo($"{L["UndoComment"]} #{editTicketId}", async () =>
-                        await TicketService.UpdateCommentAsync(Slug, editTicketId, commentId, oldComment));
-                    _editingCommentId = null;
-                    _selectedTicket = await TicketService.GetTicketAsync(Slug, editTicketId);
-                }
-                break;
-        }
-
-        await RefreshTicketsAndTouch();
-    }
-
-    private MarkdownPipeline _mdPipeline = KittyClaw.Web.Markdown.CommentMarkdownPipeline.Build();
-
-    private readonly Dictionary<string, Dictionary<int, string>> _crossProjectTickets =
-        new(StringComparer.OrdinalIgnoreCase);
-
-    private static readonly System.Text.RegularExpressions.Regex CrossProjectRefPattern =
-        new(@"#([A-Za-z0-9][A-Za-z0-9-]*):\d+", System.Text.RegularExpressions.RegexOptions.Compiled);
-
-    private async Task FetchCrossProjectTicketsAsync()
-    {
-        var allText = string.Join('\n', _tickets.Select(t => (t.Description ?? "") + '\n' + t.Title));
-        if (_selectedTicket is not null)
-            allText += '\n' + string.Join('\n', _selectedTicket.Comments.Select(c => c.Content));
-
-        var foreignSlugs = CrossProjectRefPattern.Matches(allText)
-            .Select(m => m.Groups[1].Value.ToLowerInvariant())
-            .Where(s => !s.Equals(Slug, StringComparison.OrdinalIgnoreCase))
-            .ToHashSet();
-
-        foreach (var foreignSlug in foreignSlugs)
-        {
-            if (_crossProjectTickets.ContainsKey(foreignSlug)) continue;
-            var project = await ProjectService.GetProjectAsync(foreignSlug);
-            if (project is null)
-            {
-                _crossProjectTickets[foreignSlug] = [];
-                continue;
-            }
-            var tickets = await TicketService.ListTicketsAsync(foreignSlug);
-            _crossProjectTickets[foreignSlug] = tickets.ToDictionary(t => t.Id, t => t.Title);
-        }
-    }
-
-    private async Task RebuildPipelineAsync()
-    {
-        await FetchCrossProjectTicketsAsync();
-        var index = _tickets.ToDictionary(t => t.Id, t => t.Title);
-        var memberHandles = new HashSet<string>(_allMembers.Select(m => m.Slug), StringComparer.OrdinalIgnoreCase);
-        _mdPipeline = KittyClaw.Web.Markdown.CommentMarkdownPipeline.Configure(new MarkdownPipelineBuilder())
-            .Use(new TicketReferenceExtension(Slug, index, _crossProjectTickets))
-            .Use(new MentionExtension(memberHandles))
-            .Build();
-    }
-
-    private record TimelineItem(DateTime At, string Author, bool IsComment, string Text, int? Id);
-
-    private IEnumerable<TimelineItem> GetTimeline()
-    {
-        if (_selectedTicket is null) return [];
-        return _selectedTicket.Comments
-            .Select(c => new TimelineItem(c.CreatedAt, c.Author, true, c.Content, c.Id))
-            .Concat(_selectedTicket.Activities
-                .Select(a => new TimelineItem(a.CreatedAt, a.Author, false, a.Text, null)))
-            .OrderByDescending(x => x.At);
-    }
 
     private string? _activeRunDrawerId;
     private async Task ToggleProjectPause()
@@ -1153,43 +672,6 @@ else
         _escChatDrawer = null;
     }
 
-    private void OpenTicketChat()
-    {
-        if (_selectedTicket is null) return;
-        var assignee = _selectedTicket.AssignedTo;
-        // With an assignee: jump straight into the conversation with that agent.
-        // Without: leave InitialAgent null so the drawer shows the picker — the ticket
-        // context still propagates because we set _chatTicketId.
-        if (!string.IsNullOrWhiteSpace(assignee) && assignee != "owner")
-        {
-            var member = _allMembers.FirstOrDefault(m => m.Slug == assignee);
-            _chatInitialAgent = assignee;
-            _chatInitialAgentName = member?.Name ?? assignee;
-        }
-        else
-        {
-            _chatInitialAgent = null;
-            _chatInitialAgentName = null;
-        }
-        _chatTicketId = _selectedTicket.Id;
-        _chatTicketTitle = _selectedTicket.Title;
-        _showChatDrawer = true;
-        _escChatDrawer?.Dispose();
-        _escChatDrawer = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseChatDrawer(); StateHasChanged(); }));
-    }
-
-    private bool CanChatWithAssignee()
-    {
-        var a = _selectedTicket?.AssignedTo;
-        return !string.IsNullOrWhiteSpace(a) && a != "owner";
-    }
-
-    private string _chatInitialAgentNameForTooltip()
-    {
-        var a = _selectedTicket?.AssignedTo;
-        if (string.IsNullOrWhiteSpace(a)) return "";
-        return _allMembers.FirstOrDefault(m => m.Slug == a)?.Name ?? a;
-    }
     private void OnAgentRunsChanged() => InvokeAsync(StateHasChanged);
 
     protected override async Task OnInitializedAsync()
@@ -1204,15 +686,13 @@ else
             _tickets = await TicketService.ListTicketsAsync(Slug);
             _allLabels = await LabelService.ListLabelsAsync(Slug);
             _allMembers = await MemberService.ListMembersAsync(Slug);
-            await RebuildPipelineAsync();
         }
         if (ParentId.HasValue)
         {
             _subKanbanParentId = ParentId.Value;
             _subKanbanParent = _tickets.FirstOrDefault(t => t.Id == ParentId.Value);
         }
-        if (TicketId.HasValue)
-            _selectedTicket = await TicketService.GetTicketAsync(Slug, TicketId.Value);
+        _openTicketId = TicketId;
     }
 
     private void OnProjectUpdatedExternal(string slug)
@@ -1225,9 +705,6 @@ else
             _tickets = await TicketService.ListTicketsAsync(Slug);
             _allLabels = await LabelService.ListLabelsAsync(Slug);
             _allMembers = await MemberService.ListMembersAsync(Slug);
-            if (_selectedTicket is not null)
-                _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
-            await RebuildPipelineAsync();
             StateHasChanged();
         });
     }
@@ -1240,13 +717,9 @@ else
             _ = JS.InvokeVoidAsync("unregisterUndoShortcut", _undoHandler);
         _dotNetRef?.Dispose();
         _escCreatePopup?.Dispose();
-        _escTicketPanel?.Dispose();
         _escRunDrawer?.Dispose();
         _escChatDrawer?.Dispose();
         _escTrashDialog?.Dispose();
-        _escPriorityPicker?.Dispose();
-        _escLabelDropdown?.Dispose();
-        _escAssigneeDropdown?.Dispose();
     }
 
     protected override async Task OnParametersSetAsync()
@@ -1265,14 +738,9 @@ else
             _subKanbanParent = null;
         }
 
-        if (TicketId.HasValue && _selectedTicket?.Id != TicketId)
-        {
-            _escTicketPanel?.Dispose();
-            _escTicketPanel = null;
-            _selectedTicket = await TicketService.GetTicketAsync(Slug, TicketId.Value);
-        }
-        else if (!TicketId.HasValue && _selectedTicket is not null)
-            _selectedTicket = null;
+        // Sync the open panel with the URL (deep links, browser navigation).
+        _openTicketId = TicketId;
+        await Task.CompletedTask;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -1311,19 +779,17 @@ else
 
             await LoadSortAsync();
 
+            // Point "← Projects" at the home mode the user last used ("/" is the unified
+            // kanban, "/projects" the cards grid — the route carries the mode).
+            var homeView = await JS.InvokeAsync<string?>("localStorage.getItem", "unified-board-view");
+            if (homeView == "cards") _homeHref = "/projects";
+
             StateHasChanged();
         }
         if (_restoreScrollAfterRender)
         {
             _restoreScrollAfterRender = false;
             await JS.InvokeVoidAsync("restoreColumnScrollPositions");
-        }
-        if (_selectedTicket is not null && _escTicketPanel is null)
-            _escTicketPanel = EscapeStack.PushWithFocus(JS, () => InvokeAsync(async () => { await ClosePanel(); StateHasChanged(); }));
-        if (!string.IsNullOrEmpty(_fullscreenTarget) && !_pasteListenerAttached)
-        {
-            _pasteListenerAttached = true;
-            await JS.InvokeVoidAsync("attachImagePaste", _editorTextarea, "/api/images");
         }
         // Wire up image paste on the create-ticket description textarea every time
         // the popup is shown. The JS handler guards against double-attaching, and the
@@ -1527,42 +993,6 @@ else
         _ => "nice"
     };
 
-    private async Task SetPriority(TicketPriority p)
-    {
-        if (_selectedTicket is null || _selectedTicket.Priority == p) return;
-        var oldPriority = _selectedTicket.Priority;
-        var ticketId = _selectedTicket.Id;
-        await TicketService.UpdateTicketAsync(Slug, ticketId, priority: p);
-        PushUndo($"{L["UndoPriority"]} #{ticketId}", async () =>
-            await TicketService.UpdateTicketAsync(Slug, ticketId, priority: oldPriority));
-        _selectedTicket = await TicketService.GetTicketAsync(Slug, ticketId);
-        await RefreshTicketsAndTouch();
-    }
-
-    private async Task SetPriorityAndClose(TicketPriority p)
-    {
-        ClosePriorityPicker();
-        await SetPriority(p);
-    }
-
-    private void TogglePriorityPicker()
-    {
-        if (_showPriorityPicker) ClosePriorityPicker();
-        else
-        {
-            _showPriorityPicker = true;
-            _escPriorityPicker?.Dispose();
-            _escPriorityPicker = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { ClosePriorityPicker(); StateHasChanged(); }));
-        }
-    }
-
-    private void ClosePriorityPicker()
-    {
-        _showPriorityPicker = false;
-        _escPriorityPicker?.Dispose();
-        _escPriorityPicker = null;
-    }
-
     private void OnDragStart(TicketSummary ticket) => _draggedTicket = ticket;
 
     private void OnDragEnd()
@@ -1692,7 +1122,6 @@ else
         _dragHoverIndex = -1;
         _dragActiveSlot = -1;
         _dropTargetTicketId = null;
-        await RebuildPipelineAsync();
     }
 
     private async Task OnDropAsChild(TicketSummary target, string colName)
@@ -1712,7 +1141,6 @@ else
             _dragHoverIndex = -1;
             _dragActiveSlot = -1;
             _dropTargetTicketId = null;
-            await RebuildPipelineAsync();
             return;
         }
 
@@ -1725,7 +1153,7 @@ else
     {
         _subKanbanParentId = parent.Id;
         _subKanbanParent = parent;
-        _selectedTicket = null;
+        _openTicketId = null;
         Navigation.NavigateTo($"/board/{Slug}/sub/{parent.Id}", replace: true);
     }
 
@@ -1756,18 +1184,13 @@ else
         _dragOverStatus = null;
         _dragHoverIndex = -1;
         _dragActiveSlot = -1;
-        await RebuildPipelineAsync();
     }
 
     // Escape key handler tokens for popups
     private IDisposable? _escCreatePopup;
-    private IDisposable? _escTicketPanel;
     private IDisposable? _escRunDrawer;
     private IDisposable? _escChatDrawer;
     private IDisposable? _escTrashDialog;
-    private IDisposable? _escPriorityPicker;
-    private IDisposable? _escLabelDropdown;
-    private IDisposable? _escAssigneeDropdown;
 
     // Create popup
     private void OpenCreatePopup()
@@ -1817,21 +1240,13 @@ else
                 await TicketService.DeleteTicketAsync(Slug, ticket.Id));
         _showCreatePopup = false;
         await RefreshTicketsAndTouch();
-        await RebuildPipelineAsync();
     }
 
     private async Task SelectTicket(TicketSummary ticket)
     {
         await JS.InvokeVoidAsync("saveColumnScrollPositions");
         _restoreScrollAfterRender = true;
-        _confirmDelete = false;
-        _editingTitle = false;
-        _editingSchedule = false;
-        _editingCommentId = null;
-        _fullscreenTarget = "";
-        _selectedTicket = await TicketService.GetTicketAsync(Slug, ticket.Id);
-        _escTicketPanel?.Dispose();
-        _escTicketPanel = EscapeStack.PushWithFocus(JS, () => InvokeAsync(async () => { await ClosePanel(); StateHasChanged(); }));
+        _openTicketId = ticket.Id;
 
         // Clear the "updated" indicator only for the ticket actually opened.
         await MarkTicketViewedAsync(ticket.Id);
@@ -1846,155 +1261,34 @@ else
     {
         await JS.InvokeVoidAsync("saveColumnScrollPositions");
         _restoreScrollAfterRender = true;
-        _selectedTicket = null;
-        _escTicketPanel?.Dispose();
-        _escTicketPanel = null;
-        _confirmDelete = false;
-        _editingTitle = false;
-        _editingSchedule = false;
-        _editingCommentId = null;
-        _fullscreenTarget = "";
-        ClosePriorityPicker();
-        _labelSearch = "";
-        CloseLabelDropdown();
-        CloseAssigneeDropdown();
-        if (await TryReturnToHomeAsync()) return;
+        _openTicketId = null;
         if (_subKanbanParentId is not null)
             Navigation.NavigateTo($"/board/{Slug}/sub/{_subKanbanParentId}", replace: true);
         else
             Navigation.NavigateTo($"/board/{Slug}", replace: true);
     }
 
-    /// <summary>
-    /// The unified home sets a per-tab sessionStorage flag right before navigating into a
-    /// ticket: closing that ticket must land back on the home, not on the project board.
-    /// sessionStorage is used because every interactive page runs in its own circuit here
-    /// (static router + per-page islands), so no scoped service survives the navigation.
-    /// The flag is consumed on use; it is absent for in-board opens and deep links, which
-    /// keep the plain board URL.
-    /// </summary>
-    private async Task<bool> TryReturnToHomeAsync()
+    /// <summary>The panel mutated the ticket — refresh the board's card lists.</summary>
+    private async Task OnPanelChanged()
     {
-        var flag = await JS.InvokeAsync<string?>("sessionStorage.getItem", "kc-return-home");
-        if (flag != "1") return false;
-        await JS.InvokeVoidAsync("sessionStorage.removeItem", "kc-return-home");
-        await JS.InvokeVoidAsync("history.back");
-        return true;
-    }
-
-    private async Task DeleteSelectedTicket()
-    {
-        if (_selectedTicket is null) return;
-        var t = _selectedTicket;
-        var labelIds = t.Labels.Select(l => l.Id).ToList();
-        await TicketService.DeleteTicketAsync(Slug, t.Id);
-        PushUndo($"{L["UndoDelete"]} #{t.Id}", async () =>
-            await TicketService.CreateTicketAsync(Slug, t.Title, t.Description, t.CreatedBy, t.Status, labelIds, t.Priority, t.AssignedTo, t.ParentId));
-        _selectedTicket = null;
-        _confirmDelete = false;
         await RefreshTicketsAndTouch();
-        await RebuildPipelineAsync();
-        if (await TryReturnToHomeAsync()) return;
-        Navigation.NavigateTo($"/board/{Slug}", replace: true);
+        StateHasChanged();
     }
 
-    private async Task AddComment()
+    private async Task OnPanelDeleted()
     {
-        if (_selectedTicket is null || string.IsNullOrWhiteSpace(_newComment)) return;
-        await TicketService.AddCommentAsync(Slug, _selectedTicket.Id, _newComment.Trim());
-        _newComment = "";
-        _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
+        _openTicketId = null;
         await RefreshTicketsAndTouch();
+        if (_subKanbanParentId is not null)
+            Navigation.NavigateTo($"/board/{Slug}/sub/{_subKanbanParentId}", replace: true);
+        else
+            Navigation.NavigateTo($"/board/{Slug}", replace: true);
     }
 
-    private void CancelComment()
+    private void EnterSubKanbanById(int parentId)
     {
-        _newComment = "";
-    }
-
-    private void StartNewComment()
-    {
-        OpenFullscreen("newComment");
-    }
-
-    // Title editing
-    private void StartEditTitle()
-    {
-        _editTitle = _selectedTicket!.Title;
-        _editingTitle = true;
-    }
-
-    private async Task SaveTitle()
-    {
-        if (_selectedTicket is null || string.IsNullOrWhiteSpace(_editTitle)) return;
-        var oldTitle = _selectedTicket.Title;
-        var ticketId = _selectedTicket.Id;
-        await TicketService.UpdateTicketAsync(Slug, ticketId, title: _editTitle.Trim());
-        PushUndo($"{L["UndoRename"]} #{ticketId}", async () =>
-            await TicketService.UpdateTicketAsync(Slug, ticketId, title: oldTitle));
-        _editingTitle = false;
-        _selectedTicket = await TicketService.GetTicketAsync(Slug, ticketId);
-        await RefreshTicketsAndTouch();
-        await RebuildPipelineAsync();
-    }
-
-    private async Task HandleTitleKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter") await SaveTitle();
-        else if (e.Key == "Escape") _editingTitle = false;
-    }
-
-    private static DateTime UtcToLocal(DateTime utc) =>
-        DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime();
-
-    private void StartEditSchedule()
-    {
-        if (_selectedTicket is null) return;
-        _editFireAtLocal = _selectedTicket.FireAt is DateTime fireAt
-            ? UtcToLocal(fireAt)
-            : DateTime.Now.Date.AddDays(1).AddHours(9);
-        var target = _selectedTicket.ScheduleTarget;
-        _editScheduleTarget = !string.IsNullOrWhiteSpace(target) && _columns.Any(c => c.Name == target)
-            ? target!
-            : _columns.FirstOrDefault(c => c.Name == "Todo")?.Name
-              ?? _columns.FirstOrDefault(c => c.Name != "Scheduled")?.Name ?? "Todo";
-        _editingSchedule = true;
-    }
-
-    private async Task SaveSchedule()
-    {
-        if (_selectedTicket is null) return;
-        if (_editFireAtLocal is not DateTime local) return;
-        var fireAtUtc = DateTime.SpecifyKind(local, DateTimeKind.Local).ToUniversalTime();
-        var ticketId = _selectedTicket.Id;
-        await TicketService.ScheduleTicketAsync(Slug, ticketId, fireAtUtc, _editScheduleTarget);
-        _editingSchedule = false;
-        _selectedTicket = await TicketService.GetTicketAsync(Slug, ticketId);
-        await RefreshTicketsAndTouch();
-        await RebuildPipelineAsync();
-    }
-
-    // Description editing
-    private void StartEditDescription()
-    {
-        OpenFullscreen("description");
-    }
-
-    // Comment editing
-    private void StartEditComment(int commentId, string currentContent)
-    {
-        _editComment = currentContent;
-        _editingCommentId = commentId;
-        OpenFullscreen("editComment");
-    }
-
-    private async Task SaveComment()
-    {
-        if (_selectedTicket is null || _editingCommentId is null) return;
-        await TicketService.UpdateCommentAsync(Slug, _selectedTicket.Id, _editingCommentId.Value, _editComment.Trim());
-        _editingCommentId = null;
-        _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
-        await RefreshTicketsAndTouch();
+        var parent = _tickets.FirstOrDefault(t => t.Id == parentId);
+        if (parent is not null) EnterSubKanban(parent);
     }
 
     // Column management
@@ -2035,7 +1329,6 @@ else
         _trashConfirmColumn = null;
         _columns = await ColumnService.ListColumnsAsync(Slug);
         await RefreshTicketsAndTouch();
-        await RebuildPipelineAsync();
     }
 
     // Trash zone handlers
@@ -2096,111 +1389,6 @@ else
         _escTrashDialog?.Dispose();
         _escTrashDialog = null;
         await RefreshTicketsAndTouch();
-        await RebuildPipelineAsync();
-    }
-
-    // ── Label autocomplete ──
-    private List<Label> GetLabelSuggestions()
-    {
-        if (_selectedTicket is null) return [];
-        var currentIds = _selectedTicket.Labels.Select(l => l.Id).ToHashSet();
-        var query = _labelSearch?.Trim() ?? "";
-        return _allLabels
-            .Where(l => !currentIds.Contains(l.Id))
-            .Where(l => string.IsNullOrEmpty(query) || l.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-    }
-
-    private async Task AddExistingLabel(Label label)
-    {
-        if (_selectedTicket is null) return;
-        var oldIds = _selectedTicket.Labels.Select(l => l.Id).ToList();
-        var ticketId = _selectedTicket.Id;
-        var ids = oldIds.ToList();
-        ids.Add(label.Id);
-        await TicketService.SetTicketLabelsAsync(Slug, ticketId, ids);
-        PushUndo($"{L["UndoLabel"]} +{label.Name} #{ticketId}", async () =>
-            await TicketService.SetTicketLabelsAsync(Slug, ticketId, oldIds));
-        _selectedTicket = await TicketService.GetTicketAsync(Slug, ticketId);
-        await RefreshTicketsAndTouch();
-        _labelSearch = "";
-        CloseLabelDropdown();
-    }
-
-    private async Task RemoveLabel(int labelId)
-    {
-        if (_selectedTicket is null) return;
-        var oldIds = _selectedTicket.Labels.Select(l => l.Id).ToList();
-        var ticketId = _selectedTicket.Id;
-        var ids = oldIds.Where(id => id != labelId).ToList();
-        await TicketService.SetTicketLabelsAsync(Slug, ticketId, ids);
-        PushUndo($"{L["UndoLabel"]} #{ticketId}", async () =>
-            await TicketService.SetTicketLabelsAsync(Slug, ticketId, oldIds));
-        _selectedTicket = await TicketService.GetTicketAsync(Slug, ticketId);
-        await RefreshTicketsAndTouch();
-    }
-
-    private async Task CreateAndAddLabel()
-    {
-        if (_selectedTicket is null || string.IsNullOrWhiteSpace(_labelSearch)) return;
-        var label = await LabelService.CreateLabelAsync(Slug, _labelSearch.Trim(), "#6366f1");
-        _allLabels = await LabelService.ListLabelsAsync(Slug);
-        var ids = _selectedTicket.Labels.Select(l => l.Id).ToList();
-        ids.Add(label.Id);
-        await TicketService.SetTicketLabelsAsync(Slug, _selectedTicket.Id, ids);
-        _selectedTicket = await TicketService.GetTicketAsync(Slug, _selectedTicket.Id);
-        await RefreshTicketsAndTouch();
-        _labelSearch = "";
-        CloseLabelDropdown();
-    }
-
-    private async Task HandleLabelKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_labelSearch))
-        {
-            var suggestions = GetLabelSuggestions();
-            if (suggestions.Count > 0)
-                await AddExistingLabel(suggestions[0]);
-            else
-                await CreateAndAddLabel();
-        }
-        else if (e.Key == "Escape")
-        {
-            _labelSearch = "";
-            CloseLabelDropdown();
-        }
-    }
-
-    private void OpenLabelDropdown()
-    {
-        if (_labelDropdownOpen) return;
-        _labelDropdownOpen = true;
-        _escLabelDropdown?.Dispose();
-        _escLabelDropdown = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseLabelDropdown(); StateHasChanged(); }));
-    }
-
-    private void CloseLabelDropdown()
-    {
-        _labelDropdownOpen = false;
-        _escLabelDropdown?.Dispose();
-        _escLabelDropdown = null;
-    }
-
-    private void OnLabelBlur()
-    {
-        // Small delay handled by @onmousedown on dropdown items
-        CloseLabelDropdown();
-    }
-
-    // ── Assignee autocomplete ──
-    private List<Member> GetAssigneeSuggestions()
-    {
-        var query = _assigneeSearch?.Trim() ?? "";
-        return _allMembers
-            .Where(m => string.IsNullOrEmpty(query)
-                || m.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
-                || m.Slug.Contains(query, StringComparison.OrdinalIgnoreCase))
-            .ToList();
     }
 
     private string MemberDisplayName(string? slug)
@@ -2208,78 +1396,6 @@ else
         if (string.IsNullOrEmpty(slug)) return "";
         var member = _allMembers.FirstOrDefault(m => m.Slug == slug);
         return member?.Name ?? slug;
-    }
-
-    private async Task SetAssignee(string slug)
-    {
-        if (_selectedTicket is null) return;
-        var oldAssignee = _selectedTicket.AssignedTo ?? "";
-        var ticketId = _selectedTicket.Id;
-        await TicketService.UpdateTicketAsync(Slug, ticketId, assignedTo: slug);
-        PushUndo($"{L["UndoAssign"]} #{ticketId}", async () =>
-            await TicketService.UpdateTicketAsync(Slug, ticketId, assignedTo: oldAssignee));
-        _selectedTicket = await TicketService.GetTicketAsync(Slug, ticketId);
-        await RefreshTicketsAndTouch();
-        _assigneeSearch = "";
-        CloseAssigneeDropdown();
-    }
-
-    private async Task RemoveAssignee()
-    {
-        if (_selectedTicket is null) return;
-        var oldAssignee = _selectedTicket.AssignedTo ?? "";
-        var ticketId = _selectedTicket.Id;
-        await TicketService.UpdateTicketAsync(Slug, ticketId, assignedTo: "");
-        PushUndo($"{L["UndoUnassign"]} #{ticketId}", async () =>
-            await TicketService.UpdateTicketAsync(Slug, ticketId, assignedTo: oldAssignee));
-        _selectedTicket = await TicketService.GetTicketAsync(Slug, ticketId);
-        await RefreshTicketsAndTouch();
-    }
-
-    private async Task CreateAndAssign()
-    {
-        if (_selectedTicket is null || string.IsNullOrWhiteSpace(_assigneeSearch)) return;
-        var name = _assigneeSearch.Trim();
-        var created = await MemberService.CreateMemberAsync(Slug, name);
-        _allMembers = await MemberService.ListMembersAsync(Slug);
-        await SetAssignee(created.Slug);
-    }
-
-    private async Task HandleAssigneeKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_assigneeSearch))
-        {
-            var suggestions = GetAssigneeSuggestions();
-            if (suggestions.Count > 0)
-                await SetAssignee(suggestions[0].Slug);
-            else
-                await CreateAndAssign();
-        }
-        else if (e.Key == "Escape")
-        {
-            _assigneeSearch = "";
-            CloseAssigneeDropdown();
-        }
-    }
-
-    private void OpenAssigneeDropdown()
-    {
-        if (_assigneeDropdownOpen) return;
-        _assigneeDropdownOpen = true;
-        _escAssigneeDropdown?.Dispose();
-        _escAssigneeDropdown = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseAssigneeDropdown(); StateHasChanged(); }));
-    }
-
-    private void CloseAssigneeDropdown()
-    {
-        _assigneeDropdownOpen = false;
-        _escAssigneeDropdown?.Dispose();
-        _escAssigneeDropdown = null;
-    }
-
-    private void OnAssigneeBlur()
-    {
-        CloseAssigneeDropdown();
     }
 
 }

@@ -1,5 +1,6 @@
 @page "/"
 @page "/board"
+@page "/projects"
 @using KittyClaw.Core.Models
 @using KittyClaw.Core.Services
 @inject ProjectService ProjectService
@@ -277,6 +278,18 @@ else
     </div>
 }
 
+@* Ticket detail: the extracted TicketPanel renders as an overlay OVER the unified view,
+   so opening a ticket never loads the project board page underneath. *@
+@if (_panelSlug is not null && _panelTicketId is int panelTicketId)
+{
+    <TicketPanel Slug="@_panelSlug"
+                 TicketId="panelTicketId"
+                 OnClose="CloseTicketPanel"
+                 OnChanged="OnPanelTicketChanged"
+                 OnDeleted="OnPanelTicketDeleted"
+                 OnEnterSubKanban="OpenSubKanban" />
+}
+
 @code {
     private sealed record LaneData(Project Project, List<BoardColumn> Columns, List<TicketSummary> Tickets, List<Member> Members);
 
@@ -332,22 +345,34 @@ else
     private bool IsLaneCollapsed(LaneData lane) =>
         _collapsed.TryGetValue(lane.Project.Slug, out var stored) ? stored : lane.Project.IsPaused;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         BoardUpdateNotifier.OnProjectUpdated += OnProjectUpdatedExternal;
         L.OnLanguageChanged += OnLanguageChanged;
+
+        // The display mode is carried by the ROUTE — "/projects" is the cards grid, "/" and
+        // "/board" are the unified kanban — so it is known HERE, before the first render
+        // (prerender included): the right mode paints immediately with its data, with no
+        // loading placeholder and no wrong-mode flash. The toggle switches routes through
+        // history.pushState without reloading, and each mode stays bookmarkable.
+        var path = new Uri(Navigation.Uri).AbsolutePath;
+        _viewMode = path.Equals("/projects", StringComparison.OrdinalIgnoreCase) ? "cards" : "kanban";
+
+        _projects = await ProjectService.ListProjectsAsync();
+        _prefsLoaded = true;
+        if (_viewMode == "kanban")
+            await EnsureLanesAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // JS interop (localStorage) is only available after the first render: resolve the
-        // display mode FIRST, then load only what that mode needs.
-        if (firstRender && !_prefsLoaded)
+        // localStorage-backed preferences (collapse state, per-column sorts) need JS
+        // interop, which only exists after the first render.
+        if (firstRender)
         {
-            _projects = await ProjectService.ListProjectsAsync();
             try
             {
-                var slugs = _projects.Select(p => p.Slug).ToArray();
+                var slugs = (_projects ?? []).Select(p => p.Slug).ToArray();
                 var stored = await JS.InvokeAsync<Dictionary<string, bool>>("unifiedBoardStorage.getCollapsed", (object)slugs);
                 foreach (var (slug, value) in stored)
                     _collapsed[slug] = value;
@@ -355,15 +380,9 @@ else
                 // per-project board uses, so both views stay in agreement.
                 foreach (var slug in slugs)
                     await LoadSortAsync(slug);
-                var storedView = await JS.InvokeAsync<string?>("localStorage.getItem", "unified-board-view");
-                if (storedView is "cards" or "kanban") _viewMode = storedView;
             }
             catch { /* localStorage unavailable — defaults apply */ }
-            _prefsLoaded = true;
             StateHasChanged();
-
-            if (_viewMode == "kanban")
-                await EnsureLanesAsync();
         }
     }
 
@@ -503,9 +522,15 @@ else
         if (idx >= 0) _projects[idx] = updated;
     }
 
+    private string HomePath => _viewMode == "cards" ? "/projects" : "/";
+
     private async Task SetViewMode(string mode)
     {
         _viewMode = mode;
+        // Reflect the mode in the URL without navigating (no reload, no circuit swap).
+        _ = JS.InvokeVoidAsync("history.pushState", (object?)null, "", HomePath);
+        // Remember the choice so the project board's "← Projects" link can point at the
+        // mode the user last used (client-side only — the route carries the mode here).
         _ = JS.InvokeVoidAsync("localStorage.setItem", "unified-board-view", mode);
         // First switch to kanban in this session: the lanes were deliberately not loaded.
         if (mode == "kanban")
@@ -608,12 +633,48 @@ else
         _ => "nice"
     };
 
+    // ── Ticket panel (opens OVER the unified view — no page navigation) ─────
+
+    private string? _panelSlug;
+    private int? _panelTicketId;
+
     private async Task OpenTicket(string slug, int ticketId)
     {
-        // Mark the origin (per tab): closing this ticket must come back to the unified home.
-        // See Board.razor TryReturnToHomeAsync for why sessionStorage and not a scoped service.
-        await JS.InvokeVoidAsync("sessionStorage.setItem", "kc-return-home", "1");
-        Navigation.NavigateTo($"/board/{slug}/ticket/{ticketId}");
+        _panelSlug = slug;
+        _panelTicketId = ticketId;
+        // Reflect the ticket in the URL without navigating (the circuit stays on this page):
+        // a reload or browser back/forward deep-links into the project board route.
+        await JS.InvokeVoidAsync("history.pushState", (object?)null, "", $"/board/{slug}/ticket/{ticketId}");
+    }
+
+    private async Task CloseTicketPanel()
+    {
+        _panelSlug = null;
+        _panelTicketId = null;
+        await JS.InvokeVoidAsync("history.pushState", (object?)null, "", HomePath);
+    }
+
+    private async Task OnPanelTicketChanged()
+    {
+        if (_panelSlug is null || _lanes is null) return;
+        var idx = _lanes.FindIndex(l => l.Project.Slug == _panelSlug);
+        if (idx >= 0)
+        {
+            _lanes[idx] = await LoadLaneAsync(_lanes[idx].Project);
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnPanelTicketDeleted()
+    {
+        await OnPanelTicketChanged();
+        await CloseTicketPanel();
+    }
+
+    private void OpenSubKanban(int parentId)
+    {
+        if (_panelSlug is null) return;
+        Navigation.NavigateTo($"/board/{_panelSlug}/sub/{parentId}");
     }
 
     private void OnDragStart(string slug, TicketSummary ticket)

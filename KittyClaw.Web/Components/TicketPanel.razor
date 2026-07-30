@@ -1,0 +1,1015 @@
+@using Markdig
+@using KittyClaw.Core.Models
+@using KittyClaw.Core.Services
+@using KittyClaw.Core.Extensions
+@using KittyClaw.Web.Extensions
+@inject ProjectService ProjectService
+@inject TicketService TicketService
+@inject LabelService LabelService
+@inject ColumnService ColumnService
+@inject MemberService MemberService
+@inject KittyClaw.Web.Services.BoardUpdateNotifier BoardUpdateNotifier
+@inject IJSRuntime JS
+@inject LocalizationService L
+@inject KittyClaw.Web.Services.EscapeKeyStack EscapeStack
+@implements IDisposable
+
+@* Full ticket detail panel, rendered as an overlay ON TOP of whatever page mounts it.
+   The panel owns its own data (ticket, project ticket index, columns, labels, members)
+   so both the project board and the unified home can open a ticket without loading a
+   different page underneath. Parents react through OnClose / OnChanged / OnDeleted /
+   OnEnterSubKanban; undoable actions are offered to the optional PushUndo sink. *@
+
+@if (_ticket is not null)
+{
+    <div class="ticket-modal-overlay">
+        <div class="ticket-panel">
+        <div class="ticket-panel-header">
+            <div class="editable-field">
+                <div class="priority-dot-btn" @onclick="TogglePriorityPicker" title="@L["ChangePriority"]">
+                    <span class="priority-dot priority-@GetPriorityClass(_ticket.Priority)"></span>
+                </div>
+                @if (_showPriorityPicker)
+                {
+                    <div class="priority-dropdown">
+                        @foreach (var p in Enum.GetValues<TicketPriority>())
+                        {
+                            <button class="priority-option @(_ticket.Priority == p ? "active" : "")"
+                                    @onclick="() => SetPriorityAndClose(p)">
+                                <span class="priority-dot priority-@GetPriorityClass(p)"></span>
+                                @GetPriorityLabel(p)
+                            </button>
+                        }
+                    </div>
+                }
+                @if (_editingTitle)
+                {
+                    <span class="ticket-id-prefix">#@_ticket.Id &mdash;</span>
+                    <input class="edit-title-input" @bind="_editTitle" @onkeydown="HandleTitleKeyDown" />
+                    <button class="icon-btn save-btn" title="@L["Save"]" @onclick="SaveTitle">&#10003;</button>
+                    <button class="icon-btn cancel-icon-btn" title="@L["Cancel"]" @onclick="() => _editingTitle = false">&#10005;</button>
+                }
+                else
+                {
+                    <h2>#@_ticket.Id &mdash; @_ticket.Title</h2>
+                    <button class="icon-btn pencil-btn" title="@L["EditTitle"]" @onclick="StartEditTitle">&#9998;</button>
+                }
+            </div>
+            <div class="header-actions">
+                <button class="close-btn" @onclick="CloseAsync">&times;</button>
+            </div>
+        </div>
+
+        @* ── Labels row ── *@
+        <div class="ticket-labels-row">
+            @foreach (var label in _ticket.Labels)
+            {
+                var lid = label.Id;
+                <span class="label-pill label-removable" style="--lc: @label.Color">
+                    @label.Name
+                    <button class="label-remove-btn" @onclick="() => RemoveLabel(lid)" @onclick:stopPropagation>&times;</button>
+                </span>
+            }
+            <div class="label-autocomplete">
+                <input class="label-autocomplete-input"
+                       placeholder="+ Label..."
+                       @bind="_labelSearch"
+                       @bind:event="oninput"
+                       @onfocus="OpenLabelDropdown"
+                       @onblur="OnLabelBlur"
+                       @onkeydown="HandleLabelKeyDown" />
+                @if (_labelDropdownOpen && GetLabelSuggestions().Any())
+                {
+                    <div class="label-dropdown">
+                        @foreach (var suggestion in GetLabelSuggestions())
+                        {
+                            <button class="label-dropdown-item" style="--lc: @suggestion.Color"
+                                    @onmousedown="() => AddExistingLabel(suggestion)">
+                                <span class="label-pill" style="--lc: @suggestion.Color">@suggestion.Name</span>
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* ── Assignee row ── *@
+        <div class="ticket-assignee-row">
+            <span class="section-label-sm">@L["AssignedToLabel"]</span>
+            @if (!string.IsNullOrEmpty(_ticket.AssignedTo))
+            {
+                <span class="assignee-pill">
+                    @MemberDisplayName(_ticket.AssignedTo)
+                    <button class="label-remove-btn" @onclick="RemoveAssignee">&times;</button>
+                </span>
+            }
+            <div class="label-autocomplete">
+                <input class="label-autocomplete-input"
+                       placeholder="@(string.IsNullOrEmpty(_ticket.AssignedTo) ? L["AssignPlaceholder"] : L["ChangePlaceholder"])"
+                       @bind="_assigneeSearch"
+                       @bind:event="oninput"
+                       @onfocus="OpenAssigneeDropdown"
+                       @onblur="OnAssigneeBlur"
+                       @onkeydown="HandleAssigneeKeyDown" />
+                @if (_assigneeDropdownOpen && GetAssigneeSuggestions().Any())
+                {
+                    <div class="label-dropdown">
+                        @foreach (var member in GetAssigneeSuggestions())
+                        {
+                            <button class="label-dropdown-item" @onmousedown="() => SetAssignee(member.Slug)">
+                                <span class="assignee-pill">@member.Name</span>
+                                <span class="member-slug-hint">@member.Slug</span>
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="ticket-meta">
+                <span>@_ticket.Status</span>
+                <span>@_ticket.CreatedBy</span>
+                <span>@_ticket.CreatedAt.ToString("d")</span>
+                @if (_ticket.AgentTokens > 0)
+                {
+                    <span class="token-badge" title="@($"{_ticket.AgentTokens:N0} tokens")">⛁ @KittyClaw.Web.Services.TokenDisplay.Compact(_ticket.AgentTokens) · @KittyClaw.Web.Services.TokenDisplay.Usd(_ticket.AgentCostUsd)</span>
+                }
+            </div>
+        </div>
+
+        @* ── Schedule row ── *@
+        @if (_editingSchedule)
+        {
+            <div class="ticket-schedule-row">
+                <span class="section-label-sm">⏰ @L["ScheduledForLabel"]</span>
+                <input type="datetime-local" class="schedule-input" @bind="_editFireAtLocal" @bind:event="oninput" />
+                <span class="schedule-arrow">&#8594;</span>
+                <select class="schedule-target-select" @bind="_editScheduleTarget">
+                    @foreach (var c in _columns.Where(c => c.Name != "Scheduled"))
+                    {
+                        <option value="@c.Name">@c.Name</option>
+                    }
+                </select>
+                <button class="icon-btn save-btn" title="@L["Save"]" disabled="@(_editFireAtLocal is null)" @onclick="SaveSchedule">&#10003;</button>
+                <button class="icon-btn cancel-icon-btn" title="@L["Cancel"]" @onclick="() => _editingSchedule = false">&#10005;</button>
+            </div>
+        }
+        else if (_ticket.FireAt is not null || _ticket.Status == "Scheduled")
+        {
+            <div class="ticket-schedule-row">
+                <span class="section-label-sm">⏰ @L["ScheduledForLabel"]</span>
+                @if (_ticket.FireAt is DateTime fireAtUtc)
+                {
+                    <span class="schedule-value">@UtcToLocal(fireAtUtc).ToString("g")</span>
+                    <span class="schedule-arrow">&#8594; @(_ticket.ScheduleTarget ?? "Todo")</span>
+                }
+                else
+                {
+                    <span class="schedule-value empty-hint">@L["ScheduleNoDate"]</span>
+                }
+                <button class="icon-btn pencil-btn" title="@L["ScheduleEdit"]" @onclick="StartEditSchedule">&#9998;</button>
+            </div>
+        }
+        else if (_columns.Any(c => c.Name == "Scheduled"))
+        {
+            <div class="ticket-schedule-row">
+                <button class="schedule-add-btn" @onclick="StartEditSchedule">⏰ @L["ScheduleButton"]</button>
+            </div>
+        }
+
+        @* ── Sub-tickets section ── *@
+        @{ var selectedSummary = _summaries.FirstOrDefault(t => t.Id == _ticket.Id); }
+        @if (selectedSummary?.SubTickets is { Count: > 0 })
+        {
+            <div class="sub-tickets-section">
+                <div class="section-header">
+                    <span class="section-label">@L["SubTickets"] (@selectedSummary.SubTickets.Count)</span>
+                    <button class="sub-kanban-btn" @onclick="() => OnEnterSubKanban.InvokeAsync(_ticket.Id)">@L["ViewAll"] &#8594;</button>
+                </div>
+                <div class="sub-ticket-list">
+                    @foreach (var sub in selectedSummary.SubTickets)
+                    {
+                        <div class="sub-ticket-row">
+                            <span class="sub-ticket-status-dot" style="background: @GetColumnColor(sub.Status)"></span>
+                            <span class="sub-ticket-id">#@sub.Id</span>
+                            <span class="sub-ticket-title">@sub.Title</span>
+                            <span class="sub-ticket-status">@sub.Status</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+        @if (_ticket.ParentId is not null)
+        {
+            var parentSummary = _summaries.FirstOrDefault(t => t.Id == _ticket.ParentId);
+            <div class="parent-ticket-section">
+                <span class="section-label-sm">@L["Parent"]</span>
+                <span class="parent-ticket-link">#@_ticket.ParentId @(parentSummary?.Title ?? "")</span>
+            </div>
+        }
+
+        @* ── Ticket body (thread layout) ── *@
+            <div class="ticket-panel-thread">
+                <div class="section-header">
+                    <span class="section-label">@L["Description"]</span>
+                    <button class="icon-btn pencil-btn" title="@L["EditDescription"]" @onclick="StartEditDescription">&#9998;</button>
+                </div>
+                <div class="ticket-desc markdown">
+                    @if (_ticket.Description is { Length: > 0 })
+                    {
+                        @((MarkupString)Markdown.ToHtml(_ticket.Description, _mdPipeline))
+                    }
+                    else
+                    {
+                        <p class="empty-hint">@L["NoDescription"]</p>
+                    }
+                </div>
+
+                <div class="thread-section-divider">
+                    <div class="activity-header">
+                        <span class="section-label">@L["Activity"]</span>
+                        <div class="activity-header-actions">
+                            <button class="add-comment-btn-sm" @onclick="StartNewComment">@L["AddComment"]</button>
+                            <button class="chat-with-agent-btn"
+                                    @onclick="OpenTicketChat"
+                                    title="@(CanChatWithAssignee()
+                                        ? L.Get("ChatWithAssigneeTooltip", _chatInitialAgentNameForTooltip())
+                                        : L["ChatPickAgentTooltip"])">
+                                💬 @L["ChatWithAssignee"]
+                            </button>
+                        </div>
+                    </div>
+                    @foreach (var item in GetTimeline())
+                    {
+                        @if (item.IsComment)
+                        {
+                            <div class="timeline-comment">
+                                <div class="timeline-comment-header">
+                                    <strong>@item.Author</strong>
+                                    <small>@item.At.ToString("g")</small>
+                                    @if (_editingCommentId != item.Id)
+                                    {
+                                        <button class="icon-btn pencil-btn" title="Modifier" @onclick="() => StartEditComment(item.Id!.Value, item.Text)">&#9998;</button>
+                                    }
+                                </div>
+                                <div class="markdown">@((MarkupString)Markdown.ToHtml(item.Text, _mdPipeline))</div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="timeline-event">
+                                <span class="event-dot"></span>
+                                <div class="event-content">
+                                    <span class="event-author">@item.Author</span>
+                                    <span class="event-text">@item.Text</span>
+                                    <small>@item.At.ToString("g")</small>
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+
+                <div class="panel-footer-actions">
+                    @if (_confirmDelete)
+                    {
+                        <span class="confirm-delete-label">@L["DeleteThisTicketConfirm"]</span>
+                        <button class="delete-btn" @onclick="DeleteTicketAsync">@L["Confirm"]</button>
+                        <button class="cancel-btn" @onclick="() => _confirmDelete = false">@L["Cancel"]</button>
+                    }
+                    else
+                    {
+                        <button class="delete-btn" @onclick="() => _confirmDelete = true">@L["DeleteThisTicket"]</button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(_fullscreenTarget))
+{
+    <div class="fullscreen-editor-overlay">
+        <div class="fullscreen-editor">
+            <div class="fullscreen-editor-header">
+                <span>@(_fullscreenTarget == "description" ? L["FullscreenDescription"] : L["FullscreenComment"])</span>
+                <button class="icon-btn cancel-icon-btn" @onclick="CancelFullscreen">&#10005;</button>
+            </div>
+            <textarea @ref="_editorTextarea" @bind="_fullscreenText" @bind:event="oninput"></textarea>
+            <div class="fullscreen-editor-footer">
+                <button @onclick="SaveFullscreen">@L["Save"]</button>
+                <button class="cancel-btn" @onclick="CancelFullscreen">@L["Cancel"]</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showDiscardConfirm)
+{
+    <div class="modal-backdrop">
+        <div class="modal-dialog">
+            <p>@L["DiscardChangesConfirm"]</p>
+            <div class="modal-actions">
+                <button @onclick="ConfirmDiscard">@L["Discard"]</button>
+                <button class="cancel-btn" @onclick="CancelDiscard">@L["Cancel"]</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showChatDrawer && _ticket is not null)
+{
+    <ErrorBoundary>
+        <ChildContent>
+            <ChatDrawer ProjectSlug="@Slug"
+                              InitialAgent="@_chatInitialAgent"
+                              InitialAgentName="@_chatInitialAgentName"
+                              TicketId="_ticket.Id"
+                              TicketTitle="@_ticket.Title"
+                              OnClose="CloseChatDrawer" />
+        </ChildContent>
+        <ErrorContent Context="ex">
+            <div class="chat-drawer-overlay" @onclick="CloseChatDrawer"></div>
+            <div class="chat-drawer" style="padding:1.5rem;color:#f06b6b">
+                <strong>Erreur : </strong>@ex.Message
+                <br/><button @onclick="CloseChatDrawer" style="margin-top:1rem">Fermer</button>
+            </div>
+        </ErrorContent>
+    </ErrorBoundary>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Slug { get; set; } = "";
+    [Parameter, EditorRequired] public int TicketId { get; set; }
+    /// <summary>Bumped by the parent to force a full reload (e.g. after an undo).</summary>
+    [Parameter] public int RefreshToken { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    /// <summary>Raised after any mutation so the parent can refresh its ticket lists.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+    /// <summary>Raised after the ticket is deleted; the parent decides where to go.</summary>
+    [Parameter] public EventCallback OnDeleted { get; set; }
+    /// <summary>Raised with the parent-ticket id when the user opens the sub-kanban.</summary>
+    [Parameter] public EventCallback<int> OnEnterSubKanban { get; set; }
+    /// <summary>Optional undo sink — the project board wires its undo stack here.</summary>
+    [Parameter] public Action<string, Func<Task>>? PushUndo { get; set; }
+
+    private Ticket? _ticket;
+    private List<TicketSummary> _summaries = [];
+    private List<BoardColumn> _columns = [];
+    private List<Label> _allLabels = [];
+    private List<Member> _allMembers = [];
+
+    private bool _confirmDelete;
+    private bool _editingTitle;
+    private string _editTitle = "";
+    private int? _editingCommentId;
+    private string _editComment = "";
+
+    // Schedule editing state (FireAt is stored UTC; the input works in local time)
+    private bool _editingSchedule;
+    private DateTime? _editFireAtLocal;
+    private string _editScheduleTarget = "Todo";
+
+    private bool _showPriorityPicker;
+    private string _labelSearch = "";
+    private bool _labelDropdownOpen;
+    private string _assigneeSearch = "";
+    private bool _assigneeDropdownOpen;
+
+    // Fullscreen editor
+    private string _fullscreenTarget = ""; // "description", "newComment", "editComment"
+    private string _fullscreenText = "";
+    private string _fullscreenOriginalText = "";
+    private bool _showDiscardConfirm;
+    private ElementReference _editorTextarea;
+    private bool _pasteListenerAttached;
+
+    // Chat drawer (ticket-scoped)
+    private bool _showChatDrawer;
+    private string? _chatInitialAgent;
+    private string? _chatInitialAgentName;
+
+    // Escape key handler tokens
+    private IDisposable? _escClose;
+    private IDisposable? _escFullscreenEditor;
+    private IDisposable? _escPriorityPicker;
+    private IDisposable? _escLabelDropdown;
+    private IDisposable? _escAssigneeDropdown;
+    private IDisposable? _escChatDrawer;
+
+    private string _loadedKey = "";
+
+    protected override void OnInitialized()
+    {
+        BoardUpdateNotifier.OnProjectUpdated += OnProjectUpdatedExternal;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{Slug}/{TicketId}/{RefreshToken}";
+        if (key == _loadedKey) return;
+        _loadedKey = key;
+        ResetEditingState();
+        await LoadAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            _escClose = EscapeStack.PushWithFocus(JS, () => InvokeAsync(async () => { await CloseAsync(); StateHasChanged(); }));
+        if (!string.IsNullOrEmpty(_fullscreenTarget) && !_pasteListenerAttached)
+        {
+            _pasteListenerAttached = true;
+            await JS.InvokeVoidAsync("attachImagePaste", _editorTextarea, "/api/images");
+        }
+    }
+
+    public void Dispose()
+    {
+        BoardUpdateNotifier.OnProjectUpdated -= OnProjectUpdatedExternal;
+        _escClose?.Dispose();
+        _escFullscreenEditor?.Dispose();
+        _escPriorityPicker?.Dispose();
+        _escLabelDropdown?.Dispose();
+        _escAssigneeDropdown?.Dispose();
+        _escChatDrawer?.Dispose();
+    }
+
+    private void ResetEditingState()
+    {
+        _confirmDelete = false;
+        _editingTitle = false;
+        _editingSchedule = false;
+        _editingCommentId = null;
+        _fullscreenTarget = "";
+        _pasteListenerAttached = false;
+        _labelSearch = "";
+        _assigneeSearch = "";
+        ClosePriorityPicker();
+        CloseLabelDropdown();
+        CloseAssigneeDropdown();
+    }
+
+    private async Task LoadAsync()
+    {
+        _ticket = await TicketService.GetTicketAsync(Slug, TicketId);
+        _summaries = await TicketService.ListTicketsAsync(Slug);
+        _columns = await ColumnService.ListColumnsAsync(Slug);
+        _allLabels = await LabelService.ListLabelsAsync(Slug);
+        _allMembers = await MemberService.ListMembersAsync(Slug);
+        await RebuildPipelineAsync();
+    }
+
+    /// <summary>Reload after a local mutation, then let the parent refresh its lists.</summary>
+    private async Task RefreshAsync()
+    {
+        _ticket = await TicketService.GetTicketAsync(Slug, TicketId);
+        _summaries = await TicketService.ListTicketsAsync(Slug);
+        await RebuildPipelineAsync();
+        await OnChanged.InvokeAsync();
+    }
+
+    private void OnProjectUpdatedExternal(string slug)
+    {
+        if (!slug.Equals(Slug, StringComparison.OrdinalIgnoreCase)) return;
+        InvokeAsync(async () =>
+        {
+            _ticket = await TicketService.GetTicketAsync(Slug, TicketId);
+            if (_ticket is null)
+            {
+                // Ticket deleted from elsewhere (API, agent) — close rather than show a husk.
+                await OnClose.InvokeAsync();
+                return;
+            }
+            _summaries = await TicketService.ListTicketsAsync(Slug);
+            _allLabels = await LabelService.ListLabelsAsync(Slug);
+            _allMembers = await MemberService.ListMembersAsync(Slug);
+            await RebuildPipelineAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task CloseAsync() => await OnClose.InvokeAsync();
+
+    // ── Markdown pipeline (ticket refs + cross-project refs + mentions) ──
+
+    private MarkdownPipeline _mdPipeline = KittyClaw.Web.Markdown.CommentMarkdownPipeline.Build();
+
+    private readonly Dictionary<string, Dictionary<int, string>> _crossProjectTickets =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private static readonly System.Text.RegularExpressions.Regex CrossProjectRefPattern =
+        new(@"#([A-Za-z0-9][A-Za-z0-9-]*):\d+", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private async Task FetchCrossProjectTicketsAsync()
+    {
+        var allText = string.Join('\n', _summaries.Select(t => (t.Description ?? "") + '\n' + t.Title));
+        if (_ticket is not null)
+            allText += '\n' + string.Join('\n', _ticket.Comments.Select(c => c.Content));
+
+        var foreignSlugs = CrossProjectRefPattern.Matches(allText)
+            .Select(m => m.Groups[1].Value.ToLowerInvariant())
+            .Where(s => !s.Equals(Slug, StringComparison.OrdinalIgnoreCase))
+            .ToHashSet();
+
+        foreach (var foreignSlug in foreignSlugs)
+        {
+            if (_crossProjectTickets.ContainsKey(foreignSlug)) continue;
+            var project = await ProjectService.GetProjectAsync(foreignSlug);
+            if (project is null)
+            {
+                _crossProjectTickets[foreignSlug] = [];
+                continue;
+            }
+            var tickets = await TicketService.ListTicketsAsync(foreignSlug);
+            _crossProjectTickets[foreignSlug] = tickets.ToDictionary(t => t.Id, t => t.Title);
+        }
+    }
+
+    private async Task RebuildPipelineAsync()
+    {
+        await FetchCrossProjectTicketsAsync();
+        var index = _summaries.ToDictionary(t => t.Id, t => t.Title);
+        var memberHandles = new HashSet<string>(_allMembers.Select(m => m.Slug), StringComparer.OrdinalIgnoreCase);
+        _mdPipeline = KittyClaw.Web.Markdown.CommentMarkdownPipeline.Configure(new MarkdownPipelineBuilder())
+            .Use(new TicketReferenceExtension(Slug, index, _crossProjectTickets))
+            .Use(new MentionExtension(memberHandles))
+            .Build();
+    }
+
+    // ── Timeline ──
+
+    private record TimelineItem(DateTime At, string Author, bool IsComment, string Text, int? Id);
+
+    private IEnumerable<TimelineItem> GetTimeline()
+    {
+        if (_ticket is null) return [];
+        return _ticket.Comments
+            .Select(c => new TimelineItem(c.CreatedAt, c.Author, true, c.Content, c.Id))
+            .Concat(_ticket.Activities
+                .Select(a => new TimelineItem(a.CreatedAt, a.Author, false, a.Text, null)))
+            .OrderByDescending(x => x.At);
+    }
+
+    // ── Priority ──
+
+    private string GetPriorityLabel(TicketPriority p) => p switch
+    {
+        TicketPriority.Idea => L["PriorityIdea"],
+        TicketPriority.NiceToHave => L["PriorityNiceToHave"],
+        TicketPriority.Required => L["PriorityRequired"],
+        TicketPriority.Critical => L["PriorityCritical"],
+        _ => p.ToString()
+    };
+
+    private static string GetPriorityClass(TicketPriority p) => p switch
+    {
+        TicketPriority.Idea => "idea",
+        TicketPriority.NiceToHave => "nice",
+        TicketPriority.Required => "required",
+        TicketPriority.Critical => "critical",
+        _ => "nice"
+    };
+
+    private async Task SetPriority(TicketPriority p)
+    {
+        if (_ticket is null || _ticket.Priority == p) return;
+        var oldPriority = _ticket.Priority;
+        var ticketId = _ticket.Id;
+        await TicketService.UpdateTicketAsync(Slug, ticketId, priority: p);
+        PushUndo?.Invoke($"{L["UndoPriority"]} #{ticketId}", async () =>
+            await TicketService.UpdateTicketAsync(Slug, ticketId, priority: oldPriority));
+        await RefreshAsync();
+    }
+
+    private async Task SetPriorityAndClose(TicketPriority p)
+    {
+        ClosePriorityPicker();
+        await SetPriority(p);
+    }
+
+    private void TogglePriorityPicker()
+    {
+        if (_showPriorityPicker) ClosePriorityPicker();
+        else
+        {
+            _showPriorityPicker = true;
+            _escPriorityPicker?.Dispose();
+            _escPriorityPicker = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { ClosePriorityPicker(); StateHasChanged(); }));
+        }
+    }
+
+    private void ClosePriorityPicker()
+    {
+        _showPriorityPicker = false;
+        _escPriorityPicker?.Dispose();
+        _escPriorityPicker = null;
+    }
+
+    // ── Title editing ──
+
+    private void StartEditTitle()
+    {
+        _editTitle = _ticket!.Title;
+        _editingTitle = true;
+    }
+
+    private async Task SaveTitle()
+    {
+        if (_ticket is null || string.IsNullOrWhiteSpace(_editTitle)) return;
+        var oldTitle = _ticket.Title;
+        var ticketId = _ticket.Id;
+        await TicketService.UpdateTicketAsync(Slug, ticketId, title: _editTitle.Trim());
+        PushUndo?.Invoke($"{L["UndoRename"]} #{ticketId}", async () =>
+            await TicketService.UpdateTicketAsync(Slug, ticketId, title: oldTitle));
+        _editingTitle = false;
+        await RefreshAsync();
+    }
+
+    private async Task HandleTitleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SaveTitle();
+        else if (e.Key == "Escape") _editingTitle = false;
+    }
+
+    // ── Schedule ──
+
+    private static DateTime UtcToLocal(DateTime utc) =>
+        DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime();
+
+    private void StartEditSchedule()
+    {
+        if (_ticket is null) return;
+        _editFireAtLocal = _ticket.FireAt is DateTime fireAt
+            ? UtcToLocal(fireAt)
+            : DateTime.Now.Date.AddDays(1).AddHours(9);
+        var target = _ticket.ScheduleTarget;
+        _editScheduleTarget = !string.IsNullOrWhiteSpace(target) && _columns.Any(c => c.Name == target)
+            ? target!
+            : _columns.FirstOrDefault(c => c.Name == "Todo")?.Name
+              ?? _columns.FirstOrDefault(c => c.Name != "Scheduled")?.Name ?? "Todo";
+        _editingSchedule = true;
+    }
+
+    private async Task SaveSchedule()
+    {
+        if (_ticket is null) return;
+        if (_editFireAtLocal is not DateTime local) return;
+        var fireAtUtc = DateTime.SpecifyKind(local, DateTimeKind.Local).ToUniversalTime();
+        await TicketService.ScheduleTicketAsync(Slug, _ticket.Id, fireAtUtc, _editScheduleTarget);
+        _editingSchedule = false;
+        await RefreshAsync();
+    }
+
+    // ── Description / comments (fullscreen editor) ──
+
+    private void StartEditDescription() => OpenFullscreen("description");
+
+    private void StartNewComment() => OpenFullscreen("newComment");
+
+    private void StartEditComment(int commentId, string currentContent)
+    {
+        _editComment = currentContent;
+        _editingCommentId = commentId;
+        OpenFullscreen("editComment");
+    }
+
+    private void OpenFullscreen(string target)
+    {
+        _fullscreenTarget = target;
+        _fullscreenText = target switch
+        {
+            "description" => _ticket?.Description ?? "",
+            "newComment" => "",
+            "editComment" => _editComment,
+            _ => ""
+        };
+        _fullscreenOriginalText = _fullscreenText;
+        ArmFullscreenEscape();
+    }
+
+    private void ArmFullscreenEscape()
+    {
+        _escFullscreenEditor?.Dispose();
+        _escFullscreenEditor = EscapeStack.PushWithFocus(JS, () =>
+        {
+            InvokeAsync(() =>
+            {
+                if (_fullscreenText != _fullscreenOriginalText)
+                {
+                    _showDiscardConfirm = true;
+                    StateHasChanged();
+                }
+                else
+                {
+                    CancelFullscreen();
+                    StateHasChanged();
+                }
+            });
+        });
+    }
+
+    private void CancelFullscreen()
+    {
+        _escFullscreenEditor?.Dispose();
+        _escFullscreenEditor = null;
+        _showDiscardConfirm = false;
+        _fullscreenTarget = "";
+        _fullscreenText = "";
+        _pasteListenerAttached = false;
+    }
+
+    private void ConfirmDiscard()
+    {
+        _showDiscardConfirm = false;
+        CancelFullscreen();
+    }
+
+    private void CancelDiscard()
+    {
+        _showDiscardConfirm = false;
+        // Re-register ESC handler so subsequent ESC still triggers the dirty-check
+        ArmFullscreenEscape();
+    }
+
+    private async Task SaveFullscreen()
+    {
+        _escFullscreenEditor?.Dispose();
+        _escFullscreenEditor = null;
+        var target = _fullscreenTarget;
+        var text = _fullscreenText;
+        _fullscreenTarget = "";
+        _fullscreenText = "";
+        _pasteListenerAttached = false;
+
+        switch (target)
+        {
+            case "description":
+                if (_ticket is not null)
+                {
+                    var oldDesc = _ticket.Description;
+                    var descTicketId = _ticket.Id;
+                    await TicketService.UpdateTicketAsync(Slug, descTicketId, description: text);
+                    PushUndo?.Invoke($"{L["UndoDescription"]} #{descTicketId}", async () =>
+                        await TicketService.UpdateTicketAsync(Slug, descTicketId, description: oldDesc));
+                }
+                break;
+            case "newComment":
+                if (_ticket is not null && !string.IsNullOrWhiteSpace(text))
+                    await TicketService.AddCommentAsync(Slug, _ticket.Id, text.Trim());
+                break;
+            case "editComment":
+                if (_ticket is not null && _editingCommentId is not null)
+                {
+                    var oldComment = _editComment;
+                    var commentId = _editingCommentId.Value;
+                    var editTicketId = _ticket.Id;
+                    await TicketService.UpdateCommentAsync(Slug, editTicketId, commentId, text.Trim());
+                    PushUndo?.Invoke($"{L["UndoComment"]} #{editTicketId}", async () =>
+                        await TicketService.UpdateCommentAsync(Slug, editTicketId, commentId, oldComment));
+                    _editingCommentId = null;
+                }
+                break;
+        }
+
+        await RefreshAsync();
+    }
+
+    // ── Delete ──
+
+    private async Task DeleteTicketAsync()
+    {
+        if (_ticket is null) return;
+        var t = _ticket;
+        var labelIds = t.Labels.Select(l => l.Id).ToList();
+        await TicketService.DeleteTicketAsync(Slug, t.Id);
+        PushUndo?.Invoke($"{L["UndoDelete"]} #{t.Id}", async () =>
+            await TicketService.CreateTicketAsync(Slug, t.Title, t.Description, t.CreatedBy, t.Status, labelIds, t.Priority, t.AssignedTo, t.ParentId));
+        _confirmDelete = false;
+        await OnDeleted.InvokeAsync();
+    }
+
+    // ── Labels ──
+
+    private List<Label> GetLabelSuggestions()
+    {
+        if (_ticket is null) return [];
+        var currentIds = _ticket.Labels.Select(l => l.Id).ToHashSet();
+        var query = _labelSearch?.Trim() ?? "";
+        return _allLabels
+            .Where(l => !currentIds.Contains(l.Id))
+            .Where(l => string.IsNullOrEmpty(query) || l.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    private async Task AddExistingLabel(Label label)
+    {
+        if (_ticket is null) return;
+        var oldIds = _ticket.Labels.Select(l => l.Id).ToList();
+        var ticketId = _ticket.Id;
+        var ids = oldIds.ToList();
+        ids.Add(label.Id);
+        await TicketService.SetTicketLabelsAsync(Slug, ticketId, ids);
+        PushUndo?.Invoke($"{L["UndoLabel"]} +{label.Name} #{ticketId}", async () =>
+            await TicketService.SetTicketLabelsAsync(Slug, ticketId, oldIds));
+        _labelSearch = "";
+        CloseLabelDropdown();
+        await RefreshAsync();
+    }
+
+    private async Task RemoveLabel(int labelId)
+    {
+        if (_ticket is null) return;
+        var oldIds = _ticket.Labels.Select(l => l.Id).ToList();
+        var ticketId = _ticket.Id;
+        var ids = oldIds.Where(id => id != labelId).ToList();
+        await TicketService.SetTicketLabelsAsync(Slug, ticketId, ids);
+        PushUndo?.Invoke($"{L["UndoLabel"]} #{ticketId}", async () =>
+            await TicketService.SetTicketLabelsAsync(Slug, ticketId, oldIds));
+        await RefreshAsync();
+    }
+
+    private async Task CreateAndAddLabel()
+    {
+        if (_ticket is null || string.IsNullOrWhiteSpace(_labelSearch)) return;
+        var label = await LabelService.CreateLabelAsync(Slug, _labelSearch.Trim(), "#6366f1");
+        _allLabels = await LabelService.ListLabelsAsync(Slug);
+        var ids = _ticket.Labels.Select(l => l.Id).ToList();
+        ids.Add(label.Id);
+        await TicketService.SetTicketLabelsAsync(Slug, _ticket.Id, ids);
+        _labelSearch = "";
+        CloseLabelDropdown();
+        await RefreshAsync();
+    }
+
+    private async Task HandleLabelKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_labelSearch))
+        {
+            var suggestions = GetLabelSuggestions();
+            if (suggestions.Count > 0)
+                await AddExistingLabel(suggestions[0]);
+            else
+                await CreateAndAddLabel();
+        }
+        else if (e.Key == "Escape")
+        {
+            _labelSearch = "";
+            CloseLabelDropdown();
+        }
+    }
+
+    private void OpenLabelDropdown()
+    {
+        if (_labelDropdownOpen) return;
+        _labelDropdownOpen = true;
+        _escLabelDropdown?.Dispose();
+        _escLabelDropdown = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseLabelDropdown(); StateHasChanged(); }));
+    }
+
+    private void CloseLabelDropdown()
+    {
+        _labelDropdownOpen = false;
+        _escLabelDropdown?.Dispose();
+        _escLabelDropdown = null;
+    }
+
+    private void OnLabelBlur()
+    {
+        // Small delay handled by @onmousedown on dropdown items
+        CloseLabelDropdown();
+    }
+
+    // ── Assignee ──
+
+    private List<Member> GetAssigneeSuggestions()
+    {
+        var query = _assigneeSearch?.Trim() ?? "";
+        return _allMembers
+            .Where(m => string.IsNullOrEmpty(query)
+                || m.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || m.Slug.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    private string MemberDisplayName(string? slug)
+    {
+        if (string.IsNullOrEmpty(slug)) return "";
+        var member = _allMembers.FirstOrDefault(m => m.Slug == slug);
+        return member?.Name ?? slug;
+    }
+
+    private async Task SetAssignee(string slug)
+    {
+        if (_ticket is null) return;
+        var oldAssignee = _ticket.AssignedTo ?? "";
+        var ticketId = _ticket.Id;
+        await TicketService.UpdateTicketAsync(Slug, ticketId, assignedTo: slug);
+        PushUndo?.Invoke($"{L["UndoAssign"]} #{ticketId}", async () =>
+            await TicketService.UpdateTicketAsync(Slug, ticketId, assignedTo: oldAssignee));
+        _assigneeSearch = "";
+        CloseAssigneeDropdown();
+        await RefreshAsync();
+    }
+
+    private async Task RemoveAssignee()
+    {
+        if (_ticket is null) return;
+        var oldAssignee = _ticket.AssignedTo ?? "";
+        var ticketId = _ticket.Id;
+        await TicketService.UpdateTicketAsync(Slug, ticketId, assignedTo: "");
+        PushUndo?.Invoke($"{L["UndoUnassign"]} #{ticketId}", async () =>
+            await TicketService.UpdateTicketAsync(Slug, ticketId, assignedTo: oldAssignee));
+        await RefreshAsync();
+    }
+
+    private async Task CreateAndAssign()
+    {
+        if (_ticket is null || string.IsNullOrWhiteSpace(_assigneeSearch)) return;
+        var name = _assigneeSearch.Trim();
+        var created = await MemberService.CreateMemberAsync(Slug, name);
+        _allMembers = await MemberService.ListMembersAsync(Slug);
+        await SetAssignee(created.Slug);
+    }
+
+    private async Task HandleAssigneeKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_assigneeSearch))
+        {
+            var suggestions = GetAssigneeSuggestions();
+            if (suggestions.Count > 0)
+                await SetAssignee(suggestions[0].Slug);
+            else
+                await CreateAndAssign();
+        }
+        else if (e.Key == "Escape")
+        {
+            _assigneeSearch = "";
+            CloseAssigneeDropdown();
+        }
+    }
+
+    private void OpenAssigneeDropdown()
+    {
+        if (_assigneeDropdownOpen) return;
+        _assigneeDropdownOpen = true;
+        _escAssigneeDropdown?.Dispose();
+        _escAssigneeDropdown = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseAssigneeDropdown(); StateHasChanged(); }));
+    }
+
+    private void CloseAssigneeDropdown()
+    {
+        _assigneeDropdownOpen = false;
+        _escAssigneeDropdown?.Dispose();
+        _escAssigneeDropdown = null;
+    }
+
+    private void OnAssigneeBlur() => CloseAssigneeDropdown();
+
+    // ── Ticket chat ──
+
+    private void OpenTicketChat()
+    {
+        if (_ticket is null) return;
+        var assignee = _ticket.AssignedTo;
+        // With an assignee: jump straight into the conversation with that agent.
+        // Without: leave InitialAgent null so the drawer shows the picker — the ticket
+        // context still propagates through the TicketId/TicketTitle parameters.
+        if (!string.IsNullOrWhiteSpace(assignee) && assignee != "owner")
+        {
+            var member = _allMembers.FirstOrDefault(m => m.Slug == assignee);
+            _chatInitialAgent = assignee;
+            _chatInitialAgentName = member?.Name ?? assignee;
+        }
+        else
+        {
+            _chatInitialAgent = null;
+            _chatInitialAgentName = null;
+        }
+        _showChatDrawer = true;
+        _escChatDrawer?.Dispose();
+        _escChatDrawer = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseChatDrawer(); StateHasChanged(); }));
+    }
+
+    private void CloseChatDrawer()
+    {
+        _showChatDrawer = false;
+        _chatInitialAgent = null;
+        _chatInitialAgentName = null;
+        _escChatDrawer?.Dispose();
+        _escChatDrawer = null;
+    }
+
+    private bool CanChatWithAssignee()
+    {
+        var a = _ticket?.AssignedTo;
+        return !string.IsNullOrWhiteSpace(a) && a != "owner";
+    }
+
+    private string _chatInitialAgentNameForTooltip()
+    {
+        var a = _ticket?.AssignedTo;
+        if (string.IsNullOrWhiteSpace(a)) return "";
+        return _allMembers.FirstOrDefault(m => m.Slug == a)?.Name ?? a;
+    }
+
+    private string GetColumnColor(string status) =>
+        _columns.FirstOrDefault(c => c.Name == status)?.Color ?? "#5a6a80";
+}
