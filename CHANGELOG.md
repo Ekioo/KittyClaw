@@ -2,6 +2,13 @@
 
 All notable changes to KittyClaw.
 
+## [Unreleased]
+
+### Changed
+
+- **License: MIT → AGPL-3.0-or-later.** All versions after v0.11 are licensed under the GNU Affero General Public License v3 or later; versions up to and including v0.11 remain available under MIT. A new `NOTICE.md` documents the license history and grants an explicit additional permission: the `ProjectTemplate/` files copied into user workspaces stay MIT-licensed, and everything the app produces (tickets, logs, agent memory, commits) carries no license obligation — initializing a project with KittyClaw never places it under the AGPL.
+- **Anti-silent-rebrand terms (AGPL §7)**: derivative works must preserve the KittyClaw attribution (license notices, the new in-app legal-notice footer on the home page, and a "based on KittyClaw" statement in their README), must not misrepresent their origin (§7(c)), and receive no trademark rights to the KittyClaw name or logos (§7(e)).
+
 ## [v0.11] — 2026-07-30
 
 macOS/Linux support, a second agent backend (Grok CLI), outbound webhooks, and a deep automation-engine reliability pass driven by real production incidents.

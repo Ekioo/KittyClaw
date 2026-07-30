@@ -20,7 +20,11 @@
 <PageTitle>@L["UnifiedBoardTitle"]</PageTitle>
 
 <OnboardingGate />
-<TipOfTheDay />
+
+@* Everything lives in one flex column so the footer (tip + legal notice) sits at
+   the end of the content, or on the bottom edge of the viewport when the page is
+   short — never floating over the board. *@
+<div class="unified-page">
 
 @* Single top bar: title, global search, project creation and the link to the
    project-list page all live in ONE header row (wrapping on narrow screens). *@
@@ -290,6 +294,21 @@ else
                  OnDeleted="OnPanelTicketDeleted"
                  OnEnterSubKanban="OpenSubKanban" />
 }
+
+@* Page footer: tip of the day + Appropriate Legal Notice (AGPL §0, §5(d)), in the
+   page flow. The additional terms in NOTICE.md require derivative works to keep the
+   legal notice visible — restyling is fine, removal is not. *@
+<footer class="unified-footer">
+    <TipOfTheDay />
+    <div class="legal-notice">
+        KittyClaw · © 2026 <a href="https://ekioo.com" target="_blank" rel="noopener">Ekioo</a>
+        · <a href="https://github.com/Ekioo/KittyClaw" target="_blank" rel="noopener">Source</a>
+        · <a href="https://github.com/Ekioo/KittyClaw/blob/main/LICENSE" target="_blank" rel="noopener">AGPL-3.0-or-later</a>
+    </div>
+</footer>
+
+</div>
+
 
 @code {
     private sealed record LaneData(Project Project, List<BoardColumn> Columns, List<TicketSummary> Tickets, List<Member> Members);

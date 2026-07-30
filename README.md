@@ -199,6 +199,19 @@ No ticket content, project names, hostnames, or usage details are ever sent. Fai
 
 ---
 
+## License
+
+KittyClaw is licensed under the **[AGPL-3.0-or-later](LICENSE)**. Self-hosting and personal use are unrestricted; if you distribute a modified version or offer one as a network service, you must publish your source under the same license.
+
+Additional terms under AGPL §7 (full text in [NOTICE.md](NOTICE.md)): derivative works must **keep the KittyClaw attribution visible** (the in-app legal notice and a "based on KittyClaw" statement in their README), must **not misrepresent their origin**, and receive **no rights to the KittyClaw name or logos**.
+
+Two things the AGPL does **not** touch (see [NOTICE.md](NOTICE.md)):
+
+- **Your projects**: the template files KittyClaw copies into your workspace (`.agents/`, `CLAUDE.md`, …) are additionally MIT-licensed, and everything the app produces for you (tickets, logs, agent commits, …) is yours, license-free. Managing a project with KittyClaw never places that project under the AGPL.
+- **The past**: versions up to and including v0.11 were released under MIT and remain available under those terms.
+
+---
+
 ## More Projects & Contact
 
 → **Site + demo:** [kittyclaw.dev](https://kittyclaw.dev)

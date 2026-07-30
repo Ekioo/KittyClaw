@@ -4747,16 +4747,12 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     padding: 0.3rem 0.85rem;
 }
 
-/* ── Tip of the day (unified home, bottom center) ─────────────────────────
-   A quiet bordered strip, always visible, one line per sentence. The colors
-   stay close to the page background so it reads as décor, not a popup. The
-   width is FIXED so the ↻ button never moves when the tip changes. The
+/* ── Tip of the day (unified home footer) ─────────────────────────────────
+   A quiet bordered strip inside the page footer, one line per sentence. The
+   colors stay close to the page background so it reads as décor, not a popup.
+   The width is FIXED so the ↻ button never moves when the tip changes. The
    container ignores pointer events; only the ↻ next button is clickable. */
 .tip-of-the-day {
-    position: fixed;
-    left: 50%;
-    bottom: 0.75rem;
-    transform: translateX(-50%);
     display: flex;
     align-items: center;
     gap: 0.6rem;
@@ -4769,7 +4765,6 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     line-height: 1.5;
     color: var(--text-dim);
     pointer-events: none;
-    z-index: 40; /* below every modal/panel overlay (100+) */
 }
 
 .tip-of-the-day .tip-lines {
@@ -4792,5 +4787,68 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 }
 
 .tip-of-the-day .tip-next-btn:hover {
+    color: var(--text-muted);
+}
+
+/* ---- Unified home: page column + footer ---------------------------------- */
+/* The home page is one flex column filling the viewport, so the footer (tip of
+   the day + legal notice) sits after the content — or on the bottom edge of the
+   screen when the page is short — and never floats over the board. */
+.unified-page {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* One footer line: tip strip centered, legal notice on the right. The 1fr side
+   columns keep the tip truly centered regardless of the notice width. */
+.unified-footer {
+    margin-top: auto;
+    padding: 1.5rem 1rem 0.75rem;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 0.5rem 1rem;
+}
+
+.unified-footer .tip-of-the-day {
+    grid-column: 2;
+}
+
+/* Appropriate Legal Notice required by NOTICE.md's additional terms: derivatives
+   may restyle it but must keep it visible. Bottom-right, colophon-style. */
+.legal-notice {
+    grid-column: 3;
+    justify-self: end;
+    align-self: end;
+    font-size: 0.72rem;
+    line-height: 1.5;
+    text-align: right;
+    color: var(--text-dim);
+}
+
+/* Below ~1240px the side column can no longer hold the notice next to the
+   640px tip strip, so the footer stacks: tip centered, notice under it. */
+@media (max-width: 1240px) {
+    .unified-footer {
+        grid-template-columns: 1fr;
+    }
+
+    .unified-footer .tip-of-the-day {
+        grid-column: 1;
+        justify-self: center;
+    }
+
+    .legal-notice {
+        grid-column: 1;
+    }
+}
+
+.legal-notice a {
+    color: inherit;
+    text-decoration: underline;
+}
+
+.legal-notice a:hover {
     color: var(--text-muted);
 }
