@@ -274,41 +274,13 @@ internal sealed class ActionExecutor
                         if (skip) return null;
                         return state.LastRun;
                     }
-                    case MoveTicketStatusActionSpec m when firing.TicketId is not null:
-                        await ExecuteMoveTicketStatusActionAsync(rt, firing, m, state);
-                        break;
-                    case SetLabelsActionSpec s when firing.TicketId is not null:
-                        await ExecuteSetLabelsActionAsync(rt, firing, s);
-                        break;
-                    case AddCommentActionSpec ac when firing.TicketId is not null:
-                        await ExecuteAddCommentActionAsync(rt, firing, ac);
-                        break;
-                    case AssignTicketActionSpec at when firing.TicketId is not null:
-                        await ExecuteAssignTicketActionAsync(rt, firing, at);
-                        break;
-                    case CommitAgentMemoryActionSpec cm:
-                        await ExecuteCommitAgentMemoryActionAsync(rt, cm, firing);
-                        break;
-                    case ConsolidateAgentMemoryActionSpec csm:
-                        await ExecuteConsolidateAgentMemoryActionAsync(rt, csm, firing, parentRun: null, ct);
-                        break;
-                    case HttpRequestActionSpec hr:
-                    {
-                        var abortHttp = await ExecuteHttpRequestActionAsync(hr, rt, firing, ct);
-                        if (abortHttp) return state.LastRun;
-                        break;
-                    }
-                    case ExecutePowerShellActionSpec ps:
-                    {
-                        var abort = await ExecutePowerShellAsync(ps, rt.Workspace!, rt.Slug, firing, ct);
-                        if (abort) return state.LastRun;
-                        break;
-                    }
-                    case CreateTicketActionSpec cta:
-                        await ExecuteCreateTicketActionAsync(rt, cta);
-                        break;
                     default:
-                        throw new NotSupportedException($"Unhandled action type {action.GetType().Name}. Register it in ActionExecutor.ExecuteAutomationAsync.");
+                        // Everything except runAgent goes through the single shared dispatch —
+                        // see ExecuteChainActionAsync. An unregistered type throws here (the
+                        // pre-run chain is allowed to fail loudly).
+                        if (await ExecuteChainActionAsync(rt, firing, action, state, parentRun: null, ct))
+                            return state.LastRun;
+                        break;
                 }
             }
             await CommitAsync(DateTime.UtcNow);
@@ -589,15 +561,6 @@ internal sealed class ActionExecutor
             {
                 switch (post)
                 {
-                    case CommitAgentMemoryActionSpec cm: await ExecuteCommitAgentMemoryActionAsync(rt, cm, firing); break;
-                    case ConsolidateAgentMemoryActionSpec csm: await ExecuteConsolidateAgentMemoryActionAsync(rt, csm, firing, precedingRun, ct); break;
-                    case AddCommentActionSpec ac when firing.TicketId is not null: await ExecuteAddCommentActionAsync(rt, firing, ac); break;
-                    case SetLabelsActionSpec sl when firing.TicketId is not null: await ExecuteSetLabelsActionAsync(rt, firing, sl); break;
-                    case AssignTicketActionSpec at when firing.TicketId is not null: await ExecuteAssignTicketActionAsync(rt, firing, at); break;
-                    case ExecutePowerShellActionSpec ps: await ExecutePowerShellAsync(ps, rt.Workspace!, rt.Slug, firing, ct); break;
-                    case HttpRequestActionSpec hr:
-                        if (await ExecuteHttpRequestActionAsync(hr, rt, firing, ct)) return;
-                        break;
                     case RunAgentActionSpec ra:
                     {
                         var (skip, runTask, agentName) = await StartAgentRunAsync(rt, firing, ra, ct);
@@ -631,9 +594,77 @@ internal sealed class ActionExecutor
                         await ProcessPostRunActionsAsync(rt, firing, chainedRun, rest, commitAsync, ct);
                         return;
                     }
+                    default:
+                        // Single shared dispatch (fix for the silent createTicket/
+                        // moveTicketStatus drop, ticket §2.1): every non-runAgent action
+                        // runs through ExecuteChainActionAsync. An unregistered type throws
+                        // there and surfaces as the warning below instead of vanishing —
+                        // the post-run chain keeps going, per-action try/catch semantics.
+                        if (await ExecuteChainActionAsync(rt, firing, post, new ActionState(), precedingRun, ct))
+                            return;
+                        break;
                 }
             }
             catch (Exception ex) { _logger.LogWarning(ex, "Post-run action {Type} failed", post.GetType().Name); }
+        }
+    }
+
+    // ── Single action dispatch ──────────────────────────────────────────────
+    //
+    // The ONE place where chain actions are routed to their executors, shared by the
+    // pre-run path (ExecuteAutomationAsync) and the post-run path
+    // (ProcessPostRunActionsAsync). Adding a new action type means adding exactly one
+    // case here — ActionDispatchTests enumerates every ActionSpec subclass by
+    // reflection and fails if one is missing. runAgent is the only exception: each
+    // path owns its dispatch/hand-off semantics.
+    //
+    // Returns true when the chain must abort (a gate action said stop).
+    private async Task<bool> ExecuteChainActionAsync(
+        ProjectRuntime rt,
+        TriggerFiring firing,
+        ActionSpec action,
+        ActionState state,
+        AgentRun? parentRun,
+        CancellationToken ct)
+    {
+        switch (action)
+        {
+            case MoveTicketStatusActionSpec m when firing.TicketId is not null:
+                await ExecuteMoveTicketStatusActionAsync(rt, firing, m, state);
+                return false;
+            case SetLabelsActionSpec s when firing.TicketId is not null:
+                await ExecuteSetLabelsActionAsync(rt, firing, s);
+                return false;
+            case AddCommentActionSpec ac when firing.TicketId is not null:
+                await ExecuteAddCommentActionAsync(rt, firing, ac);
+                return false;
+            case AssignTicketActionSpec at when firing.TicketId is not null:
+                await ExecuteAssignTicketActionAsync(rt, firing, at);
+                return false;
+            case MoveTicketStatusActionSpec or SetLabelsActionSpec or AddCommentActionSpec or AssignTicketActionSpec:
+                // Ticket-scoped action on a firing with no ticket (e.g. interval trigger):
+                // skipping is the only sane option, but never a silent one.
+                _logger.LogWarning("{Type} skipped: the trigger firing carries no ticket", action.GetType().Name);
+                return false;
+            case CommitAgentMemoryActionSpec cm:
+                await ExecuteCommitAgentMemoryActionAsync(rt, cm, firing);
+                return false;
+            case ConsolidateAgentMemoryActionSpec csm:
+                await ExecuteConsolidateAgentMemoryActionAsync(rt, csm, firing, parentRun, ct);
+                return false;
+            case CreateTicketActionSpec cta:
+                await ExecuteCreateTicketActionAsync(rt, cta);
+                return false;
+            case HttpRequestActionSpec hr:
+                return await ExecuteHttpRequestActionAsync(hr, rt, firing, ct);
+            case ExecutePowerShellActionSpec ps:
+                return await ExecutePowerShellAsync(ps, rt.Workspace!, rt.Slug, firing, ct);
+            case RunAgentActionSpec:
+                throw new InvalidOperationException(
+                    "runAgent is dispatched by the chain owners, never by ExecuteChainActionAsync.");
+            default:
+                throw new NotSupportedException(
+                    $"Unhandled action type {action.GetType().Name}. Register it in ActionExecutor.ExecuteChainActionAsync.");
         }
     }
 
