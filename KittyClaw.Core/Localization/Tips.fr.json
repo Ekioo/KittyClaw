@@ -1,0 +1,20 @@
+{
+  "TipLabel": "Astuce",
+  "TipNext": "Astuce suivante",
+  "TipHide": "Masquer jusqu'à demain",
+  "TipDisable": "Ne plus afficher",
+  "Tip1": "Clic droit sur l'en-tête d'une colonne pour trier ses tickets — par titre, priorité, assigné ou date. Le choix est partagé entre le kanban de l'accueil et le board du projet.",
+  "Tip2": "Glissez un ticket sur un autre pour en faire un sous-ticket. Le badge 📂 du parent ouvre son propre sous-kanban.",
+  "Tip3": "Ctrl+Z annule vos dernières actions sur le board — déplacements, suppressions, renommages, priorités — jusqu'à 30 étapes en arrière.",
+  "Tip4": "La recherche comprend des jetons : #42, @assigné, priority:critical, label:bug, by:owner, ou >2026-03-01 pour les dates.",
+  "Tip5": "Planifiez un ticket avec ⏰ : il rejoindra tout seul sa colonne cible le moment venu.",
+  "Tip6": "L'accueil a deux vues, chacune avec sa propre URL : le kanban unifié sur / et les cartes projets sur /projects. Mettez votre préférée en favori.",
+  "Tip7": "Les automatisations peuvent appeler des services externes avec l'action httpRequest — les placeholders comme {ticketId}, {ticketTitle} ou {now} sont remplis pour vous.",
+  "Tip8": "Discutez avec l'agent assigné à un ticket directement depuis le panneau — le bouton 💬 garde le ticket comme contexte.",
+  "Tip9": "KittyClaw n'a pas d'authentification et ses agents exécutent du code sur cette machine. Gardez-le sur localhost — n'exposez jamais le port via un tunnel ou un reverse proxy.",
+  "Tip10": "Mettez un projet en pause avec ⏸ pour arrêter ses automatisations. Les projets en pause descendent en bas de l'accueil, repliés.",
+  "Tip11": "Collez une image directement dans un éditeur de description ou de commentaire — elle est envoyée et liée automatiquement.",
+  "Tip12": "Écrivez #42 dans un commentaire pour lier un ticket, ou #slug-projet:7 pour référencer un ticket d'un autre projet.",
+  "Tip13": "Tout ce que fait l'interface est scriptable : l'API REST est documentée en direct sur /api/docs.",
+  "Tip14": "Échap ferme les surcouches une par une — le menu d'abord, puis l'éditeur, puis le panneau. Aucune souris nécessaire."
+}
