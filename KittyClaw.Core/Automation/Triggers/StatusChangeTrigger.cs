@@ -27,7 +27,9 @@ public sealed class StatusChangeTrigger : ITrigger
             return Array.Empty<TriggerFiring>();
         _lastPolled = ctx.Now;
 
-        var previous = ctx.Sessions.TicketSnapshot(ctx.WorkspacePath);
+        // Snapshots are per automation (§2.4): another workflow committing its own firing
+        // must never acknowledge a transition THIS automation still has to retry.
+        var previous = ctx.Sessions.TicketSnapshot(ctx.WorkspacePath, ctx.Automation.Id);
         var tickets = await ctx.Tickets.ListTicketsAsync(ctx.ProjectSlug);
         var current = tickets.ToDictionary(t => t.Id, t => t.Status);
 
@@ -53,7 +55,7 @@ public sealed class StatusChangeTrigger : ITrigger
             }
         }
 
-        ctx.Sessions.SaveTicketSnapshot(ctx.WorkspacePath, newSnapshot);
+        ctx.Sessions.SaveTicketSnapshot(ctx.WorkspacePath, ctx.Automation.Id, newSnapshot);
         return firings;
     }
 
@@ -83,9 +85,9 @@ public sealed class StatusChangeTrigger : ITrigger
     {
         if (firing.TicketId is int tid && firing.TicketStatus is { } status)
         {
-            var snapshot = ctx.Sessions.TicketSnapshot(ctx.WorkspacePath);
+            var snapshot = ctx.Sessions.TicketSnapshot(ctx.WorkspacePath, ctx.Automation.Id);
             snapshot[tid] = status;
-            ctx.Sessions.SaveTicketSnapshot(ctx.WorkspacePath, snapshot);
+            ctx.Sessions.SaveTicketSnapshot(ctx.WorkspacePath, ctx.Automation.Id, snapshot);
         }
         return Task.CompletedTask;
     }
