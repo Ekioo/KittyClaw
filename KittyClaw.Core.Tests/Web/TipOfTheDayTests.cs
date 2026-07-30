@@ -80,11 +80,20 @@ public class TipOfTheDayTests
     public void TipOfTheDay_IsDecorNotADialog()
     {
         // Owner direction: plain text blended into the page background, always visible —
-        // no dismiss buttons, no persistence, and it must never intercept clicks.
+        // no dismissal, no persistence, never intercepts clicks. The single allowed
+        // control is the ↻ next-tip button, which re-enables its own pointer events.
         var src = File.ReadAllText(ComponentPath());
-        Assert.DoesNotContain("button", src);
         Assert.DoesNotContain("localStorage", src);
+        Assert.Contains("NextTip", src);
         var css = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "wwwroot", "app.css"));
-        Assert.Contains("pointer-events: none;", css[css.IndexOf(".tip-of-the-day", StringComparison.Ordinal)..]);
+        var tipCss = css[css.IndexOf(".tip-of-the-day", StringComparison.Ordinal)..];
+        Assert.Contains("pointer-events: none;", tipCss);
+        Assert.Contains("pointer-events: auto;", tipCss);
+    }
+
+    [Fact]
+    public void TipOfTheDay_BreaksSentencesOntoTheirOwnLines()
+    {
+        Assert.Contains("TipLines", File.ReadAllText(ComponentPath()));
     }
 }
