@@ -108,8 +108,52 @@ public partial class ProjectService
         return project;
     }
 
+    // Roots where agents must never run or write: KittyClaw creates .agents/** in the
+    // workspace and launches permission-less claude subprocesses there, so a workspace
+    // inside a system directory turns any typo (or confused agent calling the open API)
+    // into an incident. Validated at write time only — existing projects are untouched.
+    private static readonly string[] ForbiddenUnixRoots =
+        ["/etc", "/usr", "/bin", "/sbin", "/lib", "/lib64", "/boot", "/proc", "/sys", "/dev", "/System"];
+
+    /// <summary>
+    /// Rejects workspace paths that are relative, contain "..", point at a filesystem
+    /// root, or live under a system directory (backport analysis §2.6). Throws
+    /// <see cref="InvalidOperationException"/> with an actionable message (mapped to 400).
+    /// </summary>
+    public static void ValidateWorkspacePath(string path)
+    {
+        if (!Path.IsPathFullyQualified(path))
+            throw new InvalidOperationException($"Le workspace doit être un chemin absolu ('{path}' ne l'est pas).");
+        if (path.Split('/', '\\').Any(segment => segment == ".."))
+            throw new InvalidOperationException("Le workspace ne doit pas contenir de segment '..'.");
+
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        var root = Path.TrimEndingDirectorySeparator(Path.GetPathRoot(full) ?? "");
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (string.Equals(full, root, comparison))
+            throw new InvalidOperationException("Le workspace ne peut pas être la racine d'un disque.");
+
+        var forbidden = OperatingSystem.IsWindows()
+            ? new[]
+            {
+                Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+            }
+            : ForbiddenUnixRoots;
+        foreach (var dir in forbidden)
+        {
+            if (string.IsNullOrEmpty(dir)) continue;
+            var f = Path.TrimEndingDirectorySeparator(dir);
+            if (string.Equals(full, f, comparison) || full.StartsWith(f + Path.DirectorySeparatorChar, comparison))
+                throw new InvalidOperationException($"Le workspace ne peut pas être dans '{f}' (répertoire système).");
+        }
+    }
+
     public async Task<Project?> UpdateProjectAsync(string slug, string? workspacePath, string? fallbackModel = null, bool updateFallback = false)
     {
+        if (!string.IsNullOrWhiteSpace(workspacePath))
+            ValidateWorkspacePath(workspacePath.Trim());
         await EnsureRegistryInitializedAsync();
         await using var db = new RegistryDbContext(_registryPath);
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Slug == slug);

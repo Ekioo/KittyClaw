@@ -493,10 +493,23 @@ else
         {
             var body = new { workspacePath = string.IsNullOrWhiteSpace(_workspacePath) ? null : _workspacePath.Trim() };
             var resp = await NewHttp().PatchAsJsonAsync($"/api/projects/{Slug}", body);
-            _workspaceStatus = resp.IsSuccessStatusCode
-                ? (L["Saved"], "settings-status-ok")
-                : ($"{L["Error"]}: {resp.StatusCode}", "settings-status-err");
-            if (resp.IsSuccessStatusCode) _project = await ProjectService.GetProjectAsync(Slug);
+            if (resp.IsSuccessStatusCode)
+            {
+                _workspaceStatus = (L["Saved"], "settings-status-ok");
+                _project = await ProjectService.GetProjectAsync(Slug);
+            }
+            else
+            {
+                // Surface the validation message (workspace path rules) rather than a bare code.
+                string? detail = null;
+                try
+                {
+                    var err = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                    if (err.TryGetProperty("error", out var e)) detail = e.GetString();
+                }
+                catch { /* non-JSON error body */ }
+                _workspaceStatus = ($"{L["Error"]}: {detail ?? resp.StatusCode.ToString()}", "settings-status-err");
+            }
         }
         finally { _savingWorkspace = false; }
     }

@@ -91,11 +91,13 @@ public class OllamaLocalModelTests
         var loaded = await projects.GetProjectAsync(project.Slug);
         Assert.Equal("grok-4.5", loaded!.FallbackModel);
 
-        // Workspace-only update must not clear the fallback.
-        await projects.UpdateProjectAsync(project.Slug, workspacePath: @"C:\work", updateFallback: false);
+        // Workspace-only update must not clear the fallback. (Absolute path on every OS —
+        // workspace paths are validated since §2.6.)
+        var workspace = Path.Combine(tmp.Path, "work");
+        await projects.UpdateProjectAsync(project.Slug, workspacePath: workspace, updateFallback: false);
         loaded = await projects.GetProjectAsync(project.Slug);
         Assert.Equal("grok-4.5", loaded!.FallbackModel);
-        Assert.Equal(@"C:\work", loaded.WorkspacePath);
+        Assert.Equal(workspace, loaded.WorkspacePath);
 
         // Explicit clear.
         await projects.UpdateProjectAsync(project.Slug, loaded.WorkspacePath, fallbackModel: null, updateFallback: true);

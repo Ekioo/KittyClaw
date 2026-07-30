@@ -30,9 +30,18 @@ public static partial class Endpoints
 
         api.MapPatch("/projects/{slug}", async (string slug, UpdateProjectRequest req, ProjectService ps) =>
         {
-            var project = await ps.UpdateProjectAsync(slug, req.WorkspacePath, req.FallbackModel, req.UpdateFallbackModel);
-            return project is null ? Results.NotFound() : Results.Ok(project);
-        }).WithTags("Projects");
+            try
+            {
+                var project = await ps.UpdateProjectAsync(slug, req.WorkspacePath, req.FallbackModel, req.UpdateFallbackModel);
+                return project is null ? Results.NotFound() : Results.Ok(project);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Workspace validation (§2.6): relative / ".." / drive root / system dirs.
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).WithTags("Projects")
+        .ProducesProblem(StatusCodes.Status400BadRequest);
 
         api.MapPost("/projects/{slug}/pause", async (string slug, ProjectService ps) =>
         {

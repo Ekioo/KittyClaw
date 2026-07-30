@@ -224,6 +224,9 @@
         _initializing = true;
         try
         {
+            // Validate BEFORE creating: a rejected workspace must not leave a half-created
+            // project behind (§2.6 — relative / ".." / drive root / system dirs).
+            ProjectService.ValidateWorkspacePath(_newWorkspacePath.Trim());
             var project = await ProjectService.CreateProjectAsync(_newProjectName.Trim());
             await ProjectService.UpdateProjectAsync(project.Slug, _newWorkspacePath.Trim());
             await AgentsTemplate.InitializeAsync(_newWorkspacePath.Trim(), overwrite);
