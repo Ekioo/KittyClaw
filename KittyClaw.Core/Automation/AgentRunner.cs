@@ -295,17 +295,18 @@ public sealed class AgentRunner
                 PersistDiscoveredSession(ctx, scopedAgent, run);
             }
 
-            // Quota / usage-limit fallback: if the CLI signalled a rate-limit or weekly quota
-            // error and the project has a FallbackModel configured (and it differs from the
-            // primary model that just failed), retry the run once with the fallback model.
-            if (attempt.HitQuota
+            // Retry provider-level failures that another configured model can recover from.
+            if (attempt.FallbackReason != FallbackReason.None
                 && ctx.FallbackTarget is not null
                 && !string.Equals(ctx.FallbackTarget.Model, ctx.Target.Model, StringComparison.OrdinalIgnoreCase))
             {
+                var fallbackMessage = attempt.FallbackReason == FallbackReason.Quota
+                    ? $"Quota reached on {(ctx.Target.Model ?? "default model")} — retrying with fallback model {ctx.FallbackTarget.Model}"
+                    : $"Model {(ctx.Target.Model ?? "default model")} is unavailable — retrying with fallback model {ctx.FallbackTarget.Model}";
                 run.Push(new StreamEvent(DateTime.UtcNow, "fallback",
-                    $"Quota reached on {(ctx.Target.Model ?? "default model")} — retrying with fallback model {ctx.FallbackTarget.Model}"));
-                _logger.LogWarning("Quota hit for {Agent} (model={Model}); falling back to {Fallback}",
-                    ctx.AgentName, ctx.Target.Model, ctx.FallbackTarget.Model);
+                    fallbackMessage));
+                _logger.LogWarning("{Reason} for {Agent} (model={Model}); falling back to {Fallback}",
+                    attempt.FallbackReason, ctx.AgentName, ctx.Target.Model, ctx.FallbackTarget.Model);
                 run.Model = ctx.FallbackTarget.Model;
                 // Fresh session id: the primary attempt already consumed `sessionId`, and the
                 // fallback may be a different CLI (claude → grok) whose session store is separate.
@@ -346,7 +347,7 @@ public sealed class AgentRunner
 
             // Final attempt still quota-throttled → surface on the run so restoreStatusOnFail
             // can park the ticket instead of bouncing Todo ↔ InProgress forever.
-            if (attempt.HitQuota && attempt.Exit != 0)
+            if (attempt.FallbackReason == FallbackReason.Quota && attempt.Exit != 0)
                 run.HitQuota = true;
 
             _runs.Complete(run.RunId, attempt.Exit == 0 ? AgentRunStatus.Completed : AgentRunStatus.Failed, attempt.Exit);
@@ -415,7 +416,18 @@ public sealed class AgentRunner
         }
     }
 
-    private readonly record struct SpawnResult(int? Exit, int AssistantEventCount, bool Cancelled, bool HitQuota);
+    private enum FallbackReason
+    {
+        None,
+        Quota,
+        ModelUnavailable,
+    }
+
+    private readonly record struct SpawnResult(
+        int? Exit,
+        int AssistantEventCount,
+        bool Cancelled,
+        FallbackReason FallbackReason);
 
     private void PersistDiscoveredSession(AgentRunContext ctx, string scopedAgent, AgentRun run)
     {
@@ -467,6 +479,40 @@ public sealed class AgentRunner
         return false;
     }
 
+    private static readonly string[] ModelUnavailableMarkers =
+    {
+        "selected model",
+        "model not found",
+        "model does not exist",
+        "model may not exist",
+        "model is not available",
+        "model is unavailable",
+        "unknown model",
+        "invalid model",
+        "you may not have access to it",
+    };
+
+    private static bool LooksLikeModelUnavailableError(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)
+            || !text.Contains("model", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return ModelUnavailableMarkers.Any(marker =>
+            text.Contains(marker, StringComparison.OrdinalIgnoreCase));
+    }
+
+    // Provider CLIs report an unknown, retired, or inaccessible model in result/error output.
+    // Assistant prose is deliberately excluded so discussing such an error cannot trigger fallback.
+    internal static bool IsModelUnavailableSignal(StreamEvent ev)
+    {
+        if (ev.Kind is not ("stderr" or "result" or "raw" or "error"))
+            return false;
+
+        return LooksLikeModelUnavailableError(ev.Detail)
+            || LooksLikeModelUnavailableError(ev.Text);
+    }
+
     // A rate_limit_event payload counts as a quota hit only when its status is "rejected"
     // (the CLI also emits "allowed" / "allowed_warning" events that must not trigger a retry).
     private static bool IsRejectedRateLimit(string? text)
@@ -509,7 +555,7 @@ public sealed class AgentRunner
         {
             TryDeleteFile(invocation.TemporaryFile);
             run.Push(new StreamEvent(DateTime.UtcNow, "error", $"spawn failed: {ex.Message}"));
-            return new SpawnResult(-1, 0, false, false);
+            return new SpawnResult(-1, 0, false, FallbackReason.None);
         }
 
         run.Push(new StreamEvent(DateTime.UtcNow, "launch",
@@ -526,16 +572,17 @@ public sealed class AgentRunner
                 foreach (var steer in ctx.PendingSteerMessages)
                     run.Push(new StreamEvent(DateTime.UtcNow, "steer", steer));
 
-            // Count assistant events emitted during THIS attempt only, and watch for quota
-            // markers in stream-json events / stderr so the outer RunAsync can decide whether
-            // to retry with a fallback model.
+            // Count assistant events emitted during THIS attempt only, and watch for recoverable
+            // provider errors so the outer RunAsync can retry with a fallback model.
             var assistantCount = 0;
-            var hitQuota = 0;
+            var fallbackReason = 0;
             Action<StreamEvent> counter = ev =>
             {
                 if (ev.Kind == "assistant") Interlocked.Increment(ref assistantCount);
-                if (hitQuota == 0 && IsQuotaSignal(ev))
-                    Interlocked.Exchange(ref hitQuota, 1);
+                if (fallbackReason == 0 && IsQuotaSignal(ev))
+                    Interlocked.CompareExchange(ref fallbackReason, (int)FallbackReason.Quota, 0);
+                if (fallbackReason == 0 && IsModelUnavailableSignal(ev))
+                    Interlocked.CompareExchange(ref fallbackReason, (int)FallbackReason.ModelUnavailable, 0);
             };
             run.OnEvent += counter;
 
@@ -628,7 +675,7 @@ public sealed class AgentRunner
                         $"Run exceeded maximum duration of {ctx.MaxRunDuration?.TotalMinutes:F0} minutes and was killed"));
                     run.OnEvent -= counter;
                     run.OnEvent -= resultWatch;
-                    return new SpawnResult(-1, assistantCount, false, false);
+                    return new SpawnResult(-1, assistantCount, false, FallbackReason.None);
                 }
                 else if (linkedWithTimeout.IsCancellationRequested)
                 {
@@ -639,7 +686,7 @@ public sealed class AgentRunner
                     AppendDebugLog(ctx, $"STOPPED {ctx.AgentName} run={run.RunId}");
                     run.OnEvent -= counter;
                     run.OnEvent -= resultWatch;
-                    return new SpawnResult(null, assistantCount, true, hitQuota == 1);
+                    return new SpawnResult(null, assistantCount, true, (FallbackReason)fallbackReason);
                 }
                 else
                 {
@@ -683,7 +730,7 @@ public sealed class AgentRunner
                     run.AddPendingSteerMessage(queuedMsg);
             }
             run.OnEvent -= counter;
-            return new SpawnResult(exit, assistantCount, false, hitQuota == 1);
+            return new SpawnResult(exit, assistantCount, false, (FallbackReason)fallbackReason);
         }
         finally
         {
