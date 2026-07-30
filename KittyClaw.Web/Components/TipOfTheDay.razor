@@ -1,15 +1,22 @@
 @using KittyClaw.Core.Services
 @inject LocalizationService L
 
-@* Game-style "loading screen tips", adapted to an app with no loading screens: a plain
-   borderless line of text blended into the page background, always visible in the
-   bottom-right corner of the home. One tip per day, deterministic (day number cycles
-   the pool). No controls, no persistence — it is décor, not a dialog; pointer-events
-   is disabled so it can never intercept a click on content beneath it. The pool mixes
-   feature discovery with security reminders (local-only tool, agents run code here). *@
+@* Game-style "loading screen tips": a plain borderless block of muted text blended into
+   the page background, always visible at the bottom center of the home. One tip per day,
+   deterministic (day number cycles the pool); a single subtle ↻ button rotates to the
+   next tip on demand. Sentences break onto their own lines (2-3 short lines read better
+   than one long one). The container ignores pointer events — only the button is
+   clickable — so the text can never intercept a click on content beneath it. *@
 
 <div class="tip-of-the-day" role="note">
-    <span class="tip-text">💡 <b>@L["TipLabel"]</b> — @L[$"Tip{_tipIndex + 1}"]</span>
+    <span class="tip-icon">💡</span>
+    <span class="tip-lines">
+        @foreach (var line in TipLines())
+        {
+            <span class="tip-line">@line</span>
+        }
+    </span>
+    <button class="tip-next-btn" title="@L["TipNext"]" @onclick="NextTip">↻</button>
 </div>
 
 @code {
@@ -23,4 +30,11 @@
         // Same tip all day; the day number walks the whole pool before repeating.
         _tipIndex = DateOnly.FromDateTime(DateTime.Now).DayNumber % TipCount;
     }
+
+    private void NextTip() => _tipIndex = (_tipIndex + 1) % TipCount;
+
+    // One line per sentence: break after ., !, ? or … followed by whitespace.
+    private IEnumerable<string> TipLines() =>
+        System.Text.RegularExpressions.Regex.Split(L[$"Tip{_tipIndex + 1}"], @"(?<=[.!?…])\s+")
+            .Where(s => s.Length > 0);
 }

@@ -4747,22 +4747,50 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     padding: 0.3rem 0.85rem;
 }
 
-/* ── Tip of the day (unified home, bottom-right) ──────────────────────────
-   Plain text blended into the page background: no border, no box, always
-   visible; pointer-events none so it never intercepts clicks on content. */
+/* ── Tip of the day (unified home, bottom center) ─────────────────────────
+   A quiet bordered strip, always visible, one line per sentence. The colors
+   stay close to the page background so it reads as décor, not a popup. The
+   width is FIXED so the ↻ button never moves when the tip changes. The
+   container ignores pointer events; only the ↻ next button is clickable. */
 .tip-of-the-day {
     position: fixed;
-    right: 1rem;
+    left: 50%;
     bottom: 0.75rem;
-    max-width: min(620px, calc(100vw - 2rem));
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    width: min(640px, calc(100vw - 2rem));
+    padding: 0.4rem 0.7rem;
+    background: color-mix(in srgb, var(--surface) 40%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+    border-radius: 8px;
     font-size: 0.76rem;
+    line-height: 1.5;
     color: var(--text-dim);
-    text-align: right;
     pointer-events: none;
     z-index: 40; /* below every modal/panel overlay (100+) */
 }
 
-.tip-of-the-day .tip-text b {
+.tip-of-the-day .tip-lines {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+}
+
+.tip-of-the-day .tip-next-btn {
+    pointer-events: auto;
+    background: transparent;
+    border: none;
+    padding: 0.1rem 0.3rem;
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    cursor: pointer;
+    border-radius: 4px;
+    line-height: 1;
+}
+
+.tip-of-the-day .tip-next-btn:hover {
     color: var(--text-muted);
-    font-weight: 600;
 }
