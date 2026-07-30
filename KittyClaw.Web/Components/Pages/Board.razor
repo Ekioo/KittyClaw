@@ -1858,10 +1858,28 @@ else
         _labelSearch = "";
         CloseLabelDropdown();
         CloseAssigneeDropdown();
+        if (await TryReturnToHomeAsync()) return;
         if (_subKanbanParentId is not null)
             Navigation.NavigateTo($"/board/{Slug}/sub/{_subKanbanParentId}", replace: true);
         else
             Navigation.NavigateTo($"/board/{Slug}", replace: true);
+    }
+
+    /// <summary>
+    /// The unified home sets a per-tab sessionStorage flag right before navigating into a
+    /// ticket: closing that ticket must land back on the home, not on the project board.
+    /// sessionStorage is used because every interactive page runs in its own circuit here
+    /// (static router + per-page islands), so no scoped service survives the navigation.
+    /// The flag is consumed on use; it is absent for in-board opens and deep links, which
+    /// keep the plain board URL.
+    /// </summary>
+    private async Task<bool> TryReturnToHomeAsync()
+    {
+        var flag = await JS.InvokeAsync<string?>("sessionStorage.getItem", "kc-return-home");
+        if (flag != "1") return false;
+        await JS.InvokeVoidAsync("sessionStorage.removeItem", "kc-return-home");
+        await JS.InvokeVoidAsync("history.back");
+        return true;
     }
 
     private async Task DeleteSelectedTicket()
@@ -1876,6 +1894,7 @@ else
         _confirmDelete = false;
         await RefreshTicketsAndTouch();
         await RebuildPipelineAsync();
+        if (await TryReturnToHomeAsync()) return;
         Navigation.NavigateTo($"/board/{Slug}", replace: true);
     }
 

@@ -1,0 +1,111 @@
+@using KittyClaw.Core.Models
+@inject LocalizationService L
+@inject IJSRuntime JS
+@inject KittyClaw.Web.Services.AgentRunsState RunsState
+@rendermode InteractiveServer
+@implements IDisposable
+
+@* Project cards grid (the former Home view): pause toggle, live agent-run badge, and a
+   right-click sort menu persisted in localStorage. One of the two display modes of the
+   unified home — the other being the swimlane kanban. *@
+<div class="project-list" @oncontextmenu="ShowSortMenu" @oncontextmenu:preventDefault>
+    @foreach (var project in Sorted)
+    {
+        <div class="project-card-wrap @(project.IsPaused ? "project-paused" : "")">
+            @if (RunsState.ActiveForProject(project.Slug).Any())
+            {
+                <span class="project-card-agent-badge" title="Agent running"></span>
+            }
+            <a class="project-card" href="/board/@project.Slug">
+                <h3>
+                    @project.Name
+                    @if (project.IsPaused)
+                    {
+                        <span class="project-paused-badge">⏸ @L["Paused"]</span>
+                    }
+                </h3>
+                <small>@project.Slug</small>
+            </a>
+            <button class="project-pause-btn" title="@(project.IsPaused ? L["Resume"] : L["Pause"])"
+                    @onclick="() => OnTogglePause.InvokeAsync(project)" @onclick:stopPropagation>
+                @(project.IsPaused ? "▶" : "⏸")
+            </button>
+        </div>
+    }
+</div>
+
+@if (_sortMenuVisible)
+{
+    <div class="context-menu-backdrop" @onclick="HideSortMenu"></div>
+    <div class="context-menu" style="left:@(_sortMenuX)px;top:@(_sortMenuY)px">
+        <button class="context-menu-item @(_sortOrder == "name" ? "active" : "")" @onclick='() => SetSort("name")'>
+            @if (_sortOrder == "name") { <span class="context-menu-check">✓</span> } else { <span class="context-menu-check"></span> }
+            @L["SortByName"]
+        </button>
+        <button class="context-menu-item @(_sortOrder == "created" ? "active" : "")" @onclick='() => SetSort("created")'>
+            @if (_sortOrder == "created") { <span class="context-menu-check">✓</span> } else { <span class="context-menu-check"></span> }
+            @L["SortByCreationDate"]
+        </button>
+        <button class="context-menu-item @(_sortOrder == "updated" ? "active" : "")" @onclick='() => SetSort("updated")'>
+            @if (_sortOrder == "updated") { <span class="context-menu-check">✓</span> } else { <span class="context-menu-check"></span> }
+            @L["SortByLastModified"]
+        </button>
+    </div>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<Project> Projects { get; set; } = [];
+    [Parameter] public EventCallback<Project> OnTogglePause { get; set; }
+
+    private string _sortOrder = "name";
+    private bool _sortMenuVisible;
+    private double _sortMenuX, _sortMenuY;
+    private bool _sortLoaded;
+
+    // Paused projects sink to the bottom, mirroring the kanban view's lane ordering.
+    private IEnumerable<Project> Sorted =>
+        Projects.OrderBy(p => p.IsPaused ? 1 : 0).ThenBy(SortKey).ThenBy(p => p.Name);
+
+    private IComparable SortKey(Project p) => _sortOrder switch
+    {
+        "created" => p.CreatedAt,
+        "updated" => p.UpdatedAt,
+        _ => (IComparable)p.Name
+    };
+
+    protected override void OnInitialized() => RunsState.OnChange += OnRunsChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_sortLoaded)
+        {
+            _sortLoaded = true;
+            var stored = await JS.InvokeAsync<string?>("localStorage.getItem", "kc-project-sort");
+            if (stored is "name" or "created" or "updated")
+            {
+                _sortOrder = stored;
+                StateHasChanged();
+            }
+        }
+    }
+
+    private void ShowSortMenu(MouseEventArgs e)
+    {
+        _sortMenuX = e.ClientX;
+        _sortMenuY = e.ClientY;
+        _sortMenuVisible = true;
+    }
+
+    private void HideSortMenu() => _sortMenuVisible = false;
+
+    private async Task SetSort(string order)
+    {
+        _sortOrder = order;
+        _sortMenuVisible = false;
+        await JS.InvokeVoidAsync("localStorage.setItem", "kc-project-sort", order);
+    }
+
+    private void OnRunsChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => RunsState.OnChange -= OnRunsChanged;
+}

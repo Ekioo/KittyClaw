@@ -18,8 +18,10 @@ public class ProjectDeleteRelocationTests
         return dir!;
     }
 
+    // The project-cards grid moved from Home.razor into the ProjectCards component when the
+    // unified home took over the "/" route; the no-delete-on-cards guards follow it.
     private static string LoadHomeRazor() =>
-        File.ReadAllText(Path.Combine(FindRoot(), "KittyClaw.Web", "Components", "Pages", "Home.razor"));
+        File.ReadAllText(Path.Combine(FindRoot(), "KittyClaw.Web", "Components", "ProjectCards.razor"));
 
     private static string LoadProjectSettingsRazor() =>
         File.ReadAllText(Path.Combine(FindRoot(), "KittyClaw.Web", "Components", "Pages", "ProjectSettings.razor"));

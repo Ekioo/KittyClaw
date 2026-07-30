@@ -4599,3 +4599,150 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     border-radius: 4px;
     margin-bottom: 4px;
 }
+
+.all-boards-link { margin-left: auto; }
+
+/* Unified multi-project board (/board) */
+.unified-board {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem 2rem;
+}
+.board-lane {
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    overflow: hidden;
+}
+.board-lane-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.7rem 1rem;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.12s;
+}
+.board-lane-header:hover { background: var(--surface2); }
+.board-lane-caret {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    width: 1em;
+    flex-shrink: 0;
+}
+.board-lane-title { margin: 0; }
+.board-lane-slug {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+.board-lane-ticket-total {
+    background: var(--surface3);
+    color: var(--text-muted);
+    border-radius: 10px;
+    padding: 0.1rem 0.55rem;
+    font-size: 0.73rem;
+    font-weight: 500;
+}
+.board-lane-columns {
+    height: auto;
+    max-height: 480px;
+    padding: 0 0.75rem 0.75rem;
+}
+.board-lane-columns .column { height: 440px; }
+.board-lane-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    padding: 0 1rem 0.85rem;
+}
+.board-lane-summary-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    color: var(--sc, var(--text-muted));
+    background: color-mix(in srgb, var(--sc, var(--border-strong)) 12%, transparent);
+    border-radius: 999px;
+    padding: 0.2rem 0.65rem;
+}
+.board-lane-summary-chip b { color: var(--text); font-weight: 700; }
+
+/* Cross-lane drag rejection: only the source lane's columns ever get the
+   preventDefault + drop handler wired up (see UnifiedBoard.razor), so every other
+   lane keeps the browser's native "not-allowed" drop cursor. This highlight only
+   ever applies within the source lane. */
+.column-drop-hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-dim);
+}
+
+/* Unified board as default workspace: single top bar + lane quick actions */
+.board-lane-ticket-total { flex-shrink: 0; }
+.board-lane-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+}
+.lane-action {
+    min-height: 28px;
+    padding: 0.25rem 0.55rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--surface2);
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+}
+.lane-action:hover {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+    color: var(--accent-hover);
+}
+.lane-action-paused { color: var(--accent-hover); }
+.unified-page-header { flex-wrap: wrap; }
+.unified-filter-bar { min-width: min(320px, 100%); }
+.unified-create-project {
+    margin-left: 0;
+    padding: 0;
+}
+.unified-create-project input { min-width: 220px; }
+
+@media (max-width: 900px) {
+    .board-lane-header {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+    .board-lane-actions {
+        width: 100%;
+        margin-left: 1.6rem;
+        justify-content: flex-start;
+    }
+    .unified-page-header .filter-bar,
+    .unified-page-header .create-project {
+        flex: 1 1 280px;
+        max-width: none;
+    }
+}
+
+/* View-mode toggle on the unified home: <button> entries must render exactly like the
+   <a>/<span> segments — without this, the global button styling (primary green) leaks in. */
+.view-toggle button.view-toggle-btn {
+    appearance: none;
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 500;
+    line-height: inherit;
+    border: none;
+    background: transparent;
+    padding: 0.3rem 0.85rem;
+}

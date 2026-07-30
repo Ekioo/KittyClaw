@@ -1,0 +1,14 @@
+{
+  "UnifiedBoardTitle": "All Boards",
+  "AllBoardsNavLabel": "All Boards",
+  "UnifiedBoardLoading": "Loading boards…",
+  "UnifiedBoardNoProjects": "No projects yet.",
+  "UnifiedBoardNoMatches": "No tickets match this search.",
+  "UnifiedBoardSearchPlaceholder": "Search every project…",
+  "ClearSearch": "Clear search",
+  "CreateProjectButton": "Create a project",
+  "ProjectName": "Project name",
+  "UnifiedBoardCollapseLane": "Collapse lane",
+  "UnifiedBoardExpandLane": "Expand lane",
+  "UnifiedBoardCrossLaneBlocked": "Tickets can't move between projects."
+}

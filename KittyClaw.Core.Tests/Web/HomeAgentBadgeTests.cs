@@ -15,8 +15,10 @@ public class HomeAgentBadgeTests
             dir = Path.GetDirectoryName(dir);
         }
         Assert.NotNull(dir);
-        var path = Path.Combine(dir!, "KittyClaw.Web", "Components", "Pages", "Home.razor");
-        Assert.True(File.Exists(path), $"Home.razor not found at {path}");
+        // The project-cards grid moved from Home.razor into the ProjectCards component when
+        // the unified home took over the "/" route; the badge guards follow it.
+        var path = Path.Combine(dir!, "KittyClaw.Web", "Components", "ProjectCards.razor");
+        Assert.True(File.Exists(path), $"ProjectCards.razor not found at {path}");
         return File.ReadAllText(path);
     }
 
