@@ -1,0 +1,9 @@
+{
+  "StopAgent": "Stoppen Sie den Agenten",
+  "Stop": "Stoppen",
+  "Retry": "Wiederholen",
+  "RetryAgent": "Führen Sie diesen Agenten erneut aus",
+  "WaitingForOutput": "Warten auf Ausgabe…",
+  "SteerPlaceholder": "Senden Sie eine Anweisung an den Agenten…",
+  "Send": "Schicken"
+}

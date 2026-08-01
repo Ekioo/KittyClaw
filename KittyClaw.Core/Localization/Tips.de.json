@@ -1,0 +1,17 @@
+{
+  "TipNext": "Nächster Tipp",
+  "Tip1": "Klicken Sie mit der rechten Maustaste auf eine Spaltenüberschrift, um die Tickets zu sortieren. Nach Titel, Priorität, Beauftragter oder Datum. Die Wahl wird dem Projektvorstand mitgeteilt.",
+  "Tip2": "Ziehen Sie ein Ticket auf ein anderes, um es in ein Unterticket umzuwandeln. Das 📂-Badge auf dem übergeordneten Kanban öffnet seinen eigenen Unterkanban.",
+  "Tip3": "Strg+Z macht Ihre letzten Board-Aktionen rückgängig. Verschieben, Löschen, Umbenennen, Prioritätsänderungen. Bis zu 30 Schritte zurück.",
+  "Tip4": "Die Suche versteht Token. Versuchen Sie es mit #42, @assignee, Priority:Critical, Label:Bug oder By:Owner.",
+  "Tip5": "Vereinbaren Sie ein Ticket mit ⏰. Es wird zu gegebener Zeit von selbst in die Zielspalte verschoben.",
+  "Tip6": "Das Haus verfügt über zwei Ansichten mit jeweils eigener URL. Das einheitliche Kanban befindet sich unter / und die Projektkarten unter /projects. Setzen Sie ein Lesezeichen für das, was Ihnen am besten gefällt.",
+  "Tip7": "Automatisierungen können externe Dienste aufrufen. Die httpRequest-Aktion füllt {ticketId}, {ticketTitle} oder {now} für Sie aus.",
+  "Tip8": "Chatten Sie mit dem einem Ticket zugewiesenen Agenten über dessen Panel. Der 💬-Button behält das Ticket als Kontext bei.",
+  "Tip9": "KittyClaw hat keine Authentifizierung. Seine Agenten führen Code auf diesem Computer aus. Behalten Sie es auf localhost, ohne Tunnel oder Reverse-Proxy.",
+  "Tip10": "Pausieren Sie ein Projekt mit ⏸, um seine Automatisierungen zu stoppen. Pausierte Projekte sinken auf den Grund des Hauses, kollabieren.",
+  "Tip11": "Fügen Sie ein Bild direkt in eine Beschreibung oder einen Kommentar ein. Es wird automatisch hochgeladen und verlinkt.",
+  "Tip12": "Schreiben Sie #42 in einen Kommentar, um ein Ticket zu verlinken. Mit #project-slug:7 erfolgt die Referenz projektübergreifend.",
+  "Tip13": "Alles, was die Benutzeroberfläche tut, ist skriptfähig. Die REST-API ist live unter /api/docs dokumentiert.",
+  "Tip14": "Esc schließt Overlays einzeln. Zuerst das Menü, dann den Editor, dann das Bedienfeld. Keine Maus erforderlich."
+}

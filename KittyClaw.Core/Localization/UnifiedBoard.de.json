@@ -1,0 +1,14 @@
+{
+  "UnifiedBoardTitle": "Alle Foren",
+  "AllBoardsNavLabel": "Alle Foren",
+  "UnifiedBoardLoading": "Lade Boards…",
+  "UnifiedBoardNoProjects": "Noch keine Projekte.",
+  "UnifiedBoardNoMatches": "Zu dieser Suche passen keine Tickets.",
+  "UnifiedBoardSearchPlaceholder": "Durchsuchen Sie jedes Projekt…",
+  "ClearSearch": "Suche löschen",
+  "CreateProjectButton": "Erstellen Sie ein Projekt",
+  "ProjectName": "Projektname",
+  "UnifiedBoardCollapseLane": "Fahrspur einklappen",
+  "UnifiedBoardExpandLane": "Spur erweitern",
+  "UnifiedBoardCrossLaneBlocked": "Tickets können nicht zwischen Projekten verschoben werden."
+}

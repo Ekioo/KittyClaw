@@ -1,0 +1,17 @@
+{
+  "TipNext": "Siguiente consejo",
+  "Tip1": "Haga clic derecho en el encabezado de una columna para ordenar sus tickets. Por título, prioridad, cesionario o fecha. La elección se comparte con la junta del proyecto.",
+  "Tip2": "Arrastra un ticket sobre otro para convertirlo en un subticket. La insignia 📂 del padre abre su propio subkanban.",
+  "Tip3": "Ctrl+Z deshace las últimas acciones del tablero. Mueve, elimina, renombra, cambia de prioridad. Hasta 30 pasos atrás.",
+  "Tip4": "La búsqueda comprende tokens. Pruebe #42, @assignee, prioridad:crítica, etiqueta:error o por:propietario.",
+  "Tip5": "Agenda un boleto con ⏰. Se moverá solo a su columna de destino cuando llegue el momento.",
+  "Tip6": "La casa tiene dos vistas, cada una con su propia URL. El kanban unificado se encuentra en / y las tarjetas de proyecto en /projects. Añade a favoritos el que prefieras.",
+  "Tip7": "Las automatizaciones pueden llamar a servicios externos. La acción httpRequest completa {ticketId}, {ticketTitle} o {now} por usted.",
+  "Tip8": "Chatea con el agente asignado a un ticket desde su panel. El botón 💬 mantiene el ticket como contexto.",
+  "Tip9": "KittyClaw no tiene autenticación. Sus agentes ejecutan código en esta máquina. Mantenlo en localhost, sin túnel ni proxy inverso.",
+  "Tip10": "Pausa un proyecto con ⏸ para detener sus automatizaciones. Los proyectos detenidos se hunden hasta el fondo de la casa, colapsados.",
+  "Tip11": "Pegue una imagen directamente en una descripción o un comentario. Se carga y vincula automáticamente.",
+  "Tip12": "Escribe #42 en un comentario para vincular un ticket. Con #project-slug:7 la referencia cruza proyectos.",
+  "Tip13": "Todo lo que hace la interfaz de usuario es programable. La API REST está documentada en vivo en /api/docs.",
+  "Tip14": "Esc cierra las superposiciones una a la vez. Primero menú, luego editor, luego panel. No se necesita ratón."
+}

@@ -1,0 +1,14 @@
+{
+  "UnifiedBoardTitle": "Tutte le bacheche",
+  "AllBoardsNavLabel": "Tutte le bacheche",
+  "UnifiedBoardLoading": "Caricamento schede…",
+  "UnifiedBoardNoProjects": "Nessun progetto ancora",
+  "UnifiedBoardNoMatches": "Nessun biglietto corrisponde a questa ricerca.",
+  "UnifiedBoardSearchPlaceholder": "Cerca ogni progetto...",
+  "ClearSearch": "Cancella ricerca",
+  "CreateProjectButton": "Crea un progetto",
+  "ProjectName": "Nome del progetto",
+  "UnifiedBoardCollapseLane": "Corsia di collasso",
+  "UnifiedBoardExpandLane": "Espandi corsia",
+  "UnifiedBoardCrossLaneBlocked": "I ticket non possono essere spostati tra progetti."
+}

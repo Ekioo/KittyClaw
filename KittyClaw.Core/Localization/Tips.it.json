@@ -1,0 +1,17 @@
+{
+  "TipNext": "Prossimo consiglio",
+  "Tip1": "Fare clic con il pulsante destro del mouse sull'intestazione di una colonna per ordinarne i ticket. Per titolo, priorità, assegnatario o data. La scelta è condivisa con il comitato di progetto.",
+  "Tip2": "Trascina un biglietto su un altro per trasformarlo in un sotto-biglietto. Il badge 📂 sul genitore apre il proprio sub-kanban.",
+  "Tip3": "Ctrl+Z annulla le tue ultime azioni sulla scheda. Sposta, elimina, rinomina, cambia priorità. Fino a 30 passi indietro.",
+  "Tip4": "La ricerca comprende i token. Prova #42, @assignee, priorità:critica, etichetta:bug o per:proprietario.",
+  "Tip5": "Prenota un biglietto con ⏰. Si sposterà da solo nella colonna di destinazione quando sarà il momento.",
+  "Tip6": "La casa ha due visualizzazioni, ciascuna con il proprio URL. Il kanban unificato risiede in / e le carte progetto in /projects. Aggiungi ai preferiti quello che preferisci.",
+  "Tip7": "Le automazioni possono chiamare servizi esterni. L'azione httpRequest riempie {ticketId}, {ticketTitle} o {now} per te.",
+  "Tip8": "Chatta con l'agente assegnato a un ticket dal suo pannello. Il pulsante 💬 mantiene il biglietto come contesto.",
+  "Tip9": "KittyClaw non ha autenticazione. I suoi agenti eseguono il codice su questa macchina. Mantienilo su localhost, senza tunnel o proxy inverso.",
+  "Tip10": "Metti in pausa un progetto con ⏸ per fermarne le automazioni. I progetti in pausa sprofondano in fondo alla casa, crollano.",
+  "Tip11": "Incolla un'immagine direttamente in una descrizione o in un commento. Viene caricato e collegato automaticamente.",
+  "Tip12": "Scrivi #42 in un commento per collegare un biglietto. Con #project-slug:7 il riferimento attraversa i progetti.",
+  "Tip13": "Tutto ciò che fa l'interfaccia utente è gestibile tramite script. L'API REST è documentata in tempo reale in /api/docs.",
+  "Tip14": "Esc chiude gli overlay uno alla volta. Prima il menu, poi l'editor, quindi il pannello. Non è necessario il mouse."
+}
