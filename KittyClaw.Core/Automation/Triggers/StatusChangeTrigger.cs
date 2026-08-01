@@ -38,7 +38,12 @@ public sealed class StatusChangeTrigger : ITrigger
         foreach (var (id, status) in current)
         {
             previous.TryGetValue(id, out var prevStatus);
-            var shouldFire = prevStatus != status
+            // A missing entry is baseline discovery, not evidence of a transition. This
+            // happens for tickets created while the engine is down and, importantly, when
+            // migrating a partial legacy snapshot. Treating null -> Done as a status change
+            // replays every historical Done ticket after a restart.
+            var shouldFire = prevStatus is not null
+                && prevStatus != status
                 && (_spec.From is null || prevStatus == _spec.From)
                 && (_spec.To is null || status == _spec.To);
 

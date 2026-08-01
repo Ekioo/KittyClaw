@@ -9,8 +9,7 @@ namespace KittyClaw.Core.Tests.Automation;
 
 /// <summary>
 /// Verifies that <see cref="ActionExecutor"/> defers CommitFiringAsync until after
-/// a successful run (ticket #210). Currently all tests in this file are RED because the
-/// bug causes commitAsync to be called before dispatch regardless of run outcome.
+/// a successful run. This is what lets a status-change trigger retry a failed dispatch.
 /// </summary>
 [Collection("MockClaude")]
 public class ActionExecutorDeferredCommitTests
@@ -77,6 +76,25 @@ public class ActionExecutorDeferredCommitTests
         throw new TimeoutException("Timed out waiting for agent run to complete.");
     }
 
+    private static async Task WaitForSnapshotStatusAsync(
+        SessionRegistry sessions,
+        string workspace,
+        string automationId,
+        int ticketId,
+        string expectedStatus,
+        TimeSpan timeout)
+    {
+        using var cts = new CancellationTokenSource(timeout);
+        while (!cts.IsCancellationRequested)
+        {
+            var snapshot = sessions.TicketSnapshot(workspace, automationId);
+            if (snapshot.TryGetValue(ticketId, out var status) && status == expectedStatus)
+                return;
+            await Task.Delay(50);
+        }
+        throw new TimeoutException($"Timed out waiting for snapshot status '{expectedStatus}'.");
+    }
+
     // ── Case 1: Failed run must NOT advance the snapshot ─────────────────────
 
     [Fact]
@@ -87,7 +105,8 @@ public class ActionExecutorDeferredCommitTests
             await BuildAsync(tmp.Path, agentScenario: "error-exit");
 
         // Snapshot shows ticket was in "Develop" — trigger sees Develop→Done transition.
-        sessions.SaveTicketSnapshot(rt.Workspace!, new Dictionary<int, string> { [ticketId] = "Develop" });
+        sessions.SaveTicketSnapshot(rt.Workspace!, automationId: "on-done",
+            new Dictionary<int, string> { [ticketId] = "Develop" });
 
         var trigger = new StatusChangeTrigger(new StatusChangeTriggerSpec { From = "Develop", To = "Done", PollSeconds = 30 });
         var automation = MakeRunAgentAutomation();
@@ -108,9 +127,8 @@ public class ActionExecutorDeferredCommitTests
         await WaitForRunEndAsync(runs, rt.Slug, TimeSpan.FromSeconds(15));
 
         // After a FAILED run the snapshot must still be "Develop" so the next poll
-        // detects Develop→Done again and re-fires.  Currently FAILS because the bug
-        // commits the snapshot before dispatch.
-        var snapshot = sessions.TicketSnapshot(rt.Workspace!);
+        // detects Develop→Done again and re-fires.
+        var snapshot = sessions.TicketSnapshot(rt.Workspace!, automation.Id);
         Assert.True(snapshot.TryGetValue(ticketId, out var snapshotStatus),
             "Ticket must exist in snapshot.");
         Assert.Equal("Develop", snapshotStatus);
@@ -125,7 +143,8 @@ public class ActionExecutorDeferredCommitTests
         var (executor, rt, tickets, sessions, runs, ticketId) =
             await BuildAsync(tmp.Path, agentScenario: "default");
 
-        sessions.SaveTicketSnapshot(rt.Workspace!, new Dictionary<int, string> { [ticketId] = "Develop" });
+        sessions.SaveTicketSnapshot(rt.Workspace!, automationId: "on-done",
+            new Dictionary<int, string> { [ticketId] = "Develop" });
 
         var trigger = new StatusChangeTrigger(new StatusChangeTriggerSpec { From = "Develop", To = "Done", PollSeconds = 30 });
         var automation = MakeRunAgentAutomation();
@@ -144,9 +163,11 @@ public class ActionExecutorDeferredCommitTests
 
         await executor.ExecuteAutomationAsync(rt, automation, firing, CancellationToken.None, trigger, tctx);
         await WaitForRunEndAsync(runs, rt.Slug, TimeSpan.FromSeconds(15));
+        await WaitForSnapshotStatusAsync(
+            sessions, rt.Workspace!, automation.Id, ticketId, "Done", TimeSpan.FromSeconds(5));
 
         // After a successful run the snapshot must be "Done" — trigger stays silent.
-        var snapshot = sessions.TicketSnapshot(rt.Workspace!);
+        var snapshot = sessions.TicketSnapshot(rt.Workspace!, automation.Id);
         Assert.True(snapshot.TryGetValue(ticketId, out var snapshotStatus),
             "Ticket must exist in snapshot.");
         Assert.Equal("Done", snapshotStatus);
@@ -163,7 +184,8 @@ public class ActionExecutorDeferredCommitTests
 
         // Move ticket to Done first (the restore path expects statusBeforeMove = Develop).
         // The test's BuildAsync already moves ticket to Done, so we just need the right snapshot.
-        sessions.SaveTicketSnapshot(rt.Workspace!, new Dictionary<int, string> { [ticketId] = "Develop" });
+        sessions.SaveTicketSnapshot(rt.Workspace!, automationId: "on-done",
+            new Dictionary<int, string> { [ticketId] = "Develop" });
 
         var trigger = new StatusChangeTrigger(new StatusChangeTriggerSpec { From = "Develop", To = "Done", PollSeconds = 30 });
         // With restoreStatusOnFail: true, a moveTicketStatus action would precede runAgent.
@@ -186,7 +208,7 @@ public class ActionExecutorDeferredCommitTests
         await WaitForRunEndAsync(runs, rt.Slug, TimeSpan.FromSeconds(15));
 
         // Snapshot must remain at "Develop" — no spurious re-fire while ticket is in "Develop".
-        var snapshot = sessions.TicketSnapshot(rt.Workspace!);
+        var snapshot = sessions.TicketSnapshot(rt.Workspace!, automation.Id);
         Assert.True(snapshot.TryGetValue(ticketId, out var snapshotStatus),
             "Ticket must exist in snapshot.");
         Assert.Equal("Develop", snapshotStatus);
@@ -201,7 +223,8 @@ public class ActionExecutorDeferredCommitTests
         var (executor, rt, tickets, sessions, runs, ticketId) =
             await BuildAsync(tmp.Path, agentScenario: "default");
 
-        sessions.SaveTicketSnapshot(rt.Workspace!, new Dictionary<int, string> { [ticketId] = "Develop" });
+        sessions.SaveTicketSnapshot(rt.Workspace!, automationId: "on-done",
+            new Dictionary<int, string> { [ticketId] = "Develop" });
 
         var trigger = new StatusChangeTrigger(new StatusChangeTriggerSpec { From = "Develop", To = "Done", PollSeconds = 30 });
         var automation = MakeRunAgentAutomation();
@@ -226,8 +249,7 @@ public class ActionExecutorDeferredCommitTests
         await WaitForRunEndAsync(runs, rt.Slug, TimeSpan.FromSeconds(15));
 
         // A manually-stopped run should NOT commit the snapshot — a new dispatch is acceptable.
-        // Currently FAILS because the bug commits before dispatch.
-        var snapshot = sessions.TicketSnapshot(rt.Workspace!);
+        var snapshot = sessions.TicketSnapshot(rt.Workspace!, automation.Id);
         Assert.True(snapshot.TryGetValue(ticketId, out var snapshotStatus),
             "Ticket must exist in snapshot.");
         Assert.Equal("Develop", snapshotStatus);

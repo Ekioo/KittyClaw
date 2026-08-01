@@ -186,7 +186,6 @@ Rules:
 - **Commit only docs.** Never `git add` source files, configs, agent files, etc. Even if the working tree contains uncommitted code changes, leave them alone.
 - **Never modify code.** No `.cs`, `.ts`, `.js`, `.py`, `.json` (except markdown frontmatter), `.razor`, `.css`, etc.
 - **Stay in scope.** Process only the commits in your prompt; don't scan the full history.
-- **English everywhere.** Even if existing docs are partly in another language, keep new content English-first; only switch if the entire doc is non-English.
 - **Don't touch agent files.** `ProjectTemplate/`, `.agents/`, automations, memories — out of scope.
 
 ## Run summary

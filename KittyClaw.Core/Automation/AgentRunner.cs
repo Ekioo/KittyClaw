@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using KittyClaw.Core.Services;
 
 namespace KittyClaw.Core.Automation;
 
@@ -164,13 +165,15 @@ public sealed class AgentRunner
     private readonly AgentRunRegistry _runs;
     private readonly RunConcurrencyGate _gate;
     private readonly ILogger<AgentRunner> _logger;
+    private readonly AppSettingsService? _appSettings;
 
-    public AgentRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<AgentRunner> logger)
+    public AgentRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<AgentRunner> logger, AppSettingsService? appSettings = null)
     {
         _sessions = sessions;
         _runs = runs;
         _gate = gate;
         _logger = logger;
+        _appSettings = appSettings;
     }
 
     public async Task<AgentRun> RunAsync(AgentRunContext ctx, CancellationToken ct)
@@ -190,6 +193,37 @@ public sealed class AgentRunner
         };
         if (ctx.OnEventHook is not null) run.OnEvent += ctx.OnEventHook;
         _runs.Register(run);
+
+        var provider = ctx.Target.Provider;
+        run.CliVersion = await CliVersionProbe.ProbeAsync(provider,
+            CliVersionProbe.BinaryFor(provider), CliVersionProbe.ExpectedVersionFor(provider));
+        var cli = run.CliVersion;
+        try
+        {
+            run.Push(new StreamEvent(DateTime.UtcNow,
+                cli.Mismatch ? "warning" : cli.Status == "failed" ? "warning" : "cli_version",
+                cli.Mismatch
+                    ? $"{cli.Provider} CLI version {cli.Version} differs from expected {cli.ExpectedVersion}"
+                    : cli.Status == "failed"
+                        ? $"Could not detect {cli.Provider} CLI version: {cli.Failure}"
+                        : $"{cli.Provider} CLI version {cli.Version}",
+                $"binary={cli.Binary}; status={cli.Status}"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Agent CLI version event subscriber failed for run {RunId}", run.RunId);
+            _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
+            return run;
+        }
+        if (cli.Mismatch)
+            _logger.LogWarning("Agent CLI version mismatch: provider={Provider} binary={Binary} detected={DetectedVersion} expected={ExpectedVersion}",
+                cli.Provider, cli.Binary, cli.Version, cli.ExpectedVersion);
+        else if (cli.Status == "failed")
+            _logger.LogWarning("Agent CLI version probe failed: provider={Provider} binary={Binary} failure={Failure}",
+                cli.Provider, cli.Binary, cli.Failure);
+        else
+            _logger.LogInformation("Agent CLI version detected: provider={Provider} binary={Binary} version={Version}",
+                cli.Provider, cli.Binary, cli.Version);
 
         if (ctx.Target.ValidationError is not null)
         {
@@ -535,7 +569,7 @@ public sealed class AgentRunner
         AgentRunContext ctx, AgentRun run, string skillContent,
         string sessionId, bool isResume, CancellationToken ct)
     {
-        var prompt = await BuildPromptAsync(ctx, skillContent, isResume, ct);
+        var prompt = await BuildPromptAsync(ctx, skillContent, isResume, ct, _appSettings?.Language ?? "en");
         var backend = AgentCliBackend.For(ctx.Target.Provider);
         var invocation = await backend.BuildInvocationAsync(ctx, prompt, sessionId, isResume, ct);
         var psi = ProcessLifecycleManager.BuildProcessStartInfo(
@@ -799,7 +833,7 @@ public sealed class AgentRunner
         return $"{TicketUntrustedOpen}{sanitized}{TicketUntrustedClose}";
     }
 
-    internal static async Task<string> BuildPromptAsync(AgentRunContext ctx, string skillContent, bool isResume, CancellationToken ct)
+    internal static async Task<string> BuildPromptAsync(AgentRunContext ctx, string skillContent, bool isResume, CancellationToken ct, string uiLanguage = "en")
     {
         var imagesBlock = BuildAttachedImagesBlock(ctx);
 
@@ -808,9 +842,7 @@ public sealed class AgentRunner
         if (ctx.SessionScope == "chat" && isResume)
         {
             var userMsg = ctx.ExtraContext ?? "";
-            const string languageReminder =
-                "[Interactive chat: reply in the language used by the owner unless they explicitly request another language. " +
-                "Keep persistent project artifacts in the language required by the project instructions.]";
+            var languageReminder = BuildLanguageInstruction(uiLanguage);
             if (ctx.PendingSteerMessages?.Count > 0)
             {
                 var sb = new StringBuilder();
@@ -834,7 +866,7 @@ public sealed class AgentRunner
         if (isResume && ctx.TicketId is not null)
             return $"The owner has posted feedback on ticket #{ctx.TicketId}: {SpotlightTicketField(ctx.TicketTitle)}\n{TicketUntrustedNotice}\nRead ALL owner comments on this ticket and address them.";
 
-        var prefix = await BuildPreambleAsync(ctx, ct);
+        var prefix = await BuildPreambleAsync(ctx, uiLanguage, ct);
 
         if (ctx.TicketId is not null && ctx.SessionScope != "chat")
             return $"{prefix}{skillContent}\n\n{TicketUntrustedNotice}\n\nFocus on ticket #{ctx.TicketId}: {SpotlightTicketField(ctx.TicketTitle)}";
@@ -867,7 +899,20 @@ public sealed class AgentRunner
         }
     }
 
-    private static async Task<string> BuildPreambleAsync(AgentRunContext ctx, CancellationToken ct)
+    internal static string BuildLanguageInstruction(string uiLanguage)
+    {
+        var (code, name) = uiLanguage.ToLowerInvariant() switch
+        {
+            "fr" => ("fr", "French"),
+            "es" => ("es", "Spanish"),
+            "de" => ("de", "German"),
+            "it" => ("it", "Italian"),
+            _ => ("en", "English"),
+        };
+        return $"[Language: the KittyClaw UI language is {name} ({code}). Use {name} for persistent project artifacts and interactive replies unless the owner explicitly requests another language.]";
+    }
+
+    private static async Task<string> BuildPreambleAsync(AgentRunContext ctx, string uiLanguage, CancellationToken ct)
     {
         var sb = new StringBuilder();
 
@@ -878,6 +923,9 @@ public sealed class AgentRunner
             sb.AppendLine(preamble.Replace("{agent}", ctx.AgentName));
             sb.AppendLine();
         }
+
+        sb.AppendLine(BuildLanguageInstruction(uiLanguage));
+        sb.AppendLine();
 
         await AppendMemoryAsync(sb, ctx, ct);
 

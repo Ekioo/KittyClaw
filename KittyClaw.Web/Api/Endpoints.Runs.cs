@@ -16,6 +16,7 @@ public static partial class Endpoints
             {
                 r.RunId, r.AgentName, r.SkillFile, r.TicketId, r.ConcurrencyGroup,
                 r.StartedAt, r.SessionId, status = r.Status.ToString(),
+                r.CliVersion,
                 r.TotalTokens, r.TotalCostUsd,
             })))
             .WithTags("Runs");
@@ -53,6 +54,7 @@ public static partial class Endpoints
             {
                 run.RunId, run.AgentName, run.SkillFile, run.TicketId, run.ConcurrencyGroup,
                 run.StartedAt, run.EndedAt, run.SessionId, run.ExitCode,
+                run.CliVersion,
                 status = run.Status.ToString(),
                 run.InputTokens, run.OutputTokens, run.CacheReadTokens, run.CacheWriteTokens,
                 run.TotalTokens, run.TotalCostUsd,

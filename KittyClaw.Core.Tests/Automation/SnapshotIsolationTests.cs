@@ -108,6 +108,23 @@ public class SnapshotIsolationTests
     }
 
     [Fact]
+    public async Task PartialLegacySnapshot_DoesNotReplayUnseenTicketsAlreadyInTargetStatus()
+    {
+        using var tmp = new TempDir();
+        var h = await BuildAsync(tmp.Path);
+        await h.Tickets.MoveTicketAsync(h.Slug, h.TicketId, "Done", "test");
+
+        // A partial legacy snapshot can omit older tickets after concurrent status-change
+        // automations wrote different snapshots. The omitted ticket has no observed previous
+        // status, so its current Done state must be captured as baseline rather than replayed.
+        h.Sessions.SaveTicketSnapshot(h.Workspace, new Dictionary<int, string>());
+
+        var (trigger, automation) = MakeAutomation("committer-on-done", "Done");
+        Assert.Empty(await trigger.EvaluateAsync(Ctx(h, automation), CancellationToken.None));
+        Assert.Equal("Done", h.Sessions.TicketSnapshot(h.Workspace, automation.Id)[h.TicketId]);
+    }
+
+    [Fact]
     public async Task PerAutomationSaves_KeepTheLegacySnapshotFresh()
     {
         // The legacy shared snapshot is the seed for automations that don't have their own

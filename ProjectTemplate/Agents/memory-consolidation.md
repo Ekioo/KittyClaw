@@ -64,7 +64,6 @@ A large memory legitimately takes several passes — that is expected. Better to
 
 - Index lines and bullets: imperative or declarative, one idea each. **No** stories, no "I tried X then Y", no `because of run #143`.
 - Cite a path / endpoint / selector / value when it makes the lesson actionable. Vague lessons (`be careful with state`) are worth `[0]` immediately.
-- English only.
 
 ## Output rules
 

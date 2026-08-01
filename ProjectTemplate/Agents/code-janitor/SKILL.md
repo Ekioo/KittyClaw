@@ -103,4 +103,3 @@ Maintain `.agents/code-janitor/health.md`:
 - **Build check after each batch** — trust the project's background build tool; only treat hard compile errors as blockers, and revert the offending edit if one appears.
 - **No `git commit`** — the owner or the committer handles commits.
 - **One ticket per problem** — no catch-all tickets.
-- **All output in English** (health.md, ticket titles/descriptions, comments).
