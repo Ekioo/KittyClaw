@@ -118,8 +118,20 @@ public sealed class TicketTransferService(
                 foreach (var label in ticket.Labels)
                     await ExecuteAsync(connection, transaction, "INSERT INTO target.TicketLabels (TicketsId, LabelsId) VALUES ($ticketId, $labelId)", ("$ticketId", ticket.Id), ("$labelId", labelMap[label.Id]));
 
-                await ExecuteAsync(connection, transaction, "INSERT INTO target.ActivityEntries (TicketId, Author, Text, CreatedAt) VALUES ($ticketId, $author, $text, $createdAt)",
-                    ("$ticketId", root.Id), ("$author", actor), ("$text", $"Transferred from project '{sourceProject}' to '{targetProject}' by '{actor}' at {transferredAt:O}."), ("$createdAt", transferredAt));
+                var maxActivityId = Convert.ToInt64(await ScalarAsync(connection, transaction, """
+                    SELECT COALESCE(MAX(Id), 0)
+                    FROM (
+                        SELECT Id FROM ActivityEntries
+                        UNION ALL
+                        SELECT Id FROM target.ActivityEntries
+                    )
+                    """));
+                if (maxActivityId >= int.MaxValue)
+                    throw new InvalidOperationException("No activity identifier is available for the transfer audit event.");
+                var auditActivityId = checked((int)maxActivityId + 1);
+
+                await ExecuteAsync(connection, transaction, "INSERT INTO target.ActivityEntries (Id, TicketId, Author, Text, CreatedAt) VALUES ($id, $ticketId, $author, $text, $createdAt)",
+                    ("$id", auditActivityId), ("$ticketId", root.Id), ("$author", actor), ("$text", $"Transferred from project '{sourceProject}' to '{targetProject}' by '{actor}' at {transferredAt:O}."), ("$createdAt", transferredAt));
 
                 foreach (var id in transferIds)
                 {

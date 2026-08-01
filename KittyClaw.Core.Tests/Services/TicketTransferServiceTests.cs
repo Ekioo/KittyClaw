@@ -106,6 +106,35 @@ public sealed class TicketTransferServiceTests
     }
 
     [Fact]
+    public async Task Transfer_AllocatesAuditIdsBeyondBothProjectsSoSequentialTransfersRemainLossless()
+    {
+        using var temp = new TempDir();
+        var (transfers, tickets, _, source, target) = await BuildSut(temp);
+        var first = await tickets.CreateTicketAsync(source, "First");
+        var second = await tickets.CreateTicketAsync(source, "Second");
+        var firstOriginalActivityId = Assert.Single((await tickets.GetTicketAsync(source, first.Id))!.Activities).Id;
+        var secondOriginalActivityId = Assert.Single((await tickets.GetTicketAsync(source, second.Id))!.Activities).Id;
+
+        await transfers.TransferAsync(source, first.Id, target, "owner");
+        await transfers.TransferAsync(source, second.Id, target, "owner");
+
+        var movedFirst = await tickets.GetTicketAsync(target, first.Id);
+        var movedSecond = await tickets.GetTicketAsync(target, second.Id);
+        Assert.NotNull(movedFirst);
+        Assert.NotNull(movedSecond);
+        Assert.Contains(movedFirst.Activities, activity => activity.Id == firstOriginalActivityId);
+        Assert.Contains(movedSecond.Activities, activity => activity.Id == secondOriginalActivityId);
+
+        var auditIds = movedFirst.Activities.Concat(movedSecond.Activities)
+            .Where(activity => activity.Text.StartsWith("Transferred from project", StringComparison.Ordinal))
+            .Select(activity => activity.Id)
+            .ToList();
+        Assert.Equal(2, auditIds.Count);
+        Assert.All(auditIds, id => Assert.True(id > Math.Max(firstOriginalActivityId, secondOriginalActivityId)));
+        Assert.Equal(2, auditIds.Distinct().Count());
+    }
+
+    [Fact]
     public async Task Transfer_RollsBackBothDatabasesWhenTargetWriteFails()
     {
         using var temp = new TempDir();
