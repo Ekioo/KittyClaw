@@ -12,6 +12,7 @@ public record CreateTicketRequest(string Title, string CreatedBy, string Status,
 // when set, the update only applies while the ticket is still in that status (else 409).
 public record UpdateTicketRequest(string Author, string? Title = null, string? Description = null, TicketPriority? Priority = null, string? AssignedTo = null, List<int>? LabelIds = null, string? Status = null, string? ExpectedStatus = null);
 public record MoveTicketRequest(string Status, string Author);
+public record TransferTicketRequest(string TargetProject, string Actor);
 public record ScheduleTicketRequest(DateTime FireAt, string Author, string? TargetStatus = "Todo");
 // Content/Author are nullable so missing JSON fields deserialize cleanly; the service
 // rejects null/whitespace with 400 rather than letting SQLite throw NOT NULL (500).

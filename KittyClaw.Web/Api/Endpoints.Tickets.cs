@@ -65,6 +65,23 @@ public static partial class Endpoints
         .Produces<Ticket>()
         .ProducesProblem(StatusCodes.Status404NotFound);
 
+        api.MapPost("/projects/{slug}/tickets/{id:int}/transfer", async (string slug, int id, TransferTicketRequest req, TicketTransferService transfers, BoardUpdateNotifier notifier) =>
+        {
+            try
+            {
+                var result = await transfers.TransferAsync(slug, id, req.TargetProject, req.Actor);
+                notifier.NotifyProjectUpdated(slug);
+                notifier.NotifyProjectUpdated(req.TargetProject);
+                return Results.Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).WithTags("Tickets")
+        .Produces<TicketTransferResult>()
+        .ProducesProblem(StatusCodes.Status400BadRequest);
+
         api.MapPatch("/projects/{slug}/tickets/{id:int}/status", async (string slug, int id, MoveTicketRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
         {
             try

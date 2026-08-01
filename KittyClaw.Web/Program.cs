@@ -42,6 +42,7 @@ builder.Services.AddSingleton(appSettings);
 builder.Services.AddSingleton(new KittyClaw.Core.Services.LocalizationService(appSettings));
 builder.Services.AddSingleton(new ProjectService(dataDir));
 builder.Services.AddSingleton<TicketService>();
+builder.Services.AddSingleton<TicketTransferService>();
 builder.Services.AddSingleton<LabelService>();
 builder.Services.AddSingleton<ColumnService>();
 builder.Services.AddSingleton<MemberService>();
