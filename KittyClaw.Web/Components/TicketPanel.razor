@@ -343,6 +343,8 @@
     [Parameter] public EventCallback OnClose { get; set; }
     /// <summary>Raised after any mutation so the parent can refresh its ticket lists.</summary>
     [Parameter] public EventCallback OnChanged { get; set; }
+    /// <summary>Raised with the ticket changed by the user's own successful action.</summary>
+    [Parameter] public EventCallback<int> OnMutatedTicket { get; set; }
     /// <summary>Raised after the ticket is deleted; the parent decides where to go.</summary>
     [Parameter] public EventCallback OnDeleted { get; set; }
     /// <summary>Raised with the parent-ticket id when the user opens the sub-kanban.</summary>
@@ -464,6 +466,7 @@
         _summaries = await TicketService.ListTicketsAsync(Slug);
         await RebuildPipelineAsync();
         await OnChanged.InvokeAsync();
+        await OnMutatedTicket.InvokeAsync(TicketId);
     }
 
     private void OnProjectUpdatedExternal(string slug)
@@ -781,7 +784,11 @@
         var labelIds = t.Labels.Select(l => l.Id).ToList();
         await TicketService.DeleteTicketAsync(Slug, t.Id);
         PushUndo?.Invoke($"{L["UndoDelete"]} #{t.Id}", async () =>
-            await TicketService.CreateTicketAsync(Slug, t.Title, t.Description, t.CreatedBy, t.Status, labelIds, t.Priority, t.AssignedTo, t.ParentId));
+        {
+            var restored = await TicketService.CreateTicketAsync(Slug, t.Title, t.Description, t.CreatedBy, t.Status, labelIds, t.Priority, t.AssignedTo, t.ParentId);
+            if (restored is not null)
+                await OnMutatedTicket.InvokeAsync(restored.Id);
+        });
         _confirmDelete = false;
         await OnDeleted.InvokeAsync();
     }

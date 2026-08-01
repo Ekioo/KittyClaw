@@ -420,9 +420,10 @@ else
         <TicketPanel Slug="@Slug"
                      TicketId="openTicketId"
                      RefreshToken="_panelRefreshToken"
-                     PushUndo="PushUndo"
+                     PushUndo="PushTicketUndo"
                      OnClose="ClosePanel"
                      OnChanged="OnPanelChanged"
+                     OnMutatedTicket="MarkTicketViewedAsync"
                      OnDeleted="OnPanelDeleted"
                      OnEnterSubKanban="EnterSubKanbanById" />
     }
@@ -550,12 +551,7 @@ else
     private bool IsTicketUpdated(TicketSummary ticket)
     {
         var activity = ticket.LastActivityAt ?? ticket.UpdatedAt;
-        var lastSeen = _lastVisitedAt ?? DateTime.MinValue;
-        if (_viewedAt.TryGetValue(ticket.Id, out var viewed))
-            lastSeen = viewed > lastSeen ? viewed : lastSeen;
-        else if (_lastVisitedAt is null)
-            return false;
-        return activity > lastSeen;
+        return BoardUnreadState.IsUpdated(activity, ticket.Id, _viewedAt, _lastVisitedAt);
     }
 
     private async Task MarkTicketViewedAsync(int ticketId)
@@ -570,21 +566,19 @@ else
         catch { /* localStorage unavailable */ }
     }
 
-    private async Task RefreshTicketsAndTouch()
+    private async Task RefreshTicketsAsync()
     {
         _tickets = await TicketService.ListTicketsAsync(Slug);
-        _lastVisitedAt = DateTime.UtcNow;
-        await JS.InvokeVoidAsync("localStorage.setItem", $"board-last-visited-{Slug}", _lastVisitedAt.Value.ToString("O"));
     }
 
     // Undo
-    private record UndoAction(string Label, Func<Task> Undo);
+    private record UndoAction(string Label, Func<Task> Undo, int? AffectedTicketId);
     private readonly Stack<UndoAction> _undoStack = new();
     private const int MaxUndoSize = 30;
     private IJSObjectReference? _undoHandler;
     private DotNetObjectReference<Board>? _dotNetRef;
 
-    private void PushUndo(string label, Func<Task> undo)
+    private void PushUndo(string label, Func<Task> undo, int? affectedTicketId = null)
     {
         if (_undoStack.Count >= MaxUndoSize)
         {
@@ -593,8 +587,11 @@ else
             for (int i = items.Length - 2; i >= 0; i--)
                 _undoStack.Push(items[i]);
         }
-        _undoStack.Push(new UndoAction(label, undo));
+        _undoStack.Push(new UndoAction(label, undo, affectedTicketId));
     }
+
+    private void PushTicketUndo(string label, Func<Task> undo) =>
+        PushUndo(label, undo, _openTicketId);
 
     [JSInvokable]
     public async Task OnCtrlZ() => await PerformUndo();
@@ -604,7 +601,9 @@ else
         if (!_undoStack.Any()) return;
         var action = _undoStack.Pop();
         await action.Undo();
-        await RefreshTicketsAndTouch();
+        await RefreshTicketsAsync();
+        if (action.AffectedTicketId is int ticketId && _tickets.Any(t => t.Id == ticketId))
+            await MarkTicketViewedAsync(ticketId);
         _columns = await ColumnService.ListColumnsAsync(Slug);
         // The panel loads its own data — bump the token so an open panel reloads too.
         _panelRefreshToken++;
@@ -751,8 +750,8 @@ else
             _undoHandler = await JS.InvokeAsync<IJSObjectReference>("registerUndoShortcut", _dotNetRef);
 
             // Load board-wide fallback timestamp. Do NOT write the current time here —
-            // indicators must persist across reloads until the user actually opens
-            // a ticket (or performs any other action that calls RefreshTicketsAndTouch).
+            // indicators must persist across reloads. This legacy value is only a
+            // fallback for tickets without a per-ticket viewed timestamp.
             var key = $"board-last-visited-{Slug}";
             var stored = await JS.InvokeAsync<string?>("localStorage.getItem", key);
             if (stored is not null && DateTime.TryParse(stored, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
@@ -776,6 +775,9 @@ else
                 }
                 catch { /* corrupt JSON — ignore, will be overwritten on next view */ }
             }
+
+            if (_openTicketId is int openTicketId)
+                await MarkTicketViewedAsync(openTicketId);
 
             await LoadSortAsync();
 
@@ -1115,8 +1117,9 @@ else
 
         await TicketService.ReorderTicketAsync(Slug, ticketId, newStatus, targetIndex);
         PushUndo($"{L["UndoMove"]} #{ticketId}", async () =>
-            await TicketService.ReorderTicketAsync(Slug, ticketId, oldStatus, oldIndex));
-        await RefreshTicketsAndTouch();
+            await TicketService.ReorderTicketAsync(Slug, ticketId, oldStatus, oldIndex), ticketId);
+        await RefreshTicketsAsync();
+        await MarkTicketViewedAsync(ticketId);
         _draggedTicket = null;
         _dragOverStatus = null;
         _dragHoverIndex = -1;
@@ -1134,8 +1137,9 @@ else
             var childId = _draggedTicket.Id;
             await TicketService.SetParentAsync(Slug, childId, target.Id);
             PushUndo($"{L["UndoAssociate"]} #{childId} → #{target.Id}", async () =>
-                await TicketService.UnparentAsync(Slug, childId));
-            _tickets = await TicketService.ListTicketsAsync(Slug);
+                await TicketService.UnparentAsync(Slug, childId), childId);
+            await RefreshTicketsAsync();
+            await MarkTicketViewedAsync(childId);
             _draggedTicket = null;
             _dragOverStatus = null;
             _dragHoverIndex = -1;
@@ -1178,8 +1182,9 @@ else
         var oldParentId = _subKanbanParentId!.Value;
         await TicketService.UnparentAsync(Slug, childId);
         PushUndo($"{L["UndoUnparent"]} #{childId}", async () =>
-            await TicketService.SetParentAsync(Slug, childId, oldParentId));
-        await RefreshTicketsAndTouch();
+            await TicketService.SetParentAsync(Slug, childId, oldParentId), childId);
+        await RefreshTicketsAsync();
+        await MarkTicketViewedAsync(childId);
         _draggedTicket = null;
         _dragOverStatus = null;
         _dragHoverIndex = -1;
@@ -1239,7 +1244,9 @@ else
             PushUndo($"{L["UndoCreate"]} #{ticket.Id}", async () =>
                 await TicketService.DeleteTicketAsync(Slug, ticket.Id));
         _showCreatePopup = false;
-        await RefreshTicketsAndTouch();
+        await RefreshTicketsAsync();
+        if (ticket is not null)
+            await MarkTicketViewedAsync(ticket.Id);
     }
 
     private async Task SelectTicket(TicketSummary ticket)
@@ -1271,14 +1278,14 @@ else
     /// <summary>The panel mutated the ticket — refresh the board's card lists.</summary>
     private async Task OnPanelChanged()
     {
-        await RefreshTicketsAndTouch();
+        await RefreshTicketsAsync();
         StateHasChanged();
     }
 
     private async Task OnPanelDeleted()
     {
         _openTicketId = null;
-        await RefreshTicketsAndTouch();
+        await RefreshTicketsAsync();
         if (_subKanbanParentId is not null)
             Navigation.NavigateTo($"/board/{Slug}/sub/{_subKanbanParentId}", replace: true);
         else
@@ -1328,7 +1335,7 @@ else
         await ColumnService.DeleteColumnAsync(Slug, columnId, _deleteColumnMoveTo);
         _trashConfirmColumn = null;
         _columns = await ColumnService.ListColumnsAsync(Slug);
-        await RefreshTicketsAndTouch();
+        await RefreshTicketsAsync();
     }
 
     // Trash zone handlers
@@ -1384,11 +1391,15 @@ else
         var labelIds = full?.Labels.Select(l => l.Id).ToList() ?? [];
         await TicketService.DeleteTicketAsync(Slug, t.Id);
         PushUndo($"{L["UndoDelete"]} #{t.Id}", async () =>
-            await TicketService.CreateTicketAsync(Slug, t.Title, t.Description, t.CreatedBy, t.Status, labelIds, t.Priority, t.AssignedTo, t.ParentId));
+        {
+            var restored = await TicketService.CreateTicketAsync(Slug, t.Title, t.Description, t.CreatedBy, t.Status, labelIds, t.Priority, t.AssignedTo, t.ParentId);
+            if (restored is not null)
+                await MarkTicketViewedAsync(restored.Id);
+        });
         _trashConfirmTicket = null;
         _escTrashDialog?.Dispose();
         _escTrashDialog = null;
-        await RefreshTicketsAndTouch();
+        await RefreshTicketsAsync();
     }
 
     private string MemberDisplayName(string? slug)
