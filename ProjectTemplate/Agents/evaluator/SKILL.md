@@ -146,4 +146,3 @@ Exact format:
 - **Factual**: base scores on activities and comments, not stylistic preference.
 - **Idempotent**: if `scores.json` already has the ticket with matching `updatedAt` + `commentCount`, do nothing.
 - **Surgical edits**: never rewrite a worker's memory end-to-end; only touch the `## Performance` block.
-- **All output in English**.

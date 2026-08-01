@@ -88,7 +88,6 @@ You never change status. The owner prioritizes by moving to `Todo`.
 - **Concise**: final description 200–400 words, enough to start without questions.
 - **Do not invent** unrealistic criteria. When unsure: `Acceptance criteria to be clarified by the owner`.
 - **One ticket at a time**: the trigger will recall you on the next one.
-- **All output in English**: titles, descriptions, comments.
 
 ## Edge cases
 

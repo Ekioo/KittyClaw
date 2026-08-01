@@ -52,7 +52,6 @@ Two paths:
 - **Never drop** existing database tables or persisted schemas.
 - **Never break** tests or existing features. If you touch shared code, review every call site.
 - **Keep ticket comments concise** — 1–3 sentences explaining the "what" and the "why". No essays.
-- **All output in English**: ticket comments, code comments, commit messages if any, variable names.
 
 ## Useful commands
 

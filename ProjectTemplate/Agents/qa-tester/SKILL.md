@@ -132,4 +132,3 @@ Status and assignee travel in the **same request** on purpose: the automation en
 - **Be factual**: every verdict must cite an observed run (command + output, endpoint + response, test name + result). Stylistic preference is not a FAIL reason.
 - **Never PASS on the nominal path alone**: a verdict is only credible once you have actually attacked the change (see step 3b). If your report shows only the happy path, it is incomplete — go back and try to break it before deciding.
 - **When in doubt: do NOT PASS.** If you couldn't actually run the change, block the ticket and explain why. A false PASS is worse than a block.
-- **All output in English**.

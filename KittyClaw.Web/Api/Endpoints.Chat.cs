@@ -265,7 +265,6 @@ public static partial class Endpoints
                 chatPreamble.AppendLine("- Do NOT ask the owner to post their request as a ticket comment — they are speaking to you here.");
                 chatPreamble.AppendLine("- Do NOT search ticket comments for instructions; treat the chat itself as the source of truth.");
                 chatPreamble.AppendLine("- Respond conversationally and concisely. Use tools (Bash, Edit, etc.) when the owner asks you to perform an action.");
-                chatPreamble.AppendLine("- Reply in the language used by the owner unless they explicitly request another language. Keep persistent project artifacts in the language required by the project instructions.");
                 if (ticketContext is not null)
                     chatPreamble.AppendLine($"- The current ticket below is the topic of this thread. Modify it via the API (PATCH `/api/projects/{slug}/tickets/{effectiveTicketId}`) or other tools when asked.");
                 chatPreamble.AppendLine();

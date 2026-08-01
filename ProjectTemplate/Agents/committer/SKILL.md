@@ -95,7 +95,7 @@ Re-read the whole staged diff. Anything out of scope → `git restore --staged <
 git commit -m "<type>: <message>"
 ```
 
-Commit message format (**in English**):
+Commit message format:
 
 ```
 <type>: <short imperative summary tied to the ticket title>
@@ -128,7 +128,6 @@ If you had to leave some hunks uncommitted (mixed work from other tickets), ment
 - **One commit per ticket**.
 - **When in doubt about a hunk, skip it.** A partial commit is better than a polluted one.
 - **If `git apply` fails** to isolate a hunk, do not insist: comment the ticket to explain and exit without committing.
-- **All messages and comments in English**.
 
 ## Edge cases
 
