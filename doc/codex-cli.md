@@ -25,7 +25,8 @@ process working directory and preserves the same lifecycle, streaming, fallback,
 concurrency handling used by the other CLI backends.
 
 To use a non-standard installation, set `KITTYCLAW_CODEX_BIN` to the executable path
-before starting KittyClaw.
+before starting KittyClaw. To detect accidental upgrades of that executable, set
+`KITTYCLAW_CODEX_EXPECTED_VERSION` to the version reported by `codex --version`.
 
 ## Project instructions
 

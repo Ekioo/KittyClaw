@@ -191,6 +191,37 @@ public sealed class AgentRunner
         if (ctx.OnEventHook is not null) run.OnEvent += ctx.OnEventHook;
         _runs.Register(run);
 
+        var provider = ctx.Target.Provider;
+        run.CliVersion = await CliVersionProbe.ProbeAsync(provider,
+            CliVersionProbe.BinaryFor(provider), CliVersionProbe.ExpectedVersionFor(provider));
+        var cli = run.CliVersion;
+        try
+        {
+            run.Push(new StreamEvent(DateTime.UtcNow,
+                cli.Mismatch ? "warning" : cli.Status == "failed" ? "warning" : "cli_version",
+                cli.Mismatch
+                    ? $"{cli.Provider} CLI version {cli.Version} differs from expected {cli.ExpectedVersion}"
+                    : cli.Status == "failed"
+                        ? $"Could not detect {cli.Provider} CLI version: {cli.Failure}"
+                        : $"{cli.Provider} CLI version {cli.Version}",
+                $"binary={cli.Binary}; status={cli.Status}"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Agent CLI version event subscriber failed for run {RunId}", run.RunId);
+            _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
+            return run;
+        }
+        if (cli.Mismatch)
+            _logger.LogWarning("Agent CLI version mismatch: provider={Provider} binary={Binary} detected={DetectedVersion} expected={ExpectedVersion}",
+                cli.Provider, cli.Binary, cli.Version, cli.ExpectedVersion);
+        else if (cli.Status == "failed")
+            _logger.LogWarning("Agent CLI version probe failed: provider={Provider} binary={Binary} failure={Failure}",
+                cli.Provider, cli.Binary, cli.Failure);
+        else
+            _logger.LogInformation("Agent CLI version detected: provider={Provider} binary={Binary} version={Version}",
+                cli.Provider, cli.Binary, cli.Version);
+
         if (ctx.Target.ValidationError is not null)
         {
             run.Push(new StreamEvent(DateTime.UtcNow, "error", ctx.Target.ValidationError));
