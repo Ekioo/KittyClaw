@@ -4,10 +4,52 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.12] — 2026-08-01
+
+OpenAI Codex support, a unified multi-project home, lossless cross-project ticket transfers, expanded localization, and safer concurrent board updates.
+
+### Highlights
+
+KittyClaw now supports the **OpenAI Codex CLI** alongside Claude and Grok while preserving chat context across provider changes and falling back cleanly when a configured model is unavailable.
+
+The home screen is now a **unified multi-project workspace** with project-card and kanban-swimlane modes, plus an extracted ticket-panel overlay that keeps navigation and unread state consistent across views.
+
+Tickets can be **transferred losslessly between projects** through an atomic cross-database operation. Ticket and history identifiers, immutable timestamps, comments, activities, labels, relationships, schedules, assignments, and token/cost metadata are preserved; unsupported mappings and collisions are rejected without mutating the source. Transfer-audit IDs are allocated above both databases so sequential migrations remain safe.
+
+### Added
+
+- **OpenAI Codex CLI backend** with provider-aware session handling and model fallback.
+- **Unified multi-project home** with project cards and kanban swimlanes.
+- **Lossless cross-project ticket transfer API** with preflight validation, atomic rollback, provenance audit events, and sequential-transfer regression coverage.
+- **Spanish, German, and Italian localization**, extending the existing English and French UI.
+- **Tip of the day** on the unified home.
+- **Onboarding and ticket-scheduling documentation**.
+
 ### Changed
 
 - **License: MIT → AGPL-3.0-or-later.** All versions after v0.11 are licensed under the GNU Affero General Public License v3 or later; versions up to and including v0.11 remain available under MIT. A new `NOTICE.md` documents the license history and grants an explicit additional permission: the `ProjectTemplate/` files copied into user workspaces stay MIT-licensed, and everything the app produces (tickets, logs, agent memory, commits) carries no license obligation — initializing a project with KittyClaw never places it under the AGPL.
 - **Anti-silent-rebrand terms (AGPL §7)**: derivative works must preserve the KittyClaw attribution (license notices, the new in-app legal-notice footer on the home page, and a "based on KittyClaw" statement in their README), must not misrepresent their origin (§7(c)), and receive no trademark rights to the KittyClaw name or logos (§7(e)).
+- **Atomic ticket updates**: multi-field ticket PATCH operations apply in one write, support expected-status concurrency checks, and reject unknown fields instead of silently ignoring them.
+- **Merge-safe label updates** prevent concurrent writers from replacing each other's ticket labels.
+- **SQLite reliability**: every connection uses WAL mode and a busy timeout.
+
+### Fixed
+
+- Cross-project transfer audit activities can no longer consume identifiers still used by source-project history.
+- Unread ticket state remains per-ticket and survives board refreshes and moves.
+- Large stderr output is collapsed in the run drawer instead of overwhelming the interface.
+- Chat context survives provider changes, and unavailable configured models fall back correctly.
+- `statusChange` snapshots are isolated per automation, preventing one workflow from consuming another workflow's transition.
+- Post-run action chains execute exactly once instead of silently skipping `createTicket` or `moveTicketStatus` actions.
+- Project workspace paths are validated before being persisted.
+
+### Security
+
+- Project workspace paths are constrained and validated at write time.
+- Allowed hosts are pinned to local loopback names.
+- The repository is now licensed under **AGPL-3.0-or-later** with explicit attribution and project-template exceptions documented in `NOTICE.md`.
+
+---
 
 ## [v0.11] — 2026-07-30
 
