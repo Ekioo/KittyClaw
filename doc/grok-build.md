@@ -7,6 +7,9 @@ Detection is automatic — no configuration. When the CLI is absent, the Grok mo
 does not appear in the UI, and selecting a grok model anyway (e.g. via the API) fails the run
 with an explanatory error event before any subprocess is launched.
 
+Set `KITTYCLAW_GROK_BIN` before starting KittyClaw to pin dispatch to a specific executable.
+`KITTYCLAW_GROK_EXPECTED_VERSION` optionally warns when `grok --version` reports a different version.
+
 ## Key components
 - `KittyClaw.Core/Automation/GrokCli.cs` — binary detection (search order: `KITTYCLAW_GROK_BIN`
   env var → sibling of the host exe → `tools/` → PATH probe, including `.cmd`/`.bat` shims on

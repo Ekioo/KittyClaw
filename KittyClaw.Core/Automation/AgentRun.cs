@@ -23,6 +23,7 @@ public sealed class AgentRun
     public AgentRunStatus Status { get; set; } = AgentRunStatus.Running;
     public DateTime? EndedAt { get; set; }
     public int? ExitCode { get; set; }
+    public CliVersionMetadata? CliVersion { get; set; }
 
     /// <summary>
     /// True when the final subprocess attempt failed with a quota / spend / rate-limit signal
@@ -153,6 +154,7 @@ public sealed class AgentRunSnapshot
     public int CacheReadTokens { get; set; }
     public int CacheWriteTokens { get; set; }
     public decimal? TotalCostUsd { get; set; }
+    public CliVersionMetadata? CliVersion { get; set; }
     public List<StreamEvent> Events { get; set; } = [];
     public List<string> PendingSteerMessages { get; set; } = [];
 }
@@ -194,6 +196,7 @@ public sealed class RunLogStore
             CacheReadTokens = run.CacheReadTokens,
             CacheWriteTokens = run.CacheWriteTokens,
             TotalCostUsd = run.TotalCostUsd,
+            CliVersion = run.CliVersion,
             Events = run.SnapshotBuffer().ToList(),
             PendingSteerMessages = run.PendingSteerMessages.ToList(),
         };
@@ -236,6 +239,7 @@ public sealed class RunLogStore
             run.Status = snapshot.Status;
             run.EndedAt = snapshot.EndedAt;
             run.ExitCode = snapshot.ExitCode;
+            run.CliVersion = snapshot.CliVersion;
             run.AddUsage(snapshot.InputTokens, snapshot.OutputTokens,
                 snapshot.CacheReadTokens, snapshot.CacheWriteTokens, snapshot.TotalCostUsd);
             foreach (var ev in snapshot.Events)
