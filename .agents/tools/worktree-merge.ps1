@@ -1,12 +1,12 @@
 #!/usr/bin/env pwsh
-# Fast-forward merges a ticket worktree's branch into dev, then cleans up.
+# Rebases a ticket worktree's branch onto dev, fast-forwards dev, then cleans up.
 #
 # Exit codes:
 #   0 -merged and cleaned up
 #   2 -main repo has uncommitted changes; aborted without touching anything
 #   3 -worktree has uncommitted changes; aborted (committer must commit first)
-#   4 -merge into ticket branch produced conflicts; worktree left with conflict markers
-#       so a follow-up agent can resolve them in the worktree itself
+#   4 -rebase onto dev produced conflicts; worktree left in a rebase with conflict markers
+#       so a follow-up agent can resolve or abort it in the worktree itself
 #   1 -any other failure
 [CmdletBinding()]
 param(
@@ -42,10 +42,10 @@ if ($wtBranch -ne $branch) {
     Fail 1 "Worktree HEAD is on '$wtBranch', expected '$branch'."
 }
 
-Log "Merging dev into $branch (in worktree)."
-& git -C $wtPath merge dev --no-edit
+Log "Rebasing $branch onto dev (in worktree)."
+& git -C $wtPath rebase dev
 if ($LASTEXITCODE -ne 0) {
-    Fail 4 "Conflicts merging dev into $branch. Worktree retained with conflict markers."
+    Fail 4 "Conflicts rebasing $branch onto dev. Worktree retained in rebase state for recovery."
 }
 
 Log "Fast-forwarding dev to $branch."

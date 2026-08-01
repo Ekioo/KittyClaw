@@ -11,7 +11,7 @@ Adopt this pattern only if you need filesystem isolation between concurrent agen
 These pieces are in the repo and available to every project:
 
 - `tools/worktree-ensure.ps1` — idempotent. Creates a worktree from local `main` if absent, or returns the path of the existing one. Convention: branch `ticket/<N>`, folder `<repo>.worktrees/ticket-<N>`. Usage: `powershell.exe -NoProfile -File tools/worktree-ensure.ps1 <N>`; the absolute path is printed on the last stdout line.
-- `tools/worktree-merge.ps1` — fast-forwards `main` to the ticket branch in the worktree, then removes the worktree and deletes the branch.
+- `tools/worktree-merge.ps1` — rebases the local unpublished ticket branch onto `dev`, fast-forwards `dev` to it, then removes the worktree and deletes the branch. This keeps ticket integration linear without merge commits.
 - `{ticketId}` placeholder support in `concurrencyGroup` and `mutuallyExclusiveWith` (see [automation engine](./automation-engine.md)). Lets you serialize agents per-ticket without serializing across tickets.
 
 ### `worktree-merge.ps1` exit codes
@@ -22,7 +22,7 @@ These pieces are in the repo and available to every project:
 | 1    | Other failure (worktree missing, FF rejected unexpectedly, …) |
 | 2    | Main repo has uncommitted changes — aborted without touching anything |
 | 3    | Worktree has uncommitted changes — commit first, then retry |
-| 4    | Conflict merging `main` into the ticket branch — the worktree is left with conflict markers so a follow-up agent can resolve them |
+| 4    | Conflict rebasing the ticket branch onto `dev` — the worktree is left in rebase state so a follow-up agent can resolve it or run `git rebase --abort` |
 
 ## What is NOT in the product
 
@@ -34,7 +34,7 @@ These pieces are in the repo and available to every project:
 You need three things in the project's `<workspace>/.agents/`:
 
 1. **Preamble** — add a "Per-ticket worktrees" section that tells every agent: if your prompt contains `Focus on ticket #N`, resolve `$wt = $(powershell.exe -NoProfile -File tools/worktree-ensure.ps1 N | tail -n 1)` and operate exclusively under `$wt` for that run. Memory/skill files stay in `<workspace>/.agents/` (do not copy them into the worktree).
-2. **Committer SKILL** — at the end of a ticket, commit any pending worktree changes with `git -C "$wt" commit`, then run `tools/worktree-merge.ps1 N`. Branch on the exit code: 0 → success comment; 2 → defer with comment; 4 → move ticket back to `Todo` with a comment naming the worktree path. Never `git checkout main` from the worktree (main is checked out in the primary repo).
+2. **Committer SKILL** — at the end of a ticket, commit any pending worktree changes with `git -C "$wt" commit`, then run `tools/worktree-merge.ps1 N`. The helper rebases the unpublished ticket branch onto `dev` before the final fast-forward. Branch on the exit code: 0 → success comment; 2 → defer with comment; 4 → move ticket back to `Todo` with a comment naming the worktree path and rebase conflict. Never `git checkout main` from the worktree (`dev` is checked out in the primary repo).
 3. **Automations** — for every ticket-bound `runAgent` action, set `concurrencyGroup: "ticket-{ticketId}"`. On the committer action, keep a global `git` concurrency group **and** add `mutuallyExclusiveWith: ["ticket-{ticketId}"]` so the merge waits for any worker in the same worktree.
 
 ## Caveats
