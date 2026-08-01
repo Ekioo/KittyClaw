@@ -127,6 +127,30 @@ public sealed class CodexSupportTests
     }
 
     [Fact]
+    public void StreamAdapter_HidesCompletedReasoningFragments()
+    {
+        var run = NewRun();
+
+        Map("""{"type":"item.completed","item":{"type":"reasoning","text":"{"}}""", run);
+        Map("""{"type":"item.completed","item":{"type":"reasoning","text":"\"id\": \"weekly-ticket-example\","}}""", run);
+
+        Assert.Empty(run.SnapshotBuffer());
+    }
+
+    [Fact]
+    public void StreamAdapter_HidesEmptyReasoningButKeepsFollowingToolCall()
+    {
+        var run = NewRun();
+
+        Map("""{"type":"item.completed","item":{"type":"reasoning","text":""}}""", run);
+        Map("""{"type":"item.started","item":{"type":"file_change","changes":[]}}""", run);
+
+        var tool = Assert.Single(run.SnapshotBuffer());
+        Assert.Equal("tool_use", tool.Kind);
+        Assert.Equal("file_change", tool.Text);
+    }
+
+    [Fact]
     public void SessionScopeKey_UsesCodexNamespace() =>
         Assert.Equal("codex:chat:agent",
             AgentRunner.SessionScopeKey("agent", "chat", CliProvider.Codex));

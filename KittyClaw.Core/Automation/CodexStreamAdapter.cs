@@ -60,12 +60,9 @@ internal static class CodexStreamAdapter
 
         if (itemType == "reasoning")
         {
-            if (completed)
-            {
-                var text = String(item, "text");
-                if (!string.IsNullOrWhiteSpace(text))
-                    run.Push(new StreamEvent(DateTime.UtcNow, "reasoning", text, line));
-            }
+            // Codex may split its internal reasoning into tiny completed items around tool
+            // calls (for example a lone "{" or one JSON property). Those fragments are not
+            // user-facing output and render as disconnected Markdown blocks in the drawer.
             return true;
         }
 

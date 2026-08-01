@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"qa-ticket-150"}
+{"type":"item.completed","item":{"type":"reasoning","text":"{"}}
+{"type":"item.completed","item":{"type":"reasoning","text":"\"id\": \"weekly-ticket-example\","}}
+{"type":"item.started","item":{"type":"file_change","changes":[]}}
+{"type":"item.completed","item":{"type":"agent_message","text":"Codex drawer output remains visible."}}
+{"type":"turn.completed","usage":{"input_tokens":10,"cached_input_tokens":0,"output_tokens":5}}

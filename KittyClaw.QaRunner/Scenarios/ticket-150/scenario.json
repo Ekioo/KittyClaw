@@ -1,0 +1,67 @@
+{
+  "setup": [
+    {
+      "type": "createProject",
+      "name": "qa-ticket-150",
+      "workspacePath": "C:\\Sources\\KittyClaw"
+    },
+    {
+      "type": "createTicket",
+      "project": "qa-ticket-150",
+      "title": "Codex drawer regression",
+      "status": "Todo"
+    },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/qa-ticket-150/chat/start",
+      "body": {
+        "target": "programmer#ticket-{ticketId}",
+        "message": "Exercise the deterministic Codex drawer fixture.",
+        "model": "codex:gpt-5.6-sol",
+        "forceNew": true
+      },
+      "extract": {
+        "runId": "runId"
+      }
+    }
+  ],
+  "actions": [
+    {
+      "type": "navigate",
+      "url": "/board/qa-ticket-150"
+    },
+    {
+      "type": "wait",
+      "ms": 2000
+    },
+    {
+      "type": "click",
+      "selector": ".ticket-card:has-text(\"Codex drawer regression\") .agent-log-btn"
+    },
+    {
+      "type": "wait",
+      "ms": 1000
+    },
+    {
+      "type": "assertVisible",
+      "selector": ".agent-drawer .console-tool-name:has-text(\"file_change\")"
+    },
+    {
+      "type": "assertVisible",
+      "selector": ".agent-drawer .console-msg-detail:has-text(\"Codex drawer output remains visible.\")"
+    },
+    {
+      "type": "assertVisible",
+      "selector": ".agent-drawer:not(:has-text(\"weekly-ticket-example\"))"
+    },
+    {
+      "type": "screenshot",
+      "name": "ticket-150-codex-drawer",
+      "description": "The deterministic Codex run keeps tool and assistant output visible while internal reasoning fragments are absent."
+    }
+  ],
+  "verdict": {
+    "passOn": "all-asserts-pass"
+  }
+}
