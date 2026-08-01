@@ -14,25 +14,25 @@
   <a href="https://kittyclaw.dev">kittyclaw.dev</a> · <a href="https://kittyclaw.dev/#waitlist">Get early access</a>
 </p>
 
-A kanban board that **orchestrates agentic projects**. Each column is a workflow stage (`Backlog`, `Todo`, `InProgress`, `Review`, `Done`, `Blocked`). Each project has members that can be human owners or **LLM agents** (programmer, groomer, producer, qa-tester, committer, code-janitor, evaluator, documentalist). A background `AutomationEngine` dispatches these agents based on triggers (column changes, comments, intervals, git commits, …), running them as `claude` CLI subprocesses whose output streams into an in-app drawer.
+A kanban board that **orchestrates agentic projects**. Each column is a workflow stage (`Backlog`, `Todo`, `InProgress`, `Review`, `Done`, `Blocked`). Each project has members that can be human owners or **LLM agents** (programmer, groomer, producer, qa-tester, committer, code-janitor, evaluator, documentalist). A background `AutomationEngine` dispatches these agents based on triggers (column changes, comments, intervals, git commits, …), running them through Claude Code, OpenAI Codex, Grok Build, or a local Ollama model while their output streams into an in-app drawer.
 
 ## Tech Stack
 
 - **.NET 10** / **Blazor Server** (interactive SSR)
 - **SQLite** via Entity Framework Core (one DB per project)
 - **OpenAPI** with auto-generated Markdown docs
-- External: **[Claude Code CLI](https://docs.claude.com/en/docs/claude-code/overview)** + **[Git](https://git-scm.com/downloads)** (required on PATH for agent dispatch and auto-commits)
-- Optional: **[Ollama](https://ollama.com)** — dispatch agents to a local model instead of the Anthropic cloud API ([details](doc/local-models.md))
+- External: **[Git](https://git-scm.com/downloads)** plus at least one agent provider: **[Claude Code CLI](https://docs.claude.com/en/docs/claude-code/overview)**, **[OpenAI Codex CLI](doc/codex-cli.md)**, or **[Grok Build](doc/grok-build.md)**
+- Optional: **[Ollama](https://ollama.com)** — dispatch agents to a local model ([details](doc/local-models.md))
 
 ## Getting Started
 
 ### Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Claude Code CLI](https://docs.claude.com/en/docs/claude-code/overview) — `claude` on your PATH
+- An agent CLI — Claude Code (`claude`), OpenAI Codex (`codex`), or Grok Build (`grok`) on your PATH
 - [Git](https://git-scm.com/downloads) — `git` on your PATH
 
-On first launch an onboarding popup detects whether `claude` and `git` are available. You can continue without them, but agent runs and auto-commits will fail until they are installed and on the PATH.
+On first launch an onboarding popup detects Claude Code and Git. You can continue without them and configure another supported provider, but agent runs and auto-commits require the corresponding tools to be installed and available on the PATH.
 
 ### Run
 
@@ -104,6 +104,7 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 6. **Labels & priority** — use `GET /api/projects/{slug}/labels` to discover available labels, and set priority to `Idea`, `NiceToHave`, `Required`, or `Critical`.
 7. **Check mentions** — call `GET /api/projects/{slug}/mentions/{your-handle}` to find tickets that mention you.
 8. **Sub-tickets** — set `parentId` when creating a ticket to make it a child. Use `PUT /api/projects/{slug}/tickets/{id}/parent` to reparent, or `DELETE` it to detach. List sub-tickets with `?parentId={id}`.
+9. **Cross-project transfers** — use `POST /api/projects/{slug}/tickets/{id}/transfer` only after checking that the target project has compatible columns, assignees, and labels. The operation preserves the ticket tree and its history or rejects the transfer without changing either project. See [Lossless ticket transfer](doc/ticket-transfer.md).
 
 ## Conventions
 
@@ -115,19 +116,22 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 
 - Onboarding popup on first launch with Claude Code + Git detection
 - Project creation popup with workspace selection + one-click agent template initialization
+- Unified multi-project home with project cards and kanban swimlanes
 - Kanban board with drag-and-drop
 - Customizable dashboard view with free-drag tiles (Markdown, KPI, charts, Heatmap, Timeline, …), AI chat-based tile creation, and auto-refresh via LLM prompts
 - Ticket detail panel with comments and activity timeline
-- Live agent run drawer (SSE stream of Claude Code output, steer + stop controls)
+- Live agent run drawer (SSE stream of provider output, steer + stop controls)
 - New-instruction chat drawer to send an ad-hoc prompt to an agent
 - Automations page: list, enable/disable, edit (triggers / conditions / actions), reload from disk, re-initialize agent template
 - Markdown rendering with `@mention`, `#id`, and `#{slug}:{id}` cross-project ticket reference support
 - Advanced search syntax: `#42`, `@owner`, `>date`, `priority:critical`, `label:bug`, `by:owner`
 - Sub-tickets with parent/child relationships and progress tracking
+- Lossless, atomic ticket-tree transfers between projects through the REST API
 - Column management (create, reorder, customize colors)
 - Label and member management
 - Image upload in descriptions and comments
 - Local model support ([Ollama](doc/local-models.md)): per-project base URL with model autodiscovery, per-member default model, per-action override in the Automation Editor
+- Provider-aware dispatch through Claude Code, [OpenAI Codex](doc/codex-cli.md), [Grok Build](doc/grok-build.md), or Ollama, with conversation handoff and unavailable-model fallback
 
 ## Dashboard
 

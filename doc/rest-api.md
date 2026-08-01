@@ -13,6 +13,7 @@ Exposes the project, ticket, comment, member, label, column, and automation data
 - `GET /api/docs` — Markdown documentation, generated at runtime from the OpenAPI spec. Includes: schema tables for all request/response types (e.g. `TileSidecar` with allowed `template` values), an **Automations guide**, and a **Dashboard tiles guide** (template catalogue, sidecar format, creation walkthrough).
 - `GET /openapi/v1.json` — machine-readable OpenAPI JSON.
 - `/api/projects/{slug}/...` — projects, tickets, comments, columns, members, labels, mentions, automations.
+- `POST /api/projects/{slug}/tickets/{id}/transfer` — atomically transfers a ticket tree to another project while preserving identifiers and history; see [Lossless ticket transfer](./ticket-transfer.md).
 - `POST /api/projects/{slug}/chat/start` accepts an optional `images` array (`ChatImageDto[]`). Each DTO carries `dataUrl` (base64 data URL), `mime`, `name`, and `sizeBytes`. Server-side: MIME allow-list (JPEG, PNG, GIF, WebP), 5 MB per-image cap, 5 images per turn cap, base64 decoded and persisted to `<workspace>/.agents/channel/tmp/chat-{runId}-{i}.{ext}` before being forwarded as `ImagePaths` to `AgentRunContext`. Invalid images return HTTP 400 `image_rejected`.
 
 ## Conventions
@@ -21,6 +22,7 @@ Exposes the project, ticket, comment, member, label, column, and automation data
 - Cross-project ticket reference syntax in comments: `#id` (same project) and `#{slug}:{id}` (other project).
 - Ticket endpoints declare typed response schemas via `.Produces<T>()` and `.ProducesProblem()`. The OpenAPI spec at `/openapi/v1.json` includes full response types and error codes (400, 404) for all ticket CRUD operations. `GET /api/docs` renders these schemas with accurate example values (e.g. `"author": "owner"` is shown in every mutating request body).
 - `GET /api/projects/{slug}/tickets` returns `TicketSummary[]` (a lighter projection), while individual ticket endpoints return the full `Ticket` type.
+- Cross-project transfers preflight identifiers and project-specific mappings. A conflict returns a validation error without mutating either database.
 
 ## Member deletion
 - `DELETE /api/projects/{slug}/members/{memberId}` — removes a member and unassigns them from all tickets.

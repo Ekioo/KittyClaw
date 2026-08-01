@@ -23,6 +23,7 @@ Inside each workspace:
 - `KittyClaw.Core/Data/` — EF Core contexts and inline migrations (`CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ADD COLUMN` in try/catch).
 - `KittyClaw.Core/Services/ProjectService.cs` — registry CRUD.
 - `KittyClaw.Core/Services/TicketService.cs`, `ColumnService.cs`, `LabelService.cs`, `MemberService.cs`, `ChatService.cs` — per-project domain services.
+- `KittyClaw.Core/Services/TicketTransferService.cs` — failure-safe, cross-database [ticket transfers](./ticket-transfer.md) with preflight validation and rollback.
 - `KittyClaw.Core/Services/AppSettingsService.cs` — `settings.json` reader/writer.
 
 ## Entry points
