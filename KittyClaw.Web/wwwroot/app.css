@@ -4557,6 +4557,10 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     color: #2563eb;
     font-weight: 600;
 }
+.column-context-menu-configure {
+    color: #111827;
+    font-weight: 600;
+}
 .column-context-menu-check {
     display: inline-block;
     width: 14px;
@@ -4911,6 +4915,56 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .workflow-table .settings-actions { display: flex; gap: .4rem; justify-content: flex-end; }
 .processor-editor label { display: grid; gap: .35rem; margin: .75rem 0; }
 .processor-editor .workflow-check { display: flex; align-items: center; gap: .5rem; }
+.processor-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(0, 0, 0, .72);
+}
+.processor-dialog {
+    width: min(980px, 96vw);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--border-strong);
+    border-radius: 14px;
+    background: var(--surface);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, .65);
+}
+.processor-dialog-header,
+.processor-dialog-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    background: var(--surface2);
+}
+.processor-dialog-header { border-bottom: 1px solid var(--border); }
+.processor-dialog-footer { justify-content: flex-end; border-top: 1px solid var(--border); }
+.processor-dialog-header h2 { margin: .15rem 0 0; font-size: 1.15rem; }
+.processor-dialog-eyebrow { color: var(--text-muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; }
+.processor-dialog-body { padding: .25rem 1.25rem 1.25rem; overflow-y: auto; }
+.processor-dialog-body h3 { margin: 1.25rem 0 .25rem; }
+.processor-dialog-loading { min-height: 240px; display: grid; place-items: center; font-size: 2rem; color: var(--text-muted); }
+.processor-secondary-btn {
+    border: 1px solid var(--border-strong);
+    background: var(--surface2);
+    color: var(--text-muted);
+}
+.processor-secondary-btn:hover { border-color: var(--accent); background: var(--accent-dim); color: var(--accent-hover); }
+.processor-dialog .route-row select { min-width: 220px; }
+@media (max-width: 700px) {
+    .processor-dialog-overlay { align-items: stretch; padding: .5rem; }
+    .processor-dialog { width: 100%; max-height: 100%; }
+    .processor-dialog .route-row { align-items: stretch; flex-direction: column; }
+    .processor-dialog .route-row select { min-width: 0; width: 100%; }
+}
 .workflow-textarea { width: 100%; min-height: 9rem; resize: vertical; }
 .workflow-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem; }
 .workflow-grid input, .workflow-grid select { width: 100%; }

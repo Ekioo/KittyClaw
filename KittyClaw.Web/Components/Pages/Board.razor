@@ -271,6 +271,11 @@ else
         var current = SortState.Get(Slug, _sortMenuOpenFor);
         <div class="column-context-menu-backdrop" @onclick="CloseSortMenu" @oncontextmenu="CloseSortMenu" @oncontextmenu:preventDefault></div>
         <div class="column-context-menu" style="left:@(_sortMenuX)px; top:@(_sortMenuY)px;" @onclick:stopPropagation @oncontextmenu:preventDefault>
+            <button class="column-context-menu-item column-context-menu-configure" @onclick="OpenProcessorDialogFromMenu">
+                <span class="column-context-menu-check">⚙</span>
+                <span>@L["ConfigureColumn"]</span>
+            </button>
+            <div class="column-context-menu-separator"></div>
             <div class="column-context-menu-title">@L["SortMenuTitle"]</div>
             <button class="column-context-menu-item @(current.Mode == KittyClaw.Web.Services.ColumnSortMode.Manual ? "column-context-menu-item--active" : "")"
                     @onclick="() => SelectSort(KittyClaw.Web.Services.ColumnSortMode.Manual, KittyClaw.Web.Services.SortDirection.Ascending)">
@@ -291,6 +296,15 @@ else
                 }
             }
         </div>
+    }
+
+    @if (_processorDialogColumn is not null)
+    {
+        <ColumnProcessorDialog @key="_processorDialogColumn.Id"
+                               Slug="@Slug"
+                               Column="@_processorDialogColumn"
+                               OnClose="CloseProcessorDialog"
+                               OnSaved="OnProcessorSavedAsync" />
     }
 
     @* ── Trash drop zone (visible during drag) ── *@
@@ -899,6 +913,7 @@ else
     private string? _sortMenuOpenFor;
     private double _sortMenuX;
     private double _sortMenuY;
+    private BoardColumn? _processorDialogColumn;
 
     private void OpenSortMenu(string columnName, Microsoft.AspNetCore.Components.Web.MouseEventArgs e)
     {
@@ -908,6 +923,20 @@ else
     }
 
     private void CloseSortMenu() => _sortMenuOpenFor = null;
+
+    private void OpenProcessorDialogFromMenu()
+    {
+        _processorDialogColumn = _columns.FirstOrDefault(c => c.Name == _sortMenuOpenFor);
+        _sortMenuOpenFor = null;
+    }
+
+    private void CloseProcessorDialog() => _processorDialogColumn = null;
+
+    private async Task OnProcessorSavedAsync()
+    {
+        await LoadSelectedPipelineColumnsAsync();
+        BoardUpdateNotifier.NotifyProjectUpdated(Slug);
+    }
 
     private async Task SelectSort(KittyClaw.Web.Services.ColumnSortMode mode, KittyClaw.Web.Services.SortDirection direction)
     {
