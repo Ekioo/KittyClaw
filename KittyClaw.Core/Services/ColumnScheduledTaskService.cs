@@ -100,10 +100,31 @@ public sealed class ColumnScheduledTaskService(ProjectService projects)
             var path = await GetDefinitionPathAsync(projectSlug, columnId);
             if (File.Exists(path)) File.Delete(path);
             await using var db = projects.GetProjectDb(projectSlug);
+            await ColumnService.EnsureBoardColumnsTableAsync(db);
             await EnsureTablesAsync(db);
-            var tasks = await db.ColumnScheduledTasks.Where(task => task.ColumnId == columnId).ToListAsync();
-            db.ColumnScheduledTasks.RemoveRange(tasks);
-            await db.SaveChangesAsync();
+            var project = await projects.GetProjectAsync(projectSlug)
+                ?? throw new InvalidOperationException($"Le projet '{projectSlug}' n’existe pas.");
+            var root = Path.Combine(projects.ResolveWorkspacePath(project), ".agents", "schedules");
+            if (Directory.Exists(root))
+            {
+                var deletedReference = $"column-{columnId}";
+                foreach (var otherPath in Directory.EnumerateFiles(root, "tasks.json", SearchOption.AllDirectories))
+                {
+                    if (string.Equals(otherPath, path, StringComparison.OrdinalIgnoreCase)) continue;
+                    var file = JsonSerializer.Deserialize<ColumnTasksDefinition>(
+                        await File.ReadAllTextAsync(otherPath), FileJson);
+                    if (file is null) continue;
+                    var changed = false;
+                    foreach (var action in file.Tasks.SelectMany(task => task.Actions))
+                    {
+                        if (!string.Equals(action.OnFailure, deletedReference, StringComparison.OrdinalIgnoreCase)) continue;
+                        action.OnFailure = null;
+                        changed = true;
+                    }
+                    if (changed) await WriteDefinitionFileAsync(otherPath, file);
+                }
+            }
+            await SynchronizeLockedAsync(projectSlug, db);
         }
         finally { gate.Release(); }
     }
@@ -310,6 +331,12 @@ public sealed class ColumnScheduledTaskService(ProjectService projects)
             Column = $"column-{columnId}",
             Tasks = definitions.ToList(),
         };
+        await WriteDefinitionFileAsync(path, file);
+    }
+
+    private static async Task WriteDefinitionFileAsync(string path, ColumnTasksDefinition file)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temporary = path + $".{Guid.NewGuid():N}.tmp";
         await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(file, FileJson) + Environment.NewLine);
         File.Move(temporary, path, true);

@@ -58,5 +58,31 @@ public sealed class ColumnScheduledTaskServiceTests : IDisposable
             service.SaveColumnAsync(project.Slug, column.Id, [task]));
     }
 
+    [Fact]
+    public async Task Deleting_a_column_removes_incoming_scheduled_failure_routes()
+    {
+        var projects = new ProjectService(_temp.Path);
+        var project = await projects.CreateProjectAsync("Schedule routes");
+        var schedules = new ColumnScheduledTaskService(projects);
+        var columns = new ColumnService(projects, scheduledTaskService: schedules);
+        var board = await columns.ListColumnsAsync(project.Slug);
+        var source = board[0];
+        var target = board[1];
+        await schedules.SaveColumnAsync(project.Slug, source.Id,
+        [
+            new ColumnScheduledTask
+            {
+                Id = "route", ColumnId = source.Id, Name = "Route", Cron = "0 9 * * 1",
+                TimeZoneId = TimeZoneInfo.Utc.Id, TicketScope = ScheduledTaskTicketScope.FirstTicket,
+                Actions = [new ColumnProcessorAction("script", new ExecutePowerShellActionSpec { Script = "exit 1" }, target.Id)],
+            },
+        ]);
+
+        Assert.True(await columns.DeleteColumnAsync(project.Slug, target.Id, board[2].Name));
+
+        var reloaded = Assert.Single(await schedules.ListAsync(project.Slug, source.Id));
+        Assert.Null(Assert.Single(reloaded.Actions).FailureTargetColumnId);
+    }
+
     public void Dispose() => _temp.Dispose();
 }
