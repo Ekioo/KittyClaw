@@ -1,0 +1,363 @@
+@page "/board/{Slug}/workflows"
+@using KittyClaw.Core.Models
+@using KittyClaw.Core.Services
+@inject ProjectService ProjectService
+@inject PipelineService PipelineService
+@inject ColumnService ColumnService
+@inject ColumnProcessorService ProcessorService
+@inject ProjectSkillService SkillService
+@rendermode InteractiveServer
+
+<PageTitle>@(_project?.Name ?? "Project") — Workflows</PageTitle>
+
+@if (_project is null)
+{
+    <p>Project not found.</p>
+}
+else
+{
+    <div class="page-header">
+        <a class="back-link" href="/board/@Slug">&larr; Board</a>
+        <h1>@_project.Name — Workflows</h1>
+    </div>
+
+    <div class="settings-container workflow-settings">
+        @if (!string.IsNullOrWhiteSpace(_message))
+        {
+            <div class="settings-status @(_isError ? "settings-status-err" : "settings-status-ok")">@_message</div>
+        }
+
+        <section class="settings-section">
+            <h2>Pipelines</h2>
+            <p class="settings-hint">A pipeline has a stable identity. Renaming it does not change its links, columns, tickets or routing rules.</p>
+            <div class="workflow-pills">
+                @foreach (var pipeline in _pipelines)
+                {
+                    <button class="pipeline-tab @(pipeline.Id == _selectedPipelineId ? "pipeline-tab--active" : "")"
+                            @onclick="() => SelectPipelineAsync(pipeline.Id)">@pipeline.Name</button>
+                }
+            </div>
+            @if (_selectedPipeline is not null)
+            {
+                <div class="settings-row workflow-edit-row">
+                    <input class="settings-input" @bind="_pipelineName" @bind:event="oninput" />
+                    <button class="settings-primary" @onclick="RenamePipelineAsync">Rename</button>
+                    <span class="settings-hint">Stable key: <code>@_selectedPipeline.Slug</code></span>
+                </div>
+            }
+            <div class="settings-row">
+                <input class="settings-input" placeholder="New pipeline name" @bind="_newPipelineName" @bind:event="oninput" />
+                <button class="settings-primary" @onclick="CreatePipelineAsync" disabled="@(string.IsNullOrWhiteSpace(_newPipelineName))">Add pipeline</button>
+            </div>
+        </section>
+
+        @if (_selectedPipeline is not null)
+        {
+            <section class="settings-section">
+                <h2>Columns</h2>
+                <p class="settings-hint">The role expresses meaning, independently from the column name. A success role determines when blocking child tickets are complete.</p>
+                <table class="settings-list workflow-table">
+                    <thead><tr><th>Name</th><th>Role</th><th>Processor</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var column in _columns)
+                        {
+                            <tr>
+                                <td><input value="@ColumnName(column.Id)" @oninput="e => SetColumnName(column.Id, e.Value?.ToString())" /></td>
+                                <td>
+                                    <select value="@ColumnRoleValue(column.Id)" @onchange="e => SetColumnRole(column.Id, e.Value?.ToString())">
+                                        @foreach (var role in Enum.GetValues<ColumnRole>())
+                                        {
+                                            <option value="@((int)role)">@role</option>
+                                        }
+                                    </select>
+                                </td>
+                                <td>@(_processors.ContainsKey(column.Id) ? (_processors[column.Id].Enabled ? "Enabled" : "Paused") : "None")</td>
+                                <td class="settings-actions">
+                                    <button @onclick="() => SaveColumnAsync(column)">Save</button>
+                                    <button @onclick="() => EditProcessorAsync(column.Id)">Configure processor</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                <div class="settings-row">
+                    <input class="settings-input" placeholder="New column name" @bind="_newColumnName" @bind:event="oninput" />
+                    <select @bind="_newColumnRole">
+                        @foreach (var role in Enum.GetValues<ColumnRole>()) { <option value="@role">@role</option> }
+                    </select>
+                    <button class="settings-primary" @onclick="CreateColumnAsync" disabled="@(string.IsNullOrWhiteSpace(_newColumnName))">Add column</button>
+                </div>
+            </section>
+        }
+
+        @if (_editingColumn is not null)
+        {
+            <section class="settings-section processor-editor">
+                <h2>Processor — @_editingColumn.Name</h2>
+                <p class="settings-hint">This is the generic agent attached to the column. Its execution state is tracked separately, so the ticket stays in its business column while work runs.</p>
+                <label class="workflow-check"><input type="checkbox" @bind="_processorEnabled" /> Enabled</label>
+                <label>Name<input class="settings-input" @bind="_processorName" /></label>
+                <label>Mission<textarea class="settings-input workflow-textarea" @bind="_processorMission"></textarea></label>
+                <div class="workflow-grid">
+                    <label>Ticket order
+                        <select @bind="_selectionOrder">
+                            @foreach (var order in Enum.GetValues<TicketSelectionOrder>()) { <option value="@order">@order</option> }
+                        </select>
+                    </label>
+                    <label>Maximum attempts<input type="number" min="1" @bind="_maxAttempts" /></label>
+                    <label>Retry delay (seconds)<input type="number" min="1" @bind="_retryBackoff" /></label>
+                    <label>Agent turn limit<input type="number" min="1" @bind="_maxTurns" /></label>
+                </div>
+
+                <h3>Skills</h3>
+                <p class="settings-hint">Available skills can be used; recommended skills are suggested; required skills must be reported as used before routing succeeds.</p>
+                <div class="skill-matrix">
+                    @foreach (var skill in _skills)
+                    {
+                        <div><strong>@skill.Name</strong><code>@skill.Slug</code></div>
+                        <label><input type="checkbox" checked="@_availableSkills.Contains(skill.Slug)" @onchange="e => ToggleSkill(_availableSkills, skill.Slug, e)" /> Available</label>
+                        <label><input type="checkbox" checked="@_recommendedSkills.Contains(skill.Slug)" @onchange="e => ToggleSkill(_recommendedSkills, skill.Slug, e)" /> Recommended</label>
+                        <label><input type="checkbox" checked="@_requiredSkills.Contains(skill.Slug)" @onchange="e => ToggleSkill(_requiredSkills, skill.Slug, e)" /> Required</label>
+                    }
+                </div>
+
+                <h3>Routing</h3>
+                <div class="workflow-grid">
+                    <label>Default destination<select @bind="_defaultTargetId">@ColumnOptions(true)</select></label>
+                    <label>Technical failure destination<select @bind="_technicalFailureTargetId">@ColumnOptions(true)</select></label>
+                </div>
+                @foreach (var route in _routeDrafts)
+                {
+                    <div class="settings-row route-row">
+                        <input placeholder="Outcome, e.g. approved" @bind="route.Outcome" />
+                        <span>&rarr;</span>
+                        <select @bind="route.TargetColumnId">@ColumnOptions(false)</select>
+                        <button @onclick="() => _routeDrafts.Remove(route)">Remove</button>
+                    </div>
+                }
+                <button @onclick="AddRoute">Add conditional route</button>
+                <div class="workflow-save"><button class="settings-primary" @onclick="SaveProcessorAsync">Save processor</button></div>
+            </section>
+        }
+
+        <section class="settings-section">
+            <h2>Project skills</h2>
+            <p class="settings-hint">Reusable technical and operational procedures shared by the column processors. Their stable key is preserved when renamed.</p>
+            @foreach (var skill in _skills)
+            {
+                <details class="skill-editor">
+                    <summary>@skill.Name <code>@skill.Slug</code></summary>
+                    <input class="settings-input" value="@SkillName(skill.Slug)" @oninput="e => SetSkillName(skill.Slug, e.Value?.ToString())" />
+                    <textarea class="settings-input workflow-textarea" value="@SkillInstructions(skill.Slug)" @oninput="e => SetSkillInstructions(skill.Slug, e.Value?.ToString())"></textarea>
+                    <button @onclick="() => SaveSkillAsync(skill.Slug)">Save skill</button>
+                </details>
+            }
+            <div class="skill-editor">
+                <input class="settings-input" placeholder="New skill name" @bind="_newSkillName" />
+                <textarea class="settings-input workflow-textarea" placeholder="Skill instructions (Markdown)" @bind="_newSkillInstructions"></textarea>
+                <button class="settings-primary" @onclick="CreateSkillAsync" disabled="@(string.IsNullOrWhiteSpace(_newSkillName))">Add skill</button>
+            </div>
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+
+    private Project? _project;
+    private List<Pipeline> _pipelines = [];
+    private List<BoardColumn> _columns = [];
+    private List<ProjectSkill> _skills = [];
+    private readonly Dictionary<int, ColumnProcessor> _processors = [];
+    private readonly Dictionary<int, string> _columnNames = [];
+    private readonly Dictionary<int, ColumnRole> _columnRoles = [];
+    private readonly Dictionary<string, string> _skillNames = [];
+    private readonly Dictionary<string, string> _skillInstructions = [];
+    private int? _selectedPipelineId;
+    private Pipeline? _selectedPipeline => _pipelines.FirstOrDefault(p => p.Id == _selectedPipelineId);
+    private string _pipelineName = "";
+    private string _newPipelineName = "";
+    private string _newColumnName = "";
+    private ColumnRole _newColumnRole;
+    private string? _message;
+    private bool _isError;
+
+    private BoardColumn? _editingColumn;
+    private string _processorName = "";
+    private string _processorMission = "";
+    private bool _processorEnabled = true;
+    private int _maxTurns = 100;
+    private int _maxAttempts = 3;
+    private int _retryBackoff = 60;
+    private TicketSelectionOrder _selectionOrder;
+    private int? _defaultTargetId;
+    private int? _technicalFailureTargetId;
+    private HashSet<string> _availableSkills = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _recommendedSkills = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _requiredSkills = new(StringComparer.OrdinalIgnoreCase);
+    private List<RouteDraft> _routeDrafts = [];
+
+    private string _newSkillName = "";
+    private string _newSkillInstructions = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _project = await ProjectService.GetProjectAsync(Slug);
+        if (_project is null) return;
+        _pipelines = await PipelineService.ListAsync(Slug);
+        _skills = await SkillService.ListAsync(Slug);
+        await LoadSkillDraftsAsync();
+        await SelectPipelineAsync(_pipelines.FirstOrDefault(p => p.IsDefault)?.Id ?? _pipelines.First().Id);
+    }
+
+    private async Task SelectPipelineAsync(int id)
+    {
+        _selectedPipelineId = id;
+        _pipelineName = _selectedPipeline?.Name ?? "";
+        _columns = await ColumnService.ListColumnsAsync(Slug, id);
+        _pipelineColumns[id] = _columns;
+        _columnNames.Clear();
+        _columnRoles.Clear();
+        _processors.Clear();
+        foreach (var column in _columns)
+        {
+            _columnNames[column.Id] = column.Name;
+            _columnRoles[column.Id] = column.Role;
+            var processor = await ProcessorService.GetAsync(Slug, column.Id);
+            if (processor is not null) _processors[column.Id] = processor;
+        }
+        _editingColumn = null;
+    }
+
+    private async Task CreatePipelineAsync() => await RunAsync(async () =>
+    {
+        var created = await PipelineService.CreateAsync(Slug, _newPipelineName);
+        _newPipelineName = "";
+        _pipelines = await PipelineService.ListAsync(Slug);
+        await SelectPipelineAsync(created.Id);
+    }, "Pipeline created.");
+
+    private async Task RenamePipelineAsync() => await RunAsync(async () =>
+    {
+        await PipelineService.UpdateAsync(Slug, _selectedPipelineId!.Value, _pipelineName);
+        _pipelines = await PipelineService.ListAsync(Slug);
+    }, "Pipeline renamed without changing its stable key.");
+
+    private string ColumnName(int id) => _columnNames.GetValueOrDefault(id, "");
+    private string ColumnRoleValue(int id) => ((int)_columnRoles.GetValueOrDefault(id)).ToString();
+    private void SetColumnName(int id, string? value) => _columnNames[id] = value ?? "";
+    private void SetColumnRole(int id, string? value) => _columnRoles[id] = Enum.Parse<ColumnRole>(value ?? "0");
+
+    private async Task CreateColumnAsync() => await RunAsync(async () =>
+    {
+        await ColumnService.CreateColumnAsync(Slug, _newColumnName, pipelineId: _selectedPipelineId, role: _newColumnRole);
+        _newColumnName = "";
+        await SelectPipelineAsync(_selectedPipelineId!.Value);
+    }, "Column created.");
+
+    private async Task SaveColumnAsync(BoardColumn column) => await RunAsync(async () =>
+    {
+        await ColumnService.UpdateColumnAsync(Slug, column.Id, _columnNames[column.Id], role: _columnRoles[column.Id]);
+        await SelectPipelineAsync(_selectedPipelineId!.Value);
+    }, "Column updated.");
+
+    private async Task EditProcessorAsync(int columnId)
+    {
+        _editingColumn = _columns.Single(c => c.Id == columnId);
+        var processor = await ProcessorService.GetAsync(Slug, columnId);
+        _processorName = processor?.Name ?? $"{_editingColumn.Name} processor";
+        _processorMission = processor?.Mission ?? "Process the selected ticket and return a structured outcome.";
+        _processorEnabled = processor?.Enabled ?? true;
+        _maxTurns = processor?.MaxTurns ?? 100;
+        _maxAttempts = processor?.MaxAttempts ?? 3;
+        _retryBackoff = processor?.RetryBackoffSeconds ?? 60;
+        _selectionOrder = processor?.SelectionOrder ?? TicketSelectionOrder.Position;
+        _defaultTargetId = processor?.DefaultTargetColumnId;
+        _technicalFailureTargetId = processor?.TechnicalFailureColumnId;
+        _availableSkills = new(processor?.AvailableSkills ?? [], StringComparer.OrdinalIgnoreCase);
+        _recommendedSkills = new(processor?.RecommendedSkills ?? [], StringComparer.OrdinalIgnoreCase);
+        _requiredSkills = new(processor?.RequiredSkills ?? [], StringComparer.OrdinalIgnoreCase);
+        _routeDrafts = processor?.Routes.Select(r => new RouteDraft { Outcome = r.Outcome, TargetColumnId = r.TargetColumnId }).ToList() ?? [];
+    }
+
+    private void ToggleSkill(HashSet<string> set, string slug, ChangeEventArgs e)
+    {
+        if (e.Value is true) set.Add(slug); else set.Remove(slug);
+    }
+
+    private void AddRoute() => _routeDrafts.Add(new RouteDraft { TargetColumnId = _allColumns.FirstOrDefault(c => c.Id != _editingColumn?.Id)?.Id ?? 0 });
+    private List<BoardColumn> _allColumns => _pipelineColumns.Values.SelectMany(c => c).ToList();
+    private readonly Dictionary<int, List<BoardColumn>> _pipelineColumns = [];
+
+    private RenderFragment ColumnOptions(bool allowEmpty) => builder =>
+    {
+        var sequence = 0;
+        if (allowEmpty)
+        {
+            builder.OpenElement(sequence++, "option"); builder.AddAttribute(sequence++, "value", "");
+            builder.AddContent(sequence++, "None"); builder.CloseElement();
+        }
+        foreach (var pipeline in _pipelines)
+        foreach (var column in _pipelineColumns.GetValueOrDefault(pipeline.Id, []))
+        {
+            if (column.Id == _editingColumn?.Id) continue;
+            builder.OpenElement(sequence++, "option"); builder.AddAttribute(sequence++, "value", column.Id);
+            builder.AddContent(sequence++, $"{pipeline.Name} / {column.Name}"); builder.CloseElement();
+        }
+    };
+
+    private async Task SaveProcessorAsync() => await RunAsync(async () =>
+    {
+        var routes = _routeDrafts.Where(r => !string.IsNullOrWhiteSpace(r.Outcome) && r.TargetColumnId > 0)
+            .Select(r => new ColumnRoute(r.Outcome, r.TargetColumnId)).ToList();
+        await ProcessorService.SaveAsync(Slug, _editingColumn!.Id, _processorName, _processorMission, null,
+            _processorEnabled, _maxTurns, _availableSkills.ToList(), _recommendedSkills.ToList(), _requiredSkills.ToList(),
+            _selectionOrder, _maxAttempts, _retryBackoff, _defaultTargetId, _technicalFailureTargetId, routes);
+        await SelectPipelineAsync(_selectedPipelineId!.Value);
+    }, "Processor saved.");
+
+    private async Task LoadSkillDraftsAsync()
+    {
+        _skillNames.Clear(); _skillInstructions.Clear();
+        foreach (var skill in _skills)
+        {
+            _skillNames[skill.Slug] = skill.Name;
+            _skillInstructions[skill.Slug] = await SkillService.ReadInstructionsAsync(Slug, skill.Slug) ?? "";
+        }
+        _pipelineColumns.Clear();
+        foreach (var pipeline in _pipelines)
+            _pipelineColumns[pipeline.Id] = await ColumnService.ListColumnsAsync(Slug, pipeline.Id);
+    }
+
+    private string SkillName(string slug) => _skillNames.GetValueOrDefault(slug, "");
+    private string SkillInstructions(string slug) => _skillInstructions.GetValueOrDefault(slug, "");
+    private void SetSkillName(string slug, string? value) => _skillNames[slug] = value ?? "";
+    private void SetSkillInstructions(string slug, string? value) => _skillInstructions[slug] = value ?? "";
+
+    private async Task SaveSkillAsync(string slug) => await RunAsync(async () =>
+    {
+        await SkillService.UpdateAsync(Slug, slug, _skillNames[slug], _skillInstructions[slug]);
+        _skills = await SkillService.ListAsync(Slug);
+        await LoadSkillDraftsAsync();
+    }, "Skill saved; its stable key was preserved.");
+
+    private async Task CreateSkillAsync() => await RunAsync(async () =>
+    {
+        await SkillService.CreateAsync(Slug, _newSkillName, _newSkillInstructions);
+        _newSkillName = _newSkillInstructions = "";
+        _skills = await SkillService.ListAsync(Slug);
+        await LoadSkillDraftsAsync();
+    }, "Skill created.");
+
+    private async Task RunAsync(Func<Task> action, string success)
+    {
+        try { await action(); _message = success; _isError = false; }
+        catch (Exception ex) { _message = ex.Message; _isError = true; }
+    }
+
+    private sealed class RouteDraft
+    {
+        public string Outcome { get; set; } = "";
+        public int TargetColumnId { get; set; }
+    }
+}

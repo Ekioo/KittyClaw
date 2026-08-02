@@ -33,7 +33,7 @@ public record CreateTicketRequest(
 // primitive: {"status":"Todo","assignedTo":"programmer"} can never be observed
 // half-applied by the automation engine. ExpectedStatus is optimistic concurrency:
 // when set, the update only applies while the ticket is still in that status (else 409).
-public record UpdateTicketRequest(string Author, string? Title = null, string? Description = null, TicketPriority? Priority = null, string? AssignedTo = null, List<int>? LabelIds = null, string? Status = null, string? ExpectedStatus = null);
+public record UpdateTicketRequest(string Author, string? Title = null, string? Description = null, TicketPriority? Priority = null, string? AssignedTo = null, List<int>? LabelIds = null, string? Status = null, string? ExpectedStatus = null, int? PipelineId = null, int? ColumnId = null, bool? BlocksParent = null);
 public record MoveTicketRequest(string Status, string Author);
 public record TransferTicketRequest(string TargetProject, string Actor);
 public record ScheduleTicketRequest(DateTime FireAt, string Author, string? TargetStatus = "Todo");

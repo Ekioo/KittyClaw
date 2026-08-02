@@ -23,6 +23,7 @@
         <div class="modal-dialog" @onclick:stopPropagation>
             <h2>@L["CreateProjectButton"]</h2>
             <p>@L["CreationSetupIntro"]</p>
+            <p class="settings-hint">After initialization, you will define the project's pipelines, columns, processors and skills.</p>
 
             <label class="settings-label">@L["ProjectName"] *</label>
             <div class="settings-row">
@@ -237,7 +238,7 @@
             _open = false;
             await OnCreated.InvokeAsync(project);
             if (NavigateToProject)
-                Nav.NavigateTo($"/board/{project.Slug}");
+                Nav.NavigateTo($"/board/{project.Slug}/workflows");
         }
         catch (Exception ex)
         {

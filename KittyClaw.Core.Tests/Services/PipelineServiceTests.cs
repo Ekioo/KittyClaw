@@ -87,5 +87,42 @@ public sealed class PipelineServiceTests : IDisposable
         Assert.Equal("Draft", reloaded.Status);
     }
 
+    [Fact]
+    public async Task Ticket_can_move_across_pipelines_by_stable_column_id()
+    {
+        var project = await _projects.CreateProjectAsync("Cross pipeline move");
+        var intake = await _pipelines.CreateAsync(project.Slug, "Intake");
+        var delivery = await _pipelines.CreateAsync(project.Slug, "Delivery");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: intake.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: delivery.Id);
+        var tickets = new TicketService(_projects, new MemberService(_projects));
+        var ticket = await tickets.CreateTicketAsync(project.Slug, "Work", status: source.Name,
+            pipelineId: intake.Id, columnId: source.Id);
+
+        var moved = await tickets.UpdateTicketAsync(project.Slug, ticket.Id, columnId: target.Id);
+
+        Assert.Equal(delivery.Id, moved!.PipelineId);
+        Assert.Equal(target.Id, moved.ColumnId);
+        Assert.Equal("Ready", moved.Status);
+    }
+
+    [Fact]
+    public async Task Subticket_summary_exposes_destination_column_role()
+    {
+        var project = await _projects.CreateProjectAsync("Child outcome");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Validation");
+        var work = await _columns.CreateColumnAsync(project.Slug, "Work", pipelineId: pipeline.Id);
+        var success = await _columns.CreateColumnAsync(project.Slug, "Accepted", pipelineId: pipeline.Id, role: ColumnRole.Success);
+        var tickets = new TicketService(_projects, new MemberService(_projects));
+        var parent = await tickets.CreateTicketAsync(project.Slug, "Parent", status: work.Name,
+            pipelineId: pipeline.Id, columnId: work.Id);
+        await tickets.CreateTicketAsync(project.Slug, "Child", status: success.Name, parentId: parent.Id,
+            pipelineId: pipeline.Id, columnId: success.Id);
+
+        var loaded = await tickets.GetTicketAsync(project.Slug, parent.Id);
+
+        Assert.Equal(ColumnRole.Success, Assert.Single(loaded!.SubTickets).ColumnRole);
+    }
+
     public void Dispose() => _temp.Dispose();
 }

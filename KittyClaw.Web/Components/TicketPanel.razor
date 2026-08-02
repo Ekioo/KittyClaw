@@ -192,6 +192,11 @@
                             <span class="sub-ticket-id">#@sub.Id</span>
                             <span class="sub-ticket-title">@sub.Title</span>
                             <span class="sub-ticket-status">@sub.Status</span>
+                            <button class="sub-ticket-blocking-toggle"
+                                    title="@(sub.BlocksParent ? "This child blocks its parent" : "This child is informational")"
+                                    @onclick="() => ToggleBlockingAsync(sub)">
+                                @(sub.BlocksParent ? "Blocking" : "Non-blocking")
+                            </button>
                         </div>
                     }
                 </div>
@@ -457,7 +462,7 @@
     {
         _ticket = await TicketService.GetTicketAsync(Slug, TicketId);
         _summaries = await TicketService.ListTicketsAsync(Slug);
-        _columns = await ColumnService.ListColumnsAsync(Slug);
+        _columns = _ticket is null ? [] : await ColumnService.ListColumnsAsync(Slug, _ticket.PipelineId);
         _allLabels = await LabelService.ListLabelsAsync(Slug);
         _allMembers = await MemberService.ListMembersAsync(Slug);
         await RebuildPipelineAsync();
@@ -468,9 +473,17 @@
     {
         _ticket = await TicketService.GetTicketAsync(Slug, TicketId);
         _summaries = await TicketService.ListTicketsAsync(Slug);
+        if (_ticket is not null)
+            _columns = await ColumnService.ListColumnsAsync(Slug, _ticket.PipelineId);
         await RebuildPipelineAsync();
         await OnChanged.InvokeAsync();
         await OnMutatedTicket.InvokeAsync(TicketId);
+    }
+
+    private async Task ToggleBlockingAsync(SubTicketInfo child)
+    {
+        await TicketService.UpdateTicketAsync(Slug, child.Id, author: "owner", blocksParent: !child.BlocksParent);
+        await RefreshAsync();
     }
 
     private void OnProjectUpdatedExternal(string slug)
@@ -789,7 +802,7 @@
         await TicketService.DeleteTicketAsync(Slug, t.Id);
         PushUndo?.Invoke($"{L["UndoDelete"]} #{t.Id}", async () =>
         {
-            var restored = await TicketService.CreateTicketAsync(Slug, t.Title, t.Description, t.CreatedBy, t.Status, labelIds, t.Priority, t.AssignedTo, t.ParentId);
+            var restored = await TicketService.CreateTicketAsync(Slug, t.Title, t.Description, t.CreatedBy, t.Status, labelIds, t.Priority, t.AssignedTo, t.ParentId, t.PipelineId, t.ColumnId, t.BlocksParent);
             if (restored is not null)
                 await OnMutatedTicket.InvokeAsync(restored.Id);
         });

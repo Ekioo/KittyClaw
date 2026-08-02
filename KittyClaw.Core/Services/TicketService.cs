@@ -191,6 +191,9 @@ public class TicketService
                 .Select(t => new { t.ParentId, t.PipelineId, t.ColumnId, t.BlocksParent, t.Status, t.Id, t.Title, t.AssignedTo })
                 .ToListAsync()
             : [];
+        var childColumnIds = childRows.Where(x => x.ColumnId is not null).Select(x => x.ColumnId!.Value).Distinct().ToList();
+        var childRoles = await db.BoardColumns.Where(c => childColumnIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, c => c.Role);
         var subsByParent = childRows
             .GroupBy(x => x.ParentId!.Value)
             .ToDictionary(g => g.Key, g => g.Select(x => new SubTicketInfo(x.Id, x.Title, x.Status, x.AssignedTo)
@@ -198,6 +201,7 @@ public class TicketService
                 PipelineId = x.PipelineId,
                 ColumnId = x.ColumnId,
                 BlocksParent = x.BlocksParent,
+                ColumnRole = x.ColumnId is int columnId && childRoles.TryGetValue(columnId, out var role) ? role : ColumnRole.Normal,
             }).ToList());
 
         return allTickets.Select(t => subsByParent.TryGetValue(t.Id, out var subs)
@@ -230,6 +234,12 @@ public class TicketService
                 BlocksParent = t.BlocksParent,
             })
             .ToListAsync();
+        var subColumnIds = ticket.SubTickets.Where(t => t.ColumnId is not null).Select(t => t.ColumnId!.Value).Distinct().ToList();
+        var subRoles = await db.BoardColumns.Where(c => subColumnIds.Contains(c.Id)).ToDictionaryAsync(c => c.Id, c => c.Role);
+        ticket.SubTickets = ticket.SubTickets.Select(t => t with
+        {
+            ColumnRole = t.ColumnId is int columnId && subRoles.TryGetValue(columnId, out var role) ? role : ColumnRole.Normal,
+        }).ToList();
         return ticket;
     }
 
@@ -423,7 +433,7 @@ public class TicketService
     /// when set, the update only applies if the ticket is still in that status —
     /// otherwise <see cref="TicketTransitionConflictException"/> (mapped to HTTP 409).
     /// </summary>
-    public async Task<Ticket?> UpdateTicketAsync(string projectSlug, int ticketId, string? title = null, string? description = null, string author = "owner", TicketPriority? priority = null, string? assignedTo = null, string? status = null, string? expectedStatus = null)
+    public async Task<Ticket?> UpdateTicketAsync(string projectSlug, int ticketId, string? title = null, string? description = null, string author = "owner", TicketPriority? priority = null, string? assignedTo = null, string? status = null, string? expectedStatus = null, int? pipelineId = null, int? columnId = null, bool? blocksParent = null)
     {
         if (string.IsNullOrWhiteSpace(author))
             throw new InvalidOperationException("Le champ 'author' est requis.");
@@ -436,9 +446,19 @@ public class TicketService
         var ticket = await db.Tickets.FindAsync(ticketId);
         if (ticket is null) return null;
         BoardColumn? destination = null;
-        if (status is not null)
+        if (columnId is not null)
         {
-            destination = await RequireColumnAsync(db, status, ticket.PipelineId);
+            destination = await db.BoardColumns.FindAsync(columnId.Value)
+                ?? throw new InvalidOperationException($"La colonne #{columnId} n'existe pas.");
+            if (pipelineId is not null && destination.PipelineId != pipelineId)
+                throw new InvalidOperationException("La colonne cible n'appartient pas au pipeline indiqué.");
+            if (status is not null && !string.Equals(status, destination.Name, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Le nom de colonne ne correspond pas à l'identifiant de colonne cible.");
+            status = destination.Name;
+        }
+        else if (status is not null)
+        {
+            destination = await RequireColumnAsync(db, status, pipelineId ?? ticket.PipelineId);
             status = destination.Name;
         }
 
@@ -446,11 +466,13 @@ public class TicketService
             throw new TicketTransitionConflictException(ticket.Status, expectedStatus);
 
         string? oldStatus = null;
-        if (status is not null && !string.Equals(ticket.Status, status, StringComparison.OrdinalIgnoreCase))
+        if (destination is not null && (ticket.ColumnId != destination.Id || ticket.PipelineId != destination.PipelineId
+            || !string.Equals(ticket.Status, status, StringComparison.OrdinalIgnoreCase)))
         {
             oldStatus = ticket.Status;
-            ticket.Status = status;
+            ticket.Status = status!;
             ticket.ColumnId = destination!.Id;
+            ticket.PipelineId = destination.PipelineId;
             if (string.Equals(oldStatus, "Scheduled", StringComparison.OrdinalIgnoreCase))
             {
                 // Leaving Scheduled cancels the pending promotion — otherwise the stale
@@ -509,11 +531,22 @@ public class TicketService
                 Text = $"a assigné le ticket : {old} → {ticket.AssignedTo ?? "personne"}"
             });
         }
+        if (blocksParent is not null && blocksParent != ticket.BlocksParent)
+        {
+            ticket.BlocksParent = blocksParent.Value;
+            oldStatus ??= ticket.Status;
+            db.ActivityEntries.Add(new ActivityEntry
+            {
+                TicketId = ticketId,
+                Author = author,
+                Text = blocksParent.Value ? "a rendu ce sous-ticket bloquant" : "a rendu ce sous-ticket non bloquant"
+            });
+        }
         ticket.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
         // Signal AFTER commit: the engine can only ever observe the fully-written state.
         if (oldStatus is not null)
-            TicketStatusChanged?.Invoke(projectSlug, ticketId, oldStatus, ticket.Status);
+            TicketStatusChanged?.Invoke(projectSlug, ticketId, oldStatus, ticket.Status!);
         return ticket;
     }
 

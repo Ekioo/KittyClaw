@@ -125,6 +125,27 @@ public sealed class ColumnExecutionServiceTests : IDisposable
         Assert.Equal(parent.Id, execution.TicketId);
     }
 
+    [Fact]
+    public async Task Non_blocking_child_does_not_hold_parent()
+    {
+        var project = await _projects.CreateProjectAsync("Informational child");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: pipeline.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Done", pipelineId: pipeline.Id, role: ColumnRole.Success);
+        var childWork = await _columns.CreateColumnAsync(project.Slug, "Child work", pipelineId: pipeline.Id);
+        var processor = await SaveProcessor(project.Slug, source.Id, target.Id);
+        var parent = await _tickets.CreateTicketAsync(project.Slug, "Parent", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var child = await _tickets.CreateTicketAsync(project.Slug, "Note", status: childWork.Name,
+            parentId: parent.Id, pipelineId: pipeline.Id, columnId: childWork.Id);
+
+        await _tickets.UpdateTicketAsync(project.Slug, child.Id, blocksParent: false);
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+
+        Assert.NotNull(execution);
+        Assert.Equal(parent.Id, execution.TicketId);
+    }
+
     private Task<ColumnProcessor> SaveProcessor(
         string slug, int sourceId, int defaultTargetId,
         TicketSelectionOrder selectionOrder = TicketSelectionOrder.Position,

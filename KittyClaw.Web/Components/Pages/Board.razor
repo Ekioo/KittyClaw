@@ -16,6 +16,7 @@
 @inject KittyClaw.Web.Services.AgentRunsState AgentRuns
 @inject LabelService LabelService
 @inject ColumnService ColumnService
+@inject PipelineService PipelineService
 @inject MemberService MemberService
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
@@ -90,9 +91,22 @@ else
             </button>
             <button class="header-action-btn new-instruction-btn" @onclick="OpenChatDrawer" title="@L["NewInstruction"]">&#128172; @L["NewInstruction"]</button>
             <a class="header-action-btn" href="/board/@Slug/automations" title="@L["Automations"]">&#9881; @L["Automations"]</a>
+            <a class="header-action-btn" href="/board/@Slug/workflows" title="Workflows">&#8644; Workflows</a>
             <a class="header-action-btn" href="/board/@Slug/settings" title="@L["ProjectSettingsTooltip"]">&#9881;&#65039; @L["ProjectSettings"]</a>
         </div>
     </div>
+
+    @if (_pipelines.Count > 0)
+    {
+        <nav class="pipeline-tabs" aria-label="Project workflows">
+            @foreach (var pipeline in _pipelines)
+            {
+                <button class="pipeline-tab @(pipeline.Id == _selectedPipelineId ? "pipeline-tab--active" : "")"
+                        @onclick="() => SelectPipelineAsync(pipeline.Id)">@pipeline.Name</button>
+            }
+            <a class="pipeline-tab pipeline-tab--manage" href="/board/@Slug/workflows">Manage</a>
+        </nav>
+    }
 
     <div class="board">
         @foreach (var col in _columns)
@@ -476,6 +490,8 @@ else
     private Project? _project;
     private List<TicketSummary> _tickets = [];
     private List<BoardColumn> _columns = [];
+    private List<Pipeline> _pipelines = [];
+    private int? _selectedPipelineId;
     private bool _restoreScrollAfterRender;
     // "← Projects" target: the home route matching the display mode last used there.
     private string _homeHref = "/";
@@ -572,6 +588,25 @@ else
         _tickets = await TicketService.ListTicketsAsync(Slug);
     }
 
+    private async Task LoadSelectedPipelineColumnsAsync()
+    {
+        _pipelines = await PipelineService.ListAsync(Slug);
+        if (_selectedPipelineId is null || !_pipelines.Any(p => p.Id == _selectedPipelineId))
+            _selectedPipelineId = _pipelines.FirstOrDefault(p => p.IsDefault)?.Id ?? _pipelines.FirstOrDefault()?.Id;
+        _columns = _selectedPipelineId is int pipelineId
+            ? await ColumnService.ListColumnsAsync(Slug, pipelineId)
+            : [];
+    }
+
+    private async Task SelectPipelineAsync(int pipelineId)
+    {
+        if (_selectedPipelineId == pipelineId) return;
+        _selectedPipelineId = pipelineId;
+        _openTicketId = null;
+        await LoadSelectedPipelineColumnsAsync();
+        ResetLoadedColumns();
+    }
+
     // Undo
     private record UndoAction(string Label, Func<Task> Undo, int? AffectedTicketId);
     private readonly Stack<UndoAction> _undoStack = new();
@@ -605,7 +640,7 @@ else
         await RefreshTicketsAsync();
         if (action.AffectedTicketId is int ticketId && _tickets.Any(t => t.Id == ticketId))
             await MarkTicketViewedAsync(ticketId);
-        _columns = await ColumnService.ListColumnsAsync(Slug);
+        await LoadSelectedPipelineColumnsAsync();
         // The panel loads its own data — bump the token so an open panel reloads too.
         _panelRefreshToken++;
         StateHasChanged();
@@ -681,7 +716,7 @@ else
         _project = await ProjectService.GetProjectAsync(Slug);
         if (_project is not null)
         {
-            _columns = await ColumnService.ListColumnsAsync(Slug);
+            await LoadSelectedPipelineColumnsAsync();
             ResetLoadedColumns();
             _tickets = await TicketService.ListTicketsAsync(Slug);
             _allLabels = await LabelService.ListLabelsAsync(Slug);
@@ -700,7 +735,7 @@ else
         if (slug != Slug) return;
         InvokeAsync(async () =>
         {
-            _columns = await ColumnService.ListColumnsAsync(Slug);
+            await LoadSelectedPipelineColumnsAsync();
             ResetLoadedColumns();
             _tickets = await TicketService.ListTicketsAsync(Slug);
             _allLabels = await LabelService.ListLabelsAsync(Slug);
@@ -812,12 +847,12 @@ else
         if (_subKanbanParentId is not null)
         {
             // Sub-kanban: only children of the parent ticket
-            tickets = _tickets.Where(t => t.ParentId == _subKanbanParentId && t.Status == status);
+            tickets = _tickets.Where(t => t.PipelineId == _selectedPipelineId && t.ParentId == _subKanbanParentId && t.Status == status);
         }
         else
         {
             // Main board: only top-level tickets (no parent)
-            tickets = _tickets.Where(t => t.ParentId is null && t.Status == status);
+            tickets = _tickets.Where(t => t.PipelineId == _selectedPipelineId && t.ParentId is null && t.Status == status);
         }
 
         if (!string.IsNullOrWhiteSpace(_filterText))
@@ -1037,7 +1072,7 @@ else
             targetIndex--;
 
         await ColumnService.ReorderColumnAsync(Slug, _draggedColumn.Id, targetIndex);
-        _columns = await ColumnService.ListColumnsAsync(Slug);
+        await LoadSelectedPipelineColumnsAsync();
         _draggedColumn = null;
         _colDropIndex = -1;
     }
@@ -1240,7 +1275,7 @@ else
     {
         if (string.IsNullOrWhiteSpace(_newTicketTitle) || _columns.Count == 0) return;
         var status = _columns[0].Name;
-        var ticket = await TicketService.CreateTicketAsync(Slug, _newTicketTitle.Trim(), _newTicketDescription.Trim(), status: status, labelIds: _newTicketLabelIds, priority: _newTicketPriority, assignedTo: string.IsNullOrEmpty(_newTicketAssignedTo) ? null : _newTicketAssignedTo, parentId: _subKanbanParentId);
+        var ticket = await TicketService.CreateTicketAsync(Slug, _newTicketTitle.Trim(), _newTicketDescription.Trim(), status: status, labelIds: _newTicketLabelIds, priority: _newTicketPriority, assignedTo: string.IsNullOrEmpty(_newTicketAssignedTo) ? null : _newTicketAssignedTo, parentId: _subKanbanParentId, pipelineId: _selectedPipelineId, columnId: _columns[0].Id);
         if (ticket is not null)
             PushUndo($"{L["UndoCreate"]} #{ticket.Id}", async () =>
                 await TicketService.DeleteTicketAsync(Slug, ticket.Id));
@@ -1303,13 +1338,13 @@ else
     private async Task AddColumn()
     {
         if (string.IsNullOrWhiteSpace(_newColumnName)) return;
-        var col = await ColumnService.CreateColumnAsync(Slug, _newColumnName.Trim(), _newColumnColor);
+        var col = await ColumnService.CreateColumnAsync(Slug, _newColumnName.Trim(), _newColumnColor, _selectedPipelineId);
         if (col is not null)
             PushUndo($"{L["UndoColumn"]} {col.Name}", async () =>
             {
                 await ColumnService.DeleteColumnAsync(Slug, col.Id, _columns.FirstOrDefault(c => c.Id != col.Id)?.Name ?? "Backlog");
             });
-        _columns = await ColumnService.ListColumnsAsync(Slug);
+        await LoadSelectedPipelineColumnsAsync();
         _newColumnName = "";
         _newColumnColor = "#5a6a80";
     }
@@ -1335,7 +1370,7 @@ else
         if (string.IsNullOrEmpty(_deleteColumnMoveTo)) return;
         await ColumnService.DeleteColumnAsync(Slug, columnId, _deleteColumnMoveTo);
         _trashConfirmColumn = null;
-        _columns = await ColumnService.ListColumnsAsync(Slug);
+        await LoadSelectedPipelineColumnsAsync();
         await RefreshTicketsAsync();
     }
 
@@ -1393,7 +1428,7 @@ else
         await TicketService.DeleteTicketAsync(Slug, t.Id);
         PushUndo($"{L["UndoDelete"]} #{t.Id}", async () =>
         {
-            var restored = await TicketService.CreateTicketAsync(Slug, t.Title, t.Description, t.CreatedBy, t.Status, labelIds, t.Priority, t.AssignedTo, t.ParentId);
+            var restored = await TicketService.CreateTicketAsync(Slug, t.Title, t.Description, t.CreatedBy, t.Status, labelIds, t.Priority, t.AssignedTo, t.ParentId, t.PipelineId, t.ColumnId, t.BlocksParent);
             if (restored is not null)
                 await MarkTicketViewedAsync(restored.Id);
         });

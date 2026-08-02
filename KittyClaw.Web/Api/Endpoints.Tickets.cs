@@ -40,7 +40,7 @@ public static partial class Endpoints
             // never observe the transition half-applied. ExpectedStatus mismatches map to 409.
             try
             {
-                var ticket = await ts.UpdateTicketAsync(slug, id, req.Title, req.Description, req.Author, req.Priority, req.AssignedTo, req.Status, req.ExpectedStatus);
+                var ticket = await ts.UpdateTicketAsync(slug, id, req.Title, req.Description, req.Author, req.Priority, req.AssignedTo, req.Status, req.ExpectedStatus, req.PipelineId, req.ColumnId, req.BlocksParent);
                 if (ticket is not null && req.LabelIds is not null)
                     await ts.SetTicketLabelsAsync(slug, id, req.LabelIds);
                 if (ticket is not null) notifier.NotifyProjectUpdated(slug);
