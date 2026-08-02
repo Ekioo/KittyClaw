@@ -51,7 +51,20 @@ public sealed class AutomationQueueStore
     /// </summary>
     public async Task ObserveColumnAsync(
         string slug, int ticketId, string columnName, CancellationToken ct = default)
+        => await ObserveColumnsAsync(slug, [(ticketId, columnName)], ct);
+
+    /// <summary>Records a project's current ticket columns with one connection and transaction.
+    /// Unchanged tickets require no writes; only genuine transitions create occurrences.</summary>
+    public async Task ObserveColumnsAsync(
+        string slug, IEnumerable<(int TicketId, string ColumnName)> observations,
+        CancellationToken ct = default)
     {
+        var batch = observations
+            .GroupBy(x => x.TicketId)
+            .Select(g => g.Last())
+            .ToList();
+        if (batch.Count == 0) return;
+
         var path = _projects.GetProjectDbPath(slug);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await using var conn = new SqliteConnection($"Data Source={path}");
@@ -59,8 +72,41 @@ public sealed class AutomationQueueStore
         EnsureSchema(conn);
         await using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct);
 
-        var occurrenceId = await ResolveOccurrenceAsync(conn, tx, ticketId, columnName, ct);
-        await UpsertPresenceAsync(conn, tx, ticketId, columnName, occurrenceId, ct);
+        var current = new Dictionary<int, (string ColumnName, string OccurrenceId)>();
+        await using (var read = conn.CreateCommand())
+        {
+            read.Transaction = tx;
+            read.CommandText = "SELECT TicketId, ColumnName, OccurrenceId FROM automation_column_presence";
+            await using var reader = await read.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+                current[reader.GetInt32(0)] = (reader.GetString(1), reader.GetString(2));
+        }
+
+        foreach (var (ticketId, columnName) in batch)
+        {
+            current.TryGetValue(ticketId, out var previous);
+            if (string.Equals(previous.ColumnName, columnName, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var occurrenceId = Guid.NewGuid().ToString("N");
+            await using (var record = conn.CreateCommand())
+            {
+                record.Transaction = tx;
+                record.CommandText = """
+                    INSERT INTO automation_column_occurrences
+                        (TicketId, OccurrenceId, ColumnName, PreviousColumnName, ObservedAt)
+                    VALUES(@ticket,@occurrence,@column,@previous,@now)
+                    """;
+                record.Parameters.AddWithValue("@ticket", ticketId);
+                record.Parameters.AddWithValue("@occurrence", occurrenceId);
+                record.Parameters.AddWithValue("@column", columnName);
+                record.Parameters.AddWithValue("@previous", (object?)previous.ColumnName ?? DBNull.Value);
+                record.Parameters.AddWithValue("@now", DateTime.UtcNow.ToString("O"));
+                await record.ExecuteNonQueryAsync(ct);
+            }
+            await UpsertPresenceAsync(conn, tx, ticketId, columnName, occurrenceId, ct);
+            current[ticketId] = (columnName, occurrenceId);
+        }
         await tx.CommitAsync(ct);
     }
 

@@ -107,8 +107,9 @@ internal sealed class TriggerHandler
             // Occurrence tracking must see every column transition, including columns that
             // are not watched by any ticketInColumn automation. Otherwise a later re-entry
             // into a watched column is incorrectly deduplicated against the previous visit.
-            foreach (var ticket in await _tickets.ListTicketsAsync(project.Slug))
-                await _queue.ObserveColumnAsync(project.Slug, ticket.Id, ticket.Status, ct);
+            var projectTickets = await _tickets.ListTicketsAsync(project.Slug);
+            await _queue.ObserveColumnsAsync(
+                project.Slug, projectTickets.Select(ticket => (ticket.Id, ticket.Status)), ct);
             foreach (var automation in rt.Config.Automations)
             {
                 if (!automation.Enabled) continue;

@@ -90,6 +90,30 @@ public class AutomationQueueStoreTests
     }
 
     [Fact]
+    public async Task BatchObservation_PreservesTransitionsAndSkipsUnchangedTickets()
+    {
+        using var tmp = new TempDir();
+        var h = await BuildAsync(tmp.Path);
+        var moved = await h.Tickets.CreateTicketAsync(h.Slug, "Moved", status: "Todo");
+        var unchanged = await h.Tickets.CreateTicketAsync(h.Slug, "Unchanged", status: "Todo");
+
+        await h.Queue.ObserveColumnsAsync(h.Slug, [(moved.Id, "Todo"), (unchanged.Id, "Todo")]);
+        await h.Queue.EnqueueAsync(h.Slug, moved, [Rule("a")]);
+        await h.Queue.EnqueueAsync(h.Slug, unchanged, [Rule("a")]);
+
+        await h.Queue.ObserveColumnsAsync(h.Slug, [(moved.Id, "Doing"), (unchanged.Id, "Todo")]);
+        await h.Queue.ObserveColumnsAsync(h.Slug, [(moved.Id, "Todo"), (unchanged.Id, "Todo")]);
+        await h.Queue.EnqueueAsync(h.Slug, moved, [Rule("a")]);
+        await h.Queue.EnqueueAsync(h.Slug, unchanged, [Rule("a")]);
+
+        var movedEntries = await h.Queue.ListForTicketAsync(h.Slug, moved.Id);
+        var unchangedEntries = await h.Queue.ListForTicketAsync(h.Slug, unchanged.Id);
+        Assert.Equal(2, movedEntries.Count);
+        Assert.Equal(2, movedEntries.Select(x => x.OccurrenceId).Distinct().Count());
+        Assert.Single(unchangedEntries);
+    }
+
+    [Fact]
     public async Task ExpiredRunningLease_IsRecoveredWithoutChangingFifoOrder()
     {
         using var tmp = new TempDir();
