@@ -4,7 +4,7 @@ namespace KittyClaw.ClaudeMock;
 
 internal static class ScenarioReplayer
 {
-    public static async Task<int> ReplayAsync(string[] lines, string? sessionId)
+    public static async Task<int> ReplayAsync(string[] lines, string? sessionId, string workingDirectory)
     {
         int exitCode = 0;
         foreach (var raw in lines)
@@ -27,6 +27,21 @@ internal static class ScenarioReplayer
                         exitCode = code;
                     if (meta.TryGetProperty("delay_ms", out var d) && d.TryGetInt32(out var ms))
                         await Task.Delay(ms);
+                    if (meta.TryGetProperty("write_file", out var write) &&
+                        write.TryGetProperty("path", out var pathElement) &&
+                        write.TryGetProperty("content", out var contentElement))
+                    {
+                        var relativePath = pathElement.GetString();
+                        if (!string.IsNullOrWhiteSpace(relativePath))
+                        {
+                            var fullPath = Path.GetFullPath(Path.Combine(workingDirectory, relativePath));
+                            var rootPath = Path.GetFullPath(workingDirectory) + Path.DirectorySeparatorChar;
+                            if (!fullPath.StartsWith(rootPath, StringComparison.OrdinalIgnoreCase))
+                                throw new InvalidOperationException("Mock scenario write_file must stay inside the working directory.");
+                            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+                            await File.WriteAllTextAsync(fullPath, contentElement.GetString() ?? string.Empty);
+                        }
+                    }
                     continue;
                 }
 

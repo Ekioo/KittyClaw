@@ -37,7 +37,7 @@ public static class ModelRouting
 
     /// <summary>
     /// Routing rules:
-    /// - null or claude-* → claude CLI, no extra env.
+    /// - null, claude-*, or claude:* → claude CLI, no extra env.
     /// - grok-* → grok CLI when installed; otherwise an error (run fails without launching).
     /// - anything else → Ollama local model through the claude CLI: requires the project's
     ///   LocalModelBaseUrl and injects the ANTHROPIC_* env overrides.
@@ -46,6 +46,9 @@ public static class ModelRouting
     {
         if (model is null || model.StartsWith("claude-", StringComparison.OrdinalIgnoreCase))
             return new Resolution(CliProvider.Claude, null, null);
+
+        if (model.StartsWith("claude:", StringComparison.OrdinalIgnoreCase))
+            return new Resolution(CliProvider.Claude, null, null, model["claude:".Length..]);
 
         if (CodexCli.IsCodexModel(model))
         {

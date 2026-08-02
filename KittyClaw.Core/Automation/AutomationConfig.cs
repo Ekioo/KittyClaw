@@ -340,6 +340,8 @@ public sealed class ConsolidateAgentMemoryActionSpec : ActionSpec
     public override string UiTypeKey => "consolidateAgentMemory";
     /// <summary>Agent slug. Supports {assignee} placeholder.</summary>
     public required string Agent { get; set; }
+    /// <summary>Optional model target. When omitted, member and project defaults are used.</summary>
+    public string? Model { get; set; }
     /// <summary>Max turns for the consolidation pass.</summary>
     public int MaxTurns { get; set; } = 5;
     /// <summary>Path to the instruction markdown file, relative to workspace root.</summary>

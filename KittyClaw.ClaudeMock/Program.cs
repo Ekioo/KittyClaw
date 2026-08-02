@@ -10,7 +10,7 @@ using KittyClaw.ClaudeMock;
 //   4. "default"
 
 var sessionId = ArgParser.Get(args, "--session-id") ?? ArgParser.Get(args, "-s");
-_ = ArgParser.Get(args, "--model");
+var model = ArgParser.Get(args, "--model");
 
 // Claude: prompt arrives on stdin. Grok (KittyClaw headless): --prompt-file, empty stdin.
 // Read the file when present so scenario markers in the prompt still resolve.
@@ -21,8 +21,13 @@ if (!string.IsNullOrEmpty(promptFile) && File.Exists(promptFile))
 else
     prompt = await Console.In.ReadToEndAsync();
 
+var unavailableModel = Environment.GetEnvironmentVariable("KITTYCLAW_MOCK_UNAVAILABLE_MODEL");
 var scenarioName =
-    Environment.GetEnvironmentVariable("KITTYCLAW_MOCK_SCENARIO")
+    (!string.IsNullOrWhiteSpace(unavailableModel)
+     && string.Equals(model, unavailableModel, StringComparison.OrdinalIgnoreCase)
+        ? "model-unavailable"
+        : null)
+    ?? Environment.GetEnvironmentVariable("KITTYCLAW_MOCK_SCENARIO")
     ?? ScenarioMatcher.FromPrompt(prompt)
     ?? Environment.GetEnvironmentVariable("CLAUDE_AGENT")
     ?? "default";
@@ -35,4 +40,4 @@ if (scenario is null)
     return 2;
 }
 
-return await ScenarioReplayer.ReplayAsync(scenario, sessionId);
+return await ScenarioReplayer.ReplayAsync(scenario, sessionId, Directory.GetCurrentDirectory());

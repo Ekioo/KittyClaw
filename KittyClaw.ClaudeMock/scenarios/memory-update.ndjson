@@ -1,0 +1,5 @@
+{"type":"system","subtype":"init","session_id":"{{session_id}}","model":"mock"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Persisting one durable lesson."}]}}
+{"_meta":{"write_file":{"path":".agents/programmer/memory/routing.md","content":"---\ntitle: Routing\n---\n\nUse the resolved provider/model target for memory consolidation.\n"}}}
+{"_meta":{"write_file":{"path":".agents/programmer/memory/MEMORY.md","content":"# Memory index — programmer\n\n- [5] [Routing](routing.md) — Preserve provider/model routing during consolidation.\n"}}}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":20,"num_turns":1}

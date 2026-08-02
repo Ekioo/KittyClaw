@@ -784,6 +784,35 @@ internal sealed class ActionExecutor
             const string scope = "consolidate";
             _sessions.Clear(rt.Workspace!, $"{scope}:{agent}", ticketId: null);
 
+            var project = await _projects.GetProjectAsync(rt.Slug);
+            var member = await _members.GetMemberBySlugAsync(rt.Slug, agent);
+            var memberModel = string.IsNullOrWhiteSpace(member?.DefaultModel) ? null : member.DefaultModel;
+            var projectFallback = string.IsNullOrWhiteSpace(project?.FallbackModel) ? null : project.FallbackModel;
+            var localDefault = string.IsNullOrWhiteSpace(project?.LocalModelName) ? null : project.LocalModelName;
+            var effectiveModel = FirstConfiguredModel(spec.Model, memberModel, projectFallback, localDefault);
+            var routing = ModelRouting.Resolve(effectiveModel, project?.LocalModelBaseUrl);
+            var target = routing.ToTarget(effectiveModel);
+
+            // Preserve the project's quota fallback when a more specific primary target won.
+            // If it is already the primary, retrying the same target would only duplicate failure.
+            AgentDispatchTarget? fallbackTarget = null;
+            if (projectFallback is not null &&
+                !string.Equals(projectFallback, effectiveModel, StringComparison.OrdinalIgnoreCase))
+            {
+                var fallbackRouting = ModelRouting.Resolve(projectFallback, project?.LocalModelBaseUrl);
+                if (fallbackRouting.Error is null)
+                    fallbackTarget = fallbackRouting.ToTarget(projectFallback);
+                else
+                    _logger.LogWarning(
+                        "consolidateAgentMemory: fallback target '{Model}' is unusable for {Agent}: {Error}",
+                        projectFallback, agent, fallbackRouting.Error);
+            }
+
+            _logger.LogInformation(
+                "consolidateAgentMemory: resolved {Agent} to {Provider}:{Model}{Fallback}",
+                agent, target.Provider, target.Model ?? "default",
+                fallbackTarget is null ? "" : $" (fallback {fallbackTarget.Provider}:{fallbackTarget.Model ?? "default"})");
+
             var runCtx = new AgentRunContext
             {
                 ProjectSlug = rt.Slug,
@@ -797,7 +826,8 @@ internal sealed class ActionExecutor
                     ? "No events were recorded for this run."
                     : eventsSummary,
                 SessionScope = scope,
-                Model = null,
+                Target = target,
+                FallbackTarget = fallbackTarget,
                 RetryOnResumeFailure = true,
                 MaxRunDuration = TimeSpan.FromMinutes(30),
             };
@@ -816,6 +846,9 @@ internal sealed class ActionExecutor
             _logger.LogWarning(ex, "consolidateAgentMemory: failed for {Agent}", spec.Agent);
         }
     }
+
+    internal static string? FirstConfiguredModel(params string?[] candidates) =>
+        candidates.FirstOrDefault(model => !string.IsNullOrWhiteSpace(model))?.Trim();
 
     /// <summary>Expands date/time placeholders in createTicket title/description fields.</summary>
     internal static string ResolveCreateTicketPlaceholders(string s, DateTime now)
@@ -941,9 +974,13 @@ internal sealed class ActionExecutor
                 return;
             }
 
-            // Pathspecs cover the new memory/ dir (recursively) and the legacy flat file. Git tolerates
-            // pathspecs for paths that don't exist on disk (e.g. only the dir is present), so list both.
-            var pathArgs = $"\"{relBase}/memory\" \"{relBase}/memory.md\"";
+            // Only pass paths that exist. Some Git versions reject the entire `git add` when one
+            // pathspec is absent, which prevented a new-format-only memory tree from being committed.
+            var pathArgs = string.Join(" ", new[]
+            {
+                hasDir ? $"\"{relBase}/memory\"" : null,
+                hasLegacy ? $"\"{relBase}/memory.md\"" : null,
+            }.Where(path => path is not null));
 
             var gitLock = _gitLocks.GetOrAdd(gitCwd, _ => new SemaphoreSlim(1, 1));
             await gitLock.WaitAsync();
