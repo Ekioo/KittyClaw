@@ -14,25 +14,25 @@
   <a href="https://kittyclaw.dev">kittyclaw.dev</a> · <a href="https://kittyclaw.dev/#waitlist">Get early access</a>
 </p>
 
-A kanban board that **orchestrates agentic projects**. Each column is a workflow stage (`Backlog`, `Todo`, `InProgress`, `Review`, `Done`, `Blocked`). Each project has members that can be human owners or **LLM agents** (programmer, groomer, producer, qa-tester, committer, code-janitor, evaluator, documentalist). A background `AutomationEngine` dispatches these agents based on triggers (column changes, comments, intervals, git commits, …), running them through Claude Code, OpenAI Codex, Grok Build, or a local Ollama model while their output streams into an in-app drawer.
+A kanban board that **orchestrates agentic projects**. New boards start with the workflow stages `Backlog`, `Todo`, `InProgress`, `Blocked`, `Scheduled`, `Review`, and `Done` (columns remain customizable). Each project has members that can be human owners or **LLM agents** (programmer, groomer, producer, qa-tester, committer, code-janitor, evaluator, documentalist). A background `AutomationEngine` dispatches these agents based on triggers (column changes, comments, intervals, git commits, …), running them through Claude Code, OpenAI Codex, Grok Build, or a local Ollama model while their output streams into an in-app drawer.
 
 ## Tech Stack
 
 - **.NET 10** / **Blazor Server** (interactive SSR)
 - **SQLite** via Entity Framework Core (one DB per project)
 - **OpenAPI** with auto-generated Markdown docs
-- External: **[Git](https://git-scm.com/downloads)** plus at least one agent provider: **[Claude Code CLI](https://docs.claude.com/en/docs/claude-code/overview)**, **[OpenAI Codex CLI](doc/codex-cli.md)**, or **[Grok Build](doc/grok-build.md)**
-- Optional: **[Ollama](https://ollama.com)** — dispatch agents to a local model ([details](doc/local-models.md))
+- Agent execution: at least one supported CLI — **[Claude Code CLI](https://docs.claude.com/en/docs/claude-code/overview)**, **[OpenAI Codex CLI](doc/codex-cli.md)**, or **[Grok Build](doc/grok-build.md)**. **[Ollama](https://ollama.com)** is also supported for local models through Claude Code CLI ([local-model setup](doc/local-models.md)).
+- Optional for repository initialization, Git-aware automations, and agent commits: **[Git](https://git-scm.com/downloads)**
 
 ## Getting Started
 
 ### Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- An agent CLI — Claude Code (`claude`), OpenAI Codex (`codex`), or Grok Build (`grok`) on your PATH
-- [Git](https://git-scm.com/downloads) — `git` on your PATH
+- At least one agent CLI on your `PATH`: Claude Code (`claude`), OpenAI Codex (`codex`), or Grok Build (`grok`). Local-model execution requires both Claude Code CLI and a reachable Ollama server.
+- Optional: [Git](https://git-scm.com/downloads) (`git` on your `PATH`) for repository initialization, Git-aware automations, and agent commits
 
-On first launch an onboarding popup detects Claude Code and Git. You can continue without them and configure another supported provider, but agent runs and auto-commits require the corresponding tools to be installed and available on the PATH.
+On first launch, the onboarding popup checks only for Claude Code and Git; it does not probe Codex, Grok Build, or Ollama. Those checks describe the default setup path, not the runtime's provider support. You can continue without either detected tool and configure another backend. Agent runs require their selected backend to be available, while Git-dependent features require Git.
 
 ### Run
 
@@ -114,7 +114,7 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 
 ## UI Features
 
-- Onboarding popup on first launch with Claude Code + Git detection
+- Onboarding popup on first launch that checks the default Claude Code + Git setup (other supported backends are configured separately)
 - Project creation popup with workspace selection + one-click agent template initialization
 - Unified multi-project home with project cards and kanban swimlanes
 - Kanban board with drag-and-drop
