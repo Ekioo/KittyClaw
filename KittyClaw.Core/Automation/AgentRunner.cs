@@ -296,9 +296,12 @@ public sealed class AgentRunner
 
         try
         {
+            var replayBaseContext = ctx;
+            var replayScopedAgent = scopedAgent;
             var attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume, ct);
             if (attempt.Cancelled) return run;
             PersistDiscoveredSession(ctx, scopedAgent, run);
+            sessionId = ResolveEffectiveSessionId(ctx.Target.Provider, sessionId, run.SessionId);
 
             // If the agent invoked AskUserQuestion, wait for the user's answer via the SteeringQueue.
             if (run.IsAwaitingUserAnswer)
@@ -330,6 +333,7 @@ public sealed class AgentRunner
                 attempt = await SpawnAndWaitAsync(ctx, run, skillContent, sessionId, isResume: false, ct);
                 if (attempt.Cancelled) return run;
                 PersistDiscoveredSession(ctx, scopedAgent, run);
+                sessionId = ResolveEffectiveSessionId(ctx.Target.Provider, sessionId, run.SessionId);
             }
 
             // Retry provider-level failures that another configured model can recover from.
@@ -353,13 +357,15 @@ public sealed class AgentRunner
                 // The primary key is left alone so a later primary run can still resume that session
                 // once quota recovers.
                 var fallbackCtx = ctx.WithFallback();
+                replayBaseContext = fallbackCtx;
+                var fallbackScoped = SessionScopeKey(
+                    fallbackCtx.AgentName, fallbackCtx.SessionScope, fallbackCtx.Target.Provider);
+                replayScopedAgent = fallbackScoped;
                 sessionId = Guid.NewGuid().ToString();
                 var fallbackBackend = AgentCliBackend.For(fallbackCtx.Target.Provider);
                 run.SessionId = fallbackBackend.CallerChoosesNewSessionId ? sessionId : null;
                 if (ctx.PersistSession)
                 {
-                    var fallbackScoped = SessionScopeKey(
-                        fallbackCtx.AgentName, fallbackCtx.SessionScope, fallbackCtx.Target.Provider);
                     if (fallbackBackend.CallerChoosesNewSessionId)
                         _sessions.SetSessionId(ctx.WorkspacePath, fallbackScoped, ctx.TicketId, sessionId);
                 }
@@ -367,33 +373,35 @@ public sealed class AgentRunner
                 if (attempt.Cancelled) return run;
                 PersistDiscoveredSession(fallbackCtx,
                     SessionScopeKey(fallbackCtx.AgentName, fallbackCtx.SessionScope, fallbackCtx.Target.Provider), run);
+                sessionId = ResolveEffectiveSessionId(fallbackCtx.Target.Provider, sessionId, run.SessionId);
             }
 
             // Auto-replay steer messages that arrived while stdin was closed (--print mode).
             // Loop so that steers injected during the replay itself are also picked up.
-            while (ctx.SessionScope == "chat" && attempt.Exit == 0 && run.PendingSteerMessages.Count > 0)
+            while (replayBaseContext.SessionScope == "chat" && attempt.Exit == 0 && run.PendingSteerMessages.Count > 0)
             {
                 var steers = run.DrainPendingSteerMessages();
                 var steerText = string.Join("\n", steers.Select(s => $"[Steering message from previous turn]: {s}"));
                 run.Push(new StreamEvent(DateTime.UtcNow, "steer_replay",
                     $"Replaying {steers.Count} injected message(s) from previous turn"));
-                var replayCtx = ctx.WithChatReplay(steerText);
+                var replayCtx = replayBaseContext.WithChatReplay(steerText);
                 attempt = await SpawnAndWaitAsync(replayCtx, run, skillContent, sessionId, isResume: true, ct);
                 if (attempt.Cancelled) return run;
                 if (ShouldRetryExpiredResume(replayCtx, isResume: true, attempt.Exit, attempt.AssistantEventCount))
                 {
                     run.Push(new StreamEvent(DateTime.UtcNow, "reset",
                         "Chat session closed before steering was delivered, starting a new turn"));
-                    _sessions.Clear(replayCtx.WorkspacePath, scopedAgent, replayCtx.TicketId);
+                    _sessions.Clear(replayCtx.WorkspacePath, replayScopedAgent, replayCtx.TicketId);
                     sessionId = Guid.NewGuid().ToString();
                     var replayBackend = AgentCliBackend.For(replayCtx.Target.Provider);
                     run.SessionId = replayBackend.CallerChoosesNewSessionId ? sessionId : null;
                     if (replayCtx.PersistSession && replayBackend.CallerChoosesNewSessionId)
-                        _sessions.SetSessionId(replayCtx.WorkspacePath, scopedAgent, replayCtx.TicketId, sessionId);
+                        _sessions.SetSessionId(replayCtx.WorkspacePath, replayScopedAgent, replayCtx.TicketId, sessionId);
 
                     attempt = await SpawnAndWaitAsync(replayCtx, run, skillContent, sessionId, isResume: false, ct);
                     if (attempt.Cancelled) return run;
-                    PersistDiscoveredSession(replayCtx, scopedAgent, run);
+                    PersistDiscoveredSession(replayCtx, replayScopedAgent, run);
+                    sessionId = ResolveEffectiveSessionId(replayCtx.Target.Provider, sessionId, run.SessionId);
                 }
             }
 
@@ -471,6 +479,17 @@ public sealed class AgentRunner
     internal static bool ShouldRetryExpiredResume(
         AgentRunContext context, bool isResume, int? exitCode, int assistantEventCount) =>
         context.RetryOnResumeFailure && isResume && (exitCode ?? -1) != 0 && assistantEventCount == 0;
+
+    /// <summary>
+    /// Codex chooses its thread id and reports it after launch. Any in-run resume (notably
+    /// steering replay) must use that discovered id, never KittyClaw's provisional GUID.
+    /// Claude and Grok keep the caller-selected id.
+    /// </summary>
+    internal static string ResolveEffectiveSessionId(
+        CliProvider provider, string requestedSessionId, string? discoveredSessionId) =>
+        provider == CliProvider.Codex && !string.IsNullOrWhiteSpace(discoveredSessionId)
+            ? discoveredSessionId
+            : requestedSessionId;
 
     private enum FallbackReason
     {

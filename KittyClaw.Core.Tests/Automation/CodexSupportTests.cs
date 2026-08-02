@@ -156,6 +156,15 @@ public sealed class CodexSupportTests
             AgentRunner.SessionScopeKey("agent", "chat", CliProvider.Codex));
 
     [Theory]
+    [InlineData(CliProvider.Codex, "provisional", "thread-real", "thread-real")]
+    [InlineData(CliProvider.Codex, "provisional", null, "provisional")]
+    [InlineData(CliProvider.Claude, "caller-id", "reported-id", "caller-id")]
+    [InlineData(CliProvider.Grok, "caller-id", "reported-id", "caller-id")]
+    public void EffectiveSessionId_UsesCodexDiscoveredThreadForInRunResume(
+        CliProvider provider, string requested, string? discovered, string expected) =>
+        Assert.Equal(expected, AgentRunner.ResolveEffectiveSessionId(provider, requested, discovered));
+
+    [Theory]
     [InlineData("2026-07-30T14:57:39Z WARN codex_core::plugins: invalid manifest", "diagnostic")]
     [InlineData("Authentication failed", "stderr")]
     public void Backend_HidesOnlyStructuredCodexWarnings(string line, string expectedKind) =>
