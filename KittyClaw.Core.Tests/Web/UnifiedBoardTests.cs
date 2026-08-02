@@ -146,6 +146,17 @@ public class UnifiedBoardTests
     }
 
     [Fact]
+    public void UnifiedBoard_ShowsAndAppliesProjectPipelines()
+    {
+        var src = LoadUnifiedBoard();
+        Assert.Contains("PipelineService PipelineService", src);
+        Assert.Contains("pipeline-tabs--lane", src);
+        Assert.Contains("SelectPipelineAsync(lane, pipeline.Id)", src);
+        Assert.Contains("ticket.PipelineId == pipelineId", src);
+        Assert.Contains("pipelineId: _newTicketPipelineId", src);
+    }
+
+    [Fact]
     public void UnifiedBoard_SubscribesAndDisposesBoardUpdateNotifier()
     {
         var src = LoadUnifiedBoard();

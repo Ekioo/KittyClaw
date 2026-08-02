@@ -4738,7 +4738,14 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
         align-items: flex-start;
         flex-wrap: wrap;
     }
+    .pipeline-tabs--lane {
+        order: 2;
+        width: calc(100% - 1.6rem);
+        max-width: none;
+        margin-left: 1.6rem;
+    }
     .board-lane-actions {
+        order: 3;
         width: 100%;
         margin-left: 1.6rem;
         justify-content: flex-start;
@@ -4881,35 +4888,63 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .queue-skipped, .queue-cancelled { border-left-color: #94a3b8; }
 .pipeline-tabs {
     display: flex;
-    gap: .4rem;
-    padding: 0 1.25rem .75rem;
+    gap: .25rem;
+    width: max-content;
+    max-width: calc(100% - 2rem);
+    margin: 0 auto .75rem;
+    padding: .2rem;
+    box-sizing: border-box;
+    background: var(--surface2);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
     overflow-x: auto;
+    scrollbar-width: none;
 }
+.pipeline-tabs::-webkit-scrollbar { display: none; }
 
 .pipeline-tab {
-    border: 1px solid var(--border, #303744);
-    border-radius: 999px;
+    border: 0;
+    border-radius: 6px;
     background: transparent;
     color: var(--text-muted, #9aa4b2);
-    padding: .4rem .8rem;
+    padding: .3rem .85rem;
+    font: inherit;
+    font-size: .82rem;
+    font-weight: 500;
     white-space: nowrap;
     cursor: pointer;
     text-decoration: none;
+    transition: color .15s, background .15s;
 }
+.pipeline-tab:hover { color: var(--text); }
 
 .pipeline-tab--active {
-    background: var(--accent, #6366f1);
-    border-color: var(--accent, #6366f1);
-    color: white;
+    background: var(--surface3);
+    color: var(--text);
 }
 
-.pipeline-tab--manage { margin-left: auto; }
+.pipeline-tabs--lane {
+    flex: 0 1 auto;
+    width: auto;
+    max-width: min(48vw, 52rem);
+    margin: 0 0 0 .25rem;
+}
 
 .workflow-settings { max-width: 1100px; }
 .workflow-migration-card { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; }
 .workflow-migration-card h2 { margin-bottom: .35rem; }
 .workflow-migration-card p { margin: 0; }
-.workflow-pills { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: 1rem; }
+.workflow-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .25rem;
+    width: fit-content;
+    margin-bottom: 1rem;
+    padding: .2rem;
+    background: var(--surface2);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+}
 .workflow-edit-row { align-items: center; }
 .workflow-table input, .workflow-table select { width: 100%; }
 .workflow-table .settings-actions { display: flex; gap: .4rem; justify-content: flex-end; }

@@ -6,6 +6,7 @@
 @inject ProjectService ProjectService
 @inject TicketService TicketService
 @inject ColumnService ColumnService
+@inject PipelineService PipelineService
 @inject MemberService MemberService
 @inject KittyClaw.Web.Services.BoardUpdateNotifier BoardUpdateNotifier
 @inject KittyClaw.Web.Services.BoardSortState SortState
@@ -102,6 +103,17 @@ else
                     @if (lane.Project.IsPaused)
                     {
                         <span class="project-paused-badge">⏸ @L["Paused"]</span>
+                    }
+                    @if (lane.Pipelines.Count > 0)
+                    {
+                        <nav class="pipeline-tabs pipeline-tabs--lane" aria-label="Project pipelines" @onclick:stopPropagation>
+                            @foreach (var pipeline in lane.Pipelines)
+                            {
+                                <button class="pipeline-tab @(pipeline.Id == lane.SelectedPipelineId ? "pipeline-tab--active" : "")"
+                                        @onclick="() => SelectPipelineAsync(lane, pipeline.Id)"
+                                        @onclick:stopPropagation>@pipeline.Name</button>
+                            }
+                        </nav>
                     }
                     <div class="board-lane-actions">
                         <a class="lane-action" href="/board/@slug"
@@ -312,7 +324,13 @@ else
 
 
 @code {
-    private sealed record LaneData(Project Project, List<BoardColumn> Columns, List<TicketSummary> Tickets, List<Member> Members);
+    private sealed record LaneData(
+        Project Project,
+        List<Pipeline> Pipelines,
+        int? SelectedPipelineId,
+        List<BoardColumn> Columns,
+        List<TicketSummary> Tickets,
+        List<Member> Members);
 
     private List<LaneData>? _lanes;
     private readonly Dictionary<string, bool> _collapsed = new(StringComparer.OrdinalIgnoreCase);
@@ -329,6 +347,8 @@ else
     private string _newTicketTitle = "";
     private string _newTicketDescription = "";
     private TicketPriority _newTicketPriority = TicketPriority.NiceToHave;
+    private int? _newTicketPipelineId;
+    private int? _newTicketColumnId;
     private string? _newTicketError;
     private bool _creatingTicket;
     private IDisposable? _escCreateTicket;
@@ -358,7 +378,7 @@ else
     private IEnumerable<LaneData> VisibleLanes =>
         (_lanes is null || string.IsNullOrWhiteSpace(_filterText)
             ? _lanes ?? []
-            : _lanes.Where(lane => ApplyFilter(lane.Tickets, lane).Any()))
+            : _lanes.Where(lane => ApplyFilter(PipelineTickets(lane), lane).Any()))
         .OrderBy(lane => lane.Project.IsPaused ? 1 : 0)
         .ThenBy(lane => lane.Project.Name, StringComparer.OrdinalIgnoreCase);
 
@@ -412,25 +432,49 @@ else
         if (_lanes is not null || _projects is null) return;
         // Load every lane concurrently — with 7-10 projects and a few hundred tickets each,
         // sequential per-project round trips would make the page noticeably slow to first paint.
-        var laneTasks = _projects.Select(LoadLaneAsync);
+        var laneTasks = _projects.Select(project => LoadLaneAsync(project));
         var lanes = await Task.WhenAll(laneTasks);
         _lanes = lanes.OrderBy(l => l.Project.Name, StringComparer.OrdinalIgnoreCase).ToList();
         StateHasChanged();
     }
 
-    private async Task<LaneData> LoadLaneAsync(Project project)
+    private async Task<LaneData> LoadLaneAsync(Project project, int? selectedPipelineId = null)
     {
-        var columnsTask = ColumnService.ListColumnsAsync(project.Slug);
+        var pipelinesTask = PipelineService.ListAsync(project.Slug);
         var ticketsTask = TicketService.ListTicketsAsync(project.Slug);
         var membersTask = MemberService.ListMembersAsync(project.Slug);
-        await Task.WhenAll(columnsTask, ticketsTask, membersTask);
-        return new LaneData(project, columnsTask.Result, ticketsTask.Result, membersTask.Result);
+        await Task.WhenAll(pipelinesTask, ticketsTask, membersTask);
+
+        var pipelines = pipelinesTask.Result;
+        if (selectedPipelineId is null || pipelines.All(pipeline => pipeline.Id != selectedPipelineId))
+            selectedPipelineId = pipelines.FirstOrDefault(pipeline => pipeline.IsDefault)?.Id
+                ?? pipelines.FirstOrDefault()?.Id;
+
+        var columns = selectedPipelineId is int pipelineId
+            ? await ColumnService.ListColumnsAsync(project.Slug, pipelineId)
+            : [];
+        return new LaneData(project, pipelines, selectedPipelineId, columns, ticketsTask.Result, membersTask.Result);
     }
+
+    private async Task SelectPipelineAsync(LaneData lane, int pipelineId)
+    {
+        if (lane.SelectedPipelineId == pipelineId) return;
+        var index = _lanes?.IndexOf(lane) ?? -1;
+        if (index < 0) return;
+
+        var columns = await ColumnService.ListColumnsAsync(lane.Project.Slug, pipelineId);
+        _lanes![index] = lane with { SelectedPipelineId = pipelineId, Columns = columns };
+    }
+
+    private static IEnumerable<TicketSummary> PipelineTickets(LaneData lane) =>
+        lane.SelectedPipelineId is int pipelineId
+            ? lane.Tickets.Where(ticket => ticket.PipelineId == pipelineId)
+            : [];
 
     private List<TicketSummary> GetTickets(LaneData lane, string status)
     {
         // Match the per-project board: top-level tickets only (sub-tickets live in sub-kanbans).
-        var tickets = ApplyFilter(lane.Tickets.Where(t => t.ParentId is null && t.Status == status), lane);
+        var tickets = ApplyFilter(PipelineTickets(lane).Where(t => t.ParentId is null && t.Status == status), lane);
 
         var sort = SortState.Get(lane.Project.Slug, status);
         if (sort.Mode != KittyClaw.Web.Services.ColumnSortMode.Manual)
@@ -442,7 +486,7 @@ else
     }
 
     private int VisibleTicketCount(LaneData lane) =>
-        ApplyFilter(lane.Tickets.Where(t => t.ParentId is null), lane).Count();
+        ApplyFilter(PipelineTickets(lane).Where(t => t.ParentId is null), lane).Count();
 
     // Same token syntax as the per-project board search: free text matches ticket title or
     // project name/slug; #42, @assignee, project:, priority:, label:, by: narrow further.
@@ -577,6 +621,8 @@ else
         _newTicketTitle = "";
         _newTicketDescription = "";
         _newTicketPriority = TicketPriority.NiceToHave;
+        _newTicketPipelineId = lane.SelectedPipelineId;
+        _newTicketColumnId = lane.Columns.FirstOrDefault(column => column.Name == status)?.Id;
         _newTicketError = null;
         _escCreateTicket?.Dispose();
         _escCreateTicket = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() =>
@@ -590,6 +636,8 @@ else
     {
         if (_creatingTicket) return;
         _newTicketProjectSlug = null;
+        _newTicketPipelineId = null;
+        _newTicketColumnId = null;
         _newTicketError = null;
         _escCreateTicket?.Dispose();
         _escCreateTicket = null;
@@ -607,13 +655,14 @@ else
         {
             await TicketService.CreateTicketAsync(
                 slug, _newTicketTitle.Trim(), _newTicketDescription.Trim(), "owner",
-                status: _newTicketStatus, priority: _newTicketPriority);
+                status: _newTicketStatus, priority: _newTicketPriority,
+                pipelineId: _newTicketPipelineId, columnId: _newTicketColumnId);
 
             if (_lanes is not null)
             {
                 var index = _lanes.FindIndex(lane => lane.Project.Slug == slug);
                 if (index >= 0)
-                    _lanes[index] = await LoadLaneAsync(_lanes[index].Project);
+                    _lanes[index] = await LoadLaneAsync(_lanes[index].Project, _lanes[index].SelectedPipelineId);
             }
 
             _creatingTicket = false;
@@ -681,7 +730,7 @@ else
         var idx = _lanes.FindIndex(l => l.Project.Slug == _panelSlug);
         if (idx >= 0)
         {
-            _lanes[idx] = await LoadLaneAsync(_lanes[idx].Project);
+            _lanes[idx] = await LoadLaneAsync(_lanes[idx].Project, _lanes[idx].SelectedPipelineId);
             StateHasChanged();
         }
     }
@@ -741,7 +790,7 @@ else
         var idx = lanes.FindIndex(l => l.Project.Slug == slug);
         if (idx >= 0)
         {
-            lanes[idx] = await LoadLaneAsync(lanes[idx].Project);
+            lanes[idx] = await LoadLaneAsync(lanes[idx].Project, lanes[idx].SelectedPipelineId);
             StateHasChanged();
         }
     }
@@ -785,7 +834,7 @@ else
                 return;
             }
 
-            _lanes[idx] = await LoadLaneAsync(refreshedProject);
+            _lanes[idx] = await LoadLaneAsync(refreshedProject, _lanes[idx].SelectedPipelineId);
             StateHasChanged();
         });
     }

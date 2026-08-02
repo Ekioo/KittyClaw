@@ -104,7 +104,6 @@ else
                 <button class="pipeline-tab @(pipeline.Id == _selectedPipelineId ? "pipeline-tab--active" : "")"
                         @onclick="() => SelectPipelineAsync(pipeline.Id)">@pipeline.Name</button>
             }
-            <a class="pipeline-tab pipeline-tab--manage" href="/board/@Slug/workflows">Manage</a>
         </nav>
     }
 

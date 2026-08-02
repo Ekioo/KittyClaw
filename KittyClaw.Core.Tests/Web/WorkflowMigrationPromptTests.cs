@@ -22,6 +22,17 @@ public sealed class WorkflowMigrationPromptTests
     }
 
     [Fact]
+    public void Workflow_page_keeps_structure_editing_but_delegates_processor_configuration_to_the_board()
+    {
+        var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Workflows.razor"));
+
+        Assert.Contains("Add column", source);
+        Assert.Contains("right-click its header on the board", source);
+        Assert.DoesNotContain("Configure processor", source);
+        Assert.DoesNotContain("ColumnProcessorService ProcessorService", source);
+    }
+
+    [Fact]
     public void Chat_drawer_prefills_but_does_not_automatically_send_initial_message()
     {
         var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "ChatDrawer.razor"));
