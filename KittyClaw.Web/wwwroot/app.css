@@ -5096,6 +5096,7 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     .column-editor-grid { grid-template-columns: 1fr; }
 }
 .workflow-textarea { width: 100%; min-height: 9rem; resize: vertical; }
+.processor-prompt { min-height: 12rem; }
 .workflow-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem; }
 .workflow-grid input, .workflow-grid select { width: 100%; }
 .skill-matrix { display: grid; grid-template-columns: minmax(180px, 1fr) repeat(3, auto); gap: .5rem 1rem; align-items: center; }

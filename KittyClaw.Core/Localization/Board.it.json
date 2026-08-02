@@ -119,6 +119,8 @@
   "ColumnProcessorInactive": "Nessun processore attivo",
   "ProcessorEnabled": "Abilitato",
   "ProcessorMission": "Missione",
+  "ProcessorPrompt": "Prompt del processore",
+  "ProcessorPromptHint": "Istruzioni dettagliate dopo la missione e prima delle skill e del contratto del risultato.",
   "ProcessorTicketOrder": "Ordine dei ticket",
   "ProcessorMaxAttempts": "Tentativi massimi",
   "ProcessorRetryDelay": "Attesa prima del nuovo tentativo (secondi)",

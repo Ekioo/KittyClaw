@@ -11,6 +11,7 @@ public class ColumnProcessor
     public int ColumnId { get; set; }
     public required string Name { get; set; }
     public string Mission { get; set; } = "Process the selected ticket and return a structured outcome.";
+    public string Prompt { get; set; } = "";
     public string? Model { get; set; }
     public bool Enabled { get; set; } = true;
     public int MaxTurns { get; set; } = 100;

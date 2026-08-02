@@ -24,7 +24,7 @@ public static partial class Endpoints
                     slug, columnId, req.Name, req.Mission, req.Model, req.Enabled, req.MaxTurns,
                     req.AvailableSkills, req.RecommendedSkills, req.RequiredSkills,
                     req.SelectionOrder, req.MaxAttempts, req.RetryBackoffSeconds,
-                    req.DefaultTargetColumnId, req.TechnicalFailureColumnId, req.Routes);
+                    req.DefaultTargetColumnId, req.TechnicalFailureColumnId, req.Routes, req.Prompt);
                 notifier.NotifyProjectUpdated(slug);
                 return Results.Ok(processor);
             }

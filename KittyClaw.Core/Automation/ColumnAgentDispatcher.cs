@@ -76,6 +76,12 @@ public sealed class ColumnAgentDispatcher(
         text.AppendLine("# Column processor");
         text.AppendLine();
         text.AppendLine(processor.Mission);
+        if (!string.IsNullOrWhiteSpace(processor.Prompt))
+        {
+            text.AppendLine();
+            text.AppendLine("## Processor prompt");
+            text.AppendLine(processor.Prompt);
+        }
         text.AppendLine();
         text.AppendLine("You own this workflow step. Do not move the ticket yourself; KittyClaw routes it from your structured result.");
 

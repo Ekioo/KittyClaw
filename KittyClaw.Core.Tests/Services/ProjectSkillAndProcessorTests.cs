@@ -1,5 +1,7 @@
 using KittyClaw.Core.Services;
 using KittyClaw.Core.Tests.Helpers;
+using KittyClaw.Core.Models;
+using System.Text.Json.Nodes;
 
 namespace KittyClaw.Core.Tests.Services;
 
@@ -17,7 +19,7 @@ public sealed class ProjectSkillAndProcessorTests : IDisposable
         _projects = new ProjectService(_temp.Path);
         _skills = new ProjectSkillService(_projects);
         _processors = new ColumnProcessorService(_projects, _skills);
-        _columns = new ColumnService(_projects);
+        _columns = new ColumnService(_projects, _processors);
         _pipelines = new PipelineService(_projects);
     }
 
@@ -98,6 +100,79 @@ public sealed class ProjectSkillAndProcessorTests : IDisposable
     }
 
     [Fact]
+    public async Task Processor_definition_file_is_authoritative_and_includes_prompt()
+    {
+        var project = await _projects.CreateProjectAsync("File processor");
+        var columns = await _columns.ListColumnsAsync(project.Slug);
+        var source = columns[0];
+        var target = columns[1];
+
+        await _processors.SaveAsync(project.Slug, source.Id, "File worker", "Short mission.", null,
+            true, 42, [], [], [], defaultTargetColumnId: target.Id,
+            routes: [new("accepted", target.Id)], prompt: "Follow the detailed checklist.");
+
+        var path = await _processors.GetDefinitionPathAsync(project.Slug, source.Id);
+        var json = JsonNode.Parse(await File.ReadAllTextAsync(path))!.AsObject();
+        Assert.Equal("Follow the detailed checklist.", json["prompt"]!.GetValue<string>());
+        Assert.Equal($"column-{target.Id}", json["routing"]!["default"]!.GetValue<string>());
+        Assert.Equal($"column-{target.Id}", json["routing"]!["routes"]![0]!["target"]!.GetValue<string>());
+
+        json["name"] = "Edited on disk";
+        json["prompt"] = "Prompt edited outside KittyClaw.";
+        await File.WriteAllTextAsync(path, json.ToJsonString(new() { WriteIndented = true }));
+
+        var synchronized = await _processors.GetAsync(project.Slug, source.Id);
+        Assert.NotNull(synchronized);
+        Assert.Equal("Edited on disk", synchronized.Name);
+        Assert.Equal("Prompt edited outside KittyClaw.", synchronized.Prompt);
+    }
+
+    [Fact]
+    public async Task Removing_definition_file_removes_runtime_projection_after_initial_migration()
+    {
+        var project = await _projects.CreateProjectAsync("Removed file processor");
+        var column = (await _columns.ListColumnsAsync(project.Slug)).First();
+        await _processors.SaveAsync(project.Slug, column.Id, "Worker", "Do work.", null,
+            true, 20, [], [], []);
+        var path = await _processors.GetDefinitionPathAsync(project.Slug, column.Id);
+
+        File.Delete(path);
+
+        Assert.Null(await _processors.GetAsync(project.Slug, column.Id));
+    }
+
+    [Fact]
+    public async Task First_read_exports_legacy_sqlite_processor_without_losing_configuration()
+    {
+        var project = await _projects.CreateProjectAsync("Legacy database processor");
+        var column = (await _columns.ListColumnsAsync(project.Slug)).First();
+        await using (var db = _projects.GetProjectDb(project.Slug))
+        {
+            await ColumnProcessorService.EnsureTableAsync(db);
+            db.ColumnProcessors.Add(new ColumnProcessor
+            {
+                ColumnId = column.Id,
+                Name = "Legacy worker",
+                Mission = "Preserve this mission.",
+                Prompt = "Preserve this prompt.",
+                Enabled = false,
+                MaxTurns = 77,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var migrated = await _processors.GetAsync(project.Slug, column.Id);
+        var path = await _processors.GetDefinitionPathAsync(project.Slug, column.Id);
+
+        Assert.NotNull(migrated);
+        Assert.Equal("Preserve this prompt.", migrated.Prompt);
+        Assert.False(migrated.Enabled);
+        Assert.Equal(77, migrated.MaxTurns);
+        Assert.True(File.Exists(path));
+        Assert.Contains("Preserve this mission.", await File.ReadAllTextAsync(path));
+    }
+
+    [Fact]
     public async Task Processor_rejects_unknown_project_skills()
     {
         var project = await _projects.CreateProjectAsync("Unknown skill");
@@ -148,6 +223,11 @@ public sealed class ProjectSkillAndProcessorTests : IDisposable
         Assert.Null(repaired.DefaultTargetColumnId);
         Assert.Null(repaired.TechnicalFailureColumnId);
         Assert.Empty(repaired.Routes);
+        var removedPath = await _processors.GetDefinitionPathAsync(project.Slug, removed.Id);
+        Assert.False(File.Exists(removedPath));
+        var sourcePath = await _processors.GetDefinitionPathAsync(project.Slug, source.Id);
+        var sourceDefinition = await File.ReadAllTextAsync(sourcePath);
+        Assert.DoesNotContain($"column-{removed.Id}", sourceDefinition);
     }
 
     [Fact]

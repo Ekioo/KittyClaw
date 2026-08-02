@@ -119,6 +119,8 @@
   "ColumnProcessorInactive": "No active processor",
   "ProcessorEnabled": "Enabled",
   "ProcessorMission": "Mission",
+  "ProcessorPrompt": "Processor prompt",
+  "ProcessorPromptHint": "Detailed instructions appended after the mission, before skills and the result contract.",
   "ProcessorTicketOrder": "Ticket order",
   "ProcessorMaxAttempts": "Maximum attempts",
   "ProcessorRetryDelay": "Retry delay (seconds)",

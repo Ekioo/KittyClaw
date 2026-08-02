@@ -112,6 +112,8 @@
                         <label class="workflow-check"><input type="checkbox" @bind="_enabled" /> @L["ProcessorEnabled"]</label>
                         <label>@L["Name"]<input class="settings-input" @bind="_name" /></label>
                         <label>@L["ProcessorMission"]<textarea class="settings-input workflow-textarea" @bind="_mission"></textarea></label>
+                        <label>@L["ProcessorPrompt"]<textarea class="settings-input workflow-textarea processor-prompt" @bind="_prompt"></textarea></label>
+                        <p class="settings-hint">@L["ProcessorPromptHint"]</p>
 
                         <div class="workflow-grid">
                             <label>@L["ProcessorTicketOrder"]
@@ -218,6 +220,7 @@
     private int _positionIndex;
     private string _name = "";
     private string _mission = "";
+    private string _prompt = "";
     private int _maxTurns = 100;
     private int _maxAttempts = 3;
     private int _retryBackoff = 60;
@@ -279,6 +282,7 @@
     {
         _name = processor?.Name ?? $"{sourceName ?? _columnName} processor";
         _mission = processor?.Mission ?? "Process the selected ticket and return a structured outcome.";
+        _prompt = processor?.Prompt ?? "";
         _enabled = processor?.Enabled ?? true;
         _maxTurns = processor?.MaxTurns ?? 100;
         _maxAttempts = processor?.MaxAttempts ?? 3;
@@ -331,7 +335,8 @@
                     .Select(route => new ColumnRoute(route.Outcome, route.TargetColumnId)).ToList();
                 await ProcessorService.SaveAsync(Slug, savedColumn.Id, _name, _mission, null,
                     _enabled, _maxTurns, _availableSkills.ToList(), _recommendedSkills.ToList(), _requiredSkills.ToList(),
-                    _selectionOrder, _maxAttempts, _retryBackoff, _defaultTargetId, _technicalFailureTargetId, routes);
+                    _selectionOrder, _maxAttempts, _retryBackoff, _defaultTargetId, _technicalFailureTargetId, routes,
+                    prompt: _prompt);
             }
 
             await OnSaved.InvokeAsync();

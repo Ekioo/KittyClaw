@@ -7,10 +7,12 @@ namespace KittyClaw.Core.Services;
 public class ColumnService
 {
     private readonly ProjectService _projectService;
+    private readonly ColumnProcessorService? _processorService;
 
-    public ColumnService(ProjectService projectService)
+    public ColumnService(ProjectService projectService, ColumnProcessorService? processorService = null)
     {
         _projectService = projectService;
+        _processorService = processorService;
     }
 
     private static readonly (string Name, string Color, ColumnRole Role)[] DefaultColumns =
@@ -195,6 +197,11 @@ public class ColumnService
         var target = await db.BoardColumns.FirstOrDefaultAsync(c =>
             c.PipelineId == column.PipelineId && c.Name == moveTicketsTo && c.Id != columnId);
         if (target is null) return false;
+
+        // processor.json is authoritative. Repair it before the runtime projection so a
+        // later synchronization cannot restore routes to the deleted column.
+        if (_processorService is not null)
+            await _processorService.PrepareColumnDeletionAsync(projectSlug, columnId);
 
         // Move tickets and repair every processor reference atomically with the column removal.
         // Without this cleanup, deleting a routed column leaves invisible destinations that only

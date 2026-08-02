@@ -16,6 +16,12 @@
 
 A kanban board that **orchestrates agentic projects**. A project can be split into independently named pipelines whose stable identities survive renames. Columns can own generic processors with persistent memory, reusable project skills, ordered ticket selection, durable retries, and switch-like routing to columns in any pipeline. Right-click a column and choose **Configure column** to edit its name, color, role, position, processor, and routing without losing the visual context of the board. Columns can also be inserted between existing lanes or added at the end directly from the Kanban; the Workflows page remains the global pipeline-and-skills overview. Execution state is separate from business columns, so an `InProgress` column is optional. The legacy `AutomationEngine` remains available for trigger-based rules, cron/interval work, and backward compatibility. Agents run through Claude Code, OpenAI Codex, Grok Build, or a local Ollama model while their output streams into the app.
 
+Each processor is versioned with its project in
+`.agents/processors/column-<id>/processor.json`. This authoritative definition contains its
+mission, explicit prompt, model, skills, ticket ordering, retry policy, and routing. SQLite keeps
+only a synchronized runtime projection and execution state. Persistent lessons live beside the
+definition under `.agents/processors/column-<id>/memory/MEMORY.md`.
+
 ## Tech Stack
 
 - **.NET 10** / **Blazor Server** (interactive SSR)

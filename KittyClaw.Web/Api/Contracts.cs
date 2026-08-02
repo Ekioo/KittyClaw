@@ -10,6 +10,7 @@ public record UpdateProjectSkillRequest(string? Name = null, string? Instruction
 public record SaveColumnProcessorRequest(
     string Name,
     string Mission,
+    string Prompt = "",
     string? Model = null,
     bool Enabled = true,
     int MaxTurns = 100,
