@@ -12,11 +12,11 @@
 @implements IDisposable
 
 <div class="processor-dialog-overlay" @onclick="CloseAsync">
-    <section class="processor-dialog processor-editor" role="dialog" aria-modal="true" aria-labelledby="processor-dialog-title" @onclick:stopPropagation>
+    <section class="processor-dialog column-editor" role="dialog" aria-modal="true" aria-labelledby="column-dialog-title" @onclick:stopPropagation>
         <header class="processor-dialog-header">
             <div>
-                <span class="processor-dialog-eyebrow">@L["ConfigureColumn"]</span>
-                <h2 id="processor-dialog-title">@L.Get("ColumnProcessorTitle", Column.Name)</h2>
+                <span class="processor-dialog-eyebrow">@L[IsCreating ? "CreateColumn" : "ConfigureColumn"]</span>
+                <h2 id="column-dialog-title">@(IsCreating ? L["ColumnCreateTitle"] : _columnName)</h2>
             </div>
             <button class="agent-close-btn" @onclick="CloseAsync" title="@L["Close"]">×</button>
         </header>
@@ -27,78 +27,169 @@
         }
         else
         {
+            <nav class="column-editor-tabs" aria-label="@L["ColumnEditorSections"]">
+                <button class="@GeneralTabClass" @onclick="OpenGeneralTab">@L["ColumnGeneralTab"]</button>
+                <button class="@ProcessorTabClass" @onclick="OpenProcessorTab">
+                    @L["ColumnProcessorTab"] <span class="column-editor-tab-state">@(_processorDraft ? "⚙" : "○")</span>
+                </button>
+                <button class="@RoutingTabClass" @onclick="OpenRoutingTab">@L["ColumnRoutingTab"]</button>
+            </nav>
+
             <div class="processor-dialog-body">
-                <p class="settings-hint">@L["ColumnProcessorHint"]</p>
-                @if (!_processorExists)
-                {
-                    <div class="processor-draft-notice" role="status">@L["ProcessorDraftNotice"]</div>
-                }
                 @if (!string.IsNullOrWhiteSpace(_message))
                 {
                     <p class="@(_isError ? "settings-status-error" : "settings-status-ok")">@_message</p>
                 }
 
-                <label class="workflow-check"><input type="checkbox" @bind="_enabled" /> @L["ProcessorEnabled"]</label>
-                <label>@L["Name"]<input class="settings-input" @bind="_name" /></label>
-                <label>@L["ProcessorMission"]<textarea class="settings-input workflow-textarea" @bind="_mission"></textarea></label>
-
-                <div class="workflow-grid">
-                    <label>@L["ProcessorTicketOrder"]
-                        <select @bind="_selectionOrder">
-                            @foreach (var order in Enum.GetValues<TicketSelectionOrder>())
-                            {
-                                <option value="@order">@SelectionOrderLabel(order)</option>
-                            }
-                        </select>
-                    </label>
-                    <label>@L["ProcessorMaxAttempts"]<input type="number" min="1" @bind="_maxAttempts" /></label>
-                    <label>@L["ProcessorRetryDelay"]<input type="number" min="1" @bind="_retryBackoff" /></label>
-                    <label>@L["ProcessorTurnLimit"]<input type="number" min="1" @bind="_maxTurns" /></label>
-                </div>
-
-                <h3>@L["ProcessorSkills"]</h3>
-                <p class="settings-hint">@L["ProcessorSkillsHint"]</p>
-                @if (_skills.Count == 0)
+                @if (_activeTab == "general")
                 {
-                    <p class="settings-hint">@L["ProcessorNoSkills"]</p>
+                    <div class="column-editor-grid">
+                        <label>@L["Name"]<input class="settings-input" @bind="_columnName" @bind:event="oninput" /></label>
+                        <label>@L["Color"]<input type="color" class="color-input column-editor-color" @bind="_columnColor" /></label>
+                        <label>@L["ColumnRole"]
+                            <select @bind="_columnRole">
+                                @foreach (var role in Enum.GetValues<ColumnRole>())
+                                {
+                                    <option value="@role">@L[$"WorkflowRole{role}"]</option>
+                                }
+                            </select>
+                        </label>
+                        <label>@L["ColumnPosition"]
+                            <select @bind="_positionIndex">
+                                @for (var index = 0; index <= SiblingColumns.Count; index++)
+                                {
+                                    <option value="@index">@PositionLabel(index)</option>
+                                }
+                            </select>
+                        </label>
+                    </div>
+                    <p class="settings-hint">@L["ColumnStableIdentityHint"]</p>
+
+                    @if (!IsCreating && PipelineColumns.Count > 1)
+                    {
+                        <section class="column-danger-zone">
+                            <h3>@L["ColumnDeleteTitle"]</h3>
+                            @if (!_confirmDelete)
+                            {
+                                <p class="settings-hint">@L["ColumnDeleteHint"]</p>
+                                <button class="delete-btn" @onclick="() => _confirmDelete = true">@L["DeleteColumn"]</button>
+                            }
+                            else
+                            {
+                                <label>@L["MoveTicketsTo"]
+                                    <select @bind="_deleteTargetId">
+                                        @foreach (var target in SiblingColumns)
+                                        {
+                                            <option value="@target.Id">@target.Name</option>
+                                        }
+                                    </select>
+                                </label>
+                                <div class="confirm-actions">
+                                    <button class="processor-secondary-btn" @onclick="() => _confirmDelete = false">@L["Cancel"]</button>
+                                    <button class="delete-btn" @onclick="DeleteColumnAsync">@L["DeleteColumn"]</button>
+                                </div>
+                            }
+                        </section>
+                    }
+                }
+                else if (_activeTab == "processor")
+                {
+                    @if (!_processorDraft)
+                    {
+                        <div class="column-empty-state">
+                            <span class="column-empty-state-icon">○</span>
+                            <h3>@L["ColumnNoProcessorTitle"]</h3>
+                            <p class="settings-hint">@L["ColumnNoProcessorHint"]</p>
+                            <button class="settings-primary" @onclick="CreateProcessorDraft">@L["ColumnAddProcessor"]</button>
+                        </div>
+                    }
+                    else
+                    {
+                        @if (!_processorExists)
+                        {
+                            <div class="processor-draft-notice" role="status">@L["ProcessorDraftNotice"]</div>
+                        }
+                        <label class="workflow-check"><input type="checkbox" @bind="_enabled" /> @L["ProcessorEnabled"]</label>
+                        <label>@L["Name"]<input class="settings-input" @bind="_name" /></label>
+                        <label>@L["ProcessorMission"]<textarea class="settings-input workflow-textarea" @bind="_mission"></textarea></label>
+
+                        <div class="workflow-grid">
+                            <label>@L["ProcessorTicketOrder"]
+                                <select @bind="_selectionOrder">
+                                    @foreach (var order in Enum.GetValues<TicketSelectionOrder>())
+                                    {
+                                        <option value="@order">@SelectionOrderLabel(order)</option>
+                                    }
+                                </select>
+                            </label>
+                            <label>@L["ProcessorMaxAttempts"]<input type="number" min="1" @bind="_maxAttempts" /></label>
+                            <label>@L["ProcessorRetryDelay"]<input type="number" min="1" @bind="_retryBackoff" /></label>
+                            <label>@L["ProcessorTurnLimit"]<input type="number" min="1" @bind="_maxTurns" /></label>
+                        </div>
+
+                        <h3>@L["ProcessorSkills"]</h3>
+                        <p class="settings-hint">@L["ProcessorSkillsHint"]</p>
+                        @if (_skills.Count == 0)
+                        {
+                            <p class="settings-hint">@L["ProcessorNoSkills"]</p>
+                        }
+                        else
+                        {
+                            <div class="skill-matrix">
+                                @foreach (var skill in _skills)
+                                {
+                                    <div><strong>@skill.Name</strong><code>@skill.Slug</code></div>
+                                    <label><input type="checkbox" checked="@_availableSkills.Contains(skill.Slug)" @onchange="e => ToggleSkill(_availableSkills, skill.Slug, e)" /> @L["ProcessorAvailable"]</label>
+                                    <label><input type="checkbox" checked="@_recommendedSkills.Contains(skill.Slug)" @onchange="e => ToggleSkill(_recommendedSkills, skill.Slug, e)" /> @L["ProcessorRecommended"]</label>
+                                    <label><input type="checkbox" checked="@_requiredSkills.Contains(skill.Slug)" @onchange="e => ToggleSkill(_requiredSkills, skill.Slug, e)" /> @L["ProcessorRequired"]</label>
+                                }
+                            </div>
+                        }
+
+                        @if (_processorExists)
+                        {
+                            <button class="processor-secondary-btn processor-remove-btn" @onclick="RemoveProcessorDraft">@L["ColumnRemoveProcessor"]</button>
+                        }
+                    }
                 }
                 else
                 {
-                    <div class="skill-matrix">
-                        @foreach (var skill in _skills)
+                    @if (!_processorDraft)
+                    {
+                        <div class="column-empty-state">
+                            <span class="column-empty-state-icon">○</span>
+                            <h3>@L["ColumnRoutingNeedsProcessor"]</h3>
+                            <button class="settings-primary" @onclick="CreateProcessorAndOpenTab">@L["ColumnAddProcessor"]</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="settings-hint">@L["ColumnRoutingHint"]</p>
+                        <div class="workflow-grid">
+                            <label>@L["ProcessorDefaultDestination"]
+                                <select @bind="_defaultTargetId">@ColumnOptions(true)</select>
+                            </label>
+                            <label>@L["ProcessorFailureDestination"]
+                                <select @bind="_technicalFailureTargetId">@ColumnOptions(true)</select>
+                            </label>
+                        </div>
+                        @foreach (var route in _routes)
                         {
-                            <div><strong>@skill.Name</strong><code>@skill.Slug</code></div>
-                            <label><input type="checkbox" checked="@_availableSkills.Contains(skill.Slug)" @onchange="e => ToggleSkill(_availableSkills, skill.Slug, e)" /> @L["ProcessorAvailable"]</label>
-                            <label><input type="checkbox" checked="@_recommendedSkills.Contains(skill.Slug)" @onchange="e => ToggleSkill(_recommendedSkills, skill.Slug, e)" /> @L["ProcessorRecommended"]</label>
-                            <label><input type="checkbox" checked="@_requiredSkills.Contains(skill.Slug)" @onchange="e => ToggleSkill(_requiredSkills, skill.Slug, e)" /> @L["ProcessorRequired"]</label>
+                            <div class="settings-row route-row">
+                                <input placeholder="@L["ProcessorOutcomePlaceholder"]" @bind="route.Outcome" />
+                                <span>&rarr;</span>
+                                <select @bind="route.TargetColumnId">@ColumnOptions(false)</select>
+                                <button class="processor-secondary-btn" @onclick="() => _routes.Remove(route)">@L["ProcessorRemove"]</button>
+                            </div>
                         }
-                    </div>
+                        <button class="processor-secondary-btn" @onclick="AddRoute">@L["ProcessorAddRoute"]</button>
+                    }
                 }
-
-                <h3>@L["ProcessorRouting"]</h3>
-                <div class="workflow-grid">
-                    <label>@L["ProcessorDefaultDestination"]
-                        <select @bind="_defaultTargetId">@ColumnOptions(true)</select>
-                    </label>
-                    <label>@L["ProcessorFailureDestination"]
-                        <select @bind="_technicalFailureTargetId">@ColumnOptions(true)</select>
-                    </label>
-                </div>
-                @foreach (var route in _routes)
-                {
-                    <div class="settings-row route-row">
-                        <input placeholder="@L["ProcessorOutcomePlaceholder"]" @bind="route.Outcome" />
-                        <span>&rarr;</span>
-                        <select @bind="route.TargetColumnId">@ColumnOptions(false)</select>
-                        <button class="processor-secondary-btn" @onclick="() => _routes.Remove(route)">@L["ProcessorRemove"]</button>
-                    </div>
-                }
-                <button class="processor-secondary-btn" @onclick="AddRoute">@L["ProcessorAddRoute"]</button>
             </div>
 
             <footer class="processor-dialog-footer">
                 <button class="processor-secondary-btn" @onclick="CloseAsync">@L["Cancel"]</button>
-                <button class="settings-primary" @onclick="SaveAsync" disabled="@_saving">@(_saving ? "…" : L["ProcessorSave"])</button>
+                <button class="settings-primary" @onclick="SaveAsync" disabled="@(_saving || string.IsNullOrWhiteSpace(_columnName))">@(_saving ? "…" : L[IsCreating ? "CreateColumn" : "Save"])</button>
             </footer>
         }
     </section>
@@ -106,14 +197,25 @@
 
 @code {
     [Parameter, EditorRequired] public required string Slug { get; set; }
-    [Parameter, EditorRequired] public required BoardColumn Column { get; set; }
+    [Parameter] public BoardColumn? Column { get; set; }
+    [Parameter] public BoardColumn? TemplateColumn { get; set; }
+    [Parameter, EditorRequired] public int PipelineId { get; set; }
+    [Parameter] public int InsertIndex { get; set; } = -1;
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback OnSaved { get; set; }
 
+    private bool IsCreating => Column is null;
     private bool _loading = true;
     private bool _saving;
     private bool _processorExists;
+    private bool _processorDraft;
+    private bool _removeProcessorOnSave;
     private bool _enabled = true;
+    private string _activeTab = "general";
+    private string _columnName = "";
+    private string _columnColor = "#5a6a80";
+    private ColumnRole _columnRole;
+    private int _positionIndex;
     private string _name = "";
     private string _mission = "";
     private int _maxTurns = 100;
@@ -129,9 +231,14 @@
     private HashSet<string> _recommendedSkills = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<string> _requiredSkills = new(StringComparer.OrdinalIgnoreCase);
     private List<RouteDraft> _routes = [];
+    private bool _confirmDelete;
+    private int _deleteTargetId;
     private string? _message;
     private bool _isError;
     private IDisposable? _escapeToken;
+
+    private List<BoardColumn> PipelineColumns => _pipelineColumns.GetValueOrDefault(PipelineId, []);
+    private List<BoardColumn> SiblingColumns => PipelineColumns.Where(column => column.Id != Column?.Id).ToList();
 
     protected override async Task OnInitializedAsync()
     {
@@ -142,21 +249,20 @@
                 _pipelineColumns[pipeline.Id] = await ColumnService.ListColumnsAsync(Slug, pipeline.Id);
             _skills = await SkillService.ListAsync(Slug);
 
-            var processor = await ProcessorService.GetAsync(Slug, Column.Id);
-            _processorExists = processor is not null;
-            _name = processor?.Name ?? $"{Column.Name} processor";
-            _mission = processor?.Mission ?? "Process the selected ticket and return a structured outcome.";
-            _enabled = processor?.Enabled ?? true;
-            _maxTurns = processor?.MaxTurns ?? 100;
-            _maxAttempts = processor?.MaxAttempts ?? 3;
-            _retryBackoff = processor?.RetryBackoffSeconds ?? 60;
-            _selectionOrder = processor?.SelectionOrder ?? TicketSelectionOrder.Position;
-            _defaultTargetId = processor?.DefaultTargetColumnId;
-            _technicalFailureTargetId = processor?.TechnicalFailureColumnId;
-            _availableSkills = new(processor?.AvailableSkills ?? [], StringComparer.OrdinalIgnoreCase);
-            _recommendedSkills = new(processor?.RecommendedSkills ?? [], StringComparer.OrdinalIgnoreCase);
-            _requiredSkills = new(processor?.RequiredSkills ?? [], StringComparer.OrdinalIgnoreCase);
-            _routes = processor?.Routes.Select(r => new RouteDraft { Outcome = r.Outcome, TargetColumnId = r.TargetColumnId }).ToList() ?? [];
+            var source = Column ?? TemplateColumn;
+            _columnName = Column?.Name ?? (TemplateColumn is null ? "" : L.Get("ColumnCopyName", TemplateColumn.Name));
+            _columnColor = source?.Color ?? "#5a6a80";
+            _columnRole = source?.Role ?? ColumnRole.Normal;
+            var sourceIndex = source is null ? PipelineColumns.Count : PipelineColumns.FindIndex(column => column.Id == source.Id);
+            _positionIndex = Math.Clamp(InsertIndex >= 0 ? InsertIndex : Math.Max(0, sourceIndex), 0, SiblingColumns.Count);
+            _deleteTargetId = SiblingColumns.FirstOrDefault()?.Id ?? 0;
+
+            var processor = source is null ? null : await ProcessorService.GetAsync(Slug, source.Id);
+            _processorExists = Column is not null && processor is not null;
+            _processorDraft = processor is not null;
+            ApplyProcessor(processor, source?.Name);
+            if (TemplateColumn is not null && processor is not null)
+                _name = L.Get("ColumnCopyName", processor.Name);
         }
         catch (Exception ex)
         {
@@ -167,6 +273,23 @@
         {
             _loading = false;
         }
+    }
+
+    private void ApplyProcessor(ColumnProcessor? processor, string? sourceName)
+    {
+        _name = processor?.Name ?? $"{sourceName ?? _columnName} processor";
+        _mission = processor?.Mission ?? "Process the selected ticket and return a structured outcome.";
+        _enabled = processor?.Enabled ?? true;
+        _maxTurns = processor?.MaxTurns ?? 100;
+        _maxAttempts = processor?.MaxAttempts ?? 3;
+        _retryBackoff = processor?.RetryBackoffSeconds ?? 60;
+        _selectionOrder = processor?.SelectionOrder ?? TicketSelectionOrder.Position;
+        _defaultTargetId = processor?.DefaultTargetColumnId;
+        _technicalFailureTargetId = processor?.TechnicalFailureColumnId;
+        _availableSkills = new(processor?.AvailableSkills ?? [], StringComparer.OrdinalIgnoreCase);
+        _recommendedSkills = new(processor?.RecommendedSkills ?? [], StringComparer.OrdinalIgnoreCase);
+        _requiredSkills = new(processor?.RequiredSkills ?? [], StringComparer.OrdinalIgnoreCase);
+        _routes = processor?.Routes.Select(route => new RouteDraft { Outcome = route.Outcome, TargetColumnId = route.TargetColumnId }).ToList() ?? [];
     }
 
     protected override Task OnAfterRenderAsync(bool firstRender)
@@ -182,11 +305,35 @@
         _message = null;
         try
         {
-            var routes = _routes.Where(r => !string.IsNullOrWhiteSpace(r.Outcome) && r.TargetColumnId > 0)
-                .Select(r => new ColumnRoute(r.Outcome, r.TargetColumnId)).ToList();
-            await ProcessorService.SaveAsync(Slug, Column.Id, _name, _mission, null,
-                _enabled, _maxTurns, _availableSkills.ToList(), _recommendedSkills.ToList(), _requiredSkills.ToList(),
-                _selectionOrder, _maxAttempts, _retryBackoff, _defaultTargetId, _technicalFailureTargetId, routes);
+            var trimmedName = _columnName.Trim();
+            if (PipelineColumns.Any(column => column.Id != Column?.Id && column.Name.Equals(trimmedName, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException(L["ColumnNameAlreadyExists"]);
+
+            BoardColumn savedColumn;
+            if (IsCreating)
+            {
+                savedColumn = await ColumnService.CreateColumnAsync(Slug, trimmedName, _columnColor, PipelineId, _columnRole, _positionIndex);
+            }
+            else
+            {
+                savedColumn = await ColumnService.UpdateColumnAsync(Slug, Column!.Id, trimmedName, _columnColor, _columnRole)
+                    ?? throw new InvalidOperationException(L["ColumnNameAlreadyExists"]);
+                await ColumnService.ReorderColumnAsync(Slug, savedColumn.Id, _positionIndex);
+            }
+
+            if (_removeProcessorOnSave)
+            {
+                await ProcessorService.DeleteAsync(Slug, savedColumn.Id);
+            }
+            else if (_processorDraft)
+            {
+                var routes = _routes.Where(route => !string.IsNullOrWhiteSpace(route.Outcome) && route.TargetColumnId > 0)
+                    .Select(route => new ColumnRoute(route.Outcome, route.TargetColumnId)).ToList();
+                await ProcessorService.SaveAsync(Slug, savedColumn.Id, _name, _mission, null,
+                    _enabled, _maxTurns, _availableSkills.ToList(), _recommendedSkills.ToList(), _requiredSkills.ToList(),
+                    _selectionOrder, _maxAttempts, _retryBackoff, _defaultTargetId, _technicalFailureTargetId, routes);
+            }
+
             await OnSaved.InvokeAsync();
             await CloseAsync();
         }
@@ -201,6 +348,61 @@
         }
     }
 
+    private async Task DeleteColumnAsync()
+    {
+        var target = SiblingColumns.FirstOrDefault(column => column.Id == _deleteTargetId);
+        if (Column is null || target is null) return;
+        try
+        {
+            if (!await ColumnService.DeleteColumnAsync(Slug, Column.Id, target.Name))
+                throw new InvalidOperationException(L["ColumnDeleteFailed"]);
+            await OnSaved.InvokeAsync();
+            await CloseAsync();
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+            _isError = true;
+        }
+    }
+
+    private void RemoveProcessorDraft()
+    {
+        _removeProcessorOnSave = true;
+        _processorExists = false;
+        _processorDraft = false;
+        ApplyProcessor(null, _columnName);
+    }
+
+    private void CreateProcessorDraft()
+    {
+        _removeProcessorOnSave = false;
+        _processorDraft = true;
+        ApplyProcessor(null, _columnName);
+    }
+
+    private void CreateProcessorAndOpenTab()
+    {
+        CreateProcessorDraft();
+        _activeTab = "processor";
+    }
+
+    private string TabClass(string tab) => $"column-editor-tab {(_activeTab == tab ? "column-editor-tab--active" : "")}";
+    private string GeneralTabClass => TabClass("general");
+    private string ProcessorTabClass => TabClass("processor");
+    private string RoutingTabClass => TabClass("routing");
+    private void OpenGeneralTab() => _activeTab = "general";
+    private void OpenProcessorTab() => _activeTab = "processor";
+    private void OpenRoutingTab() => _activeTab = "routing";
+
+    private string PositionLabel(int index)
+    {
+        if (SiblingColumns.Count == 0) return L["ColumnPositionOnly"];
+        if (index == 0) return L.Get("ColumnPositionBefore", SiblingColumns[0].Name);
+        if (index >= SiblingColumns.Count) return L.Get("ColumnPositionAfter", SiblingColumns[^1].Name);
+        return L.Get("ColumnPositionBefore", SiblingColumns[index].Name);
+    }
+
     private void ToggleSkill(HashSet<string> set, string slug, ChangeEventArgs e)
     {
         if (e.Value is true) set.Add(slug); else set.Remove(slug);
@@ -213,8 +415,8 @@
     }
 
     private List<(Pipeline Pipeline, BoardColumn Column)> TargetColumns =>
-        _pipelines.SelectMany(p => _pipelineColumns.GetValueOrDefault(p.Id, [])
-            .Where(c => c.Id != Column.Id).Select(c => (p, c))).ToList();
+        _pipelines.SelectMany(pipeline => _pipelineColumns.GetValueOrDefault(pipeline.Id, [])
+            .Where(column => column.Id != Column?.Id).Select(column => (pipeline, column))).ToList();
 
     private RenderFragment ColumnOptions(bool allowEmpty) => builder =>
     {

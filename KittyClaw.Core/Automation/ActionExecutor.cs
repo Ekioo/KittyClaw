@@ -32,6 +32,11 @@ internal sealed class ActionExecutor
     // Prevents concurrent chains for the same (automation, ticket) pair.
     private readonly ConcurrentDictionary<string, byte> _inFlightChains = new();
 
+    // Long-running actions are detached so the engine tick stays responsive. Ticket-independent
+    // actions (for example a board-wide delivery script) are coalesced per project/automation:
+    // one status transition per ticket must not fan out into hundreds of identical processes.
+    private readonly ConcurrentDictionary<string, byte> _inFlightDetachedActions = new();
+
     public ActionExecutor(
         TicketService tickets,
         MemberService members,
@@ -246,10 +251,16 @@ internal sealed class ActionExecutor
 
                 if (!background && action is ConsolidateAgentMemoryActionSpec or ExecutePowerShellActionSpec or HttpRequestActionSpec)
                 {
-                    var guardKey = chainKey ?? $"{automation.Id}:detached";
-                    if (chainKey is null && !_inFlightChains.TryAdd(guardKey, 0))
+                    var coalesceGlobally = IsTicketIndependentDetachedAction(action);
+                    var guardKey = coalesceGlobally
+                        ? $"{rt.Slug}:{automation.Id}:global-detached"
+                        : chainKey ?? $"{rt.Slug}:{automation.Id}:detached";
+                    var ownsDetachedGuard = coalesceGlobally || chainKey is null;
+                    if (ownsDetachedGuard && !_inFlightDetachedActions.TryAdd(guardKey, 0))
                     {
-                        _logger.LogDebug("Detached actions for {Id} already in flight — skipping", automation.Id);
+                        _logger.LogInformation(
+                            "Coalesced overlapping ticket-independent actions for {Project}/{Id}",
+                            rt.Slug, automation.Id);
                         return state.LastRun;
                     }
                     detached = true;
@@ -261,9 +272,12 @@ internal sealed class ActionExecutor
                         catch (Exception ex) { _logger.LogWarning(ex, "Detached automation actions failed for {Id}", automation.Id); }
                         finally
                         {
+                            if (ownsDetachedGuard)
+                                _inFlightDetachedActions.TryRemove(guardKey, out _);
                             // Mirrors the outer finally: a dispatched runAgent hands chain
                             // ownership to HandleRunCompletionAsync.
-                            if (!runAgentDispatched) _inFlightChains.TryRemove(guardKey, out _);
+                            if (!runAgentDispatched && chainKey is not null)
+                                _inFlightChains.TryRemove(chainKey, out _);
                         }
                     }, CancellationToken.None);
                     return state.LastRun;
@@ -302,6 +316,12 @@ internal sealed class ActionExecutor
             if (chainKey is not null && !runAgentDispatched && !detached)
                 _inFlightChains.TryRemove(chainKey, out _);
         }
+    }
+
+    private static bool IsTicketIndependentDetachedAction(ActionSpec action)
+    {
+        if (action is ConsolidateAgentMemoryActionSpec) return true;
+        return action is ExecutePowerShellActionSpec { CoalesceOverlapping: true };
     }
 
     /// <summary>

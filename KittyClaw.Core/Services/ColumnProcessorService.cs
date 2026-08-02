@@ -8,7 +8,7 @@ public sealed class ColumnProcessorService(
     ProjectService projects,
     ProjectSkillService skills)
 {
-    private static async Task EnsureTableAsync(TodoDbContext db)
+    internal static async Task EnsureTableAsync(TodoDbContext db)
     {
         await MigrationGate.RunOnceAsync(db, "column-processors-v1", static d =>
             d.Database.ExecuteSqlRawAsync("""

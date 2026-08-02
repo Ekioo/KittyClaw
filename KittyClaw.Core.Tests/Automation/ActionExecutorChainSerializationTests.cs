@@ -188,4 +188,16 @@ public class ActionExecutorChainSerializationTests
             Regex.IsMatch(src, @"chainKey\s*=.*automation\.Id|automation\.Id.*chainKey"),
             "chainKey must embed automation.Id to avoid collisions between different automations");
     }
+
+    [Fact]
+    public void Ticket_independent_detached_scripts_are_coalesced_per_project_and_automation()
+    {
+        var src = ActionExecutorSrc;
+
+        Assert.Contains("_inFlightDetachedActions", src);
+        Assert.Contains("IsTicketIndependentDetachedAction", src);
+        Assert.Contains("global-detached", src);
+        Assert.Contains("CoalesceOverlapping: true", src);
+        Assert.Contains("Coalesced overlapping ticket-independent actions", src);
+    }
 }

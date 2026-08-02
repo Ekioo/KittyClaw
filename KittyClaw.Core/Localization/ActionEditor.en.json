@@ -58,5 +58,7 @@
   "HttpContentType": "Content-Type",
   "HttpTimeout": "Timeout (seconds)",
   "HttpAllowLocalTargets": "Allow local targets (loopback/link-local)",
-  "HttpAllowLocalTargetsHint": "SSRF guard: without this, requests to loopback and link-local addresses (incl. cloud metadata) are refused"
+  "HttpAllowLocalTargetsHint": "SSRF guard: without this, requests to loopback and link-local addresses (incl. cloud metadata) are refused",
+  "PsCoalesceOverlapping": "Coalesce overlapping executions",
+  "PsCoalesceOverlappingHint": "For idempotent scripts that scan global state: only one copy runs at a time for this automation"
 }

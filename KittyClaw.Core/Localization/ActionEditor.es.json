@@ -58,5 +58,7 @@
   "HttpContentType": "Tipo de contenido",
   "HttpTimeout": "Tiempo de espera (segundos)",
   "HttpAllowLocalTargets": "Permitir objetivos locales (bucle invertido/enlace local)",
-  "HttpAllowLocalTargetsHint": "Protección SSRF: sin esto, se rechazan las solicitudes de bucle invertido y direcciones locales de enlace (incluidos los metadatos de la nube)"
+  "HttpAllowLocalTargetsHint": "Protección SSRF: sin esto, se rechazan las solicitudes de bucle invertido y direcciones locales de enlace (incluidos los metadatos de la nube)",
+  "PsCoalesceOverlapping": "Agrupar ejecuciones simultáneas",
+  "PsCoalesceOverlappingHint": "Para scripts idempotentes que analizan el estado global: solo se ejecuta una copia a la vez por automatización"
 }

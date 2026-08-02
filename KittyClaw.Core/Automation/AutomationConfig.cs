@@ -410,5 +410,10 @@ public sealed class ExecutePowerShellActionSpec : ActionSpec
     public List<string> Arguments { get; set; } = new();
     public int TimeoutSeconds { get; set; } = 60;
     public bool AbortOnFailure { get; set; }
+    /// <summary>
+    /// Coalesce overlapping executions per project and automation. Use this for board-wide,
+    /// idempotent scripts that scan current state instead of processing one firing payload.
+    /// </summary>
+    public bool CoalesceOverlapping { get; set; }
     public Dictionary<string, string> Env { get; set; } = new();
 }

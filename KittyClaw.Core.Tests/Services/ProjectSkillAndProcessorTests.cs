@@ -126,6 +126,31 @@ public sealed class ProjectSkillAndProcessorTests : IDisposable
     }
 
     [Fact]
+    public async Task Deleting_column_removes_its_processor_and_repairs_incoming_routes()
+    {
+        var project = await _projects.CreateProjectAsync("Safe column deletion");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Editorial");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Source", pipelineId: pipeline.Id);
+        var removed = await _columns.CreateColumnAsync(project.Slug, "Removed", pipelineId: pipeline.Id);
+        var fallback = await _columns.CreateColumnAsync(project.Slug, "Fallback", pipelineId: pipeline.Id);
+
+        await _processors.SaveAsync(project.Slug, source.Id, "Source worker", "Route work.", null,
+            true, 20, [], [], [], defaultTargetColumnId: removed.Id,
+            technicalFailureColumnId: removed.Id, routes: [new("approved", removed.Id)]);
+        await _processors.SaveAsync(project.Slug, removed.Id, "Removed worker", "Do work.", null,
+            true, 20, [], [], []);
+
+        Assert.True(await _columns.DeleteColumnAsync(project.Slug, removed.Id, fallback.Name));
+
+        Assert.Null(await _processors.GetAsync(project.Slug, removed.Id));
+        var repaired = await _processors.GetAsync(project.Slug, source.Id);
+        Assert.NotNull(repaired);
+        Assert.Null(repaired.DefaultTargetColumnId);
+        Assert.Null(repaired.TechnicalFailureColumnId);
+        Assert.Empty(repaired.Routes);
+    }
+
+    [Fact]
     public async Task Processor_memory_preserves_lessons_from_legacy_inferred_path()
     {
         var project = await _projects.CreateProjectAsync("Legacy processor memory");

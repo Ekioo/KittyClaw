@@ -58,5 +58,7 @@
   "HttpContentType": "Inhaltstyp",
   "HttpTimeout": "Timeout (Sekunden)",
   "HttpAllowLocalTargets": "Lokale Ziele zulassen (Loopback/Link-Local)",
-  "HttpAllowLocalTargetsHint": "SSRF-Schutz: Ohne diesen werden Anfragen an Loopback- und Link-Local-Adressen (inkl. Cloud-Metadaten) abgelehnt"
+  "HttpAllowLocalTargetsHint": "SSRF-Schutz: Ohne diesen werden Anfragen an Loopback- und Link-Local-Adressen (inkl. Cloud-Metadaten) abgelehnt",
+  "PsCoalesceOverlapping": "Überlappende Ausführungen zusammenfassen",
+  "PsCoalesceOverlappingHint": "Für idempotente Skripte mit globalem Zustand: Pro Automation läuft nur eine Kopie gleichzeitig"
 }

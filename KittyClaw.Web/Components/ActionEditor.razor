@@ -207,6 +207,10 @@
                 <input type="checkbox" @bind="s.AbortOnFailure" />
                 @L["PsAbortOnFailure"]
             </label>
+            <label class="checkbox-label" title="@L["PsCoalesceOverlappingHint"]">
+                <input type="checkbox" @bind="s.CoalesceOverlapping" />
+                @L["PsCoalesceOverlapping"]
+            </label>
             break;
         case HttpRequestActionSpec s:
             <label>@L["HttpMethod"]

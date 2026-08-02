@@ -35,6 +35,21 @@ public class AutomationConfigJsonTests
     }
 
     [Fact]
+    public void ExecutePowerShellActionSpec_coalescing_round_trip()
+    {
+        var spec = new ExecutePowerShellActionSpec
+        {
+            Script = "node board-wide-task.mjs",
+            CoalesceOverlapping = true,
+        };
+
+        ActionSpec roundtrip = JsonSerializer.Deserialize<ActionSpec>(
+            JsonSerializer.Serialize<ActionSpec>(spec, Opts), Opts)!;
+
+        Assert.True(Assert.IsType<ExecutePowerShellActionSpec>(roundtrip).CoalesceOverlapping);
+    }
+
+    [Fact]
     public void AllSubTicketsInStatusConditionSpec_round_trip()
     {
         var spec = new AllSubTicketsInStatusConditionSpec { Statuses = new() { "Done", "Review" } };

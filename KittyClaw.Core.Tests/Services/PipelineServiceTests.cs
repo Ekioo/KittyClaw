@@ -50,6 +50,22 @@ public sealed class PipelineServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Column_can_be_inserted_at_an_exact_board_position()
+    {
+        var project = await _projects.CreateProjectAsync("Contextual insertion");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Editorial");
+        await _columns.CreateColumnAsync(project.Slug, "Draft", pipelineId: pipeline.Id);
+        await _columns.CreateColumnAsync(project.Slug, "Review", pipelineId: pipeline.Id);
+
+        var inserted = await _columns.CreateColumnAsync(
+            project.Slug, "Fact check", pipelineId: pipeline.Id, insertIndex: 1);
+        var columns = await _columns.ListColumnsAsync(project.Slug, pipeline.Id);
+
+        Assert.Equal(["Draft", "Fact check", "Review"], columns.Select(column => column.Name));
+        Assert.Equal(1, inserted.SortOrder);
+    }
+
+    [Fact]
     public async Task Renaming_pipeline_preserves_stable_identity_and_columns()
     {
         var project = await _projects.CreateProjectAsync("Rename workflow");

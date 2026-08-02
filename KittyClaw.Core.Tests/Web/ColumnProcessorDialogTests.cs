@@ -21,7 +21,34 @@ public sealed class ColumnProcessorDialogTests
 
         Assert.Contains("if (!_processorExists)", source);
         Assert.Contains("ProcessorDraftNotice", source);
-        Assert.Contains("_processorExists = processor is not null", source);
+        Assert.Contains("_processorExists = Column is not null && processor is not null", source);
+    }
+
+    [Fact]
+    public void Column_editor_centralizes_general_processor_routing_and_deletion()
+    {
+        var dialog = File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Web", "Components", "ColumnProcessorDialog.razor"));
+        var board = File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Board.razor"));
+        var workflows = File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Workflows.razor"));
+        var settings = File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Web", "Components", "Pages", "ProjectSettings.razor"));
+
+        Assert.Contains("ColumnGeneralTab", dialog);
+        Assert.Contains("ColumnProcessorTab", dialog);
+        Assert.Contains("ColumnRoutingTab", dialog);
+        Assert.Contains("_columnColor", dialog);
+        Assert.Contains("_columnRole", dialog);
+        Assert.Contains("_positionIndex", dialog);
+        Assert.Contains("DeleteColumnAsync", dialog);
+        Assert.Contains("column-insert-slot", board);
+        Assert.Contains("AddColumnFromBoard", board);
+        Assert.Contains("InsertColumnBeforeFromMenu", board);
+        Assert.Contains("DuplicateColumnFromMenu", board);
+        Assert.DoesNotContain("WorkflowColumnsHint", workflows);
+        Assert.DoesNotContain("NewColumnPlaceholder", settings);
     }
 
     [Theory]

@@ -24,12 +24,13 @@ public sealed class WorkflowMigrationPromptTests
     }
 
     [Fact]
-    public void Workflow_page_keeps_structure_editing_but_delegates_processor_configuration_to_the_board()
+    public void Workflow_page_delegates_all_column_configuration_to_the_board()
     {
         var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Workflows.razor"));
 
-        Assert.Contains("WorkflowAddColumn", source);
-        Assert.Contains("WorkflowColumnsHint", source);
+        Assert.DoesNotContain("WorkflowAddColumn", source);
+        Assert.DoesNotContain("WorkflowColumnsHint", source);
+        Assert.DoesNotContain("ColumnService", source);
         Assert.DoesNotContain("Configure processor", source);
         Assert.DoesNotContain("ColumnProcessorService ProcessorService", source);
     }

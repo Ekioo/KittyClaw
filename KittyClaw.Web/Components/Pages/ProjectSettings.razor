@@ -4,7 +4,6 @@
 @inject ProjectService ProjectService
 @inject MemberService MemberService
 @inject LabelService LabelService
-@inject ColumnService ColumnService
 @inject NavigationManager Nav
 @inject IHttpClientFactory HttpFactory
 @inject LocalizationService L
@@ -233,59 +232,6 @@ else
         </section>
 
         <section class="settings-section">
-            <h2>@L["Columns"]</h2>
-            <p class="settings-hint">@L["ColumnsHint"]</p>
-            <table class="settings-list">
-                <thead><tr><th>@L["Order"]</th><th>@L["Name"]</th><th>@L["Color"]</th><th></th></tr></thead>
-                <tbody>
-                    @for (int i = 0; i < _columns.Count; i++)
-                    {
-                        var idx = i;
-                        var c = _columns[idx];
-                        <tr>
-                            <td>
-                                <button class="icon-btn" disabled="@(idx == 0)" @onclick="() => MoveColumn(idx, idx - 1)">↑</button>
-                                <button class="icon-btn" disabled="@(idx == _columns.Count - 1)" @onclick="() => MoveColumn(idx, idx + 1)">↓</button>
-                            </td>
-                            <td>
-                                @if (_editingColumnId == c.Id)
-                                {
-                                    <input @bind="_editingColumnName" @bind:event="oninput" />
-                                }
-                                else { <span>@c.Name</span> }
-                            </td>
-                            <td>
-                                @if (_editingColumnId == c.Id)
-                                {
-                                    <input type="color" class="color-input" @bind="_editingColumnColor" />
-                                }
-                                else { <span class="color-swatch" style="background:@c.Color"></span> <code>@c.Color</code> }
-                            </td>
-                            <td class="row-actions">
-                                @if (_editingColumnId == c.Id)
-                                {
-                                    <button class="icon-btn save-btn" @onclick="() => SaveColumn(c)">✓</button>
-                                    <button class="icon-btn cancel-icon-btn" @onclick="() => { _editingColumnId = null; }">✕</button>
-                                }
-                                else
-                                {
-                                    <button class="icon-btn" @onclick="() => StartEditColumn(c)">✎</button>
-                                    <button class="icon-btn delete-icon" @onclick="() => _deleteConfirmColumn = c">🗑</button>
-                                }
-                            </td>
-                        </tr>
-                    }
-                    <tr class="add-row">
-                        <td></td>
-                        <td><input placeholder="@L["NewColumnPlaceholder"]" @bind="_newColumnName" @bind:event="oninput" /></td>
-                        <td><input type="color" class="color-input" @bind="_newColumnColor" /></td>
-                        <td><button class="settings-primary" @onclick="CreateColumn" disabled="@string.IsNullOrWhiteSpace(_newColumnName)">@L["Add"]</button></td>
-                    </tr>
-                </tbody>
-            </table>
-        </section>
-
-        <section class="settings-section">
             <h2>@L["LabelsSection"]</h2>
             <p class="settings-hint">@L["LabelsHint"]</p>
             <table class="settings-list">
@@ -365,22 +311,6 @@ else
             </div>
         </div>
     }
-    @if (_deleteConfirmColumn is not null)
-    {
-        <div class="confirm-overlay">
-            <div class="confirm-dialog">
-                <p>@L["DeleteColumnConfirm"] «&#160;@_deleteConfirmColumn.Name&#160;»&#160;?</p>
-                @if (_columns.Count > 1)
-                {
-                    <p class="confirm-warning">@L["MoveTicketsTo"]</p>
-                }
-                <div class="confirm-actions">
-                    <button class="cancel-btn" @onclick="() => _deleteConfirmColumn = null">@L["Cancel"]</button>
-                    <button class="delete-btn" @onclick="ConfirmDeleteColumn">@L["Delete"]</button>
-                </div>
-            </div>
-        </div>
-    }
     @if (_deleteConfirmLabel is not null)
     {
         <div class="confirm-overlay">
@@ -423,13 +353,6 @@ else
     private string _newMemberName = "";
     private Member? _deleteConfirmMember;
 
-    private List<BoardColumn> _columns = new();
-    private int? _editingColumnId;
-    private string _editingColumnName = "";
-    private string _editingColumnColor = "#6366f1";
-    private string _newColumnName = "";
-    private string _newColumnColor = "#6366f1";
-    private BoardColumn? _deleteConfirmColumn;
 
     private List<Label> _labels = new();
     private int? _editingLabelId;
@@ -470,7 +393,6 @@ else
     private async Task ReloadAllAsync()
     {
         _members = await MemberService.ListMembersAsync(Slug);
-        _columns = await ColumnService.ListColumnsAsync(Slug);
         _labels = await LabelService.ListLabelsAsync(Slug);
     }
 
@@ -618,53 +540,6 @@ else
         _deleteConfirmMember = null;
         var resp = await NewHttp().DeleteAsync($"/api/projects/{Slug}/members/{m.Id}");
         if (resp.IsSuccessStatusCode) _members = await MemberService.ListMembersAsync(Slug);
-    }
-
-    private async Task CreateColumn()
-    {
-        if (string.IsNullOrWhiteSpace(_newColumnName)) return;
-        var resp = await NewHttp().PostAsJsonAsync($"/api/projects/{Slug}/columns", new { name = _newColumnName.Trim(), color = _newColumnColor });
-        if (resp.IsSuccessStatusCode)
-        {
-            _newColumnName = "";
-            _columns = await ColumnService.ListColumnsAsync(Slug);
-        }
-    }
-
-    private void StartEditColumn(BoardColumn c)
-    {
-        _editingColumnId = c.Id;
-        _editingColumnName = c.Name;
-        _editingColumnColor = c.Color;
-    }
-
-    private async Task SaveColumn(BoardColumn c)
-    {
-        var resp = await NewHttp().PatchAsJsonAsync($"/api/projects/{Slug}/columns/{c.Id}",
-            new { name = _editingColumnName, color = _editingColumnColor });
-        if (resp.IsSuccessStatusCode)
-        {
-            _editingColumnId = null;
-            _columns = await ColumnService.ListColumnsAsync(Slug);
-        }
-    }
-
-    private async Task ConfirmDeleteColumn()
-    {
-        if (_deleteConfirmColumn is null) return;
-        var c = _deleteConfirmColumn;
-        _deleteConfirmColumn = null;
-        var fallback = _columns.FirstOrDefault(x => x.Id != c.Id)?.Name;
-        if (fallback is null) return;
-        var resp = await NewHttp().DeleteAsync($"/api/projects/{Slug}/columns/{c.Id}?moveTicketsTo={Uri.EscapeDataString(fallback)}");
-        if (resp.IsSuccessStatusCode) _columns = await ColumnService.ListColumnsAsync(Slug);
-    }
-
-    private async Task MoveColumn(int from, int to)
-    {
-        var c = _columns[from];
-        var resp = await NewHttp().PatchAsJsonAsync($"/api/projects/{Slug}/columns/reorder", new { columnId = c.Id, index = to });
-        if (resp.IsSuccessStatusCode) _columns = await ColumnService.ListColumnsAsync(Slug);
     }
 
     private void StartEditLabel(Label l)

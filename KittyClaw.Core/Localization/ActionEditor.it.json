@@ -58,5 +58,7 @@
   "HttpContentType": "Tipo di contenuto",
   "HttpTimeout": "Timeout (secondi)",
   "HttpAllowLocalTargets": "Consenti destinazioni locali (loopback/link-local)",
-  "HttpAllowLocalTargetsHint": "Protezione SSRF: senza di essa, le richieste di loopback e indirizzi link-local (incl. metadati cloud) vengono rifiutate"
+  "HttpAllowLocalTargetsHint": "Protezione SSRF: senza di essa, le richieste di loopback e indirizzi link-local (incl. metadati cloud) vengono rifiutate",
+  "PsCoalesceOverlapping": "Raggruppa le esecuzioni sovrapposte",
+  "PsCoalesceOverlappingHint": "Per script idempotenti che analizzano lo stato globale: viene eseguita una sola copia alla volta per automazione"
 }

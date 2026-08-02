@@ -119,7 +119,7 @@ public class ColumnService
 
     public async Task<BoardColumn> CreateColumnAsync(
         string projectSlug, string name, string color = "#5a6a80",
-        int? pipelineId = null, ColumnRole role = ColumnRole.Normal)
+        int? pipelineId = null, ColumnRole role = ColumnRole.Normal, int? insertIndex = null)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureBoardColumnsTableAsync(db);
@@ -130,14 +130,17 @@ public class ColumnService
         // the same vocabulary (for example "Review" or "Published").
         var existing = await db.BoardColumns.FirstOrDefaultAsync(c => c.PipelineId == pipelineId && c.Name == name);
         if (existing is not null) return existing;
-        var maxSort = await db.BoardColumns.Where(c => c.PipelineId == pipelineId)
-            .Select(c => (int?)c.SortOrder).MaxAsync() ?? -1;
+        var columns = await db.BoardColumns.Where(c => c.PipelineId == pipelineId)
+            .OrderBy(c => c.SortOrder).ThenBy(c => c.Id).ToListAsync();
+        var targetIndex = Math.Clamp(insertIndex ?? columns.Count, 0, columns.Count);
+        for (var index = targetIndex; index < columns.Count; index++)
+            columns[index].SortOrder = index + 1;
         var column = new BoardColumn
         {
             PipelineId = pipelineId.Value,
             Name = name,
             Color = color,
-            SortOrder = maxSort + 1,
+            SortOrder = targetIndex,
             Role = role,
         };
         db.BoardColumns.Add(column);
@@ -193,11 +196,29 @@ public class ColumnService
             c.PipelineId == column.PipelineId && c.Name == moveTicketsTo && c.Id != columnId);
         if (target is null) return false;
 
-        // Move tickets from this column to the target, atomically with the column removal.
+        // Move tickets and repair every processor reference atomically with the column removal.
+        // Without this cleanup, deleting a routed column leaves invisible destinations that only
+        // fail when a future ticket returns the corresponding outcome.
+        await ColumnProcessorService.EnsureTableAsync(db);
         await using var tx = await db.Database.BeginTransactionAsync();
         await db.Database.ExecuteSqlRawAsync(
             "UPDATE Tickets SET Status = {0}, ColumnId = {1}, PipelineId = {2} WHERE ColumnId = {3} OR (ColumnId IS NULL AND PipelineId = {2} AND Status = {4})",
             target.Name, target.Id, target.PipelineId, column.Id, column.Name);
+
+        var processors = await db.ColumnProcessors.ToListAsync();
+        foreach (var processor in processors)
+        {
+            if (processor.ColumnId == columnId)
+            {
+                db.ColumnProcessors.Remove(processor);
+                continue;
+            }
+            if (processor.DefaultTargetColumnId == columnId)
+                processor.DefaultTargetColumnId = null;
+            if (processor.TechnicalFailureColumnId == columnId)
+                processor.TechnicalFailureColumnId = null;
+            processor.Routes = processor.Routes.Where(route => route.TargetColumnId != columnId).ToList();
+        }
 
         db.BoardColumns.Remove(column);
         await db.SaveChangesAsync();

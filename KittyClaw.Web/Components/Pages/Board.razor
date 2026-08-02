@@ -112,6 +112,10 @@ else
         @foreach (var col in _columns)
         {
             var colIndex = _columns.IndexOf(col);
+            <div class="column-insert-slot" aria-hidden="false">
+                <button class="column-insert-btn" title="@L["InsertColumnHere"]" aria-label="@L["InsertColumnHere"]"
+                        @onclick="() => OpenCreateColumn(colIndex)">+</button>
+            </div>
             <div @key="col.Id" class="column @(_draggedColumn?.Id == col.Id ? "column-dragging" : "")"
                  style="--col-color: @col.Color"
                  @ondragover="(e) => OnDragOverColumn(col.Name, e)"
@@ -269,7 +273,10 @@ else
                 }
             </div>
         }
-
+        <button class="add-column-lane" @onclick="() => OpenCreateColumn(_columns.Count)">
+            <span>＋</span>
+            <span>@L["AddColumnFromBoard"]</span>
+        </button>
     </div>
 
     @* ── Column sort context menu ── *@
@@ -278,9 +285,21 @@ else
         var current = SortState.Get(Slug, _sortMenuOpenFor);
         <div class="column-context-menu-backdrop" @onclick="CloseSortMenu" @oncontextmenu="CloseSortMenu" @oncontextmenu:preventDefault></div>
         <div class="column-context-menu" style="left:@(_sortMenuX)px; top:@(_sortMenuY)px;" @onclick:stopPropagation @oncontextmenu:preventDefault>
-            <button class="column-context-menu-item column-context-menu-configure" @onclick="OpenProcessorDialogFromMenu">
+            <button class="column-context-menu-item column-context-menu-configure" @onclick="OpenColumnDialogFromMenu">
                 <span class="column-context-menu-check">⚙</span>
                 <span>@L["ConfigureColumn"]</span>
+            </button>
+            <button class="column-context-menu-item" @onclick="InsertColumnBeforeFromMenu">
+                <span class="column-context-menu-check">＋</span>
+                <span>@L["InsertColumnBefore"]</span>
+            </button>
+            <button class="column-context-menu-item" @onclick="InsertColumnAfterFromMenu">
+                <span class="column-context-menu-check">＋</span>
+                <span>@L["InsertColumnAfter"]</span>
+            </button>
+            <button class="column-context-menu-item" @onclick="DuplicateColumnFromMenu">
+                <span class="column-context-menu-check">⧉</span>
+                <span>@L["DuplicateColumn"]</span>
             </button>
             <div class="column-context-menu-separator"></div>
             <div class="column-context-menu-title">@L["SortMenuTitle"]</div>
@@ -305,13 +324,16 @@ else
         </div>
     }
 
-    @if (_processorDialogColumn is not null)
+    @if (_columnEditorOpen && _selectedPipelineId is int editorPipelineId)
     {
-        <ColumnProcessorDialog @key="_processorDialogColumn.Id"
+        <ColumnProcessorDialog @key="_columnDialogKey"
                                Slug="@Slug"
-                               Column="@_processorDialogColumn"
-                               OnClose="CloseProcessorDialog"
-                               OnSaved="OnProcessorSavedAsync" />
+                               PipelineId="@editorPipelineId"
+                               Column="@_columnDialogColumn"
+                               TemplateColumn="@_columnDialogTemplate"
+                               InsertIndex="@_columnDialogInsertIndex"
+                               OnClose="CloseColumnDialog"
+                               OnSaved="OnColumnSavedAsync" />
     }
 
     @* ── Trash drop zone (visible during drag) ── *@
@@ -543,8 +565,6 @@ else
     private string _newLabelColor = "#6366f1";
 
     // Column management
-    private string _newColumnName = "";
-    private string _newColumnColor = "#5a6a80";
     private string _deleteColumnMoveTo = "";
 
     // Trash drop zone
@@ -928,7 +948,11 @@ else
     private string? _sortMenuOpenFor;
     private double _sortMenuX;
     private double _sortMenuY;
-    private BoardColumn? _processorDialogColumn;
+    private bool _columnEditorOpen;
+    private BoardColumn? _columnDialogColumn;
+    private BoardColumn? _columnDialogTemplate;
+    private int _columnDialogInsertIndex;
+    private int _columnDialogKey;
 
     private void OpenSortMenu(string columnName, Microsoft.AspNetCore.Components.Web.MouseEventArgs e)
     {
@@ -939,17 +963,57 @@ else
 
     private void CloseSortMenu() => _sortMenuOpenFor = null;
 
-    private void OpenProcessorDialogFromMenu()
+    private void OpenColumnDialogFromMenu()
     {
-        _processorDialogColumn = _columns.FirstOrDefault(c => c.Name == _sortMenuOpenFor);
+        var column = _columns.FirstOrDefault(c => c.Name == _sortMenuOpenFor);
         _sortMenuOpenFor = null;
+        if (column is null) return;
+        _columnEditorOpen = true;
+        _columnDialogColumn = column;
+        _columnDialogTemplate = null;
+        _columnDialogInsertIndex = _columns.IndexOf(column);
+        _columnDialogKey++;
     }
 
-    private void CloseProcessorDialog() => _processorDialogColumn = null;
+    private void InsertColumnBeforeFromMenu() => OpenCreateColumnFromMenu(0);
+    private void InsertColumnAfterFromMenu() => OpenCreateColumnFromMenu(1);
 
-    private async Task OnProcessorSavedAsync()
+    private void OpenCreateColumnFromMenu(int offset)
+    {
+        var column = _columns.FirstOrDefault(c => c.Name == _sortMenuOpenFor);
+        _sortMenuOpenFor = null;
+        if (column is null) return;
+        OpenCreateColumn(_columns.IndexOf(column) + offset);
+    }
+
+    private void DuplicateColumnFromMenu()
+    {
+        var column = _columns.FirstOrDefault(c => c.Name == _sortMenuOpenFor);
+        _sortMenuOpenFor = null;
+        if (column is null) return;
+        OpenCreateColumn(_columns.IndexOf(column) + 1, column);
+    }
+
+    private void OpenCreateColumn(int insertIndex, BoardColumn? template = null)
+    {
+        _columnEditorOpen = true;
+        _columnDialogColumn = null;
+        _columnDialogTemplate = template;
+        _columnDialogInsertIndex = Math.Clamp(insertIndex, 0, _columns.Count);
+        _columnDialogKey++;
+    }
+
+    private void CloseColumnDialog()
+    {
+        _columnEditorOpen = false;
+        _columnDialogColumn = null;
+        _columnDialogTemplate = null;
+    }
+
+    private async Task OnColumnSavedAsync()
     {
         await LoadSelectedPipelineColumnsAsync();
+        await RefreshTicketsAsync();
         BoardUpdateNotifier.NotifyProjectUpdated(Slug);
     }
 
@@ -1379,20 +1443,6 @@ else
     }
 
     // Column management
-    private async Task AddColumn()
-    {
-        if (string.IsNullOrWhiteSpace(_newColumnName)) return;
-        var col = await ColumnService.CreateColumnAsync(Slug, _newColumnName.Trim(), _newColumnColor, _selectedPipelineId);
-        if (col is not null)
-            PushUndo($"{L["UndoColumn"]} {col.Name}", async () =>
-            {
-                await ColumnService.DeleteColumnAsync(Slug, col.Id, _columns.FirstOrDefault(c => c.Id != col.Id)?.Name ?? "Backlog");
-            });
-        await LoadSelectedPipelineColumnsAsync();
-        _newColumnName = "";
-        _newColumnColor = "#5a6a80";
-    }
-
     private void StartDeleteColumn(int columnId)
     {
         var col = _columns.FirstOrDefault(c => c.Id == columnId);

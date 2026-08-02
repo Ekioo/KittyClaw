@@ -3,7 +3,6 @@
 @using KittyClaw.Core.Services
 @inject ProjectService ProjectService
 @inject PipelineService PipelineService
-@inject ColumnService ColumnService
 @inject ProjectSkillService SkillService
 @inject LocalizationService L
 @inject IJSRuntime JS
@@ -62,43 +61,6 @@ else
             </div>
         </section>
 
-        @if (_selectedPipeline is not null)
-        {
-            <section class="settings-section">
-                <h2>@L["WorkflowColumns"]</h2>
-                <p class="settings-hint">@L["WorkflowColumnsHint"]</p>
-                <table class="settings-list workflow-table">
-                    <thead><tr><th>@L["Name"]</th><th>@L["WorkflowRole"]</th><th></th></tr></thead>
-                    <tbody>
-                        @foreach (var column in _columns)
-                        {
-                            <tr>
-                                <td><input value="@ColumnName(column.Id)" @oninput="e => SetColumnName(column.Id, e.Value?.ToString())" /></td>
-                                <td>
-                                    <select value="@ColumnRoleValue(column.Id)" @onchange="e => SetColumnRole(column.Id, e.Value?.ToString())">
-                                        @foreach (var role in Enum.GetValues<ColumnRole>())
-                                        {
-                                            <option value="@((int)role)">@ColumnRoleLabel(role)</option>
-                                        }
-                                    </select>
-                                </td>
-                                <td class="settings-actions">
-                                    <button @onclick="() => SaveColumnAsync(column)">@L["Save"]</button>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-                <div class="settings-row">
-                    <input class="settings-input" placeholder="@L["WorkflowNewColumn"]" @bind="_newColumnName" @bind:event="oninput" />
-                    <select @bind="_newColumnRole">
-                        @foreach (var role in Enum.GetValues<ColumnRole>()) { <option value="@role">@ColumnRoleLabel(role)</option> }
-                    </select>
-                    <button class="settings-primary" @onclick="CreateColumnAsync" disabled="@(string.IsNullOrWhiteSpace(_newColumnName))">@L["WorkflowAddColumn"]</button>
-                </div>
-            </section>
-        }
-
         <section class="settings-section">
             <h2>@L["WorkflowProjectSkills"]</h2>
             <p class="settings-hint">@L["WorkflowProjectSkillsHint"]</p>
@@ -132,10 +94,7 @@ else
 
     private Project? _project;
     private List<Pipeline> _pipelines = [];
-    private List<BoardColumn> _columns = [];
     private List<ProjectSkill> _skills = [];
-    private readonly Dictionary<int, string> _columnNames = [];
-    private readonly Dictionary<int, ColumnRole> _columnRoles = [];
     private readonly Dictionary<string, string> _skillNames = [];
     private readonly Dictionary<string, string> _skillDescriptions = [];
     private readonly Dictionary<string, string> _skillInstructions = [];
@@ -143,8 +102,6 @@ else
     private Pipeline? _selectedPipeline => _pipelines.FirstOrDefault(p => p.Id == _selectedPipelineId);
     private string _pipelineName = "";
     private string _newPipelineName = "";
-    private string _newColumnName = "";
-    private ColumnRole _newColumnRole;
     private string? _message;
     private bool _isError;
     private bool _showMigrationInstruction;
@@ -168,14 +125,6 @@ else
     {
         _selectedPipelineId = id;
         _pipelineName = _selectedPipeline?.Name ?? "";
-        _columns = await ColumnService.ListColumnsAsync(Slug, id);
-        _columnNames.Clear();
-        _columnRoles.Clear();
-        foreach (var column in _columns)
-        {
-            _columnNames[column.Id] = column.Name;
-            _columnRoles[column.Id] = column.Role;
-        }
     }
 
     private async Task CreatePipelineAsync() => await RunAsync(async () =>
@@ -191,25 +140,6 @@ else
         await PipelineService.UpdateAsync(Slug, _selectedPipelineId!.Value, _pipelineName);
         _pipelines = await PipelineService.ListAsync(Slug);
     }, L["WorkflowPipelineRenamed"]);
-
-    private string ColumnName(int id) => _columnNames.GetValueOrDefault(id, "");
-    private string ColumnRoleValue(int id) => ((int)_columnRoles.GetValueOrDefault(id)).ToString();
-    private string ColumnRoleLabel(ColumnRole role) => L[$"WorkflowRole{role}"];
-    private void SetColumnName(int id, string? value) => _columnNames[id] = value ?? "";
-    private void SetColumnRole(int id, string? value) => _columnRoles[id] = Enum.Parse<ColumnRole>(value ?? "0");
-
-    private async Task CreateColumnAsync() => await RunAsync(async () =>
-    {
-        await ColumnService.CreateColumnAsync(Slug, _newColumnName, pipelineId: _selectedPipelineId, role: _newColumnRole);
-        _newColumnName = "";
-        await SelectPipelineAsync(_selectedPipelineId!.Value);
-    }, L["WorkflowColumnCreated"]);
-
-    private async Task SaveColumnAsync(BoardColumn column) => await RunAsync(async () =>
-    {
-        await ColumnService.UpdateColumnAsync(Slug, column.Id, _columnNames[column.Id], role: _columnRoles[column.Id]);
-        await SelectPipelineAsync(_selectedPipelineId!.Value);
-    }, L["WorkflowColumnUpdated"]);
 
     private async Task LoadSkillDraftsAsync()
     {

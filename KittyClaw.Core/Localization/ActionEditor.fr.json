@@ -58,5 +58,7 @@
   "HttpContentType": "Content-Type",
   "HttpTimeout": "Timeout (secondes)",
   "HttpAllowLocalTargets": "Autoriser les cibles locales (loopback/link-local)",
-  "HttpAllowLocalTargetsHint": "Garde SSRF : sans cette option, les requêtes vers les adresses loopback et link-local (y compris les métadonnées cloud) sont refusées"
+  "HttpAllowLocalTargetsHint": "Garde SSRF : sans cette option, les requêtes vers les adresses loopback et link-local (y compris les métadonnées cloud) sont refusées",
+  "PsCoalesceOverlapping": "Fusionner les exécutions simultanées",
+  "PsCoalesceOverlappingHint": "Pour les scripts idempotents qui analysent l’état global : une seule copie de cette automation s’exécute à la fois"
 }
