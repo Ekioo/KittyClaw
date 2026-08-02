@@ -78,7 +78,20 @@ public class RunDrawerEventPresentationTests
             RepoRoot(), "KittyClaw.Web", "Components", "ChatDrawer.razor"));
 
         Assert.Contains("RunDrawerEventPresentation.Sanitize(text)", source);
-        Assert.Contains("_messages[^1].Role == \"stderr\"", source);
+        Assert.Contains("_messages[^1].Role == role", source);
+        Assert.Contains("AddDiagnosticMessage(\"stderr\", text);", source);
         Assert.Contains("AddStderrMessage(m.Text)", source);
+    }
+
+    [Fact]
+    public void Chat_drawer_sanitizes_live_and_historical_error_events()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Web", "Components", "ChatDrawer.razor"));
+
+        Assert.Contains("else if (m.Role == \"error\") AddErrorMessage(m.Text);", source);
+        Assert.Contains("else if (kind == \"error\")", source);
+        Assert.Contains("AddErrorMessage(text);", source);
+        Assert.Contains("AddDiagnosticMessage(\"error\", text);", source);
     }
 }

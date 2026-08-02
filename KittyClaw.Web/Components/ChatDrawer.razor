@@ -387,6 +387,7 @@
                     else
                     {
                         if (m.Role == "stderr") AddStderrMessage(m.Text);
+                        else if (m.Role == "error") AddErrorMessage(m.Text);
                         else _messages.Add(new ChatMessage(m.Role, m.Text));
                     }
                     latestMessageAt = m.CreatedAt;
@@ -656,7 +657,7 @@
         }
         else if (kind == "error")
         {
-            _messages.Add(new ChatMessage("error", text));
+            AddErrorMessage(text);
         }
         else if (kind == "stderr")
         {
@@ -705,12 +706,22 @@
 
     private void AddStderrMessage(string text)
     {
+        AddDiagnosticMessage("stderr", text);
+    }
+
+    private void AddErrorMessage(string text)
+    {
+        AddDiagnosticMessage("error", text);
+    }
+
+    private void AddDiagnosticMessage(string role, string text)
+    {
         var clean = RunDrawerEventPresentation.Sanitize(text);
         if (string.IsNullOrWhiteSpace(clean)) return;
-        if (_messages.Count > 0 && _messages[^1].Role == "stderr")
-            _messages[^1] = new ChatMessage("stderr", _messages[^1].Text + "\n" + clean);
+        if (_messages.Count > 0 && _messages[^1].Role == role)
+            _messages[^1] = new ChatMessage(role, _messages[^1].Text + "\n" + clean);
         else
-            _messages.Add(new ChatMessage("stderr", clean));
+            _messages.Add(new ChatMessage(role, clean));
     }
 
     private static (string Prompt, string[] Options) ParseAskUserQuestionDetail(string? detail)
