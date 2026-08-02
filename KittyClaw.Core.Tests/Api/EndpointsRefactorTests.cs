@@ -37,6 +37,10 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "PATCH /api/projects/{slug}/columns/{columnId}",
         "DELETE /api/projects/{slug}/columns/{columnId}",
         "PATCH /api/projects/{slug}/columns/reorder",
+        // Pipelines
+        "GET /api/projects/{slug}/pipelines",
+        "POST /api/projects/{slug}/pipelines",
+        "PATCH /api/projects/{slug}/pipelines/{pipelineId}",
         // Projects
         "GET /api/projects",
         "POST /api/projects",

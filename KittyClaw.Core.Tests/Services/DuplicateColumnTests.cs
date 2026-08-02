@@ -34,7 +34,8 @@ public sealed class DuplicateColumnTests
             await conn.OpenAsync();
             var cmd = conn.CreateCommand();
             cmd.CommandText = """
-                CREATE TABLE IF NOT EXISTS BoardColumns (
+                DROP TABLE IF EXISTS BoardColumns;
+                CREATE TABLE BoardColumns (
                     Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
                     Name TEXT NOT NULL,
                     Color TEXT NOT NULL DEFAULT '#5a6a80',

@@ -10,6 +10,7 @@ public class TodoDbContext : DbContext
     public DbSet<ActivityEntry> ActivityEntries => Set<ActivityEntry>();
     public DbSet<Label> Labels => Set<Label>();
     public DbSet<BoardColumn> BoardColumns => Set<BoardColumn>();
+    public DbSet<Pipeline> Pipelines => Set<Pipeline>();
     public DbSet<Member> Members => Set<Member>();
     public DbSet<ChatMessageRow> ChatMessages => Set<ChatMessageRow>();
 
@@ -57,6 +58,13 @@ public class TodoDbContext : DbContext
         modelBuilder.Entity<BoardColumn>(e =>
         {
             e.HasKey(c => c.Id);
+            e.HasIndex(c => new { c.PipelineId, c.Name }).IsUnique();
+        });
+
+        modelBuilder.Entity<Pipeline>(e =>
+        {
+            e.HasKey(p => p.Id);
+            e.HasIndex(p => p.Slug).IsUnique();
         });
 
         modelBuilder.Entity<Member>(e =>

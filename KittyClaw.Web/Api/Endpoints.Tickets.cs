@@ -17,7 +17,10 @@ public static partial class Endpoints
         {
             try
             {
-                var ticket = await ts.CreateTicketAsync(slug, req.Title, req.Description, req.CreatedBy, req.Status, req.LabelIds, req.Priority, req.AssignedTo, req.ParentId);
+                var ticket = await ts.CreateTicketAsync(
+                    slug, req.Title, req.Description, req.CreatedBy, req.Status,
+                    req.LabelIds, req.Priority, req.AssignedTo, req.ParentId,
+                    req.PipelineId, req.ColumnId, req.BlocksParent);
                 notifier.NotifyProjectUpdated(slug);
                 return Results.Created($"/api/projects/{slug}/tickets/{ticket.Id}", ticket);
             }

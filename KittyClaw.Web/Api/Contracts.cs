@@ -3,7 +3,13 @@
 namespace KittyClaw.Web.Api;
 
 public record CreateProjectRequest(string Name);
-public record CreateTicketRequest(string Title, string CreatedBy, string Status, string Description = "", List<int>? LabelIds = null, TicketPriority Priority = TicketPriority.NiceToHave, string? AssignedTo = null, int? ParentId = null);
+public record CreatePipelineRequest(string Name);
+public record UpdatePipelineRequest(string? Name = null);
+public record CreateTicketRequest(
+    string Title, string CreatedBy, string Status, string Description = "",
+    List<int>? LabelIds = null, TicketPriority Priority = TicketPriority.NiceToHave,
+    string? AssignedTo = null, int? ParentId = null, int? PipelineId = null,
+    int? ColumnId = null, bool BlocksParent = true);
 // The root PATCH applies every provided field — Status included — in ONE atomic write,
 // through the same semantics as the dedicated /status endpoint (column validation,
 // Scheduled cleanup, activity, engine signal after commit). This is the hand-off
@@ -26,8 +32,8 @@ public record PatchTicketLabelsRequest(string Author, List<string>? Add = null, 
 public record UpdateLabelRequest(string? Name = null, string? Color = null);
 public record SetTicketLabelsRequest(List<int> LabelIds);
 public record ReorderTicketRequest(string Status, int Index);
-public record CreateColumnRequest(string Name, string Color = "#5a6a80");
-public record UpdateColumnRequest(string? Name = null, string? Color = null);
+public record CreateColumnRequest(string Name, string Color = "#5a6a80", int? PipelineId = null, ColumnRole Role = ColumnRole.Normal);
+public record UpdateColumnRequest(string? Name = null, string? Color = null, ColumnRole? Role = null);
 public record ReorderColumnRequest(int ColumnId, int Index);
 public record CreateMemberRequest(string Name);
 public record UpdateMemberRequest(string? Name = null, string? DefaultModel = null);

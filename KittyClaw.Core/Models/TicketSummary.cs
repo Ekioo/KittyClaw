@@ -28,6 +28,16 @@ public record TicketSummary(
 
     /// <summary>Cumulative USD cost of agent runs on this ticket, as priced by the claude CLI.</summary>
     public double AgentCostUsd { get; init; }
+
+    public int PipelineId { get; init; }
+    public int? ColumnId { get; init; }
+    public bool BlocksParent { get; init; } = true;
 }
 
-public record SubTicketInfo(int Id, string Title, string Status, string? AssignedTo);
+public record SubTicketInfo(int Id, string Title, string Status, string? AssignedTo)
+{
+    public int PipelineId { get; init; }
+    public int? ColumnId { get; init; }
+    public bool BlocksParent { get; init; } = true;
+    public ColumnRole ColumnRole { get; init; } = ColumnRole.Normal;
+}

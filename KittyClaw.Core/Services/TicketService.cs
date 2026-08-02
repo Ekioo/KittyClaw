@@ -32,18 +32,30 @@ public class TicketService
     /// <paramref name="status"/> (case-insensitive match). Throws when the column is missing
     /// so tickets are never parked in a status the board cannot render.
     /// </summary>
-    private static async Task<string> RequireColumnNameAsync(TodoDbContext db, string? status)
+    private static async Task<BoardColumn> RequireColumnAsync(
+        TodoDbContext db, string? status, int? pipelineId = null, int? columnId = null)
     {
         await ColumnService.EnsureBoardColumnsTableAsync(db);
+        pipelineId ??= await db.Pipelines.Where(p => p.IsDefault).Select(p => p.Id).SingleAsync();
+        if (columnId is not null)
+        {
+            var byId = await db.BoardColumns.FirstOrDefaultAsync(c => c.Id == columnId && c.PipelineId == pipelineId);
+            if (byId is null)
+                throw new InvalidOperationException($"La colonne #{columnId} n'existe pas dans le pipeline #{pipelineId}.");
+            return byId;
+        }
         if (string.IsNullOrWhiteSpace(status))
             throw new InvalidOperationException("Le statut (colonne) est requis.");
-        status = status.Trim();
-        var names = await db.BoardColumns.Select(c => c.Name).ToListAsync();
-        var match = names.FirstOrDefault(n => string.Equals(n, status, StringComparison.OrdinalIgnoreCase));
+        var requested = status.Trim();
+        var columns = await db.BoardColumns.Where(c => c.PipelineId == pipelineId).ToListAsync();
+        var match = columns.FirstOrDefault(c => string.Equals(c.Name, requested, StringComparison.OrdinalIgnoreCase));
         if (match is null)
-            throw new InvalidOperationException($"La colonne '{status}' n'existe pas.");
+            throw new InvalidOperationException($"La colonne '{requested}' n'existe pas dans le pipeline #{pipelineId}.");
         return match;
     }
+
+    private static async Task<string> RequireColumnNameAsync(TodoDbContext db, string? status, int? pipelineId = null) =>
+        (await RequireColumnAsync(db, status, pipelineId)).Name;
 
     // Ensures the ActivityEntries table exists (for databases created before this feature)
     private static Task EnsureActivityTableAsync(TodoDbContext db) =>
@@ -159,7 +171,10 @@ public class TicketService
                     FireAt = t.FireAt,
                     ScheduleTarget = t.ScheduleTarget,
                     AgentTokens = t.AgentTokens,
-                    AgentCostUsd = t.AgentCostUsd
+                    AgentCostUsd = t.AgentCostUsd,
+                    PipelineId = t.PipelineId,
+                    ColumnId = t.ColumnId,
+                    BlocksParent = t.BlocksParent,
                 })
             .ToListAsync();
 
@@ -169,12 +184,17 @@ public class TicketService
         var childRows = parentIds.Count > 0
             ? await db.Tickets
                 .Where(t => t.ParentId != null && parentIds.Contains(t.ParentId!.Value))
-                .Select(t => new { t.ParentId, Info = new SubTicketInfo(t.Id, t.Title, t.Status, t.AssignedTo) })
+                .Select(t => new { t.ParentId, t.PipelineId, t.ColumnId, t.BlocksParent, t.Status, t.Id, t.Title, t.AssignedTo })
                 .ToListAsync()
             : [];
         var subsByParent = childRows
             .GroupBy(x => x.ParentId!.Value)
-            .ToDictionary(g => g.Key, g => g.Select(x => x.Info).ToList());
+            .ToDictionary(g => g.Key, g => g.Select(x => new SubTicketInfo(x.Id, x.Title, x.Status, x.AssignedTo)
+            {
+                PipelineId = x.PipelineId,
+                ColumnId = x.ColumnId,
+                BlocksParent = x.BlocksParent,
+            }).ToList());
 
         return allTickets.Select(t => subsByParent.TryGetValue(t.Id, out var subs)
             ? t with { SubTickets = subs }
@@ -199,7 +219,12 @@ public class TicketService
         ticket.SubTickets = await db.Tickets
             .Where(t => t.ParentId == ticketId)
             .OrderBy(t => t.SortOrder).ThenBy(t => t.CreatedAt)
-            .Select(t => new SubTicketInfo(t.Id, t.Title, t.Status, t.AssignedTo))
+            .Select(t => new SubTicketInfo(t.Id, t.Title, t.Status, t.AssignedTo)
+            {
+                PipelineId = t.PipelineId,
+                ColumnId = t.ColumnId,
+                BlocksParent = t.BlocksParent,
+            })
             .ToListAsync();
         return ticket;
     }
@@ -224,7 +249,12 @@ public class TicketService
         await db.SaveChangesAsync();
     }
 
-    public async Task<Ticket> CreateTicketAsync(string projectSlug, string title, string description = "", string createdBy = "owner", string status = "Backlog", List<int>? labelIds = null, TicketPriority priority = TicketPriority.NiceToHave, string? assignedTo = null, int? parentId = null)
+    public async Task<Ticket> CreateTicketAsync(
+        string projectSlug, string title, string description = "", string createdBy = "owner",
+        string status = "Backlog", List<int>? labelIds = null,
+        TicketPriority priority = TicketPriority.NiceToHave, string? assignedTo = null,
+        int? parentId = null, int? pipelineId = null, int? columnId = null,
+        bool blocksParent = true)
     {
         if (string.IsNullOrWhiteSpace(createdBy))
             throw new InvalidOperationException("Le champ 'createdBy' est requis.");
@@ -237,24 +267,30 @@ public class TicketService
         await EnsureParentIdColumnAsync(db);
         // Reject unknown statuses so the ticket is never created into a column the board
         // cannot render (invisible ticket). Canonical name matches BoardColumns.Name.
-        status = await RequireColumnNameAsync(db, status);
+        var column = await RequireColumnAsync(db, status, pipelineId, columnId);
+        status = column.Name;
+        pipelineId = column.PipelineId;
         if (parentId is not null)
         {
             var parentExists = await db.Tickets.AnyAsync(t => t.Id == parentId.Value);
             if (!parentExists)
                 throw new InvalidOperationException($"Le ticket parent #{parentId} n'existe pas.");
         }
-        var maxSort = await db.Tickets.Where(t => t.Status == status).Select(t => (int?)t.SortOrder).MaxAsync() ?? -1;
+        var maxSort = await db.Tickets.Where(t => t.ColumnId == column.Id)
+            .Select(t => (int?)t.SortOrder).MaxAsync() ?? -1;
         var ticket = new Ticket
         {
             Title = title,
+            PipelineId = pipelineId.Value,
+            ColumnId = column.Id,
             Description = description,
             CreatedBy = createdBy,
             Status = status,
             Priority = priority,
             SortOrder = maxSort + 1,
             AssignedTo = assignedTo,
-            ParentId = parentId
+            ParentId = parentId,
+            BlocksParent = blocksParent,
         };
         if (labelIds is { Count: > 0 })
         {
@@ -296,12 +332,14 @@ public class TicketService
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureActivityTableAsync(db);
         await EnsureScheduleColumnsAsync(db);
-        await RequireColumnNameAsync(db, "Scheduled");
-        targetStatus = await RequireColumnNameAsync(db, targetStatus);
         var ticket = await db.Tickets.FindAsync(ticketId);
         if (ticket is null) return null;
+        var scheduledColumn = await RequireColumnAsync(db, "Scheduled", ticket.PipelineId);
+        var targetColumn = await RequireColumnAsync(db, targetStatus, ticket.PipelineId);
+        targetStatus = targetColumn.Name;
         var oldStatus = ticket.Status;
-        ticket.Status = "Scheduled";
+        ticket.Status = scheduledColumn.Name;
+        ticket.ColumnId = scheduledColumn.Id;
         ticket.FireAt = fireAt;
         ticket.ScheduleTarget = targetStatus;
         ticket.UpdatedAt = DateTime.UtcNow;
@@ -346,13 +384,16 @@ public class TicketService
         if (ticket is null || !string.Equals(ticket.Status, "Scheduled", StringComparison.OrdinalIgnoreCase))
             return null;
         var target = string.IsNullOrWhiteSpace(ticket.ScheduleTarget) ? "Todo" : ticket.ScheduleTarget!;
-        try { target = await RequireColumnNameAsync(db, target); }
+        BoardColumn targetColumn;
+        try { targetColumn = await RequireColumnAsync(db, target, ticket.PipelineId); }
         catch (InvalidOperationException)
         {
             // Fall back to Todo when the stored target was deleted; still require Todo to exist.
-            target = await RequireColumnNameAsync(db, "Todo");
+            targetColumn = await RequireColumnAsync(db, "Todo", ticket.PipelineId);
         }
+        target = targetColumn.Name;
         ticket.Status = target;
+        ticket.ColumnId = targetColumn.Id;
         ticket.FireAt = null;
         ticket.ScheduleTarget = null;
         ticket.UpdatedAt = DateTime.UtcNow;
@@ -387,10 +428,14 @@ public class TicketService
         await EnsureActivityTableAsync(db);
         await EnsureAssignedToColumnAsync(db);
         await EnsureScheduleColumnsAsync(db);
-        if (status is not null)
-            status = await RequireColumnNameAsync(db, status);
         var ticket = await db.Tickets.FindAsync(ticketId);
         if (ticket is null) return null;
+        BoardColumn? destination = null;
+        if (status is not null)
+        {
+            destination = await RequireColumnAsync(db, status, ticket.PipelineId);
+            status = destination.Name;
+        }
 
         if (expectedStatus is not null && !string.Equals(ticket.Status, expectedStatus, StringComparison.OrdinalIgnoreCase))
             throw new TicketTransitionConflictException(ticket.Status, expectedStatus);
@@ -400,6 +445,7 @@ public class TicketService
         {
             oldStatus = ticket.Status;
             ticket.Status = status;
+            ticket.ColumnId = destination!.Id;
             if (string.Equals(oldStatus, "Scheduled", StringComparison.OrdinalIgnoreCase))
             {
                 // Leaving Scheduled cancels the pending promotion — otherwise the stale
@@ -681,21 +727,22 @@ public class TicketService
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureSortOrderColumnAsync(db);
         await EnsureActivityTableAsync(db);
-        // Same column gate as MoveTicketAsync — drag-and-drop must not park tickets in a
-        // phantom status the board does not render.
-        newStatus = await RequireColumnNameAsync(db, newStatus);
-
         var ticket = await db.Tickets.FindAsync(ticketId);
         if (ticket is null) return;
+        // Same column gate as MoveTicketAsync — drag-and-drop must not park tickets in a
+        // phantom status the board does not render. Resolve inside the ticket's pipeline.
+        var destination = await RequireColumnAsync(db, newStatus, ticket.PipelineId);
+        newStatus = destination.Name;
 
         var oldStatus = ticket.Status;
         var statusChanged = !string.Equals(oldStatus, newStatus, StringComparison.OrdinalIgnoreCase);
         ticket.Status = newStatus;
+        ticket.ColumnId = destination.Id;
         ticket.UpdatedAt = DateTime.UtcNow;
 
         // Get all tickets in the target column (excluding the moved ticket)
         var columnTickets = await db.Tickets
-            .Where(t => t.Status == newStatus && t.Id != ticketId)
+            .Where(t => t.ColumnId == destination.Id && t.Id != ticketId)
             .OrderBy(t => t.SortOrder).ThenBy(t => t.CreatedAt)
             .ToListAsync();
 

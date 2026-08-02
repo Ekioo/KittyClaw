@@ -7,6 +7,7 @@ public static partial class Endpoints
         var api = app.MapGroup("/api");
 
         MapColumns(api);
+        MapPipelines(api);
         MapProjects(api);
         MapTickets(api);
         MapProjectLabels(api);

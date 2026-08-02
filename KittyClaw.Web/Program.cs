@@ -45,6 +45,7 @@ builder.Services.AddSingleton<TicketService>();
 builder.Services.AddSingleton<TicketTransferService>();
 builder.Services.AddSingleton<LabelService>();
 builder.Services.AddSingleton<ColumnService>();
+builder.Services.AddSingleton<PipelineService>();
 builder.Services.AddSingleton<MemberService>();
 builder.Services.AddSingleton<ChatService>();
 builder.Services.AddSingleton<DashboardService>();

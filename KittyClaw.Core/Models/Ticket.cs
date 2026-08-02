@@ -3,6 +3,10 @@ namespace KittyClaw.Core.Models;
 public class Ticket
 {
     public int Id { get; set; }
+    /// <summary>Stable workflow identity. Legacy projects are migrated to their default pipeline.</summary>
+    public int PipelineId { get; set; }
+    /// <summary>Stable column identity. <see cref="Status"/> remains synchronized for legacy clients.</summary>
+    public int? ColumnId { get; set; }
     public required string Title { get; set; }
     public string Description { get; set; } = "";
     public string Status { get; set; } = "Backlog";
@@ -13,6 +17,8 @@ public class Ticket
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     public int? ParentId { get; set; }
+    /// <summary>Whether this child must reach a success column before its parent can resume.</summary>
+    public bool BlocksParent { get; set; } = true;
 
     /// <summary>
     /// When set (and Status == "Scheduled"), the ticket auto-promotes to <see cref="ScheduleTarget"/>

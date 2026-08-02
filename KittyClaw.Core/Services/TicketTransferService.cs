@@ -61,6 +61,8 @@ public sealed class TicketTransferService(
             throw new InvalidOperationException($"Transfer would overwrite existing identifiers in '{targetProject}' (tickets: {Join(conflictingTicketIds)}, comments: {Join(conflictingCommentIds)}, activities: {Join(conflictingActivityIds)}).");
 
         var targetColumnNames = targetColumns.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var targetPipelineId = targetColumns.Select(c => c.PipelineId).Distinct().Single();
+        var targetColumnIds = targetColumns.ToDictionary(c => c.Name, c => c.Id, StringComparer.OrdinalIgnoreCase);
         var missingColumns = transferTickets.SelectMany(t => new[] { t.Status, t.ScheduleTarget })
             .Where(name => !string.IsNullOrWhiteSpace(name) && !targetColumnNames.Contains(name!))
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -104,9 +106,9 @@ public sealed class TicketTransferService(
 
                 foreach (var ticket in transferTickets)
                     await ExecuteAsync(connection, transaction, """
-                        INSERT INTO target.Tickets (Id, Title, Description, Status, Priority, SortOrder, AssignedTo, CreatedBy, CreatedAt, UpdatedAt, ParentId, FireAt, ScheduleTarget, AgentTokens, AgentCostUsd)
-                        VALUES ($id, $title, $description, $status, $priority, $sortOrder, $assignedTo, $createdBy, $createdAt, $updatedAt, $parentId, $fireAt, $scheduleTarget, $agentTokens, $agentCostUsd)
-                        """, TicketParameters(ticket));
+                        INSERT INTO target.Tickets (Id, PipelineId, ColumnId, Title, Description, Status, Priority, SortOrder, AssignedTo, CreatedBy, CreatedAt, UpdatedAt, ParentId, BlocksParent, FireAt, ScheduleTarget, AgentTokens, AgentCostUsd)
+                        VALUES ($id, $pipelineId, $columnId, $title, $description, $status, $priority, $sortOrder, $assignedTo, $createdBy, $createdAt, $updatedAt, $parentId, $blocksParent, $fireAt, $scheduleTarget, $agentTokens, $agentCostUsd)
+                        """, TicketParameters(ticket, targetPipelineId, targetColumnIds[ticket.Status]));
 
                 foreach (var comment in transferTickets.SelectMany(t => t.Comments))
                     await ExecuteAsync(connection, transaction, "INSERT INTO target.Comments (Id, TicketId, Content, Author, CreatedAt) VALUES ($id, $ticketId, $content, $author, $createdAt)",
@@ -173,8 +175,8 @@ public sealed class TicketTransferService(
         return result;
     }
 
-    private static (string Name, object? Value)[] TicketParameters(Ticket t) =>
-    [ ("$id", t.Id), ("$title", t.Title), ("$description", t.Description), ("$status", t.Status), ("$priority", (int)t.Priority), ("$sortOrder", t.SortOrder), ("$assignedTo", t.AssignedTo), ("$createdBy", t.CreatedBy), ("$createdAt", t.CreatedAt), ("$updatedAt", t.UpdatedAt), ("$parentId", t.ParentId), ("$fireAt", t.FireAt), ("$scheduleTarget", t.ScheduleTarget), ("$agentTokens", t.AgentTokens), ("$agentCostUsd", t.AgentCostUsd) ];
+    private static (string Name, object? Value)[] TicketParameters(Ticket t, int targetPipelineId, int targetColumnId) =>
+    [ ("$id", t.Id), ("$pipelineId", targetPipelineId), ("$columnId", targetColumnId), ("$title", t.Title), ("$description", t.Description), ("$status", t.Status), ("$priority", (int)t.Priority), ("$sortOrder", t.SortOrder), ("$assignedTo", t.AssignedTo), ("$createdBy", t.CreatedBy), ("$createdAt", t.CreatedAt), ("$updatedAt", t.UpdatedAt), ("$parentId", t.ParentId), ("$blocksParent", t.BlocksParent), ("$fireAt", t.FireAt), ("$scheduleTarget", t.ScheduleTarget), ("$agentTokens", t.AgentTokens), ("$agentCostUsd", t.AgentCostUsd) ];
 
     private static async Task ExecuteAsync(SqliteConnection connection, SqliteTransaction transaction, string sql, params (string Name, object? Value)[] parameters)
     {

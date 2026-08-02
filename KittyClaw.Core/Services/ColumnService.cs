@@ -13,15 +13,15 @@ public class ColumnService
         _projectService = projectService;
     }
 
-    private static readonly (string Name, string Color)[] DefaultColumns =
+    private static readonly (string Name, string Color, ColumnRole Role)[] DefaultColumns =
     [
-        ("Backlog",      "#5a6a80"),
-        ("Todo",         "#4a9eff"),
-        ("InProgress",   "#f59e42"),
-        ("Blocked",      "#f06b6b"),
-        ("Scheduled",    "#eab308"),
-        ("Review",       "#a78bfa"),
-        ("Done",         "#3ecf8e"),
+        ("Backlog",      "#5a6a80", ColumnRole.Normal),
+        ("Todo",         "#4a9eff", ColumnRole.Normal),
+        ("InProgress",   "#f59e42", ColumnRole.Normal),
+        ("Blocked",      "#f06b6b", ColumnRole.Waiting),
+        ("Scheduled",    "#eab308", ColumnRole.Waiting),
+        ("Review",       "#a78bfa", ColumnRole.Normal),
+        ("Done",         "#3ecf8e", ColumnRole.Success),
     ];
 
     internal static async Task EnsureBoardColumnsTableAsync(TodoDbContext db)
@@ -32,23 +32,31 @@ public class ColumnService
             d.Database.ExecuteSqlRawAsync("""
                 CREATE TABLE IF NOT EXISTS BoardColumns (
                     Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    PipelineId INTEGER NOT NULL DEFAULT 0,
                     Name TEXT NOT NULL,
                     Color TEXT NOT NULL DEFAULT '#5a6a80',
-                    SortOrder INTEGER NOT NULL DEFAULT 0
+                    SortOrder INTEGER NOT NULL DEFAULT 0,
+                    Role INTEGER NOT NULL DEFAULT 0
                 )
             """));
+
+        var defaultPipeline = await PipelineService.EnsureWorkflowSchemaAsync(db);
 
         // Duplicate column names crash the board (ToDictionary by name) and make ticket
         // Status ambiguous. Heal boards that already contain duplicates (the pre-index
         // EnsureScheduledColumnAsync check-then-insert could race), then lock the invariant in.
-        await MigrationGate.RunOnceAsync(db, "board-columns-unique-name", static d =>
+        await MigrationGate.RunOnceAsync(db, "board-columns-unique-name-per-pipeline-v1", static d =>
             d.Database.ExecuteSqlRawAsync("""
-                DELETE FROM BoardColumns WHERE Id NOT IN (SELECT MIN(Id) FROM BoardColumns GROUP BY Name);
-                CREATE UNIQUE INDEX IF NOT EXISTS IX_BoardColumns_Name ON BoardColumns(Name);
+                DELETE FROM BoardColumns WHERE Id NOT IN (
+                    SELECT MIN(Id) FROM BoardColumns GROUP BY PipelineId, Name
+                );
+                DROP INDEX IF EXISTS IX_BoardColumns_Name;
+                CREATE UNIQUE INDEX IF NOT EXISTS IX_BoardColumns_PipelineId_Name
+                    ON BoardColumns(PipelineId, Name);
             """));
 
         // Seed defaults if table is empty
-        var count = await db.BoardColumns.CountAsync();
+        var count = await db.BoardColumns.CountAsync(c => c.PipelineId == defaultPipeline.Id);
         if (count == 0)
         {
             for (int i = 0; i < DefaultColumns.Length; i++)
@@ -57,7 +65,9 @@ public class ColumnService
                 {
                     Name = DefaultColumns[i].Name,
                     Color = DefaultColumns[i].Color,
-                    SortOrder = i
+                    SortOrder = i,
+                    PipelineId = defaultPipeline.Id,
+                    Role = DefaultColumns[i].Role,
                 });
             }
             await db.SaveChangesAsync();
@@ -65,20 +75,26 @@ public class ColumnService
         else
         {
             // Existing boards (feature #99): add the "Scheduled" column once if missing.
-            await EnsureScheduledColumnAsync(db);
+            await EnsureScheduledColumnAsync(db, defaultPipeline.Id);
         }
     }
 
     // Idempotently inserts the "Scheduled" column (feature #99) on boards that predate it.
     // Placed just after "Blocked" when present; columns stay user-reorderable afterwards.
-    private static async Task EnsureScheduledColumnAsync(TodoDbContext db)
+    private static async Task EnsureScheduledColumnAsync(TodoDbContext db, int pipelineId)
     {
-        if (await db.BoardColumns.AnyAsync(c => c.Name == "Scheduled")) return;
+        if (await db.BoardColumns.AnyAsync(c => c.PipelineId == pipelineId && c.Name == "Scheduled")) return;
 
-        var columns = await db.BoardColumns.OrderBy(c => c.SortOrder).ToListAsync();
+        var columns = await db.BoardColumns.Where(c => c.PipelineId == pipelineId).OrderBy(c => c.SortOrder).ToListAsync();
         var blockedIndex = columns.FindIndex(c => c.Name == "Blocked");
         var insertAt = blockedIndex >= 0 ? blockedIndex + 1 : columns.Count;
-        columns.Insert(insertAt, new BoardColumn { Name = "Scheduled", Color = "#eab308" });
+        columns.Insert(insertAt, new BoardColumn
+        {
+            PipelineId = pipelineId,
+            Name = "Scheduled",
+            Color = "#eab308",
+            Role = ColumnRole.Waiting,
+        });
         for (int i = 0; i < columns.Count; i++)
             columns[i].SortOrder = i;
         db.BoardColumns.Add(columns[insertAt]);
@@ -92,39 +108,50 @@ public class ColumnService
     private static bool IsUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is Microsoft.Data.Sqlite.SqliteException { SqliteErrorCode: 19 };
 
-    public async Task<List<BoardColumn>> ListColumnsAsync(string projectSlug)
+    public async Task<List<BoardColumn>> ListColumnsAsync(string projectSlug, int? pipelineId = null)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureBoardColumnsTableAsync(db);
-        return await db.BoardColumns.OrderBy(c => c.SortOrder).ToListAsync();
+        pipelineId ??= await db.Pipelines.Where(p => p.IsDefault).Select(p => p.Id).SingleAsync();
+        return await db.BoardColumns.Where(c => c.PipelineId == pipelineId)
+            .OrderBy(c => c.SortOrder).ThenBy(c => c.Id).ToListAsync();
     }
 
-    public async Task<BoardColumn> CreateColumnAsync(string projectSlug, string name, string color = "#5a6a80")
+    public async Task<BoardColumn> CreateColumnAsync(
+        string projectSlug, string name, string color = "#5a6a80",
+        int? pipelineId = null, ColumnRole role = ColumnRole.Normal)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureBoardColumnsTableAsync(db);
-        // Idempotent on name: ticket Status references columns by name, so a second
-        // column with the same name would be indistinguishable — return the existing one.
-        var existing = await db.BoardColumns.FirstOrDefaultAsync(c => c.Name == name);
+        pipelineId ??= await db.Pipelines.Where(p => p.IsDefault).Select(p => p.Id).SingleAsync();
+        if (!await db.Pipelines.AnyAsync(p => p.Id == pipelineId))
+            throw new InvalidOperationException($"Le pipeline #{pipelineId} n'existe pas.");
+        // Names are unique inside a pipeline; separate pipelines may intentionally use
+        // the same vocabulary (for example "Review" or "Published").
+        var existing = await db.BoardColumns.FirstOrDefaultAsync(c => c.PipelineId == pipelineId && c.Name == name);
         if (existing is not null) return existing;
-        var maxSort = await db.BoardColumns.Select(c => (int?)c.SortOrder).MaxAsync() ?? -1;
+        var maxSort = await db.BoardColumns.Where(c => c.PipelineId == pipelineId)
+            .Select(c => (int?)c.SortOrder).MaxAsync() ?? -1;
         var column = new BoardColumn
         {
+            PipelineId = pipelineId.Value,
             Name = name,
             Color = color,
-            SortOrder = maxSort + 1
+            SortOrder = maxSort + 1,
+            Role = role,
         };
         db.BoardColumns.Add(column);
         try { await db.SaveChangesAsync(); }
         catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
             db.Entry(column).State = EntityState.Detached;
-            return await db.BoardColumns.FirstAsync(c => c.Name == name);
+            return await db.BoardColumns.FirstAsync(c => c.PipelineId == pipelineId && c.Name == name);
         }
         return column;
     }
 
-    public async Task<BoardColumn?> UpdateColumnAsync(string projectSlug, int columnId, string? name = null, string? color = null)
+    public async Task<BoardColumn?> UpdateColumnAsync(
+        string projectSlug, int columnId, string? name = null, string? color = null, ColumnRole? role = null)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureBoardColumnsTableAsync(db);
@@ -138,15 +165,17 @@ public class ColumnService
         {
             // Refuse renames that would collide with another column: the unique index
             // would reject it anyway, and silently merging two columns loses one of them.
-            if (await db.BoardColumns.AnyAsync(c => c.Name == name && c.Id != columnId))
+            if (await db.BoardColumns.AnyAsync(c => c.PipelineId == column.PipelineId && c.Name == name && c.Id != columnId))
                 return null;
             // Rename: update tickets whose Status points at the old name.
             var oldName = column.Name;
             column.Name = name;
             await db.Database.ExecuteSqlRawAsync(
-                "UPDATE Tickets SET Status = {0} WHERE Status = {1}", name, oldName);
+                "UPDATE Tickets SET Status = {0} WHERE ColumnId = {1} OR (ColumnId IS NULL AND PipelineId = {2} AND Status = {3})",
+                name, column.Id, column.PipelineId, oldName);
         }
         if (color is not null) column.Color = color;
+        if (role is not null) column.Role = role.Value;
         await db.SaveChangesAsync();
         await tx.CommitAsync();
         return column;
@@ -160,13 +189,15 @@ public class ColumnService
         if (column is null) return false;
 
         // Ensure the target column exists
-        var targetExists = await db.BoardColumns.AnyAsync(c => c.Name == moveTicketsTo && c.Id != columnId);
-        if (!targetExists) return false;
+        var target = await db.BoardColumns.FirstOrDefaultAsync(c =>
+            c.PipelineId == column.PipelineId && c.Name == moveTicketsTo && c.Id != columnId);
+        if (target is null) return false;
 
         // Move tickets from this column to the target, atomically with the column removal.
         await using var tx = await db.Database.BeginTransactionAsync();
         await db.Database.ExecuteSqlRawAsync(
-            "UPDATE Tickets SET Status = {0} WHERE Status = {1}", moveTicketsTo, column.Name);
+            "UPDATE Tickets SET Status = {0}, ColumnId = {1}, PipelineId = {2} WHERE ColumnId = {3} OR (ColumnId IS NULL AND PipelineId = {2} AND Status = {4})",
+            target.Name, target.Id, target.PipelineId, column.Id, column.Name);
 
         db.BoardColumns.Remove(column);
         await db.SaveChangesAsync();
@@ -183,7 +214,7 @@ public class ColumnService
         if (column is null) return;
 
         var columns = await db.BoardColumns
-            .Where(c => c.Id != columnId)
+            .Where(c => c.PipelineId == column.PipelineId && c.Id != columnId)
             .OrderBy(c => c.SortOrder)
             .ToListAsync();
 
