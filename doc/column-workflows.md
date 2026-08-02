@@ -39,6 +39,8 @@ Reusable project capabilities live under:
 <workspace>/.agents/skills/<stable-skill-slug>/SKILL.md
 ```
 
+KittyClaw writes the Codex-compatible YAML frontmatter (`name` and `description`) and keeps the editable instructions as the Markdown body. Reading an older plain-Markdown project skill upgrades it atomically before the next agent process starts.
+
 The processor is a generic agent identity tied to a column. Its persistent memory lives under:
 
 ```text

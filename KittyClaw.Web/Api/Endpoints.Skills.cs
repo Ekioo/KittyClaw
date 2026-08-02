@@ -48,7 +48,7 @@ public static partial class Endpoints
         {
             try
             {
-                var skill = await skills.CreateAsync(slug, req.Name, req.Instructions);
+                var skill = await skills.CreateAsync(slug, req.Name, req.Instructions, req.Description);
                 return Results.Created($"/api/projects/{slug}/project-skills/{skill.Slug}", skill);
             }
             catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
@@ -59,7 +59,7 @@ public static partial class Endpoints
         {
             try
             {
-                var skill = await skills.UpdateAsync(slug, skillSlug, req.Name, req.Instructions);
+                var skill = await skills.UpdateAsync(slug, skillSlug, req.Name, req.Instructions, req.Description);
                 return skill is null ? Results.NotFound() : Results.Ok(skill);
             }
             catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }

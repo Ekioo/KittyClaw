@@ -159,12 +159,14 @@ else
                 <details class="skill-editor">
                     <summary>@skill.Name <code>@skill.Slug</code></summary>
                     <input class="settings-input" value="@SkillName(skill.Slug)" @oninput="e => SetSkillName(skill.Slug, e.Value?.ToString())" />
+                    <input class="settings-input" placeholder="When should the agent use this skill?" value="@SkillDescription(skill.Slug)" @oninput="e => SetSkillDescription(skill.Slug, e.Value?.ToString())" />
                     <textarea class="settings-input workflow-textarea" value="@SkillInstructions(skill.Slug)" @oninput="e => SetSkillInstructions(skill.Slug, e.Value?.ToString())"></textarea>
                     <button @onclick="() => SaveSkillAsync(skill.Slug)">Save skill</button>
                 </details>
             }
             <div class="skill-editor">
                 <input class="settings-input" placeholder="New skill name" @bind="_newSkillName" />
+                <input class="settings-input" placeholder="When should the agent use this skill?" @bind="_newSkillDescription" />
                 <textarea class="settings-input workflow-textarea" placeholder="Skill instructions (Markdown)" @bind="_newSkillInstructions"></textarea>
                 <button class="settings-primary" @onclick="CreateSkillAsync" disabled="@(string.IsNullOrWhiteSpace(_newSkillName))">Add skill</button>
             </div>
@@ -188,6 +190,7 @@ else
     private readonly Dictionary<int, string> _columnNames = [];
     private readonly Dictionary<int, ColumnRole> _columnRoles = [];
     private readonly Dictionary<string, string> _skillNames = [];
+    private readonly Dictionary<string, string> _skillDescriptions = [];
     private readonly Dictionary<string, string> _skillInstructions = [];
     private int? _selectedPipelineId;
     private Pipeline? _selectedPipeline => _pipelines.FirstOrDefault(p => p.Id == _selectedPipelineId);
@@ -216,6 +219,7 @@ else
     private List<RouteDraft> _routeDrafts = [];
 
     private string _newSkillName = "";
+    private string _newSkillDescription = "";
     private string _newSkillInstructions = "";
 
     protected override async Task OnInitializedAsync()
@@ -336,10 +340,11 @@ else
 
     private async Task LoadSkillDraftsAsync()
     {
-        _skillNames.Clear(); _skillInstructions.Clear();
+        _skillNames.Clear(); _skillDescriptions.Clear(); _skillInstructions.Clear();
         foreach (var skill in _skills)
         {
             _skillNames[skill.Slug] = skill.Name;
+            _skillDescriptions[skill.Slug] = skill.Description;
             _skillInstructions[skill.Slug] = await SkillService.ReadInstructionsAsync(Slug, skill.Slug) ?? "";
         }
         _pipelineColumns.Clear();
@@ -348,21 +353,23 @@ else
     }
 
     private string SkillName(string slug) => _skillNames.GetValueOrDefault(slug, "");
+    private string SkillDescription(string slug) => _skillDescriptions.GetValueOrDefault(slug, "");
     private string SkillInstructions(string slug) => _skillInstructions.GetValueOrDefault(slug, "");
     private void SetSkillName(string slug, string? value) => _skillNames[slug] = value ?? "";
+    private void SetSkillDescription(string slug, string? value) => _skillDescriptions[slug] = value ?? "";
     private void SetSkillInstructions(string slug, string? value) => _skillInstructions[slug] = value ?? "";
 
     private async Task SaveSkillAsync(string slug) => await RunAsync(async () =>
     {
-        await SkillService.UpdateAsync(Slug, slug, _skillNames[slug], _skillInstructions[slug]);
+        await SkillService.UpdateAsync(Slug, slug, _skillNames[slug], _skillInstructions[slug], _skillDescriptions[slug]);
         _skills = await SkillService.ListAsync(Slug);
         await LoadSkillDraftsAsync();
     }, "Skill saved; its stable key was preserved.");
 
     private async Task CreateSkillAsync() => await RunAsync(async () =>
     {
-        await SkillService.CreateAsync(Slug, _newSkillName, _newSkillInstructions);
-        _newSkillName = _newSkillInstructions = "";
+        await SkillService.CreateAsync(Slug, _newSkillName, _newSkillInstructions, _newSkillDescription);
+        _newSkillName = _newSkillDescription = _newSkillInstructions = "";
         _skills = await SkillService.ListAsync(Slug);
         await LoadSkillDraftsAsync();
     }, "Skill created.");

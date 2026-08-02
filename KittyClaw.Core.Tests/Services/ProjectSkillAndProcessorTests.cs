@@ -32,7 +32,42 @@ public sealed class ProjectSkillAndProcessorTests : IDisposable
         Assert.NotNull(renamed);
         Assert.Equal("run-tests", renamed.Slug);
         Assert.Equal("Verify build", renamed.Name);
-        Assert.Equal("# Run tests\n", await _skills.ReadInstructionsAsync(project.Slug, skill.Slug));
+        Assert.Equal("# Run tests", await _skills.ReadInstructionsAsync(project.Slug, skill.Slug));
+    }
+
+    [Fact]
+    public async Task Project_skill_is_written_with_codex_frontmatter()
+    {
+        var project = await _projects.CreateProjectAsync("Codex skill");
+
+        var skill = await _skills.CreateAsync(
+            project.Slug, "Quality routing", "Check every acceptance criterion.",
+            "Validate deliverables and choose a routing outcome.");
+        var document = await File.ReadAllTextAsync(skill.InstructionsPath);
+
+        Assert.StartsWith("---\nname: quality-routing\ndescription: \"Validate deliverables and choose a routing outcome.\"\n---\n", document);
+        Assert.EndsWith("Check every acceptance criterion.\n", document);
+        Assert.Equal("Check every acceptance criterion.", await _skills.ReadInstructionsAsync(project.Slug, skill.Slug));
+    }
+
+    [Fact]
+    public async Task Listing_skills_migrates_legacy_plain_markdown_without_changing_slug_or_body()
+    {
+        var project = await _projects.CreateProjectAsync("Legacy project skill");
+        var skill = await _skills.CreateAsync(project.Slug, "Ticket triage", "Initial body.");
+        const string legacyBody = "Reusable ticket triage. Clarify acceptance criteria.";
+        await File.WriteAllTextAsync(skill.InstructionsPath, legacyBody);
+        await File.WriteAllTextAsync(Path.Combine(Path.GetDirectoryName(skill.InstructionsPath)!, "skill.json"),
+            "{\"Name\":\"Ticket triage\"}");
+
+        var migrated = Assert.Single(await _skills.ListAsync(project.Slug));
+        var document = await File.ReadAllTextAsync(skill.InstructionsPath);
+
+        Assert.Equal(skill.Slug, migrated.Slug);
+        Assert.Equal(legacyBody, await _skills.ReadInstructionsAsync(project.Slug, skill.Slug));
+        Assert.Contains("name: ticket-triage", document);
+        Assert.Contains("description: \"Reusable ticket triage. Clarify acceptance criteria.\"", document);
+        Assert.EndsWith(legacyBody + "\n", document);
     }
 
     [Fact]

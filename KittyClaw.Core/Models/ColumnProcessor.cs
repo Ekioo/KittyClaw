@@ -70,7 +70,7 @@ public class ColumnProcessor
             .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(v => v, StringComparer.OrdinalIgnoreCase));
 }
 
-public sealed record ProjectSkill(string Slug, string Name, string InstructionsPath);
+public sealed record ProjectSkill(string Slug, string Name, string Description, string InstructionsPath);
 
 public sealed record ColumnRoute(string Outcome, int TargetColumnId);
 
