@@ -5,6 +5,17 @@ namespace KittyClaw.Web.Api;
 public record CreateProjectRequest(string Name);
 public record CreatePipelineRequest(string Name);
 public record UpdatePipelineRequest(string? Name = null);
+public record CreateProjectSkillRequest(string Name, string Instructions = "");
+public record UpdateProjectSkillRequest(string? Name = null, string? Instructions = null);
+public record SaveColumnProcessorRequest(
+    string Name,
+    string Mission,
+    string? Model = null,
+    bool Enabled = true,
+    int MaxTurns = 100,
+    List<string>? AvailableSkills = null,
+    List<string>? RecommendedSkills = null,
+    List<string>? RequiredSkills = null);
 public record CreateTicketRequest(
     string Title, string CreatedBy, string Status, string Description = "",
     List<int>? LabelIds = null, TicketPriority Priority = TicketPriority.NiceToHave,

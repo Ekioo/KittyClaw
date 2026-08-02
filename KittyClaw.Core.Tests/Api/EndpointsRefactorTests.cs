@@ -84,6 +84,15 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "POST /api/browse/folder",
         // Skills
         "GET /api/projects/{slug}/skills",
+        "GET /api/projects/{slug}/project-skills",
+        "GET /api/projects/{slug}/project-skills/{skillSlug}",
+        "POST /api/projects/{slug}/project-skills",
+        "PATCH /api/projects/{slug}/project-skills/{skillSlug}",
+        "DELETE /api/projects/{slug}/project-skills/{skillSlug}",
+        // Column processors
+        "GET /api/projects/{slug}/columns/{columnId}/processor",
+        "PUT /api/projects/{slug}/columns/{columnId}/processor",
+        "DELETE /api/projects/{slug}/columns/{columnId}/processor",
         // Ollama
         "GET /api/projects/{slug}/ollama-models",
         // Grok
