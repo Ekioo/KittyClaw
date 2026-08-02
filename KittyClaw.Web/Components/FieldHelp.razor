@@ -1,0 +1,14 @@
+<span class="field-caption">
+    @Label
+    <span class="field-help"
+          tabindex="0"
+          role="note"
+          title="@Help"
+          aria-label="@Help"
+          data-tooltip="@Help">?</span>
+</span>
+
+@code {
+    [Parameter, EditorRequired] public required string Label { get; set; }
+    [Parameter, EditorRequired] public required string Help { get; set; }
+}

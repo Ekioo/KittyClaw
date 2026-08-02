@@ -44,9 +44,9 @@
                 @if (_activeTab == "general")
                 {
                     <div class="column-editor-grid">
-                        <label>@L["Name"]<input class="settings-input" @bind="_columnName" @bind:event="oninput" /></label>
-                        <label>@L["Color"]<input type="color" class="color-input column-editor-color" @bind="_columnColor" /></label>
-                        <label>@L["ColumnRole"]
+                        <label><FieldHelp Label="@L["Name"]" Help="@L["ColumnNameHelp"]" /><input class="settings-input" @bind="_columnName" @bind:event="oninput" /></label>
+                        <label><FieldHelp Label="@L["Color"]" Help="@L["ColumnColorHelp"]" /><input type="color" class="color-input column-editor-color" @bind="_columnColor" /></label>
+                        <label><FieldHelp Label="@L["ColumnRole"]" Help="@L["ColumnRoleHelp"]" />
                             <select @bind="_columnRole">
                                 @foreach (var role in Enum.GetValues<ColumnRole>())
                                 {
@@ -54,7 +54,7 @@
                                 }
                             </select>
                         </label>
-                        <label>@L["ColumnPosition"]
+                        <label><FieldHelp Label="@L["ColumnPosition"]" Help="@L["ColumnPositionHelp"]" />
                             <select @bind="_positionIndex">
                                 @for (var index = 0; index <= SiblingColumns.Count; index++)
                                 {
@@ -76,7 +76,7 @@
                             }
                             else
                             {
-                                <label>@L["MoveTicketsTo"]
+                                <label><FieldHelp Label="@L["MoveTicketsTo"]" Help="@L["ColumnDeleteDestinationHelp"]" />
                                     <select @bind="_deleteTargetId">
                                         @foreach (var target in SiblingColumns)
                                         {
@@ -109,14 +109,13 @@
                         {
                             <div class="processor-draft-notice" role="status">@L["ProcessorDraftNotice"]</div>
                         }
-                        <label class="workflow-check"><input type="checkbox" @bind="_enabled" /> @L["ProcessorEnabled"]</label>
-                        <label>@L["Name"]<input class="settings-input" @bind="_name" /></label>
-                        <label>@L["ProcessorMission"]<textarea class="settings-input workflow-textarea" @bind="_mission"></textarea></label>
-                        <label>@L["ProcessorPrompt"]<textarea class="settings-input workflow-textarea processor-prompt" @bind="_prompt"></textarea></label>
-                        <p class="settings-hint">@L["ProcessorPromptHint"]</p>
+                        <label class="workflow-check"><input type="checkbox" @bind="_enabled" /> <FieldHelp Label="@L["ProcessorEnabled"]" Help="@L["ProcessorEnabledHelp"]" /></label>
+                        <label><FieldHelp Label="@L["Name"]" Help="@L["ProcessorNameHelp"]" /><input class="settings-input" @bind="_name" /></label>
+                        <label><FieldHelp Label="@L["ProcessorMission"]" Help="@L["ProcessorMissionHelp"]" /><textarea class="settings-input workflow-textarea" @bind="_mission"></textarea></label>
+                        <label><FieldHelp Label="@L["ProcessorPrompt"]" Help="@L["ProcessorPromptHelp"]" /><textarea class="settings-input workflow-textarea processor-prompt" @bind="_prompt"></textarea></label>
 
                         <div class="workflow-grid">
-                            <label>@L["ProcessorTicketOrder"]
+                            <label><FieldHelp Label="@L["ProcessorTicketOrder"]" Help="@L["ProcessorTicketOrderHelp"]" />
                                 <select @bind="_selectionOrder">
                                     @foreach (var order in Enum.GetValues<TicketSelectionOrder>())
                                     {
@@ -124,9 +123,9 @@
                                     }
                                 </select>
                             </label>
-                            <label>@L["ProcessorMaxAttempts"]<input type="number" min="1" @bind="_maxAttempts" /></label>
-                            <label>@L["ProcessorRetryDelay"]<input type="number" min="1" @bind="_retryBackoff" /></label>
-                            <label>@L["ProcessorTurnLimit"]<input type="number" min="1" @bind="_maxTurns" /></label>
+                            <label><FieldHelp Label="@L["ProcessorMaxAttempts"]" Help="@L["ProcessorMaxAttemptsHelp"]" /><input type="number" min="1" @bind="_maxAttempts" /></label>
+                            <label><FieldHelp Label="@L["ProcessorRetryDelay"]" Help="@L["ProcessorRetryDelayHelp"]" /><input type="number" min="1" @bind="_retryBackoff" /></label>
+                            <label><FieldHelp Label="@L["ProcessorTurnLimit"]" Help="@L["ProcessorTurnLimitHelp"]" /><input type="number" min="1" @bind="_maxTurns" /></label>
                         </div>
 
                         <h3>@L["ProcessorSkills"]</h3>
@@ -141,9 +140,9 @@
                                 @foreach (var skill in _skills)
                                 {
                                     <div><strong>@skill.Name</strong><code>@skill.Slug</code></div>
-                                    <label><input type="checkbox" checked="@_availableSkills.Contains(skill.Slug)" @onchange="e => ToggleSkill(_availableSkills, skill.Slug, e)" /> @L["ProcessorAvailable"]</label>
-                                    <label><input type="checkbox" checked="@_recommendedSkills.Contains(skill.Slug)" @onchange="e => ToggleSkill(_recommendedSkills, skill.Slug, e)" /> @L["ProcessorRecommended"]</label>
-                                    <label><input type="checkbox" checked="@_requiredSkills.Contains(skill.Slug)" @onchange="e => ToggleSkill(_requiredSkills, skill.Slug, e)" /> @L["ProcessorRequired"]</label>
+                                    <label><input type="checkbox" checked="@_availableSkills.Contains(skill.Slug)" @onchange="e => ToggleSkill(_availableSkills, skill.Slug, e)" /> <FieldHelp Label="@L["ProcessorAvailable"]" Help="@L["ProcessorAvailableHelp"]" /></label>
+                                    <label><input type="checkbox" checked="@_recommendedSkills.Contains(skill.Slug)" @onchange="e => ToggleSkill(_recommendedSkills, skill.Slug, e)" /> <FieldHelp Label="@L["ProcessorRecommended"]" Help="@L["ProcessorRecommendedHelp"]" /></label>
+                                    <label><input type="checkbox" checked="@_requiredSkills.Contains(skill.Slug)" @onchange="e => ToggleSkill(_requiredSkills, skill.Slug, e)" /> <FieldHelp Label="@L["ProcessorRequired"]" Help="@L["ProcessorRequiredHelp"]" /></label>
                                 }
                             </div>
                         }
@@ -168,19 +167,19 @@
                     {
                         <p class="settings-hint">@L["ColumnRoutingHint"]</p>
                         <div class="workflow-grid">
-                            <label>@L["ProcessorDefaultDestination"]
+                            <label><FieldHelp Label="@L["ProcessorDefaultDestination"]" Help="@L["ProcessorDefaultDestinationHelp"]" />
                                 <select @bind="_defaultTargetId">@ColumnOptions(true)</select>
                             </label>
-                            <label>@L["ProcessorFailureDestination"]
+                            <label><FieldHelp Label="@L["ProcessorFailureDestination"]" Help="@L["ProcessorFailureDestinationHelp"]" />
                                 <select @bind="_technicalFailureTargetId">@ColumnOptions(true)</select>
                             </label>
                         </div>
                         @foreach (var route in _routes)
                         {
                             <div class="settings-row route-row">
-                                <input placeholder="@L["ProcessorOutcomePlaceholder"]" @bind="route.Outcome" />
+                                <label class="route-field"><FieldHelp Label="@L["ProcessorOutcome"]" Help="@L["ProcessorOutcomeHelp"]" /><input placeholder="@L["ProcessorOutcomePlaceholder"]" @bind="route.Outcome" /></label>
                                 <span>&rarr;</span>
-                                <select @bind="route.TargetColumnId">@ColumnOptions(false)</select>
+                                <label class="route-field"><FieldHelp Label="@L["ProcessorRouteDestination"]" Help="@L["ProcessorRouteDestinationHelp"]" /><select @bind="route.TargetColumnId">@ColumnOptions(false)</select></label>
                                 <button class="processor-secondary-btn" @onclick="() => _routes.Remove(route)">@L["ProcessorRemove"]</button>
                             </div>
                         }
@@ -221,6 +220,7 @@
     private string _name = "";
     private string _mission = "";
     private string _prompt = "";
+    private string? _model;
     private int _maxTurns = 100;
     private int _maxAttempts = 3;
     private int _retryBackoff = 60;
@@ -283,6 +283,7 @@
         _name = processor?.Name ?? $"{sourceName ?? _columnName} processor";
         _mission = processor?.Mission ?? "Process the selected ticket and return a structured outcome.";
         _prompt = processor?.Prompt ?? "";
+        _model = processor?.Model;
         _enabled = processor?.Enabled ?? true;
         _maxTurns = processor?.MaxTurns ?? 100;
         _maxAttempts = processor?.MaxAttempts ?? 3;
@@ -333,7 +334,7 @@
             {
                 var routes = _routes.Where(route => !string.IsNullOrWhiteSpace(route.Outcome) && route.TargetColumnId > 0)
                     .Select(route => new ColumnRoute(route.Outcome, route.TargetColumnId)).ToList();
-                await ProcessorService.SaveAsync(Slug, savedColumn.Id, _name, _mission, null,
+                await ProcessorService.SaveAsync(Slug, savedColumn.Id, _name, _mission, _model,
                     _enabled, _maxTurns, _availableSkills.ToList(), _recommendedSkills.ToList(), _requiredSkills.ToList(),
                     _selectionOrder, _maxAttempts, _retryBackoff, _defaultTargetId, _technicalFailureTargetId, routes,
                     prompt: _prompt);

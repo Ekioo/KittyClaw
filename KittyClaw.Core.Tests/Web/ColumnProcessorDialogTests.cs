@@ -70,6 +70,45 @@ public sealed class ColumnProcessorDialogTests
             document.RootElement.GetProperty("ColumnProcessorInactive").GetString()));
     }
 
+    [Theory]
+    [InlineData("en")]
+    [InlineData("fr")]
+    [InlineData("de")]
+    [InlineData("es")]
+    [InlineData("it")]
+    public void Every_column_editor_field_help_is_localized(string language)
+    {
+        string[] keys =
+        [
+            "ColumnNameHelp", "ColumnColorHelp", "ColumnRoleHelp", "ColumnPositionHelp",
+            "ColumnDeleteDestinationHelp", "ProcessorEnabledHelp", "ProcessorNameHelp",
+            "ProcessorMissionHelp", "ProcessorPromptHelp", "ProcessorTicketOrderHelp",
+            "ProcessorMaxAttemptsHelp", "ProcessorRetryDelayHelp", "ProcessorTurnLimitHelp",
+            "ProcessorAvailableHelp", "ProcessorRecommendedHelp", "ProcessorRequiredHelp",
+            "ProcessorDefaultDestinationHelp", "ProcessorFailureDestinationHelp",
+            "ProcessorOutcomeHelp", "ProcessorRouteDestinationHelp",
+        ];
+        var path = Path.Combine(RepoRoot(), "KittyClaw.Core", "Localization", $"Board.{language}.json");
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+
+        foreach (var key in keys)
+            Assert.False(string.IsNullOrWhiteSpace(document.RootElement.GetProperty(key).GetString()), key);
+    }
+
+    [Fact]
+    public void Column_editor_explains_all_fields_and_preserves_the_processor_model()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Web", "Components", "ColumnProcessorDialog.razor"));
+
+        Assert.Contains("<FieldHelp", source);
+        Assert.Contains("ProcessorMissionHelp", source);
+        Assert.Contains("ProcessorPromptHelp", source);
+        Assert.Contains("_model = processor?.Model", source);
+        Assert.Contains("_name, _mission, _model", source);
+        Assert.DoesNotContain("_name, _mission, null", source);
+    }
+
     [Fact]
     public void Boards_replace_the_decorative_dot_with_processor_state()
     {
