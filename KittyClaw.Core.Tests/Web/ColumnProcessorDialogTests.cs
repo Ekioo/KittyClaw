@@ -110,6 +110,7 @@ public sealed class ColumnProcessorDialogTests
 
         var css = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "wwwroot", "app.css"));
         Assert.Contains(".skill-matrix .field-help::after", css);
+        Assert.Contains(".workflow-grid > label:last-child .field-help::after", css);
         Assert.Contains("right: 0;", css);
     }
 
