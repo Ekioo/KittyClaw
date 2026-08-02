@@ -102,12 +102,27 @@ public sealed class ColumnAgentDispatcher(
         }
 
         text.AppendLine();
+        text.AppendLine(BuildRuntimeContract(processor));
+        text.AppendLine();
         text.AppendLine("## Result contract");
         text.AppendLine("Your final response must be exactly one JSON object, with no Markdown:");
         text.AppendLine("{\"outcome\":\"configured-outcome\",\"skillsUsed\":[\"skill-slug\"],\"summary\":\"short result\"}");
         text.AppendLine("Use outcome \"wait_for_children\" only after creating at least one blocking sub-ticket.");
         return text.ToString();
     }
+
+    internal static string BuildRuntimeContract(ColumnProcessor processor) => $$"""
+        ## Non-negotiable runtime contract
+
+        KittyClaw, not the agent, owns the current ticket's workflow transition.
+        - Never PATCH or otherwise change the current ticket's pipeline, column, status, or assignedTo value.
+        - Do not apply legacy hand-off instructions that move the current ticket to names such as Todo, InProgress, Review, or Done.
+        - Express the business result only through the final JSON outcome; KittyClaw applies the configured route atomically.
+        - Creating or updating child tickets is allowed when required by the mission, but do not use a child transition as a substitute for the current ticket's outcome.
+
+        The canonical persistent memory for this processor is `.agents/processors/column-{{processor.ColumnId}}/memory/MEMORY.md`.
+        Read and update that exact file for durable processor lessons. You may read specialist memories for domain expertise, but never create or use `.agents/column-{{processor.ColumnId}}/memory.md`.
+        """;
 
     private static string BuildTicketContext(Ticket ticket) => $$"""
         Process ticket #{{ticket.Id}}.

@@ -47,6 +47,8 @@ The processor is a generic agent identity tied to a column. Its persistent memor
 <workspace>/.agents/processors/column-<column-id>/memory/MEMORY.md
 ```
 
+The runtime prompt names this exact path and reserves current-ticket transitions for KittyClaw. Legacy specialist instructions may inform the work, but a column processor must return its outcome instead of moving or reassigning the current ticket itself.
+
 Skills can be available, recommended, or required. Required skills must be named in the agent's structured result before business routing is accepted. Renaming a skill changes its display name while preserving its directory slug.
 
 ## Parent and child tickets
