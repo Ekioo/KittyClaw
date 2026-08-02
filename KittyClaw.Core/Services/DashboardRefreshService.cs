@@ -221,7 +221,7 @@ public sealed class DashboardRefreshService : BackgroundService
         var output = new StringBuilder();
 
         var project = await _projects.GetProjectAsync(projectSlug);
-        var routing = ModelRouting.Resolve(sidecar.Model, project?.LocalModelBaseUrl);
+        var (target, fallbackTarget) = DashboardModelRouting.Resolve(project, sidecar.Model);
 
         var ctx = new AgentRunContext
         {
@@ -232,7 +232,8 @@ public sealed class DashboardRefreshService : BackgroundService
             InlineSkillContent = sidecar.Prompt + TileTemplate.SchemaPrompt(sidecar.Template),
             MaxTurns = 5,
             ConcurrencyGroup = $"dashboard-{projectSlug}-{SanitizeName(tileSlug)}",
-            Target = routing.ToTarget(sidecar.Model),
+            Target = target,
+            FallbackTarget = fallbackTarget,
             SessionScope = "dashboard",
             PersistSession = false,
             // Tile refreshes hold the global dashboard gate: a hung run would starve every
@@ -240,6 +241,11 @@ public sealed class DashboardRefreshService : BackgroundService
             MaxRunDuration = TimeSpan.FromMinutes(15),
             OnEventHook = ev =>
             {
+                if (ev.Kind == "fallback")
+                {
+                    lock (output) { output.Clear(); }
+                    return;
+                }
                 if (ev.Kind != "assistant" || string.IsNullOrWhiteSpace(ev.Text)) return;
                 var text = ev.Text;
                 const string prefix = "[assistant] ";

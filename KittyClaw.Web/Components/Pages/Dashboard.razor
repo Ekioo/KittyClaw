@@ -885,7 +885,7 @@ else
                     if (!string.IsNullOrWhiteSpace(sidecar.Prompt))
                     {
                         var output = new StringBuilder();
-                        var routing = ModelRouting.Resolve(sidecar.Model, _project?.LocalModelBaseUrl);
+                        var (target, fallbackTarget) = DashboardModelRouting.Resolve(_project, sidecar.Model);
                         var ctx = new AgentRunContext
                         {
                             ProjectSlug = Slug,
@@ -895,12 +895,18 @@ else
                             InlineSkillContent = sidecar.Prompt + TileTemplate.SchemaPrompt(sidecar.Template),
                             MaxTurns = 5,
                             ConcurrencyGroup = $"dashboard-{Slug}-{SanitizeName(tileSlug)}",
-                            Target = routing.ToTarget(sidecar.Model),
+                            Target = target,
+                            FallbackTarget = fallbackTarget,
                             SessionScope = "dashboard",
                             PersistSession = false,
                             PresetRunId = runId,
                             OnEventHook = ev =>
                             {
+                                if (ev.Kind == "fallback")
+                                {
+                                    lock (output) { output.Clear(); }
+                                    return;
+                                }
                                 if (ev.Kind != "assistant" || string.IsNullOrWhiteSpace(ev.Text)) return;
                                 var t = ev.Text;
                                 const string prefix = "[assistant] ";
