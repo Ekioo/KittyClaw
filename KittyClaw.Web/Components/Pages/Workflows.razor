@@ -6,7 +6,10 @@
 @inject ColumnService ColumnService
 @inject ColumnProcessorService ProcessorService
 @inject ProjectSkillService SkillService
+@inject IJSRuntime JS
+@inject KittyClaw.Web.Services.EscapeKeyStack EscapeStack
 @rendermode InteractiveServer
+@implements IDisposable
 
 <PageTitle>@(_project?.Name ?? "Project") — Workflows</PageTitle>
 
@@ -22,6 +25,14 @@ else
     </div>
 
     <div class="settings-container workflow-settings">
+        <section class="settings-section workflow-migration-card">
+            <div>
+                <h2>Migrate the existing workflow</h2>
+                <p class="settings-hint">Ask KittyClaw to analyse the current board and prepare a safe, progressive migration. You can review and edit the instruction before sending it.</p>
+            </div>
+            <button class="settings-primary" @onclick="OpenMigrationInstruction">Migrate</button>
+        </section>
+
         @if (!string.IsNullOrWhiteSpace(_message))
         {
             <div class="settings-status @(_isError ? "settings-status-err" : "settings-status-ok")">@_message</div>
@@ -161,6 +172,11 @@ else
     </div>
 }
 
+@if (_showMigrationInstruction)
+{
+    <ChatDrawer ProjectSlug="@Slug" InitialMessage="@MigrationPrompt" OnClose="CloseMigrationInstruction" />
+}
+
 @code {
     [Parameter] public string Slug { get; set; } = "";
 
@@ -181,6 +197,8 @@ else
     private ColumnRole _newColumnRole;
     private string? _message;
     private bool _isError;
+    private bool _showMigrationInstruction;
+    private IDisposable? _migrationEscape;
 
     private BoardColumn? _editingColumn;
     private string _processorName = "";
@@ -354,6 +372,53 @@ else
         try { await action(); _message = success; _isError = false; }
         catch (Exception ex) { _message = ex.Message; _isError = true; }
     }
+
+    private void OpenMigrationInstruction()
+    {
+        _showMigrationInstruction = true;
+        _migrationEscape?.Dispose();
+        _migrationEscape = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() =>
+        {
+            CloseMigrationInstruction();
+            StateHasChanged();
+        }));
+    }
+
+    private void CloseMigrationInstruction()
+    {
+        _showMigrationInstruction = false;
+        _migrationEscape?.Dispose();
+        _migrationEscape = null;
+    }
+
+    public void Dispose() => _migrationEscape?.Dispose();
+
+    private const string MigrationPrompt = """
+        Analyze this project's current board and prepare a safe migration to the pipeline and column-processor architecture.
+
+        First inspect the existing columns, tickets, legacy automations (including cron jobs), agents, memories, skills, and parent/child ticket relationships. Then propose the smallest useful set of pipelines and columns for this project's actual workflows.
+
+        Follow these rules:
+        - Use separate pipelines only for genuinely distinct workflows.
+        - Do not add an In Progress column merely to represent agent execution; execution state is tracked separately.
+        - Give every column an explicit semantic role: Normal, Waiting, Success, or Failure.
+        - Attach at most one generic processor to each active column.
+        - Convert reusable technical and operational procedures into project skills.
+        - Configure each processor's mission, ticket ordering, available/recommended/required skills, retry policy, default destination, conditional outcome routes, and technical-failure destination.
+        - Allow child tickets to live in other pipelines. Mark only true prerequisites as blocking; their success is determined by the Success role of their destination column.
+        - Preserve stable pipeline, column, and skill identifiers when renaming anything.
+        - Keep legacy cron or event automations that are not replaced by queue-style column processing.
+        - Do not delete or disable existing automations, agents, skills, columns, or pipelines during the analysis.
+
+        Before making changes, show me:
+        1. the proposed pipelines and columns;
+        2. each processor, its skills, and its routing switch;
+        3. which legacy automations would be kept, replaced, or require a decision;
+        4. how existing tickets and child tickets would be mapped;
+        5. any risks or ambiguous choices.
+
+        Wait for my explicit approval before applying the migration. After approval, migrate progressively, verify that existing tickets remain accessible, and only disable legacy automations that have a validated replacement.
+        """;
 
     private sealed class RouteDraft
     {

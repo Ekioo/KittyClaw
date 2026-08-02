@@ -4902,6 +4902,9 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .pipeline-tab--manage { margin-left: auto; }
 
 .workflow-settings { max-width: 1100px; }
+.workflow-migration-card { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; }
+.workflow-migration-card h2 { margin-bottom: .35rem; }
+.workflow-migration-card p { margin: 0; }
 .workflow-pills { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: 1rem; }
 .workflow-edit-row { align-items: center; }
 .workflow-table input, .workflow-table select { width: 100%; }

@@ -232,6 +232,8 @@
     [Parameter] public string? InitialAgent { get; set; }
     /// <summary>Optional. Display name for the InitialAgent (falls back to slug).</summary>
     [Parameter] public string? InitialAgentName { get; set; }
+    /// <summary>Optional draft placed in the composer without sending it automatically.</summary>
+    [Parameter] public string? InitialMessage { get; set; }
     /// <summary>Optional. When set together with InitialAgent, scopes the chat to a specific ticket.</summary>
     [Parameter] public int? TicketId { get; set; }
     /// <summary>Optional. Title of the scoped ticket, shown in the drawer header.</summary>
@@ -286,6 +288,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        _inputText = InitialMessage ?? "";
         await FetchOllamaModelsAsync();
         // Ticket-scoped or pre-targeted chat: skip the picker entirely.
         if (!string.IsNullOrWhiteSpace(InitialAgent))

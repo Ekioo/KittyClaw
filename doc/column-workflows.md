@@ -60,7 +60,7 @@ This avoids coupling child completion to column names or to the parent's pipelin
 
 ## User interface and API
 
-The board displays pipeline tabs and one pipeline at a time. The **Workflows** page manages pipelines, column roles, processors, routing rules, and project skills. New project creation opens this page after workspace initialization.
+The board displays pipeline tabs and one pipeline at a time. The **Workflows** page manages pipelines, column roles, processors, routing rules, and project skills. Its **Migrate** button opens New Instruction with an editable English migration prompt; the prompt asks for a proposal and explicit approval before changing the project. New project creation opens this page after workspace initialization.
 
 Relevant endpoints include:
 
@@ -78,4 +78,3 @@ Ticket creation and update accept stable `pipelineId` and `columnId`. Ticket upd
 ## Compatibility
 
 Existing databases are migrated into a default `main` pipeline. Existing columns and tickets receive stable links, while legacy status strings and APIs continue to work. `.agents/automations.json`, polling triggers, cron/interval triggers, and legacy agent directories are not removed.
-
