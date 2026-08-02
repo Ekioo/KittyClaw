@@ -28,6 +28,7 @@ public sealed record AutomationQueueEntry(
     DateTime? StartedAt,
     DateTime? FinishedAt,
     DateTime? LeaseUntil,
+    DateTime? AvailableAt,
     string? Reason,
     int ExecutableAhead,
     string AutomationSnapshot);
@@ -199,7 +200,8 @@ public sealed class AutomationQueueStore
             select.Transaction = tx;
             select.CommandText = """
                 SELECT Id FROM automation_queue
-                WHERE Status='Pending' OR (Status='Running' AND LeaseUntil < @now)
+                WHERE (Status='Pending' AND (AvailableAt IS NULL OR AvailableAt <= @now))
+                   OR (Status='Running' AND LeaseUntil < @now)
                 ORDER BY QueueOrder, Id LIMIT 1
                 """;
             select.Parameters.AddWithValue("@now", now.ToString("O"));
@@ -256,6 +258,26 @@ public sealed class AutomationQueueStore
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task ScheduleRetryAsync(
+        string slug, long id, DateTime availableAt, bool resetAttempts, CancellationToken ct = default)
+    {
+        var path = _projects.GetProjectDbPath(slug);
+        await using var conn = new SqliteConnection($"Data Source={path}");
+        await conn.OpenAsync(ct);
+        EnsureSchema(conn);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            UPDATE automation_queue
+            SET Status='Pending', Attempts=CASE WHEN @reset=1 THEN 0 ELSE Attempts END,
+                AvailableAt=@available, LeaseUntil=NULL, FinishedAt=NULL, Reason=NULL
+            WHERE Id=@id
+            """;
+        cmd.Parameters.AddWithValue("@id", id);
+        cmd.Parameters.AddWithValue("@reset", resetAttempts ? 1 : 0);
+        cmd.Parameters.AddWithValue("@available", availableAt.ToString("O"));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task<IReadOnlyList<AutomationQueueEntry>> ListForTicketAsync(string slug, int ticketId, CancellationToken ct = default)
     {
         var path = _projects.GetProjectDbPath(slug);
@@ -292,6 +314,7 @@ public sealed class AutomationQueueStore
         Enum.Parse<AutomationQueueStatus>(r.GetString(r.GetOrdinal("Status"))), r.GetInt32(r.GetOrdinal("Attempts")),
         DateTime.Parse(r.GetString(r.GetOrdinal("CreatedAt")), null, System.Globalization.DateTimeStyles.RoundtripKind),
         ReadDate(r, "StartedAt"), ReadDate(r, "FinishedAt"), ReadDate(r, "LeaseUntil"),
+        ReadDate(r, "AvailableAt"),
         r.IsDBNull(r.GetOrdinal("Reason")) ? null : r.GetString(r.GetOrdinal("Reason")),
         r.GetInt32(r.GetOrdinal("Ahead")), r.GetString(r.GetOrdinal("AutomationSnapshot")));
 
@@ -312,6 +335,7 @@ public sealed class AutomationQueueStore
               AutomationName TEXT NOT NULL, OccurrenceId TEXT NOT NULL, QueueOrder INTEGER NOT NULL DEFAULT 0,
               Status TEXT NOT NULL, Attempts INTEGER NOT NULL, CreatedAt TEXT NOT NULL, StartedAt TEXT,
               FinishedAt TEXT, LeaseUntil TEXT, Reason TEXT, AutomationSnapshot TEXT NOT NULL,
+              AvailableAt TEXT,
               UNIQUE(TicketId, AutomationId, OccurrenceId));
             CREATE TRIGGER IF NOT EXISTS automation_queue_order AFTER INSERT ON automation_queue
               WHEN NEW.QueueOrder=0 BEGIN UPDATE automation_queue SET QueueOrder=NEW.Id WHERE Id=NEW.Id; END;
@@ -321,5 +345,19 @@ public sealed class AutomationQueueStore
               ON automation_column_occurrences(TicketId, PreviousColumnName, ColumnName, ObservedAt);
             """;
         cmd.ExecuteNonQuery();
+        EnsureColumn(conn, "automation_queue", "AvailableAt", "TEXT");
+    }
+
+    private static void EnsureColumn(SqliteConnection conn, string table, string column, string type)
+    {
+        using var check = conn.CreateCommand();
+        check.CommandText = $"PRAGMA table_info({table})";
+        using var reader = check.ExecuteReader();
+        while (reader.Read())
+            if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase)) return;
+        reader.Close();
+        using var alter = conn.CreateCommand();
+        alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {type}";
+        alter.ExecuteNonQuery();
     }
 }

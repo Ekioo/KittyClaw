@@ -79,6 +79,19 @@ public class ColumnPollFirstMatchTests
         return scenarios;
     }
 
+    private static async Task<string> CreateFailedScenarioAsync(string root, string name)
+    {
+        var scenarios = Path.Combine(root, "mock-scenarios");
+        Directory.CreateDirectory(scenarios);
+        await File.WriteAllTextAsync(Path.Combine(scenarios, $"{name}.ndjson"), string.Join('\n', new[]
+        {
+            "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"{{session_id}}\",\"model\":\"mock\"}",
+            "{\"type\":\"result\",\"subtype\":\"error\",\"is_error\":true,\"duration_ms\":1,\"num_turns\":1}",
+            "{\"_meta\":{\"exit\":1}}",
+        }));
+        return scenarios;
+    }
+
     private static AutomationRule AgentAutomation(
         string id, string agent, string group, string scenario, string scenariosDir) => new()
     {
@@ -99,6 +112,31 @@ public class ColumnPollFirstMatchTests
                 },
             },
             new AddCommentActionSpec { Content = $"{id}-after-agent", Author = "automation" },
+        ],
+    };
+
+    private static AutomationRule AgentOnlyAutomation(
+        string id, string agent, string scenario, string scenariosDir, int cap = 2) => new()
+    {
+        Id = id,
+        Name = id,
+        Trigger = new TicketInColumnTriggerSpec
+        {
+            Columns = { "Todo" }, Seconds = 0, MaxConsecutiveRuns = cap,
+            FailureBackoffSeconds = 1, MaxFailureBackoffSeconds = 4,
+        },
+        Actions =
+        [
+            new RunAgentActionSpec
+            {
+                Agent = agent,
+                MaxTurns = 1,
+                Env = new Dictionary<string, string>
+                {
+                    ["KITTYCLAW_MOCK_SCENARIO"] = scenario,
+                    ["KITTYCLAW_MOCK_SCENARIOS_DIR"] = scenariosDir,
+                },
+            },
         ],
     };
 
@@ -294,6 +332,162 @@ public class ColumnPollFirstMatchTests
         Assert.Equal("InProgress", (await h.Tickets.GetTicketAsync(h.Slug, ticket.Id))!.Status);
         Assert.Contains((await h.Tickets.GetTicketAsync(h.Slug, ticket.Id))!.Comments,
             c => c.Content == "arrived");
+    }
+
+    [Fact]
+    public void FailureBackoff_IsExponentialAndCapped()
+    {
+        var trigger = new TicketInColumnTriggerSpec
+        {
+            FailureBackoffSeconds = 10,
+            MaxFailureBackoffSeconds = 25,
+        };
+
+        Assert.Equal(10, AutomationQueueProcessor.ComputeFailureBackoffSeconds(trigger, 1));
+        Assert.Equal(20, AutomationQueueProcessor.ComputeFailureBackoffSeconds(trigger, 2));
+        Assert.Equal(25, AutomationQueueProcessor.ComputeFailureBackoffSeconds(trigger, 3));
+        Assert.Equal(25, AutomationQueueProcessor.ComputeFailureBackoffSeconds(trigger, 20));
+    }
+
+    [Fact]
+    public async Task AgentOnly_NoTransition_StopsAtCapWithOneBlockedDiagnostic()
+    {
+        using var tmp = new TempDir();
+        var scenarios = await CreateDelayedScenarioAsync(tmp.Path, "cap-success", 0);
+        var automation = AgentOnlyAutomation("bounded-resume", "resume-agent", "cap-success", scenarios);
+        var h = await BuildAsync(tmp.Path, automation);
+        TestSkillBuilder.Create(h.Workspace, "resume-agent", scenario: "cap-success");
+        var ticket = await h.Tickets.CreateTicketAsync(h.Slug, "Bounded resume", status: "Todo");
+
+        await h.Handler.ProcessTickAsync(CancellationToken.None);
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        AutomationQueueEntry? terminal = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            await h.Processor.ProcessOnceAsync(CancellationToken.None);
+            terminal = Assert.Single(await h.Queue.ListForTicketAsync(h.Slug, ticket.Id));
+            if (terminal.Status == AutomationQueueStatus.Cancelled) break;
+            await Task.Delay(100);
+        }
+
+        Assert.NotNull(terminal);
+        Assert.Equal(AutomationQueueStatus.Cancelled, terminal.Status);
+        Assert.Equal(2, terminal.Attempts);
+        var updated = await h.Tickets.GetTicketAsync(h.Slug, ticket.Id);
+        Assert.Equal("Blocked", updated!.Status);
+        Assert.Single(updated.Comments, c => c.Content.Contains("[automation-retry-cap]"));
+        Assert.Equal(2, h.Runs.AllForTicket(h.Slug, ticket.Id).Count());
+    }
+
+    [Fact]
+    public async Task AgentOnly_FailedRunsUseDurableBackoffAndStopAtCap()
+    {
+        using var tmp = new TempDir();
+        var scenarios = await CreateFailedScenarioAsync(tmp.Path, "cap-failure");
+        var automation = AgentOnlyAutomation("bounded-failure", "failing-agent", "cap-failure", scenarios, cap: 3);
+        var trigger = (TicketInColumnTriggerSpec)automation.Trigger;
+        trigger.FailureBackoffSeconds = 1;
+        trigger.MaxFailureBackoffSeconds = 2;
+        var h = await BuildAsync(tmp.Path, automation);
+        TestSkillBuilder.Create(h.Workspace, "failing-agent", scenario: "cap-failure");
+        var ticket = await h.Tickets.CreateTicketAsync(h.Slug, "Bounded failure", status: "Todo");
+
+        await h.Handler.ProcessTickAsync(CancellationToken.None);
+        var observedDelays = new List<int>();
+        for (var attempt = 1; attempt <= 2; attempt++)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            AutomationQueueEntry? pending = null;
+            while (DateTime.UtcNow < deadline)
+            {
+                await h.Processor.ProcessOnceAsync(CancellationToken.None);
+                var current = Assert.Single(await h.Queue.ListForTicketAsync(h.Slug, ticket.Id));
+                if (current.Status == AutomationQueueStatus.Pending && current.Attempts == attempt)
+                {
+                    pending = current;
+                    break;
+                }
+                await Task.Delay(25);
+            }
+            Assert.NotNull(pending);
+            observedDelays.Add((int)Math.Round((pending.AvailableAt!.Value - DateTime.UtcNow).TotalSeconds));
+            await Task.Delay(TimeSpan.FromSeconds(attempt));
+        }
+
+        var terminal = await ProcessUntilTerminalAsync(h, ticket.Id, "bounded-failure");
+        Assert.Equal([1, 2], observedDelays);
+        Assert.Equal(AutomationQueueStatus.Cancelled, terminal.Status);
+        Assert.Equal(3, terminal.Attempts);
+        Assert.All(h.Runs.AllForTicket(h.Slug, ticket.Id), run => Assert.Equal(AgentRunStatus.Failed, run.Status));
+        var updated = await h.Tickets.GetTicketAsync(h.Slug, ticket.Id);
+        Assert.Equal("Blocked", updated!.Status);
+        Assert.Single(updated.Comments, c => c.Content.Contains("[automation-retry-cap]"));
+    }
+
+    [Fact]
+    public async Task AgentOnly_ManualStopSuppressesAutomaticRetry()
+    {
+        using var tmp = new TempDir();
+        var scenarios = await CreateDelayedScenarioAsync(tmp.Path, "manual-stop", 5_000);
+        var automation = AgentOnlyAutomation("stopped-resume", "stopped-agent", "manual-stop", scenarios, cap: 3);
+        var h = await BuildAsync(tmp.Path, automation);
+        TestSkillBuilder.Create(h.Workspace, "stopped-agent", scenario: "manual-stop");
+        var ticket = await h.Tickets.CreateTicketAsync(h.Slug, "Stopped resume", status: "Todo");
+
+        await h.Handler.ProcessTickAsync(CancellationToken.None);
+        await h.Processor.ProcessOnceAsync(CancellationToken.None);
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        AgentRun? active = null;
+        while (DateTime.UtcNow < deadline && active is null)
+        {
+            active = h.Runs.ActiveForProject(h.Slug).SingleOrDefault();
+            if (active is null) await Task.Delay(25);
+        }
+        Assert.NotNull(active);
+        active.Cancellation.Cancel();
+
+        var terminal = await ProcessUntilTerminalAsync(h, ticket.Id, "stopped-resume");
+        Assert.Equal(AutomationQueueStatus.Cancelled, terminal.Status);
+        Assert.Equal(1, terminal.Attempts);
+        Assert.Contains("stopped manually", terminal.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(AgentRunStatus.Stopped, Assert.Single(h.Runs.AllForTicket(h.Slug, ticket.Id)).Status);
+        Assert.Equal("Todo", (await h.Tickets.GetTicketAsync(h.Slug, ticket.Id))!.Status);
+    }
+
+    [Fact]
+    public async Task AgentOnly_NewRelevantCommentResetsConsecutiveAttempts()
+    {
+        using var tmp = new TempDir();
+        var scenarios = await CreateDelayedScenarioAsync(tmp.Path, "input-reset", 500);
+        var automation = AgentOnlyAutomation("reset-resume", "reset-agent", "input-reset", scenarios, cap: 3);
+        var h = await BuildAsync(tmp.Path, automation);
+        TestSkillBuilder.Create(h.Workspace, "reset-agent", scenario: "input-reset");
+        var ticket = await h.Tickets.CreateTicketAsync(h.Slug, "Reset resume", status: "Todo");
+
+        await h.Handler.ProcessTickAsync(CancellationToken.None);
+        await h.Processor.ProcessOnceAsync(CancellationToken.None);
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline && !h.Runs.ActiveForProject(h.Slug).Any())
+            await Task.Delay(25);
+        Assert.Single(h.Runs.ActiveForProject(h.Slug));
+        await h.Tickets.AddCommentAsync(h.Slug, ticket.Id, "New owner input", "owner");
+
+        AutomationQueueEntry? reset = null;
+        deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            var current = Assert.Single(await h.Queue.ListForTicketAsync(h.Slug, ticket.Id));
+            if (current.Status == AutomationQueueStatus.Pending && current.Attempts == 0)
+            {
+                reset = current;
+                break;
+            }
+            await Task.Delay(25);
+        }
+
+        Assert.NotNull(reset);
+        Assert.Equal("Todo", (await h.Tickets.GetTicketAsync(h.Slug, ticket.Id))!.Status);
+        Assert.Single(h.Runs.AllForTicket(h.Slug, ticket.Id));
     }
 
     [Fact]

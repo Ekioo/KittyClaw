@@ -111,8 +111,56 @@ internal sealed class AutomationQueueProcessor
                     return;
                 }
 
-                await _executor.ExecuteAutomationToCompletionAsync(rt, snapshot, firing, ct);
-                await _queue.FinishAsync(slug, entry.Id, AutomationQueueStatus.Completed, null, ct);
+                var statusBefore = ticket.Status;
+                var latestCommentBefore = ticket.Comments
+                    .Where(c => !string.Equals(c.Author, "automation", StringComparison.OrdinalIgnoreCase))
+                    .Select(c => c.Id).DefaultIfEmpty().Max();
+                var run = await _executor.ExecuteAutomationToCompletionAsync(rt, snapshot, firing, ct);
+                if (run is null)
+                {
+                    await _queue.FinishAsync(slug, entry.Id, AutomationQueueStatus.Completed, null, ct);
+                    return;
+                }
+                var runIndex = snapshot.Actions.FindIndex(a => a is RunAgentActionSpec);
+                if (runIndex >= 0 && runIndex < snapshot.Actions.Count - 1)
+                {
+                    await _queue.FinishAsync(slug, entry.Id, AutomationQueueStatus.Completed, null, ct);
+                    return;
+                }
+                var updated = await _tickets.GetTicketAsync(slug, entry.TicketId);
+                var inputChanged = updated is not null &&
+                    (!string.Equals(statusBefore, updated.Status, StringComparison.OrdinalIgnoreCase) ||
+                     updated.Comments
+                         .Where(c => !string.Equals(c.Author, "automation", StringComparison.OrdinalIgnoreCase))
+                         .Select(c => c.Id).DefaultIfEmpty().Max() != latestCommentBefore);
+
+                if (inputChanged)
+                {
+                    if (updated is not null && string.Equals(statusBefore, updated.Status, StringComparison.OrdinalIgnoreCase))
+                        await _queue.ScheduleRetryAsync(slug, entry.Id,
+                            DateTime.UtcNow.AddSeconds(Math.Max(1, trigger.Seconds)), resetAttempts: true, ct);
+                    else
+                        await _queue.FinishAsync(slug, entry.Id, AutomationQueueStatus.Completed, null, ct);
+                    return;
+                }
+                if (run?.Status == AgentRunStatus.Stopped)
+                {
+                    await _queue.FinishAsync(slug, entry.Id, AutomationQueueStatus.Cancelled,
+                        "Agent run was stopped manually; automatic retry suppressed.", ct);
+                    return;
+                }
+                var cap = Math.Max(1, trigger.MaxConsecutiveRuns);
+                if (entry.Attempts >= cap)
+                {
+                    await ParkAtRetryCapAsync(slug, entry, cap, ct);
+                    return;
+                }
+                var failed = run?.Status == AgentRunStatus.Failed;
+                var delaySeconds = failed
+                    ? ComputeFailureBackoffSeconds(trigger, entry.Attempts)
+                    : Math.Max(1, trigger.Seconds);
+                await _queue.ScheduleRetryAsync(slug, entry.Id,
+                    DateTime.UtcNow.AddSeconds(delaySeconds), resetAttempts: false, ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
             catch (Exception ex)
@@ -126,6 +174,29 @@ internal sealed class AutomationQueueProcessor
             ReleaseReservation(slug, entry.Id);
             workers.Release();
         }
+    }
+
+    internal static int ComputeFailureBackoffSeconds(TicketInColumnTriggerSpec trigger, int attempts)
+    {
+        var initial = Math.Max(1, trigger.FailureBackoffSeconds);
+        var maximum = Math.Max(initial, trigger.MaxFailureBackoffSeconds);
+        var exponent = Math.Clamp(attempts - 1, 0, 30);
+        return (int)Math.Min(maximum, initial * Math.Pow(2, exponent));
+    }
+
+    private async Task ParkAtRetryCapAsync(string slug, AutomationQueueEntry entry, int cap, CancellationToken ct)
+    {
+        const string marker = "[automation-retry-cap]";
+        var ticket = await _tickets.GetTicketAsync(slug, entry.TicketId);
+        if (ticket is not null && !string.Equals(ticket.Status, "Blocked", StringComparison.OrdinalIgnoreCase))
+            await _tickets.MoveTicketAsync(slug, entry.TicketId, "Blocked", "automation");
+        ticket = await _tickets.GetTicketAsync(slug, entry.TicketId);
+        if (ticket is not null && !ticket.Comments.Any(c => c.Content.Contains(marker, StringComparison.Ordinal)))
+            await _tickets.AddCommentAsync(slug, entry.TicketId,
+                $"{marker} Automation '{entry.AutomationName}' reached its cap of {cap} consecutive runs without a status change or new comment. Parked in Blocked to prevent a dispatch loop.",
+                "automation");
+        await _queue.FinishAsync(slug, entry.Id, AutomationQueueStatus.Cancelled,
+            $"Consecutive run cap ({cap}) reached; ticket parked in Blocked.", ct);
     }
 
     private static GroupReservation ResolveReservation(AutomationQueueEntry entry)

@@ -68,6 +68,9 @@ public sealed class TicketInColumnTriggerSpec : TriggerSpec
     public List<string> Columns { get; set; } = new();
     public string? AssigneeSlug { get; set; }
     public int DebounceSeconds { get; set; } = 0;
+    public int MaxConsecutiveRuns { get; set; } = 5;
+    public int FailureBackoffSeconds { get; set; } = 60;
+    public int MaxFailureBackoffSeconds { get; set; } = 1800;
 }
 
 public sealed class GitCommitTriggerSpec : TriggerSpec
