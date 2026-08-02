@@ -34,6 +34,7 @@
 }
 else
 {
+    <div class="board-layout">
     <div class="page-header">
         <a href="@_homeHref" class="back-link">&larr; @L["BackToProjects"]</a>
         <h1>@_project.Name</h1>
@@ -273,10 +274,14 @@ else
                 }
             </div>
         }
-        <button class="add-column-lane" @onclick="() => OpenCreateColumn(_columns.Count)">
-            <span>＋</span>
-            <span>@L["AddColumnFromBoard"]</span>
-        </button>
+        @if (_columns.Count == 0)
+        {
+            <button class="add-column-lane" @onclick="() => OpenCreateColumn(0)">
+                <span>＋</span>
+                <span>@L["AddColumnFromBoard"]</span>
+            </button>
+        }
+    </div>
     </div>
 
     @* ── Column sort context menu ── *@

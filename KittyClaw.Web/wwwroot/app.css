@@ -266,12 +266,26 @@ a:hover { color: var(--accent-hover); }
 }
 
 /* Board */
+.board-layout {
+    height: 100vh;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.board-layout > .page-header,
+.board-layout > .pipeline-tabs {
+    flex-shrink: 0;
+}
+
 .board {
     display: flex;
-    gap: 0.6rem;
+    gap: 0;
     padding: 1rem;
     overflow-x: auto;
-    height: calc(100vh - 57px);
+    height: auto;
+    min-height: 0;
+    flex: 1 1 auto;
     align-items: flex-start;
 }
 
@@ -326,8 +340,9 @@ a:hover { color: var(--accent-hover); }
     position: relative;
     z-index: 4;
     flex: 0 0 .6rem;
+    min-width: 0;
     align-self: stretch;
-    margin: 0 -.6rem;
+    margin: 0;
 }
 .column-insert-btn {
     position: sticky;
