@@ -15,7 +15,13 @@ public record SaveColumnProcessorRequest(
     int MaxTurns = 100,
     List<string>? AvailableSkills = null,
     List<string>? RecommendedSkills = null,
-    List<string>? RequiredSkills = null);
+    List<string>? RequiredSkills = null,
+    TicketSelectionOrder SelectionOrder = TicketSelectionOrder.Position,
+    int MaxAttempts = 3,
+    int RetryBackoffSeconds = 60,
+    int? DefaultTargetColumnId = null,
+    int? TechnicalFailureColumnId = null,
+    List<ColumnRoute>? Routes = null);
 public record CreateTicketRequest(
     string Title, string CreatedBy, string Status, string Description = "",
     List<int>? LabelIds = null, TicketPriority Priority = TicketPriority.NiceToHave,

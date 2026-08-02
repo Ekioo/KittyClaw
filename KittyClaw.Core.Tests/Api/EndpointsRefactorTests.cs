@@ -93,6 +93,10 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "GET /api/projects/{slug}/columns/{columnId}/processor",
         "PUT /api/projects/{slug}/columns/{columnId}/processor",
         "DELETE /api/projects/{slug}/columns/{columnId}/processor",
+        // Column execution runtime
+        "GET /api/projects/{slug}/column-executions",
+        "POST /api/projects/{slug}/column-executions/{executionId}/retry",
+        "POST /api/projects/{slug}/column-executions/{executionId}/cancel",
         // Ollama
         "GET /api/projects/{slug}/ollama-models",
         // Grok

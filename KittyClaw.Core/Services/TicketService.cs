@@ -14,6 +14,10 @@ public class TicketService
     /// Parameters: (projectSlug, ticketId, fromStatus, toStatus)
     /// </summary>
     public event Action<string, int, string, string>? TicketStatusChanged;
+    public event Action<string, int>? TicketCreated;
+
+    internal void NotifyStatusChanged(string projectSlug, int ticketId, string fromStatus, string toStatus) =>
+        TicketStatusChanged?.Invoke(projectSlug, ticketId, fromStatus, toStatus);
 
     /// <summary>
     /// Raised immediately after a comment is persisted.
@@ -58,7 +62,7 @@ public class TicketService
         (await RequireColumnAsync(db, status, pipelineId)).Name;
 
     // Ensures the ActivityEntries table exists (for databases created before this feature)
-    private static Task EnsureActivityTableAsync(TodoDbContext db) =>
+    internal static Task EnsureActivityTableAsync(TodoDbContext db) =>
         MigrationGate.RunOnceAsync(db, "activity-table", static async d =>
         {
             await d.Database.ExecuteSqlRawAsync("""
@@ -310,6 +314,7 @@ public class TicketService
         });
         await db.SaveChangesAsync();
         await tx.CommitAsync();
+        TicketCreated?.Invoke(projectSlug, ticket.Id);
         return ticket;
     }
 

@@ -1,0 +1,136 @@
+using System.Collections.Concurrent;
+using KittyClaw.Core.Models;
+using KittyClaw.Core.Services;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
+namespace KittyClaw.Core.Automation;
+
+/// <summary>
+/// Event-driven primary workflow engine. It claims at most one ticket per active column;
+/// the legacy trigger engine remains registered independently for backward compatibility.
+/// </summary>
+public sealed class ColumnProcessingEngine : BackgroundService
+{
+    private readonly ProjectService _projects;
+    private readonly TicketService _tickets;
+    private readonly ColumnProcessorService _processors;
+    private readonly ColumnExecutionService _executions;
+    private readonly IColumnAgentDispatcher _dispatcher;
+    private readonly ILogger<ColumnProcessingEngine> _logger;
+    private readonly ConcurrentDictionary<string, byte> _pendingProjects = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, Task> _activeProcessors = new();
+    private readonly SemaphoreSlim _wake = new(0);
+
+    public ColumnProcessingEngine(
+        ProjectService projects, TicketService tickets, ColumnProcessorService processors,
+        ColumnExecutionService executions, IColumnAgentDispatcher dispatcher,
+        ILogger<ColumnProcessingEngine> logger)
+    {
+        _projects = projects;
+        _tickets = tickets;
+        _processors = processors;
+        _executions = executions;
+        _dispatcher = dispatcher;
+        _logger = logger;
+        _tickets.TicketStatusChanged += OnTicketChanged;
+        _tickets.TicketCreated += OnTicketCreated;
+    }
+
+    private void OnTicketChanged(string slug, int _, string __, string ___) => Signal(slug);
+    private void OnTicketCreated(string slug, int _) => Signal(slug);
+
+    public void Signal(string projectSlug)
+    {
+        _pendingProjects[projectSlug] = 0;
+        try { _wake.Release(); } catch (SemaphoreFullException) { }
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        var projects = await _projects.ListProjectsAsync();
+        foreach (var project in projects.Where(p => !p.IsPaused))
+        {
+            await _executions.RecoverInterruptedAsync(project.Slug);
+            Signal(project.Slug);
+        }
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                await _wake.WaitAsync(TimeSpan.FromSeconds(10), stoppingToken);
+                // Periodic recovery also discovers processor edits and due retries.
+                if (_pendingProjects.IsEmpty)
+                    foreach (var project in (await _projects.ListProjectsAsync()).Where(p => !p.IsPaused))
+                        _pendingProjects[project.Slug] = 0;
+
+                foreach (var slug in _pendingProjects.Keys)
+                {
+                    _pendingProjects.TryRemove(slug, out _);
+                    await ScheduleProjectAsync(slug, stoppingToken);
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            catch (Exception ex) { _logger.LogError(ex, "Column processing engine loop failed"); }
+        }
+    }
+
+    private async Task ScheduleProjectAsync(string slug, CancellationToken stoppingToken)
+    {
+        var project = await _projects.GetProjectAsync(slug);
+        if (project is null || project.IsPaused) return;
+        foreach (var processor in await _processors.ListEnabledAsync(slug))
+        {
+            var key = $"{slug}:{processor.Id}";
+            if (_activeProcessors.TryGetValue(key, out var active) && !active.IsCompleted) continue;
+            var execution = await _executions.ClaimNextAsync(slug, processor, DateTime.UtcNow);
+            if (execution is null) continue;
+            var task = ProcessAsync(slug, processor, execution, stoppingToken);
+            _activeProcessors[key] = task;
+            _ = task.ContinueWith(completedTask =>
+            {
+                _activeProcessors.TryRemove(key, out var _);
+                Signal(slug);
+            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        }
+    }
+
+    private async Task ProcessAsync(
+        string slug, ColumnProcessor processor, ColumnExecution execution,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var ticket = await _tickets.GetTicketAsync(slug, execution.TicketId);
+            if (ticket is null)
+            {
+                await _executions.FailAttemptAsync(slug, execution, processor, "Le ticket n'existe plus.", $"column-{processor.ColumnId}");
+                return;
+            }
+            await _executions.SetRunIdAsync(slug, execution.Id, execution.Id);
+            var dispatch = await _dispatcher.DispatchAsync(slug, processor, execution, ticket, cancellationToken);
+            if (dispatch.Result is null)
+            {
+                await _executions.FailAttemptAsync(slug, execution, processor,
+                    dispatch.Error ?? "Échec inconnu du processeur.", $"column-{processor.ColumnId}");
+                return;
+            }
+            await _executions.CompleteAsync(slug, execution, processor, dispatch.Result, $"column-{processor.ColumnId}");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Column processor {ProcessorId} failed for ticket {TicketId}", processor.Id, execution.TicketId);
+            await _executions.FailAttemptAsync(slug, execution, processor, ex.Message, $"column-{processor.ColumnId}");
+        }
+    }
+
+    public override void Dispose()
+    {
+        _tickets.TicketStatusChanged -= OnTicketChanged;
+        _tickets.TicketCreated -= OnTicketCreated;
+        _wake.Dispose();
+        base.Dispose();
+    }
+}

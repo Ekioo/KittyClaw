@@ -22,7 +22,9 @@ public static partial class Endpoints
             {
                 var processor = await processors.SaveAsync(
                     slug, columnId, req.Name, req.Mission, req.Model, req.Enabled, req.MaxTurns,
-                    req.AvailableSkills, req.RecommendedSkills, req.RequiredSkills);
+                    req.AvailableSkills, req.RecommendedSkills, req.RequiredSkills,
+                    req.SelectionOrder, req.MaxAttempts, req.RetryBackoffSeconds,
+                    req.DefaultTargetColumnId, req.TechnicalFailureColumnId, req.Routes);
                 notifier.NotifyProjectUpdated(slug);
                 return Results.Ok(processor);
             }

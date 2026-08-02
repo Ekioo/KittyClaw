@@ -8,8 +8,9 @@ public sealed class ColumnProcessorService(
     ProjectService projects,
     ProjectSkillService skills)
 {
-    private static Task EnsureTableAsync(TodoDbContext db) =>
-        MigrationGate.RunOnceAsync(db, "column-processors-v1", static d =>
+    private static async Task EnsureTableAsync(TodoDbContext db)
+    {
+        await MigrationGate.RunOnceAsync(db, "column-processors-v1", static d =>
             d.Database.ExecuteSqlRawAsync("""
                 CREATE TABLE IF NOT EXISTS ColumnProcessors (
                     Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -19,15 +20,31 @@ public sealed class ColumnProcessorService(
                     Model TEXT NULL,
                     Enabled INTEGER NOT NULL DEFAULT 1,
                     MaxTurns INTEGER NOT NULL DEFAULT 100,
+                    SelectionOrder INTEGER NOT NULL DEFAULT 0,
+                    MaxAttempts INTEGER NOT NULL DEFAULT 3,
+                    RetryBackoffSeconds INTEGER NOT NULL DEFAULT 60,
+                    DefaultTargetColumnId INTEGER NULL,
+                    TechnicalFailureColumnId INTEGER NULL,
                     AvailableSkillsJson TEXT NOT NULL DEFAULT '[]',
                     RecommendedSkillsJson TEXT NOT NULL DEFAULT '[]',
                     RequiredSkillsJson TEXT NOT NULL DEFAULT '[]',
+                    RoutesJson TEXT NOT NULL DEFAULT '[]',
                     CreatedAt TEXT NOT NULL,
                     UpdatedAt TEXT NOT NULL
                 );
                 CREATE UNIQUE INDEX IF NOT EXISTS IX_ColumnProcessors_ColumnId
                     ON ColumnProcessors(ColumnId);
                 """));
+        await MigrationGate.RunOnceAsync(db, "column-processors-routing-v1", static async d =>
+        {
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN SelectionOrder INTEGER NOT NULL DEFAULT 0");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN MaxAttempts INTEGER NOT NULL DEFAULT 3");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN RetryBackoffSeconds INTEGER NOT NULL DEFAULT 60");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN DefaultTargetColumnId INTEGER NULL");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN TechnicalFailureColumnId INTEGER NULL");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN RoutesJson TEXT NOT NULL DEFAULT '[]'");
+        });
+    }
 
     public async Task<ColumnProcessor?> GetAsync(string projectSlug, int columnId)
     {
@@ -37,20 +54,44 @@ public sealed class ColumnProcessorService(
         return await db.ColumnProcessors.AsNoTracking().FirstOrDefaultAsync(p => p.ColumnId == columnId);
     }
 
+    public async Task<List<ColumnProcessor>> ListEnabledAsync(string projectSlug)
+    {
+        await using var db = projects.GetProjectDb(projectSlug);
+        await ColumnService.EnsureBoardColumnsTableAsync(db);
+        await EnsureTableAsync(db);
+        return await db.ColumnProcessors.AsNoTracking().Where(p => p.Enabled).OrderBy(p => p.Id).ToListAsync();
+    }
+
     public async Task<ColumnProcessor> SaveAsync(
         string projectSlug, int columnId, string name, string mission, string? model,
         bool enabled, int maxTurns, List<string>? availableSkills,
-        List<string>? recommendedSkills, List<string>? requiredSkills)
+        List<string>? recommendedSkills, List<string>? requiredSkills,
+        TicketSelectionOrder selectionOrder = TicketSelectionOrder.Position,
+        int maxAttempts = 3, int retryBackoffSeconds = 60,
+        int? defaultTargetColumnId = null, int? technicalFailureColumnId = null,
+        List<ColumnRoute>? routes = null)
     {
         if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("Le nom du processeur est requis.");
         if (string.IsNullOrWhiteSpace(mission)) throw new InvalidOperationException("La mission du processeur est requise.");
         if (maxTurns < 1) throw new InvalidOperationException("MaxTurns doit être supérieur à zéro.");
+        if (maxAttempts < 1) throw new InvalidOperationException("MaxAttempts doit être supérieur à zéro.");
+        if (retryBackoffSeconds < 1) throw new InvalidOperationException("RetryBackoffSeconds doit être supérieur à zéro.");
 
         await using var db = projects.GetProjectDb(projectSlug);
         await ColumnService.EnsureBoardColumnsTableAsync(db);
         await EnsureTableAsync(db);
         if (!await db.BoardColumns.AnyAsync(c => c.Id == columnId))
             throw new InvalidOperationException($"La colonne #{columnId} n'existe pas.");
+        var targetIds = (routes ?? []).Select(r => r.TargetColumnId)
+            .Concat(defaultTargetColumnId is null ? [] : [defaultTargetColumnId.Value])
+            .Concat(technicalFailureColumnId is null ? [] : [technicalFailureColumnId.Value])
+            .Distinct().ToList();
+        if (targetIds.Contains(columnId))
+            throw new InvalidOperationException("Une route ne peut pas renvoyer vers sa propre colonne. Utilisez la politique de nouvelle tentative pour rejouer un traitement.");
+        var knownTargets = await db.BoardColumns.Where(c => targetIds.Contains(c.Id)).Select(c => c.Id).ToListAsync();
+        var missingTargets = targetIds.Except(knownTargets).ToList();
+        if (missingTargets.Count > 0)
+            throw new InvalidOperationException($"Colonnes de routage inconnues : {string.Join(", ", missingTargets)}.");
 
         var knownSkills = (await skills.ListAsync(projectSlug)).Select(s => s.Slug)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -71,9 +112,15 @@ public sealed class ColumnProcessorService(
         processor.Model = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
         processor.Enabled = enabled;
         processor.MaxTurns = maxTurns;
+        processor.SelectionOrder = selectionOrder;
+        processor.MaxAttempts = maxAttempts;
+        processor.RetryBackoffSeconds = retryBackoffSeconds;
+        processor.DefaultTargetColumnId = defaultTargetColumnId;
+        processor.TechnicalFailureColumnId = technicalFailureColumnId;
         processor.AvailableSkills = availableSkills ?? [];
         processor.RecommendedSkills = recommendedSkills ?? [];
         processor.RequiredSkills = requiredSkills ?? [];
+        processor.Routes = routes ?? [];
         processor.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
         await EnsureMemoryAsync(projectSlug, processor);

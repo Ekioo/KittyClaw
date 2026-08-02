@@ -12,6 +12,7 @@ public class TodoDbContext : DbContext
     public DbSet<BoardColumn> BoardColumns => Set<BoardColumn>();
     public DbSet<Pipeline> Pipelines => Set<Pipeline>();
     public DbSet<ColumnProcessor> ColumnProcessors => Set<ColumnProcessor>();
+    public DbSet<ColumnExecution> ColumnExecutions => Set<ColumnExecution>();
     public DbSet<Member> Members => Set<Member>();
     public DbSet<ChatMessageRow> ChatMessages => Set<ChatMessageRow>();
 
@@ -75,7 +76,10 @@ public class TodoDbContext : DbContext
             e.Ignore(p => p.AvailableSkills);
             e.Ignore(p => p.RecommendedSkills);
             e.Ignore(p => p.RequiredSkills);
+            e.Ignore(p => p.Routes);
         });
+
+        modelBuilder.Entity<ColumnExecution>(e => e.HasKey(x => x.Id));
 
         modelBuilder.Entity<Member>(e =>
         {
