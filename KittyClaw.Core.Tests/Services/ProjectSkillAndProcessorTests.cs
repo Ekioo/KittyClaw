@@ -123,6 +123,7 @@ public sealed class ProjectSkillAndProcessorTests : IDisposable
         await File.WriteAllTextAsync(Path.Combine(legacyDirectory, "memory.md"),
             $"# Legacy memory\n\n- Preserve this lesson.\n");
 
+        await _processors.ListEnabledAsync(project.Slug);
         var canonicalPath = await _processors.GetMemoryIndexPathAsync(project.Slug, column.Id);
         var canonical = await File.ReadAllTextAsync(canonicalPath!);
         await _processors.GetMemoryIndexPathAsync(project.Slug, column.Id);
