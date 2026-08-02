@@ -156,6 +156,31 @@ public sealed class ColumnExecutionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Waiting_parent_resumes_when_its_last_child_stops_blocking()
+    {
+        var project = await _projects.CreateProjectAsync("Removed child blocker");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: pipeline.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Done", pipelineId: pipeline.Id, role: ColumnRole.Success);
+        var childWork = await _columns.CreateColumnAsync(project.Slug, "Child work", pipelineId: pipeline.Id);
+        var processor = await SaveProcessor(project.Slug, source.Id, target.Id);
+        var parent = await _tickets.CreateTicketAsync(project.Slug, "Parent", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+        var child = await _tickets.CreateTicketAsync(project.Slug, "Child", status: childWork.Name,
+            parentId: parent.Id, pipelineId: pipeline.Id, columnId: childWork.Id, blocksParent: true);
+        await _executions.CompleteAsync(project.Slug, execution!, processor,
+            new ColumnAgentResult("wait_for_children", []), "column-agent");
+
+        await _tickets.UpdateTicketAsync(project.Slug, child.Id, blocksParent: false);
+
+        var resumed = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+        Assert.NotNull(resumed);
+        Assert.Equal(execution!.Id, resumed.Id);
+        Assert.Equal(parent.Id, resumed.TicketId);
+    }
+
+    [Fact]
     public async Task Unclaimed_parent_is_eligible_when_multiple_children_share_the_same_success_column()
     {
         var project = await _projects.CreateProjectAsync("Already successful children");

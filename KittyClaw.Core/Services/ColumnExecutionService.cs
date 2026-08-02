@@ -48,7 +48,6 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             var childColumnIds = await db.Tickets
                 .Where(t => t.ParentId == candidate.TicketId && t.BlocksParent)
                 .Select(t => t.ColumnId).Distinct().ToListAsync();
-            if (childColumnIds.Count == 0) continue;
             var successCount = await db.BoardColumns.CountAsync(c => childColumnIds.Contains(c.Id) && c.Role == ColumnRole.Success);
             if (successCount != childColumnIds.Count) continue;
             candidate.Status = ColumnExecutionStatus.Running;
