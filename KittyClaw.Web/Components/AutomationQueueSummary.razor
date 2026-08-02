@@ -1,0 +1,41 @@
+@using KittyClaw.Core.Automation
+@inject AutomationQueueStore Queue
+@inject KittyClaw.Core.Services.LocalizationService L
+
+@if (_entries.Count > 0)
+{
+    <div class="automation-queue @(@Compact ? "compact" : "")" @onclick:stopPropagation>
+        @foreach (var entry in _entries)
+        {
+            <div class="automation-queue-entry queue-@entry.Status.ToString().ToLowerInvariant()"
+                 title="@entry.Reason">
+                <span class="automation-queue-name">@entry.AutomationName</span>
+                <span class="automation-queue-state">@StateLabel(entry.Status)</span>
+                @if (entry.Status == AutomationQueueStatus.Pending && entry.ExecutableAhead > 0)
+                {
+                    <span class="automation-queue-ahead">@L.Get("AutomationsAhead", entry.ExecutableAhead)</span>
+                }
+                @if (!Compact && !string.IsNullOrWhiteSpace(entry.Reason))
+                {
+                    <span class="automation-queue-reason">@entry.Reason</span>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Slug { get; set; } = "";
+    [Parameter, EditorRequired] public int TicketId { get; set; }
+    [Parameter] public bool Compact { get; set; }
+    private IReadOnlyList<AutomationQueueEntry> _entries = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var all = await Queue.ListForTicketAsync(Slug, TicketId);
+        var occurrence = all.FirstOrDefault()?.OccurrenceId;
+        _entries = occurrence is null ? [] : all.Where(x => x.OccurrenceId == occurrence).Reverse().ToList();
+    }
+
+    private string StateLabel(AutomationQueueStatus status) => L[$"Queue{status}"];
+}

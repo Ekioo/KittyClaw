@@ -4864,3 +4864,14 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .legal-notice a:hover {
     color: var(--text-muted);
 }
+
+.automation-queue { display: grid; gap: .35rem; margin: .45rem 0; }
+.automation-queue-entry { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; padding: .35rem .5rem; border-left: 3px solid var(--border); background: color-mix(in srgb, var(--surface) 85%, transparent); border-radius: .25rem; font-size: .78rem; }
+.automation-queue.compact .automation-queue-entry { padding: .2rem .35rem; }
+.automation-queue-name { font-weight: 600; }
+.automation-queue-state, .automation-queue-ahead { color: var(--text-muted); }
+.automation-queue-reason { flex-basis: 100%; color: var(--text-muted); }
+.queue-running { border-left-color: #3b82f6; }
+.queue-completed { border-left-color: #22c55e; }
+.queue-failed { border-left-color: #ef4444; }
+.queue-skipped, .queue-cancelled { border-left-color: #94a3b8; }

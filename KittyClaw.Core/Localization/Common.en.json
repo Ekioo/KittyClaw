@@ -22,5 +22,9 @@
   "DropHere": "Drop here",
   "Board": "Board",
   "Automations": "Automations",
-  "ProjectNotFound": "Project not found."
+  "ProjectNotFound": "Project not found.",
+  "AutomationQueue": "Automation queue",
+  "QueuePending": "Pending", "QueueRunning": "Running", "QueueCompleted": "Completed",
+  "QueueSkipped": "Skipped", "QueueFailed": "Failed", "QueueCancelled": "Cancelled",
+  "AutomationsAhead": "{0} automations ahead"
 }

@@ -168,6 +168,7 @@ else
                                             <span class="ticket-id">#@ticket.Id</span>
                                         </div>
                                         <span class="ticket-title">@ticket.Title</span>
+                                        <AutomationQueueSummary Slug="@slug" TicketId="@ticket.Id" Compact="true" />
                                         @if (ticket.Labels.Count > 0)
                                         {
                                             <div class="label-list">

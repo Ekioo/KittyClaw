@@ -209,6 +209,10 @@
         @* ── Ticket body (thread layout) ── *@
             <div class="ticket-panel-thread">
                 <div class="section-header">
+                    <span class="section-label">@L["AutomationQueue"]</span>
+                </div>
+                <AutomationQueueSummary Slug="@Slug" TicketId="@_ticket.Id" />
+                <div class="section-header">
                     <span class="section-label">@L["Description"]</span>
                     <button class="icon-btn pencil-btn" title="@L["EditDescription"]" @onclick="StartEditDescription">&#9998;</button>
                 </div>

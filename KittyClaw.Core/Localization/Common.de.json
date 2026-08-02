@@ -22,5 +22,9 @@
   "DropHere": "Kommen Sie hier vorbei",
   "Board": "Planke",
   "Automations": "Automatisierungen",
-  "ProjectNotFound": "Projekt nicht gefunden."
+  "ProjectNotFound": "Projekt nicht gefunden.",
+  "AutomationQueue": "Automatisierungswarteschlange",
+  "QueuePending": "Wartend", "QueueRunning": "Läuft", "QueueCompleted": "Abgeschlossen",
+  "QueueSkipped": "Übersprungen", "QueueFailed": "Fehlgeschlagen", "QueueCancelled": "Abgebrochen",
+  "AutomationsAhead": "{0} Automatisierungen davor"
 }

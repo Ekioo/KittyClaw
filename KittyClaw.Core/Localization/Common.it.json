@@ -22,5 +22,9 @@
   "DropHere": "Lasciami qui",
   "Board": "Asse",
   "Automations": "Automazioni",
-  "ProjectNotFound": "Progetto non trovato."
+  "ProjectNotFound": "Progetto non trovato.",
+  "AutomationQueue": "Coda delle automazioni",
+  "QueuePending": "In attesa", "QueueRunning": "In corso", "QueueCompleted": "Completata",
+  "QueueSkipped": "Ignorata", "QueueFailed": "Errore", "QueueCancelled": "Annullata",
+  "AutomationsAhead": "{0} automazioni precedenti"
 }

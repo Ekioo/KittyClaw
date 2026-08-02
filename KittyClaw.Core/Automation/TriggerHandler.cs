@@ -18,6 +18,13 @@ internal sealed class TriggerHandler
     private readonly SessionRegistry _sessions;
     private readonly AgentRunRegistry _runs;
     private readonly ILogger _logger;
+    private readonly AutomationQueueStore _queue;
+
+    public TriggerHandler(ProjectService projects, ProjectRuntimeManager runtimeManager,
+        ActionExecutor executor, TicketService tickets, MemberService members,
+        SessionRegistry sessions, AgentRunRegistry runs, ILogger logger)
+        : this(projects, runtimeManager, executor, tickets, members, sessions, runs,
+            new AutomationQueueStore(projects), logger) { }
 
     public TriggerHandler(
         ProjectService projects,
@@ -27,6 +34,7 @@ internal sealed class TriggerHandler
         MemberService members,
         SessionRegistry sessions,
         AgentRunRegistry runs,
+        AutomationQueueStore queue,
         ILogger logger)
     {
         _projects = projects;
@@ -36,6 +44,7 @@ internal sealed class TriggerHandler
         _members = members;
         _sessions = sessions;
         _runs = runs;
+        _queue = queue;
         _logger = logger;
     }
 
@@ -95,13 +104,11 @@ internal sealed class TriggerHandler
                 await _runtimeManager.ReloadProjectAsync(project.Slug);
             }
             if (rt.Config is null) continue;
-            // First-match-wins per ticket per tick (ticket #112): column-poll automations are
-            // evaluated in file order, and the first one that matches AND dispatches on a ticket
-            // consumes it for this tick. Without this, two ticketInColumn automations watching
-            // the same column race on the same ticket — one's runAgent effects land asynchronously
-            // and the other's state changes get overwritten (kalceo #1144–#1148: tickets moved to
-            // InProgress with an empty assignee, invisible to the router, stuck for 2 days).
-            var consumedTickets = new HashSet<int>();
+            // Occurrence tracking must see every column transition, including columns that
+            // are not watched by any ticketInColumn automation. Otherwise a later re-entry
+            // into a watched column is incorrectly deduplicated against the previous visit.
+            foreach (var ticket in await _tickets.ListTicketsAsync(project.Slug))
+                await _queue.ObserveColumnAsync(project.Slug, ticket.Id, ticket.Status, ct);
             foreach (var automation in rt.Config.Automations)
             {
                 if (!automation.Enabled) continue;
@@ -113,14 +120,14 @@ internal sealed class TriggerHandler
                 catch (Exception ex) { _logger.LogWarning(ex, "Trigger eval failed for {Id}", automation.Id); continue; }
                 foreach (var firing in firings)
                 {
-                    if (isColumnPoll && firing.TicketId is int consumedId && consumedTickets.Contains(consumedId))
+                    if (!await _executor.ConditionsMatchAsync(rt, automation, firing)) continue;
+                    if (isColumnPoll && firing.TicketId is int ticketId)
                     {
-                        _logger.LogInformation(
-                            "Automation {Id} skipped ticket #{Ticket}: consumed by an earlier column-poll automation this tick (first-match-wins)",
-                            automation.Id, consumedId);
+                        var ticket = await _tickets.GetTicketAsync(project.Slug, ticketId);
+                        if (ticket is not null)
+                            await _queue.EnqueueAsync(project.Slug, ticket, [automation], ct);
                         continue;
                     }
-                    if (!await _executor.ConditionsMatchAsync(rt, automation, firing)) continue;
                     if (trigger is StatusChangeTrigger statusTrigger && !statusTrigger.TryConsumeFiring(tctx, firing))
                     {
                         _logger.LogInformation(
@@ -128,7 +135,6 @@ internal sealed class TriggerHandler
                             automation.Id, firing.TicketId, firing.TicketStatus);
                         continue;
                     }
-                    if (isColumnPoll && firing.TicketId is int dispatchedId) consumedTickets.Add(dispatchedId);
                     rt.LastFiredAt = DateTime.UtcNow;
                     rt.LastFiredAutomationId = automation.Id;
                     // Awaited: the prep phase runs to completion before the next firing, reserving

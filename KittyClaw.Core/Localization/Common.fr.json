@@ -22,5 +22,9 @@
   "DropHere": "Déposer ici",
   "Board": "Tableau",
   "Automations": "Automatisations",
-  "ProjectNotFound": "Projet introuvable."
+  "ProjectNotFound": "Projet introuvable.",
+  "AutomationQueue": "File des automations",
+  "QueuePending": "En attente", "QueueRunning": "En cours", "QueueCompleted": "Terminée",
+  "QueueSkipped": "Ignorée", "QueueFailed": "Échec", "QueueCancelled": "Annulée",
+  "AutomationsAhead": "{0} automations avant celle-ci"
 }

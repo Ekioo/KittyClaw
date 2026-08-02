@@ -6,6 +6,12 @@ public static partial class Endpoints
 {
     private static void MapAutomations(RouteGroupBuilder api)
     {
+        api.MapGet("/projects/{slug}/tickets/{ticketId:int}/automation-queue", async (
+            string slug, int ticketId, AutomationQueueStore queue) =>
+            Results.Ok(await queue.ListForTicketAsync(slug, ticketId)))
+            .WithTags("Automations")
+            .Produces<IReadOnlyList<AutomationQueueEntry>>();
+
         api.MapGet("/projects/{slug}/automations", async (string slug, AutomationStore store) =>
         {
             try

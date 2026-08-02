@@ -90,6 +90,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "GET /api/projects/{slug}/automations",
         "PUT /api/projects/{slug}/automations",
         "POST /api/projects/{slug}/automations/reload",
+        "GET /api/projects/{slug}/tickets/{ticketId}/automation-queue",
         // Engine
         "GET /api/engine/health",
         // Runs
@@ -183,6 +184,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         ["GET /api/projects/{slug}/automations"] = "Automations",
         ["PUT /api/projects/{slug}/automations"] = "Automations",
         ["POST /api/projects/{slug}/automations/reload"] = "Automations",
+        ["GET /api/projects/{slug}/tickets/{ticketId}/automation-queue"] = "Automations",
         ["GET /api/engine/health"] = "Engine",
         ["GET /api/projects/{slug}/runs"] = "Runs",
         ["GET /api/projects/{slug}/runs/{runId}"] = "Runs",

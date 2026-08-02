@@ -304,6 +304,31 @@ internal sealed class ActionExecutor
         }
     }
 
+    /// <summary>
+    /// Executes a complete chain and does not return while a detached action or runAgent continuation
+    /// still owns its per-ticket chain slot. Queue consumers use this without blocking trigger polling.
+    /// </summary>
+    public async Task ExecuteAutomationToCompletionAsync(
+        ProjectRuntime rt, Automation automation, TriggerFiring firing, CancellationToken ct)
+    {
+        var startedAt = DateTime.UtcNow;
+        if (firing.TicketId is not int ticketId)
+        {
+            await ExecuteAutomationAsync(rt, automation, firing, ct);
+            return;
+        }
+        var chainKey = $"{automation.Id}:{ticketId}";
+        await ExecuteAutomationAsync(rt, automation, firing, ct);
+        while (_inFlightChains.ContainsKey(chainKey))
+            await Task.Delay(250, ct);
+        var failedRun = _runs.AllForTicket(rt.Slug, ticketId)
+            .Where(r => r.StartedAt >= startedAt && r.Status is AgentRunStatus.Failed or AgentRunStatus.Stopped)
+            .OrderByDescending(r => r.StartedAt)
+            .FirstOrDefault();
+        if (failedRun is not null)
+            throw new InvalidOperationException($"runAgent '{failedRun.AgentName}' ended with status {failedRun.Status}.");
+    }
+
     // Returns true when the caller should abort (gate not passed).
     // When false, the run has been DISPATCHED (not awaited).
     private async Task<bool> ExecuteRunAgentActionAsync(

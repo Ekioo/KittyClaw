@@ -56,6 +56,7 @@ builder.Services.AddScoped<KittyClaw.Web.Services.EscapeKeyStack>();
 
 // Automation engine
 builder.Services.AddSingleton<AutomationStore>();
+builder.Services.AddSingleton<AutomationQueueStore>();
 builder.Services.AddSingleton<TriggerStateStore>();
 builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton(new RunLogStore(dataDir));

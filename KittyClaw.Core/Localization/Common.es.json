@@ -22,5 +22,9 @@
   "DropHere": "Caer aquí",
   "Board": "Junta",
   "Automations": "Automatizaciones",
-  "ProjectNotFound": "Proyecto no encontrado."
+  "ProjectNotFound": "Proyecto no encontrado.",
+  "AutomationQueue": "Cola de automatizaciones",
+  "QueuePending": "Pendiente", "QueueRunning": "En curso", "QueueCompleted": "Completada",
+  "QueueSkipped": "Omitida", "QueueFailed": "Fallida", "QueueCancelled": "Cancelada",
+  "AutomationsAhead": "{0} automatizaciones por delante"
 }

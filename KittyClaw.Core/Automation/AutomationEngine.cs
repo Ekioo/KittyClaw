@@ -11,6 +11,7 @@ public sealed class AutomationEngine : BackgroundService
     private readonly ILogger<AutomationEngine> _logger;
     private readonly ProjectRuntimeManager _runtimeManager;
     private readonly TriggerHandler _triggerHandler;
+    private readonly AutomationQueueProcessor _queueProcessor;
 
     public AutomationEngine(
         ProjectService projects,
@@ -18,6 +19,7 @@ public sealed class AutomationEngine : BackgroundService
         MemberService members,
         LabelService labels,
         AutomationStore store,
+        AutomationQueueStore queue,
         TriggerStateStore triggerState,
         SessionRegistry sessions,
         AgentRunRegistry runs,
@@ -32,7 +34,8 @@ public sealed class AutomationEngine : BackgroundService
         _runtimeManager = new ProjectRuntimeManager(store, triggerState, logger);
         var runState = new RunStateManager(runs, cost, tickets, logger);
         var executor = new ActionExecutor(tickets, members, labels, sessions, runs, runner, cost, loc, projects, runState, logger);
-        _triggerHandler = new TriggerHandler(projects, _runtimeManager, executor, tickets, members, sessions, runs, logger);
+        _triggerHandler = new TriggerHandler(projects, _runtimeManager, executor, tickets, members, sessions, runs, queue, logger);
+        _queueProcessor = new AutomationQueueProcessor(projects, tickets, queue, _runtimeManager, executor, logger);
 
         store.OnConfigChangedOnDisk += slug =>
         {
@@ -78,6 +81,7 @@ public sealed class AutomationEngine : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("AutomationEngine started");
+        var consumer = ConsumeQueueAsync(stoppingToken);
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -91,6 +95,18 @@ public sealed class AutomationEngine : BackgroundService
             LastTickAt = DateTime.UtcNow;
             _runs.PurgeOld(TimeSpan.FromHours(24));
             try { await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken); }
+            catch (OperationCanceledException) { break; }
+        }
+        await consumer;
+    }
+
+    private async Task ConsumeQueueAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try { await _queueProcessor.ProcessOnceAsync(ct); }
+            catch (Exception ex) { _logger.LogError(ex, "Automation queue consumer tick failed"); }
+            try { await Task.Delay(TimeSpan.FromMilliseconds(250), ct); }
             catch (OperationCanceledException) { break; }
         }
     }
