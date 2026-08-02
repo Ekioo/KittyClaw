@@ -47,7 +47,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         {
             var childColumnIds = await db.Tickets
                 .Where(t => t.ParentId == candidate.TicketId && t.BlocksParent)
-                .Select(t => t.ColumnId).ToListAsync();
+                .Select(t => t.ColumnId).Distinct().ToListAsync();
             if (childColumnIds.Count == 0) continue;
             var successCount = await db.BoardColumns.CountAsync(c => childColumnIds.Contains(c.Id) && c.Role == ColumnRole.Success);
             if (successCount != childColumnIds.Count) continue;
@@ -95,7 +95,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         foreach (var candidate in window)
         {
             var blockingChildren = await db.Tickets.Where(t => t.ParentId == candidate.Id && t.BlocksParent)
-                .Select(t => t.ColumnId).ToListAsync();
+                .Select(t => t.ColumnId).Distinct().ToListAsync();
             if (blockingChildren.Count == 0)
             {
                 selected = candidate;

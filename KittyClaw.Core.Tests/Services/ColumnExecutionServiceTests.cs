@@ -126,6 +126,56 @@ public sealed class ColumnExecutionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Waiting_parent_resumes_when_multiple_children_share_the_same_success_column()
+    {
+        var project = await _projects.CreateProjectAsync("Shared child success column");
+        var parentPipeline = await _pipelines.CreateAsync(project.Slug, "Parent flow");
+        var childPipeline = await _pipelines.CreateAsync(project.Slug, "Child flow");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: parentPipeline.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Done", pipelineId: parentPipeline.Id, role: ColumnRole.Success);
+        var childWork = await _columns.CreateColumnAsync(project.Slug, "Work", pipelineId: childPipeline.Id);
+        var childDone = await _columns.CreateColumnAsync(project.Slug, "Validated", pipelineId: childPipeline.Id, role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, target.Id);
+        var parent = await _tickets.CreateTicketAsync(project.Slug, "Parent", status: source.Name,
+            pipelineId: parentPipeline.Id, columnId: source.Id);
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+        var firstChild = await _tickets.CreateTicketAsync(project.Slug, "First child", status: childWork.Name,
+            parentId: parent.Id, pipelineId: childPipeline.Id, columnId: childWork.Id, blocksParent: true);
+        var secondChild = await _tickets.CreateTicketAsync(project.Slug, "Second child", status: childWork.Name,
+            parentId: parent.Id, pipelineId: childPipeline.Id, columnId: childWork.Id, blocksParent: true);
+
+        await _executions.CompleteAsync(project.Slug, execution!, processor,
+            new ColumnAgentResult("wait_for_children", []), "column-agent");
+        await _tickets.UpdateTicketAsync(project.Slug, firstChild.Id, status: childDone.Name);
+        await _tickets.UpdateTicketAsync(project.Slug, secondChild.Id, status: childDone.Name);
+
+        var resumed = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+        Assert.NotNull(resumed);
+        Assert.Equal(execution!.Id, resumed.Id);
+        Assert.Equal(parent.Id, resumed.TicketId);
+    }
+
+    [Fact]
+    public async Task Unclaimed_parent_is_eligible_when_multiple_children_share_the_same_success_column()
+    {
+        var project = await _projects.CreateProjectAsync("Already successful children");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: pipeline.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Done", pipelineId: pipeline.Id, role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, target.Id);
+        var parent = await _tickets.CreateTicketAsync(project.Slug, "Parent", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        await _tickets.CreateTicketAsync(project.Slug, "First child", status: target.Name,
+            parentId: parent.Id, pipelineId: pipeline.Id, columnId: target.Id, blocksParent: true);
+        await _tickets.CreateTicketAsync(project.Slug, "Second child", status: target.Name,
+            parentId: parent.Id, pipelineId: pipeline.Id, columnId: target.Id, blocksParent: true);
+
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+        Assert.NotNull(execution);
+        Assert.Equal(parent.Id, execution.TicketId);
+    }
+
+    [Fact]
     public async Task Non_blocking_child_does_not_hold_parent()
     {
         var project = await _projects.CreateProjectAsync("Informational child");
