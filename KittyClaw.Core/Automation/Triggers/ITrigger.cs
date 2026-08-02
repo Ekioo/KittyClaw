@@ -70,4 +70,8 @@ public sealed class TriggerContext
     public required DateTime Now { get; init; }
 }
 
-public sealed record TriggerFiring(int? TicketId, string? TicketTitle, string? TicketStatus);
+public sealed record TriggerFiring(
+    int? TicketId,
+    string? TicketTitle,
+    string? TicketStatus,
+    bool ShouldDispatch = true);

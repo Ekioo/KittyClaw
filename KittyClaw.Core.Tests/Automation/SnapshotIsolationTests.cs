@@ -139,4 +139,109 @@ public class SnapshotIsolationTests
         var legacy = h.Sessions.TicketSnapshot(h.Workspace);
         Assert.Equal("Done", legacy[h.TicketId]);
     }
+
+    [Fact]
+    public async Task ConsumedDoneTransition_DoesNotReplayAcrossPollsReloadOrMetadataChanges()
+    {
+        using var tmp = new TempDir();
+        var h = await BuildAsync(tmp.Path);
+        var (trigger, automation) = MakeAutomation("committer-on-done", "Done");
+        Assert.Empty(await trigger.EvaluateAsync(Ctx(h, automation), CancellationToken.None));
+
+        await h.Tickets.MoveTicketAsync(h.Slug, h.TicketId, "Done", "test");
+        var firing = Assert.Single(await trigger.EvaluateAsync(Ctx(h, automation), CancellationToken.None));
+        Assert.True(trigger.TryConsumeFiring(Ctx(h, automation), firing));
+
+        for (var poll = 0; poll < 10; poll++)
+            Assert.Empty(await trigger.EvaluateAsync(Ctx(h, automation), CancellationToken.None));
+
+        await h.Tickets.AddCommentAsync(h.Slug, h.TicketId, "metadata-only update", "owner");
+        var reloaded = new StatusChangeTrigger(new StatusChangeTriggerSpec { To = "Done", PollSeconds = 0 });
+        Assert.Empty(await reloaded.EvaluateAsync(Ctx(h, automation), CancellationToken.None));
+        Assert.False(reloaded.TryConsumeFiring(Ctx(h, automation), firing));
+    }
+
+    [Fact]
+    public async Task ConsumedDoneTransition_DoesNotReplayAfterSessionRegistryRestart()
+    {
+        using var tmp = new TempDir();
+        var h = await BuildAsync(tmp.Path);
+        var (trigger, automation) = MakeAutomation("committer-on-done", "Done");
+        Assert.Empty(await trigger.EvaluateAsync(Ctx(h, automation), CancellationToken.None));
+
+        await h.Tickets.MoveTicketAsync(h.Slug, h.TicketId, "Done", "test");
+        var firing = Assert.Single(await trigger.EvaluateAsync(Ctx(h, automation), CancellationToken.None));
+        Assert.True(trigger.TryConsumeFiring(Ctx(h, automation), firing));
+
+        var restarted = h with { Sessions = new SessionRegistry() };
+        var restartedTrigger = new StatusChangeTrigger(
+            new StatusChangeTriggerSpec { To = "Done", PollSeconds = 0 });
+
+        Assert.Empty(await restartedTrigger.EvaluateAsync(Ctx(restarted, automation), CancellationToken.None));
+        Assert.False(restartedTrigger.TryConsumeFiring(Ctx(restarted, automation), firing));
+    }
+
+    [Fact]
+    public async Task LeavingAndReenteringDone_CreatesOneNewOccurrenceForEachAutomation()
+    {
+        using var tmp = new TempDir();
+        var h = await BuildAsync(tmp.Path);
+        var (triggerA, automationA) = MakeAutomation("committer-on-done", "Done");
+        var (triggerB, automationB) = MakeAutomation("evaluator-on-done", "Done");
+        Assert.Empty(await triggerA.EvaluateAsync(Ctx(h, automationA), CancellationToken.None));
+        Assert.Empty(await triggerB.EvaluateAsync(Ctx(h, automationB), CancellationToken.None));
+
+        await h.Tickets.MoveTicketAsync(h.Slug, h.TicketId, "Done", "test");
+        var firstA = Assert.Single(await triggerA.EvaluateAsync(Ctx(h, automationA), CancellationToken.None));
+        var firstB = Assert.Single(await triggerB.EvaluateAsync(Ctx(h, automationB), CancellationToken.None));
+        Assert.True(triggerA.TryConsumeFiring(Ctx(h, automationA), firstA));
+        Assert.True(triggerB.TryConsumeFiring(Ctx(h, automationB), firstB));
+
+        await h.Tickets.MoveTicketAsync(h.Slug, h.TicketId, "Review", "test");
+        Assert.Empty(await triggerA.EvaluateAsync(Ctx(h, automationA), CancellationToken.None));
+        Assert.Empty(await triggerB.EvaluateAsync(Ctx(h, automationB), CancellationToken.None));
+        await h.Tickets.MoveTicketAsync(h.Slug, h.TicketId, "Done", "test");
+
+        Assert.True(triggerA.TryConsumeFiring(Ctx(h, automationA),
+            Assert.Single(await triggerA.EvaluateAsync(Ctx(h, automationA), CancellationToken.None))));
+        Assert.True(triggerB.TryConsumeFiring(Ctx(h, automationB),
+            Assert.Single(await triggerB.EvaluateAsync(Ctx(h, automationB), CancellationToken.None))));
+    }
+
+    [Fact]
+    public async Task ConcurrentDuplicateConsumers_OnlyOneWins()
+    {
+        using var tmp = new TempDir();
+        var h = await BuildAsync(tmp.Path);
+        var (_, automation) = MakeAutomation("committer-on-done", "Done");
+        var firing = new TriggerFiring(h.TicketId, "Raced ticket", "Done");
+
+        var attempts = await Task.WhenAll(Enumerable.Range(0, 20).Select(_ => Task.Run(() =>
+            h.Sessions.TryConsumeStatusTransition(h.Workspace, automation.Id, h.TicketId, firing.TicketStatus!))));
+
+        Assert.Single(attempts, value => value);
+    }
+
+    [Fact]
+    public async Task SignalPath_LeaveAndReenterDoneBeforePoll_CreatesNewOccurrence()
+    {
+        using var tmp = new TempDir();
+        var h = await BuildAsync(tmp.Path);
+        var (trigger, automation) = MakeAutomation("committer-on-done", "Done");
+        var ctx = Ctx(h, automation);
+
+        Assert.True(trigger.TryHandleExternalSignal(
+            new StatusChangeSignal(h.TicketId, "Review", "Done"), out var firstFirings));
+        Assert.True(trigger.TryConsumeFiring(ctx, Assert.Single(firstFirings)));
+
+        Assert.True(trigger.TryHandleExternalSignal(
+            new StatusChangeSignal(h.TicketId, "Done", "Review"), out var leaveFirings));
+        var leave = Assert.Single(leaveFirings);
+        Assert.False(leave.ShouldDispatch);
+        Assert.True(trigger.TryConsumeFiring(ctx, leave));
+
+        Assert.True(trigger.TryHandleExternalSignal(
+            new StatusChangeSignal(h.TicketId, "Review", "Done"), out var secondFirings));
+        Assert.True(trigger.TryConsumeFiring(ctx, Assert.Single(secondFirings)));
+    }
 }

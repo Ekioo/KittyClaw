@@ -195,4 +195,32 @@ public class SignalPathConditionTests
 
         Assert.Equal(1, await BotCommentCountAsync(h, ticket.Id));
     }
+
+    [Fact]
+    public async Task StatusSignals_LeaveAndReenterBeforeTick_DispatchBothDoneOccurrences()
+    {
+        using var tmp = new TempDir();
+        var h = await BuildAsync(tmp.Path);
+        await h.Store.SaveAsync(h.Slug, new AutomationConfig
+        {
+            Automations =
+            {
+                new AutomationRule
+                {
+                    Id = "on-done",
+                    Trigger = new StatusChangeTriggerSpec { To = "Done", PollSeconds = 3600 },
+                    Actions = [new AddCommentActionSpec { Content = "done observed", Author = "bot" }],
+                },
+            },
+        });
+        var ticket = await h.Tickets.CreateTicketAsync(h.Slug, "T", status: "Review");
+        await h.Handler.ProcessTickAsync(CancellationToken.None);
+
+        await h.Manager.NotifySignalAsync(h.Slug, new StatusChangeSignal(ticket.Id, "Review", "Done"));
+        await h.Manager.NotifySignalAsync(h.Slug, new StatusChangeSignal(ticket.Id, "Done", "Review"));
+        await h.Manager.NotifySignalAsync(h.Slug, new StatusChangeSignal(ticket.Id, "Review", "Done"));
+        await h.Handler.ProcessTickAsync(CancellationToken.None);
+
+        Assert.Equal(2, await BotCommentCountAsync(h, ticket.Id));
+    }
 }

@@ -31,8 +31,8 @@ public class StatusChangeTriggerTests
         Assert.True(t.TryHandleExternalSignal(new StatusChangeSignal(1, "Review", "Done"), out var a));
         Assert.Single(a);
 
-        Assert.False(t.TryHandleExternalSignal(new StatusChangeSignal(2, "Review", "Todo"), out var b));
-        Assert.Empty(b);
+        Assert.True(t.TryHandleExternalSignal(new StatusChangeSignal(2, "Review", "Todo"), out var b));
+        Assert.False(Assert.Single(b).ShouldDispatch);
     }
 
     [Fact]
@@ -44,8 +44,8 @@ public class StatusChangeTriggerTests
         Assert.True(t.TryHandleExternalSignal(new StatusChangeSignal(1, "InProgress", "Review"), out var a));
         Assert.Single(a);
 
-        Assert.False(t.TryHandleExternalSignal(new StatusChangeSignal(2, "Todo", "Review"), out var b));
-        Assert.Empty(b);
+        Assert.True(t.TryHandleExternalSignal(new StatusChangeSignal(2, "Todo", "Review"), out var b));
+        Assert.False(Assert.Single(b).ShouldDispatch);
     }
 
     [Fact]

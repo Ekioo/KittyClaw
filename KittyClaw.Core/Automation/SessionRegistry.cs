@@ -185,6 +185,37 @@ public sealed class SessionRegistry
         });
     }
 
+    /// <summary>
+    /// Atomically records a status transition for one automation. Returns false when that
+    /// automation has already consumed the ticket in the target status.
+    /// </summary>
+    public bool TryConsumeStatusTransition(string workspacePath, string automationId, int ticketId, string status)
+    {
+        var consumed = false;
+        Update(workspacePath, state =>
+        {
+            var all = state["_ticketSnapshots"] as JsonObject ?? new JsonObject();
+            var snapshot = all[automationId] as JsonObject;
+            if (snapshot is null)
+            {
+                snapshot = state["_ticketSnapshot"] is JsonObject legacy
+                    ? (JsonObject)legacy.DeepClone()
+                    : new JsonObject();
+            }
+
+            var key = ticketId.ToString();
+            if (string.Equals(snapshot[key]?.GetValue<string>(), status, StringComparison.Ordinal))
+                return;
+
+            snapshot[key] = status;
+            all[automationId] = snapshot;
+            state["_ticketSnapshots"] = all;
+            state["_ticketSnapshot"] = (JsonObject)snapshot.DeepClone();
+            consumed = true;
+        });
+        return consumed;
+    }
+
     private static JsonObject ToJson(IReadOnlyDictionary<int, string> snap)
     {
         var obj = new JsonObject();

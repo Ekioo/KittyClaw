@@ -49,12 +49,29 @@ internal sealed class TriggerHandler
             if (urgentProject?.IsPaused == true) continue;
             await _runtimeManager.EnsureLoadedAsync(entry.Slug);
             if (!_runtimeManager.TryGetRuntime(entry.Slug, out var urt) || urt?.Config is null) continue;
-            if (!await _executor.ConditionsMatchAsync(urt, entry.Automation, entry.Firing)) continue;
             var utctx = BuildTriggerContext(entry.Slug, urt.Workspace!, entry.Automation);
+            if (!entry.Firing.ShouldDispatch)
+            {
+                if (entry.Trigger is StatusChangeTrigger observationTrigger)
+                    observationTrigger.TryConsumeFiring(utctx, entry.Firing);
+                continue;
+            }
+            if (!await _executor.ConditionsMatchAsync(urt, entry.Automation, entry.Firing)) continue;
+            if (entry.Trigger is StatusChangeTrigger statusTrigger && !statusTrigger.TryConsumeFiring(utctx, entry.Firing))
+            {
+                _logger.LogInformation(
+                    "Automation {Id} suppressed duplicate status transition for ticket #{Ticket} in {Status}",
+                    entry.Automation.Id, entry.Firing.TicketId, entry.Firing.TicketStatus);
+                continue;
+            }
             // Consume the underlying event (persisted) before dispatch so the poll path does
             // not re-fire it. On failure, dispatch anyway: a ~PollSeconds-late duplicate is
             // better than a lost firing (ticket #136).
-            try { await entry.Trigger.ConsumeSignalFiringAsync(utctx, entry.Firing); }
+            try
+            {
+                if (entry.Trigger is not StatusChangeTrigger)
+                    await entry.Trigger.ConsumeSignalFiringAsync(utctx, entry.Firing);
+            }
             catch (Exception ex) { _logger.LogWarning(ex, "ConsumeSignalFiring failed for {Id} — the poll may re-fire this event", entry.Automation.Id); }
             urt.LastFiredAt = DateTime.UtcNow;
             urt.LastFiredAutomationId = entry.Automation.Id;
@@ -104,6 +121,13 @@ internal sealed class TriggerHandler
                         continue;
                     }
                     if (!await _executor.ConditionsMatchAsync(rt, automation, firing)) continue;
+                    if (trigger is StatusChangeTrigger statusTrigger && !statusTrigger.TryConsumeFiring(tctx, firing))
+                    {
+                        _logger.LogInformation(
+                            "Automation {Id} suppressed duplicate status transition for ticket #{Ticket} in {Status}",
+                            automation.Id, firing.TicketId, firing.TicketStatus);
+                        continue;
+                    }
                     if (isColumnPoll && firing.TicketId is int dispatchedId) consumedTickets.Add(dispatchedId);
                     rt.LastFiredAt = DateTime.UtcNow;
                     rt.LastFiredAutomationId = automation.Id;

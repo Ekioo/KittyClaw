@@ -214,6 +214,12 @@ internal sealed class ActionExecutor
             return null;
         }
 
+        // statusChange delivery is exactly-once: persist consumption before any action can
+        // detach, fail, or be interrupted by an engine restart. TriggerHandler performs the
+        // duplicate gate; this call also protects direct executor callers and tests.
+        if (trigger is StatusChangeTrigger statusTrigger && tctx is not null)
+            statusTrigger.TryConsumeFiring(tctx, firing);
+
         var state = new ActionState();
         bool committed = false;
         bool runAgentDispatched = false;

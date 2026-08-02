@@ -9,7 +9,8 @@ namespace KittyClaw.Core.Tests.Automation;
 
 /// <summary>
 /// Verifies that <see cref="ActionExecutor"/> defers CommitFiringAsync until after
-/// a successful run. This is what lets a status-change trigger retry a failed dispatch.
+/// a dispatch. Status-change transitions are consumed before actions start so failures and
+/// restarts cannot replay the same logical occurrence.
 /// </summary>
 [Collection("MockClaude")]
 public class ActionExecutorDeferredCommitTests
@@ -98,7 +99,7 @@ public class ActionExecutorDeferredCommitTests
     // ── Case 1: Failed run must NOT advance the snapshot ─────────────────────
 
     [Fact]
-    public async Task FailedRun_SnapshotStaysAtPreviousStatus_SoTriggerReFires()
+    public async Task FailedRun_SnapshotRemainsConsumed_SoTriggerDoesNotReplay()
     {
         using var tmp = new TempDir();
         var (executor, rt, tickets, sessions, runs, ticketId) =
@@ -126,12 +127,11 @@ public class ActionExecutorDeferredCommitTests
         await executor.ExecuteAutomationAsync(rt, automation, firing, CancellationToken.None, trigger, tctx);
         await WaitForRunEndAsync(runs, rt.Slug, TimeSpan.FromSeconds(15));
 
-        // After a FAILED run the snapshot must still be "Develop" so the next poll
-        // detects Develop→Done again and re-fires.
+        // A failed agent must not resurrect an already-dispatched logical transition.
         var snapshot = sessions.TicketSnapshot(rt.Workspace!, automation.Id);
         Assert.True(snapshot.TryGetValue(ticketId, out var snapshotStatus),
             "Ticket must exist in snapshot.");
-        Assert.Equal("Develop", snapshotStatus);
+        Assert.Equal("Done", snapshotStatus);
     }
 
     // ── Case 2: Completed run MUST advance the snapshot (no regression) ──────
@@ -176,7 +176,7 @@ public class ActionExecutorDeferredCommitTests
     // ── Case 3: restoreStatusOnFail interaction ───────────────────────────────
 
     [Fact]
-    public async Task FailedRunWithRestoreStatusOnFail_SnapshotStaysAtPreviousStatus()
+    public async Task FailedRunWithRestoreStatusOnFail_TransitionRemainsConsumed()
     {
         using var tmp = new TempDir();
         var (executor, rt, tickets, sessions, runs, ticketId) =
@@ -207,17 +207,18 @@ public class ActionExecutorDeferredCommitTests
         await executor.ExecuteAutomationAsync(rt, automation, firing, CancellationToken.None, trigger, tctx);
         await WaitForRunEndAsync(runs, rt.Slug, TimeSpan.FromSeconds(15));
 
-        // Snapshot must remain at "Develop" — no spurious re-fire while ticket is in "Develop".
+        // The Done occurrence remains consumed. A later poll observes the restored Develop
+        // state as the new baseline without replaying Done.
         var snapshot = sessions.TicketSnapshot(rt.Workspace!, automation.Id);
         Assert.True(snapshot.TryGetValue(ticketId, out var snapshotStatus),
             "Ticket must exist in snapshot.");
-        Assert.Equal("Develop", snapshotStatus);
+        Assert.Equal("Done", snapshotStatus);
     }
 
     // ── Edge: Stopped run must NOT advance the snapshot ───────────────────────
 
     [Fact]
-    public async Task StoppedRun_SnapshotStaysAtPreviousStatus_SoTriggerReFires()
+    public async Task StoppedRun_SnapshotRemainsConsumed_SoTriggerDoesNotReplay()
     {
         using var tmp = new TempDir();
         var (executor, rt, tickets, sessions, runs, ticketId) =
@@ -252,6 +253,6 @@ public class ActionExecutorDeferredCommitTests
         var snapshot = sessions.TicketSnapshot(rt.Workspace!, automation.Id);
         Assert.True(snapshot.TryGetValue(ticketId, out var snapshotStatus),
             "Ticket must exist in snapshot.");
-        Assert.Equal("Develop", snapshotStatus);
+        Assert.Equal("Done", snapshotStatus);
     }
 }

@@ -8,11 +8,9 @@ public sealed record StatusChangeSignal(int TicketId, string From, string To);
 /// Uses a persisted snapshot (dispatch-state.json:_ticketSnapshot) to detect changes
 /// across restarts.
 ///
-/// A ticket's snapshot is only advanced after the engine confirms dispatch via
-/// <see cref="CommitFiring"/>. Firings skipped by transient gates (concurrency,
-/// dedup, budget) leave the snapshot at its old value, so the next poll re-fires.
-/// Concurrent re-fires during an in-flight run are harmless — the engine's dedup
-/// gate absorbs them.
+/// A matching transition is atomically consumed per automation immediately before
+/// dispatch. This makes delivery durable across polling, reloads, restarts, and
+/// concurrent duplicate observations while preserving independent automations.
 /// </summary>
 public sealed class StatusChangeTrigger : ITrigger
 {
@@ -77,8 +75,11 @@ public sealed class StatusChangeTrigger : ITrigger
 
         if (!matches)
         {
-            firings = Array.Empty<TriggerFiring>();
-            return false;
+            // The transition still advances this automation's durable baseline. Without
+            // this observation, Done -> Review -> Done signals received between polls leave
+            // the baseline at Done and suppress the legitimate second entry.
+            firings = [new TriggerFiring(s.TicketId, null, s.To, ShouldDispatch: false)];
+            return true;
         }
 
         // Keep snapshot at old value so the poll retries if commit is skipped.
@@ -88,12 +89,17 @@ public sealed class StatusChangeTrigger : ITrigger
 
     public Task CommitFiringAsync(TriggerContext ctx, TriggerFiring firing, DateTime? completedAt = null)
     {
-        if (firing.TicketId is int tid && firing.TicketStatus is { } status)
-        {
-            var snapshot = ctx.Sessions.TicketSnapshot(ctx.WorkspacePath, ctx.Automation.Id);
-            snapshot[tid] = status;
-            ctx.Sessions.SaveTicketSnapshot(ctx.WorkspacePath, ctx.Automation.Id, snapshot);
-        }
+        TryConsumeFiring(ctx, firing);
+        return Task.CompletedTask;
+    }
+
+    public bool TryConsumeFiring(TriggerContext ctx, TriggerFiring firing) =>
+        firing.TicketId is int tid && firing.TicketStatus is { } status
+            && ctx.Sessions.TryConsumeStatusTransition(ctx.WorkspacePath, ctx.Automation.Id, tid, status);
+
+    public Task ConsumeSignalFiringAsync(TriggerContext ctx, TriggerFiring firing)
+    {
+        TryConsumeFiring(ctx, firing);
         return Task.CompletedTask;
     }
 
