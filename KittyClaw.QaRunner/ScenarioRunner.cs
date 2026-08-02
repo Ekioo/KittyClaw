@@ -180,6 +180,11 @@ public sealed class ScenarioRunner
             case "fill":
                 await page.FillAsync(Required(Resolve(action.Selector), "fill.selector"), Resolve(action.Value ?? ""));
                 break;
+            case "selectOption":
+                await page.SelectOptionAsync(
+                    Required(Resolve(action.Selector), "selectOption.selector"),
+                    Resolve(action.Value ?? ""));
+                break;
             case "wait":
                 await page.WaitForTimeoutAsync(action.Ms ?? 500);
                 break;
@@ -239,6 +244,21 @@ public sealed class ScenarioRunner
                         Expected = "true",
                         Actual = visible.ToString().ToLowerInvariant(),
                         Passed = visible,
+                    });
+                    break;
+                }
+            case "assertValue":
+                {
+                    var selector = Required(Resolve(action.Selector), "assertValue.selector");
+                    var actual = await page.InputValueAsync(selector);
+                    var expected = Resolve(action.Expected);
+                    result.Assertions.Add(new AssertionEntry
+                    {
+                        Selector = selector,
+                        Property = "value",
+                        Expected = expected,
+                        Actual = actual,
+                        Passed = string.Equals(actual, expected, StringComparison.Ordinal),
                     });
                     break;
                 }

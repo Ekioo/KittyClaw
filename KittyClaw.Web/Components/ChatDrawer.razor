@@ -45,7 +45,7 @@
                     <span class="chat-drawer-ticket-ref" title="@TicketTitle">· #@tid @(string.IsNullOrEmpty(TicketTitle) ? "" : "— " + SharedRenderHelpers.Truncate(TicketTitle!, 40))</span>
                 }
             </span>
-            <select class="chat-drawer-model-select" @bind="_selectedModel">
+            <select class="chat-drawer-model-select" @bind="_selectedModel" @bind:after="PersistSelectedModelAsync">
                 <optgroup label="Claude">
                     @foreach (var m in ClaudeModels)
                     {
@@ -263,6 +263,7 @@
     private List<string> _codexModels = new();
     private const string DefaultModel = ClaudeModelCatalog.DefaultModel;
     private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
+    private string SelectedModelStorageKey => $"kc-chat-model-{ProjectSlug}";
 
     // Image paste (#115). Accepted clipboard images await Send() in this buffer; rejections
     // surface in _pasteError as a small inline banner.
@@ -319,6 +320,20 @@
         }
         catch { /* leave _view = Selection */ }
         finally { _ready = true; }
+    }
+
+    private bool IsAvailableModel(string? model) =>
+        !string.IsNullOrWhiteSpace(model) &&
+        (ClaudeModels.Contains(model) || _ollamaModels.Contains(model) ||
+         _grokModels.Contains(model) || _codexModels.Contains(model));
+
+    private async Task PersistSelectedModelAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.setItem", SelectedModelStorageKey, _selectedModel);
+        }
+        catch { /* localStorage unavailable — selection remains valid for this drawer instance */ }
     }
 
     private async Task FetchOllamaModelsAsync()
@@ -457,6 +472,16 @@
     {
         if (firstRender)
         {
+            try
+            {
+                var storedModel = await JS.InvokeAsync<string?>("localStorage.getItem", SelectedModelStorageKey);
+                if (IsAvailableModel(storedModel))
+                {
+                    _selectedModel = storedModel!;
+                    StateHasChanged();
+                }
+            }
+            catch { /* localStorage unavailable — keep the default model */ }
             try { await _inputRef.FocusAsync(); } catch { }
         }
         if (_view == View.Conversation)

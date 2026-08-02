@@ -24,7 +24,9 @@ public class ScenarioParseTests
           ],
           "actions": [
             { "type": "navigate", "url": "/" },
+            { "type": "selectOption", "selector": ".model", "value": "codex:gpt-5.6-sol" },
             { "type": "screenshot", "name": "home", "description": "Home" },
+            { "type": "assertValue", "selector": ".model", "expected": "codex:gpt-5.6-sol" },
             { "type": "assertCss", "selector": ".x", "property": "color", "expected": "rgb(245,158,11)" }
           ],
           "verdict": { "passOn": "all-asserts-pass" }
@@ -37,10 +39,12 @@ public class ScenarioParseTests
         Assert.Equal(2, s!.Setup.Count);
         Assert.Equal("createProject", s.Setup[0].Type);
         Assert.Equal("D:/foo", s.Setup[0].WorkspacePath);
-        Assert.Equal(3, s.Actions.Count);
+        Assert.Equal(5, s.Actions.Count);
         Assert.Equal("/", s.Actions[0].Url);
-        Assert.Equal("home", s.Actions[1].Name);
-        Assert.Equal("rgb(245,158,11)", s.Actions[2].Expected);
+        Assert.Equal("codex:gpt-5.6-sol", s.Actions[1].Value);
+        Assert.Equal("home", s.Actions[2].Name);
+        Assert.Equal("codex:gpt-5.6-sol", s.Actions[3].Expected);
+        Assert.Equal("rgb(245,158,11)", s.Actions[4].Expected);
         Assert.Equal("all-asserts-pass", s.Verdict.PassOn);
     }
 

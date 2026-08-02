@@ -1,0 +1,34 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "qa-156-model-persistence" },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/qa-156-model-persistence/members",
+      "body": { "name": "programmer" }
+    },
+    {
+      "type": "createTicket",
+      "project": "qa-156-model-persistence",
+      "title": "Model persistence verification",
+      "status": "Todo",
+      "assignedTo": "programmer"
+    }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-156-model-persistence/ticket/{ticketId}" },
+    { "type": "wait", "ms": 1500 },
+    { "type": "click", "selector": ".chat-with-agent-btn" },
+    { "type": "selectOption", "selector": ".chat-drawer-model-select", "value": "claude-fable-5" },
+    { "type": "assertValue", "selector": ".chat-drawer-model-select", "expected": "claude-fable-5" },
+    { "type": "click", "selector": ".chat-drawer .agent-close-btn" },
+    { "type": "click", "selector": ".chat-with-agent-btn" },
+    { "type": "assertValue", "selector": ".chat-drawer-model-select", "expected": "claude-fable-5" },
+    {
+      "type": "screenshot",
+      "name": "qa-156-model-restored",
+      "description": "The reopened New instruction drawer retains claude-fable-5."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

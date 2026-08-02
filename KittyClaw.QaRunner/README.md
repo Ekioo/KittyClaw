@@ -176,11 +176,13 @@ These require Playwright (run inside `actions`, after setup).
 | `navigate`     | `url` (relative or absolute)             | Goes to the URL on the test instance.                                 |
 | `click`        | `selector`                               | CSS selector click.                                                   |
 | `fill`         | `selector`, `value`                      | Set input value.                                                      |
+| `selectOption` | `selector`, `value`                      | Select an option by value.                                            |
 | `wait`         | `ms`                                     | Pause N ms.                                                           |
 | `screenshot`   | `name`, optional `description`           | Full-page PNG. Uploaded post-run, URL placed in `result.screenshots`. |
 | `assertCss`    | `selector`, `property`, `expected`       | Reads `getComputedStyle(...).getPropertyValue(prop)`.                 |
 | `assertText`   | `selector`, `expected`                   | Reads `textContent`.                                                  |
 | `assertVisible`| `selector`                               | Asserts element is visible.                                           |
+| `assertValue`  | `selector`, `expected`                   | Asserts the current value of an input or select.                       |
 | `assertJson`   | `path`, `jsonPath`, `expected`           | GET `path`, extract `jsonPath` (dotted), assert equals `expected`.    |
 
 #### `assertJson`
