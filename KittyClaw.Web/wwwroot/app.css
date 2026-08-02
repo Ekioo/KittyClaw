@@ -4897,7 +4897,7 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     gap: .25rem;
     width: max-content;
     max-width: calc(100% - 2rem);
-    margin: .75rem 1rem 0;
+    margin: .75rem 1rem;
     padding: .2rem;
     box-sizing: border-box;
     background: var(--surface2);

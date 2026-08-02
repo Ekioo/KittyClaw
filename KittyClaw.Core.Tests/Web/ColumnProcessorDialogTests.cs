@@ -65,7 +65,7 @@ public sealed class ColumnProcessorDialogTests
     {
         var css = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "wwwroot", "app.css"));
 
-        Assert.Contains("margin: .75rem 1rem 0;", css);
+        Assert.Contains("margin: .75rem 1rem;", css);
     }
 
     [Fact]
