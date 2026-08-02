@@ -166,6 +166,18 @@ public sealed class ColumnProcessorDialogTests
     }
 
     [Fact]
+    public void New_workflow_controls_follow_the_dark_application_theme()
+    {
+        var css = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "wwwroot", "app.css"));
+
+        Assert.Matches(@"(?s)\.column-context-menu\s*\{[^}]*background:\s*var\(--surface2\);[^}]*border:\s*1px solid var\(--border-strong\);", css);
+        Assert.Matches(@"(?s)\.processor-dialog select,\s*\.workflow-settings select\s*\{[^}]*background:\s*var\(--surface2\);[^}]*color:\s*var\(--text\);", css);
+        Assert.Contains(".workflow-edit-row > .settings-hint { margin: 0;", css);
+        Assert.Contains(".workflow-settings .skill-editor summary::before", css);
+        Assert.Contains("content: \"▸\";", css);
+    }
+
+    [Fact]
     public void Ticket_timeline_resolves_legacy_column_ids_to_processor_names()
     {
         var source = File.ReadAllText(Path.Combine(
