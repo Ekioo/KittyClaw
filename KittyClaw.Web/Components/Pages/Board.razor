@@ -274,7 +274,7 @@ else
                 }
             </div>
         }
-        @if (_columns.Count == 0)
+        @if (_columnsLoaded && _columns.Count == 0)
         {
             <button class="add-column-lane" @onclick="() => OpenCreateColumn(0)">
                 <span>＋</span>
@@ -538,6 +538,7 @@ else
     private Project? _project;
     private List<TicketSummary> _tickets = [];
     private List<BoardColumn> _columns = [];
+    private bool _columnsLoaded;
     private HashSet<int> _activeProcessorColumnIds = [];
     private List<Pipeline> _pipelines = [];
     private int? _selectedPipelineId;
@@ -646,6 +647,7 @@ else
         var processorsTask = ProcessorService.ListAsync(Slug);
         await Task.WhenAll(columnsTask, processorsTask);
         _columns = columnsTask.Result;
+        _columnsLoaded = true;
         _activeProcessorColumnIds = processorsTask.Result
             .Where(processor => processor.Enabled)
             .Select(processor => processor.ColumnId)

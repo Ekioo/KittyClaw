@@ -5017,6 +5017,7 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 }
 .workflow-edit-row { align-items: center; }
 .workflow-edit-row > .settings-hint { margin: 0; white-space: nowrap; }
+.workflow-settings .settings-row + .settings-row { margin-top: .6rem; }
 .workflow-table input, .workflow-table select { width: 100%; }
 .workflow-table .settings-actions { display: flex; gap: .4rem; justify-content: flex-end; }
 .workflow-settings .skill-editor summary {
@@ -5178,8 +5179,9 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     border-bottom: 1px solid var(--border);
     background: var(--surface2);
     overflow-x: auto;
-    scrollbar-width: thin;
+    scrollbar-width: none;
 }
+.column-editor-tabs::-webkit-scrollbar { display: none; }
 .column-editor-tab {
     border: 0;
     border-bottom: 2px solid transparent;
@@ -5230,6 +5232,16 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     .workflow-migration-card { align-items: stretch; flex-direction: column; }
     .workflow-settings .settings-row { align-items: stretch; flex-direction: column; }
     .workflow-edit-row > .settings-hint { white-space: normal; }
+}
+
+@media (max-width: 1100px) {
+    .board-layout > .page-header {
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+    .board-layout > .page-header::-webkit-scrollbar { display: none; }
+    .board-layout > .page-header > * { flex-shrink: 0; }
+    .board-layout > .page-header .filter-bar { flex: 0 0 12rem; margin-left: 0; }
 }
 .workflow-textarea { width: 100%; min-height: 9rem; resize: vertical; }
 .processor-prompt { min-height: 12rem; }

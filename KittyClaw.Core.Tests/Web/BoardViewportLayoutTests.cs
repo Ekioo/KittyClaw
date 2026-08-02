@@ -18,7 +18,7 @@ public sealed class BoardViewportLayoutTests
         Assert.Matches(@"(?s)\.board\s*\{[^}]*height:\s*auto;[^}]*flex:\s*1 1 auto;", css);
         Assert.Matches(@"(?s)\.board\s*\{[^}]*gap:\s*0;", css);
         Assert.Matches(@"(?s)\.column-insert-slot\s*\{[^}]*flex:\s*0 0 \.6rem;[^}]*min-width:\s*0;[^}]*margin:\s*0;", css);
-        Assert.Matches(@"(?s)@if \(_columns\.Count == 0\)\s*\{\s*<button class=""add-column-lane""", board);
+        Assert.Matches(@"(?s)@if \(_columnsLoaded && _columns\.Count == 0\)\s*\{\s*<button class=""add-column-lane""", board);
     }
 
     private static string RepoRoot()
