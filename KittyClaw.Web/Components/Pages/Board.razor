@@ -17,6 +17,7 @@
 @inject LabelService LabelService
 @inject ColumnService ColumnService
 @inject PipelineService PipelineService
+@inject ColumnProcessorService ProcessorService
 @inject MemberService MemberService
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
@@ -131,7 +132,14 @@ else
                      @ondrop:preventDefault
                      @oncontextmenu="(e) => OpenSortMenu(col.Name, e)"
                      @oncontextmenu:preventDefault>
-                    <span class="status-pill" style="color: @col.Color; background: color-mix(in srgb, @col.Color 12%, transparent)">@col.Name</span>
+                    <span class="status-pill" style="color: @col.Color; background: color-mix(in srgb, @col.Color 12%, transparent)">
+                        <span class="column-processor-indicator @(_activeProcessorColumnIds.Contains(col.Id) ? "column-processor-indicator--active" : "")"
+                              title="@L[_activeProcessorColumnIds.Contains(col.Id) ? "ColumnProcessorActive" : "ColumnProcessorInactive"]"
+                              aria-label="@L[_activeProcessorColumnIds.Contains(col.Id) ? "ColumnProcessorActive" : "ColumnProcessorInactive"]">
+                            @(_activeProcessorColumnIds.Contains(col.Id) ? "⚙" : "○")
+                        </span>
+                        <span>@col.Name</span>
+                    </span>
                     @{ var _sortHere = SortState.Get(Slug, col.Name); }
                     @if (_sortHere.Mode != KittyClaw.Web.Services.ColumnSortMode.Manual)
                     {
@@ -503,6 +511,7 @@ else
     private Project? _project;
     private List<TicketSummary> _tickets = [];
     private List<BoardColumn> _columns = [];
+    private HashSet<int> _activeProcessorColumnIds = [];
     private List<Pipeline> _pipelines = [];
     private int? _selectedPipelineId;
     private bool _restoreScrollAfterRender;
@@ -606,9 +615,16 @@ else
         _pipelines = await PipelineService.ListAsync(Slug);
         if (_selectedPipelineId is null || !_pipelines.Any(p => p.Id == _selectedPipelineId))
             _selectedPipelineId = _pipelines.FirstOrDefault(p => p.IsDefault)?.Id ?? _pipelines.FirstOrDefault()?.Id;
-        _columns = _selectedPipelineId is int pipelineId
-            ? await ColumnService.ListColumnsAsync(Slug, pipelineId)
-            : [];
+        var columnsTask = _selectedPipelineId is int pipelineId
+            ? ColumnService.ListColumnsAsync(Slug, pipelineId)
+            : Task.FromResult(new List<BoardColumn>());
+        var processorsTask = ProcessorService.ListAsync(Slug);
+        await Task.WhenAll(columnsTask, processorsTask);
+        _columns = columnsTask.Result;
+        _activeProcessorColumnIds = processorsTask.Result
+            .Where(processor => processor.Enabled)
+            .Select(processor => processor.ColumnId)
+            .ToHashSet();
     }
 
     private async Task SelectPipelineAsync(int pipelineId)

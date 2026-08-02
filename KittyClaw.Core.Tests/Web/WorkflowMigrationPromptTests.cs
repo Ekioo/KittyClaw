@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace KittyClaw.Core.Tests.Web;
 
 public sealed class WorkflowMigrationPromptTests
@@ -26,10 +28,42 @@ public sealed class WorkflowMigrationPromptTests
     {
         var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Workflows.razor"));
 
-        Assert.Contains("Add column", source);
-        Assert.Contains("right-click its header on the board", source);
+        Assert.Contains("WorkflowAddColumn", source);
+        Assert.Contains("WorkflowColumnsHint", source);
         Assert.DoesNotContain("Configure processor", source);
         Assert.DoesNotContain("ColumnProcessorService ProcessorService", source);
+    }
+
+    [Fact]
+    public void Workflow_page_uses_localization_keys_instead_of_english_ui_copy()
+    {
+        var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Workflows.razor"));
+
+        Assert.Contains("@inject LocalizationService L", source);
+        Assert.Contains("WorkflowMigrateTitle", source);
+        Assert.Contains("WorkflowProjectSkills", source);
+        Assert.DoesNotContain("<h2>Migrate the existing workflow</h2>", source);
+        Assert.DoesNotContain("placeholder=\"New pipeline name\"", source);
+        Assert.DoesNotContain(">Save skill</button>", source);
+    }
+
+    [Theory]
+    [InlineData("fr")]
+    [InlineData("de")]
+    [InlineData("es")]
+    [InlineData("it")]
+    public void Workflow_localizations_have_the_same_keys_as_english(string language)
+    {
+        static HashSet<string> Keys(string path)
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            return document.RootElement.EnumerateObject().Select(property => property.Name).ToHashSet();
+        }
+
+        var localization = Path.Combine(RepoRoot(), "KittyClaw.Core", "Localization");
+        Assert.Equal(
+            Keys(Path.Combine(localization, "Workflows.en.json")).Order(),
+            Keys(Path.Combine(localization, $"Workflows.{language}.json")).Order());
     }
 
     [Fact]

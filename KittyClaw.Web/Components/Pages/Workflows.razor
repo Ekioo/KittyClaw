@@ -5,31 +5,32 @@
 @inject PipelineService PipelineService
 @inject ColumnService ColumnService
 @inject ProjectSkillService SkillService
+@inject LocalizationService L
 @inject IJSRuntime JS
 @inject KittyClaw.Web.Services.EscapeKeyStack EscapeStack
 @rendermode InteractiveServer
 @implements IDisposable
 
-<PageTitle>@(_project?.Name ?? "Project") — Workflows</PageTitle>
+<PageTitle>@(_project?.Name ?? L["WorkflowProject"]) — @L["WorkflowTitle"]</PageTitle>
 
 @if (_project is null)
 {
-    <p>Project not found.</p>
+    <p>@L["ProjectNotFound"]</p>
 }
 else
 {
     <div class="page-header">
-        <a class="back-link" href="/board/@Slug">&larr; Board</a>
-        <h1>@_project.Name — Workflows</h1>
+        <a class="back-link" href="/board/@Slug">&larr; @L["WorkflowBoard"]</a>
+        <h1>@_project.Name — @L["WorkflowTitle"]</h1>
     </div>
 
     <div class="settings-container workflow-settings">
         <section class="settings-section workflow-migration-card">
             <div>
-                <h2>Migrate the existing workflow</h2>
-                <p class="settings-hint">Ask KittyClaw to analyse the current board and prepare a safe, progressive migration. You can review and edit the instruction before sending it.</p>
+                <h2>@L["WorkflowMigrateTitle"]</h2>
+                <p class="settings-hint">@L["WorkflowMigrateHint"]</p>
             </div>
-            <button class="settings-primary" @onclick="OpenMigrationInstruction">Migrate</button>
+            <button class="settings-primary" @onclick="OpenMigrationInstruction">@L["WorkflowMigrate"]</button>
         </section>
 
         @if (!string.IsNullOrWhiteSpace(_message))
@@ -38,8 +39,8 @@ else
         }
 
         <section class="settings-section">
-            <h2>Pipelines</h2>
-            <p class="settings-hint">A pipeline has a stable identity. Renaming it does not change its links, columns, tickets or routing rules.</p>
+            <h2>@L["WorkflowPipelines"]</h2>
+            <p class="settings-hint">@L["WorkflowPipelinesHint"]</p>
             <div class="workflow-pills">
                 @foreach (var pipeline in _pipelines)
                 {
@@ -51,23 +52,23 @@ else
             {
                 <div class="settings-row workflow-edit-row">
                     <input class="settings-input" @bind="_pipelineName" @bind:event="oninput" />
-                    <button class="settings-primary" @onclick="RenamePipelineAsync">Rename</button>
-                    <span class="settings-hint">Stable key: <code>@_selectedPipeline.Slug</code></span>
+                    <button class="settings-primary" @onclick="RenamePipelineAsync">@L["WorkflowRename"]</button>
+                    <span class="settings-hint">@L["WorkflowStableKey"] <code>@_selectedPipeline.Slug</code></span>
                 </div>
             }
             <div class="settings-row">
-                <input class="settings-input" placeholder="New pipeline name" @bind="_newPipelineName" @bind:event="oninput" />
-                <button class="settings-primary" @onclick="CreatePipelineAsync" disabled="@(string.IsNullOrWhiteSpace(_newPipelineName))">Add pipeline</button>
+                <input class="settings-input" placeholder="@L["WorkflowNewPipeline"]" @bind="_newPipelineName" @bind:event="oninput" />
+                <button class="settings-primary" @onclick="CreatePipelineAsync" disabled="@(string.IsNullOrWhiteSpace(_newPipelineName))">@L["WorkflowAddPipeline"]</button>
             </div>
         </section>
 
         @if (_selectedPipeline is not null)
         {
             <section class="settings-section">
-                <h2>Columns</h2>
-                <p class="settings-hint">Manage the pipeline structure here. To configure a column processor, right-click its header on the board and choose Configure.</p>
+                <h2>@L["WorkflowColumns"]</h2>
+                <p class="settings-hint">@L["WorkflowColumnsHint"]</p>
                 <table class="settings-list workflow-table">
-                    <thead><tr><th>Name</th><th>Role</th><th></th></tr></thead>
+                    <thead><tr><th>@L["Name"]</th><th>@L["WorkflowRole"]</th><th></th></tr></thead>
                     <tbody>
                         @foreach (var column in _columns)
                         {
@@ -77,45 +78,45 @@ else
                                     <select value="@ColumnRoleValue(column.Id)" @onchange="e => SetColumnRole(column.Id, e.Value?.ToString())">
                                         @foreach (var role in Enum.GetValues<ColumnRole>())
                                         {
-                                            <option value="@((int)role)">@role</option>
+                                            <option value="@((int)role)">@ColumnRoleLabel(role)</option>
                                         }
                                     </select>
                                 </td>
                                 <td class="settings-actions">
-                                    <button @onclick="() => SaveColumnAsync(column)">Save</button>
+                                    <button @onclick="() => SaveColumnAsync(column)">@L["Save"]</button>
                                 </td>
                             </tr>
                         }
                     </tbody>
                 </table>
                 <div class="settings-row">
-                    <input class="settings-input" placeholder="New column name" @bind="_newColumnName" @bind:event="oninput" />
+                    <input class="settings-input" placeholder="@L["WorkflowNewColumn"]" @bind="_newColumnName" @bind:event="oninput" />
                     <select @bind="_newColumnRole">
-                        @foreach (var role in Enum.GetValues<ColumnRole>()) { <option value="@role">@role</option> }
+                        @foreach (var role in Enum.GetValues<ColumnRole>()) { <option value="@role">@ColumnRoleLabel(role)</option> }
                     </select>
-                    <button class="settings-primary" @onclick="CreateColumnAsync" disabled="@(string.IsNullOrWhiteSpace(_newColumnName))">Add column</button>
+                    <button class="settings-primary" @onclick="CreateColumnAsync" disabled="@(string.IsNullOrWhiteSpace(_newColumnName))">@L["WorkflowAddColumn"]</button>
                 </div>
             </section>
         }
 
         <section class="settings-section">
-            <h2>Project skills</h2>
-            <p class="settings-hint">Reusable technical and operational procedures shared by the column processors. Their stable key is preserved when renamed.</p>
+            <h2>@L["WorkflowProjectSkills"]</h2>
+            <p class="settings-hint">@L["WorkflowProjectSkillsHint"]</p>
             @foreach (var skill in _skills)
             {
                 <details class="skill-editor">
                     <summary>@skill.Name <code>@skill.Slug</code></summary>
                     <input class="settings-input" value="@SkillName(skill.Slug)" @oninput="e => SetSkillName(skill.Slug, e.Value?.ToString())" />
-                    <input class="settings-input" placeholder="When should the agent use this skill?" value="@SkillDescription(skill.Slug)" @oninput="e => SetSkillDescription(skill.Slug, e.Value?.ToString())" />
+                    <input class="settings-input" placeholder="@L["WorkflowSkillUsage"]" value="@SkillDescription(skill.Slug)" @oninput="e => SetSkillDescription(skill.Slug, e.Value?.ToString())" />
                     <textarea class="settings-input workflow-textarea" value="@SkillInstructions(skill.Slug)" @oninput="e => SetSkillInstructions(skill.Slug, e.Value?.ToString())"></textarea>
-                    <button @onclick="() => SaveSkillAsync(skill.Slug)">Save skill</button>
+                    <button @onclick="() => SaveSkillAsync(skill.Slug)">@L["WorkflowSaveSkill"]</button>
                 </details>
             }
             <div class="skill-editor">
-                <input class="settings-input" placeholder="New skill name" @bind="_newSkillName" />
-                <input class="settings-input" placeholder="When should the agent use this skill?" @bind="_newSkillDescription" />
-                <textarea class="settings-input workflow-textarea" placeholder="Skill instructions (Markdown)" @bind="_newSkillInstructions"></textarea>
-                <button class="settings-primary" @onclick="CreateSkillAsync" disabled="@(string.IsNullOrWhiteSpace(_newSkillName))">Add skill</button>
+                <input class="settings-input" placeholder="@L["WorkflowNewSkill"]" @bind="_newSkillName" />
+                <input class="settings-input" placeholder="@L["WorkflowSkillUsage"]" @bind="_newSkillDescription" />
+                <textarea class="settings-input workflow-textarea" placeholder="@L["WorkflowSkillInstructions"]" @bind="_newSkillInstructions"></textarea>
+                <button class="settings-primary" @onclick="CreateSkillAsync" disabled="@(string.IsNullOrWhiteSpace(_newSkillName))">@L["WorkflowAddSkill"]</button>
             </div>
         </section>
     </div>
@@ -183,16 +184,17 @@ else
         _newPipelineName = "";
         _pipelines = await PipelineService.ListAsync(Slug);
         await SelectPipelineAsync(created.Id);
-    }, "Pipeline created.");
+    }, L["WorkflowPipelineCreated"]);
 
     private async Task RenamePipelineAsync() => await RunAsync(async () =>
     {
         await PipelineService.UpdateAsync(Slug, _selectedPipelineId!.Value, _pipelineName);
         _pipelines = await PipelineService.ListAsync(Slug);
-    }, "Pipeline renamed without changing its stable key.");
+    }, L["WorkflowPipelineRenamed"]);
 
     private string ColumnName(int id) => _columnNames.GetValueOrDefault(id, "");
     private string ColumnRoleValue(int id) => ((int)_columnRoles.GetValueOrDefault(id)).ToString();
+    private string ColumnRoleLabel(ColumnRole role) => L[$"WorkflowRole{role}"];
     private void SetColumnName(int id, string? value) => _columnNames[id] = value ?? "";
     private void SetColumnRole(int id, string? value) => _columnRoles[id] = Enum.Parse<ColumnRole>(value ?? "0");
 
@@ -201,13 +203,13 @@ else
         await ColumnService.CreateColumnAsync(Slug, _newColumnName, pipelineId: _selectedPipelineId, role: _newColumnRole);
         _newColumnName = "";
         await SelectPipelineAsync(_selectedPipelineId!.Value);
-    }, "Column created.");
+    }, L["WorkflowColumnCreated"]);
 
     private async Task SaveColumnAsync(BoardColumn column) => await RunAsync(async () =>
     {
         await ColumnService.UpdateColumnAsync(Slug, column.Id, _columnNames[column.Id], role: _columnRoles[column.Id]);
         await SelectPipelineAsync(_selectedPipelineId!.Value);
-    }, "Column updated.");
+    }, L["WorkflowColumnUpdated"]);
 
     private async Task LoadSkillDraftsAsync()
     {
@@ -232,7 +234,7 @@ else
         await SkillService.UpdateAsync(Slug, slug, _skillNames[slug], _skillInstructions[slug], _skillDescriptions[slug]);
         _skills = await SkillService.ListAsync(Slug);
         await LoadSkillDraftsAsync();
-    }, "Skill saved; its stable key was preserved.");
+    }, L["WorkflowSkillSaved"]);
 
     private async Task CreateSkillAsync() => await RunAsync(async () =>
     {
@@ -240,7 +242,7 @@ else
         _newSkillName = _newSkillDescription = _newSkillInstructions = "";
         _skills = await SkillService.ListAsync(Slug);
         await LoadSkillDraftsAsync();
-    }, "Skill created.");
+    }, L["WorkflowSkillCreated"]);
 
     private async Task RunAsync(Func<Task> action, string success)
     {

@@ -29,6 +29,10 @@
         {
             <div class="processor-dialog-body">
                 <p class="settings-hint">@L["ColumnProcessorHint"]</p>
+                @if (!_processorExists)
+                {
+                    <div class="processor-draft-notice" role="status">@L["ProcessorDraftNotice"]</div>
+                }
                 @if (!string.IsNullOrWhiteSpace(_message))
                 {
                     <p class="@(_isError ? "settings-status-error" : "settings-status-ok")">@_message</p>
@@ -108,6 +112,7 @@
 
     private bool _loading = true;
     private bool _saving;
+    private bool _processorExists;
     private bool _enabled = true;
     private string _name = "";
     private string _mission = "";
@@ -138,6 +143,7 @@
             _skills = await SkillService.ListAsync(Slug);
 
             var processor = await ProcessorService.GetAsync(Slug, Column.Id);
+            _processorExists = processor is not null;
             _name = processor?.Name ?? $"{Column.Name} processor";
             _mission = processor?.Mission ?? "Process the selected ticket and return a structured outcome.";
             _enabled = processor?.Enabled ?? true;

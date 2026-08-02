@@ -54,12 +54,17 @@ public sealed class ColumnProcessorService(
         return await db.ColumnProcessors.AsNoTracking().FirstOrDefaultAsync(p => p.ColumnId == columnId);
     }
 
-    public async Task<List<ColumnProcessor>> ListEnabledAsync(string projectSlug)
+    public async Task<List<ColumnProcessor>> ListAsync(string projectSlug)
     {
         await using var db = projects.GetProjectDb(projectSlug);
         await ColumnService.EnsureBoardColumnsTableAsync(db);
         await EnsureTableAsync(db);
-        var enabled = await db.ColumnProcessors.AsNoTracking().Where(p => p.Enabled).OrderBy(p => p.Id).ToListAsync();
+        return await db.ColumnProcessors.AsNoTracking().OrderBy(p => p.Id).ToListAsync();
+    }
+
+    public async Task<List<ColumnProcessor>> ListEnabledAsync(string projectSlug)
+    {
+        var enabled = (await ListAsync(projectSlug)).Where(p => p.Enabled).ToList();
         // Ensure every enabled processor has canonical memory even when its column has
         // no eligible ticket. This also migrates lessons written by early builds to the
         // inferred .agents/column-{id}/memory.md path during engine startup.

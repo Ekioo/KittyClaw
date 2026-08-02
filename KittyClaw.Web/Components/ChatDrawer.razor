@@ -386,7 +386,8 @@
                     }
                     else
                     {
-                        _messages.Add(new ChatMessage(m.Role, m.Text));
+                        if (m.Role == "stderr") AddStderrMessage(m.Text);
+                        else _messages.Add(new ChatMessage(m.Role, m.Text));
                     }
                     latestMessageAt = m.CreatedAt;
                 }
@@ -663,7 +664,7 @@
             // whenever ANTHROPIC_AUTH_TOKEN/API_KEY is set (always true for Ollama).
             if (text.Contains("claude.ai connectors are disabled", StringComparison.OrdinalIgnoreCase))
                 return Task.CompletedTask;
-            _messages.Add(new ChatMessage("stderr", text));
+            AddStderrMessage(text);
         }
         else if (kind == "content_block_delta")
         {
@@ -701,6 +702,16 @@
 
     private static string GetToolPreview(string toolName, string? detail) =>
         SharedRenderHelpers.GetToolPreview(toolName, detail);
+
+    private void AddStderrMessage(string text)
+    {
+        var clean = RunDrawerEventPresentation.Sanitize(text);
+        if (string.IsNullOrWhiteSpace(clean)) return;
+        if (_messages.Count > 0 && _messages[^1].Role == "stderr")
+            _messages[^1] = new ChatMessage("stderr", _messages[^1].Text + "\n" + clean);
+        else
+            _messages.Add(new ChatMessage("stderr", clean));
+    }
 
     private static (string Prompt, string[] Options) ParseAskUserQuestionDetail(string? detail)
     {

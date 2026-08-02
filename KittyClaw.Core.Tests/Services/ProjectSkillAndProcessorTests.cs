@@ -111,6 +111,21 @@ public sealed class ProjectSkillAndProcessorTests : IDisposable
     }
 
     [Fact]
+    public async Task Processor_listing_includes_disabled_processors_for_configuration_views()
+    {
+        var project = await _projects.CreateProjectAsync("Processor listing");
+        var column = (await _columns.ListColumnsAsync(project.Slug)).First();
+        await _processors.SaveAsync(project.Slug, column.Id, "Paused worker", "Do work later.", null,
+            enabled: false, maxTurns: 20, [], [], []);
+
+        var all = await _processors.ListAsync(project.Slug);
+        var enabled = await _processors.ListEnabledAsync(project.Slug);
+
+        Assert.Equal(column.Id, Assert.Single(all).ColumnId);
+        Assert.Empty(enabled);
+    }
+
+    [Fact]
     public async Task Processor_memory_preserves_lessons_from_legacy_inferred_path()
     {
         var project = await _projects.CreateProjectAsync("Legacy processor memory");

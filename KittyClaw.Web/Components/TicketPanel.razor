@@ -7,6 +7,7 @@
 @inject TicketService TicketService
 @inject LabelService LabelService
 @inject ColumnService ColumnService
+@inject ColumnProcessorService ProcessorService
 @inject MemberService MemberService
 @inject KittyClaw.Web.Services.BoardUpdateNotifier BoardUpdateNotifier
 @inject IJSRuntime JS
@@ -406,6 +407,7 @@
     private IDisposable? _escChatDrawer;
 
     private string _loadedKey = "";
+    private Dictionary<int, string> _processorNames = [];
 
     protected override void OnInitialized()
     {
@@ -465,6 +467,8 @@
         _columns = _ticket is null ? [] : await ColumnService.ListColumnsAsync(Slug, _ticket.PipelineId);
         _allLabels = await LabelService.ListLabelsAsync(Slug);
         _allMembers = await MemberService.ListMembersAsync(Slug);
+        _processorNames = (await ProcessorService.ListAsync(Slug))
+            .ToDictionary(processor => processor.ColumnId, processor => processor.Name);
         await RebuildPipelineAsync();
     }
 
@@ -564,8 +568,18 @@
         return _ticket.Comments
             .Select(c => new TimelineItem(c.CreatedAt, c.Author, true, c.Content, c.Id))
             .Concat(_ticket.Activities
-                .Select(a => new TimelineItem(a.CreatedAt, a.Author, false, a.Text, null)))
+                .Select(a => new TimelineItem(a.CreatedAt, ActivityAuthor(a.Author), false, a.Text, null)))
             .OrderByDescending(x => x.At);
+    }
+
+    private string ActivityAuthor(string author)
+    {
+        const string prefix = "column-";
+        if (author.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(author[prefix.Length..], out var columnId)
+            && _processorNames.TryGetValue(columnId, out var processorName))
+            return processorName;
+        return author;
     }
 
     // ── Priority ──

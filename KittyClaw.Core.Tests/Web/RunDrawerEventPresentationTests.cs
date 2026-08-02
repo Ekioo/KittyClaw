@@ -4,6 +4,15 @@ namespace KittyClaw.Core.Tests.Web;
 
 public class RunDrawerEventPresentationTests
 {
+    private static string RepoRoot()
+    {
+        var directory = Directory.GetCurrentDirectory();
+        while (directory is not null && !File.Exists(Path.Combine(directory, "KittyClaw.slnx")))
+            directory = Path.GetDirectoryName(directory);
+        Assert.NotNull(directory);
+        return directory!;
+    }
+
     [Fact]
     public void Group_CoalescesOnlyContiguousStderr()
     {
@@ -60,5 +69,16 @@ public class RunDrawerEventPresentationTests
     public void ExtractSummary_PrefersExceptionAndHasNeutralFallback(string raw, string expected)
     {
         Assert.Equal(expected, RunDrawerEventPresentation.ExtractSummary(raw));
+    }
+
+    [Fact]
+    public void Chat_drawer_sanitizes_and_groups_stderr_events()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Web", "Components", "ChatDrawer.razor"));
+
+        Assert.Contains("RunDrawerEventPresentation.Sanitize(text)", source);
+        Assert.Contains("_messages[^1].Role == \"stderr\"", source);
+        Assert.Contains("AddStderrMessage(m.Text)", source);
     }
 }

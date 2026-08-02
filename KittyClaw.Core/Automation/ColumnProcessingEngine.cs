@@ -102,10 +102,14 @@ public sealed class ColumnProcessingEngine : BackgroundService
     {
         try
         {
+            // Activity authors are user-facing. Keep the stable column id in run names,
+            // concurrency groups and logs, but attribute board history to the processor's
+            // configured display name instead of leaking an implementation id such as column-11.
+            var activityAuthor = processor.Name;
             var ticket = await _tickets.GetTicketAsync(slug, execution.TicketId);
             if (ticket is null)
             {
-                await _executions.FailAttemptAsync(slug, execution, processor, "Le ticket n'existe plus.", $"column-{processor.ColumnId}");
+                await _executions.FailAttemptAsync(slug, execution, processor, "Le ticket n'existe plus.", activityAuthor);
                 return;
             }
             await _executions.SetRunIdAsync(slug, execution.Id, execution.Id);
@@ -113,16 +117,16 @@ public sealed class ColumnProcessingEngine : BackgroundService
             if (dispatch.Result is null)
             {
                 await _executions.FailAttemptAsync(slug, execution, processor,
-                    dispatch.Error ?? "Échec inconnu du processeur.", $"column-{processor.ColumnId}");
+                    dispatch.Error ?? "Échec inconnu du processeur.", activityAuthor);
                 return;
             }
-            await _executions.CompleteAsync(slug, execution, processor, dispatch.Result, $"column-{processor.ColumnId}");
+            await _executions.CompleteAsync(slug, execution, processor, dispatch.Result, activityAuthor);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Column processor {ProcessorId} failed for ticket {TicketId}", processor.Id, execution.TicketId);
-            await _executions.FailAttemptAsync(slug, execution, processor, ex.Message, $"column-{processor.ColumnId}");
+            await _executions.FailAttemptAsync(slug, execution, processor, ex.Message, processor.Name);
         }
     }
 

@@ -7,6 +7,7 @@
 @inject TicketService TicketService
 @inject ColumnService ColumnService
 @inject PipelineService PipelineService
+@inject ColumnProcessorService ProcessorService
 @inject MemberService MemberService
 @inject KittyClaw.Web.Services.BoardUpdateNotifier BoardUpdateNotifier
 @inject KittyClaw.Web.Services.BoardSortState SortState
@@ -160,7 +161,14 @@ else
                                  @ondrop="() => OnDrop(slug, col.Name)"
                                  @ondrop:preventDefault="@isSourceLane">
                                 <div class="column-header">
-                                    <span class="status-pill" style="color: @col.Color; background: color-mix(in srgb, @col.Color 12%, transparent)">@col.Name</span>
+                                    <span class="status-pill" style="color: @col.Color; background: color-mix(in srgb, @col.Color 12%, transparent)">
+                                        <span class="column-processor-indicator @(lane.ActiveProcessorColumnIds.Contains(col.Id) ? "column-processor-indicator--active" : "")"
+                                              title="@L[lane.ActiveProcessorColumnIds.Contains(col.Id) ? "ColumnProcessorActive" : "ColumnProcessorInactive"]"
+                                              aria-label="@L[lane.ActiveProcessorColumnIds.Contains(col.Id) ? "ColumnProcessorActive" : "ColumnProcessorInactive"]">
+                                            @(lane.ActiveProcessorColumnIds.Contains(col.Id) ? "⚙" : "○")
+                                        </span>
+                                        <span>@col.Name</span>
+                                    </span>
                                     <span class="count">@colTickets.Count</span>
                                 </div>
                                 <div class="column-body">
@@ -329,6 +337,7 @@ else
         List<Pipeline> Pipelines,
         int? SelectedPipelineId,
         List<BoardColumn> Columns,
+        HashSet<int> ActiveProcessorColumnIds,
         List<TicketSummary> Tickets,
         List<Member> Members);
 
@@ -443,7 +452,8 @@ else
         var pipelinesTask = PipelineService.ListAsync(project.Slug);
         var ticketsTask = TicketService.ListTicketsAsync(project.Slug);
         var membersTask = MemberService.ListMembersAsync(project.Slug);
-        await Task.WhenAll(pipelinesTask, ticketsTask, membersTask);
+        var processorsTask = ProcessorService.ListAsync(project.Slug);
+        await Task.WhenAll(pipelinesTask, ticketsTask, membersTask, processorsTask);
 
         var pipelines = pipelinesTask.Result;
         if (selectedPipelineId is null || pipelines.All(pipeline => pipeline.Id != selectedPipelineId))
@@ -453,7 +463,11 @@ else
         var columns = selectedPipelineId is int pipelineId
             ? await ColumnService.ListColumnsAsync(project.Slug, pipelineId)
             : [];
-        return new LaneData(project, pipelines, selectedPipelineId, columns, ticketsTask.Result, membersTask.Result);
+        var activeProcessorColumnIds = processorsTask.Result
+            .Where(processor => processor.Enabled)
+            .Select(processor => processor.ColumnId)
+            .ToHashSet();
+        return new LaneData(project, pipelines, selectedPipelineId, columns, activeProcessorColumnIds, ticketsTask.Result, membersTask.Result);
     }
 
     private async Task SelectPipelineAsync(LaneData lane, int pipelineId)
