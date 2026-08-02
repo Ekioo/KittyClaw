@@ -13,6 +13,26 @@ namespace KittyClaw.Core.Tests.Automation;
 [Collection("MockClaude")]
 public class SteeringAutoContinueTests
 {
+    [Fact]
+    public void Chat_replay_preserves_expired_session_recovery()
+    {
+        var context = new AgentRunContext
+        {
+            ProjectSlug = "project",
+            WorkspacePath = "workspace",
+            AgentName = "agent",
+            SkillFile = "(inline)",
+            SessionScope = "chat",
+            RetryOnResumeFailure = true,
+        };
+
+        var replay = context.WithChatReplay("late steering message");
+
+        Assert.True(replay.RetryOnResumeFailure);
+        Assert.True(AgentRunner.ShouldRetryExpiredResume(replay, isResume: true, exitCode: 1, assistantEventCount: 0));
+        Assert.False(AgentRunner.ShouldRetryExpiredResume(replay, isResume: true, exitCode: 1, assistantEventCount: 1));
+    }
+
     // ── Test 1 ───────────────────────────────────────────────────────────────
     // AgentRunSnapshot does not currently include a PendingSteerMessages field,
     // so pending messages are silently lost on server restart.

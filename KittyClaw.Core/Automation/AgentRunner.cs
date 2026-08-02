@@ -84,7 +84,10 @@ public sealed class AgentRunContext
         ExtraContext = steerText,
         InlineSkillContent = InlineSkillContent,
         SessionScope = SessionScope,
-        RetryOnResumeFailure = false,
+        // A replay can race the provider's session finalization. Preserve the normal
+        // expired-resume recovery so a late steer starts a fresh turn instead of changing
+        // an otherwise successful run to Failed.
+        RetryOnResumeFailure = RetryOnResumeFailure,
         PersistSession = PersistSession,
         OnEventHook = OnEventHook,
         ChatTarget = ChatTarget,
@@ -314,7 +317,7 @@ public sealed class AgentRunner
                 }
             }
 
-            if (ctx.RetryOnResumeFailure && isResume && (attempt.Exit ?? -1) != 0 && attempt.AssistantEventCount == 0)
+            if (ShouldRetryExpiredResume(ctx, isResume, attempt.Exit, attempt.AssistantEventCount))
             {
                 run.Push(new StreamEvent(DateTime.UtcNow, "reset",
                     "Previous session expired, starting a new one"));
@@ -377,6 +380,21 @@ public sealed class AgentRunner
                 var replayCtx = ctx.WithChatReplay(steerText);
                 attempt = await SpawnAndWaitAsync(replayCtx, run, skillContent, sessionId, isResume: true, ct);
                 if (attempt.Cancelled) return run;
+                if (ShouldRetryExpiredResume(replayCtx, isResume: true, attempt.Exit, attempt.AssistantEventCount))
+                {
+                    run.Push(new StreamEvent(DateTime.UtcNow, "reset",
+                        "Chat session closed before steering was delivered, starting a new turn"));
+                    _sessions.Clear(replayCtx.WorkspacePath, scopedAgent, replayCtx.TicketId);
+                    sessionId = Guid.NewGuid().ToString();
+                    var replayBackend = AgentCliBackend.For(replayCtx.Target.Provider);
+                    run.SessionId = replayBackend.CallerChoosesNewSessionId ? sessionId : null;
+                    if (replayCtx.PersistSession && replayBackend.CallerChoosesNewSessionId)
+                        _sessions.SetSessionId(replayCtx.WorkspacePath, scopedAgent, replayCtx.TicketId, sessionId);
+
+                    attempt = await SpawnAndWaitAsync(replayCtx, run, skillContent, sessionId, isResume: false, ct);
+                    if (attempt.Cancelled) return run;
+                    PersistDiscoveredSession(replayCtx, scopedAgent, run);
+                }
             }
 
             // Final attempt still quota-throttled → surface on the run so restoreStatusOnFail
@@ -449,6 +467,10 @@ public sealed class AgentRunner
             CleanupImageTempFiles(ctx);
         }
     }
+
+    internal static bool ShouldRetryExpiredResume(
+        AgentRunContext context, bool isResume, int? exitCode, int assistantEventCount) =>
+        context.RetryOnResumeFailure && isResume && (exitCode ?? -1) != 0 && assistantEventCount == 0;
 
     private enum FallbackReason
     {
