@@ -5100,6 +5100,13 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .field-help:hover::after,
 .field-help:focus-visible::after { opacity: 1; transform: translate(-50%, 0); }
 .field-help:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.skill-matrix .field-help::after {
+    right: 0;
+    left: auto;
+    transform: translate(0, .2rem);
+}
+.skill-matrix .field-help:hover::after,
+.skill-matrix .field-help:focus-visible::after { transform: translate(0, 0); }
 .route-field { flex: 1 1 220px; min-width: 0; }
 .route-field input, .route-field select { width: 100%; }
 .column-editor-tabs {

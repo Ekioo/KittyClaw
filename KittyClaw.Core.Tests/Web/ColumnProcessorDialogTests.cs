@@ -107,6 +107,10 @@ public sealed class ColumnProcessorDialogTests
         Assert.Contains("_model = processor?.Model", source);
         Assert.Contains("_name, _mission, _model", source);
         Assert.DoesNotContain("_name, _mission, null", source);
+
+        var css = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "wwwroot", "app.css"));
+        Assert.Contains(".skill-matrix .field-help::after", css);
+        Assert.Contains("right: 0;", css);
     }
 
     [Fact]
