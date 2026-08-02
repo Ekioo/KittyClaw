@@ -5044,6 +5044,7 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 }
 .processor-dialog-header,
 .processor-dialog-footer {
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -5055,7 +5056,7 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .processor-dialog-footer { justify-content: flex-end; border-top: 1px solid var(--border); }
 .processor-dialog-header h2 { margin: .15rem 0 0; font-size: 1.15rem; }
 .processor-dialog-eyebrow { color: var(--text-muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; }
-.processor-dialog-body { padding: .25rem 1.25rem 1.25rem; overflow-y: auto; }
+.processor-dialog-body { min-height: 0; padding: .25rem 1.25rem 1.25rem; overflow-y: auto; }
 .processor-dialog-body h3 { margin: 1.25rem 0 .25rem; }
 .field-caption { display: inline-flex; align-items: center; gap: .35rem; min-width: 0; }
 .field-help {
@@ -5129,6 +5130,7 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .scheduled-actions h4 { margin: .25rem 0; font-size: .9rem; }
 .column-empty-state.compact { min-height: 180px; }
 .column-editor-tabs {
+    flex: 0 0 auto;
     display: flex;
     gap: .25rem;
     padding: .65rem 1.25rem 0;
