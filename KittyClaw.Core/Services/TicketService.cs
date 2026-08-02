@@ -243,6 +243,19 @@ public class TicketService
         return ticket;
     }
 
+    /// <summary>Loads only the fields needed by comment automation polling in one query.</summary>
+    public async Task<List<(int TicketId, int CommentId, string Author)>> ListCommentCursorsAsync(
+        string projectSlug)
+    {
+        await using var db = _projectService.GetProjectDb(projectSlug);
+        await EnsureTicketIndexesAsync(db);
+        var rows = await db.Comments
+            .AsNoTracking()
+            .Select(c => new { c.TicketId, CommentId = c.Id, c.Author })
+            .ToListAsync();
+        return rows.Select(c => (c.TicketId, c.CommentId, c.Author)).ToList();
+    }
+
     /// <summary>
     /// Accumulates a completed agent run's token usage onto the ticket. Durable counterpart of
     /// the in-memory run registry (whose runs are purged after 24h) — called by RunCostRecorder.

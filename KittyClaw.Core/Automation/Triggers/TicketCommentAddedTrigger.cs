@@ -47,34 +47,30 @@ public sealed class TicketCommentAddedTrigger : ITrigger
 
         var (lastSeen, hasState) = LoadLastCommentIds(ctx);
         var tickets = await ctx.Tickets.ListTicketsAsync(ctx.ProjectSlug);
+        var ticketsById = tickets.ToDictionary(ticket => ticket.Id);
+        var commentsByTicket = (await ctx.Tickets.ListCommentCursorsAsync(ctx.ProjectSlug))
+            .GroupBy(comment => comment.TicketId);
         var firings = new List<TriggerFiring>();
         var advanced = false;
 
-        foreach (var summary in tickets)
+        foreach (var comments in commentsByTicket)
         {
-            if (summary.CommentCount == 0) continue;
+            if (!ticketsById.TryGetValue(comments.Key, out var ticket)) continue;
 
-            var ticket = await ctx.Tickets.GetTicketAsync(ctx.ProjectSlug, summary.Id);
-            if (ticket is null || ticket.Comments.Count == 0) continue;
+            lastSeen.TryGetValue(ticket.Id, out var prevMaxId);
 
-            lastSeen.TryGetValue(summary.Id, out var prevMaxId);
-
-            if (hasState)
+            if (hasState && comments.Any(comment =>
+                    comment.CommentId > prevMaxId &&
+                    (_spec.Authors.Count == 0 || _spec.Authors.Contains(
+                        comment.Author, StringComparer.OrdinalIgnoreCase))))
             {
-                foreach (var comment in ticket.Comments)
-                {
-                    if (comment.Id <= prevMaxId) continue;
-                    if (_spec.Authors.Count > 0 && !_spec.Authors.Contains(comment.Author, StringComparer.OrdinalIgnoreCase))
-                        continue;
-                    firings.Add(new TriggerFiring(ticket.Id, ticket.Title, ticket.Status));
-                    break; // one firing per ticket per poll
-                }
+                firings.Add(new TriggerFiring(ticket.Id, ticket.Title, ticket.Status));
             }
 
-            var maxId = ticket.Comments.Max(c => c.Id);
+            var maxId = comments.Max(comment => comment.CommentId);
             if (maxId > prevMaxId)
             {
-                lastSeen[summary.Id] = maxId;
+                lastSeen[ticket.Id] = maxId;
                 advanced = true;
             }
         }
