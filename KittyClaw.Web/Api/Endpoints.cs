@@ -29,5 +29,6 @@ public static partial class Endpoints
         MapGrok(api);
         MapCodex(api);
         MapMistral(api);
+        MapApprovals(api);
     }
 }

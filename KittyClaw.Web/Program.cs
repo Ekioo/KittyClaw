@@ -52,6 +52,7 @@ builder.Services.AddSingleton<ColumnScheduledTaskService>();
 builder.Services.AddSingleton<ColumnExecutionService>();
 builder.Services.AddSingleton<MemberService>();
 builder.Services.AddSingleton<ChatService>();
+builder.Services.AddSingleton<ApprovalRegistryService>();
 builder.Services.AddSingleton<DashboardService>();
 builder.Services.AddSingleton<AgentsTemplateService>();
 builder.Services.AddScoped<KittyClaw.Web.Services.BoardFilterState>();

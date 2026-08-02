@@ -111,6 +111,14 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "GET /api/codex-models",
         // Mistral
         "GET /api/mistral-models",
+        // Approval registry
+        "GET /api/projects/{slug}/approvals/requests",
+        "POST /api/projects/{slug}/approvals/requests",
+        "GET /api/projects/{slug}/approvals/decisions",
+        "POST /api/projects/{slug}/approvals/decisions",
+        "GET /api/projects/{slug}/approvals/receipts",
+        "POST /api/projects/{slug}/approvals/receipts",
+        "POST /api/projects/{slug}/approvals/consume-once",
         // Automations
         "GET /api/projects/{slug}/automations",
         "PUT /api/projects/{slug}/automations",
@@ -205,6 +213,13 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         ["POST /api/browse/folder"] = "Browse",
         ["GET /api/projects/{slug}/skills"] = "Automations",
         ["GET /api/projects/{slug}/ollama-models"] = "Ollama",
+        ["GET /api/projects/{slug}/approvals/requests"] = "Approvals",
+        ["POST /api/projects/{slug}/approvals/requests"] = "Approvals",
+        ["GET /api/projects/{slug}/approvals/decisions"] = "Approvals",
+        ["POST /api/projects/{slug}/approvals/decisions"] = "Approvals",
+        ["GET /api/projects/{slug}/approvals/receipts"] = "Approvals",
+        ["POST /api/projects/{slug}/approvals/receipts"] = "Approvals",
+        ["POST /api/projects/{slug}/approvals/consume-once"] = "Approvals",
         ["GET /api/grok-models"] = "Grok",
         ["GET /api/codex-models"] = "Codex",
         ["GET /api/mistral-models"] = "Mistral",
