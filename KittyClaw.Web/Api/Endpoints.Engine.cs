@@ -26,7 +26,7 @@ public static partial class Endpoints
                     enabled = h?.EnabledCount ?? 0,
                     scheduledRegistered = h?.ScheduledCount ?? 0,
                     nextRunAt = h?.NextRunAt,
-                    overdue = h?.OverdueCount ?? 0,
+                    overdue = h?.EffectiveOverdueCount(p.IsPaused) ?? 0,
                     lastFiredAt = h?.LastFiredAt,
                     lastFiredAutomationId = h?.LastFiredAutomationId,
                 };

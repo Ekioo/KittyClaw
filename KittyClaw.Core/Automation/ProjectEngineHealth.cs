@@ -15,4 +15,9 @@ public sealed record ProjectEngineHealth(
     DateTime? NextRunAt,
     int OverdueCount,
     DateTime? LastFiredAt,
-    string? LastFiredAutomationId);
+    string? LastFiredAutomationId)
+{
+    /// <summary>A paused project intentionally does not serve schedules, so its persisted due
+    /// times are informative but must not be reported as scheduler outages.</summary>
+    public int EffectiveOverdueCount(bool isPaused) => isPaused ? 0 : OverdueCount;
+}
