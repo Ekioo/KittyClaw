@@ -154,6 +154,25 @@ public sealed class ColumnProcessorService(
         var index = Path.Combine(memoryDir, "MEMORY.md");
         if (!File.Exists(index))
             File.WriteAllText(index, $"# {processor.Name} memory\n\nPersistent lessons for column #{processor.ColumnId}.\n");
+        await MigrateLegacyMemoryAsync(projects.ResolveWorkspacePath(project), processor.ColumnId, index);
         return index;
+    }
+
+    private static async Task MigrateLegacyMemoryAsync(string workspace, int columnId, string canonicalPath)
+    {
+        // Early column-processor builds did not expose the canonical memory path in the
+        // runtime prompt. Some agents consequently inferred .agents/column-{id}/memory.md.
+        // Preserve useful lessons from those files without deleting or repeatedly copying them.
+        var legacyPath = Path.Combine(workspace, ".agents", $"column-{columnId}", "memory.md");
+        if (!File.Exists(legacyPath)) return;
+        var canonical = await File.ReadAllTextAsync(canonicalPath);
+        var lessons = (await File.ReadAllLinesAsync(legacyPath))
+            .Select(line => line.TrimEnd())
+            .Where(line => line.StartsWith("- ", StringComparison.Ordinal))
+            .Where(line => !canonical.Contains(line, StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (lessons.Count == 0) return;
+        await File.AppendAllTextAsync(canonicalPath, "\n" + string.Join("\n", lessons) + "\n");
     }
 }

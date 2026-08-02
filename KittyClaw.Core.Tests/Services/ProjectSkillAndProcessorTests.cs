@@ -110,5 +110,27 @@ public sealed class ProjectSkillAndProcessorTests : IDisposable
         Assert.Contains("missing", error.Message);
     }
 
+    [Fact]
+    public async Task Processor_memory_preserves_lessons_from_legacy_inferred_path()
+    {
+        var project = await _projects.CreateProjectAsync("Legacy processor memory");
+        var column = (await _columns.ListColumnsAsync(project.Slug)).First();
+        await _processors.SaveAsync(project.Slug, column.Id, "Worker", "Do work.", null,
+            true, 20, [], [], []);
+        var workspace = _projects.ResolveWorkspacePath(project);
+        var legacyDirectory = Path.Combine(workspace, ".agents", $"column-{column.Id}");
+        Directory.CreateDirectory(legacyDirectory);
+        await File.WriteAllTextAsync(Path.Combine(legacyDirectory, "memory.md"),
+            $"# Legacy memory\n\n- Preserve this lesson.\n");
+
+        var canonicalPath = await _processors.GetMemoryIndexPathAsync(project.Slug, column.Id);
+        var canonical = await File.ReadAllTextAsync(canonicalPath!);
+        await _processors.GetMemoryIndexPathAsync(project.Slug, column.Id);
+        var secondRead = await File.ReadAllTextAsync(canonicalPath!);
+
+        Assert.Contains("- Preserve this lesson.", canonical);
+        Assert.Equal(1, secondRead.Split("- Preserve this lesson.").Length - 1);
+    }
+
     public void Dispose() => _temp.Dispose();
 }

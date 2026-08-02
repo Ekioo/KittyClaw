@@ -284,6 +284,9 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         foreach (var execution in interrupted)
         {
             execution.Status = ColumnExecutionStatus.Retrying;
+            // ClaimNext increments attempts for a retry. Compensate here so a host
+            // restart resumes the interrupted attempt instead of consuming a new one.
+            execution.Attempt = Math.Max(0, execution.Attempt - 1);
             execution.AvailableAt = DateTime.UtcNow;
             execution.Error = "Exécution interrompue par un arrêt du moteur.";
         }

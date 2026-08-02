@@ -146,6 +146,27 @@ public sealed class ColumnExecutionServiceTests : IDisposable
         Assert.Equal(parent.Id, execution.TicketId);
     }
 
+    [Fact]
+    public async Task Recovering_interrupted_execution_does_not_consume_an_attempt()
+    {
+        var project = await _projects.CreateProjectAsync("Restart recovery");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: pipeline.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Done", pipelineId: pipeline.Id, role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, target.Id);
+        await _tickets.CreateTicketAsync(project.Slug, "Interrupted", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var first = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+
+        await _executions.RecoverInterruptedAsync(project.Slug);
+        var resumed = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+
+        Assert.NotNull(first);
+        Assert.NotNull(resumed);
+        Assert.Equal(first.Id, resumed.Id);
+        Assert.Equal(1, resumed.Attempt);
+    }
+
     private Task<ColumnProcessor> SaveProcessor(
         string slug, int sourceId, int defaultTargetId,
         TicketSelectionOrder selectionOrder = TicketSelectionOrder.Position,
