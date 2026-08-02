@@ -14,7 +14,7 @@
   <a href="https://kittyclaw.dev">kittyclaw.dev</a> · <a href="https://kittyclaw.dev/#waitlist">Get early access</a>
 </p>
 
-A kanban board that **orchestrates agentic projects**. New boards start with the workflow stages `Backlog`, `Todo`, `InProgress`, `Blocked`, `Scheduled`, `Review`, and `Done` (columns remain customizable). Each project has members that can be human owners or **LLM agents** (programmer, groomer, producer, qa-tester, committer, code-janitor, evaluator, documentalist). A background `AutomationEngine` dispatches these agents based on triggers (column changes, comments, intervals, git commits, …), running them through Claude Code, OpenAI Codex, Grok Build, or a local Ollama model while their output streams into an in-app drawer.
+A kanban board that **orchestrates agentic projects**. A project can be split into independently named pipelines whose stable identities survive renames. Columns can own generic processors with persistent memory, reusable project skills, ordered ticket selection, durable retries, and switch-like routing to columns in any pipeline. Execution state is separate from business columns, so an `InProgress` column is optional. The legacy `AutomationEngine` remains available for trigger-based rules, cron/interval work, and backward compatibility. Agents run through Claude Code, OpenAI Codex, Grok Build, or a local Ollama model while their output streams into the app.
 
 ## Tech Stack
 
@@ -83,7 +83,7 @@ Per-project agent state lives **in the workspace**: `<workspace>/.agents/{agent}
 
 ## Architecture
 
-Per-feature architecture documentation lives under [`doc/`](doc/index.md). Start at `doc/index.md` for an indexed map of the automation engine, agent dispatch, project template, REST API, storage, and Kanban UI.
+Per-feature architecture documentation lives under [`doc/`](doc/index.md). Start with [pipeline and column processing](doc/column-workflows.md) for the multi-pipeline model, or `doc/index.md` for the complete architecture map.
 
 ## API
 

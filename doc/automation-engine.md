@@ -3,6 +3,8 @@
 ## Purpose
 Background service that watches each project for events and dispatches agents in response. Drives the agentic workflow: when a ticket moves, a comment is posted, a commit lands, an interval elapses, etc., the engine evaluates configured automations and runs the matching actions.
 
+This is the legacy, backward-compatible automation system. New business-state workflows can use the separate [pipeline and column processing](./column-workflows.md) engine. Cron and interval triggers remain supported here.
+
 ## Key components
 - `KittyClaw.Core/Automation/AutomationEngine.cs` — top-level wiring only; delegates to `TriggerHandler` and `RunStateManager`.
 - `KittyClaw.Core/Automation/TriggerHandler.cs` — owns the tick loop (urgent drain + per-project poll).

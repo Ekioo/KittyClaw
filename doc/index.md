@@ -11,6 +11,7 @@ For a high-level overview see the root [README.md](../README.md). For repo layou
 - [Onboarding](./onboarding.md) — step-by-step first project guide, from workspace initialization to an agent-assisted ticket.
 - [OpenAI Codex CLI](./codex-cli.md) — dispatching explicitly qualified `codex:*` models to the `codex` CLI.
 - [Automation engine](./automation-engine.md) — triggers, conditions, and actions that dispatch agents.
+- [Pipeline and column processing](./column-workflows.md) — stable multi-pipeline workflows, generic column agents, routing, retries, project skills, and child-ticket completion.
 - [Agent dispatch](./agent-dispatch.md) — running the `claude` CLI as a subprocess and streaming its output.
 - [Project template](./project-template.md) — embedded `ProjectTemplate/` files copied into each workspace on Initialize.
 - [REST API](./rest-api.md) — OpenAPI-driven endpoints under `/api`, with auto-generated Markdown docs.

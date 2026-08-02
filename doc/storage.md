@@ -15,6 +15,8 @@ Under `%APPDATA%/KittyClaw/`:
 Inside each workspace:
 - `<workspace>/.agents/{agent}/memory/` — per-agent memory: `MEMORY.md` is a scored index (always injected) and each topic file holds the lessons (read on demand). Legacy flat `memory.md` is still supported until an agent's consolidation pass migrates it.
 - `<workspace>/.agents/{agent}/SKILL.md` — per-agent skill (seeded from the [project template](./project-template.md)).
+- `<workspace>/.agents/skills/{skill}/SKILL.md` — reusable project skill with a stable slug and separate display metadata.
+- `<workspace>/.agents/processors/column-{id}/memory/MEMORY.md` — persistent memory for the generic processor attached to a stable column identity.
 - `<workspace>/.agents/channel/` — session state.
 - `<workspace>/.agents/automations.json` — per-project automation config.
 - `<workspace>/CLAUDE.md` — workspace guide for Claude.
