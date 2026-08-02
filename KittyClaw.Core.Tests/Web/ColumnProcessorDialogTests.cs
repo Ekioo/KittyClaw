@@ -38,11 +38,15 @@ public sealed class ColumnProcessorDialogTests
 
         Assert.Contains("ColumnGeneralTab", dialog);
         Assert.Contains("ColumnProcessorTab", dialog);
+        Assert.Contains("ColumnActionsTab", dialog);
         Assert.Contains("ColumnRoutingTab", dialog);
         Assert.Contains("_columnColor", dialog);
         Assert.Contains("_columnRole", dialog);
         Assert.Contains("_positionIndex", dialog);
         Assert.Contains("DeleteColumnAsync", dialog);
+        Assert.Contains("processor?.BeforeActions", dialog);
+        Assert.Contains("processor?.AfterActions", dialog);
+        Assert.Contains("ProcessorMode=\"true\"", dialog);
         Assert.Contains("column-insert-slot", board);
         Assert.Contains("AddColumnFromBoard", board);
         Assert.Contains("InsertColumnBeforeFromMenu", board);
@@ -91,6 +95,28 @@ public sealed class ColumnProcessorDialogTests
         var path = Path.Combine(RepoRoot(), "KittyClaw.Core", "Localization", $"Board.{language}.json");
         using var document = JsonDocument.Parse(File.ReadAllText(path));
 
+        foreach (var key in keys)
+            Assert.False(string.IsNullOrWhiteSpace(document.RootElement.GetProperty(key).GetString()), key);
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("fr")]
+    [InlineData("de")]
+    [InlineData("es")]
+    [InlineData("it")]
+    public void Processor_action_editor_help_is_localized(string language)
+    {
+        string[] keys =
+        [
+            "ActionTypeHelp", "LabelsToAddHelp", "LabelsToRemoveHelp", "CommentContentHelp",
+            "CommentAuthorHelp", "CtTitleHelp", "CtDescriptionHelp", "CtStatusHelp",
+            "CtPriorityHelp", "CtLabelsHelp", "CtCreatedByHelp", "PsScriptHelp",
+            "PsScriptFileHelp", "PsArgumentsHelp", "PsTimeoutHelp", "HttpMethodHelp",
+            "HttpUrlHelp", "HttpBodyHelp", "HttpContentTypeHelp", "HttpTimeoutHelp",
+        ];
+        var path = Path.Combine(RepoRoot(), "KittyClaw.Core", "Localization", $"ActionEditor.{language}.json");
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
         foreach (var key in keys)
             Assert.False(string.IsNullOrWhiteSpace(document.RootElement.GetProperty(key).GetString()), key);
     }

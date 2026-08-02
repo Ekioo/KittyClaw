@@ -1,6 +1,7 @@
 using KittyClaw.Core.Services;
 using KittyClaw.Core.Tests.Helpers;
 using KittyClaw.Core.Models;
+using KittyClaw.Core.Automation;
 using System.Text.Json.Nodes;
 
 namespace KittyClaw.Core.Tests.Services;
@@ -125,6 +126,57 @@ public sealed class ProjectSkillAndProcessorTests : IDisposable
         Assert.NotNull(synchronized);
         Assert.Equal("Edited on disk", synchronized.Name);
         Assert.Equal("Prompt edited outside KittyClaw.", synchronized.Prompt);
+    }
+
+    [Fact]
+    public async Task Processor_actions_round_trip_through_versioned_file_and_runtime_projection()
+    {
+        var project = await _projects.CreateProjectAsync("Processor actions");
+        var columns = await _columns.ListColumnsAsync(project.Slug);
+        var source = columns[0];
+        var failure = columns[1];
+        var before = new ColumnProcessorAction(
+            "prepare",
+            new ExecutePowerShellActionSpec { Script = "Write-Output ready" },
+            failure.Id);
+        var after = new ColumnProcessorAction(
+            "notify",
+            new HttpRequestActionSpec { Url = "https://example.com/hook", Method = "POST" },
+            failure.Id);
+
+        await _processors.SaveAsync(project.Slug, source.Id, "Worker", "Do work.", null,
+            true, 20, [], [], [], technicalFailureColumnId: failure.Id,
+            beforeActions: [before], afterActions: [after]);
+
+        var path = await _processors.GetDefinitionPathAsync(project.Slug, source.Id);
+        var json = JsonNode.Parse(await File.ReadAllTextAsync(path))!.AsObject();
+        Assert.Equal(2, json["version"]!.GetValue<int>());
+        Assert.Equal("executePowerShell", json["beforeActions"]![0]!["action"]!["type"]!.GetValue<string>());
+        Assert.Equal($"column-{failure.Id}", json["beforeActions"]![0]!["onFailure"]!.GetValue<string>());
+        Assert.Equal("httpRequest", json["afterActions"]![0]!["action"]!["type"]!.GetValue<string>());
+
+        var reloaded = await _processors.GetAsync(project.Slug, source.Id);
+        Assert.NotNull(reloaded);
+        Assert.IsType<ExecutePowerShellActionSpec>(Assert.Single(reloaded.BeforeActions).Action);
+        Assert.IsType<HttpRequestActionSpec>(Assert.Single(reloaded.AfterActions).Action);
+        Assert.Equal(failure.Id, reloaded.AfterActions[0].FailureTargetColumnId);
+    }
+
+    [Fact]
+    public async Task Processor_rejects_hidden_agents_and_self_routes_inside_actions()
+    {
+        var project = await _projects.CreateProjectAsync("Invalid processor actions");
+        var source = (await _columns.ListColumnsAsync(project.Slug))[0];
+
+        var hiddenAgent = await Assert.ThrowsAsync<InvalidOperationException>(() => _processors.SaveAsync(
+            project.Slug, source.Id, "Worker", "Do work.", null, true, 20, [], [], [],
+            beforeActions: [new("another-agent", new RunAgentActionSpec { Agent = "other" })]));
+        Assert.Contains("Type d’action non pris en charge", hiddenAgent.Message);
+
+        var selfRoute = await Assert.ThrowsAsync<InvalidOperationException>(() => _processors.SaveAsync(
+            project.Slug, source.Id, "Worker", "Do work.", null, true, 20, [], [], [],
+            beforeActions: [new("script", new ExecutePowerShellActionSpec { Script = "exit 1" }, source.Id)]));
+        Assert.Contains("propre colonne", selfRoute.Message);
     }
 
     [Fact]

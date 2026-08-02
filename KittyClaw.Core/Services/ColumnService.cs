@@ -8,11 +8,14 @@ public class ColumnService
 {
     private readonly ProjectService _projectService;
     private readonly ColumnProcessorService? _processorService;
+    private readonly ColumnScheduledTaskService? _scheduledTaskService;
 
-    public ColumnService(ProjectService projectService, ColumnProcessorService? processorService = null)
+    public ColumnService(ProjectService projectService, ColumnProcessorService? processorService = null,
+        ColumnScheduledTaskService? scheduledTaskService = null)
     {
         _projectService = projectService;
         _processorService = processorService;
+        _scheduledTaskService = scheduledTaskService;
     }
 
     private static readonly (string Name, string Color, ColumnRole Role)[] DefaultColumns =
@@ -202,6 +205,8 @@ public class ColumnService
         // later synchronization cannot restore routes to the deleted column.
         if (_processorService is not null)
             await _processorService.PrepareColumnDeletionAsync(projectSlug, columnId);
+        if (_scheduledTaskService is not null)
+            await _scheduledTaskService.PrepareColumnDeletionAsync(projectSlug, columnId);
 
         // Move tickets and repair every processor reference atomically with the column removal.
         // Without this cleanup, deleting a routed column leaves invisible destinations that only

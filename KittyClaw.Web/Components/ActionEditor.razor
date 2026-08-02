@@ -5,15 +5,24 @@
 @inject NavigationManager Nav
 
 <div class="node-editor">
-    <label>@L["ActionType"]
+    <label><FieldHelp Label="@L["ActionType"]" Help="@L["ActionTypeHelp"]" />
         <select value="@CurrentType" @onchange="OnTypeChanged">
-            <option value="runAgent">@L["ActionRunAgent"]</option>
-            <option value="moveTicketStatus">@L["ActionMoveTicket"]</option>
+            @if (!ProcessorMode)
+            {
+                <option value="runAgent">@L["ActionRunAgent"]</option>
+                <option value="moveTicketStatus">@L["ActionMoveTicket"]</option>
+            }
             <option value="setLabels">@L["ActionSetLabels"]</option>
-            <option value="assignTicket">@L["ActionAssignTicket"]</option>
+            @if (!ProcessorMode)
+            {
+                <option value="assignTicket">@L["ActionAssignTicket"]</option>
+            }
             <option value="addComment">@L["ActionAddComment"]</option>
-            <option value="commitAgentMemory">@L["ActionCommitAgentMemory"]</option>
-            <option value="consolidateAgentMemory">@L["ActionConsolidateAgentMemory"]</option>
+            @if (!ProcessorMode)
+            {
+                <option value="commitAgentMemory">@L["ActionCommitAgentMemory"]</option>
+                <option value="consolidateAgentMemory">@L["ActionConsolidateAgentMemory"]</option>
+            }
             <option value="executePowerShell">@L["ActionExecutePowerShell"]</option>
             <option value="createTicket">@L["ActionCreateTicket"]</option>
             <option value="httpRequest">@L["ActionHttpRequest"]</option>
@@ -94,11 +103,11 @@
             </label>
             break;
         case SetLabelsActionSpec s:
-            <label>@L["LabelsToAdd"]
+            <label><FieldHelp Label="@L["LabelsToAdd"]" Help="@L["LabelsToAddHelp"]" />
                 <input placeholder="@L["LabelsCsvPlaceholder"]" value="@JoinGroups(s.Add)"
                        @onchange="e => s.Add = SplitGroups((string?)e.Value)" />
             </label>
-            <label>@L["LabelsToRemove"]
+            <label><FieldHelp Label="@L["LabelsToRemove"]" Help="@L["LabelsToRemoveHelp"]" />
                 <input placeholder="@L["LabelsCsvPlaceholder"]" value="@JoinGroups(s.Remove)"
                        @onchange="e => s.Remove = SplitGroups((string?)e.Value)" />
             </label>
@@ -113,13 +122,20 @@
             </label>
             break;
         case AddCommentActionSpec s:
-            <label>@L["CommentContent"]
+            <label><FieldHelp Label="@L["CommentContent"]" Help="@L["CommentContentHelp"]" />
                 <textarea @bind="s.Content" placeholder="@L["CommentContentPlaceholder"]"></textarea>
             </label>
-            <label>@L["CommentAuthor"]
-                <select @bind="s.Author">
-                    @foreach (var m in Members) { <option value="@m">@m</option> }
-                </select>
+            <label><FieldHelp Label="@L["CommentAuthor"]" Help="@L["CommentAuthorHelp"]" />
+                @if (ProcessorMode)
+                {
+                    <input @bind="s.Author" placeholder="processor" />
+                }
+                else
+                {
+                    <select @bind="s.Author">
+                        @foreach (var m in Members) { <option value="@m">@m</option> }
+                    </select>
+                }
             </label>
             break;
         case CommitAgentMemoryActionSpec s:
@@ -151,24 +167,27 @@
             </label>
             break;
         case CreateTicketActionSpec s:
-            <label>@L["CtTitle"]
+            <label><FieldHelp Label="@L["CtTitle"]" Help="@L["CtTitleHelp"]" />
                 <input placeholder="@L["CtTitlePlaceholder"]" @bind="s.Title" />
             </label>
-            <label>@L["CtDescription"]
+            <label><FieldHelp Label="@L["CtDescription"]" Help="@L["CtDescriptionHelp"]" />
                 <textarea placeholder="@L["CtDescriptionPlaceholder"]" @bind="s.Description" rows="3"></textarea>
             </label>
-            <label>@L["CtStatus"]
+            <label><FieldHelp Label="@L["CtStatus"]" Help="@L["CtStatusHelp"]" />
                 <select @bind="s.Status">
                     @foreach (var c in Columns) { <option value="@c">@c</option> }
                 </select>
             </label>
-            <label>@L["AssignTo"]
-                <select value="@(s.AssignedTo ?? "")" @onchange="e => s.AssignedTo = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
-                    <option value="">— @L["Nobody"] —</option>
-                    @foreach (var m in Members) { <option value="@m">@m</option> }
-                </select>
-            </label>
-            <label>@L["CtPriority"]
+            @if (!ProcessorMode)
+            {
+                <label>@L["AssignTo"]
+                    <select value="@(s.AssignedTo ?? "")" @onchange="e => s.AssignedTo = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
+                        <option value="">— @L["Nobody"] —</option>
+                        @foreach (var m in Members) { <option value="@m">@m</option> }
+                    </select>
+                </label>
+            }
+            <label><FieldHelp Label="@L["CtPriority"]" Help="@L["CtPriorityHelp"]" />
                 <select @bind="s.Priority">
                     <option value="Idea">Idea</option>
                     <option value="NiceToHave">NiceToHave</option>
@@ -176,11 +195,11 @@
                     <option value="Critical">Critical</option>
                 </select>
             </label>
-            <label>@L["CtLabels"]
+            <label><FieldHelp Label="@L["CtLabels"]" Help="@L["CtLabelsHelp"]" />
                 <input placeholder="@L["LabelsCsvPlaceholder"]" value="@JoinGroups(s.Labels)"
                        @onchange="e => s.Labels = SplitGroups((string?)e.Value)" />
             </label>
-            <label>@L["CtCreatedBy"]
+            <label><FieldHelp Label="@L["CtCreatedBy"]" Help="@L["CtCreatedByHelp"]" />
                 <input placeholder="automation" @bind="s.CreatedBy" />
             </label>
             <label class="checkbox-label">
@@ -189,31 +208,34 @@
             </label>
             break;
         case ExecutePowerShellActionSpec s:
-            <label>@L["PsScript"]
+            <label><FieldHelp Label="@L["PsScript"]" Help="@L["PsScriptHelp"]" />
                 <textarea @bind="s.Script" placeholder="@L["PsScriptPlaceholder"]" rows="5"></textarea>
             </label>
-            <label>@L["PsScriptFile"]
+            <label><FieldHelp Label="@L["PsScriptFile"]" Help="@L["PsScriptFileHelp"]" />
                 <input placeholder="@L["PsScriptFilePlaceholder"]" value="@(s.ScriptFile ?? "")"
                        @onchange="e => s.ScriptFile = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!" />
             </label>
-            <label>@L["PsArguments"]
+            <label><FieldHelp Label="@L["PsArguments"]" Help="@L["PsArgumentsHelp"]" />
                 <input placeholder="@L["PsArgumentsPlaceholder"]" value="@JoinGroups(s.Arguments)"
                        @onchange="e => s.Arguments = SplitGroups((string?)e.Value)" />
             </label>
-            <label>@L["PsTimeout"]
+            <label><FieldHelp Label="@L["PsTimeout"]" Help="@L["PsTimeoutHelp"]" />
                 <input type="number" @bind="s.TimeoutSeconds" />
             </label>
-            <label class="checkbox-label">
-                <input type="checkbox" @bind="s.AbortOnFailure" />
-                @L["PsAbortOnFailure"]
-            </label>
-            <label class="checkbox-label" title="@L["PsCoalesceOverlappingHint"]">
-                <input type="checkbox" @bind="s.CoalesceOverlapping" />
-                @L["PsCoalesceOverlapping"]
-            </label>
+            @if (!ProcessorMode)
+            {
+                <label class="checkbox-label">
+                    <input type="checkbox" @bind="s.AbortOnFailure" />
+                    @L["PsAbortOnFailure"]
+                </label>
+                <label class="checkbox-label" title="@L["PsCoalesceOverlappingHint"]">
+                    <input type="checkbox" @bind="s.CoalesceOverlapping" />
+                    @L["PsCoalesceOverlapping"]
+                </label>
+            }
             break;
         case HttpRequestActionSpec s:
-            <label>@L["HttpMethod"]
+            <label><FieldHelp Label="@L["HttpMethod"]" Help="@L["HttpMethodHelp"]" />
                 <select @bind="s.Method">
                     <option value="GET">GET</option>
                     <option value="POST">POST</option>
@@ -222,22 +244,25 @@
                     <option value="DELETE">DELETE</option>
                 </select>
             </label>
-            <label>@L["HttpUrl"]
+            <label><FieldHelp Label="@L["HttpUrl"]" Help="@L["HttpUrlHelp"]" />
                 <input placeholder="@L["HttpUrlPlaceholder"]" @bind="s.Url" />
             </label>
-            <label>@L["HttpBody"]
+            <label><FieldHelp Label="@L["HttpBody"]" Help="@L["HttpBodyHelp"]" />
                 <textarea @bind="s.Body" placeholder="@L["HttpBodyPlaceholder"]" rows="4"></textarea>
             </label>
-            <label>@L["HttpContentType"]
+            <label><FieldHelp Label="@L["HttpContentType"]" Help="@L["HttpContentTypeHelp"]" />
                 <input @bind="s.ContentType" />
             </label>
-            <label>@L["HttpTimeout"]
+            <label><FieldHelp Label="@L["HttpTimeout"]" Help="@L["HttpTimeoutHelp"]" />
                 <input type="number" @bind="s.TimeoutSeconds" />
             </label>
-            <label class="checkbox-label">
-                <input type="checkbox" @bind="s.AbortOnFailure" />
-                @L["PsAbortOnFailure"]
-            </label>
+            @if (!ProcessorMode)
+            {
+                <label class="checkbox-label">
+                    <input type="checkbox" @bind="s.AbortOnFailure" />
+                    @L["PsAbortOnFailure"]
+                </label>
+            }
             <label class="checkbox-label" title="@L["HttpAllowLocalTargetsHint"]">
                 <input type="checkbox" @bind="s.AllowLocalTargets" />
                 @L["HttpAllowLocalTargets"]
@@ -256,6 +281,7 @@
     [Parameter] public List<string> Columns { get; set; } = new();
     [Parameter] public List<string> Members { get; set; } = new();
     [Parameter] public string Slug { get; set; } = "";
+    [Parameter] public bool ProcessorMode { get; set; }
     [Parameter] public EventCallback<ActionSpec> OnReplace { get; set; }
     [Parameter] public EventCallback OnDelete { get; set; }
 

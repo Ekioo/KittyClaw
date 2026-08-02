@@ -1,8 +1,10 @@
 @using Microsoft.AspNetCore.Components
+@using KittyClaw.Core.Automation
 @using KittyClaw.Core.Models
 @using KittyClaw.Core.Services
 @using KittyClaw.Web.Services
 @inject ColumnProcessorService ProcessorService
+@inject ColumnScheduledTaskService ScheduledTaskService
 @inject ProjectSkillService SkillService
 @inject PipelineService PipelineService
 @inject ColumnService ColumnService
@@ -32,6 +34,8 @@
                 <button class="@ProcessorTabClass" @onclick="OpenProcessorTab">
                     @L["ColumnProcessorTab"] <span class="column-editor-tab-state">@(_processorDraft ? "⚙" : "○")</span>
                 </button>
+                <button class="@ActionsTabClass" @onclick="OpenActionsTab">@L["ColumnActionsTab"]</button>
+                <button class="@SchedulesTabClass" @onclick="OpenSchedulesTab">@L["ColumnSchedulesTab"]</button>
                 <button class="@RoutingTabClass" @onclick="OpenRoutingTab">@L["ColumnRoutingTab"]</button>
             </nav>
 
@@ -153,6 +157,65 @@
                         }
                     }
                 }
+                else if (_activeTab == "actions")
+                {
+                    @if (!_processorDraft)
+                    {
+                        <div class="column-empty-state">
+                            <span class="column-empty-state-icon">○</span>
+                            <h3>@L["ColumnActionsNeedsProcessor"]</h3>
+                            <button class="settings-primary" @onclick="CreateProcessorAndOpenTab">@L["ColumnAddProcessor"]</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="settings-hint">@L["ColumnActionsHint"]</p>
+                        @ActionSection(_beforeActions, true)
+                        <div class="processor-agent-step" role="note">
+                            <span class="processor-agent-step-icon">◆</span>
+                            <div>
+                                <strong>@L["ColumnAgentStep"]</strong>
+                                <span>@L["ColumnAgentStepHint"]</span>
+                            </div>
+                        </div>
+                        @ActionSection(_afterActions, false)
+                    }
+                }
+                else if (_activeTab == "schedules")
+                {
+                    <div class="processor-actions-heading scheduled-task-heading">
+                        <div>
+                            <h3>@L["ColumnSchedulesTitle"]</h3>
+                            <p class="settings-hint">@L["ColumnSchedulesHint"]</p>
+                        </div>
+                        <button class="processor-secondary-btn" @onclick="AddScheduledTask">@L["ColumnAddSchedule"]</button>
+                    </div>
+                    @if (_scheduledTasks.Count == 0)
+                    {
+                        <div class="column-empty-state compact"><span class="column-empty-state-icon">◷</span><p>@L["ColumnNoSchedules"]</p></div>
+                    }
+                    @foreach (var task in _scheduledTasks)
+                    {
+                        <article class="scheduled-task-card" @key="task.Id">
+                            <header>
+                                <label class="workflow-check"><input type="checkbox" @bind="task.Enabled" /> @L["Enabled"]</label>
+                                <button class="processor-secondary-btn" @onclick="() => _scheduledTasks.Remove(task)">@L["ProcessorRemove"]</button>
+                            </header>
+                            <div class="workflow-grid scheduled-task-fields">
+                                <label><FieldHelp Label="@L["Name"]" Help="@L["ScheduleNameHelp"]" /><input @bind="task.Name" /></label>
+                                <label><FieldHelp Label="@L["ScheduleCron"]" Help="@L["ScheduleCronHelp"]" /><input @bind="task.Cron" placeholder="0 9 * * 1" /></label>
+                                <label><FieldHelp Label="@L["ScheduleTimezone"]" Help="@L["ScheduleTimezoneHelp"]" /><input @bind="task.TimeZoneId" /></label>
+                                <label><FieldHelp Label="@L["ScheduleTicketScope"]" Help="@L["ScheduleTicketScopeHelp"]" />
+                                    <select @bind="task.TicketScope">
+                                        <option value="@ScheduledTaskTicketScope.None">@L["ScheduleNoTicket"]</option>
+                                        <option value="@ScheduledTaskTicketScope.FirstTicket">@L["ScheduleFirstTicket"]</option>
+                                    </select>
+                                </label>
+                            </div>
+                            @ScheduledActionSection(task)
+                        </article>
+                    }
+                }
                 else
                 {
                     @if (!_processorDraft)
@@ -234,6 +297,9 @@
     private HashSet<string> _recommendedSkills = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<string> _requiredSkills = new(StringComparer.OrdinalIgnoreCase);
     private List<RouteDraft> _routes = [];
+    private List<ColumnActionDraft> _beforeActions = [];
+    private List<ColumnActionDraft> _afterActions = [];
+    private List<ColumnScheduledTask> _scheduledTasks = [];
     private bool _confirmDelete;
     private int _deleteTargetId;
     private string? _message;
@@ -266,6 +332,8 @@
             ApplyProcessor(processor, source?.Name);
             if (TemplateColumn is not null && processor is not null)
                 _name = L.Get("ColumnCopyName", processor.Name);
+            if (Column is not null)
+                _scheduledTasks = await ScheduledTaskService.ListAsync(Slug, Column.Id);
         }
         catch (Exception ex)
         {
@@ -295,6 +363,8 @@
         _recommendedSkills = new(processor?.RecommendedSkills ?? [], StringComparer.OrdinalIgnoreCase);
         _requiredSkills = new(processor?.RequiredSkills ?? [], StringComparer.OrdinalIgnoreCase);
         _routes = processor?.Routes.Select(route => new RouteDraft { Outcome = route.Outcome, TargetColumnId = route.TargetColumnId }).ToList() ?? [];
+        _beforeActions = processor?.BeforeActions.Select(ColumnActionDraft.FromModel).ToList() ?? [];
+        _afterActions = processor?.AfterActions.Select(ColumnActionDraft.FromModel).ToList() ?? [];
     }
 
     protected override Task OnAfterRenderAsync(bool firstRender)
@@ -337,8 +407,12 @@
                 await ProcessorService.SaveAsync(Slug, savedColumn.Id, _name, _mission, _model,
                     _enabled, _maxTurns, _availableSkills.ToList(), _recommendedSkills.ToList(), _requiredSkills.ToList(),
                     _selectionOrder, _maxAttempts, _retryBackoff, _defaultTargetId, _technicalFailureTargetId, routes,
-                    prompt: _prompt);
+                    prompt: _prompt,
+                    beforeActions: _beforeActions.Select(action => action.ToModel()).ToList(),
+                    afterActions: _afterActions.Select(action => action.ToModel()).ToList());
             }
+
+            await ScheduledTaskService.SaveColumnAsync(Slug, savedColumn.Id, _scheduledTasks);
 
             await OnSaved.InvokeAsync();
             await CloseAsync();
@@ -396,9 +470,13 @@
     private string TabClass(string tab) => $"column-editor-tab {(_activeTab == tab ? "column-editor-tab--active" : "")}";
     private string GeneralTabClass => TabClass("general");
     private string ProcessorTabClass => TabClass("processor");
+    private string ActionsTabClass => TabClass("actions");
+    private string SchedulesTabClass => TabClass("schedules");
     private string RoutingTabClass => TabClass("routing");
     private void OpenGeneralTab() => _activeTab = "general";
     private void OpenProcessorTab() => _activeTab = "processor";
+    private void OpenActionsTab() => _activeTab = "actions";
+    private void OpenSchedulesTab() => _activeTab = "schedules";
     private void OpenRoutingTab() => _activeTab = "routing";
 
     private string PositionLabel(int index)
@@ -418,6 +496,112 @@
     {
         var targets = TargetColumns;
         _routes.Add(new RouteDraft { TargetColumnId = targets.Count > 0 ? targets[0].Column.Id : 0 });
+    }
+
+    private RenderFragment ActionSection(List<ColumnActionDraft> actions, bool beforeAgent) => @<section class="processor-actions-section">
+        <div class="processor-actions-heading">
+            <div>
+                <h3>@L[beforeAgent ? "ColumnActionsBefore" : "ColumnActionsAfter"]</h3>
+                <p class="settings-hint">@L[beforeAgent ? "ColumnActionsBeforeHint" : "ColumnActionsAfterHint"]</p>
+            </div>
+            <button class="processor-secondary-btn" @onclick="() => AddProcessorAction(actions)">@L["ColumnAddAction"]</button>
+        </div>
+        @if (actions.Count == 0)
+        {
+            <p class="processor-actions-empty">@L["ColumnNoActions"]</p>
+        }
+        @for (var index = 0; index < actions.Count; index++)
+        {
+            var action = actions[index];
+            var actionIndex = index;
+            <article class="processor-action-card" @key="action.Id">
+                <header>
+                    <strong>@L.Get("ColumnActionNumber", actionIndex + 1)</strong>
+                    <div class="processor-action-order">
+                        <button class="processor-secondary-btn" disabled="@(actionIndex == 0)" @onclick="() => MoveAction(actions, actionIndex, -1)" title="@L["MoveUp"]">↑</button>
+                        <button class="processor-secondary-btn" disabled="@(actionIndex == actions.Count - 1)" @onclick="() => MoveAction(actions, actionIndex, 1)" title="@L["MoveDown"]">↓</button>
+                    </div>
+                </header>
+                <ActionEditor Action="action.Action"
+                              Columns="AllColumnNames"
+                              Members="EmptyMembers"
+                              Slug="@Slug"
+                              ProcessorMode="true"
+                              OnReplace="replacement => ReplaceAction(action, replacement)"
+                              OnDelete="() => actions.Remove(action)" />
+                <label class="processor-action-failure">
+                    <FieldHelp Label="@L["ColumnActionFailureDestination"]" Help="@L["ColumnActionFailureDestinationHelp"]" />
+                    <select @bind="action.FailureTargetColumnId">@ColumnOptions(true)</select>
+                </label>
+            </article>
+        }
+    </section>;
+
+    private List<string> AllColumnNames => TargetColumns.Select(target => target.Column.Name)
+        .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    private static readonly List<string> EmptyMembers = [];
+
+    private void AddProcessorAction(List<ColumnActionDraft> actions) => actions.Add(new ColumnActionDraft
+    {
+        Id = Guid.NewGuid().ToString("N"),
+        Action = new ExecutePowerShellActionSpec(),
+        FailureTargetColumnId = _technicalFailureTargetId,
+    });
+
+    private static void ReplaceAction(ColumnActionDraft draft, ActionSpec replacement) => draft.Action = replacement;
+
+    private static void MoveAction(List<ColumnActionDraft> actions, int index, int delta)
+    {
+        var target = index + delta;
+        if (index < 0 || index >= actions.Count || target < 0 || target >= actions.Count) return;
+        (actions[index], actions[target]) = (actions[target], actions[index]);
+    }
+
+    private void AddScheduledTask() => _scheduledTasks.Add(new ColumnScheduledTask
+    {
+        Id = Guid.NewGuid().ToString("N"),
+        ColumnId = Column?.Id ?? 0,
+        Name = L["ScheduleDefaultName"],
+        Cron = "0 9 * * 1",
+        TimeZoneId = TimeZoneInfo.Local.Id,
+        TicketScope = ScheduledTaskTicketScope.None,
+        Actions = [new ColumnProcessorAction(Guid.NewGuid().ToString("N"), new CreateTicketActionSpec())],
+    });
+
+    private RenderFragment ScheduledActionSection(ColumnScheduledTask task) => @<section class="processor-actions-section scheduled-actions">
+        <div class="processor-actions-heading">
+            <h4>@L["ScheduleActions"]</h4>
+            <button class="processor-secondary-btn" @onclick="() => AddScheduledAction(task)">@L["ColumnAddAction"]</button>
+        </div>
+        @for (var index = 0; index < task.Actions.Count; index++)
+        {
+            var action = task.Actions[index];
+            <article class="processor-action-card" @key="action.Id">
+                <ActionEditor Action="action.Action" Columns="AllColumnNames" Members="EmptyMembers" Slug="@Slug"
+                    ProcessorMode="true"
+                    OnReplace="replacement => ReplaceScheduledAction(task, action, replacement)"
+                    OnDelete="() => RemoveScheduledAction(task, action)" />
+                @if (task.TicketScope == ScheduledTaskTicketScope.FirstTicket)
+                {
+                    <label class="processor-action-failure"><FieldHelp Label="@L["ColumnActionFailureDestination"]" Help="@L["ScheduleFailureHelp"]" />
+                        <select value="@action.FailureTargetColumnId" @onchange="e => ReplaceScheduledFailure(task, action, e.Value?.ToString())">@ColumnOptions(true)</select>
+                    </label>
+                }
+            </article>
+        }
+    </section>;
+
+    private static void ReplaceScheduledAction(ColumnScheduledTask task, ColumnProcessorAction current, ActionSpec replacement) =>
+        task.Actions = task.Actions.Select(action => action.Id == current.Id ? current with { Action = replacement } : action).ToList();
+    private static void AddScheduledAction(ColumnScheduledTask task) =>
+        task.Actions = task.Actions.Append(new ColumnProcessorAction(
+            Guid.NewGuid().ToString("N"), new ExecutePowerShellActionSpec(), null)).ToList();
+    private static void RemoveScheduledAction(ColumnScheduledTask task, ColumnProcessorAction current) =>
+        task.Actions = task.Actions.Where(action => action.Id != current.Id).ToList();
+    private static void ReplaceScheduledFailure(ColumnScheduledTask task, ColumnProcessorAction current, string? value)
+    {
+        var target = int.TryParse(value, out var parsed) ? parsed : (int?)null;
+        task.Actions = task.Actions.Select(action => action.Id == current.Id ? current with { FailureTargetColumnId = target } : action).ToList();
     }
 
     private List<(Pipeline Pipeline, BoardColumn Column)> TargetColumns =>
@@ -462,5 +646,21 @@
     {
         public string Outcome { get; set; } = "";
         public int TargetColumnId { get; set; }
+    }
+
+    private sealed class ColumnActionDraft
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString("N");
+        public ActionSpec Action { get; set; } = new SetLabelsActionSpec();
+        public int? FailureTargetColumnId { get; set; }
+
+        public ColumnProcessorAction ToModel() => new(Id, Action, FailureTargetColumnId);
+
+        public static ColumnActionDraft FromModel(ColumnProcessorAction action) => new()
+        {
+            Id = action.Id,
+            Action = action.Action,
+            FailureTargetColumnId = action.FailureTargetColumnId,
+        };
     }
 }

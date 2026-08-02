@@ -17,6 +17,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
     private readonly ColumnProcessorService _processors;
     private readonly ColumnExecutionService _executions;
     private readonly IColumnAgentDispatcher _dispatcher;
+    private readonly ColumnActionExecutor _actions;
     private readonly ILogger<ColumnProcessingEngine> _logger;
     private readonly ConcurrentDictionary<string, byte> _pendingProjects = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Task> _activeProcessors = new();
@@ -24,7 +25,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
 
     public ColumnProcessingEngine(
         ProjectService projects, TicketService tickets, ColumnProcessorService processors,
-        ColumnExecutionService executions, IColumnAgentDispatcher dispatcher,
+        ColumnExecutionService executions, IColumnAgentDispatcher dispatcher, ColumnActionExecutor actions,
         ILogger<ColumnProcessingEngine> logger)
     {
         _projects = projects;
@@ -32,6 +33,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
         _processors = processors;
         _executions = executions;
         _dispatcher = dispatcher;
+        _actions = actions;
         _logger = logger;
         _tickets.TicketStatusChanged += OnTicketChanged;
         _tickets.TicketCreated += OnTicketCreated;
@@ -112,15 +114,72 @@ public sealed class ColumnProcessingEngine : BackgroundService
                 await _executions.FailAttemptAsync(slug, execution, processor, "Le ticket n'existe plus.", activityAuthor);
                 return;
             }
-            await _executions.SetRunIdAsync(slug, execution.Id, execution.Id);
-            var dispatch = await _dispatcher.DispatchAsync(slug, processor, execution, ticket, cancellationToken);
-            if (dispatch.Result is null)
+
+            // A host can stop after an external side effect succeeds but before its local
+            // checkpoint is committed. Replaying that action could duplicate a webhook or
+            // script effect, so an indeterminate in-flight action is routed/held instead.
+            if (!string.IsNullOrWhiteSpace(execution.CurrentActionId))
             {
-                await _executions.FailAttemptAsync(slug, execution, processor,
-                    dispatch.Error ?? "Échec inconnu du processeur.", activityAuthor);
+                var interrupted = processor.BeforeActions.Concat(processor.AfterActions)
+                    .FirstOrDefault(action => string.Equals(
+                        action.Id, execution.CurrentActionId, StringComparison.OrdinalIgnoreCase))
+                    ?? new ColumnProcessorAction(
+                        execution.CurrentActionId,
+                        new SetLabelsActionSpec(),
+                        processor.TechnicalFailureColumnId);
+                await _executions.RouteActionFailureAsync(
+                    slug, execution, processor, interrupted,
+                    $"L’action '{execution.CurrentActionId}' a été interrompue ; son résultat externe est incertain.",
+                    activityAuthor,
+                    outcomeUncertain: true);
                 return;
             }
-            await _executions.CompleteAsync(slug, execution, processor, dispatch.Result, activityAuthor);
+
+            if (!await ExecuteActionsAsync(
+                    slug, processor, execution, ticket, processor.BeforeActions, null,
+                    activityAuthor, cancellationToken))
+                return;
+
+            ColumnAgentResult result;
+            if (execution.AgentCompleted)
+            {
+                result = execution.AgentResult
+                    ?? throw new InvalidOperationException("Le checkpoint de l’agent ne contient aucun résultat.");
+            }
+            else
+            {
+                await _executions.SetRunIdAsync(slug, execution.Id, execution.Id);
+                var dispatch = await _dispatcher.DispatchAsync(slug, processor, execution, ticket, cancellationToken);
+                if (dispatch.Result is null)
+                {
+                    await _executions.FailAttemptAsync(slug, execution, processor,
+                        dispatch.Error ?? "Échec inconnu du processeur.", activityAuthor);
+                    return;
+                }
+                result = dispatch.Result;
+                var required = processor.RequiredSkills.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                if (!required.IsSubsetOf(result.SkillsUsed.ToHashSet(StringComparer.OrdinalIgnoreCase)))
+                {
+                    var missing = required.Except(result.SkillsUsed, StringComparer.OrdinalIgnoreCase);
+                    await _executions.FailAttemptAsync(slug, execution, processor,
+                        $"Skills obligatoires non exécutés : {string.Join(", ", missing)}.", activityAuthor);
+                    return;
+                }
+                if (string.Equals(result.Outcome, "wait_for_children", StringComparison.OrdinalIgnoreCase))
+                {
+                    await _executions.CompleteAsync(slug, execution, processor, result, activityAuthor);
+                    return;
+                }
+                await _executions.SaveAgentResultAsync(slug, execution, result);
+            }
+
+            ticket = await _tickets.GetTicketAsync(slug, execution.TicketId)
+                ?? throw new InvalidOperationException($"Le ticket #{execution.TicketId} n’existe plus.");
+            if (!await ExecuteActionsAsync(
+                    slug, processor, execution, ticket, processor.AfterActions, result,
+                    activityAuthor, cancellationToken))
+                return;
+            await _executions.CompleteAsync(slug, execution, processor, result, activityAuthor);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         catch (Exception ex)
@@ -128,6 +187,40 @@ public sealed class ColumnProcessingEngine : BackgroundService
             _logger.LogError(ex, "Column processor {ProcessorId} failed for ticket {TicketId}", processor.Id, execution.TicketId);
             await _executions.FailAttemptAsync(slug, execution, processor, ex.Message, processor.Name);
         }
+    }
+
+    private async Task<bool> ExecuteActionsAsync(
+        string slug,
+        ColumnProcessor processor,
+        ColumnExecution execution,
+        Ticket ticket,
+        IReadOnlyList<ColumnProcessorAction> actions,
+        ColumnAgentResult? agentResult,
+        string activityAuthor,
+        CancellationToken cancellationToken)
+    {
+        var completed = execution.CompletedActionIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var action in actions)
+        {
+            if (completed.Contains(action.Id)) continue;
+            await _executions.BeginActionAsync(slug, execution, action.Id);
+            var result = await _actions.ExecuteAsync(
+                slug, processor, execution, ticket, action, agentResult, cancellationToken);
+            if (!result.Succeeded)
+            {
+                await _executions.ClearCurrentActionAsync(slug, execution);
+                var error = $"Action '{action.Id}' ({action.Action.UiTypeKey}) en échec : {result.Error}";
+                if (action.FailureTargetColumnId is not null)
+                    await _executions.RouteActionFailureAsync(
+                        slug, execution, processor, action, error, activityAuthor);
+                else
+                    await _executions.FailAttemptAsync(slug, execution, processor, error, activityAuthor);
+                return false;
+            }
+            await _executions.CompleteActionAsync(slug, execution, action.Id);
+            completed.Add(action.Id);
+        }
+        return true;
     }
 
     public override void Dispose()

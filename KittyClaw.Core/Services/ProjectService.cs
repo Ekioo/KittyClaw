@@ -83,6 +83,9 @@ public partial class ProjectService
         // Create the project database
         var projectDbPath = GetProjectDbPath(slug);
         Directory.CreateDirectory(Path.GetDirectoryName(projectDbPath)!);
+        // Script actions need a real working directory even before the user assigns an
+        // external workspace to a newly created project.
+        Directory.CreateDirectory(ResolveWorkspacePath(project));
         await using var projectDb = new TodoDbContext(projectDbPath);
         await projectDb.Database.EnsureCreatedAsync();
 

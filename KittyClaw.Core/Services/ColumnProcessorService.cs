@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using KittyClaw.Core.Automation;
 using KittyClaw.Core.Data;
 using KittyClaw.Core.Models;
 using Microsoft.EntityFrameworkCore;
@@ -15,7 +16,8 @@ public sealed class ColumnProcessorService(
     ProjectService projects,
     ProjectSkillService skills)
 {
-    private const int DefinitionVersion = 1;
+    private const int DefinitionVersion = 2;
+    private const int OldestSupportedDefinitionVersion = 1;
     private const string SourceMarkerName = ".source-of-truth-v1";
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> ProjectGates = new(StringComparer.OrdinalIgnoreCase);
     private static readonly JsonSerializerOptions DefinitionJson = new()
@@ -47,6 +49,8 @@ public sealed class ColumnProcessorService(
                     RecommendedSkillsJson TEXT NOT NULL DEFAULT '[]',
                     RequiredSkillsJson TEXT NOT NULL DEFAULT '[]',
                     RoutesJson TEXT NOT NULL DEFAULT '[]',
+                    BeforeActionsJson TEXT NOT NULL DEFAULT '[]',
+                    AfterActionsJson TEXT NOT NULL DEFAULT '[]',
                     CreatedAt TEXT NOT NULL,
                     UpdatedAt TEXT NOT NULL
                 );
@@ -64,6 +68,11 @@ public sealed class ColumnProcessorService(
         });
         await MigrationGate.RunOnceAsync(db, "column-processors-prompt-v1", static d =>
             MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN Prompt TEXT NOT NULL DEFAULT ''"));
+        await MigrationGate.RunOnceAsync(db, "column-processors-actions-v1", static async d =>
+        {
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN BeforeActionsJson TEXT NOT NULL DEFAULT '[]'");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN AfterActionsJson TEXT NOT NULL DEFAULT '[]'");
+        });
     }
 
     public async Task<ColumnProcessor?> GetAsync(string projectSlug, int columnId)
@@ -90,7 +99,9 @@ public sealed class ColumnProcessorService(
         TicketSelectionOrder selectionOrder = TicketSelectionOrder.Position,
         int maxAttempts = 3, int retryBackoffSeconds = 60,
         int? defaultTargetColumnId = null, int? technicalFailureColumnId = null,
-        List<ColumnRoute>? routes = null, string? prompt = null)
+        List<ColumnRoute>? routes = null, string? prompt = null,
+        List<ColumnProcessorAction>? beforeActions = null,
+        List<ColumnProcessorAction>? afterActions = null)
     {
         var gate = ProjectGates.GetOrAdd(projectSlug, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync();
@@ -117,6 +128,8 @@ public sealed class ColumnProcessorService(
                 AvailableSkills = availableSkills ?? [],
                 RecommendedSkills = recommendedSkills ?? [],
                 RequiredSkills = requiredSkills ?? [],
+                BeforeActions = ToActionDefinitions(beforeActions),
+                AfterActions = ToActionDefinitions(afterActions),
                 Routing = new ProcessorRoutingDefinition
                 {
                     Default = ColumnReference(defaultTargetColumnId),
@@ -212,6 +225,12 @@ public sealed class ColumnProcessorService(
                     definition.Routing.Routes = remaining;
                     changed = true;
                 }
+                foreach (var action in definition.BeforeActions.Concat(definition.AfterActions))
+                {
+                    if (action.OnFailure != removed) continue;
+                    action.OnFailure = null;
+                    changed = true;
+                }
                 if (changed) await WriteDefinitionAsync(projectSlug, definition);
             }
         }
@@ -294,7 +313,7 @@ public sealed class ColumnProcessorService(
     private async Task<ProcessorDefinition> ValidateAndNormalizeAsync(
         string projectSlug, TodoDbContext db, ProcessorDefinition definition, int columnId)
     {
-        if (definition.Version != DefinitionVersion)
+        if (definition.Version < OldestSupportedDefinitionVersion || definition.Version > DefinitionVersion)
             throw new InvalidOperationException($"Version processor.json non prise en charge pour {ColumnReference(columnId)} : {definition.Version}.");
         if (string.IsNullOrWhiteSpace(definition.Name)) throw new InvalidOperationException("Le nom du processeur est requis.");
         if (string.IsNullOrWhiteSpace(definition.Mission)) throw new InvalidOperationException("La mission du processeur est requise.");
@@ -311,6 +330,8 @@ public sealed class ColumnProcessorService(
         definition.AvailableSkills = NormalizeStrings(definition.AvailableSkills);
         definition.RecommendedSkills = NormalizeStrings(definition.RecommendedSkills);
         definition.RequiredSkills = NormalizeStrings(definition.RequiredSkills);
+        definition.BeforeActions ??= [];
+        definition.AfterActions ??= [];
         definition.Routing ??= new ProcessorRoutingDefinition();
         definition.Routing.Routes ??= [];
 
@@ -333,6 +354,21 @@ public sealed class ColumnProcessorService(
             if (string.IsNullOrWhiteSpace(route.Outcome))
                 throw new InvalidOperationException($"Une route de {ColumnReference(columnId)} n'a pas d'outcome.");
             targets.Add(ParseColumnReference(route.Target, ColumnReference(columnId), $"route '{route.Outcome}'"));
+        }
+        var allActions = definition.BeforeActions.Concat(definition.AfterActions).ToList();
+        var duplicateActionIds = allActions.Where(action => !string.IsNullOrWhiteSpace(action.Id))
+            .GroupBy(action => action.Id, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1).Select(group => group.Key).ToList();
+        if (duplicateActionIds.Count > 0)
+            throw new InvalidOperationException($"Identifiants d’actions dupliqués : {string.Join(", ", duplicateActionIds)}.");
+        foreach (var action in allActions)
+        {
+            action.Id = action.Id?.Trim() ?? "";
+            if (string.IsNullOrWhiteSpace(action.Id))
+                throw new InvalidOperationException("Chaque action de processeur doit avoir un identifiant stable.");
+            ValidateProcessorAction(action.Action, action.Id);
+            if (action.OnFailure is not null)
+                targets.Add(ParseColumnReference(action.OnFailure, ColumnReference(columnId), $"action '{action.Id}'.onFailure"));
         }
         var duplicateOutcomes = definition.Routing.Routes.GroupBy(route => route.Outcome, StringComparer.OrdinalIgnoreCase)
             .Where(group => group.Count() > 1).Select(group => group.Key).ToList();
@@ -372,6 +408,8 @@ public sealed class ColumnProcessorService(
         processor.RequiredSkills = definition.RequiredSkills;
         processor.Routes = definition.Routing.Routes.Select(route =>
             new ColumnRoute(route.Outcome, ParseColumnReference(route.Target, definition.Column, $"route '{route.Outcome}'"))).ToList();
+        processor.BeforeActions = FromActionDefinitions(definition.BeforeActions, definition.Column);
+        processor.AfterActions = FromActionDefinitions(definition.AfterActions, definition.Column);
         processor.UpdatedAt = DateTime.UtcNow;
         return processor;
     }
@@ -453,6 +491,8 @@ public sealed class ColumnProcessorService(
         AvailableSkills = processor.AvailableSkills,
         RecommendedSkills = processor.RecommendedSkills,
         RequiredSkills = processor.RequiredSkills,
+        BeforeActions = ToActionDefinitions(processor.BeforeActions),
+        AfterActions = ToActionDefinitions(processor.AfterActions),
         Routing = new ProcessorRoutingDefinition
         {
             Default = ColumnReference(processor.DefaultTargetColumnId),
@@ -468,6 +508,41 @@ public sealed class ColumnProcessorService(
     private static List<string> NormalizeStrings(IEnumerable<string>? values) =>
         (values ?? []).Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList();
+
+    private static List<ProcessorActionDefinition> ToActionDefinitions(IEnumerable<ColumnProcessorAction>? actions) =>
+        (actions ?? []).Select(action => new ProcessorActionDefinition
+        {
+            Id = action.Id,
+            Action = action.Action,
+            OnFailure = ColumnReference(action.FailureTargetColumnId),
+        }).ToList();
+
+    private static List<ColumnProcessorAction> FromActionDefinitions(
+        IEnumerable<ProcessorActionDefinition> actions, string source) =>
+        actions.Select(action => new ColumnProcessorAction(
+            action.Id,
+            action.Action,
+            action.OnFailure is null ? null : ParseColumnReference(action.OnFailure, source, $"action '{action.Id}'.onFailure"))).ToList();
+
+    private static void ValidateProcessorAction(ActionSpec? action, string id)
+    {
+        if (action is not SetLabelsActionSpec and not AddCommentActionSpec and not CreateTicketActionSpec
+            and not ExecutePowerShellActionSpec and not HttpRequestActionSpec)
+            throw new InvalidOperationException(
+                $"Type d’action non pris en charge dans un processeur ({id}) : {action?.GetType().Name ?? "null"}. " +
+                "L’agent et le routage restent uniques au niveau de la colonne.");
+        switch (action)
+        {
+            case ExecutePowerShellActionSpec script when string.IsNullOrWhiteSpace(script.Script) && string.IsNullOrWhiteSpace(script.ScriptFile):
+                throw new InvalidOperationException($"L’action PowerShell '{id}' doit définir un script ou un fichier.");
+            case HttpRequestActionSpec request when string.IsNullOrWhiteSpace(request.Url):
+                throw new InvalidOperationException($"L’action HTTP '{id}' doit définir une URL.");
+            case AddCommentActionSpec comment when string.IsNullOrWhiteSpace(comment.Content):
+                throw new InvalidOperationException($"L’action commentaire '{id}' doit définir un contenu.");
+            case CreateTicketActionSpec create when string.IsNullOrWhiteSpace(create.Title):
+                throw new InvalidOperationException($"L’action de création de ticket '{id}' doit définir un titre.");
+        }
+    }
 
     private static string ColumnReference(int columnId) => $"column-{columnId}";
     private static string? ColumnReference(int? columnId) => columnId is null ? null : ColumnReference(columnId.Value);
@@ -497,6 +572,8 @@ public sealed class ColumnProcessorService(
         public List<string> AvailableSkills { get; set; } = [];
         public List<string> RecommendedSkills { get; set; } = [];
         public List<string> RequiredSkills { get; set; } = [];
+        public List<ProcessorActionDefinition> BeforeActions { get; set; } = [];
+        public List<ProcessorActionDefinition> AfterActions { get; set; } = [];
         public ProcessorRoutingDefinition Routing { get; set; } = new();
     }
 
@@ -511,5 +588,12 @@ public sealed class ColumnProcessorService(
     {
         public string Outcome { get; set; } = "";
         public string Target { get; set; } = "";
+    }
+
+    private sealed class ProcessorActionDefinition
+    {
+        public string Id { get; set; } = "";
+        public ActionSpec Action { get; set; } = new SetLabelsActionSpec();
+        public string? OnFailure { get; set; }
     }
 }

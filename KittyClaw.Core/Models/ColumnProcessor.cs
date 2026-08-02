@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using KittyClaw.Core.Automation;
 
 namespace KittyClaw.Core.Models;
 
@@ -31,6 +32,10 @@ public class ColumnProcessor
     public string RequiredSkillsJson { get; set; } = "[]";
     [JsonIgnore]
     public string RoutesJson { get; set; } = "[]";
+    [JsonIgnore]
+    public string BeforeActionsJson { get; set; } = "[]";
+    [JsonIgnore]
+    public string AfterActionsJson { get; set; } = "[]";
 
     [NotMapped]
     public List<string> AvailableSkills
@@ -63,17 +68,43 @@ public class ColumnProcessor
             .DistinctBy(r => r.Outcome, StringComparer.OrdinalIgnoreCase));
     }
 
+    [NotMapped]
+    public List<ColumnProcessorAction> BeforeActions
+    {
+        get => DeserializeActions(BeforeActionsJson);
+        set => BeforeActionsJson = SerializeActions(value);
+    }
+
+    [NotMapped]
+    public List<ColumnProcessorAction> AfterActions
+    {
+        get => DeserializeActions(AfterActionsJson);
+        set => AfterActionsJson = SerializeActions(value);
+    }
+
     private static List<string> Deserialize(string json) =>
         JsonSerializer.Deserialize<List<string>>(json) ?? [];
 
     private static string Serialize(IEnumerable<string> values) => JsonSerializer.Serialize(
         values.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(v => v, StringComparer.OrdinalIgnoreCase));
+
+    private static List<ColumnProcessorAction> DeserializeActions(string json) =>
+        JsonSerializer.Deserialize<List<ColumnProcessorAction>>(json) ?? [];
+
+    private static string SerializeActions(IEnumerable<ColumnProcessorAction> values) =>
+        JsonSerializer.Serialize(values);
 }
 
 public sealed record ProjectSkill(string Slug, string Name, string Description, string InstructionsPath);
 
 public sealed record ColumnRoute(string Outcome, int TargetColumnId);
+
+/// <summary>A deterministic action surrounding the single implicit agent of a column.</summary>
+public sealed record ColumnProcessorAction(
+    string Id,
+    ActionSpec Action,
+    int? FailureTargetColumnId = null);
 
 public enum TicketSelectionOrder
 {
@@ -107,6 +138,27 @@ public class ColumnExecution
     public string? Outcome { get; set; }
     public string? Summary { get; set; }
     public string? Error { get; set; }
+    public string CompletedActionIdsJson { get; set; } = "[]";
+    public string? CurrentActionId { get; set; }
+    public bool AgentCompleted { get; set; }
+    public string? AgentResultJson { get; set; }
+
+    [NotMapped]
+    public List<string> CompletedActionIds
+    {
+        get => JsonSerializer.Deserialize<List<string>>(CompletedActionIdsJson) ?? [];
+        set => CompletedActionIdsJson = JsonSerializer.Serialize(value
+            .Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.OrdinalIgnoreCase));
+    }
+
+    [NotMapped]
+    public ColumnAgentResult? AgentResult
+    {
+        get => string.IsNullOrWhiteSpace(AgentResultJson)
+            ? null
+            : JsonSerializer.Deserialize<ColumnAgentResult>(AgentResultJson);
+        set => AgentResultJson = value is null ? null : JsonSerializer.Serialize(value);
+    }
 }
 
 public sealed record ColumnAgentResult(string Outcome, List<string> SkillsUsed, string? Summary = null);

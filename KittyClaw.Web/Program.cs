@@ -48,6 +48,7 @@ builder.Services.AddSingleton<ColumnService>();
 builder.Services.AddSingleton<PipelineService>();
 builder.Services.AddSingleton<ProjectSkillService>();
 builder.Services.AddSingleton<ColumnProcessorService>();
+builder.Services.AddSingleton<ColumnScheduledTaskService>();
 builder.Services.AddSingleton<ColumnExecutionService>();
 builder.Services.AddSingleton<MemberService>();
 builder.Services.AddSingleton<ChatService>();
@@ -71,6 +72,7 @@ var maxConcurrent = int.TryParse(Environment.GetEnvironmentVariable("KITTYCLAW_M
 builder.Services.AddSingleton(new RunConcurrencyGate(maxConcurrent));
 builder.Services.AddSingleton<AgentRunner>();
 builder.Services.AddSingleton<IColumnAgentDispatcher, ColumnAgentDispatcher>();
+builder.Services.AddSingleton<ColumnActionExecutor>();
 builder.Services.AddSingleton<CostTracker>();
 // Durable cost records: cost-log.jsonl (daily budget) + per-ticket token/USD totals.
 builder.Services.AddHostedService<RunCostRecorder>();
@@ -78,6 +80,8 @@ builder.Services.AddSingleton<AutomationEngine>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomationEngine>());
 builder.Services.AddSingleton<ColumnProcessingEngine>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ColumnProcessingEngine>());
+builder.Services.AddSingleton<ColumnScheduledTaskEngine>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ColumnScheduledTaskEngine>());
 builder.Services.AddSingleton<GitRepositoryWatcher>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<GitRepositoryWatcher>());
 // Dead man's switch: force-release concurrency locks held by hung runs (ticket #98, feature #3).

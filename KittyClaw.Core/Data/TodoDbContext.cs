@@ -13,6 +13,8 @@ public class TodoDbContext : DbContext
     public DbSet<Pipeline> Pipelines => Set<Pipeline>();
     public DbSet<ColumnProcessor> ColumnProcessors => Set<ColumnProcessor>();
     public DbSet<ColumnExecution> ColumnExecutions => Set<ColumnExecution>();
+    public DbSet<ColumnScheduledTask> ColumnScheduledTasks => Set<ColumnScheduledTask>();
+    public DbSet<ColumnScheduledTaskRun> ColumnScheduledTaskRuns => Set<ColumnScheduledTaskRun>();
     public DbSet<Member> Members => Set<Member>();
     public DbSet<ChatMessageRow> ChatMessages => Set<ChatMessageRow>();
 
@@ -80,6 +82,20 @@ public class TodoDbContext : DbContext
         });
 
         modelBuilder.Entity<ColumnExecution>(e => e.HasKey(x => x.Id));
+
+        modelBuilder.Entity<ColumnScheduledTask>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Ignore(x => x.Actions);
+            e.HasIndex(x => new { x.Enabled, x.NextRunAt });
+        });
+
+        modelBuilder.Entity<ColumnScheduledTaskRun>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Ignore(x => x.CompletedActionIds);
+            e.HasIndex(x => new { x.TaskId, x.Status });
+        });
 
         modelBuilder.Entity<Member>(e =>
         {

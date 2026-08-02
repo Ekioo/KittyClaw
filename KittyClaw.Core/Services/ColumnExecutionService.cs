@@ -23,7 +23,11 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                     RunId TEXT NULL,
                     Outcome TEXT NULL,
                     Summary TEXT NULL,
-                    Error TEXT NULL
+                    Error TEXT NULL,
+                    CompletedActionIdsJson TEXT NOT NULL DEFAULT '[]',
+                    CurrentActionId TEXT NULL,
+                    AgentCompleted INTEGER NOT NULL DEFAULT 0,
+                    AgentResultJson TEXT NULL
                 );
                 CREATE UNIQUE INDEX IF NOT EXISTS IX_ColumnExecutions_ActiveTicket
                     ON ColumnExecutions(TicketId)
@@ -31,6 +35,13 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                 CREATE INDEX IF NOT EXISTS IX_ColumnExecutions_ProcessorStatus
                     ON ColumnExecutions(ProcessorId, Status, AvailableAt);
                 """));
+        await MigrationGate.RunOnceAsync(db, "column-executions-actions-v1", static async d =>
+        {
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN CompletedActionIdsJson TEXT NOT NULL DEFAULT '[]'");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN CurrentActionId TEXT NULL");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN AgentCompleted INTEGER NOT NULL DEFAULT 0");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN AgentResultJson TEXT NULL");
+        });
     }
 
     public async Task<ColumnExecution?> ClaimNextAsync(string projectSlug, ColumnProcessor processor, DateTime now)
@@ -135,6 +146,105 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         if (execution is null) return;
         execution.RunId = runId;
         await db.SaveChangesAsync();
+    }
+
+    public async Task BeginActionAsync(string projectSlug, ColumnExecution execution, string actionId)
+    {
+        await using var db = projects.GetProjectDb(projectSlug);
+        await EnsureTableAsync(db);
+        var row = await db.ColumnExecutions.FindAsync(execution.Id)
+            ?? throw new InvalidOperationException($"L’exécution '{execution.Id}' n’existe plus.");
+        row.CurrentActionId = actionId;
+        await db.SaveChangesAsync();
+        execution.CurrentActionId = actionId;
+    }
+
+    public async Task CompleteActionAsync(string projectSlug, ColumnExecution execution, string actionId)
+    {
+        await using var db = projects.GetProjectDb(projectSlug);
+        await EnsureTableAsync(db);
+        var row = await db.ColumnExecutions.FindAsync(execution.Id)
+            ?? throw new InvalidOperationException($"L’exécution '{execution.Id}' n’existe plus.");
+        var completed = row.CompletedActionIds;
+        if (!completed.Contains(actionId, StringComparer.OrdinalIgnoreCase)) completed.Add(actionId);
+        row.CompletedActionIds = completed;
+        row.CurrentActionId = null;
+        await db.SaveChangesAsync();
+        execution.CompletedActionIds = completed;
+        execution.CurrentActionId = null;
+    }
+
+    public async Task ClearCurrentActionAsync(string projectSlug, ColumnExecution execution)
+    {
+        await using var db = projects.GetProjectDb(projectSlug);
+        await EnsureTableAsync(db);
+        var row = await db.ColumnExecutions.FindAsync(execution.Id);
+        if (row is null) return;
+        row.CurrentActionId = null;
+        await db.SaveChangesAsync();
+        execution.CurrentActionId = null;
+    }
+
+    public async Task SaveAgentResultAsync(
+        string projectSlug, ColumnExecution execution, ColumnAgentResult result)
+    {
+        await using var db = projects.GetProjectDb(projectSlug);
+        await EnsureTableAsync(db);
+        var row = await db.ColumnExecutions.FindAsync(execution.Id)
+            ?? throw new InvalidOperationException($"L’exécution '{execution.Id}' n’existe plus.");
+        row.AgentCompleted = true;
+        row.AgentResult = result;
+        await db.SaveChangesAsync();
+        execution.AgentCompleted = true;
+        execution.AgentResult = result;
+    }
+
+    public async Task RouteActionFailureAsync(
+        string projectSlug, ColumnExecution execution, ColumnProcessor processor,
+        ColumnProcessorAction action, string error, string author, bool outcomeUncertain = false)
+    {
+        await using var db = projects.GetProjectDb(projectSlug);
+        await ColumnService.EnsureBoardColumnsTableAsync(db);
+        await TicketService.EnsureActivityTableAsync(db);
+        await EnsureTableAsync(db);
+        var row = await db.ColumnExecutions.FindAsync(execution.Id);
+        if (row is null) return;
+        row.Error = error;
+        row.CurrentActionId = null;
+        row.EndedAt = DateTime.UtcNow;
+        var targetId = action.FailureTargetColumnId ?? processor.TechnicalFailureColumnId;
+        if (targetId is null)
+        {
+            // Holding a terminal Failed claim prevents the same ticket from being silently
+            // selected again in this column. A user can explicitly retry it later.
+            row.Status = ColumnExecutionStatus.Failed;
+            await db.SaveChangesAsync();
+            return;
+        }
+
+        var target = await db.BoardColumns.FindAsync(targetId.Value)
+            ?? throw new InvalidOperationException($"La colonne d’échec #{targetId} n’existe plus.");
+        if (target.Id == processor.ColumnId)
+            throw new InvalidOperationException("Une action en échec ne peut pas renvoyer vers sa propre colonne.");
+        var ticket = await db.Tickets.FindAsync(row.TicketId)
+            ?? throw new InvalidOperationException($"Le ticket #{row.TicketId} n’existe plus.");
+        var oldStatus = ticket.Status;
+        ticket.PipelineId = target.PipelineId;
+        ticket.ColumnId = target.Id;
+        ticket.Status = target.Name;
+        ticket.UpdatedAt = DateTime.UtcNow;
+        row.Status = ColumnExecutionStatus.Completed;
+        row.Outcome = outcomeUncertain ? "action_interrupted" : "action_failure";
+        db.ActivityEntries.Add(new ActivityEntry
+        {
+            TicketId = ticket.Id,
+            Author = author,
+            Text = outcomeUncertain
+                ? $"action '{action.Id}' interrompue avec résultat incertain : {oldStatus} → {target.Name}"
+                : $"action '{action.Id}' en échec : {oldStatus} → {target.Name}",
+        });
+        await db.SaveChangesAsync();
+        tickets.NotifyStatusChanged(projectSlug, ticket.Id, oldStatus, target.Name);
     }
 
     public async Task CompleteAsync(

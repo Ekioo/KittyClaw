@@ -22,7 +22,9 @@ public record SaveColumnProcessorRequest(
     int RetryBackoffSeconds = 60,
     int? DefaultTargetColumnId = null,
     int? TechnicalFailureColumnId = null,
-    List<ColumnRoute>? Routes = null);
+    List<ColumnRoute>? Routes = null,
+    List<ColumnProcessorAction>? BeforeActions = null,
+    List<ColumnProcessorAction>? AfterActions = null);
 public record CreateTicketRequest(
     string Title, string CreatedBy, string Status, string Description = "",
     List<int>? LabelIds = null, TicketPriority Priority = TicketPriority.NiceToHave,

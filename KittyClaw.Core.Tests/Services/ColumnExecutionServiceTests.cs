@@ -1,4 +1,5 @@
 using KittyClaw.Core.Models;
+using KittyClaw.Core.Automation;
 using KittyClaw.Core.Services;
 using KittyClaw.Core.Tests.Helpers;
 
@@ -240,6 +241,57 @@ public sealed class ColumnExecutionServiceTests : IDisposable
         Assert.NotNull(resumed);
         Assert.Equal(first.Id, resumed.Id);
         Assert.Equal(1, resumed.Attempt);
+    }
+
+    [Fact]
+    public async Task Action_and_agent_checkpoints_survive_a_restart_without_replaying_successes()
+    {
+        var project = await _projects.CreateProjectAsync("Durable action checkpoint");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: pipeline.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Done", pipelineId: pipeline.Id, role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, target.Id);
+        await _tickets.CreateTicketAsync(project.Slug, "Checkpoint", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+
+        await _executions.BeginActionAsync(project.Slug, execution!, "prepare");
+        await _executions.CompleteActionAsync(project.Slug, execution!, "prepare");
+        var result = new ColumnAgentResult("approved", ["skill"], "done");
+        await _executions.SaveAgentResultAsync(project.Slug, execution!, result);
+        await _executions.RecoverInterruptedAsync(project.Slug);
+        var resumed = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+
+        Assert.NotNull(resumed);
+        Assert.Contains("prepare", resumed.CompletedActionIds);
+        Assert.Null(resumed.CurrentActionId);
+        Assert.True(resumed.AgentCompleted);
+        Assert.Equal("approved", resumed.AgentResult!.Outcome);
+    }
+
+    [Fact]
+    public async Task Action_failure_route_is_terminal_and_cannot_reclaim_the_same_column()
+    {
+        var project = await _projects.CreateProjectAsync("Action failure route");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: pipeline.Id);
+        var failure = await _columns.CreateColumnAsync(project.Slug, "Technical failure", pipelineId: pipeline.Id, role: ColumnRole.Failure);
+        var processor = await SaveProcessor(project.Slug, source.Id, failure.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Fragile action", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+        var action = new ColumnProcessorAction(
+            "publish", new HttpRequestActionSpec { Url = "https://example.com" }, failure.Id);
+
+        await _executions.RouteActionFailureAsync(
+            project.Slug, execution!, processor, action, "HTTP 500", "worker");
+
+        var moved = await _tickets.GetTicketAsync(project.Slug, ticket.Id);
+        var history = Assert.Single(await _executions.ListAsync(project.Slug, ticket.Id));
+        Assert.Equal(failure.Id, moved!.ColumnId);
+        Assert.Equal(ColumnExecutionStatus.Completed, history.Status);
+        Assert.Equal("action_failure", history.Outcome);
+        Assert.Null(await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow));
     }
 
     private Task<ColumnProcessor> SaveProcessor(

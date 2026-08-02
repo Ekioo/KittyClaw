@@ -1,0 +1,62 @@
+using KittyClaw.Core.Automation;
+using KittyClaw.Core.Models;
+using KittyClaw.Core.Services;
+using KittyClaw.Core.Tests.Helpers;
+
+namespace KittyClaw.Core.Tests.Services;
+
+public sealed class ColumnScheduledTaskServiceTests : IDisposable
+{
+    private readonly TempDir _temp = new();
+
+    [Fact]
+    public async Task Tasks_are_file_backed_and_claims_are_checkpointed()
+    {
+        var projects = new ProjectService(_temp.Path);
+        var project = await projects.CreateProjectAsync("Scheduled tasks");
+        var columns = new ColumnService(projects);
+        var column = (await columns.ListColumnsAsync(project.Slug))[0];
+        var service = new ColumnScheduledTaskService(projects);
+        var task = new ColumnScheduledTask
+        {
+            Id = "weekly-report", ColumnId = column.Id, Name = "Weekly report",
+            Cron = "* * * * *", TimeZoneId = TimeZoneInfo.Utc.Id,
+            Actions = [new ColumnProcessorAction("create", new CreateTicketActionSpec { Title = "Report" })],
+        };
+
+        var saved = await service.SaveColumnAsync(project.Slug, column.Id, [task]);
+        var path = await service.GetDefinitionPathAsync(project.Slug, column.Id);
+        Assert.Single(saved);
+        Assert.True(File.Exists(path));
+        Assert.Contains("weekly-report", await File.ReadAllTextAsync(path));
+
+        var due = await service.ClaimDueAsync(project.Slug, DateTime.UtcNow.AddMinutes(2));
+        var claimed = Assert.Single(due);
+        await service.BeginActionAsync(project.Slug, claimed.Run, "create");
+        await service.CompleteActionAsync(project.Slug, claimed.Run, "create");
+        await service.FinishRunAsync(project.Slug, claimed.Task, claimed.Run, null);
+
+        var row = Assert.Single(await service.ListAsync(project.Slug, column.Id));
+        Assert.Equal("completed", row.LastStatus);
+    }
+
+    [Fact]
+    public async Task Ticket_actions_need_a_ticket_scope_and_self_routes_are_rejected()
+    {
+        var projects = new ProjectService(_temp.Path);
+        var project = await projects.CreateProjectAsync("Invalid schedules");
+        var column = (await new ColumnService(projects).ListColumnsAsync(project.Slug))[0];
+        var service = new ColumnScheduledTaskService(projects);
+
+        var task = new ColumnScheduledTask
+        {
+            Id = "invalid", ColumnId = column.Id, Name = "Invalid", Cron = "0 9 * * 1",
+            TimeZoneId = TimeZoneInfo.Utc.Id,
+            Actions = [new ColumnProcessorAction("comment", new AddCommentActionSpec { Content = "Hi" }, column.Id)],
+        };
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.SaveColumnAsync(project.Slug, column.Id, [task]));
+    }
+
+    public void Dispose() => _temp.Dispose();
+}
