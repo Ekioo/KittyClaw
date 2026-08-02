@@ -66,6 +66,7 @@ internal static class CodexStreamAdapter
             return true;
         }
 
+        var correlationId = String(item, "id");
         if (!completed)
         {
             var name = itemType switch
@@ -80,7 +81,18 @@ internal static class CodexStreamAdapter
             var detail = item.TryGetProperty("command", out var command)
                 ? command.ToString()
                 : line;
-            run.Push(new StreamEvent(DateTime.UtcNow, "tool_use", name, detail));
+            run.Push(new StreamEvent(DateTime.UtcNow, "tool_use", name, detail, correlationId));
+        }
+        else
+        {
+            var outcome = String(item, "status") switch
+            {
+                "failed" => "failed",
+                "cancelled" => "cancelled",
+                "canceled" => "cancelled",
+                _ => "succeeded",
+            };
+            run.Push(new StreamEvent(DateTime.UtcNow, "tool_result", outcome, line, correlationId));
         }
         return true;
     }

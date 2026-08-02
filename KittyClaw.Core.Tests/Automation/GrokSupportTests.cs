@@ -269,6 +269,18 @@ public class GrokSupportTests
     }
 
     [Fact]
+    public void Adapter_ToolResult_CarriesCorrelationAndCancellation()
+    {
+        var run = NewRun();
+        Assert.True(TryMap("""{"type":"tool_response","tool_call_id":"call-9","status":"cancelled"}""", run));
+
+        var ev = Assert.Single(run.SnapshotBuffer());
+        Assert.Equal("tool_result", ev.Kind);
+        Assert.Equal("call-9", ev.CorrelationId);
+        Assert.Equal("cancelled", ev.Text);
+    }
+
+    [Fact]
     public void Adapter_ToolUse_FlushesPrecedingTextAsAssistant()
     {
         var run = NewRun();

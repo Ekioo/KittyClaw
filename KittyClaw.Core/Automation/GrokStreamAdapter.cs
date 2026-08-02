@@ -48,7 +48,19 @@ internal static class GrokStreamAdapter
                 FlushAssistant(run);
                 var name = FirstString(root, "name", "tool", "toolName", "tool_name") ?? "tool";
                 var input = FirstRawJson(root, "input", "args", "arguments", "parameters") ?? "{}";
-                run.Push(new StreamEvent(DateTime.UtcNow, "tool_use", name, input));
+                var correlationId = FirstString(root, "id", "toolCallId", "tool_call_id");
+                run.Push(new StreamEvent(DateTime.UtcNow, "tool_use", name, input, correlationId));
+                return true;
+            }
+            case "tool_result":
+            case "tool_response":
+            {
+                var correlationId = FirstString(root, "tool_use_id", "toolCallId", "tool_call_id", "id");
+                var failed = root.TryGetProperty("is_error", out var isError) && isError.ValueKind == JsonValueKind.True;
+                var status = FirstString(root, "status", "outcome");
+                var outcome = failed || status is "failed" or "error" ? "failed"
+                    : status is "cancelled" or "canceled" ? "cancelled" : "succeeded";
+                run.Push(new StreamEvent(DateTime.UtcNow, "tool_result", outcome, line, correlationId));
                 return true;
             }
             case "error":

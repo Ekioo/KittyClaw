@@ -66,8 +66,22 @@ internal static class AgentStreamPump
                                 var eventKind = toolName == "AskUserQuestion" ? "ask_user_question" : "tool_use";
                                 if (eventKind == "ask_user_question")
                                     run.IsAwaitingUserAnswer = true;
-                                run.Push(new StreamEvent(DateTime.UtcNow, eventKind, toolName, toolInput));
+                                var toolId = part.TryGetProperty("id", out var id) ? id.GetString() : null;
+                                run.Push(new StreamEvent(DateTime.UtcNow, eventKind, toolName, toolInput, toolId));
                             }
+                        }
+                    }
+                    else if (kind == "user" &&
+                             doc.RootElement.TryGetProperty("message", out var userMessage) &&
+                             userMessage.TryGetProperty("content", out var userContent) &&
+                             userContent.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var part in userContent.EnumerateArray())
+                        {
+                            if (!part.TryGetProperty("type", out var partType) || partType.GetString() != "tool_result") continue;
+                            var toolId = part.TryGetProperty("tool_use_id", out var id) ? id.GetString() : null;
+                            var failed = part.TryGetProperty("is_error", out var isError) && isError.ValueKind == JsonValueKind.True;
+                            run.Push(new StreamEvent(DateTime.UtcNow, "tool_result", failed ? "failed" : "succeeded", part.GetRawText(), toolId));
                         }
                     }
                     else

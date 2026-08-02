@@ -169,14 +169,16 @@ public sealed class AgentRunner
     private readonly RunConcurrencyGate _gate;
     private readonly ILogger<AgentRunner> _logger;
     private readonly AppSettingsService? _appSettings;
+    private readonly BoundaryObservationService? _boundaryObserver;
 
-    public AgentRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<AgentRunner> logger, AppSettingsService? appSettings = null)
+    public AgentRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<AgentRunner> logger, AppSettingsService? appSettings = null, BoundaryObservationService? boundaryObserver = null)
     {
         _sessions = sessions;
         _runs = runs;
         _gate = gate;
         _logger = logger;
         _appSettings = appSettings;
+        _boundaryObserver = boundaryObserver;
     }
 
     public async Task<AgentRun> RunAsync(AgentRunContext ctx, CancellationToken ct)
@@ -195,6 +197,8 @@ public sealed class AgentRunner
             LockTimeoutMinutes = ctx.LockTimeoutMinutes,
         };
         if (ctx.OnEventHook is not null) run.OnEvent += ctx.OnEventHook;
+        if (_boundaryObserver is not null) run.OnEvent += ev => _boundaryObserver.Observe(run, ev);
+        _boundaryObserver?.RecordRun(run);
         _runs.Register(run);
 
         var provider = ctx.Target.Provider;

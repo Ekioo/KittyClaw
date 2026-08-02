@@ -155,6 +155,18 @@ public sealed class CodexSupportTests
     }
 
     [Fact]
+    public void StreamAdapter_CorrelatesToolCompletionOutcome()
+    {
+        var run = NewRun();
+        Map("""{"type":"item.started","item":{"id":"item-7","type":"command_execution","command":"git push origin main"}}""", run);
+        Map("""{"type":"item.completed","item":{"id":"item-7","type":"command_execution","status":"failed"}}""", run);
+
+        var events = run.SnapshotBuffer();
+        Assert.Contains(events, e => e.Kind == "tool_use" && e.CorrelationId == "item-7");
+        Assert.Contains(events, e => e.Kind == "tool_result" && e.CorrelationId == "item-7" && e.Text == "failed");
+    }
+
+    [Fact]
     public void SessionScopeKey_UsesCodexNamespace() =>
         Assert.Equal("codex:chat:agent",
             AgentRunner.SessionScopeKey("agent", "chat", CliProvider.Codex));

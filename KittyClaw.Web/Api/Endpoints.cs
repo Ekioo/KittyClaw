@@ -30,5 +30,6 @@ public static partial class Endpoints
         MapCodex(api);
         MapMistral(api);
         MapApprovals(api);
+        MapBoundaryObservations(api);
     }
 }

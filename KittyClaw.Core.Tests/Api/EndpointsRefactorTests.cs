@@ -119,6 +119,10 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "GET /api/projects/{slug}/approvals/receipts",
         "POST /api/projects/{slug}/approvals/receipts",
         "POST /api/projects/{slug}/approvals/consume-once",
+        // Observation-only boundary detection
+        "GET /api/projects/{slug}/boundary-observations",
+        "GET /api/projects/{slug}/boundary-observations/metrics",
+        "PUT /api/projects/{slug}/boundary-observations/{observationId}/review",
         // Automations
         "GET /api/projects/{slug}/automations",
         "PUT /api/projects/{slug}/automations",
@@ -220,6 +224,9 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         ["GET /api/projects/{slug}/approvals/receipts"] = "Approvals",
         ["POST /api/projects/{slug}/approvals/receipts"] = "Approvals",
         ["POST /api/projects/{slug}/approvals/consume-once"] = "Approvals",
+        ["GET /api/projects/{slug}/boundary-observations"] = "Boundary observations",
+        ["GET /api/projects/{slug}/boundary-observations/metrics"] = "Boundary observations",
+        ["PUT /api/projects/{slug}/boundary-observations/{observationId}/review"] = "Boundary observations",
         ["GET /api/grok-models"] = "Grok",
         ["GET /api/codex-models"] = "Codex",
         ["GET /api/mistral-models"] = "Mistral",
