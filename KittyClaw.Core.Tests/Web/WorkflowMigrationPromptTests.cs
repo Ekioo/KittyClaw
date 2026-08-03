@@ -130,11 +130,18 @@ public sealed class WorkflowMigrationPromptTests
         Assert.Contains("AutoSendInitialMessage=\"true\"", source);
         Assert.Contains("new System.Text.Json.Serialization.JsonStringEnumConverter()", source);
         Assert.Contains("GetFromJsonAsync<WorkflowMigrationJob>", source);
+        Assert.Contains("migration-progress-track", source);
+        Assert.Contains("MigrationWizardElapsed", source);
+        Assert.Contains("job.ProgressCode", source);
+        Assert.Contains("job.StartedAt", source);
+        Assert.Contains("StateHasChanged", source);
         Assert.Contains("Disable a legacy automation only after its replacement is configured and verified", source);
 
         var planner = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Services", "WorkflowMigrationPlanner.cs"));
         Assert.Contains("localization.Lang", planner);
         Assert.Contains("Write every user-facing value in language", planner);
+        Assert.Contains("ProgressCode = progressCode", planner);
+        Assert.Contains("LastActivityAt = ev.At", planner);
     }
 
     [Fact]

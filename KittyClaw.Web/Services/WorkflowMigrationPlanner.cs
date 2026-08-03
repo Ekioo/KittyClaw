@@ -34,7 +34,10 @@ public sealed record WorkflowMigrationJob(
     WorkflowMigrationPlan? Plan,
     string? Error,
     string? RunId,
-    string? ErrorCode = null);
+    string? ErrorCode = null,
+    string ProgressCode = "queued",
+    DateTime? StartedAt = null,
+    DateTime? LastActivityAt = null);
 
 /// <summary>
 /// Runs read-only, stateless planning turns and retains their structured result long enough for
@@ -94,7 +97,15 @@ public sealed class WorkflowMigrationPlanner(
 
             var assistantText = new List<string>();
             var runId = Guid.NewGuid().ToString("N");
-            _jobs[jobId] = _jobs[jobId] with { Status = "running", RunId = runId };
+            var startedAt = DateTime.UtcNow;
+            _jobs[jobId] = _jobs[jobId] with
+            {
+                Status = "running",
+                RunId = runId,
+                ProgressCode = "preparing",
+                StartedAt = startedAt,
+                LastActivityAt = startedAt,
+            };
             var target = CodexCli.IsInstalled
                 ? new AgentDispatchTarget("gpt-5.6-sol", CliProvider.Codex, new Dictionary<string, string>())
                 : AgentDispatchTarget.ClaudeDefault;
@@ -115,6 +126,20 @@ public sealed class WorkflowMigrationPlanner(
                 OnEventHook = ev =>
                 {
                     if (ev.Kind == "assistant") assistantText.Add(ev.Text);
+                    var progressCode = ev.Kind switch
+                    {
+                        "command" or "tool" or "stderr" => "inspecting",
+                        "assistant" or "result" => "finalizing",
+                        _ => "analyzing",
+                    };
+                    _jobs.AddOrUpdate(jobId,
+                        _ => new WorkflowMigrationJob(jobId, slug, "running", null, null, runId,
+                            ProgressCode: progressCode, StartedAt: startedAt, LastActivityAt: ev.At),
+                        (_, current) => current with
+                        {
+                            ProgressCode = progressCode,
+                            LastActivityAt = ev.At,
+                        });
                 },
             }, CancellationToken.None);
 
@@ -130,7 +155,13 @@ public sealed class WorkflowMigrationPlanner(
 
             var plan = ParsePlan(string.Join("\n", assistantText));
             Validate(plan);
-            _jobs[jobId] = _jobs[jobId] with { Status = "completed", Plan = plan };
+            _jobs[jobId] = _jobs[jobId] with
+            {
+                Status = "completed",
+                Plan = plan,
+                ProgressCode = "completed",
+                LastActivityAt = DateTime.UtcNow,
+            };
         }
         catch (Exception ex)
         {
@@ -141,7 +172,14 @@ public sealed class WorkflowMigrationPlanner(
                 _ when ex.Message.Contains("structured plan", StringComparison.OrdinalIgnoreCase) => "invalid-plan",
                 _ => "analysis-failed",
             };
-            _jobs[jobId] = _jobs[jobId] with { Status = "failed", Error = ex.Message, ErrorCode = code };
+            _jobs[jobId] = _jobs[jobId] with
+            {
+                Status = "failed",
+                Error = ex.Message,
+                ErrorCode = code,
+                ProgressCode = "failed",
+                LastActivityAt = DateTime.UtcNow,
+            };
         }
     }
 

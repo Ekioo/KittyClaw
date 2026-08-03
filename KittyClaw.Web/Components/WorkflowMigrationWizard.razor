@@ -53,10 +53,21 @@
         }
         else if (_busy)
         {
-            <div class="migration-analyzing">
+            <div class="migration-analyzing" aria-live="polite">
                 <span class="migration-spinner"></span>
-                <strong>@L["MigrationWizardAnalyzing"]</strong>
+                <strong>@ProgressLabel</strong>
+                <div class="migration-progress-track" aria-hidden="true"><span></span></div>
+                <div class="migration-progress-meta">
+                    <span class="migration-progress-pulse"></span>
+                    <span>@ActivityLabel</span>
+                    <span aria-hidden="true">·</span>
+                    <span>@L["MigrationWizardElapsed"] @ElapsedLabel</span>
+                </div>
                 <p>@L["MigrationWizardAnalyzingHint"]</p>
+                @if (Elapsed >= TimeSpan.FromSeconds(75))
+                {
+                    <small>@L["MigrationWizardLongRunningHint"]</small>
+                }
             </div>
         }
         else if (!string.IsNullOrWhiteSpace(_error))
@@ -218,6 +229,9 @@
     private string? _error;
     private string? _retryAction;
     private object? _retryBody;
+    private string _progressCode = "queued";
+    private DateTime? _jobStartedAt;
+    private DateTime? _lastActivityAt;
     private string _refinement = "";
     private bool _addingPipeline;
     private string _newPipelineName = "";
@@ -240,6 +254,21 @@
         WizardStep.Review => L["MigrationWizardReviewTitle"],
         _ => L[IsProjectOnboarding ? "ProjectOnboardingTitle" : "MigrationWizardTitle"],
     };
+    private TimeSpan Elapsed => _jobStartedAt is null ? TimeSpan.Zero : DateTime.UtcNow - _jobStartedAt.Value;
+    private string ElapsedLabel => Elapsed.TotalMinutes >= 1
+        ? $"{(int)Elapsed.TotalMinutes} min {Elapsed.Seconds:00} s"
+        : $"{Math.Max(0, (int)Elapsed.TotalSeconds)} s";
+    private string ProgressLabel => _progressCode switch
+    {
+        "preparing" => L["MigrationWizardProgressPreparing"],
+        "inspecting" => L["MigrationWizardProgressInspecting"],
+        "finalizing" => L["MigrationWizardProgressFinalizing"],
+        _ => L["MigrationWizardProgressAnalyzing"],
+    };
+    private string ActivityLabel => _lastActivityAt is not null
+        && DateTime.UtcNow - _lastActivityAt.Value <= TimeSpan.FromSeconds(12)
+            ? L["MigrationWizardActivityReceived"]
+            : L["MigrationWizardAgentThinking"];
 
     protected override void OnInitialized()
     {
@@ -275,6 +304,9 @@
     {
         _busy = true;
         _error = null;
+        _progressCode = "queued";
+        _jobStartedAt = DateTime.UtcNow;
+        _lastActivityAt = null;
         _retryAction = action;
         _retryBody = body;
         try
@@ -289,6 +321,13 @@
                 await Task.Delay(900, _dispose.Token);
                 var job = await http.GetFromJsonAsync<WorkflowMigrationJob>(
                     $"/api/projects/{ProjectSlug}/workflow-migrations/jobs/{accepted.JobId}", MigrationJson, _dispose.Token);
+                if (job is not null)
+                {
+                    _progressCode = job.ProgressCode;
+                    _jobStartedAt = job.StartedAt ?? _jobStartedAt;
+                    _lastActivityAt = job.LastActivityAt ?? _lastActivityAt;
+                    await InvokeAsync(StateHasChanged);
+                }
                 if (job?.Status == "completed") { _plan = job.Plan; _retryAction = null; _retryBody = null; break; }
                 if (job?.Status == "failed") throw new InvalidOperationException(FriendlyError(job.ErrorCode));
             }

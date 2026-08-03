@@ -5198,7 +5198,14 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .migration-analyzing { min-height: 340px; display: grid; place-content: center; justify-items: center; text-align: center; color: #b4b8d2; }
 .migration-analyzing strong { margin-top: 1rem; color: #fff; }
 .migration-analyzing p { max-width: 520px; }
+.migration-analyzing small { max-width: 520px; color: #858ba9; line-height: 1.45; }
 .migration-spinner { width: 42px; height: 42px; border: 3px solid #353852; border-top-color: #37dc7b; border-radius: 50%; animation: spin .8s linear infinite; }
+.migration-progress-track { position: relative; width: min(420px, 72vw); height: 5px; margin-top: .9rem; overflow: hidden; background: #30334d; border-radius: 999px; }
+.migration-progress-track span { position: absolute; inset-block: 0; width: 38%; background: linear-gradient(90deg, transparent, #38df7b, #4a9eff, transparent); border-radius: inherit; animation: migration-progress 1.8s ease-in-out infinite; }
+.migration-progress-meta { display: flex; align-items: center; justify-content: center; gap: .45rem; margin-top: .65rem; color: #9da2c2; font-size: .82rem; }
+.migration-progress-pulse { width: 7px; height: 7px; background: #38df7b; border-radius: 50%; box-shadow: 0 0 0 0 rgba(56, 223, 123, .45); animation: migration-pulse 1.6s ease-out infinite; }
+@keyframes migration-progress { from { transform: translateX(-105%); } to { transform: translateX(270%); } }
+@keyframes migration-pulse { 70% { box-shadow: 0 0 0 7px rgba(56, 223, 123, 0); } 100% { box-shadow: 0 0 0 0 rgba(56, 223, 123, 0); } }
 .migration-error { max-width: 680px; margin: 3rem auto; display: flex; gap: 1rem; padding: 1.2rem; color: #f0d6d9; background: #2b202c; border: 1px solid #71414a; border-radius: 10px; }
 .migration-error-icon { flex: 0 0 30px; width: 30px; height: 30px; display: grid; place-items: center; color: #fff; background: #d65464; border-radius: 50%; font-weight: 800; }
 .migration-error strong { color: #fff; }
