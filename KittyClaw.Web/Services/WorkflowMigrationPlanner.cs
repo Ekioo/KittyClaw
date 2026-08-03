@@ -271,6 +271,12 @@ public sealed class WorkflowMigrationPlanner(
                     diagnostic ?? "The migration agent did not complete successfully.");
             }
 
+            if (!isProjectOnboarding)
+            {
+                var (legacyConfig, _, _) = await automations.LoadAsync(slug);
+                EnsureNoLegacyAutomations(legacyConfig);
+            }
+
             _jobs[jobId] = _jobs[jobId] with
             {
                 Status = "completed",
@@ -478,6 +484,16 @@ public sealed class WorkflowMigrationPlanner(
             throw new InvalidOperationException("Proposed pipeline names must be unique.");
     }
 
+    internal static void EnsureNoLegacyAutomations(AutomationConfig config)
+    {
+        if (config.Automations.Count == 0) return;
+
+        var ids = string.Join(", ", config.Automations.Select(automation => automation.Id));
+        throw new WorkflowMigrationPlanningException(
+            "legacy-automations-remain",
+            $"Migration incomplete: legacy automations remain ({ids}). Convert or explicitly retire every legacy behavior, then remove its automation definition.");
+    }
+
     private static string Truncate(string value, int length) =>
         value.Length <= length ? value : value[..length] + "…";
 
@@ -491,7 +507,7 @@ public sealed class WorkflowMigrationPlanner(
 
         You are already running inside the confirmed application job. Never call any /workflow-migrations/analyze, /workflow-migrations/refine, or /workflow-migrations/apply endpoint. Apply the plan directly through the granular pipeline, column, ticket, processor, skill, scheduled-task and automation APIs.
 
-        {(isProjectOnboarding ? "Replace the placeholder default workflow with the approved organization. Inspect the workspace again when useful, but do not invent operational requirements that contradict the approved plan." : "Disable a legacy automation only after its replacement is configured and verified. Keep any automation that has no validated replacement and report it clearly.")} Verify that all tickets remain accessible, that processors and schedules reload successfully, and summarize every applied change and remaining risk when finished.
+        {(isProjectOnboarding ? "Replace the placeholder default workflow with the approved organization. Inspect the workspace again when useful, but do not invent operational requirements that contradict the approved plan." : "Convert or explicitly retire every legacy automation behavior. Translate interval triggers into scheduled tasks that create or process tickets through a column; absorb status-change work into the responsible processor stage; replace owner-comment relaunches with an explicit OwnerAction hand-off and resubmission; and fold repository-event duties into the responsible delivery processor or a scheduled ticket when exact event semantics are unnecessary. Do not leave any legacy automation definition, enabled or disabled: remove each definition only after its replacement or intentional retirement is configured and verified. If any behavior cannot be represented safely, fail the migration instead of silently preserving it.")} Verify that all tickets remain accessible, that processors and schedules reload successfully, and summarize every applied change and remaining risk when finished.
         """;
 
     private sealed class WorkflowMigrationPlanningException(string code, string message) : InvalidOperationException(message)
@@ -534,8 +550,10 @@ public sealed class WorkflowMigrationPlanner(
         file-backed workflow, processor, prompt, memory and skill configuration. Keep the existing
         board usable throughout the migration. You are already the application job: never invoke
         any workflow-migrations endpoint or launch another migration agent. Use only the granular
-        project APIs. Never disable a legacy automation until its verified
-        replacement exists. Verify API reloads, ticket accessibility, routing and scheduled work
-        before reporting completion. End with a concise user-facing summary of changes and risks.
+        project APIs. Convert or explicitly retire every legacy behavior, verify the replacement,
+        then remove the legacy automation definition. A successful migration must leave zero legacy
+        automations, including disabled definitions. If that cannot be achieved safely, report failure
+        instead of claiming completion. Verify API reloads, ticket accessibility, routing and scheduled
+        work before reporting completion. End with a concise user-facing summary of changes and risks.
         """;
 }

@@ -113,7 +113,7 @@ public sealed class WorkflowMigrationPromptTests
     {
         var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Board.razor"));
 
-        Assert.Contains("legacyConfig.Automations.Any(automation => automation.Enabled)", source);
+        Assert.Contains("legacyConfig.Automations.Count > 0", source);
         Assert.Contains("TicketId is null && ParentId is null", source);
         Assert.Contains("<WorkflowMigrationWizard", source);
     }
@@ -166,10 +166,39 @@ public sealed class WorkflowMigrationPromptTests
 
         Assert.Contains("Editorial", prompt);
         Assert.Contains("OwnerAction", prompt);
-        Assert.Contains("Disable a legacy automation only after its replacement is configured and verified", prompt);
+        Assert.Contains("Do not leave any legacy automation definition, enabled or disabled", prompt);
+        Assert.Contains("fail the migration instead of silently preserving it", prompt);
         Assert.Contains("Map every existing ticket and child ticket to exactly one pipeline", prompt);
         Assert.Contains("Never call any /workflow-migrations/analyze", prompt);
         Assert.Contains("Apply the plan directly through the granular pipeline", prompt);
+    }
+
+    [Fact]
+    public void Completed_migration_rejects_even_disabled_legacy_definitions()
+    {
+        var config = new AutomationConfig
+        {
+            Automations =
+            [
+                new KittyClaw.Core.Automation.Automation
+                {
+                    Id = "old-worker",
+                    Enabled = false,
+                    Trigger = new TicketInColumnTriggerSpec { Columns = ["Todo"] },
+                },
+            ],
+        };
+
+        var error = Assert.ThrowsAny<InvalidOperationException>(
+            () => WorkflowMigrationPlanner.EnsureNoLegacyAutomations(config));
+
+        Assert.Contains("old-worker", error.Message);
+    }
+
+    [Fact]
+    public void Completed_migration_accepts_an_empty_legacy_configuration()
+    {
+        WorkflowMigrationPlanner.EnsureNoLegacyAutomations(new AutomationConfig());
     }
 
     [Fact]

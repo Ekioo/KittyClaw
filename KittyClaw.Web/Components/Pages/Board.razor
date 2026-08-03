@@ -846,7 +846,8 @@ else
             if (TicketId is null && ParentId is null)
             {
                 var (legacyConfig, _, _) = await AutomationStore.LoadAsync(Slug);
-                _showMigrationWizard = legacyConfig.Automations.Any(automation => automation.Enabled);
+                _showMigrationWizard = KittyClaw.Web.Services.WorkflowMigrationEligibility.ShouldOffer(
+                    legacyConfig.Automations.Count > 0);
             }
 
             // Legacy ticket links did not carry the pipeline in the URL. Infer it from
