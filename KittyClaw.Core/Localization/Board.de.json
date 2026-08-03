@@ -221,5 +221,9 @@
   "ScheduleNoTicket": "Kein Ticket", "ScheduleFirstTicket": "Erstes Ticket der Spalte", "ScheduleActions": "Auszuführende Aktionen",
   "ScheduleFailureHelp": "Bei einem Fehler wird die Aufgabe beendet und das Ziel-Ticket in diese Spalte verschoben. Unsichere Aktionen werden nicht automatisch wiederholt.",
   "ScheduleDefaultName": "Geplante Aufgabe",
-  "PipelineUnreadTickets": "{0} ungelesene Tickets"
+  "PipelineUnreadTickets": "{0} ungelesene Tickets",
+  "ChatCommandBlocked": "Ein Befehlsversuch wurde durch die Sicherheitsrichtlinie blockiert",
+  "ChatCommandFailed": "Ein Befehlsversuch ist fehlgeschlagen",
+  "ChatCommandWarning": "Der Befehl hat eine technische Warnung gemeldet",
+  "ChatTechnicalDetails": "Technische Details"
 }

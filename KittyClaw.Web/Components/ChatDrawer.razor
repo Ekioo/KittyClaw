@@ -145,6 +145,19 @@
                         <div class="chat-bubble">↩ @msg.Text</div>
                     </div>
                 }
+                else if (msg is DiagnosticMessage diagnostic)
+                {
+                    <div class="chat-message chat-message-diagnostic chat-message-@diagnostic.Role">
+                        <details class="chat-diagnostic-block">
+                            <summary class="chat-diagnostic-summary">
+                                <span class="chat-diagnostic-icon">!</span>
+                                <span class="chat-diagnostic-title">@diagnostic.Summary</span>
+                                <span class="chat-diagnostic-disclosure">@L["ChatTechnicalDetails"]</span>
+                            </summary>
+                            <pre class="chat-diagnostic-detail">@diagnostic.Text</pre>
+                        </details>
+                    </div>
+                }
                 else
                 {
                     <div class="chat-message chat-message-@msg.Role">
@@ -274,6 +287,8 @@
     private string? _pasteError;
 
     private record ChatMessage(string Role, string Text);
+    private sealed record DiagnosticMessage(string DiagnosticRole, string Summary, string Detail)
+        : ChatMessage(DiagnosticRole, Detail);
     private sealed record ToolCallMessage(string ToolName, string Preview, string Detail)
         : ChatMessage("tool_use", ToolName);
     private sealed record AskUserQuestionMessage(string Prompt, string[] Options, string? RunId = null)
@@ -718,10 +733,20 @@
     {
         var clean = RunDrawerEventPresentation.Sanitize(text);
         if (string.IsNullOrWhiteSpace(clean)) return;
-        if (_messages.Count > 0 && _messages[^1].Role == role)
-            _messages[^1] = new ChatMessage(role, _messages[^1].Text + "\n" + clean);
+        var summary = GetDiagnosticSummary(role, clean);
+        if (_messages.Count > 0 && _messages[^1] is DiagnosticMessage previous && previous.Role == role)
+            _messages[^1] = new DiagnosticMessage(role, previous.Summary, previous.Text + "\n" + clean);
         else
-            _messages.Add(new ChatMessage(role, clean));
+            _messages.Add(new DiagnosticMessage(role, summary, clean));
+    }
+
+    private string GetDiagnosticSummary(string role, string text)
+    {
+        if (text.Contains("blocked by policy", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("rejected: blocked", StringComparison.OrdinalIgnoreCase))
+            return L["ChatCommandBlocked"];
+
+        return role == "stderr" ? L["ChatCommandWarning"] : L["ChatCommandFailed"];
     }
 
     private static (string Prompt, string[] Options) ParseAskUserQuestionDetail(string? detail)

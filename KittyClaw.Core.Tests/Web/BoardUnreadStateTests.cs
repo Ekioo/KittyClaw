@@ -93,7 +93,9 @@ public class BoardUnreadStateTests
         var css = File.ReadAllText(WebPath("wwwroot", "app.css"));
 
         Assert.Contains("PipelineUnreadCount(pipeline.Id)", board);
-        Assert.Contains("ticket.PipelineId == pipelineId && IsTicketUpdated(ticket)", board);
+        Assert.Contains("ticket.PipelineId == pipelineId &&", board);
+        Assert.Contains("ticket.ParentId == _subKanbanParentId &&", board);
+        Assert.Contains("IsTicketUpdated(ticket)", board);
         Assert.Contains("pipeline-unread-badge", board);
         Assert.Contains("PipelineUnreadTickets", board);
         Assert.Contains(".pipeline-unread-badge", css);

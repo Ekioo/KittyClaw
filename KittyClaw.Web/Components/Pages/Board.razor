@@ -543,6 +543,8 @@ else
     [Parameter] public string Slug { get; set; } = "";
     [Parameter] public int? TicketId { get; set; }
     [Parameter] public int? ParentId { get; set; }
+    [SupplyParameterFromQuery(Name = "pipeline")]
+    public int? PipelineId { get; set; }
 
     private Project? _project;
     private List<TicketSummary> _tickets = [];
@@ -629,7 +631,9 @@ else
     }
 
     private int PipelineUnreadCount(int pipelineId) =>
-        _tickets.Count(ticket => ticket.PipelineId == pipelineId && IsTicketUpdated(ticket));
+        _tickets.Count(ticket => ticket.PipelineId == pipelineId &&
+                                 ticket.ParentId == _subKanbanParentId &&
+                                 IsTicketUpdated(ticket));
 
     private async Task MarkTicketViewedAsync(int ticketId)
     {
@@ -673,6 +677,17 @@ else
         _openTicketId = null;
         await LoadSelectedPipelineColumnsAsync();
         ResetLoadedColumns();
+        Navigation.NavigateTo(BoardUrl(_subKanbanParentId, null), replace: true);
+    }
+
+    private string BoardUrl(int? parentId, int? ticketId)
+    {
+        var path = parentId is int parent
+            ? $"/board/{Slug}/sub/{parent}"
+            : $"/board/{Slug}";
+        if (ticketId is int ticket)
+            path += $"/ticket/{ticket}";
+        return _selectedPipelineId is int pipeline ? $"{path}?pipeline={pipeline}" : path;
     }
 
     // Undo
@@ -784,11 +799,23 @@ else
         _project = await ProjectService.GetProjectAsync(Slug);
         if (_project is not null)
         {
+            _selectedPipelineId = PipelineId;
             await LoadSelectedPipelineColumnsAsync();
             ResetLoadedColumns();
             _tickets = await TicketService.ListTicketsAsync(Slug);
             _allLabels = await LabelService.ListLabelsAsync(Slug);
             _allMembers = await MemberService.ListMembersAsync(Slug);
+
+            // Legacy ticket links did not carry the pipeline in the URL. Infer it from
+            // the ticket so direct links still open in the pipeline that owns the card.
+            if (PipelineId is null && TicketId is int ticketId &&
+                _tickets.FirstOrDefault(ticket => ticket.Id == ticketId)?.PipelineId is int ticketPipelineId &&
+                ticketPipelineId != _selectedPipelineId)
+            {
+                _selectedPipelineId = ticketPipelineId;
+                await LoadSelectedPipelineColumnsAsync();
+                ResetLoadedColumns();
+            }
         }
         if (ParentId.HasValue)
         {
@@ -828,6 +855,17 @@ else
     protected override async Task OnParametersSetAsync()
     {
         if (_project is null) return; // handled by OnInitializedAsync
+
+        var requestedPipelineId = PipelineId;
+        if (requestedPipelineId is null && TicketId is int ticketId)
+            requestedPipelineId = _tickets.FirstOrDefault(ticket => ticket.Id == ticketId)?.PipelineId;
+        if (requestedPipelineId is int pipelineId && pipelineId != _selectedPipelineId &&
+            _pipelines.Any(pipeline => pipeline.Id == pipelineId))
+        {
+            _selectedPipelineId = pipelineId;
+            await LoadSelectedPipelineColumnsAsync();
+            ResetLoadedColumns();
+        }
 
         // Sync sub-kanban state with URL
         if (ParentId.HasValue && _subKanbanParentId != ParentId.Value)
@@ -1321,14 +1359,14 @@ else
         _subKanbanParentId = parent.Id;
         _subKanbanParent = parent;
         _openTicketId = null;
-        Navigation.NavigateTo($"/board/{Slug}/sub/{parent.Id}", replace: true);
+        Navigation.NavigateTo(BoardUrl(parent.Id, null), replace: true);
     }
 
     private void ExitSubKanban()
     {
         _subKanbanParentId = null;
         _subKanbanParent = null;
-        Navigation.NavigateTo($"/board/{Slug}", replace: true);
+        Navigation.NavigateTo(BoardUrl(null, null), replace: true);
     }
 
     private string GetColumnColor(string status) =>
@@ -1421,10 +1459,7 @@ else
         // Clear the "updated" indicator only for the ticket actually opened.
         await MarkTicketViewedAsync(ticket.Id);
 
-        if (_subKanbanParentId is not null)
-            Navigation.NavigateTo($"/board/{Slug}/sub/{_subKanbanParentId}/ticket/{ticket.Id}", replace: true);
-        else
-            Navigation.NavigateTo($"/board/{Slug}/ticket/{ticket.Id}", replace: true);
+        Navigation.NavigateTo(BoardUrl(_subKanbanParentId, ticket.Id), replace: true);
     }
 
     private async Task ClosePanel()
@@ -1432,10 +1467,7 @@ else
         await JS.InvokeVoidAsync("saveColumnScrollPositions");
         _restoreScrollAfterRender = true;
         _openTicketId = null;
-        if (_subKanbanParentId is not null)
-            Navigation.NavigateTo($"/board/{Slug}/sub/{_subKanbanParentId}", replace: true);
-        else
-            Navigation.NavigateTo($"/board/{Slug}", replace: true);
+        Navigation.NavigateTo(BoardUrl(_subKanbanParentId, null), replace: true);
     }
 
     /// <summary>The panel mutated the ticket — refresh the board's card lists.</summary>
@@ -1449,10 +1481,7 @@ else
     {
         _openTicketId = null;
         await RefreshTicketsAsync();
-        if (_subKanbanParentId is not null)
-            Navigation.NavigateTo($"/board/{Slug}/sub/{_subKanbanParentId}", replace: true);
-        else
-            Navigation.NavigateTo($"/board/{Slug}", replace: true);
+        Navigation.NavigateTo(BoardUrl(_subKanbanParentId, null), replace: true);
     }
 
     private void EnterSubKanbanById(int parentId)

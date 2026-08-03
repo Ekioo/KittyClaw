@@ -78,7 +78,7 @@ public class RunDrawerEventPresentationTests
             RepoRoot(), "KittyClaw.Web", "Components", "ChatDrawer.razor"));
 
         Assert.Contains("RunDrawerEventPresentation.Sanitize(text)", source);
-        Assert.Contains("_messages[^1].Role == role", source);
+        Assert.Contains("previous.Role == role", source);
         Assert.Contains("AddDiagnosticMessage(\"stderr\", text);", source);
         Assert.Contains("AddStderrMessage(m.Text)", source);
     }
@@ -93,5 +93,18 @@ public class RunDrawerEventPresentationTests
         Assert.Contains("else if (kind == \"error\")", source);
         Assert.Contains("AddErrorMessage(text);", source);
         Assert.Contains("AddDiagnosticMessage(\"error\", text);", source);
+    }
+
+    [Fact]
+    public void Chat_drawer_collapses_diagnostics_behind_a_friendly_summary()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Web", "Components", "ChatDrawer.razor"));
+
+        Assert.Contains("msg is DiagnosticMessage diagnostic", source);
+        Assert.Contains("<details class=\"chat-diagnostic-block\">", source);
+        Assert.Contains("@L[\"ChatTechnicalDetails\"]", source);
+        Assert.Contains("text.Contains(\"blocked by policy\"", source);
+        Assert.Contains("return L[\"ChatCommandBlocked\"]", source);
     }
 }

@@ -221,5 +221,9 @@
   "ScheduleNoTicket": "Nessun ticket", "ScheduleFirstTicket": "Primo ticket della colonna", "ScheduleActions": "Azioni eseguite",
   "ScheduleFailureHelp": "In caso di errore, interrompe l’attività e sposta il ticket di destinazione in questa colonna. Le azioni incerte non vengono ripetute automaticamente.",
   "ScheduleDefaultName": "Attività pianificata",
-  "PipelineUnreadTickets": "{0} ticket non letti"
+  "PipelineUnreadTickets": "{0} ticket non letti",
+  "ChatCommandBlocked": "Un tentativo di comando è stato bloccato dalla politica di sicurezza",
+  "ChatCommandFailed": "Un tentativo di comando non è riuscito",
+  "ChatCommandWarning": "Il comando ha segnalato un avviso tecnico",
+  "ChatTechnicalDetails": "Dettagli tecnici"
 }

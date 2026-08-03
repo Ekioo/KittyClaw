@@ -228,5 +228,9 @@
   "ScheduleActions": "Actions to run",
   "ScheduleFailureHelp": "On failure, stop the task and move its target ticket to this column. An uncertain action is never replayed automatically.",
   "ScheduleDefaultName": "Scheduled task",
-  "PipelineUnreadTickets": "{0} unread ticket(s)"
+  "PipelineUnreadTickets": "{0} unread ticket(s)",
+  "ChatCommandBlocked": "A command attempt was blocked by the security policy",
+  "ChatCommandFailed": "A command attempt failed",
+  "ChatCommandWarning": "The command reported a technical warning",
+  "ChatTechnicalDetails": "Technical details"
 }

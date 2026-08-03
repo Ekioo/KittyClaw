@@ -3013,6 +3013,7 @@ body.flow-dnd-active * { cursor: grabbing !important; }
 .chat-message-user { justify-content: flex-end; }
 .chat-message-assistant { justify-content: flex-start; }
 .chat-message-error { justify-content: flex-start; }
+.chat-message-diagnostic { justify-content: flex-start; width: 100%; }
 .chat-bubble {
     max-width: 80%;
     padding: 0.6rem 0.9rem;
@@ -3076,6 +3077,77 @@ body.flow-dnd-active * { cursor: grabbing !important; }
     font-family: monospace;
     border-bottom-left-radius: 3px;
 }
+.chat-diagnostic-block {
+    width: min(80%, 34rem);
+    overflow: hidden;
+    border: 1px solid #70512f;
+    border-radius: 10px;
+    background: #2a241f;
+    color: #d9b27a;
+}
+.chat-message-error .chat-diagnostic-block {
+    border-color: #6d3c43;
+    background: #2a2023;
+    color: #e3a0a7;
+}
+.chat-diagnostic-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-height: 2.6rem;
+    padding: 0.5rem 0.7rem;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+.chat-diagnostic-summary::-webkit-details-marker { display: none; }
+.chat-diagnostic-summary::after {
+    content: "▶";
+    margin-left: 0.15rem;
+    font-size: 0.62rem;
+    opacity: 0.7;
+    transition: transform 0.15s ease;
+}
+.chat-diagnostic-block[open] .chat-diagnostic-summary::after { transform: rotate(90deg); }
+.chat-diagnostic-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 1.15rem;
+    height: 1.15rem;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: #d49a4b;
+    color: #241c14;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+.chat-message-error .chat-diagnostic-icon { background: #d96b76; color: #251518; }
+.chat-diagnostic-title {
+    min-width: 0;
+    flex: 1;
+    color: inherit;
+    font-size: 0.86rem;
+    font-weight: 650;
+}
+.chat-diagnostic-disclosure {
+    flex: 0 0 auto;
+    color: inherit;
+    font-size: 0.72rem;
+    opacity: 0.7;
+}
+.chat-diagnostic-detail {
+    max-height: 22rem;
+    margin: 0;
+    padding: 0.65rem 0.75rem;
+    overflow: auto;
+    border-top: 1px solid currentColor;
+    background: #171519;
+    color: #c8b8a6;
+    font: 0.75rem/1.5 'Cascadia Code', 'Consolas', monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+.chat-message-error .chat-diagnostic-detail { color: #d2b3b6; }
 .chat-bubble-loading {
     color: var(--muted, #8a99b0);
     font-style: italic;

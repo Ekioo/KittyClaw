@@ -228,5 +228,9 @@
   "ScheduleActions": "Actions exécutées",
   "ScheduleFailureHelp": "En cas d’échec, arrête la tâche et déplace son ticket cible vers cette colonne. Aucun rejeu automatique de l’action incertaine.",
   "ScheduleDefaultName": "Tâche planifiée",
-  "PipelineUnreadTickets": "{0} ticket(s) non lu(s)"
+  "PipelineUnreadTickets": "{0} ticket(s) non lu(s)",
+  "ChatCommandBlocked": "Une tentative de commande a été bloquée par la politique de sécurité",
+  "ChatCommandFailed": "Une tentative de commande a échoué",
+  "ChatCommandWarning": "La commande a signalé un avertissement technique",
+  "ChatTechnicalDetails": "Détails techniques"
 }
