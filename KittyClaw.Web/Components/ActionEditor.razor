@@ -17,13 +17,13 @@
             {
                 <option value="assignTicket">@L["ActionAssignTicket"]</option>
             }
-            <option value="addComment">@L["ActionAddComment"]</option>
+            <option value="addComment">@L["ActionEditorAddComment"]</option>
             @if (!ProcessorMode)
             {
                 <option value="commitAgentMemory">@L["ActionCommitAgentMemory"]</option>
                 <option value="consolidateAgentMemory">@L["ActionConsolidateAgentMemory"]</option>
             }
-            <option value="executePowerShell">@L["ActionExecutePowerShell"]</option>
+            <option value="executePowerShell">@L["ActionEditorExecutePowerShell"]</option>
             <option value="createTicket">@L["ActionCreateTicket"]</option>
             <option value="httpRequest">@L["ActionHttpRequest"]</option>
         </select>
@@ -189,10 +189,10 @@
             }
             <label><FieldHelp Label="@L["CtPriority"]" Help="@L["CtPriorityHelp"]" />
                 <select @bind="s.Priority">
-                    <option value="Idea">Idea</option>
-                    <option value="NiceToHave">NiceToHave</option>
-                    <option value="Required">Required</option>
-                    <option value="Critical">Critical</option>
+                    <option value="Idea">@L["PriorityIdea"]</option>
+                    <option value="NiceToHave">@L["PriorityNiceToHave"]</option>
+                    <option value="Required">@L["PriorityRequired"]</option>
+                    <option value="Critical">@L["PriorityCritical"]</option>
                 </select>
             </label>
             <label><FieldHelp Label="@L["CtLabels"]" Help="@L["CtLabelsHelp"]" />

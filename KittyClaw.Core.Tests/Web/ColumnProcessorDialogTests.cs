@@ -109,7 +109,8 @@ public sealed class ColumnProcessorDialogTests
     {
         string[] keys =
         [
-            "ActionTypeHelp", "LabelsToAddHelp", "LabelsToRemoveHelp", "CommentContentHelp",
+            "ActionEditorAddComment", "ActionEditorExecutePowerShell", "ActionTypeHelp",
+            "LabelsToAddHelp", "LabelsToRemoveHelp", "CommentContentHelp",
             "CommentAuthorHelp", "CtTitleHelp", "CtDescriptionHelp", "CtStatusHelp",
             "CtPriorityHelp", "CtLabelsHelp", "CtCreatedByHelp", "PsScriptHelp",
             "PsScriptFileHelp", "PsArgumentsHelp", "PsTimeoutHelp", "HttpMethodHelp",
@@ -119,6 +120,18 @@ public sealed class ColumnProcessorDialogTests
         using var document = JsonDocument.Parse(File.ReadAllText(path));
         foreach (var key in keys)
             Assert.False(string.IsNullOrWhiteSpace(document.RootElement.GetProperty(key).GetString()), key);
+    }
+
+    [Fact]
+    public void Processor_action_editor_uses_user_facing_labels()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Web", "Components", "ActionEditor.razor"));
+
+        Assert.Contains("ActionEditorAddComment", source);
+        Assert.Contains("ActionEditorExecutePowerShell", source);
+        Assert.Contains("PriorityNiceToHave", source);
+        Assert.DoesNotContain(">NiceToHave<", source);
     }
 
     [Fact]

@@ -5194,6 +5194,12 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 }
 .column-editor-tab:hover { color: var(--text); background: var(--surface3); }
 .column-editor-tab--active { border-bottom-color: var(--accent); color: var(--text); background: var(--surface3); }
+.column-editor-tab:focus-visible,
+.processor-dialog button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+.column-editor-tab:focus-visible { outline-offset: -2px; }
 .column-editor-tab-state { margin-left: .25rem; color: var(--accent-hover); }
 .column-editor-grid { display: grid; grid-template-columns: minmax(260px, 1fr) 110px minmax(180px, .65fr) minmax(240px, .8fr); gap: 1rem; align-items: end; }
 .column-editor-grid input, .column-editor-grid select { width: 100%; }
@@ -5229,6 +5235,9 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     .processor-dialog .route-row select { min-width: 0; width: 100%; }
     .column-editor-tabs { overflow-x: auto; }
     .column-editor-grid { grid-template-columns: 1fr; }
+    .processor-actions-heading { align-items: stretch; flex-direction: column; }
+    .processor-actions-heading > button { align-self: flex-start; }
+    .scheduled-task-card { padding: .8rem; }
     .workflow-migration-card { align-items: stretch; flex-direction: column; }
     .workflow-settings .settings-row { align-items: stretch; flex-direction: column; }
     .workflow-edit-row > .settings-hint { white-space: normal; }
