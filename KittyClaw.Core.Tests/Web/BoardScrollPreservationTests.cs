@@ -165,6 +165,10 @@ public class BoardScrollPreservationTests
         var app = File.ReadAllText(appRazorPath);
 
         Assert.Contains("@Assets[\"js/board.js\"]", app);
+        Assert.True(
+            app.IndexOf("@Assets[\"js/board.js\"]", StringComparison.Ordinal) <
+            app.IndexOf("@Assets[\"_framework/blazor.web.js\"]", StringComparison.Ordinal),
+            "Board helpers must load before Blazor starts the interactive circuit.");
         Assert.Contains("TryInvokeBoardJsAsync", src);
         Assert.Contains("catch (JSException)", src);
         Assert.DoesNotContain("await JS.InvokeVoidAsync(\"saveColumnScrollPositions\")", src);
