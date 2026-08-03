@@ -303,6 +303,13 @@ else
                 <span class="column-context-menu-check">⚙</span>
                 <span>@L["ConfigureColumn"]</span>
             </button>
+            <button class="column-context-menu-item"
+                    disabled="@(ColumnUnreadCount(_sortMenuOpenFor) == 0)"
+                    @onclick="MarkColumnViewedAsync">
+                <span class="column-context-menu-check">✓</span>
+                <span>@L["MarkColumnRead"]</span>
+            </button>
+            <div class="column-context-menu-separator"></div>
             <button class="column-context-menu-item" @onclick="InsertColumnBeforeFromMenu">
                 <span class="column-context-menu-check">＋</span>
                 <span>@L["InsertColumnBefore"]</span>
@@ -635,9 +642,22 @@ else
                                  ticket.ParentId == _subKanbanParentId &&
                                  IsTicketUpdated(ticket));
 
+    private IEnumerable<TicketSummary> TicketsInColumnContext(string status) =>
+        _tickets.Where(ticket => ticket.PipelineId == _selectedPipelineId &&
+                                 ticket.ParentId == _subKanbanParentId &&
+                                 ticket.Status == status);
+
+    private int ColumnUnreadCount(string status) =>
+        TicketsInColumnContext(status).Count(IsTicketUpdated);
+
     private async Task MarkTicketViewedAsync(int ticketId)
     {
         _viewedAt[ticketId] = DateTime.UtcNow;
+        await PersistViewedStateAsync();
+    }
+
+    private async Task PersistViewedStateAsync()
+    {
         try
         {
             var json = System.Text.Json.JsonSerializer.Serialize(
@@ -949,17 +969,8 @@ else
 
     private List<TicketSummary> GetTickets(string status)
     {
-        IEnumerable<TicketSummary> tickets;
-        if (_subKanbanParentId is not null)
-        {
-            // Sub-kanban: only children of the parent ticket
-            tickets = _tickets.Where(t => t.PipelineId == _selectedPipelineId && t.ParentId == _subKanbanParentId && t.Status == status);
-        }
-        else
-        {
-            // Main board: only top-level tickets (no parent)
-            tickets = _tickets.Where(t => t.PipelineId == _selectedPipelineId && t.ParentId is null && t.Status == status);
-        }
+        // Main board: top-level tickets. Sub-kanban: only children of its parent.
+        IEnumerable<TicketSummary> tickets = TicketsInColumnContext(status);
 
         if (!string.IsNullOrWhiteSpace(_filterText))
             tickets = ApplyFilter(tickets);
@@ -1019,6 +1030,19 @@ else
     }
 
     private void CloseSortMenu() => _sortMenuOpenFor = null;
+
+    private async Task MarkColumnViewedAsync()
+    {
+        var columnName = _sortMenuOpenFor;
+        _sortMenuOpenFor = null;
+        if (string.IsNullOrWhiteSpace(columnName)) return;
+
+        var viewedAt = DateTime.UtcNow;
+        foreach (var ticket in TicketsInColumnContext(columnName))
+            _viewedAt[ticket.Id] = viewedAt;
+
+        await PersistViewedStateAsync();
+    }
 
     private void OpenColumnDialogFromMenu()
     {

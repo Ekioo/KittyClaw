@@ -232,5 +232,6 @@
   "ChatCommandBlocked": "A command attempt was blocked by the security policy",
   "ChatCommandFailed": "A command attempt failed",
   "ChatCommandWarning": "The command reported a technical warning",
-  "ChatTechnicalDetails": "Technical details"
+  "ChatTechnicalDetails": "Technical details",
+  "MarkColumnRead": "Mark all as read"
 }

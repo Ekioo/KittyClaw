@@ -4701,6 +4701,12 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .column-context-menu-item:hover {
     background: var(--surface3);
 }
+.column-context-menu-item:disabled {
+    color: var(--text-muted);
+    cursor: default;
+    opacity: 0.5;
+}
+.column-context-menu-item:disabled:hover { background: transparent; }
 .column-context-menu-item--active {
     color: var(--accent-hover);
     font-weight: 600;

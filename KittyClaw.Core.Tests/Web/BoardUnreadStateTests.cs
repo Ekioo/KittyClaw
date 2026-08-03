@@ -102,6 +102,19 @@ public class BoardUnreadStateTests
         Assert.Contains("background: #f59e0b", css);
     }
 
+    [Fact]
+    public void Column_context_menu_can_mark_only_its_current_board_context_as_read()
+    {
+        var board = File.ReadAllText(BoardPath);
+
+        Assert.Contains("@L[\"MarkColumnRead\"]", board);
+        Assert.Contains("@onclick=\"MarkColumnViewedAsync\"", board);
+        Assert.Contains("disabled=\"@(ColumnUnreadCount(_sortMenuOpenFor) == 0)\"", board);
+        Assert.Contains("ticket.ParentId == _subKanbanParentId", board);
+        Assert.Contains("foreach (var ticket in TicketsInColumnContext(columnName))", board);
+        Assert.Contains("await PersistViewedStateAsync();", board);
+    }
+
     private static string WebPath(params string[] parts) => Path.GetFullPath(Path.Combine(
         AppContext.BaseDirectory, "../../../../KittyClaw.Web", Path.Combine(parts)));
 

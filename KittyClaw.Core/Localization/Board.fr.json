@@ -232,5 +232,6 @@
   "ChatCommandBlocked": "Une tentative de commande a été bloquée par la politique de sécurité",
   "ChatCommandFailed": "Une tentative de commande a échoué",
   "ChatCommandWarning": "La commande a signalé un avertissement technique",
-  "ChatTechnicalDetails": "Détails techniques"
+  "ChatTechnicalDetails": "Détails techniques",
+  "MarkColumnRead": "Tout marquer comme lu"
 }
