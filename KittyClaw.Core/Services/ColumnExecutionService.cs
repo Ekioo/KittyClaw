@@ -402,12 +402,10 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                     "L'issue 'scheduled' exige fireAt et scheduleTarget.", author);
                 return;
             }
-            if (target.Role != ColumnRole.Waiting
-                || (!string.Equals(target.Name, "Scheduled", StringComparison.OrdinalIgnoreCase)
-                    && !string.Equals(target.Name, "Planifié", StringComparison.OrdinalIgnoreCase)))
+            if (target.Role != ColumnRole.Waiting)
             {
                 await FailAttemptAsync(projectSlug, execution, processor,
-                    "L'issue 'scheduled' doit être routée vers une colonne Scheduled ou Planifié de rôle Attente.", author);
+                    "L'issue 'scheduled' doit être routée vers une colonne de rôle Attente.", author);
                 return;
             }
             wakeTarget = await db.BoardColumns.FirstOrDefaultAsync(c =>
