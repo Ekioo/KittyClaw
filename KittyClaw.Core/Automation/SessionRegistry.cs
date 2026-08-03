@@ -15,6 +15,7 @@ namespace KittyClaw.Core.Automation;
 /// </summary>
 public sealed class SessionRegistry
 {
+    private const int WriteAttempts = 6;
     private readonly object _fileLock = new();
 
     private static string StatePath(string workspacePath) =>
@@ -61,7 +62,36 @@ public sealed class SessionRegistry
     {
         var path = StatePath(workspacePath);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, state.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        WriteAllTextWithRetry(
+            path,
+            state.ToJsonString(new JsonSerializerOptions { WriteIndented = true }),
+            File.WriteAllText,
+            Thread.Sleep);
+    }
+
+    /// <summary>
+    /// Windows can briefly reject writes while an agent process has the legacy state file
+    /// open or memory-mapped. Treat that sharing violation like the transient condition it
+    /// is instead of failing the whole agent run. Non-I/O failures still surface immediately.
+    /// </summary>
+    internal static void WriteAllTextWithRetry(
+        string path,
+        string content,
+        Action<string, string> write,
+        Action<TimeSpan> delay)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                write(path, content);
+                return;
+            }
+            catch (IOException) when (attempt < WriteAttempts)
+            {
+                delay(TimeSpan.FromMilliseconds(25 * (1 << (attempt - 1))));
+            }
+        }
     }
 
     public string? GetSessionId(string workspacePath, string agent, int? ticketId)
