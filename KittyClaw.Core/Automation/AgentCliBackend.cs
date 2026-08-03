@@ -117,7 +117,7 @@ internal abstract class AgentCliBackend
             var args = new List<string>
             {
                 "exec", "--json", "--dangerously-bypass-approvals-and-sandbox",
-                "--skip-git-repo-check",
+                "--skip-git-repo-check", "--config", "notify=[]",
             };
             if (context.Target.Model is not null) { args.Add("--model"); args.Add(context.Target.Model); }
             if (context.ImagePaths is { Count: > 0 })

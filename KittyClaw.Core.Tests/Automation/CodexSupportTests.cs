@@ -106,7 +106,8 @@ public sealed class CodexSupportTests
             .BuildInvocationAsync(context, "prompt", "", false, CancellationToken.None);
 
         Assert.Equal(["exec", "--json", "--dangerously-bypass-approvals-and-sandbox",
-            "--skip-git-repo-check", "--model", "gpt-5.6-sol", "-"], invocation.Arguments);
+            "--skip-git-repo-check", "--config", "notify=[]",
+            "--model", "gpt-5.6-sol", "-"], invocation.Arguments);
         Assert.True(invocation.WritePromptToStdin);
     }
 
