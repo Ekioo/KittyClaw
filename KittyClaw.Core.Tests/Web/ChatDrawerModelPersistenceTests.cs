@@ -17,6 +17,18 @@ public class ChatDrawerModelPersistenceTests
     }
 
     [Fact]
+    public void ExistingConversation_RestoresItsOwnModel_InsteadOfTheLastGlobalChoice()
+    {
+        var source = ChatDrawer();
+
+        Assert.Contains("/chat/model?target=", source);
+        Assert.Contains("_sessionModel = modelResponse.Model", source);
+        Assert.Contains("if (_sessionModel is null)", source);
+        Assert.Contains("await RestoreRememberedModelAsync()", source);
+        Assert.Contains("_sessionModel = null", source);
+    }
+
+    [Fact]
     public void StoredModel_IsRestoredOnlyWhenNonEmptyAndAvailable()
     {
         var source = ChatDrawer();

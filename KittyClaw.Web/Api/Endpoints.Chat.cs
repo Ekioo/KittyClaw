@@ -45,6 +45,15 @@ public static partial class Endpoints
             return Results.Ok(new { runId = active?.RunId });
         }).WithTags("Chat");
 
+        api.MapGet("/projects/{slug}/chat/model", async (
+            string slug, string target, ProjectService ps, SessionRegistry sessions) =>
+        {
+            var project = await ps.GetProjectAsync(slug);
+            if (project is null) return Results.NotFound();
+            var workspacePath = ps.ResolveWorkspacePath(project);
+            return Results.Ok(new { model = sessions.GetLastChatModel(workspacePath, target) });
+        }).WithTags("Chat");
+
         api.MapDelete("/projects/{slug}/chat/session", async (string slug, string target, ProjectService ps, ChatService cs, SessionRegistry sessions) =>
         {
             var project = await ps.GetProjectAsync(slug);
@@ -54,6 +63,7 @@ public static partial class Endpoints
             sessions.Clear(workspacePath, $"chat:{target}", null);
             sessions.Clear(workspacePath, $"grok:chat:{target}", null);
             sessions.Clear(workspacePath, $"codex:chat:{target}", null);
+            sessions.ClearLastChatModel(workspacePath, target);
             return Results.NoContent();
         }).WithTags("Chat");
 
@@ -62,25 +72,32 @@ public static partial class Endpoints
             var project = await ps.GetProjectAsync(slug);
             if (project is null) return Results.NotFound();
 
+            var target = string.IsNullOrWhiteSpace(req.Target) ? "owner-chat" : req.Target;
+            var workspacePath = ps.ResolveWorkspacePath(project);
+            var storedConversationModel = req.ForceNew
+                ? null
+                : sessions.GetLastChatModel(workspacePath, target);
+            var requestedModel = storedConversationModel ?? req.Model;
+
             // Resolve which CLI runs this chat turn (claude, claude+Ollama env, or grok).
             string? effectiveModel = null;
             Dictionary<string, string>? modelEnv = null;
             var provider = CliProvider.Claude;
             string? modelValidationError = null;
-            if (!string.IsNullOrEmpty(req.Model))
+            if (!string.IsNullOrEmpty(requestedModel))
             {
-                var routing = ModelRouting.Resolve(req.Model, project.LocalModelBaseUrl);
+                var routing = ModelRouting.Resolve(requestedModel, project.LocalModelBaseUrl);
                 if (routing.Error is null)
                 {
-                    effectiveModel = routing.ResolvedModel ?? req.Model;
+                    effectiveModel = routing.ResolvedModel ?? requestedModel;
                     provider = routing.Provider;
                     modelEnv = routing.ExtraEnv is null ? null : new Dictionary<string, string>(routing.ExtraEnv);
                 }
-                else if (GrokCli.IsGrokModel(req.Model) || CodexCli.IsCodexModel(req.Model))
+                else if (GrokCli.IsGrokModel(requestedModel) || CodexCli.IsCodexModel(requestedModel))
                 {
                     // Surface a missing native CLI in the chat stream rather than silently
                     // answering with the default Claude model.
-                    effectiveModel = req.Model;
+                    effectiveModel = requestedModel;
                     modelValidationError = routing.Error;
                 }
                 // Ollama model without a configured base URL: historical chat behavior —
@@ -89,9 +106,7 @@ public static partial class Endpoints
             var dispatchTarget = new AgentDispatchTarget(
                 effectiveModel, provider, modelEnv ?? new Dictionary<string, string>(), modelValidationError);
 
-            var target = string.IsNullOrWhiteSpace(req.Target) ? "owner-chat" : req.Target;
             var runId = Guid.NewGuid().ToString("N");
-            var workspacePath = ps.ResolveWorkspacePath(project);
 
             // A ticket-scoped chat target looks like "{agent}#ticket-{id}". The hash-suffix
             // namespaces ChatService rows so each ticket has its own thread with the agent.
@@ -120,6 +135,7 @@ public static partial class Endpoints
                 sessions.Clear(workspacePath, $"grok:chat:{baseAgent}", effectiveTicketId);
                 sessions.Clear(workspacePath, $"codex:chat:{baseAgent}", effectiveTicketId);
                 sessions.ClearLastChatProvider(workspacePath, target);
+                sessions.ClearLastChatModel(workspacePath, target);
             }
 
             var providerName = dispatchTarget.Provider.ToString();
@@ -144,6 +160,8 @@ public static partial class Endpoints
 
             await cs.AppendAsync(slug, target, "user", req.Message);
             sessions.SetLastChatProvider(workspacePath, target, providerName);
+            if (!string.IsNullOrWhiteSpace(requestedModel))
+                sessions.SetLastChatModel(workspacePath, target, requestedModel);
 
             // Build ticket-context block when this chat is scoped to a ticket.
             string? ticketContext = null;

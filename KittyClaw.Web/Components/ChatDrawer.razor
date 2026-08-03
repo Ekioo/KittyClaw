@@ -79,6 +79,10 @@
                         }
                     </optgroup>
                 }
+                @if (!string.IsNullOrWhiteSpace(_selectedModel) && !AllModels.Contains(_selectedModel))
+                {
+                    <option value="@_selectedModel">@_selectedModel</option>
+                }
             </select>
             <button class="chat-newsession-btn" @onclick="StartNewSession" title="@L["NewSession"]">＋</button>
             <button class="agent-close-btn" @onclick="Close" title="@L["Close"]">×</button>
@@ -280,6 +284,7 @@
     private List<string> _codexModels = new();
     private const string DefaultModel = ClaudeModelCatalog.DefaultModel;
     private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
+    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_ollamaModels).ToList();
     private string SelectedModelStorageKey => $"kc-chat-model-{ProjectSlug}";
 
     // Image paste (#115). Accepted clipboard images await Send() in this buffer; rejections
@@ -358,6 +363,17 @@
         catch { /* localStorage unavailable — selection remains valid for this drawer instance */ }
     }
 
+    private async Task RestoreRememberedModelAsync()
+    {
+        try
+        {
+            var storedModel = await JS.InvokeAsync<string?>("localStorage.getItem", SelectedModelStorageKey);
+            if (IsAvailableModel(storedModel))
+                _selectedModel = storedModel!;
+        }
+        catch { /* localStorage unavailable — keep the current model */ }
+    }
+
     private async Task FetchOllamaModelsAsync()
     {
         if (string.IsNullOrWhiteSpace(ProjectSlug)) return;
@@ -387,6 +403,13 @@
         try
         {
             using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+            var modelResponse = await http.GetFromJsonAsync<ChatModelResponse>(
+                $"/api/projects/{ProjectSlug}/chat/model?target={Uri.EscapeDataString(target.Slug)}");
+            if (!string.IsNullOrWhiteSpace(modelResponse?.Model))
+            {
+                _sessionModel = modelResponse.Model;
+                _selectedModel = modelResponse.Model;
+            }
             var msgs = await http.GetFromJsonAsync<List<ServerChatMessage>>(
                 $"/api/projects/{ProjectSlug}/chat/messages?target={Uri.EscapeDataString(target.Slug)}");
             if (msgs is not null)
@@ -483,6 +506,8 @@
         catch { /* best-effort */ }
         _messages.Clear();
         _loading = false;
+        _sessionModel = null;
+        await RestoreRememberedModelAsync();
         // Ticket-scoped chats stay on the same target after a reset; only the picker mode falls back to selection.
         if (string.IsNullOrWhiteSpace(InitialAgent))
         {
@@ -496,16 +521,11 @@
     {
         if (firstRender)
         {
-            try
+            if (_sessionModel is null)
             {
-                var storedModel = await JS.InvokeAsync<string?>("localStorage.getItem", SelectedModelStorageKey);
-                if (IsAvailableModel(storedModel))
-                {
-                    _selectedModel = storedModel!;
-                    StateHasChanged();
-                }
+                await RestoreRememberedModelAsync();
+                StateHasChanged();
             }
-            catch { /* localStorage unavailable — keep the default model */ }
             try { await _inputRef.FocusAsync(); } catch { }
         }
         if (_view == View.Conversation)
@@ -873,6 +893,7 @@
 
     private sealed record ChatStartResponse(string RunId);
     private sealed record ActiveResponse(string? RunId);
+    private sealed record ChatModelResponse(string? Model);
     private sealed record TargetsResponse(string? LastTarget, List<ServerChatTarget> Targets);
     private sealed record ServerChatTarget(string Slug, string Name, string Kind);
     private sealed record ServerChatMessage(string Role, string Text, string? ToolName, string? Detail, string CreatedAt);

@@ -91,4 +91,17 @@ public sealed class ConversationHandoffTests
         registry.ClearLastChatProvider(temp.Path, "agent");
         Assert.Null(registry.GetLastChatProvider(temp.Path, "agent"));
     }
+
+    [Fact]
+    public void SessionRegistry_PersistsAndClearsLastChatModel()
+    {
+        using var temp = new TempDir();
+        var registry = new SessionRegistry();
+
+        registry.SetLastChatModel(temp.Path, "agent", "gpt-5.6-sol");
+        Assert.Equal("gpt-5.6-sol", registry.GetLastChatModel(temp.Path, "agent"));
+
+        registry.ClearLastChatModel(temp.Path, "agent");
+        Assert.Null(registry.GetLastChatModel(temp.Path, "agent"));
+    }
 }
