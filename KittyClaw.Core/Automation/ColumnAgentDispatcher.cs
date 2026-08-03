@@ -113,6 +113,7 @@ public sealed class ColumnAgentDispatcher(
         text.AppendLine("## Result contract");
         text.AppendLine("Your final response must be exactly one JSON object, with no Markdown:");
         text.AppendLine("{\"outcome\":\"configured-outcome\",\"skillsUsed\":[\"skill-slug\"],\"summary\":\"short result\"}");
+        text.AppendLine("For outcome \"scheduled\", also include \"fireAt\" as an ISO-8601 UTC date and \"scheduleTarget\" as the exact destination column name used when the wake fires. Both fields are mandatory for scheduled and must be omitted for other outcomes such as \"needs_input\".");
         text.AppendLine("Use outcome \"wait_for_children\" only after creating at least one blocking sub-ticket.");
         return text.ToString();
     }

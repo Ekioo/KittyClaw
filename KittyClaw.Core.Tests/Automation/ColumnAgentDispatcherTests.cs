@@ -22,4 +22,18 @@ public sealed class ColumnAgentDispatcherTests
         Assert.Contains(".agents/processors/column-19/memory/MEMORY.md", contract);
         Assert.Contains("never create or use `.agents/column-19/memory.md`", contract);
     }
+
+    [Fact]
+    public void Result_parser_accepts_scheduled_wake_contract()
+    {
+        const string json = """
+            {"outcome":"scheduled","skillsUsed":[],"summary":"Later.","fireAt":"2026-08-08T08:00:00Z","scheduleTarget":"À traiter"}
+            """;
+
+        var parsed = ColumnAgentDispatcher.TryParseResult(json, out var result, out var error);
+
+        Assert.True(parsed, error);
+        Assert.Equal(new DateTime(2026, 8, 8, 8, 0, 0, DateTimeKind.Utc), result!.FireAt);
+        Assert.Equal("À traiter", result.ScheduleTarget);
+    }
 }

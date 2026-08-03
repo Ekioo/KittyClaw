@@ -389,12 +389,41 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         await EnsureTableAsync(db);
         var target = await db.BoardColumns.FindAsync(targetId.Value)
             ?? throw new InvalidOperationException($"La colonne cible #{targetId} n'existe plus.");
+        var isScheduled = string.Equals(result.Outcome, "scheduled", StringComparison.OrdinalIgnoreCase);
+        BoardColumn? wakeTarget = null;
+        if (isScheduled)
+        {
+            if (result.FireAt is null || string.IsNullOrWhiteSpace(result.ScheduleTarget))
+            {
+                await FailAttemptAsync(projectSlug, execution, processor,
+                    "L'issue 'scheduled' exige fireAt et scheduleTarget.", author);
+                return;
+            }
+            if (target.Role != ColumnRole.Waiting
+                || (!string.Equals(target.Name, "Scheduled", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(target.Name, "Planifié", StringComparison.OrdinalIgnoreCase)))
+            {
+                await FailAttemptAsync(projectSlug, execution, processor,
+                    "L'issue 'scheduled' doit être routée vers une colonne Scheduled ou Planifié de rôle Attente.", author);
+                return;
+            }
+            wakeTarget = await db.BoardColumns.FirstOrDefaultAsync(c =>
+                c.PipelineId == target.PipelineId && c.Name == result.ScheduleTarget);
+            if (wakeTarget is null)
+            {
+                await FailAttemptAsync(projectSlug, execution, processor,
+                    $"La colonne de réveil '{result.ScheduleTarget}' n'existe pas dans le pipeline cible.", author);
+                return;
+            }
+        }
         var ticket = await db.Tickets.FindAsync(execution.TicketId)
             ?? throw new InvalidOperationException($"Le ticket #{execution.TicketId} n'existe plus.");
         var oldStatus = ticket.Status;
         ticket.PipelineId = target.PipelineId;
         ticket.ColumnId = target.Id;
         ticket.Status = target.Name;
+        ticket.FireAt = isScheduled ? result.FireAt : null;
+        ticket.ScheduleTarget = isScheduled ? wakeTarget!.Name : null;
         ticket.UpdatedAt = DateTime.UtcNow;
         var row = await db.ColumnExecutions.FindAsync(execution.Id);
         if (row is null) return;

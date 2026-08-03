@@ -162,4 +162,9 @@ public class ColumnExecution
     }
 }
 
-public sealed record ColumnAgentResult(string Outcome, List<string> SkillsUsed, string? Summary = null);
+public sealed record ColumnAgentResult(
+    string Outcome,
+    List<string> SkillsUsed,
+    string? Summary = null,
+    DateTime? FireAt = null,
+    string? ScheduleTarget = null);

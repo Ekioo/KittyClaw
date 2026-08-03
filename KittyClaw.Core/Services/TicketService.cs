@@ -403,8 +403,16 @@ public class TicketService
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureScheduleColumnsAsync(db);
+        var columns = await db.BoardColumns
+            .Select(c => new { c.Id, c.Name, c.Role })
+            .ToListAsync();
+        var scheduledColumnIds = columns
+            .Where(c => c.Role == ColumnRole.Waiting && IsScheduledColumnName(c.Name))
+            .Select(c => c.Id)
+            .ToArray();
         return await db.Tickets
-            .Where(t => t.FireAt != null && t.FireAt <= now)
+            .Where(t => t.FireAt != null && t.FireAt <= now
+                && t.ColumnId != null && scheduledColumnIds.Contains(t.ColumnId.Value))
             .OrderBy(t => t.FireAt)
             .Select(t => t.Id)
             .ToListAsync();
@@ -423,6 +431,13 @@ public class TicketService
         await ColumnService.EnsureBoardColumnsTableAsync(db);
         var ticket = await db.Tickets.FindAsync(ticketId);
         if (ticket is null || ticket.FireAt is null)
+            return null;
+        if (ticket.ColumnId is null)
+            return null;
+        var currentColumn = await db.BoardColumns.FindAsync(ticket.ColumnId.Value);
+        if (currentColumn is null
+            || currentColumn.Role != ColumnRole.Waiting
+            || !IsScheduledColumnName(currentColumn.Name))
             return null;
         var scheduledStatus = ticket.Status;
         var target = string.IsNullOrWhiteSpace(ticket.ScheduleTarget) ? "Todo" : ticket.ScheduleTarget!;
@@ -805,6 +820,11 @@ public class TicketService
         ticket.Status = newStatus;
         ticket.ColumnId = destination.Id;
         ticket.UpdatedAt = DateTime.UtcNow;
+        if (statusChanged && ticket.FireAt is not null && !IsScheduledColumnName(destination.Name))
+        {
+            ticket.FireAt = null;
+            ticket.ScheduleTarget = null;
+        }
 
         // Get all tickets in the target column (excluding the moved ticket)
         var columnTickets = await db.Tickets

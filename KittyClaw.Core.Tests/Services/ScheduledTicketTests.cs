@@ -175,6 +175,51 @@ public sealed class ScheduledTicketTests
     }
 
     [Fact]
+    public async Task ConsumedSchedule_CannotResurrectDoneTicket_ButExplicitRescheduleStillWorks()
+    {
+        using var tmp = new TempDir();
+        var (projects, svc, slug) = BuildSut(tmp);
+        var now = new DateTime(2026, 8, 3, 9, 20, 0, DateTimeKind.Utc);
+        var ticket = await svc.CreateTicketAsync(slug, "One-shot gate", status: "Todo");
+
+        await svc.ScheduleTicketAsync(slug, ticket.Id, now.AddDays(-20), "Todo", "owner");
+        var queuedDueIds = await svc.ListDueScheduledTicketIdsAsync(slug, now);
+        Assert.Contains(ticket.Id, queuedDueIds);
+
+        await svc.ReorderTicketAsync(slug, ticket.Id, "Done", 0);
+
+        // Reproduce a consumed schedule left behind after the due-ticket id was queued.
+        // The promotion must use the current column as the final authority, even when
+        // stale scheduling fields still exist on the closed ticket.
+        await using (var db = projects.GetProjectDb(slug))
+        {
+            var stale = await db.Tickets.FindAsync(ticket.Id);
+            stale!.FireAt = now.AddDays(-20);
+            stale.ScheduleTarget = "Todo";
+            await db.SaveChangesAsync();
+        }
+
+        var dueAfterCompletion = await svc.ListDueScheduledTicketIdsAsync(slug, now);
+        var stalePromotion = await svc.PromoteScheduledAsync(slug, ticket.Id);
+        var completed = await svc.GetTicketAsync(slug, ticket.Id);
+
+        Assert.DoesNotContain(ticket.Id, dueAfterCompletion);
+        Assert.Null(stalePromotion);
+        Assert.Equal("Done", completed!.Status);
+        Assert.Equal(now.AddDays(-20), completed.FireAt);
+        Assert.Equal("Todo", completed.ScheduleTarget);
+
+        await svc.ScheduleTicketAsync(slug, ticket.Id, now.AddMinutes(-1), "Todo", "owner");
+        var dueAfterExplicitReschedule = await svc.ListDueScheduledTicketIdsAsync(slug, now);
+        var promoted = await svc.PromoteScheduledAsync(slug, ticket.Id);
+
+        Assert.Contains(ticket.Id, dueAfterExplicitReschedule);
+        Assert.Equal("Todo", promoted!.Status);
+        Assert.Null(promoted.FireAt);
+        Assert.Null(promoted.ScheduleTarget);
+    }
+
+    [Fact]
     public async Task PromotionService_PromotesDue_LeavesFutureScheduled()
     {
         using var tmp = new TempDir();
