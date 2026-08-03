@@ -138,6 +138,7 @@ public class ColumnExecution
     public string? Outcome { get; set; }
     public string? Summary { get; set; }
     public string? Error { get; set; }
+    public int? TargetColumnId { get; set; }
     public string CompletedActionIdsJson { get; set; } = "[]";
     public string? CurrentActionId { get; set; }
     public bool AgentCompleted { get; set; }

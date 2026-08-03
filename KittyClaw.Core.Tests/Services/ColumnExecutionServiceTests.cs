@@ -2,6 +2,7 @@ using KittyClaw.Core.Models;
 using KittyClaw.Core.Automation;
 using KittyClaw.Core.Services;
 using KittyClaw.Core.Tests.Helpers;
+using Microsoft.EntityFrameworkCore;
 
 namespace KittyClaw.Core.Tests.Services;
 
@@ -292,6 +293,54 @@ public sealed class ColumnExecutionServiceTests : IDisposable
         Assert.Equal(ColumnExecutionStatus.Completed, history.Status);
         Assert.Equal("action_failure", history.Outcome);
         Assert.Null(await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow));
+    }
+
+    [Fact]
+    public async Task Repeated_column_transition_is_stopped_before_another_agent_dispatch()
+    {
+        var project = await _projects.CreateProjectAsync("Routing loop protection");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var drafting = await _columns.CreateColumnAsync(project.Slug, "Drafting", pipelineId: pipeline.Id);
+        var review = await _columns.CreateColumnAsync(project.Slug, "Review", pipelineId: pipeline.Id);
+        var failure = await _columns.CreateColumnAsync(project.Slug, "Technical failure",
+            pipelineId: pipeline.Id, role: ColumnRole.Failure);
+        var writer = await SaveProcessor(project.Slug, drafting.Id, review.Id,
+            technicalFailureColumnId: failure.Id);
+        var reviewer = await SaveProcessor(project.Slug, review.Id, drafting.Id,
+            technicalFailureColumnId: failure.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Needs iterations",
+            status: drafting.Name, pipelineId: pipeline.Id, columnId: drafting.Id);
+        var now = DateTime.UtcNow;
+
+        var firstDraft = await _executions.ClaimNextAsync(project.Slug, writer, now);
+        await _executions.CompleteAsync(project.Slug, firstDraft!, writer,
+            new ColumnAgentResult("needs_review", []), writer.Name);
+        var firstReview = await _executions.ClaimNextAsync(project.Slug, reviewer, now.AddMinutes(1));
+        await _executions.CompleteAsync(project.Slug, firstReview!, reviewer,
+            new ColumnAgentResult("changes_requested", []), reviewer.Name);
+        var secondDraft = await _executions.ClaimNextAsync(project.Slug, writer, now.AddMinutes(2));
+        await _executions.CompleteAsync(project.Slug, secondDraft!, writer,
+            new ColumnAgentResult("needs_review", []), writer.Name);
+        // Rows created before TargetColumnId was introduced must still protect an already
+        // active loop immediately after an application upgrade.
+        await using (var db = _projects.GetProjectDb(project.Slug))
+        {
+            var historicalRows = await db.ColumnExecutions
+                .Where(execution => execution.ProcessorId == writer.Id).ToListAsync();
+            foreach (var historical in historicalRows) historical.TargetColumnId = null;
+            await db.SaveChangesAsync();
+        }
+
+        var blockedReview = await _executions.ClaimNextAsync(project.Slug, reviewer, now.AddMinutes(3));
+        var moved = await _tickets.GetTicketAsync(project.Slug, ticket.Id);
+        var history = await _executions.ListAsync(project.Slug, ticket.Id);
+
+        Assert.Null(blockedReview);
+        Assert.Equal(failure.Id, moved!.ColumnId);
+        var protection = Assert.Single(history, execution => execution.Outcome == "routing_loop");
+        Assert.Equal(ColumnExecutionStatus.Completed, protection.Status);
+        Assert.Equal(failure.Id, protection.TargetColumnId);
+        Assert.Equal(ColumnExecutionService.RoutingLoopError, protection.Error);
     }
 
     private Task<ColumnProcessor> SaveProcessor(

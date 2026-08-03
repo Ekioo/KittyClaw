@@ -7,6 +7,10 @@ namespace KittyClaw.Core.Services;
 /// <summary>Durable ticket claims and lifecycle for column processors.</summary>
 public sealed class ColumnExecutionService(ProjectService projects, TicketService tickets)
 {
+    internal static readonly TimeSpan RoutingLoopWindow = TimeSpan.FromMinutes(10);
+    internal const string RoutingLoopError =
+        "Protection anti-boucle : cette transition de colonnes a déjà été répétée dans les 10 dernières minutes.";
+
     private static async Task EnsureTableAsync(TodoDbContext db)
     {
         await MigrationGate.RunOnceAsync(db, "column-executions-v1", static d =>
@@ -24,6 +28,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                     Outcome TEXT NULL,
                     Summary TEXT NULL,
                     Error TEXT NULL,
+                    TargetColumnId INTEGER NULL,
                     CompletedActionIdsJson TEXT NOT NULL DEFAULT '[]',
                     CurrentActionId TEXT NULL,
                     AgentCompleted INTEGER NOT NULL DEFAULT 0,
@@ -42,6 +47,8 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN AgentCompleted INTEGER NOT NULL DEFAULT 0");
             await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN AgentResultJson TEXT NULL");
         });
+        await MigrationGate.RunOnceAsync(db, "column-executions-routing-loop-v1", static d =>
+            MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN TargetColumnId INTEGER NULL"));
     }
 
     public async Task<ColumnExecution?> ClaimNextAsync(string projectSlug, ColumnProcessor processor, DateTime now)
@@ -120,6 +127,78 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         }
         if (selected is null) return null;
 
+        // A route A -> B that occurs twice for the same ticket within a short window means
+        // the ticket has completed at least one full cycle and has returned to A. Stop before
+        // launching B again: unlike an in-column retry, changing columns used to reset every
+        // attempt counter and could therefore dispatch agents forever.
+        var recentCompleted = await db.ColumnExecutions.AsNoTracking()
+            .Where(e => e.TicketId == selected.Id
+                && e.Status == ColumnExecutionStatus.Completed
+                && e.EndedAt >= now.Subtract(RoutingLoopWindow))
+            .OrderByDescending(e => e.EndedAt)
+            .ToListAsync();
+        var recentProcessorIds = recentCompleted.Select(e => e.ProcessorId).Distinct().ToList();
+        var sourceProcessors = await db.ColumnProcessors.AsNoTracking()
+            .Where(p => recentProcessorIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id);
+        var incomingExecutions = recentCompleted.Where(e =>
+            e.TargetColumnId == processor.ColumnId
+            || (e.TargetColumnId is null
+                && sourceProcessors.TryGetValue(e.ProcessorId, out var historicalProcessor)
+                && ResolveHistoricalTarget(historicalProcessor, e.Outcome) == processor.ColumnId))
+            .ToList();
+        var incoming = incomingExecutions.FirstOrDefault();
+        if (incoming is not null)
+        {
+            var repeated = incomingExecutions.Count(e => e.ProcessorId == incoming.ProcessorId);
+            if (repeated > 1)
+            {
+                var sourceProcessor = await db.ColumnProcessors.AsNoTracking()
+                    .FirstOrDefaultAsync(p => p.Id == incoming.ProcessorId);
+                var sourceColumn = sourceProcessor is null
+                    ? null
+                    : await db.BoardColumns.AsNoTracking().FirstOrDefaultAsync(c => c.Id == sourceProcessor.ColumnId);
+                var failureColumn = processor.TechnicalFailureColumnId is int failureId
+                    ? await db.BoardColumns.FindAsync(failureId)
+                    : null;
+                var protectedExecution = new ColumnExecution
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    ProcessorId = processor.Id,
+                    TicketId = selected.Id,
+                    Status = failureColumn is null ? ColumnExecutionStatus.Failed : ColumnExecutionStatus.Completed,
+                    Attempt = 0,
+                    ClaimedAt = now,
+                    EndedAt = now,
+                    Outcome = "routing_loop",
+                    Error = RoutingLoopError,
+                    TargetColumnId = failureColumn?.Id,
+                };
+                db.ColumnExecutions.Add(protectedExecution);
+                var transition = $"{sourceColumn?.Name ?? "colonne précédente"} → {selected.Status}";
+                var oldStatus = selected.Status;
+                if (failureColumn is not null)
+                {
+                    selected.PipelineId = failureColumn.PipelineId;
+                    selected.ColumnId = failureColumn.Id;
+                    selected.Status = failureColumn.Name;
+                    selected.UpdatedAt = now;
+                }
+                db.ActivityEntries.Add(new ActivityEntry
+                {
+                    TicketId = selected.Id,
+                    Author = processor.Name,
+                    Text = failureColumn is null
+                        ? $"protection anti-boucle : transition {transition} répétée ; ticket maintenu dans {oldStatus}, intervention manuelle requise"
+                        : $"protection anti-boucle : transition {transition} répétée ; {oldStatus} → {failureColumn.Name}",
+                });
+                await db.SaveChangesAsync();
+                if (failureColumn is not null)
+                    tickets.NotifyStatusChanged(projectSlug, selected.Id, oldStatus, failureColumn.Name);
+                return null;
+            }
+        }
+
         var execution = new ColumnExecution
         {
             Id = Guid.NewGuid().ToString("N"),
@@ -136,6 +215,19 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             return null;
         }
         return execution;
+    }
+
+    private static int? ResolveHistoricalTarget(ColumnProcessor processor, string? outcome)
+    {
+        if (string.Equals(outcome, "technical_failure", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(outcome, "routing_loop", StringComparison.OrdinalIgnoreCase))
+            return processor.TechnicalFailureColumnId;
+        if (string.Equals(outcome, "action_failure", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(outcome, "action_interrupted", StringComparison.OrdinalIgnoreCase))
+            return null;
+        return processor.Routes.FirstOrDefault(route =>
+            string.Equals(route.Outcome, outcome, StringComparison.OrdinalIgnoreCase))?.TargetColumnId
+            ?? processor.DefaultTargetColumnId;
     }
 
     public async Task SetRunIdAsync(string projectSlug, string executionId, string runId)
@@ -235,6 +327,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         ticket.UpdatedAt = DateTime.UtcNow;
         row.Status = ColumnExecutionStatus.Completed;
         row.Outcome = outcomeUncertain ? "action_interrupted" : "action_failure";
+        row.TargetColumnId = target.Id;
         db.ActivityEntries.Add(new ActivityEntry
         {
             TicketId = ticket.Id,
@@ -309,6 +402,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         row.Outcome = result.Outcome;
         row.Summary = result.Summary;
         row.EndedAt = DateTime.UtcNow;
+        row.TargetColumnId = target.Id;
         db.ActivityEntries.Add(new ActivityEntry
         {
             TicketId = ticket.Id,
@@ -360,6 +454,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                 // the destination column processor from claiming the ticket.
                 row.Status = ColumnExecutionStatus.Completed;
                 row.Outcome = "technical_failure";
+                row.TargetColumnId = target.Id;
                 movedTicketId = ticket.Id;
                 movedFrom = oldStatus;
                 movedTo = target.Name;
