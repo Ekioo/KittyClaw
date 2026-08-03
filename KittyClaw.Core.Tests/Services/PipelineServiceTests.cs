@@ -19,6 +19,16 @@ public sealed class PipelineServiceTests : IDisposable
     }
 
     [Fact]
+    public void Persisted_column_role_values_remain_backward_compatible()
+    {
+        Assert.Equal(0, (int)ColumnRole.Normal);
+        Assert.Equal(1, (int)ColumnRole.Waiting);
+        Assert.Equal(2, (int)ColumnRole.Success);
+        Assert.Equal(3, (int)ColumnRole.Failure);
+        Assert.Equal(4, (int)ColumnRole.OwnerAction);
+    }
+
+    [Fact]
     public async Task Existing_board_is_migrated_to_a_default_pipeline()
     {
         var project = await _projects.CreateProjectAsync("Legacy");

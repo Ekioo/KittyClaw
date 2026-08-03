@@ -16,10 +16,11 @@ public class Pipeline
 /// </summary>
 public enum ColumnRole
 {
-    Normal,
-    Waiting,
+    // Values 0-3 are persisted in existing project databases. Never reorder them.
+    Normal = 0,
+    Waiting = 1,
+    Success = 2,
+    Failure = 3,
     /// <summary>A human decision or intervention is required before the ticket can continue.</summary>
-    OwnerAction,
-    Success,
-    Failure,
+    OwnerAction = 4,
 }
