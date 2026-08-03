@@ -5210,6 +5210,12 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .migration-error-icon { flex: 0 0 30px; width: 30px; height: 30px; display: grid; place-items: center; color: #fff; background: #d65464; border-radius: 50%; font-weight: 800; }
 .migration-error strong { color: #fff; }
 .migration-error p { margin: .4rem 0 1rem; line-height: 1.45; }
+.migration-button-spinner { width: 14px; height: 14px; margin-right: .45rem; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; }
+.migration-completed { min-height: 340px; max-width: 720px; margin: 0 auto; display: grid; place-content: center; justify-items: center; text-align: center; }
+.migration-completed-icon { width: 52px; height: 52px; display: grid; place-items: center; margin-bottom: 1rem; color: #0f2017; background: #3ecf8e; border-radius: 50%; font-size: 1.7rem; font-weight: 800; box-shadow: 0 0 0 8px rgba(62,207,142,.1); }
+.migration-completed strong { color: #fff; font-size: 1.25rem; }
+.migration-completed > p { max-width: 560px; color: #aeb3cd; line-height: 1.5; }
+.migration-completed-result { width: min(680px, 78vw); max-height: 240px; margin-top: .8rem; overflow: auto; padding: 1rem; text-align: left; white-space: pre-wrap; color: #dce1f2; background: #141521; border: 1px solid #393d58; border-radius: 9px; line-height: 1.5; }
 @media (max-width: 760px) { .project-onboarding-questions { grid-template-columns: 1fr; } .project-onboarding-questions .migration-lead { grid-column: auto; } }
 .migration-step-intro { margin: 0 0 1.2rem; color: #b5bad4; }
 .migration-pipeline-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(285px, 1fr)); gap: 1rem; }

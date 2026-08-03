@@ -37,12 +37,12 @@ public sealed record WorkflowMigrationJob(
     string? ErrorCode = null,
     string ProgressCode = "queued",
     DateTime? StartedAt = null,
-    DateTime? LastActivityAt = null);
+    DateTime? LastActivityAt = null,
+    string? Result = null);
 
 /// <summary>
-/// Runs read-only, stateless planning turns and retains their structured result long enough for
-/// the migration wizard to poll it. Applying the plan is deliberately left to a separately
-/// confirmed interactive agent turn.
+/// Runs workflow planning and explicitly confirmed application turns, retaining their state long
+/// enough for the visual wizard to remain the single source of progress and errors.
 /// </summary>
 public sealed class WorkflowMigrationPlanner(
     ProjectService projects,
@@ -54,6 +54,8 @@ public sealed class WorkflowMigrationPlanner(
     LocalizationService localization)
 {
     private readonly ConcurrentDictionary<string, WorkflowMigrationJob> _jobs = [];
+    private readonly object _applicationSync = new();
+    private readonly Dictionary<string, string> _activeApplications = new(StringComparer.OrdinalIgnoreCase);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
@@ -79,6 +81,23 @@ public sealed class WorkflowMigrationPlanner(
         _jobs[id] = new WorkflowMigrationJob(id, projectSlug, "queued", null, null, null);
         _ = RunAsync(id, projectSlug, plan, instruction, (phase, pipelineIndex), "migration", null);
         return id;
+    }
+
+    public string StartApplication(string projectSlug, WorkflowMigrationPlan plan, bool isProjectOnboarding)
+    {
+        lock (_applicationSync)
+        {
+            if (_activeApplications.TryGetValue(projectSlug, out var existingId)
+                && _jobs.TryGetValue(existingId, out var existing)
+                && existing.Status is "queued" or "running")
+                return existingId;
+
+            var id = Guid.NewGuid().ToString("N");
+            _jobs[id] = new WorkflowMigrationJob(id, projectSlug, "queued", plan, null, null);
+            _activeApplications[projectSlug] = id;
+            _ = RunApplicationAsync(id, projectSlug, plan, isProjectOnboarding);
+            return id;
+        }
     }
 
     private async Task RunAsync(string jobId, string slug, WorkflowMigrationPlan? currentPlan,
@@ -180,6 +199,107 @@ public sealed class WorkflowMigrationPlanner(
                 ProgressCode = "failed",
                 LastActivityAt = DateTime.UtcNow,
             };
+        }
+    }
+
+    private async Task RunApplicationAsync(string jobId, string slug, WorkflowMigrationPlan plan,
+        bool isProjectOnboarding)
+    {
+        try
+        {
+            Validate(plan);
+            var project = await projects.GetProjectAsync(slug)
+                ?? throw new InvalidOperationException($"Project '{slug}' was not found.");
+            var workspace = projects.ResolveWorkspacePath(project);
+            var assistantText = new List<string>();
+            var runId = Guid.NewGuid().ToString("N");
+            var startedAt = DateTime.UtcNow;
+            _jobs[jobId] = _jobs[jobId] with
+            {
+                Status = "running",
+                RunId = runId,
+                ProgressCode = "applying",
+                StartedAt = startedAt,
+                LastActivityAt = startedAt,
+            };
+
+            var target = CodexCli.IsInstalled
+                ? new AgentDispatchTarget("gpt-5.6-sol", CliProvider.Codex, new Dictionary<string, string>())
+                : AgentDispatchTarget.ClaudeDefault;
+            var run = await runner.RunAsync(new AgentRunContext
+            {
+                ProjectSlug = slug,
+                WorkspacePath = workspace,
+                AgentName = "workflow-migration-applier",
+                SkillFile = "(inline)",
+                InlineSkillContent = ApplicationInstructions,
+                ExtraContext = BuildApplicationPrompt(plan, isProjectOnboarding),
+                Target = target,
+                MaxTurns = 100,
+                MaxRunDuration = TimeSpan.FromMinutes(30),
+                PersistSession = false,
+                PresetRunId = runId,
+                ConcurrencyGroup = $"workflow-migration:{slug}",
+                OnEventHook = ev =>
+                {
+                    if (ev.Kind == "assistant") assistantText.Add(ev.Text);
+                    var progressCode = ev.Kind switch
+                    {
+                        "assistant" or "result" => "verifying",
+                        "command" or "tool" or "tool_use" => "configuring",
+                        _ => "applying",
+                    };
+                    _jobs.AddOrUpdate(jobId,
+                        _ => new WorkflowMigrationJob(jobId, slug, "running", plan, null, runId,
+                            ProgressCode: progressCode, StartedAt: startedAt, LastActivityAt: ev.At),
+                        (_, current) => current with
+                        {
+                            ProgressCode = progressCode,
+                            LastActivityAt = ev.At,
+                        });
+                },
+            }, CancellationToken.None);
+
+            if (run.Status != AgentRunStatus.Completed)
+            {
+                var events = run.SnapshotBuffer();
+                var diagnostic = events.LastOrDefault(ev => ev.Kind is "stderr" or "error" or "rate_limit_event")?.Text;
+                var code = events.Any(ev => ev.Kind == "rate_limit_event")
+                    ? "provider-rate-limited"
+                    : run.Status == AgentRunStatus.Stopped ? "interrupted" : "application-failed";
+                throw new WorkflowMigrationPlanningException(code,
+                    diagnostic ?? "The migration agent did not complete successfully.");
+            }
+
+            _jobs[jobId] = _jobs[jobId] with
+            {
+                Status = "completed",
+                ProgressCode = "completed",
+                LastActivityAt = DateTime.UtcNow,
+                Result = string.Join("\n", assistantText)
+                    .Replace("[assistant] ", "", StringComparison.Ordinal)
+                    .Trim(),
+            };
+        }
+        catch (Exception ex)
+        {
+            var code = ex is WorkflowMigrationPlanningException known ? known.Code : "application-failed";
+            _jobs[jobId] = _jobs[jobId] with
+            {
+                Status = "failed",
+                Error = ex.Message,
+                ErrorCode = code,
+                ProgressCode = "failed",
+                LastActivityAt = DateTime.UtcNow,
+            };
+        }
+        finally
+        {
+            lock (_applicationSync)
+            {
+                if (_activeApplications.TryGetValue(slug, out var activeId) && activeId == jobId)
+                    _activeApplications.Remove(slug);
+            }
         }
     }
 
@@ -361,6 +481,19 @@ public sealed class WorkflowMigrationPlanner(
     private static string Truncate(string value, int length) =>
         value.Length <= length ? value : value[..length] + "…";
 
+    internal static string BuildApplicationPrompt(WorkflowMigrationPlan plan, bool isProjectOnboarding) => $"""
+        {(isProjectOnboarding ? "Configure the new project's workflow that the owner has just reviewed and explicitly approved in the visual onboarding wizard." : "Apply the workflow migration that the owner has just reviewed and explicitly approved in the visual migration wizard.")}
+
+        Approved plan:
+        {JsonSerializer.Serialize(plan, Json)}
+
+        Implement this plan completely using KittyClaw's API and the project's file-backed processor and skill configuration. Preserve stable identifiers whenever an existing pipeline, column, processor, or skill can be reused. Map every existing ticket and child ticket to exactly one pipeline by purpose. Configure processors, action chains, routing, retry/failure destinations, scheduled tasks and project skills needed by the approved flow. Use OwnerAction for every stage requiring a human decision or missing input. Do not create In Progress columns for agent execution.
+
+        You are already running inside the confirmed application job. Never call any /workflow-migrations/analyze, /workflow-migrations/refine, or /workflow-migrations/apply endpoint. Apply the plan directly through the granular pipeline, column, ticket, processor, skill, scheduled-task and automation APIs.
+
+        {(isProjectOnboarding ? "Replace the placeholder default workflow with the approved organization. Inspect the workspace again when useful, but do not invent operational requirements that contradict the approved plan." : "Disable a legacy automation only after its replacement is configured and verified. Keep any automation that has no validated replacement and report it clearly.")} Verify that all tickets remain accessible, that processors and schedules reload successfully, and summarize every applied change and remaining risk when finished.
+        """;
+
     private sealed class WorkflowMigrationPlanningException(string code, string message) : InvalidOperationException(message)
     {
         public string Code { get; } = code;
@@ -392,5 +525,17 @@ public sealed class WorkflowMigrationPlanner(
         board shared columns. Do not invent an In Progress column for agent execution. Use
         OwnerAction for human decisions or missing input, Waiting only for non-human pauses, and
         include explicit Success and Failure destinations. Keep the plan concise and user-facing.
+        """;
+
+    private const string ApplicationInstructions = """
+        You are KittyClaw's workflow migration agent. The owner has explicitly approved the plan
+        provided in the task. Apply it completely and safely inside the current KittyClaw project.
+        Consult http://localhost:5230/api/docs before using the API. Prefer stable identifiers and
+        file-backed workflow, processor, prompt, memory and skill configuration. Keep the existing
+        board usable throughout the migration. You are already the application job: never invoke
+        any workflow-migrations endpoint or launch another migration agent. Use only the granular
+        project APIs. Never disable a legacy automation until its verified
+        replacement exists. Verify API reloads, ticket accessibility, routing and scheduled work
+        before reporting completion. End with a concise user-facing summary of changes and risks.
         """;
 }

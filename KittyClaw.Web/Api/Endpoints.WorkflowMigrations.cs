@@ -23,6 +23,14 @@ public static partial class Endpoints
             });
         }).WithTags("Workflow migrations");
 
+        api.MapPost("/projects/{slug}/workflow-migrations/apply", (
+            string slug, ApplyWorkflowMigrationRequest request, WorkflowMigrationPlanner planner) =>
+            Results.Accepted(value: new
+            {
+                jobId = planner.StartApplication(slug, request.Plan, request.IsProjectOnboarding),
+            }))
+            .WithTags("Workflow migrations");
+
         api.MapGet("/projects/{slug}/workflow-migrations/jobs/{jobId}", (
             string slug, string jobId, WorkflowMigrationPlanner planner) =>
         {
@@ -39,3 +47,7 @@ public sealed record RefineWorkflowMigrationRequest(
     string Instruction,
     string Phase,
     int? PipelineIndex);
+
+public sealed record ApplyWorkflowMigrationRequest(
+    WorkflowMigrationPlan Plan,
+    bool IsProjectOnboarding);

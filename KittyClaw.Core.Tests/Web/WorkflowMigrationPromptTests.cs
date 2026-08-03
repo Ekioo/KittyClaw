@@ -119,7 +119,7 @@ public sealed class WorkflowMigrationPromptTests
     }
 
     [Fact]
-    public void Migration_wizard_supports_graphical_review_refinement_and_confirmed_launch()
+    public void Migration_wizard_supports_graphical_review_refinement_and_in_wizard_application()
     {
         var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "WorkflowMigrationWizard.razor"));
 
@@ -127,7 +127,11 @@ public sealed class WorkflowMigrationPromptTests
         Assert.Contains("migration-column-flow", source);
         Assert.Contains("RefineAsync", source);
         Assert.Contains("private void Back()", source);
-        Assert.Contains("AutoSendInitialMessage=\"true\"", source);
+        Assert.Contains("LaunchMigrationAsync", source);
+        Assert.Contains("StartJobAsync(\"apply\"", source);
+        Assert.Contains("MigrationWizardApplying", source);
+        Assert.Contains("MigrationWizardCompletedTitle", source);
+        Assert.DoesNotContain("<ChatDrawer", source);
         Assert.Contains("new System.Text.Json.Serialization.JsonStringEnumConverter()", source);
         Assert.Contains("GetFromJsonAsync<WorkflowMigrationJob>", source);
         Assert.Contains("migration-progress-track", source);
@@ -135,13 +139,37 @@ public sealed class WorkflowMigrationPromptTests
         Assert.Contains("job.ProgressCode", source);
         Assert.Contains("job.StartedAt", source);
         Assert.Contains("StateHasChanged", source);
-        Assert.Contains("Disable a legacy automation only after its replacement is configured and verified", source);
-
         var planner = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Services", "WorkflowMigrationPlanner.cs"));
         Assert.Contains("localization.Lang", planner);
         Assert.Contains("Write every user-facing value in language", planner);
         Assert.Contains("ProgressCode = progressCode", planner);
         Assert.Contains("LastActivityAt = ev.At", planner);
+        Assert.Contains("StartApplication", planner);
+        Assert.Contains("workflow-migration-applier", planner);
+        Assert.Contains("_activeApplications", planner);
+    }
+
+    [Fact]
+    public void Approved_application_prompt_preserves_the_migration_safety_contract()
+    {
+        var prompt = WorkflowMigrationPlanner.BuildApplicationPrompt(new WorkflowMigrationPlan
+        {
+            Pipelines =
+            [
+                new WorkflowMigrationPipeline
+                {
+                    Name = "Editorial",
+                    Columns = [new WorkflowMigrationColumn { Name = "Owner review", Role = ColumnRole.OwnerAction }],
+                },
+            ],
+        }, isProjectOnboarding: false);
+
+        Assert.Contains("Editorial", prompt);
+        Assert.Contains("OwnerAction", prompt);
+        Assert.Contains("Disable a legacy automation only after its replacement is configured and verified", prompt);
+        Assert.Contains("Map every existing ticket and child ticket to exactly one pipeline", prompt);
+        Assert.Contains("Never call any /workflow-migrations/analyze", prompt);
+        Assert.Contains("Apply the plan directly through the granular pipeline", prompt);
     }
 
     [Fact]

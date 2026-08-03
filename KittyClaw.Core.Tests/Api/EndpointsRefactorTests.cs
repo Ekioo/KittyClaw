@@ -43,6 +43,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "PATCH /api/projects/{slug}/pipelines/{pipelineId}",
         // Workflow migrations
         "POST /api/projects/{slug}/workflow-migrations/analyze",
+        "POST /api/projects/{slug}/workflow-migrations/apply",
         "POST /api/projects/{slug}/workflow-migrations/refine",
         "GET /api/projects/{slug}/workflow-migrations/jobs/{jobId}",
         // Projects
@@ -203,6 +204,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         ["GET /api/grok-models"] = "Grok",
         ["GET /api/codex-models"] = "Codex",
         ["POST /api/projects/{slug}/workflow-migrations/analyze"] = "Workflow migrations",
+        ["POST /api/projects/{slug}/workflow-migrations/apply"] = "Workflow migrations",
         ["POST /api/projects/{slug}/workflow-migrations/refine"] = "Workflow migrations",
         ["GET /api/projects/{slug}/workflow-migrations/jobs/{jobId}"] = "Workflow migrations",
         ["GET /api/projects/{slug}/automations"] = "Automations",
