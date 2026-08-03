@@ -46,7 +46,8 @@ public sealed class WorkflowMigrationPlanner(
     ColumnService columns,
     TicketService tickets,
     AutomationStore automations,
-    AgentRunner runner)
+    AgentRunner runner,
+    LocalizationService localization)
 {
     private readonly ConcurrentDictionary<string, WorkflowMigrationJob> _jobs = [];
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
@@ -85,8 +86,8 @@ public sealed class WorkflowMigrationPlanner(
                 ?? throw new InvalidOperationException($"Project '{slug}' was not found.");
             var workspace = projects.ResolveWorkspacePath(project);
             var prompt = currentPlan is null
-                ? await BuildAnalysisPromptAsync(slug)
-                : BuildRefinementPrompt(currentPlan, instruction!, refinement!.Value);
+                ? await BuildAnalysisPromptAsync(slug, localization.Lang)
+                : BuildRefinementPrompt(currentPlan, instruction!, refinement!.Value, localization.Lang);
 
             var assistantText = new List<string>();
             var runId = Guid.NewGuid().ToString("N");
@@ -127,7 +128,7 @@ public sealed class WorkflowMigrationPlanner(
         }
     }
 
-    private async Task<string> BuildAnalysisPromptAsync(string slug)
+    private async Task<string> BuildAnalysisPromptAsync(string slug, string language)
     {
         var pipelineRows = await pipelines.ListAsync(slug);
         var columnRows = new List<BoardColumn>();
@@ -153,16 +154,17 @@ public sealed class WorkflowMigrationPlanner(
             }),
             legacyAutomations = automationConfig.Automations,
         };
-        return "Analyse this current project snapshot and propose the migration plan.\n\n" +
+        return $"Analyse this current project snapshot and propose the migration plan. Write every user-facing value in language '{language}'.\n\n" +
                JsonSerializer.Serialize(snapshot, Json);
     }
 
     private static string BuildRefinementPrompt(WorkflowMigrationPlan plan, string instruction,
-        (string Phase, int? PipelineIndex) refinement) =>
+        (string Phase, int? PipelineIndex) refinement, string language) =>
         $"""
         Refine the current migration plan according to the user's request. Return the complete updated plan.
         Current wizard phase: {refinement.Phase}
         Current pipeline index: {refinement.PipelineIndex?.ToString() ?? "none"}
+        Write every user-facing value in language: {language}
         User request: {instruction}
 
         Current plan:

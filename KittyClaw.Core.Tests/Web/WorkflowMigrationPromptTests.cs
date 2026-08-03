@@ -100,6 +100,10 @@ public sealed class WorkflowMigrationPromptTests
         Assert.Contains("new System.Text.Json.Serialization.JsonStringEnumConverter()", source);
         Assert.Contains("GetFromJsonAsync<WorkflowMigrationJob>", source);
         Assert.Contains("Disable a legacy automation only after its replacement is configured and verified", source);
+
+        var planner = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Services", "WorkflowMigrationPlanner.cs"));
+        Assert.Contains("localization.Lang", planner);
+        Assert.Contains("Write every user-facing value in language", planner);
     }
 
     [Fact]
