@@ -190,6 +190,7 @@ public class ConsolidateMemoryRoutingTests
             Path.Combine(workspace, ".agents", "programmer", "memory", "MEMORY.md")));
         Assert.Equal(string.Empty, RunGit(workspace, "status --porcelain -- .agents/programmer/memory"));
         Assert.Contains("chore(memory): programmer", RunGit(workspace, "log -1 --pretty=%s"));
+        Assert.Equal("programmer@kittyclaw.local", RunGit(workspace, "log -1 --pretty=%ae"));
     }
 
     private static async Task RunConsolidationAsync(Harness harness, string? model)
