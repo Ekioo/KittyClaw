@@ -721,8 +721,27 @@ else
         return _selectedPipelineId is int pipeline ? $"{path}?pipeline={pipeline}" : path;
     }
 
-    private ValueTask ReplaceTicketUrlAsync(int? ticketId) =>
-        JS.InvokeVoidAsync("boardReplaceUrl", BoardUrl(_subKanbanParentId, ticketId));
+    private async Task ReplaceTicketUrlAsync(int? ticketId)
+    {
+        var url = BoardUrl(_subKanbanParentId, ticketId);
+        if (!await TryInvokeBoardJsAsync("boardReplaceUrl", url))
+            Navigation.NavigateTo(url, replace: true);
+    }
+
+    private async ValueTask<bool> TryInvokeBoardJsAsync(string identifier, params object?[] args)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync(identifier, args);
+            return true;
+        }
+        catch (JSException)
+        {
+            // A tab opened before a KittyClaw update may not have the latest optional board
+            // helpers yet. Losing scroll preservation is preferable to terminating its circuit.
+            return false;
+        }
+    }
 
     // Undo
     private record UndoAction(string Label, Func<Task> Undo, int? AffectedTicketId);
@@ -977,7 +996,7 @@ else
         if (_restoreScrollAfterRender)
         {
             _restoreScrollAfterRender = false;
-            await JS.InvokeVoidAsync("restoreColumnScrollPositions");
+            await TryInvokeBoardJsAsync("restoreColumnScrollPositions");
         }
         // Wire up image paste on the create-ticket description textarea every time
         // the popup is shown. The JS handler guards against double-attaching, and the
@@ -1502,7 +1521,7 @@ else
 
     private async Task SelectTicket(TicketSummary ticket)
     {
-        await JS.InvokeVoidAsync("saveColumnScrollPositions");
+        await TryInvokeBoardJsAsync("saveColumnScrollPositions");
         _restoreScrollAfterRender = true;
         _openTicketId = ticket.Id;
 
@@ -1514,7 +1533,7 @@ else
 
     private async Task ClosePanel()
     {
-        await JS.InvokeVoidAsync("saveColumnScrollPositions");
+        await TryInvokeBoardJsAsync("saveColumnScrollPositions");
         _restoreScrollAfterRender = true;
         _openTicketId = null;
         await ReplaceTicketUrlAsync(null);

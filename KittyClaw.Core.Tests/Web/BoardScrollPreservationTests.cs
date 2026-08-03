@@ -155,4 +155,19 @@ public class BoardScrollPreservationTests
 
         Assert.Contains("board.js", combined);
     }
+
+    [Fact]
+    public void BoardJs_IsFingerprintReferenced_AndMissingHelpersDoNotKillCircuit()
+    {
+        var src = File.ReadAllText(BoardRazorPath);
+        var appRazorPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
+            "../../../../KittyClaw.Web/Components/App.razor"));
+        var app = File.ReadAllText(appRazorPath);
+
+        Assert.Contains("@Assets[\"js/board.js\"]", app);
+        Assert.Contains("TryInvokeBoardJsAsync", src);
+        Assert.Contains("catch (JSException)", src);
+        Assert.DoesNotContain("await JS.InvokeVoidAsync(\"saveColumnScrollPositions\")", src);
+        Assert.DoesNotContain("await JS.InvokeVoidAsync(\"restoreColumnScrollPositions\")", src);
+    }
 }
