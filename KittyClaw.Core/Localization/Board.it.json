@@ -220,5 +220,6 @@
   "ScheduleTicketScope": "Ticket di destinazione", "ScheduleTicketScopeHelp": "Esegue le azioni senza ticket o sul primo ticket della colonna.",
   "ScheduleNoTicket": "Nessun ticket", "ScheduleFirstTicket": "Primo ticket della colonna", "ScheduleActions": "Azioni eseguite",
   "ScheduleFailureHelp": "In caso di errore, interrompe l’attività e sposta il ticket di destinazione in questa colonna. Le azioni incerte non vengono ripetute automaticamente.",
-  "ScheduleDefaultName": "Attività pianificata"
+  "ScheduleDefaultName": "Attività pianificata",
+  "PipelineUnreadTickets": "{0} ticket non letti"
 }

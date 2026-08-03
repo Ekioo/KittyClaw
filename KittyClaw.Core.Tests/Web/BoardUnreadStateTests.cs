@@ -86,6 +86,20 @@ public class BoardUnreadStateTests
         Assert.Contains("MarkTicketViewedAsync(openTicketId)", afterRender);
     }
 
+    [Fact]
+    public void PipelineTabs_ShowUnreadTicketCountWithAccessibleBadge()
+    {
+        var board = File.ReadAllText(BoardPath);
+        var css = File.ReadAllText(WebPath("wwwroot", "app.css"));
+
+        Assert.Contains("PipelineUnreadCount(pipeline.Id)", board);
+        Assert.Contains("ticket.PipelineId == pipelineId && IsTicketUpdated(ticket)", board);
+        Assert.Contains("pipeline-unread-badge", board);
+        Assert.Contains("PipelineUnreadTickets", board);
+        Assert.Contains(".pipeline-unread-badge", css);
+        Assert.Contains("background: #f59e0b", css);
+    }
+
     private static string WebPath(params string[] parts) => Path.GetFullPath(Path.Combine(
         AppContext.BaseDirectory, "../../../../KittyClaw.Web", Path.Combine(parts)));
 

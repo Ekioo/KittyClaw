@@ -227,5 +227,6 @@
   "ScheduleFirstTicket": "First ticket in the column",
   "ScheduleActions": "Actions to run",
   "ScheduleFailureHelp": "On failure, stop the task and move its target ticket to this column. An uncertain action is never replayed automatically.",
-  "ScheduleDefaultName": "Scheduled task"
+  "ScheduleDefaultName": "Scheduled task",
+  "PipelineUnreadTickets": "{0} unread ticket(s)"
 }

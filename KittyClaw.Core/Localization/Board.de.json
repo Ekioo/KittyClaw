@@ -220,5 +220,6 @@
   "ScheduleTicketScope": "Ziel-Ticket", "ScheduleTicketScopeHelp": "Aktionen ohne Ticket oder für das erste Ticket dieser Spalte ausführen.",
   "ScheduleNoTicket": "Kein Ticket", "ScheduleFirstTicket": "Erstes Ticket der Spalte", "ScheduleActions": "Auszuführende Aktionen",
   "ScheduleFailureHelp": "Bei einem Fehler wird die Aufgabe beendet und das Ziel-Ticket in diese Spalte verschoben. Unsichere Aktionen werden nicht automatisch wiederholt.",
-  "ScheduleDefaultName": "Geplante Aufgabe"
+  "ScheduleDefaultName": "Geplante Aufgabe",
+  "PipelineUnreadTickets": "{0} ungelesene Tickets"
 }

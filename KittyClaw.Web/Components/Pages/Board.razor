@@ -103,8 +103,17 @@ else
         <nav class="pipeline-tabs" aria-label="@L["WorkflowTitle"]">
             @foreach (var pipeline in _pipelines)
             {
+                var unreadCount = PipelineUnreadCount(pipeline.Id);
                 <button class="pipeline-tab @(pipeline.Id == _selectedPipelineId ? "pipeline-tab--active" : "")"
-                        @onclick="() => SelectPipelineAsync(pipeline.Id)">@pipeline.Name</button>
+                        @onclick="() => SelectPipelineAsync(pipeline.Id)">
+                    <span>@pipeline.Name</span>
+                    @if (unreadCount > 0)
+                    {
+                        <span class="pipeline-unread-badge"
+                              title="@string.Format(L["PipelineUnreadTickets"], unreadCount)"
+                              aria-label="@string.Format(L["PipelineUnreadTickets"], unreadCount)">@unreadCount</span>
+                    }
+                </button>
             }
         </nav>
     }
@@ -618,6 +627,9 @@ else
         var activity = ticket.LastActivityAt ?? ticket.UpdatedAt;
         return BoardUnreadState.IsUpdated(activity, ticket.Id, _viewedAt, _lastVisitedAt);
     }
+
+    private int PipelineUnreadCount(int pipelineId) =>
+        _tickets.Count(ticket => ticket.PipelineId == pipelineId && IsTicketUpdated(ticket));
 
     private async Task MarkTicketViewedAsync(int ticketId)
     {

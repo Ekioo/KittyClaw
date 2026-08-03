@@ -4979,6 +4979,9 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .pipeline-tabs::-webkit-scrollbar { display: none; }
 
 .pipeline-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: .42rem;
     border: 0;
     border-radius: 6px;
     background: transparent;
@@ -4991,6 +4994,23 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     cursor: pointer;
     text-decoration: none;
     transition: color .15s, background .15s;
+}
+
+.pipeline-unread-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.15rem;
+    height: 1.15rem;
+    padding: 0 .3rem;
+    box-sizing: border-box;
+    border-radius: 999px;
+    background: #f59e0b;
+    color: #211607;
+    font-size: .68rem;
+    font-weight: 750;
+    line-height: 1;
+    box-shadow: 0 0 0 1px color-mix(in srgb, #f59e0b 72%, white);
 }
 .pipeline-tab:hover { color: var(--text); }
 
