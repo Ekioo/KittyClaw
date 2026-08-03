@@ -239,6 +239,63 @@ public class ColumnPollFirstMatchTests
     }
 
     [Fact]
+    public async Task ReassigningWithinWatchedColumn_DispatchesNewAssigneeExactlyOnce()
+    {
+        using var tmp = new TempDir();
+        var scenarios = await CreateDelayedScenarioAsync(tmp.Path, "handoff-success", 0);
+        var automation = ColumnPollAutomation("resume-inprogress", "resumed");
+        var trigger = (TicketInColumnTriggerSpec)automation.Trigger;
+        trigger.Columns = ["InProgress"];
+        trigger.Seconds = 0;
+        automation.Conditions = [new AssignedToConditionSpec { Slugs = ["agent-a", "agent-b"] }];
+        automation.Actions =
+        [
+            new RunAgentActionSpec
+            {
+                Agent = "{assignee}",
+                MaxTurns = 1,
+                ConcurrencyGroup = "{assignee}",
+                Env = new Dictionary<string, string>
+                {
+                    ["KITTYCLAW_MOCK_SCENARIO"] = "handoff-success",
+                    ["KITTYCLAW_MOCK_SCENARIOS_DIR"] = scenarios,
+                },
+            },
+            new AddCommentActionSpec { Content = "resumed", Author = "automation" },
+        ];
+        var h = await BuildAsync(tmp.Path, automation);
+        await h.Members.CreateMemberAsync(h.Slug, "Agent A");
+        await h.Members.CreateMemberAsync(h.Slug, "Agent B");
+        TestSkillBuilder.Create(h.Workspace, "agent-a", scenario: "handoff-success");
+        TestSkillBuilder.Create(h.Workspace, "agent-b", scenario: "handoff-success");
+        var ticket = await h.Tickets.CreateTicketAsync(
+            h.Slug, "Hand-off", status: "InProgress", assignedTo: "agent-a");
+
+        await h.Handler.ProcessTickAsync(CancellationToken.None);
+        Assert.Equal(AutomationQueueStatus.Completed,
+            (await ProcessUntilTerminalAsync(h, ticket.Id, automation.Id)).Status);
+
+        await h.Tickets.UpdateTicketAsync(
+            h.Slug, ticket.Id, assignedTo: "agent-b", author: "agent-a");
+        await h.Handler.ProcessTickAsync(CancellationToken.None);
+        var entriesAfterHandoff = await h.Queue.ListForTicketAsync(h.Slug, ticket.Id);
+        Assert.Equal(2, entriesAfterHandoff.Count);
+        Assert.Equal(2, entriesAfterHandoff.Select(x => x.OccurrenceId).Distinct().Count());
+        Assert.Equal(AutomationQueueStatus.Completed,
+            (await ProcessUntilTerminalAsync(h, ticket.Id, automation.Id)).Status);
+
+        await h.Handler.ProcessTickAsync(CancellationToken.None);
+        var entriesAfterRepeatPoll = await h.Queue.ListForTicketAsync(h.Slug, ticket.Id);
+        Assert.Equal(2, entriesAfterRepeatPoll.Count);
+        Assert.Equal(2, (await h.Tickets.GetTicketAsync(h.Slug, ticket.Id))!.Comments.Count(
+            comment => comment.Content == "resumed"));
+        var runs = h.Runs.AllForTicket(h.Slug, ticket.Id).ToList();
+        Assert.Equal(2, runs.Count);
+        Assert.Single(runs, run => run.AgentName == "agent-a");
+        Assert.Single(runs, run => run.AgentName == "agent-b");
+    }
+
+    [Fact]
     public async Task Processor_ExecutesCompleteChainWithoutRunAgent()
     {
         using var tmp = new TempDir();

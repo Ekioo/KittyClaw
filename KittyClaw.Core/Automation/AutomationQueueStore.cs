@@ -52,18 +52,18 @@ public sealed class AutomationQueueStore
     public AutomationQueueStore(ProjectService projects) => _projects = projects;
 
     /// <summary>
-    /// Records the ticket's current column even when no automation watches it. This keeps
-    /// logical column occurrences correct when a ticket leaves a watched column and later
-    /// re-enters it through an unwatched one.
+    /// Records the ticket's current column and assignee even when no automation watches it.
+    /// This keeps logical occurrences correct when a ticket changes either dispatch dimension.
     /// </summary>
     public async Task ObserveColumnAsync(
-        string slug, int ticketId, string columnName, CancellationToken ct = default)
-        => await ObserveColumnsAsync(slug, [(ticketId, columnName)], ct);
+        string slug, int ticketId, string columnName, string? assigneeSlug = null,
+        CancellationToken ct = default)
+        => await ObserveColumnsAsync(slug, [(ticketId, columnName, assigneeSlug)], ct);
 
     /// <summary>Records a project's current ticket columns with one connection and transaction.
     /// Unchanged tickets require no writes; only genuine transitions create occurrences.</summary>
     public async Task ObserveColumnsAsync(
-        string slug, IEnumerable<(int TicketId, string ColumnName)> observations,
+        string slug, IEnumerable<(int TicketId, string ColumnName, string? AssigneeSlug)> observations,
         CancellationToken ct = default)
     {
         var batch = observations
@@ -79,20 +79,22 @@ public sealed class AutomationQueueStore
         EnsureSchema(conn);
         await using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct);
 
-        var current = new Dictionary<int, (string ColumnName, string OccurrenceId)>();
+        var current = new Dictionary<int, (string ColumnName, string? AssigneeSlug, string OccurrenceId)>();
         await using (var read = conn.CreateCommand())
         {
             read.Transaction = tx;
-            read.CommandText = "SELECT TicketId, ColumnName, OccurrenceId FROM automation_column_presence";
+            read.CommandText = "SELECT TicketId, ColumnName, AssigneeSlug, OccurrenceId FROM automation_column_presence";
             await using var reader = await read.ExecuteReaderAsync(ct);
             while (await reader.ReadAsync(ct))
-                current[reader.GetInt32(0)] = (reader.GetString(1), reader.GetString(2));
+                current[reader.GetInt32(0)] = (
+                    reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2), reader.GetString(3));
         }
 
-        foreach (var (ticketId, columnName) in batch)
+        foreach (var (ticketId, columnName, assigneeSlug) in batch)
         {
             current.TryGetValue(ticketId, out var previous);
-            if (string.Equals(previous.ColumnName, columnName, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(previous.ColumnName, columnName, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(previous.AssigneeSlug, assigneeSlug, StringComparison.OrdinalIgnoreCase))
                 continue;
 
             var occurrenceId = Guid.NewGuid().ToString("N");
@@ -101,21 +103,30 @@ public sealed class AutomationQueueStore
                 record.Transaction = tx;
                 record.CommandText = """
                     INSERT INTO automation_column_occurrences
-                        (TicketId, OccurrenceId, ColumnName, PreviousColumnName, ObservedAt)
-                    VALUES(@ticket,@occurrence,@column,@previous,@now)
+                        (TicketId, OccurrenceId, ColumnName, PreviousColumnName,
+                         AssigneeSlug, PreviousAssigneeSlug, ObservedAt)
+                    VALUES(@ticket,@occurrence,@column,@previous,@assignee,@previousAssignee,@now)
                     """;
                 record.Parameters.AddWithValue("@ticket", ticketId);
                 record.Parameters.AddWithValue("@occurrence", occurrenceId);
                 record.Parameters.AddWithValue("@column", columnName);
                 record.Parameters.AddWithValue("@previous", (object?)previous.ColumnName ?? DBNull.Value);
+                record.Parameters.AddWithValue("@assignee", (object?)assigneeSlug ?? DBNull.Value);
+                record.Parameters.AddWithValue("@previousAssignee", (object?)previous.AssigneeSlug ?? DBNull.Value);
                 record.Parameters.AddWithValue("@now", DateTime.UtcNow.ToString("O"));
                 await record.ExecuteNonQueryAsync(ct);
             }
-            await UpsertPresenceAsync(conn, tx, ticketId, columnName, occurrenceId, ct);
-            current[ticketId] = (columnName, occurrenceId);
+            await UpsertPresenceAsync(conn, tx, ticketId, columnName, assigneeSlug, occurrenceId, ct);
+            current[ticketId] = (columnName, assigneeSlug, occurrenceId);
         }
         await tx.CommitAsync(ct);
     }
+
+    public Task ObserveColumnsAsync(
+        string slug, IEnumerable<(int TicketId, string ColumnName)> observations,
+        CancellationToken ct = default)
+        => ObserveColumnsAsync(
+            slug, observations.Select(x => (x.TicketId, x.ColumnName, (string?)null)), ct);
 
     public async Task<IReadOnlyList<AutomationQueueEntry>> EnqueueAsync(
         string slug, Ticket ticket, IEnumerable<Automation> automations, CancellationToken ct = default)
@@ -127,8 +138,10 @@ public sealed class AutomationQueueStore
         EnsureSchema(conn);
         await using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(ct);
 
-        var occurrenceId = await ResolveOccurrenceAsync(conn, tx, ticket.Id, ticket.Status, ct);
-        await UpsertPresenceAsync(conn, tx, ticket.Id, ticket.Status, occurrenceId, ct);
+        var occurrenceId = await ResolveOccurrenceAsync(
+            conn, tx, ticket.Id, ticket.Status, ticket.AssignedTo, ct);
+        await UpsertPresenceAsync(
+            conn, tx, ticket.Id, ticket.Status, ticket.AssignedTo, occurrenceId, ct);
         var loopProtected = await IsRepeatedTransitionAsync(
             conn, tx, ticket.Id, occurrenceId, DateTime.UtcNow.Subtract(OccurrenceWindow), ct);
 
@@ -171,6 +184,8 @@ public sealed class AutomationQueueStore
               ON prior.TicketId=current.TicketId
              AND prior.ColumnName=current.ColumnName
              AND prior.PreviousColumnName=current.PreviousColumnName
+             AND prior.AssigneeSlug IS current.AssigneeSlug
+             AND prior.PreviousAssigneeSlug IS current.PreviousAssigneeSlug
              AND prior.OccurrenceId<>current.OccurrenceId
              AND prior.ObservedAt>=@windowStart
             WHERE current.TicketId=@ticket AND current.OccurrenceId=@occurrence
@@ -183,24 +198,28 @@ public sealed class AutomationQueueStore
     }
 
     private static async Task<string> ResolveOccurrenceAsync(
-        SqliteConnection conn, SqliteTransaction tx, int ticketId, string columnName, CancellationToken ct)
+        SqliteConnection conn, SqliteTransaction tx, int ticketId, string columnName,
+        string? assigneeSlug, CancellationToken ct)
     {
         await using var read = conn.CreateCommand();
         read.Transaction = tx;
-        read.CommandText = "SELECT ColumnName, OccurrenceId FROM automation_column_presence WHERE TicketId=@ticket";
+        read.CommandText = "SELECT ColumnName, AssigneeSlug, OccurrenceId FROM automation_column_presence WHERE TicketId=@ticket";
         read.Parameters.AddWithValue("@ticket", ticketId);
         string? previousColumn = null;
+        string? previousAssignee = null;
         string? previousOccurrence = null;
         await using (var reader = await read.ExecuteReaderAsync(ct))
         {
             if (await reader.ReadAsync(ct))
             {
                 previousColumn = reader.GetString(0);
-                previousOccurrence = reader.GetString(1);
+                previousAssignee = reader.IsDBNull(1) ? null : reader.GetString(1);
+                previousOccurrence = reader.GetString(2);
             }
         }
 
-        if (string.Equals(previousColumn, columnName, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(previousColumn, columnName, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(previousAssignee, assigneeSlug, StringComparison.OrdinalIgnoreCase))
             return previousOccurrence!;
 
         var occurrenceId = Guid.NewGuid().ToString("N");
@@ -208,13 +227,16 @@ public sealed class AutomationQueueStore
         record.Transaction = tx;
         record.CommandText = """
             INSERT OR IGNORE INTO automation_column_occurrences
-                (TicketId, OccurrenceId, ColumnName, PreviousColumnName, ObservedAt)
-            VALUES(@ticket,@occurrence,@column,@previous,@now)
+                (TicketId, OccurrenceId, ColumnName, PreviousColumnName,
+                 AssigneeSlug, PreviousAssigneeSlug, ObservedAt)
+            VALUES(@ticket,@occurrence,@column,@previous,@assignee,@previousAssignee,@now)
             """;
         record.Parameters.AddWithValue("@ticket", ticketId);
         record.Parameters.AddWithValue("@occurrence", occurrenceId);
         record.Parameters.AddWithValue("@column", columnName);
         record.Parameters.AddWithValue("@previous", (object?)previousColumn ?? DBNull.Value);
+        record.Parameters.AddWithValue("@assignee", (object?)assigneeSlug ?? DBNull.Value);
+        record.Parameters.AddWithValue("@previousAssignee", (object?)previousAssignee ?? DBNull.Value);
         record.Parameters.AddWithValue("@now", DateTime.UtcNow.ToString("O"));
         await record.ExecuteNonQueryAsync(ct);
         return occurrenceId;
@@ -222,18 +244,21 @@ public sealed class AutomationQueueStore
 
     private static async Task UpsertPresenceAsync(
         SqliteConnection conn, SqliteTransaction tx, int ticketId, string columnName,
-        string occurrenceId, CancellationToken ct)
+        string? assigneeSlug, string occurrenceId, CancellationToken ct)
     {
         await using var presence = conn.CreateCommand();
         presence.Transaction = tx;
         presence.CommandText = """
-            INSERT INTO automation_column_presence(TicketId, ColumnName, OccurrenceId, ObservedAt)
-            VALUES(@ticket,@column,@occurrence,@now)
-            ON CONFLICT(TicketId) DO UPDATE SET ColumnName=@column, OccurrenceId=@occurrence, ObservedAt=@now
+            INSERT INTO automation_column_presence(TicketId, ColumnName, AssigneeSlug, OccurrenceId, ObservedAt)
+            VALUES(@ticket,@column,@assignee,@occurrence,@now)
+            ON CONFLICT(TicketId) DO UPDATE SET ColumnName=@column, AssigneeSlug=@assignee,
+                OccurrenceId=@occurrence, ObservedAt=@now
             WHERE automation_column_presence.ColumnName <> excluded.ColumnName
+               OR automation_column_presence.AssigneeSlug IS NOT excluded.AssigneeSlug
             """;
         presence.Parameters.AddWithValue("@ticket", ticketId);
         presence.Parameters.AddWithValue("@column", columnName);
+        presence.Parameters.AddWithValue("@assignee", (object?)assigneeSlug ?? DBNull.Value);
         presence.Parameters.AddWithValue("@occurrence", occurrenceId);
         presence.Parameters.AddWithValue("@now", DateTime.UtcNow.ToString("O"));
         await presence.ExecuteNonQueryAsync(ct);
@@ -402,18 +427,38 @@ public sealed class AutomationQueueStore
             """;
         cmd.ExecuteNonQuery();
         EnsureColumn(conn, "automation_queue", "AvailableAt", "TEXT");
+        var addedPresenceAssignee = EnsureColumn(
+            conn, "automation_column_presence", "AssigneeSlug", "TEXT");
+        EnsureColumn(conn, "automation_column_occurrences", "AssigneeSlug", "TEXT");
+        EnsureColumn(conn, "automation_column_occurrences", "PreviousAssigneeSlug", "TEXT");
+        if (addedPresenceAssignee)
+        {
+            using var backfill = conn.CreateCommand();
+            backfill.CommandText = """
+                UPDATE automation_column_presence
+                SET AssigneeSlug=(SELECT AssignedTo FROM Tickets WHERE Tickets.Id=automation_column_presence.TicketId);
+                UPDATE automation_column_occurrences
+                SET AssigneeSlug=(
+                    SELECT presence.AssigneeSlug FROM automation_column_presence presence
+                    WHERE presence.TicketId=automation_column_occurrences.TicketId
+                      AND presence.OccurrenceId=automation_column_occurrences.OccurrenceId)
+                WHERE AssigneeSlug IS NULL;
+                """;
+            backfill.ExecuteNonQuery();
+        }
     }
 
-    private static void EnsureColumn(SqliteConnection conn, string table, string column, string type)
+    private static bool EnsureColumn(SqliteConnection conn, string table, string column, string type)
     {
         using var check = conn.CreateCommand();
         check.CommandText = $"PRAGMA table_info({table})";
         using var reader = check.ExecuteReader();
         while (reader.Read())
-            if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase)) return;
+            if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase)) return false;
         reader.Close();
         using var alter = conn.CreateCommand();
         alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {type}";
         alter.ExecuteNonQuery();
+        return true;
     }
 }

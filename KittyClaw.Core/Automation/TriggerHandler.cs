@@ -119,7 +119,8 @@ internal sealed class TriggerHandler
             {
                 var projectTickets = await _tickets.ListTicketsAsync(project.Slug);
                 await _queue.ObserveColumnsAsync(
-                    project.Slug, projectTickets.Select(ticket => (ticket.Id, ticket.Status)), ct);
+                    project.Slug,
+                    projectTickets.Select(ticket => (ticket.Id, ticket.Status, ticket.AssignedTo)), ct);
             }
             foreach (var automation in rt.Config.Automations)
             {
