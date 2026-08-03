@@ -197,6 +197,10 @@
     private string _newPipelineName = "";
     private bool _launchMigration;
     private readonly CancellationTokenSource _dispose = new();
+    private static readonly System.Text.Json.JsonSerializerOptions MigrationJson = new(System.Text.Json.JsonSerializerDefaults.Web)
+    {
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
+    };
     private WorkflowMigrationPipeline? CurrentPipeline => _plan is not null && _pipelineIndex >= 0 && _pipelineIndex < _plan.Pipelines.Count ? _plan.Pipelines[_pipelineIndex] : null;
     private string Title => _step switch
     {
@@ -235,12 +239,13 @@
             using var http = new HttpClient { BaseAddress = new Uri(Navigation.BaseUri) };
             var response = await http.PostAsJsonAsync($"/api/projects/{ProjectSlug}/workflow-migrations/{action}", body, _dispose.Token);
             response.EnsureSuccessStatusCode();
-            var accepted = await response.Content.ReadFromJsonAsync<JobAccepted>(cancellationToken: _dispose.Token)
+            var accepted = await response.Content.ReadFromJsonAsync<JobAccepted>(MigrationJson, _dispose.Token)
                 ?? throw new InvalidOperationException(L["MigrationWizardStartFailed"]);
             while (!_dispose.IsCancellationRequested)
             {
                 await Task.Delay(900, _dispose.Token);
-                var job = await http.GetFromJsonAsync<WorkflowMigrationJob>($"/api/projects/{ProjectSlug}/workflow-migrations/jobs/{accepted.JobId}", _dispose.Token);
+                var job = await http.GetFromJsonAsync<WorkflowMigrationJob>(
+                    $"/api/projects/{ProjectSlug}/workflow-migrations/jobs/{accepted.JobId}", MigrationJson, _dispose.Token);
                 if (job?.Status == "completed") { _plan = job.Plan; break; }
                 if (job?.Status == "failed") throw new InvalidOperationException(job.Error ?? L["MigrationWizardAnalysisFailed"]);
             }

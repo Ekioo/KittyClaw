@@ -97,6 +97,8 @@ public sealed class WorkflowMigrationPromptTests
         Assert.Contains("RefineAsync", source);
         Assert.Contains("private void Back()", source);
         Assert.Contains("AutoSendInitialMessage=\"true\"", source);
+        Assert.Contains("new System.Text.Json.Serialization.JsonStringEnumConverter()", source);
+        Assert.Contains("GetFromJsonAsync<WorkflowMigrationJob>", source);
         Assert.Contains("Disable a legacy automation only after its replacement is configured and verified", source);
     }
 
