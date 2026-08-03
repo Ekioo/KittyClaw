@@ -190,8 +190,7 @@ public class OllamaLocalModelTests
         var firing = new TriggerFiring(null, null, "Done");
         await executor.ExecuteAutomationAsync(rt, automation, firing, CancellationToken.None);
 
-        await Task.Delay(500);
-        var run = runs.AllForProject(rt.Slug).FirstOrDefault();
+        var run = await WaitForRunEndAsync(runs, rt.Slug, TimeSpan.FromSeconds(15));
         Assert.NotNull(run);
         var events = run.SnapshotBuffer();
         Assert.Contains(events, e => e.Kind == "error");
