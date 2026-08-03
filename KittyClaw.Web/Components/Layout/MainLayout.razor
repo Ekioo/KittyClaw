@@ -1,4 +1,6 @@
 @inherits LayoutComponentBase
+@using KittyClaw.Core.Services
+@inject LocalizationService L
 
 <EscapeKeyHost />
 @Body
@@ -6,7 +8,10 @@
 <UpdateBanner />
 
 <div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
+    <div class="error-copy">
+        <strong>@L["SessionInterrupted"]</strong>
+        <span>@L["SessionInterruptedHint"]</span>
+    </div>
+    <button type="button" class="reload" onclick="location.reload()">@L["ReloadPage"]</button>
+    <button type="button" class="dismiss" aria-label="@L["Close"]">&#10005;</button>
 </div>

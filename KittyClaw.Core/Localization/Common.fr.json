@@ -26,5 +26,8 @@
   "AutomationQueue": "File des automations",
   "QueuePending": "En attente", "QueueRunning": "En cours", "QueueCompleted": "Terminée",
   "QueueSkipped": "Ignorée", "QueueFailed": "Échec", "QueueCancelled": "Annulée",
-  "AutomationsAhead": "{0} automations avant celle-ci"
+  "AutomationsAhead": "{0} automations avant celle-ci",
+  "SessionInterrupted": "KittyClaw a été mis à jour ou la session a été interrompue.",
+  "SessionInterruptedHint": "La page se rétablit automatiquement lorsque c’est possible. Rechargez-la si ce message reste affiché.",
+  "ReloadPage": "Recharger la page"
 }

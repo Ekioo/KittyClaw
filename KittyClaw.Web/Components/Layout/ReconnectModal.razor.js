@@ -8,6 +8,18 @@ retryButton.addEventListener("click", retry);
 const resumeButton = document.getElementById("components-resume-button");
 resumeButton.addEventListener("click", resume);
 
+// A server restart can invalidate a circuit between two user interactions. Blazor's
+// default fatal-error banner otherwise appears only after the next click, which makes
+// an innocent ticket look broken. If the new server is healthy, reload the stale page
+// once automatically. A one-minute guard keeps genuine render bugs visible instead of
+// creating a reload loop.
+const fatalErrorUi = document.getElementById("blazor-error-ui");
+const fatalReloadKey = "kittyclaw:last-fatal-circuit-reload";
+if (fatalErrorUi) {
+    const fatalObserver = new MutationObserver(recoverStaleCircuit);
+    fatalObserver.observe(fatalErrorUi, { attributes: true, attributeFilter: ["style", "class"] });
+}
+
 function handleReconnectStateChanged(event) {
     if (event.detail.state === "show") {
         reconnectModal.showModal();
@@ -59,5 +71,26 @@ async function resume() {
 async function retryWhenDocumentBecomesVisible() {
     if (document.visibilityState === "visible") {
         await retry();
+    }
+}
+
+async function recoverStaleCircuit() {
+    if (!fatalErrorUi || getComputedStyle(fatalErrorUi).display === "none") {
+        return;
+    }
+
+    const lastReload = Number(sessionStorage.getItem(fatalReloadKey) || "0");
+    if (Date.now() - lastReload < 60_000) {
+        return;
+    }
+
+    try {
+        const health = await fetch("/api/engine/health", { cache: "no-store" });
+        if (health.ok) {
+            sessionStorage.setItem(fatalReloadKey, String(Date.now()));
+            location.reload();
+        }
+    } catch {
+        // The server is still unavailable. Keep the actionable banner visible.
     }
 }
