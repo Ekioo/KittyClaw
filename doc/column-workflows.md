@@ -33,6 +33,8 @@ A route cannot point back to its source column. Repeating work is expressed thro
 
 Technical failures use exponential backoff up to `MaxAttempts`. Once exhausted, the ticket can be routed to a dedicated technical-failure column. A failed execution can also be retried or cancelled through the API.
 
+An agent outcome of `scheduled` must include `fireAt` and `scheduleTarget`. Its configured route must lead to a column with the `Waiting` role; validation uses that stable role rather than the column's editable display name. The wake target must name an existing column in the destination pipeline.
+
 ## Scheduled column tasks
 
 Columns can own durable cron tasks that execute an ordered action chain without launching an agent. Each run checkpoints completed actions in the project database so a host restart resumes only the unfinished portion. If the project starts paused, interrupted runs are recovered but held in memory; they resume after the project is unpaused, and newly due tasks are not claimed while it remains paused.
