@@ -5251,6 +5251,8 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 
 @media (max-width: 1400px) {
     .board-layout > .page-header {
+        gap: .6rem;
+        padding: .75rem 1rem;
         overflow-x: auto;
         scrollbar-width: none;
     }
@@ -5258,8 +5260,10 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     .board-layout > .page-header > * { flex-shrink: 0; }
     .board-layout > .page-header h1,
     .board-layout > .page-header .back-link { white-space: nowrap; }
-    .board-layout > .page-header .filter-bar { flex: 0 1 16rem; min-width: 8rem; margin-left: 0; }
-    .board-layout > .page-header .header-right { margin-left: 0; }
+    .board-layout > .page-header .view-toggle-btn { padding-inline: .65rem; }
+    .board-layout > .page-header .filter-bar { flex: 0 1 14rem; min-width: 6rem; margin-left: 0; }
+    .board-layout > .page-header .header-right { gap: .35rem; margin-left: 0; }
+    .board-layout > .page-header .header-action-btn { padding-inline: .55rem; }
 }
 .workflow-textarea { width: 100%; min-height: 9rem; resize: vertical; }
 .processor-prompt { min-height: 12rem; }
