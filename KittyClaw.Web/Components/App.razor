@@ -16,6 +16,23 @@
 <body>
     <Routes />
     <ReconnectModal />
+    <script>
+        window.__kittyClawBoardScrolls ??= {};
+        window.saveColumnScrollPositions = function () {
+            document.querySelectorAll('.column-body').forEach((element, index) => {
+                window.__kittyClawBoardScrolls[index] = element.scrollTop;
+            });
+        };
+        window.restoreColumnScrollPositions = function () {
+            document.querySelectorAll('.column-body').forEach((element, index) => {
+                const scrollTop = window.__kittyClawBoardScrolls[index];
+                if (scrollTop !== undefined) element.scrollTop = scrollTop;
+            });
+        };
+        window.boardReplaceUrl = function (url) {
+            window.history.replaceState(window.history.state, "", url);
+        };
+    </script>
     <script src="@Assets["imageUpload.js"]"></script>
     <script src="@Assets["js/chat-drawer.js"]"></script>
     <script src="@Assets["js/dashboard.js"]"></script>

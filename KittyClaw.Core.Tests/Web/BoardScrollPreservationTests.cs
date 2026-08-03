@@ -165,7 +165,12 @@ public class BoardScrollPreservationTests
         var app = File.ReadAllText(appRazorPath);
 
         Assert.Contains("@Assets[\"js/board.js\"]", app);
+        Assert.Contains("window.boardReplaceUrl = function", app);
+        Assert.Contains("window.saveColumnScrollPositions = function", app);
+        Assert.Contains("window.restoreColumnScrollPositions = function", app);
         Assert.True(
+            app.IndexOf("window.boardReplaceUrl = function", StringComparison.Ordinal) <
+            app.IndexOf("@Assets[\"_framework/blazor.web.js\"]", StringComparison.Ordinal) &&
             app.IndexOf("@Assets[\"js/board.js\"]", StringComparison.Ordinal) <
             app.IndexOf("@Assets[\"_framework/blazor.web.js\"]", StringComparison.Ordinal),
             "Board helpers must load before Blazor starts the interactive circuit.");
