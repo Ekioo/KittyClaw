@@ -2096,8 +2096,8 @@ button:disabled { opacity: 0.4; cursor: default; }
 
 .project-card-agent-badge {
     position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
+    top: 0.65rem;
+    right: 2.25rem;
     width: 14px;
     height: 14px;
     border-radius: 50%;
@@ -4700,6 +4700,13 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 }
 .column-context-menu-item:hover {
     background: var(--surface3);
+    color: var(--text);
+}
+.column-context-menu-item:focus-visible {
+    outline: none;
+    background: var(--surface3);
+    color: var(--text);
+    box-shadow: inset 3px 0 var(--accent);
 }
 .column-context-menu-item:disabled {
     color: var(--text-muted);
@@ -4710,6 +4717,11 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .column-context-menu-item--active {
     color: var(--accent-hover);
     font-weight: 600;
+}
+.column-context-menu-item--active:hover,
+.column-context-menu-item--active:focus-visible {
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface3));
+    color: var(--accent-hover);
 }
 .column-context-menu-configure {
     color: var(--text);

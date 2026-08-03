@@ -36,19 +36,20 @@
 
 @if (_sortMenuVisible)
 {
-    <div class="context-menu-backdrop" @onclick="HideSortMenu"></div>
-    <div class="context-menu" style="left:@(_sortMenuX)px;top:@(_sortMenuY)px">
-        <button class="context-menu-item @(_sortOrder == "name" ? "active" : "")" @onclick='() => SetSort("name")'>
-            @if (_sortOrder == "name") { <span class="context-menu-check">✓</span> } else { <span class="context-menu-check"></span> }
-            @L["SortByName"]
+    <div class="column-context-menu-backdrop" @onclick="HideSortMenu" @oncontextmenu="HideSortMenu" @oncontextmenu:preventDefault></div>
+    <div class="column-context-menu" style="left:@(_sortMenuX)px;top:@(_sortMenuY)px" @onclick:stopPropagation @oncontextmenu:preventDefault>
+        <div class="column-context-menu-title">@L["SortProjectsTitle"]</div>
+        <button class="column-context-menu-item @(_sortOrder == "name" ? "column-context-menu-item--active" : "")" @onclick='() => SetSort("name")'>
+            <span class="column-context-menu-check">@(_sortOrder == "name" ? "✓" : "")</span>
+            <span>@L["SortByName"]</span>
         </button>
-        <button class="context-menu-item @(_sortOrder == "created" ? "active" : "")" @onclick='() => SetSort("created")'>
-            @if (_sortOrder == "created") { <span class="context-menu-check">✓</span> } else { <span class="context-menu-check"></span> }
-            @L["SortByCreationDate"]
+        <button class="column-context-menu-item @(_sortOrder == "created" ? "column-context-menu-item--active" : "")" @onclick='() => SetSort("created")'>
+            <span class="column-context-menu-check">@(_sortOrder == "created" ? "✓" : "")</span>
+            <span>@L["SortByCreationDate"]</span>
         </button>
-        <button class="context-menu-item @(_sortOrder == "updated" ? "active" : "")" @onclick='() => SetSort("updated")'>
-            @if (_sortOrder == "updated") { <span class="context-menu-check">✓</span> } else { <span class="context-menu-check"></span> }
-            @L["SortByLastModified"]
+        <button class="column-context-menu-item @(_sortOrder == "updated" ? "column-context-menu-item--active" : "")" @onclick='() => SetSort("updated")'>
+            <span class="column-context-menu-check">@(_sortOrder == "updated" ? "✓" : "")</span>
+            <span>@L["SortByLastModified"]</span>
         </button>
     </div>
 }

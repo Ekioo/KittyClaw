@@ -115,4 +115,27 @@ public class HomeAgentBadgeTests
         var css = LoadAppCss();
         Assert.Contains(".project-card-agent-badge", css);
     }
+
+    [Fact]
+    public void RunningBadge_AndPauseButton_UseSeparateHorizontalPositions()
+    {
+        var css = LoadAppCss();
+        var badge = Regex.Match(css, @"\.project-card-agent-badge\s*\{(?<body>[\s\S]*?)\}");
+        var pause = Regex.Match(css, @"\.project-card-wrap \.project-pause-btn\s*\{(?<body>[\s\S]*?)\}");
+
+        Assert.True(badge.Success);
+        Assert.True(pause.Success);
+        Assert.Contains("right: 2.25rem", badge.Groups["body"].Value);
+        Assert.Contains("right: 0.4rem", pause.Groups["body"].Value);
+    }
+
+    [Fact]
+    public void ProjectSortMenu_ReusesTheColumnContextMenuDesign()
+    {
+        var source = LoadHomeRazor();
+        Assert.Contains("column-context-menu-backdrop", source);
+        Assert.Contains("column-context-menu-title", source);
+        Assert.Contains("column-context-menu-item--active", source);
+        Assert.Contains("SortProjectsTitle", source);
+    }
 }

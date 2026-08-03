@@ -20,5 +20,6 @@
   "Continue": "Continuer",
   "SortByName": "Par nom",
   "SortByCreationDate": "Par date de création",
-  "SortByLastModified": "Par dernière modification"
+  "SortByLastModified": "Par dernière modification",
+  "SortProjectsTitle": "Trier les projets"
 }
