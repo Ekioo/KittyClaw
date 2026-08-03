@@ -18,6 +18,7 @@
 @inject ColumnService ColumnService
 @inject PipelineService PipelineService
 @inject ColumnProcessorService ProcessorService
+@inject KittyClaw.Core.Automation.AutomationStore AutomationStore
 @inject MemberService MemberService
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
@@ -550,6 +551,11 @@ else
     </ErrorBoundary>
 }
 
+@if (_showMigrationWizard)
+{
+    <WorkflowMigrationWizard ProjectSlug="@Slug" OnClose="CloseMigrationWizard" />
+}
+
 @code {
     [Parameter] public string Slug { get; set; } = "";
     [Parameter] public int? TicketId { get; set; }
@@ -606,6 +612,7 @@ else
     private string? _chatInitialAgentName;
     private int? _chatTicketId;
     private string? _chatTicketTitle;
+    private bool _showMigrationWizard;
 
     // Members
     private List<Member> _allMembers = [];
@@ -833,6 +840,15 @@ else
             _allLabels = await LabelService.ListLabelsAsync(Slug);
             _allMembers = await MemberService.ListMembersAsync(Slug);
 
+            // A legacy board deserves an explicit migration path, but opening a deep-linked
+            // ticket must remain interruption-free. The wizard is shown once for this board
+            // component and can be dismissed without changing any project state.
+            if (TicketId is null && ParentId is null)
+            {
+                var (legacyConfig, _, _) = await AutomationStore.LoadAsync(Slug);
+                _showMigrationWizard = legacyConfig.Automations.Any(automation => automation.Enabled);
+            }
+
             // Legacy ticket links did not carry the pipeline in the URL. Infer it from
             // the ticket so direct links still open in the pipeline that owns the card.
             if (PipelineId is null && TicketId is int ticketId &&
@@ -1050,6 +1066,8 @@ else
 
         await PersistViewedStateAsync();
     }
+
+    private void CloseMigrationWizard() => _showMigrationWizard = false;
 
     private void OpenColumnDialogFromMenu()
     {

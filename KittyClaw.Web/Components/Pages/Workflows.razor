@@ -5,10 +5,7 @@
 @inject PipelineService PipelineService
 @inject ProjectSkillService SkillService
 @inject LocalizationService L
-@inject IJSRuntime JS
-@inject KittyClaw.Web.Services.EscapeKeyStack EscapeStack
 @rendermode InteractiveServer
-@implements IDisposable
 
 <PageTitle>@(_project?.Name ?? L["WorkflowProject"]) — @L["WorkflowTitle"]</PageTitle>
 
@@ -29,7 +26,7 @@ else
                 <h2>@L["WorkflowMigrateTitle"]</h2>
                 <p class="settings-hint">@L["WorkflowMigrateHint"]</p>
             </div>
-            <button class="settings-primary" @onclick="OpenMigrationInstruction">@L["WorkflowMigrate"]</button>
+            <button class="settings-primary" @onclick="() => _showMigrationWizard = true">@L["WorkflowMigrate"]</button>
         </section>
 
         @if (!string.IsNullOrWhiteSpace(_message))
@@ -84,9 +81,9 @@ else
     </div>
 }
 
-@if (_showMigrationInstruction)
+@if (_showMigrationWizard)
 {
-    <ChatDrawer ProjectSlug="@Slug" InitialMessage="@MigrationPrompt" OnClose="CloseMigrationInstruction" />
+    <WorkflowMigrationWizard ProjectSlug="@Slug" OnClose="() => _showMigrationWizard = false" />
 }
 
 @code {
@@ -104,8 +101,7 @@ else
     private string _newPipelineName = "";
     private string? _message;
     private bool _isError;
-    private bool _showMigrationInstruction;
-    private IDisposable? _migrationEscape;
+    private bool _showMigrationWizard;
 
     private string _newSkillName = "";
     private string _newSkillDescription = "";
@@ -179,58 +175,5 @@ else
         try { await action(); _message = success; _isError = false; }
         catch (Exception ex) { _message = ex.Message; _isError = true; }
     }
-
-    private void OpenMigrationInstruction()
-    {
-        _showMigrationInstruction = true;
-        _migrationEscape?.Dispose();
-        _migrationEscape = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() =>
-        {
-            CloseMigrationInstruction();
-            StateHasChanged();
-        }));
-    }
-
-    private void CloseMigrationInstruction()
-    {
-        _showMigrationInstruction = false;
-        _migrationEscape?.Dispose();
-        _migrationEscape = null;
-    }
-
-    public void Dispose() => _migrationEscape?.Dispose();
-
-    private const string MigrationPrompt = """
-        Analyze this project's current board and prepare a safe migration to the pipeline and column-processor architecture.
-
-        First inspect the existing columns, tickets, legacy automations (including cron jobs), agents, memories, skills, and parent/child ticket relationships. Treat the current board as potentially denormalized: columns may mix several independent lifecycles simply because the legacy model had only one board. Reconstruct the project's actual workflows from ticket purpose, routing rules, actors, automations, recurring schedules, and success/failure criteria before proposing any structure.
-
-        Follow these rules:
-        - Produce a workflow inventory before designing pipelines. For every detected workflow, cite the tickets, automations, agents, or routing rules that prove it exists.
-        - Create separate pipelines for genuinely distinct lifecycles. Different processors or actors, routing rules, terminal outcomes, recurring schedules, or operational goals are strong evidence of distinct pipelines.
-        - Do not preserve a single mixed pipeline merely because today's board shares column names. Conversely, do not split a workflow only because two stages have different names.
-        - Prefer the smallest correct set of pipelines, but never optimize for fewer pipelines at the cost of mixing unrelated rules or ticket lifecycles.
-        - Map every existing ticket to exactly one proposed pipeline according to its purpose, not merely its current column.
-        - Do not add an In Progress column merely to represent agent execution; execution state is tracked separately.
-        - Give every column an explicit semantic role: Normal, Waiting, OwnerAction, Success, or Failure.
-        - Use OwnerAction when a human decision, approval, missing input, or manual intervention is required. KittyClaw will automatically assign tickets entering that column to Owner and emphasize them visually. Keep Waiting for non-human pauses such as blocked dependencies or scheduled work.
-        - Attach at most one generic processor to each active column.
-        - Convert reusable technical and operational procedures into project skills.
-        - Configure each processor's mission, ticket ordering, available/recommended/required skills, retry policy, default destination, conditional outcome routes, and technical-failure destination.
-        - Allow child tickets to live in other pipelines. Mark only true prerequisites as blocking; their success is determined by the Success role of their destination column.
-        - Preserve stable pipeline, column, and skill identifiers when renaming anything.
-        - Convert recurring cron work to column scheduled tasks with deterministic action chains whenever there is a clear owning workflow and column. Keep only legacy cron or event automations that do not yet have a validated replacement.
-        - Do not delete or disable existing automations, agents, skills, columns, or pipelines during the analysis.
-
-        Before making changes, show me:
-        1. the workflow inventory and the evidence that each workflow is distinct;
-        2. the proposed pipelines and columns, including each column's semantic role;
-        3. each processor, its skills, and its routing switch;
-        4. which legacy automations would be kept, replaced by processors, replaced by scheduled tasks, or require a decision;
-        5. how every existing ticket and child ticket would be mapped;
-        6. any risks or ambiguous choices.
-
-        Wait for my explicit approval before applying the migration. After approval, migrate progressively, verify that existing tickets remain accessible, and only disable legacy automations that have a validated replacement.
-        """;
 
 }

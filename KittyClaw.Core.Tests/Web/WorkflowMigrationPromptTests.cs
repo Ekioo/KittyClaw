@@ -14,18 +14,13 @@ public sealed class WorkflowMigrationPromptTests
     }
 
     [Fact]
-    public void Workflow_page_opens_new_instruction_with_editable_migration_draft()
+    public void Workflow_page_opens_the_same_visual_migration_wizard_as_the_board()
     {
         var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Workflows.razor"));
 
-        Assert.Contains("InitialMessage=\"@MigrationPrompt\"", source);
-        Assert.Contains("Wait for my explicit approval before applying the migration.", source);
-        Assert.Contains("Treat the current board as potentially denormalized", source);
-        Assert.Contains("Do not preserve a single mixed pipeline", source);
-        Assert.Contains("Map every existing ticket to exactly one proposed pipeline", source);
-        Assert.Contains("Use OwnerAction when a human decision", source);
-        Assert.Contains("replaced by scheduled tasks", source);
-        Assert.DoesNotContain("InitialAgent=", source);
+        Assert.Contains("<WorkflowMigrationWizard", source);
+        Assert.Contains("_showMigrationWizard = true", source);
+        Assert.DoesNotContain("<ChatDrawer", source);
     }
 
     [Fact]
@@ -80,5 +75,38 @@ public sealed class WorkflowMigrationPromptTests
         Assert.Contains("[Parameter] public string? InitialMessage", source);
         Assert.Contains("_inputText = InitialMessage ?? \"\";", source);
         Assert.DoesNotContain("Send(InitialMessage", source);
+    }
+
+    [Fact]
+    public void Legacy_board_opens_the_visual_migration_wizard_without_interrupting_deep_links()
+    {
+        var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Board.razor"));
+
+        Assert.Contains("legacyConfig.Automations.Any(automation => automation.Enabled)", source);
+        Assert.Contains("TicketId is null && ParentId is null", source);
+        Assert.Contains("<WorkflowMigrationWizard", source);
+    }
+
+    [Fact]
+    public void Migration_wizard_supports_graphical_review_refinement_and_confirmed_launch()
+    {
+        var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "WorkflowMigrationWizard.razor"));
+
+        Assert.Contains("migration-pipeline-grid", source);
+        Assert.Contains("migration-column-flow", source);
+        Assert.Contains("RefineAsync", source);
+        Assert.Contains("private void Back()", source);
+        Assert.Contains("AutoSendInitialMessage=\"true\"", source);
+        Assert.Contains("Disable a legacy automation only after its replacement is configured and verified", source);
+    }
+
+    [Fact]
+    public void Automatic_chat_send_remains_an_explicit_opt_in()
+    {
+        var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "ChatDrawer.razor"));
+
+        Assert.Contains("[Parameter] public bool AutoSendInitialMessage", source);
+        Assert.Contains("if (AutoSendInitialMessage", source);
+        Assert.Contains("_inputText = InitialMessage ?? \"\";", source);
     }
 }

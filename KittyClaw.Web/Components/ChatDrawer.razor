@@ -247,6 +247,8 @@
     [Parameter] public string? InitialAgentName { get; set; }
     /// <summary>Optional draft placed in the composer without sending it automatically.</summary>
     [Parameter] public string? InitialMessage { get; set; }
+    /// <summary>Explicit opt-in for confirmed flows that must start immediately (for example an approved migration).</summary>
+    [Parameter] public bool AutoSendInitialMessage { get; set; }
     /// <summary>Optional. When set together with InitialAgent, scopes the chat to a specific ticket.</summary>
     [Parameter] public int? TicketId { get; set; }
     /// <summary>Optional. Title of the scoped ticket, shown in the drawer header.</summary>
@@ -313,6 +315,8 @@
             var target = new ChatTarget(slug, name, "member");
             await EnterConversationAsync(target);
             _ready = true;
+            if (AutoSendInitialMessage && !string.IsNullOrWhiteSpace(_inputText))
+                await Send();
             return;
         }
 

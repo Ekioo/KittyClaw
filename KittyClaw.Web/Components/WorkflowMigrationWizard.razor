@@ -1,0 +1,324 @@
+@using KittyClaw.Core.Models
+@using KittyClaw.Web.Services
+@inject NavigationManager Navigation
+@inject LocalizationService L
+@implements IDisposable
+
+<div class="migration-wizard-overlay" @onclick="Close"></div>
+<section class="migration-wizard" role="dialog" aria-modal="true" aria-labelledby="migration-wizard-title" @onclick:stopPropagation>
+    <header class="migration-wizard-header">
+        <div>
+            <span class="migration-wizard-kicker">@L["MigrationWizardKicker"]</span>
+            <h2 id="migration-wizard-title">@Title</h2>
+        </div>
+        <button class="agent-close-btn" @onclick="Close" title="@L["Close"]">×</button>
+    </header>
+
+    @if (_step != WizardStep.Intro && _plan is not null)
+    {
+        <nav class="migration-wizard-steps" aria-label="@L["MigrationWizardProgress"]">
+            <button class="@StepClass(WizardStep.Pipelines)" @onclick="() => GoTo(WizardStep.Pipelines)">1 <span>@L["MigrationWizardPipelines"]</span></button>
+            @for (var i = 0; i < _plan.Pipelines.Count; i++)
+            {
+                var index = i;
+                <button class="@PipelineStepClass(index)" @onclick="() => OpenPipeline(index)">@(i + 2) <span>@_plan.Pipelines[i].Name</span></button>
+            }
+            <button class="@StepClass(WizardStep.Review)" @onclick="() => GoTo(WizardStep.Review)">@(_plan.Pipelines.Count + 2) <span>@L["MigrationWizardReview"]</span></button>
+        </nav>
+    }
+
+    <div class="migration-wizard-body">
+        @if (_step == WizardStep.Intro)
+        {
+            <div class="migration-intro">
+                <div class="migration-intro-icon">⇄</div>
+                <p class="migration-lead">@L["MigrationWizardIntro"]</p>
+                <div class="migration-benefits">
+                    <article><span>✓</span><div><strong>@L["MigrationBenefitReliableTitle"]</strong><p>@L["MigrationBenefitReliableText"]</p></div></article>
+                    <article><span>✓</span><div><strong>@L["MigrationBenefitVisibleTitle"]</strong><p>@L["MigrationBenefitVisibleText"]</p></div></article>
+                    <article><span>✓</span><div><strong>@L["MigrationBenefitAdaptedTitle"]</strong><p>@L["MigrationBenefitAdaptedText"]</p></div></article>
+                </div>
+                <p class="migration-safe-note">@L["MigrationWizardSafeNote"]</p>
+            </div>
+        }
+        else if (_busy)
+        {
+            <div class="migration-analyzing">
+                <span class="migration-spinner"></span>
+                <strong>@L["MigrationWizardAnalyzing"]</strong>
+                <p>@L["MigrationWizardAnalyzingHint"]</p>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="settings-status settings-status-err">@_error</div>
+        }
+        else if (_plan is not null && _step == WizardStep.Pipelines)
+        {
+            <p class="migration-step-intro">@_plan.Summary</p>
+            <div class="migration-pipeline-grid">
+                @for (var i = 0; i < _plan.Pipelines.Count; i++)
+                {
+                    var index = i;
+                    var pipeline = _plan.Pipelines[i];
+                    <article class="migration-pipeline-card">
+                        <button class="migration-card-remove" @onclick="() => RemovePipeline(index)" title="@L["MigrationWizardRemovePipeline"]">×</button>
+                        <div class="migration-pipeline-icon">⇢</div>
+                        <input value="@pipeline.Name" @oninput="e => pipeline.Name = e.Value?.ToString() ?? string.Empty" aria-label="@L["MigrationWizardPipelineName"]" />
+                        <p>@pipeline.Description</p>
+                        <div class="migration-mini-flow">
+                            @foreach (var column in pipeline.Columns)
+                            {
+                                <span class="role-@column.Role.ToString().ToLowerInvariant()">@column.Name</span>
+                            }
+                        </div>
+                        <button class="migration-card-open" @onclick="() => OpenPipeline(index)">@L["MigrationWizardInspectPipeline"] →</button>
+                    </article>
+                }
+                <article class="migration-pipeline-card migration-add-card">
+                    @if (_addingPipeline)
+                    {
+                        <input placeholder="@L["MigrationWizardPipelineName"]" @bind="_newPipelineName" @bind:event="oninput" />
+                        <div><button @onclick="AddPipeline" disabled="@string.IsNullOrWhiteSpace(_newPipelineName)">@L["Add"]</button><button @onclick="() => _addingPipeline = false">@L["Cancel"]</button></div>
+                    }
+                    else
+                    {
+                        <button @onclick="() => _addingPipeline = true"><span>＋</span>@L["MigrationWizardAddPipeline"]</button>
+                    }
+                </article>
+            </div>
+            @PromptEditor("pipelines", null)
+        }
+        else if (_plan is not null && _step == WizardStep.Pipeline && CurrentPipeline is not null)
+        {
+            <div class="migration-pipeline-heading">
+                <input value="@CurrentPipeline.Name" @oninput="e => CurrentPipeline.Name = e.Value?.ToString() ?? string.Empty" aria-label="@L["MigrationWizardPipelineName"]" />
+                <textarea value="@CurrentPipeline.Description" @oninput="e => CurrentPipeline.Description = e.Value?.ToString() ?? string.Empty"></textarea>
+            </div>
+            <div class="migration-column-flow">
+                @for (var i = 0; i < CurrentPipeline.Columns.Count; i++)
+                {
+                    var index = i;
+                    var column = CurrentPipeline.Columns[i];
+                    <article class="migration-column-card role-@column.Role.ToString().ToLowerInvariant()">
+                        <div class="migration-column-actions">
+                            <button @onclick="() => MoveColumn(index, -1)" disabled="@(index == 0)" title="@L["MoveLeft"]">←</button>
+                            <button @onclick="() => MoveColumn(index, 1)" disabled="@(index == CurrentPipeline.Columns.Count - 1)" title="@L["MoveRight"]">→</button>
+                            <button @onclick="() => RemoveColumn(index)" title="@L["Delete"]">×</button>
+                        </div>
+                        <input value="@column.Name" @oninput="e => column.Name = e.Value?.ToString() ?? string.Empty" />
+                        <select @bind="column.Role">
+                            @foreach (var role in Enum.GetValues<ColumnRole>())
+                            {
+                                <option value="@role">@RoleLabel(role)</option>
+                            }
+                        </select>
+                        <textarea value="@column.Description" @oninput="e => column.Description = e.Value?.ToString() ?? string.Empty"></textarea>
+                    </article>
+                    @if (i < CurrentPipeline.Columns.Count - 1)
+                    {
+                        <span class="migration-flow-arrow">→</span>
+                    }
+                }
+                <button class="migration-add-column" @onclick="AddColumn"><span>＋</span>@L["MigrationWizardAddColumn"]</button>
+            </div>
+            @PromptEditor("pipeline", _pipelineIndex)
+        }
+        else if (_plan is not null && _step == WizardStep.Review)
+        {
+            <p class="migration-step-intro">@L["MigrationWizardReviewHint"]</p>
+            <div class="migration-review">
+                @foreach (var pipeline in _plan.Pipelines)
+                {
+                    <article>
+                        <h3>@pipeline.Name</h3>
+                        <p>@pipeline.Description</p>
+                        <div class="migration-review-flow">
+                            @foreach (var column in pipeline.Columns)
+                            {
+                                <span class="role-@column.Role.ToString().ToLowerInvariant()"><strong>@column.Name</strong><small>@RoleLabel(column.Role)</small></span>
+                            }
+                        </div>
+                    </article>
+                }
+                @if (_plan.Risks.Count > 0)
+                {
+                    <aside><strong>@L["MigrationWizardRisks"]</strong><ul>@foreach (var risk in _plan.Risks) { <li>@risk</li> }</ul></aside>
+                }
+            </div>
+        }
+    </div>
+
+    <footer class="migration-wizard-footer">
+        <button class="migration-secondary" @onclick="Back" disabled="@(_step == WizardStep.Intro || _busy)">@L["Back"]</button>
+        <span></span>
+        @if (_step == WizardStep.Intro)
+        {
+            <button class="migration-secondary" @onclick="Close">@L["MigrationWizardLater"]</button>
+            <button class="settings-primary" @onclick="AnalyzeAsync">@L["MigrationWizardAnalyze"] →</button>
+        }
+        else if (_step == WizardStep.Pipelines)
+        {
+            <button class="settings-primary" @onclick="Continue" disabled="@(_busy || _plan?.Pipelines.Count == 0)">@L["Continue"] →</button>
+        }
+        else if (_step == WizardStep.Pipeline)
+        {
+            <button class="settings-primary" @onclick="Continue" disabled="@(_busy || CurrentPipeline?.Columns.Count == 0)">@L["Continue"] →</button>
+        }
+        else if (_step == WizardStep.Review)
+        {
+            <button class="settings-primary migration-launch" @onclick="LaunchMigration">@L["MigrationWizardLaunch"]</button>
+        }
+    </footer>
+</section>
+
+@if (_launchMigration && _plan is not null)
+{
+    <ChatDrawer ProjectSlug="@ProjectSlug"
+                InitialAgent="owner-chat"
+                InitialAgentName="KittyClaw"
+                InitialMessage="@BuildApplicationPrompt()"
+                AutoSendInitialMessage="true"
+                OnClose="MigrationChatClosed" />
+}
+
+@code {
+    [Parameter] public string ProjectSlug { get; set; } = "";
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private enum WizardStep { Intro, Pipelines, Pipeline, Review }
+    private WizardStep _step = WizardStep.Intro;
+    private WorkflowMigrationPlan? _plan;
+    private int _pipelineIndex;
+    private bool _busy;
+    private string? _error;
+    private string _refinement = "";
+    private bool _addingPipeline;
+    private string _newPipelineName = "";
+    private bool _launchMigration;
+    private readonly CancellationTokenSource _dispose = new();
+    private WorkflowMigrationPipeline? CurrentPipeline => _plan is not null && _pipelineIndex >= 0 && _pipelineIndex < _plan.Pipelines.Count ? _plan.Pipelines[_pipelineIndex] : null;
+    private string Title => _step switch
+    {
+        WizardStep.Pipelines => L["MigrationWizardPipelinesTitle"],
+        WizardStep.Pipeline => CurrentPipeline?.Name ?? L["MigrationWizardPipelineTitle"],
+        WizardStep.Review => L["MigrationWizardReviewTitle"],
+        _ => L["MigrationWizardTitle"],
+    };
+
+    private RenderFragment PromptEditor(string phase, int? pipelineIndex) => @<div class="migration-prompt-box">
+        <span>✦</span>
+        <textarea placeholder="@L["MigrationWizardPromptPlaceholder"]" @bind="_refinement"></textarea>
+        <button @onclick="() => RefineAsync(phase, pipelineIndex)" disabled="@(_busy || string.IsNullOrWhiteSpace(_refinement))">@L["MigrationWizardApplyRequest"]</button>
+    </div>;
+
+    private async Task AnalyzeAsync()
+    {
+        _step = WizardStep.Pipelines;
+        await StartJobAsync("analyze", new { });
+    }
+
+    private async Task RefineAsync(string phase, int? pipelineIndex)
+    {
+        if (_plan is null) return;
+        var instruction = _refinement;
+        _refinement = "";
+        await StartJobAsync("refine", new { plan = _plan, instruction, phase, pipelineIndex });
+    }
+
+    private async Task StartJobAsync(string action, object body)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            using var http = new HttpClient { BaseAddress = new Uri(Navigation.BaseUri) };
+            var response = await http.PostAsJsonAsync($"/api/projects/{ProjectSlug}/workflow-migrations/{action}", body, _dispose.Token);
+            response.EnsureSuccessStatusCode();
+            var accepted = await response.Content.ReadFromJsonAsync<JobAccepted>(cancellationToken: _dispose.Token)
+                ?? throw new InvalidOperationException(L["MigrationWizardStartFailed"]);
+            while (!_dispose.IsCancellationRequested)
+            {
+                await Task.Delay(900, _dispose.Token);
+                var job = await http.GetFromJsonAsync<WorkflowMigrationJob>($"/api/projects/{ProjectSlug}/workflow-migrations/jobs/{accepted.JobId}", _dispose.Token);
+                if (job?.Status == "completed") { _plan = job.Plan; break; }
+                if (job?.Status == "failed") throw new InvalidOperationException(job.Error ?? L["MigrationWizardAnalysisFailed"]);
+            }
+        }
+        catch (OperationCanceledException) when (_dispose.IsCancellationRequested) { }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private void Continue()
+    {
+        if (_plan is null) return;
+        if (_step == WizardStep.Pipelines) { _pipelineIndex = 0; _step = WizardStep.Pipeline; }
+        else if (_step == WizardStep.Pipeline && _pipelineIndex < _plan.Pipelines.Count - 1) _pipelineIndex++;
+        else _step = WizardStep.Review;
+        _refinement = "";
+    }
+
+    private void Back()
+    {
+        if (_step == WizardStep.Review) { _pipelineIndex = Math.Max(0, (_plan?.Pipelines.Count ?? 1) - 1); _step = WizardStep.Pipeline; }
+        else if (_step == WizardStep.Pipeline && _pipelineIndex > 0) _pipelineIndex--;
+        else if (_step == WizardStep.Pipeline) _step = WizardStep.Pipelines;
+        _refinement = "";
+    }
+
+    private void GoTo(WizardStep step) { if (!_busy) _step = step; }
+    private void OpenPipeline(int index) { if (!_busy) { _pipelineIndex = index; _step = WizardStep.Pipeline; } }
+    private string StepClass(WizardStep step) => _step == step ? "active" : "";
+    private string PipelineStepClass(int index) => _step == WizardStep.Pipeline && _pipelineIndex == index ? "active" : "";
+
+    private void RemovePipeline(int index)
+    {
+        if (_plan is null || _plan.Pipelines.Count <= 1) return;
+        _plan.Pipelines.RemoveAt(index);
+        _pipelineIndex = Math.Min(_pipelineIndex, _plan.Pipelines.Count - 1);
+    }
+
+    private void AddPipeline()
+    {
+        if (_plan is null || string.IsNullOrWhiteSpace(_newPipelineName)) return;
+        _plan.Pipelines.Add(new WorkflowMigrationPipeline
+        {
+            Name = _newPipelineName.Trim(),
+            Description = L["MigrationWizardNewPipelineDescription"],
+            Columns = [DefaultColumn(L["MigrationWizardNewColumnName"])],
+        });
+        _newPipelineName = "";
+        _addingPipeline = false;
+    }
+
+    private void AddColumn() => CurrentPipeline?.Columns.Add(DefaultColumn(L["MigrationWizardNewColumnName"]));
+    private static WorkflowMigrationColumn DefaultColumn(string name) => new() { Name = name, Role = ColumnRole.Normal };
+    private void RemoveColumn(int index) { if (CurrentPipeline is { Columns.Count: > 1 }) CurrentPipeline.Columns.RemoveAt(index); }
+    private void MoveColumn(int index, int offset)
+    {
+        if (CurrentPipeline is null) return;
+        var target = index + offset;
+        if (target < 0 || target >= CurrentPipeline.Columns.Count) return;
+        (CurrentPipeline.Columns[index], CurrentPipeline.Columns[target]) = (CurrentPipeline.Columns[target], CurrentPipeline.Columns[index]);
+    }
+
+    private string RoleLabel(ColumnRole role) => L[$"WorkflowRole{role}"];
+    private void LaunchMigration() => _launchMigration = true;
+    private async Task MigrationChatClosed() { _launchMigration = false; await Close(); }
+    private Task Close() => OnClose.InvokeAsync();
+
+    private string BuildApplicationPrompt() => $"""
+        Apply the workflow migration that the owner has just reviewed and explicitly approved in the visual migration wizard.
+
+        Approved plan:
+        {System.Text.Json.JsonSerializer.Serialize(_plan, new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } })}
+
+        Implement this plan completely using KittyClaw's API and the project's file-backed processor and skill configuration. Preserve stable identifiers whenever an existing pipeline, column, processor, or skill can be reused. Map every existing ticket and child ticket to exactly one pipeline by purpose. Configure processors, action chains, routing, retry/failure destinations, scheduled tasks and project skills needed by the approved flow. Use OwnerAction for every stage requiring a human decision or missing input. Do not create In Progress columns for agent execution.
+
+        Disable a legacy automation only after its replacement is configured and verified. Keep any automation that has no validated replacement and report it clearly. Verify that all tickets remain accessible, that processors and schedules reload successfully, and summarize every applied change and remaining risk when finished.
+        """;
+
+    public void Dispose() { _dispose.Cancel(); _dispose.Dispose(); }
+    private sealed record JobAccepted(string JobId);
+}

@@ -8,6 +8,7 @@ public static partial class Endpoints
 
         MapColumns(api);
         MapPipelines(api);
+        MapWorkflowMigrations(api);
         MapProjects(api);
         MapTickets(api);
         MapProjectLabels(api);
