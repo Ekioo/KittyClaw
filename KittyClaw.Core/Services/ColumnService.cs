@@ -79,8 +79,16 @@ public class ColumnService
         }
         else
         {
-            // Existing boards (feature #99): add the "Scheduled" column once if missing.
-            await EnsureScheduledColumnAsync(db, defaultPipeline.Id);
+            // Existing, untouched legacy boards (feature #99): add the "Scheduled" column once
+            // if missing. A customized pipeline is authoritative: deleting or renaming its
+            // scheduling column must not make every later board read recreate a hard-coded one.
+            var names = await db.BoardColumns
+                .Where(c => c.PipelineId == defaultPipeline.Id)
+                .Select(c => c.Name)
+                .ToListAsync();
+            var legacyNames = new[] { "Backlog", "Todo", "InProgress", "Blocked", "Review", "Done" };
+            if (legacyNames.All(name => names.Contains(name, StringComparer.OrdinalIgnoreCase)))
+                await EnsureScheduledColumnAsync(db, defaultPipeline.Id);
         }
     }
 

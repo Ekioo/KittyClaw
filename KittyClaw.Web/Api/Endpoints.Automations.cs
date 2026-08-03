@@ -32,10 +32,17 @@ public static partial class Endpoints
         // baseStamp: fileStamp returned by the GET. When it matches the current file, the save is
         // applied verbatim (deletions honored). When it is stale or omitted, automations present on
         // disk but missing from the payload are preserved instead of being silently erased (#115).
-        api.MapPut("/projects/{slug}/automations", async (string slug, AutomationConfig config, string? baseStamp, AutomationStore store, AutomationEngine engine) =>
+        api.MapPut("/projects/{slug}/automations", async Task<IResult> (string slug, AutomationConfig config, string? baseStamp, AutomationStore store, AutomationEngine engine) =>
         {
             var result = await store.SaveAsync(slug, config, string.IsNullOrEmpty(baseStamp) ? null : baseStamp);
-            await engine.ReloadProjectAsync(slug);
+            var reload = await engine.ReloadProjectAsync(slug);
+            if (!reload.Success)
+                return Results.BadRequest(new
+                {
+                    error = $"La configuration a été enregistrée, mais le moteur l'a rejetée : {reload.Error}",
+                    previousRuntimeRetained = true,
+                    fileStamp = result.FileStamp,
+                });
             return Results.Ok(new
             {
                 config = result.Config,
@@ -45,10 +52,16 @@ public static partial class Endpoints
             });
         }).WithTags("Automations");
 
-        api.MapPost("/projects/{slug}/automations/reload", async (string slug, AutomationEngine engine) =>
+        api.MapPost("/projects/{slug}/automations/reload", async Task<IResult> (string slug, AutomationEngine engine) =>
         {
-            await engine.ReloadProjectAsync(slug);
-            return Results.NoContent();
+            var reload = await engine.ReloadProjectAsync(slug);
+            return reload.Success
+                ? Results.NoContent()
+                : Results.BadRequest(new
+                {
+                    error = $"Le moteur a rejeté la configuration : {reload.Error}",
+                    previousRuntimeRetained = true,
+                });
         }).WithTags("Automations");
     }
 }

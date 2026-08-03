@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
+using KittyClaw.Core.Automation;
 using KittyClaw.Web.Api;
 
 namespace KittyClaw.Core.Tests.Api;
@@ -292,6 +293,39 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         }
     }
 
+    [Fact]
+    public async Task AutomationReload_InvalidFile_ReturnsBadRequestInsteadOfSilentSuccess()
+    {
+        var slug = await CreateProjectAsync("ReloadFailureQA");
+        var agentsDir = Path.Combine(_factory.DataDir, "projects", slug, ".agents");
+        Directory.CreateDirectory(agentsDir);
+        var path = Path.Combine(agentsDir, "automations.json");
+        var valid = new AutomationConfig
+        {
+            Automations =
+            {
+                new KittyClaw.Core.Automation.Automation
+                {
+                    Id = "valid",
+                    Name = "valid",
+                    Trigger = new IntervalTriggerSpec { Seconds = 3600 },
+                },
+            },
+        };
+        await File.WriteAllTextAsync(path, JsonSerializer.Serialize(valid, AutomationStore.JsonOptions));
+
+        var first = await _client.PostAsync($"/api/projects/{slug}/automations/reload", null);
+        Assert.Equal(System.Net.HttpStatusCode.NoContent, first.StatusCode);
+
+        await File.WriteAllTextAsync(path, "{ invalid json");
+        var failed = await _client.PostAsync($"/api/projects/{slug}/automations/reload", null);
+
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, failed.StatusCode);
+        var payload = JsonDocument.Parse(await failed.Content.ReadAsStringAsync());
+        Assert.True(payload.RootElement.GetProperty("previousRuntimeRetained").GetBoolean());
+        Assert.False(string.IsNullOrWhiteSpace(payload.RootElement.GetProperty("error").GetString()));
+    }
+
     // ---------- Case 4: structural — Endpoints.cs is split into per-domain partial files ----------
     // These two assertions are RED on dev (monolith 951 lines) and GREEN after refactor.
 
@@ -393,6 +427,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
     public sealed class ApiFactory : WebApplicationFactory<CreateProjectRequest>
     {
         private readonly string _dataDir;
+        public string DataDir => _dataDir;
         public string WorkspaceDir { get; }
 
         public ApiFactory()

@@ -47,4 +47,23 @@ public sealed class ScheduledColumnTests
         Assert.Single(afterFirst, n => n == "Scheduled");
         Assert.Single(afterSecond, n => n == "Scheduled");
     }
+
+    [Fact]
+    public async Task CustomizedPipeline_DeletedScheduledColumn_IsNotRecreated()
+    {
+        using var tmp = new TempDir();
+        var (columns, slug) = BuildSut(tmp);
+
+        var initial = await columns.ListColumnsAsync(slug);
+        var backlog = initial.First(c => c.Name == "Backlog");
+        var scheduled = initial.First(c => c.Name == "Scheduled");
+        Assert.NotNull(await columns.UpdateColumnAsync(slug, backlog.Id, name: "À qualifier"));
+        Assert.True(await columns.DeleteColumnAsync(slug, scheduled.Id, "Todo"));
+
+        var firstRead = await columns.ListColumnsAsync(slug);
+        var secondRead = await columns.ListColumnsAsync(slug);
+
+        Assert.DoesNotContain(firstRead, c => c.Name == "Scheduled");
+        Assert.DoesNotContain(secondRead, c => c.Name == "Scheduled");
+    }
 }

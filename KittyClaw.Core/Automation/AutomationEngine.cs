@@ -5,6 +5,8 @@ using KittyClaw.Core.Services;
 
 namespace KittyClaw.Core.Automation;
 
+public sealed record AutomationReloadResult(bool Success, string? Error);
+
 public sealed class AutomationEngine : BackgroundService
 {
     private readonly AgentRunRegistry _runs;
@@ -52,7 +54,7 @@ public sealed class AutomationEngine : BackgroundService
             _ = NotifySignalAsync(slug, new CommentAddedSignal(ticketId, commentId, author, content));
     }
 
-    public Task ReloadProjectAsync(string slug) => _runtimeManager.ReloadProjectAsync(slug);
+    public Task<AutomationReloadResult> ReloadProjectAsync(string slug) => _runtimeManager.ReloadProjectAsync(slug);
 
     /// <summary>UTC time the engine instance was created (process start, effectively).</summary>
     public DateTime StartedAt { get; } = DateTime.UtcNow;

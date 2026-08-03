@@ -98,6 +98,28 @@ public class AutomationReloadTests
     }
 
     [Fact]
+    public async Task Reload_reports_invalid_file_and_keeps_previous_runtime()
+    {
+        using var tmp = new TempDir();
+        var (manager, _, store, slug) = await BuildAsync(tmp.Path, "reload-invalid-test");
+        await store.SaveAsync(slug, new AutomationConfig { Automations = { CronAutomation("daily") } });
+
+        var first = await manager.ReloadProjectAsync(slug);
+        Assert.True(first.Success);
+        var runtimeBefore = manager.GetRuntime(slug).Config;
+
+        var (_, _, configPath, _) = await store.LoadWithStampAsync(slug);
+        await File.WriteAllTextAsync(configPath, "{ invalid json");
+
+        var failed = await manager.ReloadProjectAsync(slug);
+
+        Assert.False(failed.Success);
+        Assert.False(string.IsNullOrWhiteSpace(failed.Error));
+        Assert.Same(runtimeBefore, manager.GetRuntime(slug).Config);
+        Assert.Contains("daily", manager.GetNextRunTimes(slug).Keys);
+    }
+
+    [Fact]
     public async Task Health_snapshot_reports_registered_and_overdue_tasks()
     {
         using var tmp = new TempDir();

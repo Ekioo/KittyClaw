@@ -40,7 +40,7 @@ internal sealed class ProjectRuntimeManager
         if (rt.Config is null) await ReloadProjectAsync(slug);
     }
 
-    public async Task ReloadProjectAsync(string slug)
+    public async Task<AutomationReloadResult> ReloadProjectAsync(string slug)
     {
         var rt = _runtime.GetOrAdd(slug, s => new ProjectRuntime(s));
         rt.ConfigDirty = false;
@@ -55,10 +55,12 @@ internal sealed class ProjectRuntimeManager
             rt.Config = config;
             rt.Triggers = triggers;
             _logger.LogInformation("Automations loaded for {Slug}: {Count} entries", slug, config.Automations.Count);
+            return new AutomationReloadResult(true, null);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to reload automations for {Slug}", slug);
+            return new AutomationReloadResult(false, ex.Message);
         }
     }
 

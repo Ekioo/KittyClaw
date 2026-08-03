@@ -184,8 +184,8 @@ public sealed class AutomationStore : IDisposable
         }
         catch (JsonException ex)
         {
-            _logger?.LogWarning(ex, "automations.json for '{Slug}' is not valid JSON; treating it as empty", slug);
-            return (null, ComputeStamp(bytes));
+            _logger?.LogWarning(ex, "automations.json for '{Slug}' is not valid JSON; keeping the previous runtime", slug);
+            throw new InvalidDataException($"automations.json for '{slug}' is not valid JSON.", ex);
         }
     }
 
