@@ -93,14 +93,14 @@ else
             </button>
             <button class="header-action-btn new-instruction-btn" @onclick="OpenChatDrawer" title="@L["NewInstruction"]">&#128172; @L["NewInstruction"]</button>
             <a class="header-action-btn" href="/board/@Slug/automations" title="@L["Automations"]">&#9881; @L["Automations"]</a>
-            <a class="header-action-btn" href="/board/@Slug/workflows" title="Workflows">&#8644; Workflows</a>
+            <a class="header-action-btn" href="/board/@Slug/workflows" title="@L["WorkflowTitle"]">&#8644; @L["WorkflowTitle"]</a>
             <a class="header-action-btn" href="/board/@Slug/settings" title="@L["ProjectSettingsTooltip"]">&#9881;&#65039; @L["ProjectSettings"]</a>
         </div>
     </div>
 
     @if (_pipelines.Count > 0)
     {
-        <nav class="pipeline-tabs" aria-label="Project workflows">
+        <nav class="pipeline-tabs" aria-label="@L["WorkflowTitle"]">
             @foreach (var pipeline in _pipelines)
             {
                 <button class="pipeline-tab @(pipeline.Id == _selectedPipelineId ? "pipeline-tab--active" : "")"

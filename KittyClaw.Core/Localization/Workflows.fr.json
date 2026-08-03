@@ -1,8 +1,8 @@
 {
   "WorkflowProject": "Projet",
-  "WorkflowTitle": "Workflows",
+  "WorkflowTitle": "Flux de travail",
   "WorkflowBoard": "Tableau",
-  "WorkflowMigrateTitle": "Migrer le workflow existant",
+  "WorkflowMigrateTitle": "Migrer le flux de travail existant",
   "WorkflowMigrateHint": "Demandez à KittyClaw d’analyser le tableau actuel et de préparer une migration sûre et progressive. Vous pourrez relire et modifier l’instruction avant de l’envoyer.",
   "WorkflowMigrate": "Migrer",
   "WorkflowPipelines": "Pipelines",

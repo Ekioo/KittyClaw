@@ -136,7 +136,7 @@
   "ProcessorTurnLimitHelp": "Nombre maximal d’échanges internes accordés à l’agent pour traiter un ticket. Atteindre cette limite fait échouer la tentative en cours.",
   "ProcessorSkills": "Skills",
   "ProcessorSkillsHint": "Les skills disponibles peuvent être utilisés, les recommandés sont suggérés et les requis doivent avoir été utilisés avant le routage.",
-  "ProcessorNoSkills": "Aucun skill de projet n’est encore défini. Vous pouvez en créer depuis Workflows.",
+  "ProcessorNoSkills": "Aucun skill de projet n’est encore défini. Vous pouvez en créer depuis la page Flux de travail.",
   "ProcessorAvailable": "Disponible",
   "ProcessorAvailableHelp": "KittyClaw injecte les instructions de ce skill dans le profil avec le niveau « disponible ». L’agent peut l’utiliser s’il le juge utile.",
   "ProcessorRecommended": "Recommandé",
