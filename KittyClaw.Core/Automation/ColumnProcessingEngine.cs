@@ -51,10 +51,10 @@ public sealed class ColumnProcessingEngine : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var projects = await _projects.ListProjectsAsync();
-        foreach (var project in projects.Where(p => !p.IsPaused))
+        foreach (var project in projects)
         {
             await _executions.RecoverInterruptedAsync(project.Slug);
-            Signal(project.Slug);
+            if (!project.IsPaused) Signal(project.Slug);
         }
 
         while (!stoppingToken.IsCancellationRequested)

@@ -16,12 +16,22 @@ public sealed class ColumnScheduledTaskEngine(
     ILogger<ColumnScheduledTaskEngine> logger) : BackgroundService
 {
     private readonly ConcurrentDictionary<string, Task> _active = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, List<(ColumnScheduledTask Task, ColumnScheduledTaskRun Run)>>
+        _pausedRecoveries = new(StringComparer.OrdinalIgnoreCase);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        foreach (var project in (await projects.ListProjectsAsync()).Where(project => !project.IsPaused))
-            foreach (var item in await schedules.RecoverAsync(project.Slug))
+        foreach (var project in await projects.ListProjectsAsync())
+        {
+            var recovered = await schedules.RecoverAsync(project.Slug);
+            if (project.IsPaused)
+            {
+                if (recovered.Count > 0) _pausedRecoveries[project.Slug] = recovered;
+                continue;
+            }
+            foreach (var item in recovered)
                 Start(project.Slug, item.Task, item.Run, stoppingToken);
+        }
 
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
         while (!stoppingToken.IsCancellationRequested)
@@ -29,8 +39,13 @@ public sealed class ColumnScheduledTaskEngine(
             try
             {
                 foreach (var project in (await projects.ListProjectsAsync()).Where(project => !project.IsPaused))
+                {
+                    if (_pausedRecoveries.TryRemove(project.Slug, out var recovered))
+                        foreach (var item in recovered)
+                            Start(project.Slug, item.Task, item.Run, stoppingToken);
                     foreach (var item in await schedules.ClaimDueAsync(project.Slug, DateTime.UtcNow))
                         Start(project.Slug, item.Task, item.Run, stoppingToken);
+                }
                 await timer.WaitForNextTickAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
