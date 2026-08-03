@@ -12,6 +12,7 @@ public sealed class AutomationEngine : BackgroundService
     private readonly ProjectRuntimeManager _runtimeManager;
     private readonly TriggerHandler _triggerHandler;
     private readonly AutomationQueueProcessor _queueProcessor;
+    private readonly SemaphoreSlim _queueWake = new(0, 1);
 
     public AutomationEngine(
         ProjectService projects,
@@ -36,6 +37,7 @@ public sealed class AutomationEngine : BackgroundService
         var executor = new ActionExecutor(tickets, members, labels, sessions, runs, runner, cost, loc, projects, runState, logger);
         _triggerHandler = new TriggerHandler(projects, _runtimeManager, executor, tickets, members, sessions, runs, queue, logger);
         _queueProcessor = new AutomationQueueProcessor(projects, tickets, queue, _runtimeManager, executor, logger);
+        queue.WorkAvailable += WakeQueueConsumer;
 
         store.OnConfigChangedOnDisk += slug =>
         {
@@ -106,9 +108,18 @@ public sealed class AutomationEngine : BackgroundService
         {
             try { await _queueProcessor.ProcessOnceAsync(ct); }
             catch (Exception ex) { _logger.LogError(ex, "Automation queue consumer tick failed"); }
-            try { await Task.Delay(TimeSpan.FromMilliseconds(250), ct); }
+            // Enqueues in this process wake the consumer immediately. The one-second fallback
+            // discovers delayed retries becoming due and writes made by another process without
+            // hammering every project database four times per second while the queue is empty.
+            try { await _queueWake.WaitAsync(TimeSpan.FromSeconds(1), ct); }
             catch (OperationCanceledException) { break; }
         }
+    }
+
+    private void WakeQueueConsumer()
+    {
+        try { _queueWake.Release(); }
+        catch (SemaphoreFullException) { }
     }
 
     private Task TickAsync(CancellationToken ct) => _triggerHandler.ProcessTickAsync(ct);

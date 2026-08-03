@@ -167,4 +167,22 @@ public class AutomationQueueStoreTests
         var skipped = Assert.Single(history, x => x.Status == AutomationQueueStatus.Skipped);
         Assert.Equal("Column changed.", skipped.Reason);
     }
+
+    [Fact]
+    public async Task ActionableQueueMutations_WakeTheConsumer()
+    {
+        using var tmp = new TempDir();
+        var h = await BuildAsync(tmp.Path);
+        var ticket = await h.Tickets.CreateTicketAsync(h.Slug, "Ticket", status: "Todo");
+        var wakeCount = 0;
+        h.Queue.WorkAvailable += () => wakeCount++;
+
+        await h.Queue.EnqueueAsync(h.Slug, ticket, [Rule("a")]);
+        var claimed = await h.Queue.ClaimNextAsync(h.Slug, TimeSpan.FromMinutes(1));
+        await h.Queue.RequeueAsync(h.Slug, claimed!.Id);
+        claimed = await h.Queue.ClaimNextAsync(h.Slug, TimeSpan.FromMinutes(1));
+        await h.Queue.FinishAsync(h.Slug, claimed!.Id, AutomationQueueStatus.Completed);
+
+        Assert.Equal(3, wakeCount);
+    }
 }

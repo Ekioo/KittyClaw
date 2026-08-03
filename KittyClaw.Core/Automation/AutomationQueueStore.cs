@@ -42,6 +42,13 @@ public sealed class AutomationQueueStore
 
     private readonly ProjectService _projects;
 
+    /// <summary>
+    /// Wakes the in-process queue consumer after a mutation creates immediately actionable work.
+    /// The durable queue remains the source of truth; consumers still poll slowly as a fallback
+    /// for delayed retries and entries written by another process.
+    /// </summary>
+    internal event Action? WorkAvailable;
+
     public AutomationQueueStore(ProjectService projects) => _projects = projects;
 
     /// <summary>
@@ -147,6 +154,7 @@ public sealed class AutomationQueueStore
             await insert.ExecuteNonQueryAsync(ct);
         }
         await tx.CommitAsync(ct);
+        if (!loopProtected) WorkAvailable?.Invoke();
         return await ListForTicketAsync(slug, ticket.Id, ct);
     }
 
@@ -286,6 +294,7 @@ public sealed class AutomationQueueStore
         cmd.Parameters.AddWithValue("@reason", (object?)reason ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@id", id);
         await cmd.ExecuteNonQueryAsync(ct);
+        WorkAvailable?.Invoke();
     }
 
     public async Task RequeueAsync(string slug, long id, CancellationToken ct = default)
@@ -302,6 +311,7 @@ public sealed class AutomationQueueStore
             """;
         cmd.Parameters.AddWithValue("@id", id);
         await cmd.ExecuteNonQueryAsync(ct);
+        WorkAvailable?.Invoke();
     }
 
     public async Task ScheduleRetryAsync(
