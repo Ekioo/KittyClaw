@@ -27,9 +27,17 @@ There is deliberately no required `InProgress` business column. A durable `Colum
 5. selects an outcome route (switch-like rule) or the default route;
 6. moves the ticket atomically to the target column, possibly in another pipeline.
 
+At host startup, interrupted executions are recovered for every project, including projects that are paused. Recovery updates the durable execution state without dispatching new work; processing resumes only after the project is unpaused.
+
 A route cannot point back to its source column. Repeating work is expressed through the explicit retry policy, avoiding accidental processing loops.
 
 Technical failures use exponential backoff up to `MaxAttempts`. Once exhausted, the ticket can be routed to a dedicated technical-failure column. A failed execution can also be retried or cancelled through the API.
+
+## Scheduled column tasks
+
+Columns can own durable cron tasks that execute an ordered action chain without launching an agent. Each run checkpoints completed actions in the project database so a host restart resumes only the unfinished portion. If the project starts paused, interrupted runs are recovered but held in memory; they resume after the project is unpaused, and newly due tasks are not claimed while it remains paused.
+
+`ColumnScheduledTaskService` persists definitions and run checkpoints. `ColumnScheduledTaskEngine` claims due work, recovers interrupted runs, and delegates actions to `ColumnActionExecutor`. Tasks are configured from the **Schedules** tab in the column configuration dialog.
 
 ## Generic agents and project skills
 
