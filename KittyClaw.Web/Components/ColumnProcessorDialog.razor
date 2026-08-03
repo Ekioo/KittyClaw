@@ -1,3 +1,4 @@
+@using System.Net.Http.Json
 @using Microsoft.AspNetCore.Components
 @using KittyClaw.Core.Automation
 @using KittyClaw.Core.Models
@@ -9,6 +10,8 @@
 @inject PipelineService PipelineService
 @inject ColumnService ColumnService
 @inject LocalizationService L
+@inject IHttpClientFactory HttpFactory
+@inject NavigationManager Nav
 @inject EscapeKeyStack EscapeStack
 @inject IJSRuntime JS
 @implements IDisposable
@@ -117,6 +120,39 @@
                         <label><FieldHelp Label="@L["Name"]" Help="@L["ProcessorNameHelp"]" /><input class="settings-input" @bind="_name" /></label>
                         <label><FieldHelp Label="@L["ProcessorMission"]" Help="@L["ProcessorMissionHelp"]" /><textarea class="settings-input workflow-textarea" @bind="_mission"></textarea></label>
                         <label><FieldHelp Label="@L["ProcessorPrompt"]" Help="@L["ProcessorPromptHelp"]" /><textarea class="settings-input workflow-textarea processor-prompt" @bind="_prompt"></textarea></label>
+                        <label><FieldHelp Label="@L["ProcessorModel"]" Help="@L["ProcessorModelHelp"]" />
+                            <select @key="@($"{_model}#{AllModels.Count}")" value="@(_model ?? "")" @onchange="OnModelChanged">
+                                <option value="">@L["ProcessorModelAutomatic"]</option>
+                                <optgroup label="Claude">
+                                    @foreach (var model in ClaudeModels)
+                                    {
+                                        <option value="@model">@model</option>
+                                    }
+                                </optgroup>
+                                @if (_grokModels.Count > 0)
+                                {
+                                    <optgroup label="Grok">
+                                        @foreach (var model in _grokModels) { <option value="@model">@model</option> }
+                                    </optgroup>
+                                }
+                                @if (_codexModels.Count > 0)
+                                {
+                                    <optgroup label="OpenAI Codex">
+                                        @foreach (var model in _codexModels) { <option value="@model">@model</option> }
+                                    </optgroup>
+                                }
+                                @if (_ollamaModels.Count > 0)
+                                {
+                                    <optgroup label="Local (Ollama)">
+                                        @foreach (var model in _ollamaModels) { <option value="@model">@model</option> }
+                                    </optgroup>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(_model) && !AllModels.Contains(_model))
+                                {
+                                    <option value="@_model">@_model @L["ProcessorModelCustom"]</option>
+                                }
+                            </select>
+                        </label>
 
                         <div class="workflow-grid">
                             <label><FieldHelp Label="@L["ProcessorTicketOrder"]" Help="@L["ProcessorTicketOrderHelp"]" />
@@ -287,6 +323,11 @@
     private string _mission = "";
     private string _prompt = "";
     private string? _model;
+    private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
+    private List<string> _ollamaModels = [];
+    private List<string> _grokModels = [];
+    private List<string> _codexModels = [];
+    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_ollamaModels).ToList();
     private int _maxTurns = 100;
     private int _maxAttempts = 3;
     private int _retryBackoff = 60;
@@ -320,6 +361,7 @@
             foreach (var pipeline in _pipelines)
                 _pipelineColumns[pipeline.Id] = await ColumnService.ListColumnsAsync(Slug, pipeline.Id);
             _skills = await SkillService.ListAsync(Slug);
+            await LoadModelsAsync();
 
             var source = Column ?? TemplateColumn;
             _columnName = Column?.Name ?? (TemplateColumn is null ? "" : L.Get("ColumnCopyName", TemplateColumn.Name));
@@ -348,6 +390,29 @@
             _loading = false;
         }
     }
+
+    private async Task LoadModelsAsync()
+    {
+        try
+        {
+            var http = HttpFactory.CreateClient();
+            http.BaseAddress = new Uri(Nav.BaseUri);
+            var ollama = http.GetFromJsonAsync<List<string>>($"/api/projects/{Slug}/ollama-models");
+            var grok = http.GetFromJsonAsync<List<string>>("/api/grok-models");
+            var codex = http.GetFromJsonAsync<List<string>>("/api/codex-models");
+            await Task.WhenAll(ollama, grok, codex);
+            _ollamaModels = await ollama ?? [];
+            _grokModels = await grok ?? [];
+            _codexModels = await codex ?? [];
+        }
+        catch
+        {
+            // Model discovery is optional; the built-in catalog and any saved custom value remain usable.
+        }
+    }
+
+    private void OnModelChanged(ChangeEventArgs e) =>
+        _model = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value!.ToString();
 
     private void ApplyProcessor(ColumnProcessor? processor, string? sourceName)
     {

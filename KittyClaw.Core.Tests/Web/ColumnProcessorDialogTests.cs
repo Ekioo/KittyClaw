@@ -86,7 +86,7 @@ public sealed class ColumnProcessorDialogTests
         [
             "ColumnNameHelp", "ColumnColorHelp", "ColumnRoleHelp", "ColumnPositionHelp",
             "ColumnDeleteDestinationHelp", "ProcessorEnabledHelp", "ProcessorNameHelp",
-            "ProcessorMissionHelp", "ProcessorPromptHelp", "ProcessorTicketOrderHelp",
+            "ProcessorMissionHelp", "ProcessorPromptHelp", "ProcessorModelHelp", "ProcessorTicketOrderHelp",
             "ProcessorMaxAttemptsHelp", "ProcessorRetryDelayHelp", "ProcessorTurnLimitHelp",
             "ProcessorAvailableHelp", "ProcessorRecommendedHelp", "ProcessorRequiredHelp",
             "ProcessorDefaultDestinationHelp", "ProcessorFailureDestinationHelp",
@@ -143,6 +143,8 @@ public sealed class ColumnProcessorDialogTests
         Assert.Contains("<FieldHelp", source);
         Assert.Contains("ProcessorMissionHelp", source);
         Assert.Contains("ProcessorPromptHelp", source);
+        Assert.Contains("ProcessorModelHelp", source);
+        Assert.Contains("OnModelChanged", source);
         Assert.Contains("_model = processor?.Model", source);
         Assert.Contains("_name, _mission, _model", source);
         Assert.DoesNotContain("_name, _mission, null", source);
