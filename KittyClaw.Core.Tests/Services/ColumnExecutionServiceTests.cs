@@ -59,7 +59,8 @@ public sealed class ColumnExecutionServiceTests : IDisposable
         var intake = await _pipelines.CreateAsync(project.Slug, "Intake");
         var delivery = await _pipelines.CreateAsync(project.Slug, "Delivery");
         var source = await _columns.CreateColumnAsync(project.Slug, "Assess", pipelineId: intake.Id);
-        var accepted = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: delivery.Id);
+        var accepted = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: delivery.Id,
+            role: ColumnRole.OwnerAction);
         var rejected = await _columns.CreateColumnAsync(project.Slug, "Rejected", pipelineId: intake.Id, role: ColumnRole.Failure);
         var skill = await _skills.CreateAsync(project.Slug, "Validate", "Validate the ticket.");
         var processor = await _processors.SaveAsync(project.Slug, source.Id, "Assessor", "Assess.", null,
@@ -76,6 +77,7 @@ public sealed class ColumnExecutionServiceTests : IDisposable
         Assert.Equal(delivery.Id, moved!.PipelineId);
         Assert.Equal(accepted.Id, moved.ColumnId);
         Assert.Equal("Ready", moved.Status);
+        Assert.Equal("owner", moved.AssignedTo);
         Assert.Equal(ColumnExecutionStatus.Completed,
             Assert.Single(await _executions.ListAsync(project.Slug, ticket.Id)).Status);
     }

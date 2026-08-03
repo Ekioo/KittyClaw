@@ -1,0 +1,205 @@
+@inject LocalizationService L
+
+@{
+    var schedule = ScheduleModel.Resolve(Cron, LegacySeconds);
+}
+
+<div class="schedule-builder">
+    <label>@L["ScheduleFrequency"]
+        <select value="@schedule.Mode.ToString()" @onchange="e => ApplyAsync(ChangeMode(schedule, (string)e.Value!))">
+            <option value="@ScheduleMode.EveryMinutes">@L["FreqEveryMinutes"]</option>
+            <option value="@ScheduleMode.EveryHours">@L["FreqEveryHours"]</option>
+            <option value="@ScheduleMode.Scheduled">@L["FreqScheduled"]</option>
+        </select>
+    </label>
+
+    @if (schedule.Mode == ScheduleMode.EveryMinutes)
+    {
+        <label>@L["RepeatEveryLabel"] (@L["MinutesUnit"])
+            <input type="number" min="1" max="59" value="@schedule.N"
+                   @onchange="e => ApplyAsync(schedule with { N = ParseIntOr(e.Value, schedule.N) })" />
+        </label>
+    }
+    else if (schedule.Mode == ScheduleMode.EveryHours)
+    {
+        <label>@L["RepeatEveryLabel"] (@L["HoursUnit"])
+            <input type="number" min="1" max="23" value="@schedule.N"
+                   @onchange="e => ApplyAsync(schedule with { N = ParseIntOr(e.Value, schedule.N) })" />
+        </label>
+    }
+    else
+    {
+        <div class="weekday-picker" aria-label="@L["ScheduleDays"]">
+            @foreach (var day in WeekdayDisplayOrder)
+            {
+                var currentDay = day;
+                <label class="weekday-check">
+                    <input type="checkbox" checked="@(schedule.Days.Count == 0 || schedule.Days.Contains(currentDay))"
+                           @onchange="e => ApplyAsync(ToggleDay(schedule, currentDay, (bool)e.Value!))" />
+                    <span>@L[$"Weekday{currentDay}"]</span>
+                </label>
+            }
+        </div>
+        <div class="time-list">
+            <label class="time-row">@L["AtTime"]
+                <input type="time" value="@FormatTime(schedule.Minute, schedule.Hours.ElementAtOrDefault(0))"
+                       @onchange="e => ApplyAsync(SetPrimaryTime(schedule, (string?)e.Value))" />
+            </label>
+            @for (var index = 1; index < schedule.Hours.Count; index++)
+            {
+                var currentIndex = index;
+                <div class="time-row">
+                    <label>@L["AndAlsoAt"]
+                        <select value="@schedule.Hours[currentIndex]" @onchange="e => ApplyAsync(SetHourAt(schedule, currentIndex, (string?)e.Value))">
+                            @for (var hour = 0; hour < 24; hour++)
+                            {
+                                var currentHour = hour;
+                                <option value="@currentHour">@FormatTime(schedule.Minute, currentHour)</option>
+                            }
+                        </select>
+                    </label>
+                    <button type="button" class="icon-btn" title="@L["RemoveTime"]"
+                            @onclick="() => ApplyAsync(RemoveTime(schedule, currentIndex))">🗑</button>
+                </div>
+            }
+            <button type="button" class="link-btn" @onclick="() => ApplyAsync(AddTime(schedule))">+ @L["AddTime"]</button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string? Cron { get; set; }
+    [Parameter] public int? LegacySeconds { get; set; }
+    [Parameter] public EventCallback<string> CronChanged { get; set; }
+
+    private enum ScheduleMode { EveryMinutes, EveryHours, Scheduled }
+
+    private sealed record ScheduleModel(ScheduleMode Mode, int N, int Minute, List<int> Hours, List<int> Days)
+    {
+        public static ScheduleModel Default => new(ScheduleMode.Scheduled, 15, 0, [9], []);
+
+        public static ScheduleModel Resolve(string? cron, int? seconds) =>
+            Parse(cron) ?? FromLegacySeconds(seconds) ?? Default;
+
+        private static ScheduleModel? FromLegacySeconds(int? seconds)
+        {
+            if (seconds is not int value || value <= 0) return null;
+            if (value < 3600) return new(ScheduleMode.EveryMinutes, Math.Clamp(value / 60, 1, 59), 0, [], []);
+            if (value < 86400) return new(ScheduleMode.EveryHours, Math.Clamp(value / 3600, 1, 23), 0, [], []);
+            return Default;
+        }
+
+        private static ScheduleModel? Parse(string? cron)
+        {
+            if (string.IsNullOrWhiteSpace(cron)) return null;
+            var parts = cron.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length != 5) return null;
+            var (minuteField, hourField, dayOfMonth, month, dayOfWeek) =
+                (parts[0], parts[1], parts[2], parts[3], parts[4]);
+            if (dayOfMonth != "*" || month != "*") return null;
+
+            if (minuteField.StartsWith("*/") && hourField == "*" && dayOfWeek == "*"
+                && int.TryParse(minuteField[2..], out var everyMinute))
+                return new(ScheduleMode.EveryMinutes, everyMinute, 0, [], []);
+            if (minuteField == "0" && hourField.StartsWith("*/") && dayOfWeek == "*"
+                && int.TryParse(hourField[2..], out var everyHour))
+                return new(ScheduleMode.EveryHours, everyHour, 0, [], []);
+            if (!int.TryParse(minuteField, out var minute)) return null;
+
+            var hours = hourField.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(value => int.TryParse(value, out var hour) ? hour : (int?)null)
+                .Where(hour => hour is not null).Select(hour => hour!.Value).ToList();
+            return hours.Count == 0 ? null : new(ScheduleMode.Scheduled, 0, minute, hours, ParseDays(dayOfWeek));
+        }
+
+        private static List<int> ParseDays(string field)
+        {
+            if (field == "*") return [];
+            var result = new HashSet<int>();
+            foreach (var token in field.Split(',', StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (token.Contains('-'))
+                {
+                    var bounds = token.Split('-');
+                    if (bounds.Length == 2 && TryParseDay(bounds[0], out var from) && TryParseDay(bounds[1], out var to))
+                        for (var day = from; day <= to; day++) result.Add(day);
+                }
+                else if (TryParseDay(token, out var day)) result.Add(day);
+            }
+            return result.Count is 0 or 7 ? [] : result.OrderBy(day => day).ToList();
+        }
+
+        private static bool TryParseDay(string token, out int day)
+        {
+            var names = new[] { "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" };
+            var index = Array.IndexOf(names, token.Trim().ToUpperInvariant());
+            if (index >= 0) { day = index; return true; }
+            if (int.TryParse(token, out var number) && number is >= 0 and <= 7) { day = number % 7; return true; }
+            day = 0;
+            return false;
+        }
+
+        public string ToCron() => Mode switch
+        {
+            ScheduleMode.EveryMinutes => $"*/{Math.Clamp(N, 1, 59)} * * * *",
+            ScheduleMode.EveryHours => $"0 */{Math.Clamp(N, 1, 23)} * * *",
+            _ => $"{Minute} {string.Join(',', Hours.Distinct().OrderBy(hour => hour))} * * {(Days.Count == 0 ? "*" : string.Join(',', Days.OrderBy(day => day)))}",
+        };
+    }
+
+    private static readonly int[] WeekdayDisplayOrder = [1, 2, 3, 4, 5, 6, 0];
+    private static string FormatTime(int minute, int hour) => $"{hour:D2}:{minute:D2}";
+    private static int ParseIntOr(object? value, int fallback) =>
+        int.TryParse(value as string, out var parsed) && parsed > 0 ? parsed : fallback;
+
+    private Task ApplyAsync(ScheduleModel schedule) => CronChanged.InvokeAsync(schedule.ToCron());
+
+    private static ScheduleModel ChangeMode(ScheduleModel schedule, string modeValue)
+    {
+        var mode = Enum.Parse<ScheduleMode>(modeValue);
+        return mode switch
+        {
+            ScheduleMode.EveryMinutes => schedule with { Mode = mode, N = schedule.N is >= 1 and <= 59 ? schedule.N : 15 },
+            ScheduleMode.EveryHours => schedule with { Mode = mode, N = schedule.N is >= 1 and <= 23 ? schedule.N : 1 },
+            _ => schedule with { Mode = mode, Hours = schedule.Hours.Count == 0 ? [9] : schedule.Hours },
+        };
+    }
+
+    private static ScheduleModel ToggleDay(ScheduleModel schedule, int day, bool enabled)
+    {
+        var days = schedule.Days.Count == 0 ? Enumerable.Range(0, 7).ToList() : [.. schedule.Days];
+        if (enabled) { if (!days.Contains(day)) days.Add(day); }
+        else days.Remove(day);
+        if (days.Count == 7) days.Clear();
+        return schedule with { Days = days };
+    }
+
+    private static ScheduleModel SetPrimaryTime(ScheduleModel schedule, string? value)
+    {
+        if (!TimeSpan.TryParse(value, out var time)) return schedule;
+        var hours = schedule.Hours.Count == 0 ? new List<int> { time.Hours } : new List<int>(schedule.Hours) { [0] = time.Hours };
+        return schedule with { Hours = hours, Minute = time.Minutes };
+    }
+
+    private static ScheduleModel SetHourAt(ScheduleModel schedule, int index, string? value)
+    {
+        if (!int.TryParse(value, out var hour) || index >= schedule.Hours.Count) return schedule;
+        var hours = new List<int>(schedule.Hours) { [index] = hour };
+        return schedule with { Hours = hours };
+    }
+
+    private static ScheduleModel AddTime(ScheduleModel schedule)
+    {
+        var hours = schedule.Hours.Count == 0 ? new List<int> { 9 } : [.. schedule.Hours];
+        hours.Add(Enumerable.Range(0, 24).FirstOrDefault(hour => !hours.Contains(hour)));
+        return schedule with { Hours = hours };
+    }
+
+    private static ScheduleModel RemoveTime(ScheduleModel schedule, int index)
+    {
+        if (schedule.Hours.Count <= 1 || index <= 0 || index >= schedule.Hours.Count) return schedule;
+        var hours = new List<int>(schedule.Hours);
+        hours.RemoveAt(index);
+        return schedule with { Hours = hours };
+    }
+}

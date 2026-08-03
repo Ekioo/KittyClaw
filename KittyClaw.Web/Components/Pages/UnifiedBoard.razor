@@ -175,7 +175,7 @@ else
                                     @foreach (var ticket in colTickets)
                                     {
                                         <div @key="ticket.Id"
-                                             class="ticket-card @(_draggedTicket?.Id == ticket.Id ? "dragging" : "")"
+                                             class="ticket-card @(_draggedTicket?.Id == ticket.Id ? "dragging" : "") @(col.Role == ColumnRole.OwnerAction ? "ticket-owner-action" : "")"
                                              draggable="true"
                                              data-unified-ticket="true"
                                              data-project-slug="@slug"
@@ -185,6 +185,10 @@ else
                                              @onclick="() => OpenTicket(slug, ticket.Id)">
                                         <div class="ticket-card-top">
                                             <span class="priority-dot priority-@GetPriorityClass(ticket.Priority)" title="@GetPriorityLabel(ticket.Priority)"></span>
+                                            @if (col.Role == ColumnRole.OwnerAction)
+                                            {
+                                                <span class="owner-action-badge" title="@L["OwnerActionRequired"]">⚠ @L["OwnerActionRequired"]</span>
+                                            }
                                             <span class="ticket-id">#@ticket.Id</span>
                                         </div>
                                         <span class="ticket-title">@ticket.Title</span>

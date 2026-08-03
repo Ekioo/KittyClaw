@@ -12,6 +12,7 @@ public class BoardPipelineNavigationTests
 
         Assert.Contains("[SupplyParameterFromQuery(Name = \"pipeline\")]", source);
         Assert.Contains("return _selectedPipelineId is int pipeline ? $\"{path}?pipeline={pipeline}\" : path;", source);
+        Assert.Contains("return $\"{path}/ticket/{ticket}\";", source);
         Assert.Contains("await ReplaceTicketUrlAsync(ticket.Id);", source);
         Assert.Contains("await ReplaceTicketUrlAsync(null);", source);
         Assert.Contains("JS.InvokeVoidAsync(\"boardReplaceUrl\", BoardUrl(_subKanbanParentId, ticketId))", source);
@@ -27,6 +28,15 @@ public class BoardPipelineNavigationTests
         Assert.Contains("window.boardReplaceUrl", js);
         Assert.Contains("history.replaceState(window.history.state", js);
         Assert.DoesNotContain("Navigation.NavigateTo(BoardUrl(_subKanbanParentId, ticket.Id)", source);
+    }
+
+    [Fact]
+    public void Ticket_deep_links_do_not_expose_the_pipeline_query_parameter()
+    {
+        var source = BoardSource();
+
+        Assert.Contains("if (ticketId is int ticket)\n            return $\"{path}/ticket/{ticket}\";", source.Replace("\r\n", "\n"));
+        Assert.Contains("_tickets.FirstOrDefault(ticket => ticket.Id == ticketId)?.PipelineId", source);
     }
 
     [Fact]

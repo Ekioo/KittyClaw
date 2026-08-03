@@ -332,6 +332,7 @@ public class TicketService
             ParentId = parentId,
             BlocksParent = blocksParent,
         };
+        ColumnAssignmentPolicy.Apply(ticket, null, column);
         if (labelIds is { Count: > 0 })
         {
             var labels = await db.Labels.Where(l => labelIds.Contains(l.Id)).ToListAsync();
@@ -379,6 +380,10 @@ public class TicketService
         var targetColumn = await RequireColumnAsync(db, targetStatus, ticket.PipelineId);
         targetStatus = targetColumn.Name;
         var oldStatus = ticket.Status;
+        var sourceColumn = ticket.ColumnId is int sourceColumnId
+            ? await db.BoardColumns.FindAsync(sourceColumnId)
+            : null;
+        ColumnAssignmentPolicy.Apply(ticket, sourceColumn, scheduledColumn);
         ticket.Status = scheduledColumn.Name;
         ticket.ColumnId = scheduledColumn.Id;
         ticket.FireAt = fireAt;
@@ -450,6 +455,7 @@ public class TicketService
             catch (InvalidOperationException) { targetColumn = await RequireColumnAsync(db, "Todo", ticket.PipelineId); }
         }
         target = targetColumn.Name;
+        ColumnAssignmentPolicy.Apply(ticket, currentColumn, targetColumn);
         ticket.Status = target;
         ticket.ColumnId = targetColumn.Id;
         ticket.FireAt = null;
@@ -513,9 +519,13 @@ public class TicketService
             || !string.Equals(ticket.Status, status, StringComparison.OrdinalIgnoreCase)))
         {
             oldStatus = ticket.Status;
+            var source = ticket.ColumnId is int sourceColumnId
+                ? await db.BoardColumns.FindAsync(sourceColumnId)
+                : null;
             ticket.Status = status!;
             ticket.ColumnId = destination!.Id;
             ticket.PipelineId = destination.PipelineId;
+            var assignmentChangedByRole = ColumnAssignmentPolicy.Apply(ticket, source, destination);
             if (ticket.FireAt is not null && !IsScheduledColumnName(destination.Name))
             {
                 // Leaving Scheduled cancels the pending promotion — otherwise the stale
@@ -529,6 +539,17 @@ public class TicketService
                 Author = author,
                 Text = $"a déplacé le ticket : {oldStatus} → {status}"
             });
+            if (assignmentChangedByRole)
+            {
+                db.ActivityEntries.Add(new ActivityEntry
+                {
+                    TicketId = ticketId,
+                    Author = "KittyClaw",
+                    Text = destination.Role == ColumnRole.OwnerAction
+                        ? "requiert une action du Owner"
+                        : "a retiré l’affectation Owner automatique"
+                });
+            }
         }
 
         if (title is not null && title != ticket.Title)
@@ -817,8 +838,12 @@ public class TicketService
 
         var oldStatus = ticket.Status;
         var statusChanged = !string.Equals(oldStatus, newStatus, StringComparison.OrdinalIgnoreCase);
+        var source = ticket.ColumnId is int sourceColumnId
+            ? await db.BoardColumns.FindAsync(sourceColumnId)
+            : null;
         ticket.Status = newStatus;
         ticket.ColumnId = destination.Id;
+        ColumnAssignmentPolicy.Apply(ticket, source, destination);
         ticket.UpdatedAt = DateTime.UtcNow;
         if (statusChanged && ticket.FireAt is not null && !IsScheduledColumnName(destination.Name))
         {

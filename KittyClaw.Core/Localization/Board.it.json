@@ -187,7 +187,7 @@
   "ColumnNameHelp": "Nome mostrato nel kanban e usato come stato leggibile dei ticket. Rinominare la colonna non cambia la sua identità tecnica stabile.",
   "ColumnColorHelp": "Colore usato per identificare visivamente la colonna e i suoi ticket nel kanban.",
   "ColumnRole": "Ruolo",
-  "ColumnRoleHelp": "Significato funzionale della colonna. KittyClaw usa in particolare il ruolo Successo per stabilire che un sotto-ticket bloccante è completato e i ruoli Attesa o Errore per rappresentare questi stati.",
+  "ColumnRoleHelp": "Significato funzionale della colonna. Azione dell'Owner richiesta assegna automaticamente i ticket all'Owner; Attesa resta adatto alle pause normali come Bloccato o Pianificato.",
   "ColumnPosition": "Posizione",
   "ColumnPositionHelp": "Posizione della colonna nella pipeline. KittyClaw riordina il kanban senza modificarne l’identità stabile.",
   "ColumnStableIdentityHint": "L’identità stabile viene mantenuta quando cambiano nome, colore, ruolo o posizione.",
@@ -216,6 +216,7 @@
   "ColumnAddSchedule": "+ Attività pianificata", "ColumnNoSchedules": "Nessuna attività pianificata per questa colonna.",
   "ScheduleNameHelp": "Nome mostrato nell’interfaccia e usato come autore nell’attività del ticket.",
   "ScheduleCron": "Espressione cron", "ScheduleCronHelp": "Calendario cron a cinque campi: minuto, ora, giorno del mese, mese e giorno della settimana.",
+  "ScheduleCalendar": "Pianificazione", "ScheduleCalendarHelp": "Scegli frequenza, giorni e orari leggibili. KittyClaw salva internamente il cron equivalente.",
   "ScheduleTimezone": "Fuso orario", "ScheduleTimezoneHelp": "Fuso IANA o Windows in cui KittyClaw interpreta l’espressione cron.",
   "ScheduleTicketScope": "Ticket di destinazione", "ScheduleTicketScopeHelp": "Esegue le azioni senza ticket o sul primo ticket della colonna.",
   "ScheduleNoTicket": "Nessun ticket", "ScheduleFirstTicket": "Primo ticket della colonna", "ScheduleActions": "Azioni eseguite",
@@ -226,5 +227,6 @@
   "ChatCommandFailed": "Un tentativo di comando non è riuscito",
   "ChatCommandWarning": "Il comando ha segnalato un avviso tecnico",
   "ChatTechnicalDetails": "Dettagli tecnici",
-  "MarkColumnRead": "Segna tutto come letto"
+  "MarkColumnRead": "Segna tutto come letto",
+  "OwnerActionRequired": "Azione richiesta"
 }

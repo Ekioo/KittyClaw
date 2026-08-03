@@ -203,7 +203,6 @@
                             </header>
                             <div class="workflow-grid scheduled-task-fields">
                                 <label><FieldHelp Label="@L["Name"]" Help="@L["ScheduleNameHelp"]" /><input @bind="task.Name" /></label>
-                                <label><FieldHelp Label="@L["ScheduleCron"]" Help="@L["ScheduleCronHelp"]" /><input @bind="task.Cron" placeholder="0 9 * * 1" /></label>
                                 <label><FieldHelp Label="@L["ScheduleTimezone"]" Help="@L["ScheduleTimezoneHelp"]" /><input @bind="task.TimeZoneId" /></label>
                                 <label><FieldHelp Label="@L["ScheduleTicketScope"]" Help="@L["ScheduleTicketScopeHelp"]" />
                                     <select @bind="task.TicketScope">
@@ -211,6 +210,10 @@
                                         <option value="@ScheduledTaskTicketScope.FirstTicket">@L["ScheduleFirstTicket"]</option>
                                     </select>
                                 </label>
+                                <div class="scheduled-task-schedule">
+                                    <FieldHelp Label="@L["ScheduleCalendar"]" Help="@L["ScheduleCalendarHelp"]" />
+                                    <CronScheduleEditor Cron="@task.Cron" CronChanged="cron => task.Cron = cron" />
+                                </div>
                             </div>
                             @ScheduledActionSection(task)
                         </article>

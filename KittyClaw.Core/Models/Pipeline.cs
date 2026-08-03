@@ -18,6 +18,8 @@ public enum ColumnRole
 {
     Normal,
     Waiting,
+    /// <summary>A human decision or intervention is required before the ticket can continue.</summary>
+    OwnerAction,
     Success,
     Failure,
 }

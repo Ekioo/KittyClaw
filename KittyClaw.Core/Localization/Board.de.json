@@ -187,7 +187,7 @@
   "ColumnNameHelp": "Im Kanban angezeigter Name und lesbarer Ticketstatus. Das Umbenennen ändert die stabile technische Identität der Spalte nicht.",
   "ColumnColorHelp": "Farbe zur visuellen Kennzeichnung der Spalte und ihrer Tickets im Kanban.",
   "ColumnRole": "Rolle",
-  "ColumnRoleHelp": "Funktionale Bedeutung der Spalte. KittyClaw nutzt insbesondere die Rolle Erfolg, um blockierende Untertickets als abgeschlossen zu erkennen, sowie Warten und Fehler für diese Zustände.",
+  "ColumnRoleHelp": "Funktionale Bedeutung der Spalte. Owner-Aktion erforderlich weist Tickets automatisch dem Owner zu; Warten bleibt für normale Pausen wie Blockiert oder Geplant geeignet.",
   "ColumnPosition": "Position",
   "ColumnPositionHelp": "Position der Spalte in ihrer Pipeline. KittyClaw ordnet das Kanban neu, ohne die stabile Identität der Spalte zu ändern.",
   "ColumnStableIdentityHint": "Die stabile Identität bleibt bei Änderungen an Name, Farbe, Rolle oder Position erhalten.",
@@ -216,6 +216,7 @@
   "ColumnAddSchedule": "+ Geplante Aufgabe", "ColumnNoSchedules": "Keine geplante Aufgabe für diese Spalte.",
   "ScheduleNameHelp": "In der Oberfläche angezeigter Name und Autor in der Ticket-Aktivität.",
   "ScheduleCron": "Cron-Ausdruck", "ScheduleCronHelp": "Cron-Zeitplan mit fünf Feldern: Minute, Stunde, Monatstag, Monat und Wochentag.",
+  "ScheduleCalendar": "Zeitplan", "ScheduleCalendarHelp": "Wählen Sie Frequenz, Tage und Uhrzeiten. KittyClaw speichert den entsprechenden Cron-Zeitplan intern.",
   "ScheduleTimezone": "Zeitzone", "ScheduleTimezoneHelp": "IANA- oder Windows-Zeitzone, in der KittyClaw den Cron-Ausdruck interpretiert.",
   "ScheduleTicketScope": "Ziel-Ticket", "ScheduleTicketScopeHelp": "Aktionen ohne Ticket oder für das erste Ticket dieser Spalte ausführen.",
   "ScheduleNoTicket": "Kein Ticket", "ScheduleFirstTicket": "Erstes Ticket der Spalte", "ScheduleActions": "Auszuführende Aktionen",
@@ -226,5 +227,6 @@
   "ChatCommandFailed": "Ein Befehlsversuch ist fehlgeschlagen",
   "ChatCommandWarning": "Der Befehl hat eine technische Warnung gemeldet",
   "ChatTechnicalDetails": "Technische Details",
-  "MarkColumnRead": "Alle als gelesen markieren"
+  "MarkColumnRead": "Alle als gelesen markieren",
+  "OwnerActionRequired": "Aktion erforderlich"
 }

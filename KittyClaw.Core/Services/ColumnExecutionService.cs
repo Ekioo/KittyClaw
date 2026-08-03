@@ -179,6 +179,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                 var oldStatus = selected.Status;
                 if (failureColumn is not null)
                 {
+                    ColumnAssignmentPolicy.Apply(selected, sourceColumn, failureColumn);
                     selected.PipelineId = failureColumn.PipelineId;
                     selected.ColumnId = failureColumn.Id;
                     selected.Status = failureColumn.Name;
@@ -321,6 +322,8 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         var ticket = await db.Tickets.FindAsync(row.TicketId)
             ?? throw new InvalidOperationException($"Le ticket #{row.TicketId} n’existe plus.");
         var oldStatus = ticket.Status;
+        var source = await db.BoardColumns.FindAsync(processor.ColumnId);
+        ColumnAssignmentPolicy.Apply(ticket, source, target);
         ticket.PipelineId = target.PipelineId;
         ticket.ColumnId = target.Id;
         ticket.Status = target.Name;
@@ -417,8 +420,10 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             }
         }
         var ticket = await db.Tickets.FindAsync(execution.TicketId)
-            ?? throw new InvalidOperationException($"Le ticket #{execution.TicketId} n'existe plus.");
+            ?? throw new InvalidOperationException($"Le ticket #{execution.TicketId} n’existe plus.");
         var oldStatus = ticket.Status;
+        var source = await db.BoardColumns.FindAsync(processor.ColumnId);
+        ColumnAssignmentPolicy.Apply(ticket, source, target);
         ticket.PipelineId = target.PipelineId;
         ticket.ColumnId = target.Id;
         ticket.Status = target.Name;
@@ -474,6 +479,8 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             if (target is not null && ticket is not null)
             {
                 var oldStatus = ticket.Status;
+                var source = await db.BoardColumns.FindAsync(processor.ColumnId);
+                ColumnAssignmentPolicy.Apply(ticket, source, target);
                 ticket.PipelineId = target.PipelineId;
                 ticket.ColumnId = target.Id;
                 ticket.Status = target.Name;

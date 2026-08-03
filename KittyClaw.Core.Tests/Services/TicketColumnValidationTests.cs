@@ -1,4 +1,5 @@
 using KittyClaw.Core.Services;
+using KittyClaw.Core.Models;
 using KittyClaw.Core.Tests.Helpers;
 
 namespace KittyClaw.Core.Tests.Services;
@@ -68,5 +69,46 @@ public sealed class TicketColumnValidationTests
 
         var reloaded = await svc.GetTicketAsync(slug, t.Id);
         Assert.Equal("Todo", reloaded!.Status);
+    }
+
+    [Fact]
+    public async Task OwnerActionRole_AssignsOwnerOnEntry_AndClearsTheAutomaticAssignmentOnExit()
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("owner-action");
+        var pipelines = new PipelineService(projects);
+        var columns = new ColumnService(projects);
+        var members = new MemberService(projects);
+        var tickets = new TicketService(projects, members);
+        var pipeline = await pipelines.CreateAsync(project.Slug, "Review");
+        var ready = await columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: pipeline.Id);
+        var decision = await columns.CreateColumnAsync(project.Slug, "Decision", pipelineId: pipeline.Id,
+            role: ColumnRole.OwnerAction);
+        var ticket = await tickets.CreateTicketAsync(project.Slug, "Choose", status: ready.Name,
+            pipelineId: pipeline.Id, columnId: ready.Id);
+
+        var waiting = await tickets.MoveTicketAsync(project.Slug, ticket.Id, decision.Name);
+        Assert.Equal("owner", waiting!.AssignedTo);
+
+        var resumed = await tickets.MoveTicketAsync(project.Slug, ticket.Id, ready.Name);
+        Assert.Null(resumed!.AssignedTo);
+    }
+
+    [Fact]
+    public async Task OwnerActionRole_AppliesToTicketsCreatedDirectlyInTheColumn()
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("owner-action-create");
+        var pipeline = await new PipelineService(projects).CreateAsync(project.Slug, "Review");
+        var column = await new ColumnService(projects).CreateColumnAsync(project.Slug, "Decision",
+            pipelineId: pipeline.Id, role: ColumnRole.OwnerAction);
+        var tickets = new TicketService(projects, new MemberService(projects));
+
+        var ticket = await tickets.CreateTicketAsync(project.Slug, "Choose", status: column.Name,
+            pipelineId: pipeline.Id, columnId: column.Id);
+
+        Assert.Equal("owner", ticket.AssignedTo);
     }
 }

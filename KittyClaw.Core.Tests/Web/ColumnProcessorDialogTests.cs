@@ -209,4 +209,57 @@ public sealed class ColumnProcessorDialogTests
         Assert.Contains("var activityAuthor = processor.Name", source);
         Assert.DoesNotContain("dispatch.Result, $\"column-{processor.ColumnId}\"", source);
     }
+
+    [Fact]
+    public void Scheduled_tasks_use_the_shared_visual_schedule_builder_instead_of_raw_cron_input()
+    {
+        var dialog = File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Web", "Components", "ColumnProcessorDialog.razor"));
+        var trigger = File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Web", "Components", "TriggerEditor.razor"));
+        var builder = File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Web", "Components", "CronScheduleEditor.razor"));
+
+        Assert.Contains("<CronScheduleEditor", dialog);
+        Assert.Contains("<CronScheduleEditor", trigger);
+        Assert.DoesNotContain("@bind=\"task.Cron\"", dialog);
+        Assert.Contains("type=\"time\"", builder);
+        Assert.Contains("weekday-picker", builder);
+        Assert.Contains("ToCron()", builder);
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("fr")]
+    [InlineData("de")]
+    [InlineData("es")]
+    [InlineData("it")]
+    public void OwnerAction_role_and_visual_schedule_are_localized(string language)
+    {
+        using var workflow = JsonDocument.Parse(File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Core", "Localization", $"Workflows.{language}.json")));
+        using var board = JsonDocument.Parse(File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Core", "Localization", $"Board.{language}.json")));
+
+        Assert.False(string.IsNullOrWhiteSpace(workflow.RootElement.GetProperty("WorkflowRoleOwnerAction").GetString()));
+        Assert.False(string.IsNullOrWhiteSpace(board.RootElement.GetProperty("ScheduleCalendar").GetString()));
+        Assert.False(string.IsNullOrWhiteSpace(board.RootElement.GetProperty("ScheduleCalendarHelp").GetString()));
+        Assert.False(string.IsNullOrWhiteSpace(board.RootElement.GetProperty("OwnerActionRequired").GetString()));
+    }
+
+    [Fact]
+    public void OwnerAction_tickets_are_emphasized_on_project_and_unified_boards()
+    {
+        var board = File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Board.razor"));
+        var unified = File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Web", "Components", "Pages", "UnifiedBoard.razor"));
+        var css = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "wwwroot", "app.css"));
+
+        Assert.Contains("col.Role == ColumnRole.OwnerAction", board);
+        Assert.Contains("owner-action-badge", board);
+        Assert.Contains("col.Role == ColumnRole.OwnerAction", unified);
+        Assert.Contains("owner-action-badge", unified);
+        Assert.Contains(".ticket-card.ticket-owner-action", css);
+    }
 }

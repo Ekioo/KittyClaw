@@ -16,6 +16,7 @@
   "WorkflowRole": "Role",
   "WorkflowRoleNormal": "Normal",
   "WorkflowRoleWaiting": "Waiting",
+  "WorkflowRoleOwnerAction": "Owner action required",
   "WorkflowRoleSuccess": "Success",
   "WorkflowRoleFailure": "Failure",
   "WorkflowNewColumn": "New column name",

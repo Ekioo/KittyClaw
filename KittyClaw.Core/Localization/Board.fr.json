@@ -187,7 +187,7 @@
   "ColumnNameHelp": "Nom affiché dans le kanban et utilisé comme statut lisible des tickets. Renommer la colonne ne change pas son identité technique stable.",
   "ColumnColorHelp": "Couleur utilisée pour identifier visuellement la colonne et ses tickets dans le kanban.",
   "ColumnRole": "Rôle",
-  "ColumnRoleHelp": "Sens fonctionnel de la colonne. KittyClaw utilise notamment le rôle Succès pour déterminer qu’un sous-ticket bloquant est terminé, et les rôles Attente ou Échec pour représenter ces états.",
+  "ColumnRoleHelp": "Sens fonctionnel de la colonne. Action du Owner requise affecte automatiquement les tickets à Owner ; Attente reste adapté aux pauses normales comme Bloqué ou Planifié.",
   "ColumnPosition": "Position",
   "ColumnPositionHelp": "Emplacement de la colonne dans son pipeline. KittyClaw réordonne le kanban sans modifier l’identité stable de la colonne.",
   "ColumnStableIdentityHint": "La colonne conserve son identité stable lorsque son nom, sa couleur, son rôle ou sa position change.",
@@ -219,6 +219,8 @@
   "ScheduleNameHelp": "Nom affiché dans l’interface et utilisé comme auteur dans l’activité des tickets.",
   "ScheduleCron": "Expression cron",
   "ScheduleCronHelp": "Calendrier cron à cinq champs : minute, heure, jour du mois, mois et jour de la semaine.",
+  "ScheduleCalendar": "Planification",
+  "ScheduleCalendarHelp": "Choisissez une fréquence, des jours et des heures lisibles. KittyClaw enregistre le cron équivalent en interne.",
   "ScheduleTimezone": "Fuseau horaire",
   "ScheduleTimezoneHelp": "Fuseau IANA ou Windows dans lequel KittyClaw interprète l’expression cron.",
   "ScheduleTicketScope": "Ticket cible",
@@ -233,5 +235,6 @@
   "ChatCommandFailed": "Une tentative de commande a échoué",
   "ChatCommandWarning": "La commande a signalé un avertissement technique",
   "ChatTechnicalDetails": "Détails techniques",
-  "MarkColumnRead": "Tout marquer comme lu"
+  "MarkColumnRead": "Tout marquer comme lu",
+  "OwnerActionRequired": "Action requise"
 }

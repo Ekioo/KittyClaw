@@ -20,6 +20,11 @@ public sealed class WorkflowMigrationPromptTests
 
         Assert.Contains("InitialMessage=\"@MigrationPrompt\"", source);
         Assert.Contains("Wait for my explicit approval before applying the migration.", source);
+        Assert.Contains("Treat the current board as potentially denormalized", source);
+        Assert.Contains("Do not preserve a single mixed pipeline", source);
+        Assert.Contains("Map every existing ticket to exactly one proposed pipeline", source);
+        Assert.Contains("Use OwnerAction when a human decision", source);
+        Assert.Contains("replaced by scheduled tasks", source);
         Assert.DoesNotContain("InitialAgent=", source);
     }
 

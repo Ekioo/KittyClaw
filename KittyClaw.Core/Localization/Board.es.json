@@ -187,7 +187,7 @@
   "ColumnNameHelp": "Nombre mostrado en el kanban y usado como estado legible de los tickets. Renombrar la columna no cambia su identidad técnica estable.",
   "ColumnColorHelp": "Color utilizado para identificar visualmente la columna y sus tickets en el kanban.",
   "ColumnRole": "Rol",
-  "ColumnRoleHelp": "Significado funcional de la columna. KittyClaw usa especialmente el rol Éxito para determinar que un subticket bloqueante ha terminado, y Espera o Fallo para representar esos estados.",
+  "ColumnRoleHelp": "Significado funcional de la columna. Acción del Owner requerida asigna automáticamente los tickets al Owner; Espera queda para pausas normales como Bloqueado o Programado.",
   "ColumnPosition": "Posición",
   "ColumnPositionHelp": "Ubicación de la columna en su pipeline. KittyClaw reordena el kanban sin cambiar la identidad estable de la columna.",
   "ColumnStableIdentityHint": "La identidad estable se conserva al cambiar el nombre, color, rol o posición.",
@@ -216,6 +216,7 @@
   "ColumnAddSchedule": "+ Tarea programada", "ColumnNoSchedules": "No hay tareas programadas para esta columna.",
   "ScheduleNameHelp": "Nombre mostrado en la interfaz y usado como autor en la actividad del ticket.",
   "ScheduleCron": "Expresión cron", "ScheduleCronHelp": "Horario cron de cinco campos: minuto, hora, día del mes, mes y día de la semana.",
+  "ScheduleCalendar": "Programación", "ScheduleCalendarHelp": "Elige una frecuencia, días y horas legibles. KittyClaw guarda internamente el cron equivalente.",
   "ScheduleTimezone": "Zona horaria", "ScheduleTimezoneHelp": "Zona IANA o Windows en la que KittyClaw interpreta la expresión cron.",
   "ScheduleTicketScope": "Ticket objetivo", "ScheduleTicketScopeHelp": "Ejecuta las acciones sin ticket o sobre el primer ticket de esta columna.",
   "ScheduleNoTicket": "Sin ticket", "ScheduleFirstTicket": "Primer ticket de la columna", "ScheduleActions": "Acciones ejecutadas",
@@ -226,5 +227,6 @@
   "ChatCommandFailed": "Falló un intento de comando",
   "ChatCommandWarning": "El comando informó de una advertencia técnica",
   "ChatTechnicalDetails": "Detalles técnicos",
-  "MarkColumnRead": "Marcar todo como leído"
+  "MarkColumnRead": "Marcar todo como leído",
+  "OwnerActionRequired": "Acción requerida"
 }

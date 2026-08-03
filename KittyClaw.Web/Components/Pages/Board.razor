@@ -189,7 +189,7 @@ else
                             var ticket = columnTickets[i];
                             var index = i;
                             var isCardTarget = _draggedTicket is not null && _dragActiveSlot < 0 && _dragOverStatus == col.Name && _dragHoverIndex == index && _dropTargetTicketId == ticket.Id;
-                            <div class="ticket-card @(_openTicketId == ticket.Id ? "selected" : "") @(_draggedTicket?.Id == ticket.Id ? "dragging" : "") @(isCardTarget ? "drop-target" : "") @(IsTicketUpdated(ticket) ? "ticket-updated" : "")"
+                            <div class="ticket-card @(_openTicketId == ticket.Id ? "selected" : "") @(_draggedTicket?.Id == ticket.Id ? "dragging" : "") @(isCardTarget ? "drop-target" : "") @(IsTicketUpdated(ticket) ? "ticket-updated" : "") @(col.Role == ColumnRole.OwnerAction ? "ticket-owner-action" : "")"
                                  draggable="true"
                                  @ondragstart="() => OnDragStart(ticket)"
                                  @ondragend="OnDragEnd"
@@ -202,6 +202,10 @@ else
                                  @onclick="() => SelectTicket(ticket)">
                                 <div class="ticket-card-top">
                                     <span class="priority-dot priority-@GetPriorityClass(ticket.Priority)" title="@GetPriorityLabel(ticket.Priority)"></span>
+                                    @if (col.Role == ColumnRole.OwnerAction)
+                                    {
+                                        <span class="owner-action-badge" title="@L["OwnerActionRequired"]">⚠ @L["OwnerActionRequired"]</span>
+                                    }
                                     @{
                                         var activeRun = AgentRuns.ActiveForTicket(Slug, ticket.Id);
                                         var lastRun = activeRun is null ? AgentRuns.LastForTicket(Slug, ticket.Id) : null;
@@ -706,7 +710,7 @@ else
             ? $"/board/{Slug}/sub/{parent}"
             : $"/board/{Slug}";
         if (ticketId is int ticket)
-            path += $"/ticket/{ticket}";
+            return $"{path}/ticket/{ticket}";
         return _selectedPipelineId is int pipeline ? $"{path}?pipeline={pipeline}" : path;
     }
 

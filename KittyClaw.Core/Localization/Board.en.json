@@ -187,7 +187,7 @@
   "ColumnNameHelp": "Name displayed on the board and used as the readable ticket status. Renaming the column does not change its stable technical identity.",
   "ColumnColorHelp": "Color used to visually identify the column and its tickets on the board.",
   "ColumnRole": "Role",
-  "ColumnRoleHelp": "Functional meaning of the column. KittyClaw notably uses the Success role to decide that a blocking child is complete, and Waiting or Failure roles to represent those states.",
+  "ColumnRoleHelp": "Functional meaning of the column. Owner action required automatically assigns tickets to Owner; Waiting remains suitable for normal pauses such as Blocked or Scheduled.",
   "ColumnPosition": "Position",
   "ColumnPositionHelp": "Location of the column in its pipeline. KittyClaw reorders the board without changing the column's stable identity.",
   "ColumnStableIdentityHint": "The column keeps its stable identity when its name, color, role, or position changes.",
@@ -219,6 +219,8 @@
   "ScheduleNameHelp": "Name shown in the interface and used as the author in ticket activity.",
   "ScheduleCron": "Cron expression",
   "ScheduleCronHelp": "Five-field cron schedule: minute, hour, day of month, month and day of week.",
+  "ScheduleCalendar": "Schedule",
+  "ScheduleCalendarHelp": "Choose a readable frequency, days and times. KittyClaw stores the equivalent cron schedule internally.",
   "ScheduleTimezone": "Time zone",
   "ScheduleTimezoneHelp": "IANA or Windows time zone in which KittyClaw interprets the cron expression.",
   "ScheduleTicketScope": "Target ticket",
@@ -233,5 +235,6 @@
   "ChatCommandFailed": "A command attempt failed",
   "ChatCommandWarning": "The command reported a technical warning",
   "ChatTechnicalDetails": "Technical details",
-  "MarkColumnRead": "Mark all as read"
+  "MarkColumnRead": "Mark all as read",
+  "OwnerActionRequired": "Action required"
 }

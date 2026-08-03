@@ -10,6 +10,7 @@
   "AuthorsFilterHint": "Authors (comma-separated, empty = all)",
   "IgnoreAuthorsHint": "Ignore authors (comma-separated emails)",
   "ScheduleFrequency": "Frequency",
+  "ScheduleDays": "Scheduled days",
   "FreqEveryMinutes": "Every N minutes",
   "FreqEveryHours": "Every N hours",
   "FreqScheduled": "On specific days",

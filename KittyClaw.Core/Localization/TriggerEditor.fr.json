@@ -10,6 +10,7 @@
   "AuthorsFilterHint": "Auteurs (virgules, vide = tous)",
   "IgnoreAuthorsHint": "Ignorer auteurs (emails séparés par virgules)",
   "ScheduleFrequency": "Fréquence",
+  "ScheduleDays": "Jours planifiés",
   "FreqEveryMinutes": "Toutes les N minutes",
   "FreqEveryHours": "Toutes les N heures",
   "FreqScheduled": "À jours fixes",
