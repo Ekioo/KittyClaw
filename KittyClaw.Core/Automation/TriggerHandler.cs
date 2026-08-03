@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 using KittyClaw.Core.Automation.Triggers;
 using KittyClaw.Core.Services;
 
@@ -19,6 +20,7 @@ internal sealed class TriggerHandler
     private readonly AgentRunRegistry _runs;
     private readonly ILogger _logger;
     private readonly AutomationQueueStore _queue;
+    private readonly ColumnPresenceSweepTracker _presenceSweeps = new(TimeSpan.FromSeconds(30));
 
     public TriggerHandler(ProjectService projects, ProjectRuntimeManager runtimeManager,
         ActionExecutor executor, TicketService tickets, MemberService members,
@@ -46,6 +48,11 @@ internal sealed class TriggerHandler
         _runs = runs;
         _queue = queue;
         _logger = logger;
+        // Ticket mutations arrive synchronously from TicketService. Marking the project dirty
+        // here lets the same engine tick refresh occurrence state before evaluating its regular
+        // poll triggers, without rereading every ticket in every project once per second.
+        tickets.TicketStatusChanged += (slug, _, _, _) => _presenceSweeps.MarkDirty(slug);
+        tickets.TicketCreated += (slug, _) => _presenceSweeps.MarkDirty(slug);
     }
 
     public async Task ProcessTickAsync(CancellationToken ct)
@@ -104,12 +111,16 @@ internal sealed class TriggerHandler
                 await _runtimeManager.ReloadProjectAsync(project.Slug);
             }
             if (rt.Config is null) continue;
-            // Occurrence tracking must see every column transition, including columns that
-            // are not watched by any ticketInColumn automation. Otherwise a later re-entry
-            // into a watched column is incorrectly deduplicated against the previous visit.
-            var projectTickets = await _tickets.ListTicketsAsync(project.Slug);
-            await _queue.ObserveColumnsAsync(
-                project.Slug, projectTickets.Select(ticket => (ticket.Id, ticket.Status)), ct);
+            // Occurrence tracking must see every column transition, including columns that are
+            // not watched by any ticketInColumn automation. TicketService events make this scan
+            // immediate for changed projects; the periodic sweep covers process startup and
+            // best-effort detection of unsupported direct database edits.
+            if (_presenceSweeps.TryClaimSweep(project.Slug, DateTime.UtcNow))
+            {
+                var projectTickets = await _tickets.ListTicketsAsync(project.Slug);
+                await _queue.ObserveColumnsAsync(
+                    project.Slug, projectTickets.Select(ticket => (ticket.Id, ticket.Status)), ct);
+            }
             foreach (var automation in rt.Config.Automations)
             {
                 if (!automation.Enabled) continue;
@@ -158,4 +169,26 @@ internal sealed class TriggerHandler
             Runs = _runs,
             Now = DateTime.UtcNow,
         };
+}
+
+/// <summary>Coalesces ticket mutations into one occurrence-presence scan per project.</summary>
+internal sealed class ColumnPresenceSweepTracker(TimeSpan safetyInterval)
+{
+    private readonly ConcurrentDictionary<string, byte> _dirty = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, DateTime> _lastSwept = new(StringComparer.OrdinalIgnoreCase);
+
+    public void MarkDirty(string slug) => _dirty[slug] = 0;
+
+    public bool TryClaimSweep(string slug, DateTime now)
+    {
+        if (_dirty.TryRemove(slug, out _))
+        {
+            _lastSwept[slug] = now;
+            return true;
+        }
+        if (_lastSwept.TryGetValue(slug, out var last) && now - last < safetyInterval)
+            return false;
+        _lastSwept[slug] = now;
+        return true;
+    }
 }
