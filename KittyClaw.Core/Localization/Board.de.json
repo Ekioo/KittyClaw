@@ -33,6 +33,8 @@
   "Unparent": "Verknüpfung aufheben",
   "DeleteColumnConfirm": "Spalte löschen",
   "MoveTicketsTo": "Tickets werden verschoben nach:",
+  "TicketMenuOpen": "Ticket öffnen",
+  "TicketMenuMoveTo": "In Pipeline / Spalte verschieben",
   "ColumnDeleteDestinationHelp": "Diese Spalte erhält vor dem Löschen alle Tickets. KittyClaw entfernt außerdem Routen, die auf die gelöschte Spalte zeigten.",
   "DeleteTicketConfirm": "Ticket löschen",
   "NewTicket": "Neues Ticket",

@@ -200,6 +200,9 @@ else
                                  @ondrop="() => OnDropAsChild(ticket, col.Name)"
                                  @ondrop:preventDefault
                                  @ondrop:stopPropagation
+                                 @oncontextmenu="e => OpenTicketMenuAsync(ticket, e)"
+                                 @oncontextmenu:preventDefault
+                                 @oncontextmenu:stopPropagation
                                  @onclick="() => SelectTicket(ticket)">
                                 <div class="ticket-card-top">
                                     <span class="priority-dot priority-@GetPriorityClass(ticket.Priority)" title="@GetPriorityLabel(ticket.Priority)"></span>
@@ -345,6 +348,43 @@ else
                         <span class="column-context-menu-check">@(active ? "✓" : "")</span>
                         <span>@SortLabel(mode) — @DirectionLabel(dir)</span>
                     </button>
+                }
+            }
+        </div>
+    }
+
+    @* ── Ticket context menu ── *@
+    @if (_ticketMenuTicket is not null)
+    {
+        var menuTicket = _ticketMenuTicket;
+        <div class="column-context-menu-backdrop" @onclick="CloseTicketMenu" @oncontextmenu="CloseTicketMenu" @oncontextmenu:preventDefault></div>
+        <div class="column-context-menu ticket-context-menu" style="left:@(_ticketMenuX)px; top:@(_ticketMenuY)px;" @onclick:stopPropagation @oncontextmenu:preventDefault>
+            <button class="column-context-menu-item column-context-menu-configure" @onclick="OpenTicketFromMenuAsync">
+                <span class="column-context-menu-check">↗</span>
+                <span>@L["TicketMenuOpen"]</span>
+            </button>
+            <div class="column-context-menu-separator"></div>
+            <div class="column-context-menu-title">@L["TicketMenuMoveTo"]</div>
+            @if (_ticketMenuColumns.Count == 0)
+            {
+                <div class="ticket-context-menu-loading">@L["Loading"]</div>
+            }
+            @foreach (var pipeline in _pipelines)
+            {
+                if (_ticketMenuColumns.TryGetValue(pipeline.Id, out var targetColumns) && targetColumns.Count > 0)
+                {
+                    <div class="ticket-context-menu-pipeline">@pipeline.Name</div>
+                    @foreach (var targetColumn in targetColumns)
+                    {
+                        var isCurrent = menuTicket.PipelineId == pipeline.Id &&
+                            (menuTicket.ColumnId == targetColumn.Id || menuTicket.Status == targetColumn.Name);
+                        <button class="column-context-menu-item @(isCurrent ? "column-context-menu-item--active" : "")"
+                                disabled="@isCurrent"
+                                @onclick="() => MoveTicketFromMenuAsync(pipeline, targetColumn)">
+                            <span class="column-context-menu-check">@(isCurrent ? "✓" : "")</span>
+                            <span>@targetColumn.Name</span>
+                        </button>
+                    }
                 }
             }
         </div>
@@ -1059,6 +1099,10 @@ else
     private string? _sortMenuOpenFor;
     private double _sortMenuX;
     private double _sortMenuY;
+    private TicketSummary? _ticketMenuTicket;
+    private double _ticketMenuX;
+    private double _ticketMenuY;
+    private readonly Dictionary<int, List<BoardColumn>> _ticketMenuColumns = [];
     private bool _columnEditorOpen;
     private BoardColumn? _columnDialogColumn;
     private BoardColumn? _columnDialogTemplate;
@@ -1073,6 +1117,49 @@ else
     }
 
     private void CloseSortMenu() => _sortMenuOpenFor = null;
+
+    private async Task OpenTicketMenuAsync(TicketSummary ticket, Microsoft.AspNetCore.Components.Web.MouseEventArgs e)
+    {
+        _sortMenuOpenFor = null;
+        _ticketMenuTicket = ticket;
+        _ticketMenuX = e.ClientX;
+        _ticketMenuY = e.ClientY;
+        _ticketMenuColumns.Clear();
+        StateHasChanged();
+
+        var loads = _pipelines.Select(async pipeline =>
+            (pipeline.Id, Columns: await ColumnService.ListColumnsAsync(Slug, pipeline.Id)));
+        foreach (var result in await Task.WhenAll(loads))
+            _ticketMenuColumns[result.Id] = result.Columns;
+        StateHasChanged();
+    }
+
+    private void CloseTicketMenu() => _ticketMenuTicket = null;
+
+    private async Task OpenTicketFromMenuAsync()
+    {
+        var ticket = _ticketMenuTicket;
+        _ticketMenuTicket = null;
+        if (ticket is not null) await SelectTicket(ticket);
+    }
+
+    private async Task MoveTicketFromMenuAsync(Pipeline pipeline, BoardColumn column)
+    {
+        var ticket = _ticketMenuTicket;
+        _ticketMenuTicket = null;
+        if (ticket is null) return;
+
+        var oldStatus = ticket.Status;
+        var oldPipelineId = ticket.PipelineId;
+        var oldColumnId = ticket.ColumnId;
+        await TicketService.UpdateTicketAsync(Slug, ticket.Id, author: "owner",
+            status: column.Name, pipelineId: pipeline.Id, columnId: column.Id);
+        PushUndo($"{L["UndoMove"]} #{ticket.Id}", async () =>
+            await TicketService.UpdateTicketAsync(Slug, ticket.Id, author: "owner",
+                status: oldStatus, pipelineId: oldPipelineId, columnId: oldColumnId), ticket.Id);
+        await RefreshTicketsAsync();
+        BoardUpdateNotifier.NotifyProjectUpdated(Slug);
+    }
 
     private async Task MarkColumnViewedAsync()
     {

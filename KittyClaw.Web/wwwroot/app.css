@@ -4771,6 +4771,22 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     background: var(--border);
     margin: 4px 0;
 }
+.ticket-context-menu {
+    max-height: min(70vh, 620px);
+    min-width: 250px;
+    overflow-y: auto;
+}
+.ticket-context-menu-pipeline {
+    padding: 7px 12px 3px 34px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .03em;
+}
+.ticket-context-menu-loading {
+    padding: 8px 12px;
+    color: var(--text-muted);
+}
 
 /* Chat image paste (#115) */
 .chat-paste-previews {

@@ -33,6 +33,8 @@
   "Unparent": "Scollega",
   "DeleteColumnConfirm": "Elimina colonna",
   "MoveTicketsTo": "I biglietti verranno spostati in:",
+  "TicketMenuOpen": "Apri ticket",
+  "TicketMenuMoveTo": "Sposta in pipeline / colonna",
   "ColumnDeleteDestinationHelp": "Colonna che riceverà tutti i ticket prima dell’eliminazione. KittyClaw rimuove anche le route che puntavano alla colonna eliminata.",
   "DeleteTicketConfirm": "Elimina biglietto",
   "NewTicket": "Nuovo biglietto",
