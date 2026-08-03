@@ -149,8 +149,9 @@ public sealed class DashboardRefreshService : BackgroundService
 
             var key = $"{projectSlug}:{tileSlug}";
             var now = DateTime.UtcNow;
-            _lastRefreshed.TryGetValue(key, out var last);
-            var hasLast = last != default;
+            var persistedLast = await GetEffectiveLastRefreshedAtAsync(projectSlug, tileSlug);
+            var last = persistedLast ?? default;
+            var hasLast = persistedLast.HasValue;
             if (hasDailyAt)
             {
                 if (!DashboardRefreshScheduling.ShouldFireDailyAt(
@@ -212,6 +213,23 @@ public sealed class DashboardRefreshService : BackgroundService
         {
             _logger.LogWarning(ex, "Failed to refresh dashboard tile {Project}/{Tile}", projectSlug, tileSlug);
         }
+    }
+
+    /// <summary>
+    /// Resolves the refresh cursor lazily as well as during startup. A project can be paused
+    /// while KittyClaw starts and resumed later; in that case startup catch-up deliberately
+    /// skips it, but its persisted cursor must still prevent every tile from looking new.
+    /// </summary>
+    internal async Task<DateTime?> GetEffectiveLastRefreshedAtAsync(string projectSlug, string tileSlug)
+    {
+        var key = $"{projectSlug}:{tileSlug}";
+        if (_lastRefreshed.TryGetValue(key, out var cached))
+            return cached;
+
+        var persisted = await _dashboard.GetLastRefreshedAtAsync(projectSlug, tileSlug);
+        if (persisted.HasValue)
+            _lastRefreshed.TryAdd(key, persisted.Value);
+        return persisted;
     }
 
     private async Task<string?> RunPromptAsync(

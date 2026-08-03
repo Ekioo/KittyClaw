@@ -100,6 +100,32 @@ public sealed class DashboardRefreshServicePauseTests
     }
 
     [Fact]
+    public async Task ResumedAfterStartup_LoadsPersistedRefreshCursorInsteadOfReplayingTile()
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("paused-startup-resume");
+        var workspace = projects.ResolveWorkspacePath(project);
+        Directory.CreateDirectory(workspace);
+        SeedTile(workspace);
+
+        var persistedAt = DateTime.UtcNow.AddMinutes(-5);
+        var dashboard = new DashboardService(projects);
+        await dashboard.SetLastRefreshedAtAsync(project.Slug, TileSlug, persistedAt);
+        await projects.TogglePauseAsync(project.Slug);
+
+        // A fresh service represents the post-restart in-memory state. Startup skipped
+        // the paused project, then the maintenance workflow resumed it.
+        var service = BuildService(projects, out _);
+        await projects.TogglePauseAsync(project.Slug);
+
+        var resolved = await service.GetEffectiveLastRefreshedAtAsync(project.Slug, TileSlug);
+
+        Assert.NotNull(resolved);
+        Assert.Equal(persistedAt, resolved.Value, TimeSpan.FromMilliseconds(1));
+    }
+
+    [Fact]
     public void StartupCatchUp_GuardsAgainstPausedProjects()
     {
         // Structural contract: the startup catch-up flow in DashboardRefreshService MUST consult
