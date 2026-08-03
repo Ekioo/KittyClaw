@@ -14,6 +14,7 @@
     --text-dim: #46466a;
     --border: #2e2e48;
     --border-strong: #464672;
+    --focus-ring: #60a5fa;
 
     --s-blocked:    #f06b6b;
 }
@@ -929,6 +930,15 @@ button {
 }
 button:hover { background: var(--accent-hover); color: #052e16; }
 button:disabled { opacity: 0.4; cursor: default; }
+
+/* Keyboard focus is a navigation cue, not another hover/selected state. */
+button:focus-visible,
+a[href]:focus-visible,
+select:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+}
 
 /* Ticket detail modal */
 .ticket-modal-overlay {
@@ -5126,7 +5136,15 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     line-height: 1;
     box-shadow: 0 0 0 1px color-mix(in srgb, #f59e0b 72%, white);
 }
-.pipeline-tab:hover { color: var(--text); }
+.pipeline-tab:hover {
+    background: var(--surface3);
+    color: var(--text);
+}
+
+.pipeline-tab:focus-visible {
+    outline-color: var(--focus-ring);
+    color: var(--text);
+}
 
 .pipeline-tab--active {
     background: var(--surface3);
@@ -5171,7 +5189,7 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .migration-secondary { color: #c8cae3; background: transparent; border: 1px solid #484b70; border-radius: 7px; padding: .55rem 1rem; }
 .migration-secondary:hover:not(:disabled),
 .migration-secondary:focus-visible { color: #fff; background: #303252; border-color: #7379a7; }
-.migration-secondary:focus-visible { outline: 2px solid #4a9eff; outline-offset: 2px; }
+.migration-secondary:focus-visible { outline-color: var(--focus-ring); }
 .migration-secondary:disabled { color: #737792; background: #1b1c2c; border-color: #343650; cursor: default; }
 .migration-launch { background: #22c968 !important; color: #07140c !important; font-weight: 700; }
 .migration-wizard-body { min-height: 0; overflow: auto; padding: 1.5rem; }
@@ -5387,7 +5405,7 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     line-height: 1;
     cursor: help;
 }
-.field-help:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.field-help:focus-visible { outline-color: var(--focus-ring); }
 .route-field { flex: 1 1 220px; min-width: 0; }
 .route-field input, .route-field select { width: 100%; }
 .processor-actions-section { margin: 1rem 0 1.25rem; }
@@ -5487,8 +5505,7 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .column-editor-tab--active { border-bottom-color: var(--accent); color: var(--text); background: var(--surface3); }
 .column-editor-tab:focus-visible,
 .processor-dialog button:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
+    outline-color: var(--focus-ring);
 }
 .column-editor-tab:focus-visible { outline-offset: -2px; }
 .column-editor-tab-count {

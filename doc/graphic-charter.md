@@ -108,6 +108,30 @@ Tile-header icons start at `opacity: 0` and become `opacity: 1` on
 `.dashboard-tile:hover` — keep the chrome out of the way until the user
 interacts with the tile.
 
+## Interaction states and focus
+
+Hover, selection, and keyboard focus communicate different things and must never
+be collapsed into the same visual state:
+
+- **Hover** may raise a neutral/ghost control to `var(--surface3)` and promote its
+  text to `var(--text)`. A component-specific hover must always set both its
+  background and foreground so it cannot inherit the global green primary-button
+  hover accidentally.
+- **Selected / active** is persistent and belongs to the component (filled tab,
+  active menu row, checked option). It must remain identifiable when focus moves.
+- **Keyboard focus** uses the shared `2px solid var(--focus-ring)` outline with a
+  `2px` offset. Focus must not replace the component's background or text color;
+  it is an additional ring around the existing hover/selected/idle state.
+- `--focus-ring` is deliberately blue (`#60a5fa`) so it remains visible on dark,
+  green, warning-orange, and destructive-red surfaces. Do not introduce one-off
+  focus colors.
+- Never remove a focus indicator without replacing it on the same control or its
+  enclosing composite widget. Mouse-only hover is not an acceptable substitute.
+
+The global rule covers buttons, links, selects, and explicit tab stops. Text inputs
+retain their established accent border plus soft shadow. Components may move the
+ring inward when clipping requires it, but should continue using `--focus-ring`.
+
 ## Animations
 
 - All transitions use `0.12–0.15s` linear or default ease — never overshoot 0.2s
