@@ -113,6 +113,56 @@ public sealed class ScheduledTicketTests
     }
 
     [Fact]
+    public async Task UpdateTicketAsync_TransferFromScheduledToPlanifie_PreservesWake()
+    {
+        using var tmp = new TempDir();
+        var (projects, svc, slug) = BuildSut(tmp);
+        var pipelines = new PipelineService(projects);
+        var columns = new ColumnService(projects);
+        var targetPipeline = await pipelines.CreateAsync(slug, "Distribution");
+        var planned = await columns.CreateColumnAsync(
+            slug, "Planifié", pipelineId: targetPipeline.Id, role: KittyClaw.Core.Models.ColumnRole.Waiting);
+        await columns.CreateColumnAsync(slug, "À traiter", pipelineId: targetPipeline.Id);
+        var ticket = await svc.CreateTicketAsync(slug, "Post X", status: "Todo");
+        var fireAt = DateTime.UtcNow.AddDays(2);
+        await svc.ScheduleTicketAsync(slug, ticket.Id, fireAt, "Todo", "owner");
+
+        var moved = await svc.UpdateTicketAsync(
+            slug, ticket.Id, author: "lain", status: planned.Name,
+            pipelineId: targetPipeline.Id, columnId: planned.Id);
+
+        Assert.NotNull(moved);
+        Assert.Equal("Planifié", moved!.Status);
+        Assert.Equal(fireAt, moved.FireAt);
+        Assert.Equal("Todo", moved.ScheduleTarget);
+    }
+
+    [Fact]
+    public async Task ScheduleAndPromote_UsesLocalizedPipelineColumns()
+    {
+        using var tmp = new TempDir();
+        var (projects, svc, slug) = BuildSut(tmp);
+        var pipelines = new PipelineService(projects);
+        var columns = new ColumnService(projects);
+        var pipeline = await pipelines.CreateAsync(slug, "Distribution");
+        var planned = await columns.CreateColumnAsync(
+            slug, "Planifié", pipelineId: pipeline.Id, role: KittyClaw.Core.Models.ColumnRole.Waiting);
+        var ready = await columns.CreateColumnAsync(slug, "À traiter", pipelineId: pipeline.Id);
+        var ticket = await svc.CreateTicketAsync(
+            slug, "Checkpoint", status: ready.Name, pipelineId: pipeline.Id, columnId: ready.Id);
+
+        var scheduled = await svc.ScheduleTicketAsync(
+            slug, ticket.Id, DateTime.UtcNow.AddMinutes(-1), ready.Name, "owner");
+        var dueIds = await svc.ListDueScheduledTicketIdsAsync(slug, DateTime.UtcNow);
+        var promoted = await svc.PromoteScheduledAsync(slug, ticket.Id);
+
+        Assert.Equal(planned.Id, scheduled!.ColumnId);
+        Assert.Contains(ticket.Id, dueIds);
+        Assert.Equal(ready.Id, promoted!.ColumnId);
+        Assert.Null(promoted.FireAt);
+    }
+
+    [Fact]
     public async Task PromoteScheduledAsync_IsNoOp_WhenTicketNotScheduled()
     {
         using var tmp = new TempDir();

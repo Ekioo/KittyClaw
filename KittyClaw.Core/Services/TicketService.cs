@@ -61,6 +61,19 @@ public class TicketService
     private static async Task<string> RequireColumnNameAsync(TodoDbContext db, string? status, int? pipelineId = null) =>
         (await RequireColumnAsync(db, status, pipelineId)).Name;
 
+    private static bool IsScheduledColumnName(string? name) =>
+        string.Equals(name, "Scheduled", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, "Planifié", StringComparison.OrdinalIgnoreCase);
+
+    private static async Task<BoardColumn> RequireScheduledColumnAsync(TodoDbContext db, int pipelineId)
+    {
+        await ColumnService.EnsureBoardColumnsTableAsync(db);
+        var columns = await db.BoardColumns.Where(c => c.PipelineId == pipelineId).ToListAsync();
+        return columns.FirstOrDefault(c => string.Equals(c.Name, "Scheduled", StringComparison.OrdinalIgnoreCase))
+            ?? columns.FirstOrDefault(c => string.Equals(c.Name, "Planifié", StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"Aucune colonne de planification n'existe dans le pipeline #{pipelineId}.");
+    }
+
     // Ensures the ActivityEntries table exists (for databases created before this feature)
     internal static Task EnsureActivityTableAsync(TodoDbContext db) =>
         MigrationGate.RunOnceAsync(db, "activity-table", static async d =>
@@ -362,7 +375,7 @@ public class TicketService
         await EnsureScheduleColumnsAsync(db);
         var ticket = await db.Tickets.FindAsync(ticketId);
         if (ticket is null) return null;
-        var scheduledColumn = await RequireColumnAsync(db, "Scheduled", ticket.PipelineId);
+        var scheduledColumn = await RequireScheduledColumnAsync(db, ticket.PipelineId);
         var targetColumn = await RequireColumnAsync(db, targetStatus, ticket.PipelineId);
         targetStatus = targetColumn.Name;
         var oldStatus = ticket.Status;
@@ -378,8 +391,8 @@ public class TicketService
             Text = $"a planifié le ticket pour {fireAt:yyyy-MM-dd HH:mm} UTC → {targetStatus}"
         });
         await db.SaveChangesAsync();
-        if (!string.Equals(oldStatus, "Scheduled", StringComparison.OrdinalIgnoreCase))
-            TicketStatusChanged?.Invoke(projectSlug, ticketId, oldStatus, "Scheduled");
+        if (!string.Equals(oldStatus, scheduledColumn.Name, StringComparison.OrdinalIgnoreCase))
+            TicketStatusChanged?.Invoke(projectSlug, ticketId, oldStatus, scheduledColumn.Name);
         return ticket;
     }
 
@@ -391,7 +404,7 @@ public class TicketService
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureScheduleColumnsAsync(db);
         return await db.Tickets
-            .Where(t => t.Status == "Scheduled" && t.FireAt != null && t.FireAt <= now)
+            .Where(t => t.FireAt != null && t.FireAt <= now)
             .OrderBy(t => t.FireAt)
             .Select(t => t.Id)
             .ToListAsync();
@@ -409,15 +422,17 @@ public class TicketService
         await EnsureScheduleColumnsAsync(db);
         await ColumnService.EnsureBoardColumnsTableAsync(db);
         var ticket = await db.Tickets.FindAsync(ticketId);
-        if (ticket is null || !string.Equals(ticket.Status, "Scheduled", StringComparison.OrdinalIgnoreCase))
+        if (ticket is null || ticket.FireAt is null)
             return null;
+        var scheduledStatus = ticket.Status;
         var target = string.IsNullOrWhiteSpace(ticket.ScheduleTarget) ? "Todo" : ticket.ScheduleTarget!;
         BoardColumn targetColumn;
         try { targetColumn = await RequireColumnAsync(db, target, ticket.PipelineId); }
         catch (InvalidOperationException)
         {
             // Fall back to Todo when the stored target was deleted; still require Todo to exist.
-            targetColumn = await RequireColumnAsync(db, "Todo", ticket.PipelineId);
+            try { targetColumn = await RequireColumnAsync(db, "À traiter", ticket.PipelineId); }
+            catch (InvalidOperationException) { targetColumn = await RequireColumnAsync(db, "Todo", ticket.PipelineId); }
         }
         target = targetColumn.Name;
         ticket.Status = target;
@@ -429,10 +444,10 @@ public class TicketService
         {
             TicketId = ticketId,
             Author = author,
-            Text = $"planification déclenchée : Scheduled → {target}"
+            Text = $"planification déclenchée : {scheduledStatus} → {target}"
         });
         await db.SaveChangesAsync();
-        TicketStatusChanged?.Invoke(projectSlug, ticketId, "Scheduled", target);
+        TicketStatusChanged?.Invoke(projectSlug, ticketId, scheduledStatus, target);
         return ticket;
     }
 
@@ -486,7 +501,7 @@ public class TicketService
             ticket.Status = status!;
             ticket.ColumnId = destination!.Id;
             ticket.PipelineId = destination.PipelineId;
-            if (string.Equals(oldStatus, "Scheduled", StringComparison.OrdinalIgnoreCase))
+            if (ticket.FireAt is not null && !IsScheduledColumnName(destination.Name))
             {
                 // Leaving Scheduled cancels the pending promotion — otherwise the stale
                 // FireAt keeps showing a countdown badge and would fire instantly if re-scheduled.
