@@ -46,12 +46,16 @@ public static partial class Endpoints
         }).WithTags("Chat");
 
         api.MapGet("/projects/{slug}/chat/model", async (
-            string slug, string target, ProjectService ps, SessionRegistry sessions) =>
+            string slug, string target, ProjectService ps, ChatService cs,
+            SessionRegistry sessions, AgentRunRegistry runs) =>
         {
             var project = await ps.GetProjectAsync(slug);
             if (project is null) return Results.NotFound();
             var workspacePath = ps.ResolveWorkspacePath(project);
-            return Results.Ok(new { model = sessions.GetLastChatModel(workspacePath, target) });
+            var model = sessions.GetLastChatModel(workspacePath, target);
+            if (model is null && (await cs.ListAsync(slug, target)).Count > 0)
+                model = runs.LastCompletedForChatTarget(slug, target)?.Model;
+            return Results.Ok(new { model });
         }).WithTags("Chat");
 
         api.MapDelete("/projects/{slug}/chat/session", async (string slug, string target, ProjectService ps, ChatService cs, SessionRegistry sessions) =>
@@ -74,10 +78,16 @@ public static partial class Endpoints
 
             var target = string.IsNullOrWhiteSpace(req.Target) ? "owner-chat" : req.Target;
             var workspacePath = ps.ResolveWorkspacePath(project);
+            var chatHistory = req.ForceNew
+                ? new List<KittyClaw.Core.Models.ChatMessageRow>()
+                : await cs.ListAsync(slug, target);
             var storedConversationModel = req.ForceNew
                 ? null
                 : sessions.GetLastChatModel(workspacePath, target);
-            var requestedModel = storedConversationModel ?? req.Model;
+            var legacyConversationModel = chatHistory.Count > 0
+                ? runReg.LastCompletedForChatTarget(slug, target)?.Model
+                : null;
+            var requestedModel = storedConversationModel ?? legacyConversationModel ?? req.Model;
 
             // Resolve which CLI runs this chat turn (claude, claude+Ollama env, or grok).
             string? effectiveModel = null;
@@ -119,10 +129,6 @@ public static partial class Endpoints
             // session keys — reject anything that isn't a plain slug before touching disk.
             if (!baseAgent.All(c => char.IsAsciiLetterLower(c) || char.IsAsciiDigit(c) || c is '-' or '_'))
                 return Results.BadRequest(new { error = "invalid_target", reason = $"Invalid agent slug '{baseAgent}'." });
-
-            var chatHistory = req.ForceNew
-                ? new List<KittyClaw.Core.Models.ChatMessageRow>()
-                : await cs.ListAsync(slug, target);
 
             // Drain undelivered steer messages from the most recent completed run for this chat target.
             // Drain (not read) so they are not replayed on subsequent turns.

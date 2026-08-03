@@ -26,6 +26,11 @@ public class ChatDrawerModelPersistenceTests
         Assert.Contains("if (_sessionModel is null)", source);
         Assert.Contains("await RestoreRememberedModelAsync()", source);
         Assert.Contains("_sessionModel = null", source);
+
+        var endpoint = File.ReadAllText(Path.Combine(
+            FindRepoRoot(), "KittyClaw.Web", "Api", "Endpoints.Chat.cs"));
+        Assert.Contains("LastCompletedForChatTarget(slug, target)?.Model", endpoint);
+        Assert.Contains("chatHistory.Count > 0", endpoint);
     }
 
     [Fact]
