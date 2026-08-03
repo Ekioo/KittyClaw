@@ -7,8 +7,8 @@ public static partial class Endpoints
     private static void MapWorkflowMigrations(RouteGroupBuilder api)
     {
         api.MapPost("/projects/{slug}/workflow-migrations/analyze", (
-            string slug, WorkflowMigrationPlanner planner) =>
-            Results.Accepted(value: new { jobId = planner.StartAnalysis(slug) }))
+            string slug, AnalyzeWorkflowMigrationRequest? request, WorkflowMigrationPlanner planner) =>
+            Results.Accepted(value: new { jobId = planner.StartAnalysis(slug, request?.Mode ?? "migration", request?.Brief) }))
             .WithTags("Workflow migrations");
 
         api.MapPost("/projects/{slug}/workflow-migrations/refine", (
@@ -31,6 +31,8 @@ public static partial class Endpoints
         }).WithTags("Workflow migrations");
     }
 }
+
+public sealed record AnalyzeWorkflowMigrationRequest(string Mode = "migration", string? Brief = null);
 
 public sealed record RefineWorkflowMigrationRequest(
     WorkflowMigrationPlan Plan,

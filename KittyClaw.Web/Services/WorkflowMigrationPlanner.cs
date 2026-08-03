@@ -33,7 +33,8 @@ public sealed record WorkflowMigrationJob(
     string Status,
     WorkflowMigrationPlan? Plan,
     string? Error,
-    string? RunId);
+    string? RunId,
+    string? ErrorCode = null);
 
 /// <summary>
 /// Runs read-only, stateless planning turns and retains their structured result long enough for
@@ -60,11 +61,11 @@ public sealed class WorkflowMigrationPlanner(
     public WorkflowMigrationJob? Get(string projectSlug, string jobId) =>
         _jobs.TryGetValue(jobId, out var job) && job.ProjectSlug == projectSlug ? job : null;
 
-    public string StartAnalysis(string projectSlug)
+    public string StartAnalysis(string projectSlug, string mode = "migration", string? brief = null)
     {
         var id = Guid.NewGuid().ToString("N");
         _jobs[id] = new WorkflowMigrationJob(id, projectSlug, "queued", null, null, null);
-        _ = RunAsync(id, projectSlug, null, null, null);
+        _ = RunAsync(id, projectSlug, null, null, null, mode, brief);
         return id;
     }
 
@@ -73,12 +74,12 @@ public sealed class WorkflowMigrationPlanner(
     {
         var id = Guid.NewGuid().ToString("N");
         _jobs[id] = new WorkflowMigrationJob(id, projectSlug, "queued", null, null, null);
-        _ = RunAsync(id, projectSlug, plan, instruction, (phase, pipelineIndex));
+        _ = RunAsync(id, projectSlug, plan, instruction, (phase, pipelineIndex), "migration", null);
         return id;
     }
 
     private async Task RunAsync(string jobId, string slug, WorkflowMigrationPlan? currentPlan,
-        string? instruction, (string Phase, int? PipelineIndex)? refinement)
+        string? instruction, (string Phase, int? PipelineIndex)? refinement, string mode, string? brief)
     {
         try
         {
@@ -86,7 +87,9 @@ public sealed class WorkflowMigrationPlanner(
                 ?? throw new InvalidOperationException($"Project '{slug}' was not found.");
             var workspace = projects.ResolveWorkspacePath(project);
             var prompt = currentPlan is null
-                ? await BuildAnalysisPromptAsync(slug, localization.Lang)
+                ? mode == "onboarding"
+                    ? BuildWorkspaceAnalysisPrompt(workspace, brief, localization.Lang)
+                    : await BuildAnalysisPromptAsync(slug, localization.Lang)
                 : BuildRefinementPrompt(currentPlan, instruction!, refinement!.Value, localization.Lang);
 
             var assistantText = new List<string>();
@@ -116,7 +119,14 @@ public sealed class WorkflowMigrationPlanner(
             }, CancellationToken.None);
 
             if (run.Status != AgentRunStatus.Completed)
-                throw new InvalidOperationException("The planning agent did not complete successfully.");
+            {
+                var diagnostic = run.SnapshotBuffer()
+                    .LastOrDefault(ev => ev.Kind is "stderr" or "error")?.Text;
+                var code = diagnostic?.Contains("input_too_large", StringComparison.OrdinalIgnoreCase) == true
+                    ? "input-too-large"
+                    : run.Status == AgentRunStatus.Stopped ? "interrupted" : "agent-failed";
+                throw new WorkflowMigrationPlanningException(code, diagnostic ?? "The planning agent did not complete successfully.");
+            }
 
             var plan = ParsePlan(string.Join("\n", assistantText));
             Validate(plan);
@@ -124,7 +134,14 @@ public sealed class WorkflowMigrationPlanner(
         }
         catch (Exception ex)
         {
-            _jobs[jobId] = _jobs[jobId] with { Status = "failed", Error = ex.Message };
+            var code = ex switch
+            {
+                WorkflowMigrationPlanningException planning => planning.Code,
+                JsonException => "invalid-plan",
+                _ when ex.Message.Contains("structured plan", StringComparison.OrdinalIgnoreCase) => "invalid-plan",
+                _ => "analysis-failed",
+            };
+            _jobs[jobId] = _jobs[jobId] with { Status = "failed", Error = ex.Message, ErrorCode = code };
         }
     }
 
@@ -137,26 +154,90 @@ public sealed class WorkflowMigrationPlanner(
         var ticketRows = await tickets.ListTicketsAsync(slug);
         var (automationConfig, _, _) = await automations.LoadAsync(slug);
 
+        return BuildAnalysisPrompt(pipelineRows, columnRows, ticketRows, automationConfig, language);
+    }
+
+    internal static string BuildAnalysisPrompt(IReadOnlyCollection<Pipeline> pipelineRows,
+        IReadOnlyCollection<BoardColumn> columnRows, IReadOnlyCollection<TicketSummary> ticketRows,
+        AutomationConfig automationConfig, string language)
+    {
         var snapshot = new
         {
             pipelines = pipelineRows,
             columns = columnRows,
-            tickets = ticketRows.Select(ticket => new
+            ticketGroups = ticketRows
+                .GroupBy(ticket => new { ticket.PipelineId, ticket.Status })
+                .Select(group => new
+                {
+                    group.Key.PipelineId,
+                    group.Key.Status,
+                    count = group.Count(),
+                    rootTickets = group.Count(ticket => ticket.ParentId is null),
+                    commonLabels = group.SelectMany(ticket => ticket.Labels.Select(label => label.Name))
+                        .GroupBy(name => name, StringComparer.OrdinalIgnoreCase)
+                        .OrderByDescending(labels => labels.Count())
+                        .ThenBy(labels => labels.Key)
+                        .Take(12)
+                        .Select(labels => new { name = labels.Key, count = labels.Count() }),
+                    recentExamples = group.OrderByDescending(ticket => ticket.UpdatedAt).Take(20).Select(ticket => new
+                    {
+                        ticket.Id,
+                        ticket.Title,
+                        description = Truncate(ticket.Description, 180),
+                        ticket.ParentId,
+                        labels = ticket.Labels.Select(label => label.Name).Take(8),
+                    }),
+                })
+                .OrderBy(group => group.PipelineId)
+                .ThenBy(group => group.Status),
+            legacyAutomations = automationConfig.Automations.Select(automation => new
             {
-                ticket.Id,
-                ticket.Title,
-                description = Truncate(ticket.Description, 500),
-                ticket.Status,
-                ticket.PipelineId,
-                ticket.ParentId,
-                ticket.BlocksParent,
-                labels = ticket.Labels.Select(label => label.Name),
+                automation.Id,
+                automation.Name,
+                automation.Enabled,
+                trigger = SummarizeTrigger(automation.Trigger),
+                conditions = automation.Conditions.Select(SummarizeCondition),
+                actions = automation.Actions.Select(SummarizeAction),
             }),
-            legacyAutomations = automationConfig.Automations,
         };
         return $"Analyse this current project snapshot and propose the migration plan. Write every user-facing value in language '{language}'.\n\n" +
                JsonSerializer.Serialize(snapshot, Json);
     }
+
+    private static object SummarizeTrigger(TriggerSpec trigger) => trigger switch
+    {
+        IntervalTriggerSpec value => new { type = "interval", value.Cron, value.Seconds },
+        TicketInColumnTriggerSpec value => new { type = "ticketInColumn", value.Columns, value.AssigneeSlug },
+        StatusChangeTriggerSpec value => new { type = "statusChange", value.From, value.To },
+        SubTicketStatusTriggerSpec value => new { type = "subTicketStatus", value.ParentColumn },
+        BoardIdleTriggerSpec value => new { type = "boardIdle", value.IdleColumns },
+        AgentInactivityTriggerSpec value => new { type = "agentInactivity", value.MinutesIdle },
+        TicketCommentAddedTriggerSpec value => new { type = "ticketCommentAdded", value.Authors },
+        GitCommitTriggerSpec => new { type = "gitCommit" },
+        _ => new { type = trigger.UiTypeKey },
+    };
+
+    private static object SummarizeCondition(ConditionSpec condition) => new
+    {
+        type = condition.UiTypeKey,
+        condition.Negate,
+        details = Truncate(JsonSerializer.Serialize(condition, condition.GetType(), Json), 500),
+    };
+
+    private static object SummarizeAction(ActionSpec action) => action switch
+    {
+        RunAgentActionSpec value => new { type = "runAgent", value.Agent, value.Model, value.MaxTurns, context = Truncate(value.Context ?? "", 400) },
+        MoveTicketStatusActionSpec value => new { type = "moveTicketStatus", value.To },
+        SetLabelsActionSpec value => new { type = "setLabels", value.Add, value.Remove },
+        AssignTicketActionSpec value => new { type = "assignTicket", value.Slug },
+        AddCommentActionSpec value => new { type = "addComment", value.Author, content = Truncate(value.Content, 220) },
+        CommitAgentMemoryActionSpec value => new { type = "commitAgentMemory", value.Agent },
+        ConsolidateAgentMemoryActionSpec value => new { type = "consolidateAgentMemory", value.Agent, value.Model },
+        ExecutePowerShellActionSpec value => new { type = "executePowerShell", value.ScriptFile, script = Truncate(value.Script, 300), value.Arguments },
+        CreateTicketActionSpec value => new { type = "createTicket", value.Title, description = Truncate(value.Description, 220), value.Status, value.AssignedTo, value.Labels },
+        HttpRequestActionSpec value => new { type = "httpRequest", value.Method, value.Url, body = Truncate(value.Body, 220) },
+        _ => new { type = action.UiTypeKey },
+    };
 
     private static string BuildRefinementPrompt(WorkflowMigrationPlan plan, string instruction,
         (string Phase, int? PipelineIndex) refinement, string language) =>
@@ -170,6 +251,52 @@ public sealed class WorkflowMigrationPlanner(
         Current plan:
         {JsonSerializer.Serialize(plan, Json)}
         """;
+
+    internal static string BuildWorkspaceAnalysisPrompt(string workspace, string? brief, string language)
+    {
+        var ignored = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".git", ".agents", "node_modules", "bin", "obj", ".next", "dist", "build", ".venv", "vendor",
+        };
+        var files = new List<string>();
+        var manifests = new List<object>();
+        try
+        {
+            foreach (var path in Directory.EnumerateFiles(workspace, "*", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(workspace, path);
+                if (relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(ignored.Contains))
+                    continue;
+                files.Add(relative.Replace('\\', '/'));
+                var name = Path.GetFileName(path);
+                if (name.Equals("README.md", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("package.json", StringComparison.OrdinalIgnoreCase)
+                    || name.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("pyproject.toml", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("Cargo.toml", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("docker-compose.yml", StringComparison.OrdinalIgnoreCase))
+                {
+                    try { manifests.Add(new { path = relative, content = Truncate(File.ReadAllText(path), 6_000) }); }
+                    catch { }
+                }
+                if (files.Count >= 1_500) break;
+            }
+        }
+        catch { }
+
+        var snapshot = new
+        {
+            ownerBrief = brief,
+            fileCount = files.Count,
+            extensions = files.GroupBy(Path.GetExtension, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(group => group.Count()).Take(20)
+                .Select(group => new { extension = string.IsNullOrEmpty(group.Key) ? "(none)" : group.Key, count = group.Count() }),
+            representativeFiles = files.Take(300),
+            manifests,
+        };
+        return $"Analyse this new project's workspace and owner brief, then propose the pipelines it needs. Write every user-facing value in language '{language}'.\n\n"
+               + JsonSerializer.Serialize(snapshot, Json);
+    }
 
     internal static WorkflowMigrationPlan ParsePlan(string text)
     {
@@ -196,10 +323,16 @@ public sealed class WorkflowMigrationPlanner(
     private static string Truncate(string value, int length) =>
         value.Length <= length ? value : value[..length] + "…";
 
+    private sealed class WorkflowMigrationPlanningException(string code, string message) : InvalidOperationException(message)
+    {
+        public string Code { get; } = code;
+    }
+
     private const string PlannerInstructions = """
-        You are KittyClaw's read-only workflow migration planner. Never modify files, databases,
+        You are KittyClaw's read-only workflow planning agent. Never modify files, databases,
         tickets, automations, or project state during this planning turn. Infer genuinely distinct
-        ticket lifecycles even when the legacy board mixed them into one set of columns.
+        ticket lifecycles from either an existing workspace or a legacy board that mixed them into
+        one set of columns.
 
         Return only one JSON object, without Markdown fences or commentary, matching this schema:
         {

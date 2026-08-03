@@ -8,7 +8,7 @@
 <section class="migration-wizard" role="dialog" aria-modal="true" aria-labelledby="migration-wizard-title" @onclick:stopPropagation>
     <header class="migration-wizard-header">
         <div>
-            <span class="migration-wizard-kicker">@L["MigrationWizardKicker"]</span>
+            <span class="migration-wizard-kicker">@L[IsProjectOnboarding ? "ProjectOnboardingKicker" : "MigrationWizardKicker"]</span>
             <h2 id="migration-wizard-title">@Title</h2>
         </div>
         <button class="agent-close-btn" @onclick="Close" title="@L["Close"]">×</button>
@@ -28,11 +28,21 @@
     }
 
     <div class="migration-wizard-body">
-        @if (_step == WizardStep.Intro)
+        @if (_step == WizardStep.Questions)
+        {
+            <div class="project-onboarding-questions">
+                <p class="migration-lead">@L["ProjectOnboardingQuestionsIntro"]</p>
+                <label>@L["ProjectOnboardingPurpose"]<textarea @bind="_projectPurpose" placeholder="@L["ProjectOnboardingPurposeHint"]"></textarea></label>
+                <label>@L["ProjectOnboardingDeliverables"]<textarea @bind="_projectDeliverables" placeholder="@L["ProjectOnboardingDeliverablesHint"]"></textarea></label>
+                <label>@L["ProjectOnboardingHumanSteps"]<textarea @bind="_projectHumanSteps" placeholder="@L["ProjectOnboardingHumanStepsHint"]"></textarea></label>
+                <label>@L["ProjectOnboardingSchedules"]<textarea @bind="_projectSchedules" placeholder="@L["ProjectOnboardingSchedulesHint"]"></textarea></label>
+            </div>
+        }
+        else if (_step == WizardStep.Intro)
         {
             <div class="migration-intro">
                 <div class="migration-intro-icon">⇄</div>
-                <p class="migration-lead">@L["MigrationWizardIntro"]</p>
+                <p class="migration-lead">@L[IsProjectOnboarding ? "ProjectOnboardingIntro" : "MigrationWizardIntro"]</p>
                 <div class="migration-benefits">
                     <article><span>✓</span><div><strong>@L["MigrationBenefitReliableTitle"]</strong><p>@L["MigrationBenefitReliableText"]</p></div></article>
                     <article><span>✓</span><div><strong>@L["MigrationBenefitVisibleTitle"]</strong><p>@L["MigrationBenefitVisibleText"]</p></div></article>
@@ -51,7 +61,14 @@
         }
         else if (!string.IsNullOrWhiteSpace(_error))
         {
-            <div class="settings-status settings-status-err">@_error</div>
+            <div class="migration-error" role="alert">
+                <span class="migration-error-icon">!</span>
+                <div>
+                    <strong>@L["MigrationWizardErrorTitle"]</strong>
+                    <p>@_error</p>
+                    <button class="settings-primary" @onclick="RetryAsync">↻ @L["MigrationWizardRetryAnalysis"]</button>
+                </div>
+            </div>
         }
         else if (_plan is not null && _step == WizardStep.Pipelines)
         {
@@ -150,16 +167,21 @@
     </div>
 
     <footer class="migration-wizard-footer">
-        <button class="migration-secondary" @onclick="Back" disabled="@(_step == WizardStep.Intro || _busy)">@L["Back"]</button>
+        <button class="migration-secondary" @onclick="Back" disabled="@(_step is WizardStep.Intro or WizardStep.Questions || _busy)">@L["Back"]</button>
         <span></span>
-        @if (_step == WizardStep.Intro)
+        @if (_step == WizardStep.Questions)
         {
             <button class="migration-secondary" @onclick="Close">@L["MigrationWizardLater"]</button>
-            <button class="settings-primary" @onclick="AnalyzeAsync">@L["MigrationWizardAnalyze"] →</button>
+            <button class="settings-primary" @onclick="AnalyzeAsync" disabled="@string.IsNullOrWhiteSpace(_projectPurpose)">@L["ProjectOnboardingPropose"] →</button>
+        }
+        else if (_step == WizardStep.Intro)
+        {
+            <button class="migration-secondary" @onclick="Close">@L["MigrationWizardLater"]</button>
+            <button class="settings-primary" @onclick="AnalyzeAsync">@L[IsProjectOnboarding ? "ProjectOnboardingAnalyze" : "MigrationWizardAnalyze"] →</button>
         }
         else if (_step == WizardStep.Pipelines)
         {
-            <button class="settings-primary" @onclick="Continue" disabled="@(_busy || _plan?.Pipelines.Count == 0)">@L["Continue"] →</button>
+            <button class="settings-primary" @onclick="Continue" disabled="@(_busy || _plan is null || _plan.Pipelines.Count == 0)">@L["Continue"] →</button>
         }
         else if (_step == WizardStep.Pipeline)
         {
@@ -184,18 +206,26 @@
 
 @code {
     [Parameter] public string ProjectSlug { get; set; } = "";
+    [Parameter] public bool IsProjectOnboarding { get; set; }
+    [Parameter] public bool WorkspaceWasEmpty { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
 
-    private enum WizardStep { Intro, Pipelines, Pipeline, Review }
+    private enum WizardStep { Questions, Intro, Pipelines, Pipeline, Review }
     private WizardStep _step = WizardStep.Intro;
     private WorkflowMigrationPlan? _plan;
     private int _pipelineIndex;
     private bool _busy;
     private string? _error;
+    private string? _retryAction;
+    private object? _retryBody;
     private string _refinement = "";
     private bool _addingPipeline;
     private string _newPipelineName = "";
     private bool _launchMigration;
+    private string _projectPurpose = "";
+    private string _projectDeliverables = "";
+    private string _projectHumanSteps = "";
+    private string _projectSchedules = "";
     private readonly CancellationTokenSource _dispose = new();
     private static readonly System.Text.Json.JsonSerializerOptions MigrationJson = new(System.Text.Json.JsonSerializerDefaults.Web)
     {
@@ -204,11 +234,18 @@
     private WorkflowMigrationPipeline? CurrentPipeline => _plan is not null && _pipelineIndex >= 0 && _pipelineIndex < _plan.Pipelines.Count ? _plan.Pipelines[_pipelineIndex] : null;
     private string Title => _step switch
     {
+        WizardStep.Questions => L["ProjectOnboardingQuestionsTitle"],
         WizardStep.Pipelines => L["MigrationWizardPipelinesTitle"],
         WizardStep.Pipeline => CurrentPipeline?.Name ?? L["MigrationWizardPipelineTitle"],
         WizardStep.Review => L["MigrationWizardReviewTitle"],
-        _ => L["MigrationWizardTitle"],
+        _ => L[IsProjectOnboarding ? "ProjectOnboardingTitle" : "MigrationWizardTitle"],
     };
+
+    protected override void OnInitialized()
+    {
+        if (IsProjectOnboarding && WorkspaceWasEmpty)
+            _step = WizardStep.Questions;
+    }
 
     private RenderFragment PromptEditor(string phase, int? pipelineIndex) => @<div class="migration-prompt-box">
         <span>✦</span>
@@ -219,7 +256,11 @@
     private async Task AnalyzeAsync()
     {
         _step = WizardStep.Pipelines;
-        await StartJobAsync("analyze", new { });
+        await StartJobAsync("analyze", new
+        {
+            mode = IsProjectOnboarding ? "onboarding" : "migration",
+            brief = IsProjectOnboarding ? BuildProjectBrief() : null,
+        });
     }
 
     private async Task RefineAsync(string phase, int? pipelineIndex)
@@ -234,6 +275,8 @@
     {
         _busy = true;
         _error = null;
+        _retryAction = action;
+        _retryBody = body;
         try
         {
             using var http = new HttpClient { BaseAddress = new Uri(Navigation.BaseUri) };
@@ -246,14 +289,27 @@
                 await Task.Delay(900, _dispose.Token);
                 var job = await http.GetFromJsonAsync<WorkflowMigrationJob>(
                     $"/api/projects/{ProjectSlug}/workflow-migrations/jobs/{accepted.JobId}", MigrationJson, _dispose.Token);
-                if (job?.Status == "completed") { _plan = job.Plan; break; }
-                if (job?.Status == "failed") throw new InvalidOperationException(job.Error ?? L["MigrationWizardAnalysisFailed"]);
+                if (job?.Status == "completed") { _plan = job.Plan; _retryAction = null; _retryBody = null; break; }
+                if (job?.Status == "failed") throw new InvalidOperationException(FriendlyError(job.ErrorCode));
             }
         }
         catch (OperationCanceledException) when (_dispose.IsCancellationRequested) { }
         catch (Exception ex) { _error = ex.Message; }
         finally { _busy = false; }
     }
+
+    private Task RetryAsync() => _retryAction is not null && _retryBody is not null
+        ? StartJobAsync(_retryAction, _retryBody)
+        : AnalyzeAsync();
+
+    private string FriendlyError(string? code) => code switch
+    {
+        "input-too-large" => L["MigrationWizardErrorTooLarge"],
+        "interrupted" => L["MigrationWizardErrorInterrupted"],
+        "invalid-plan" => L["MigrationWizardErrorInvalidPlan"],
+        "agent-failed" => L["MigrationWizardErrorAgentFailed"],
+        _ => L["MigrationWizardAnalysisFailed"],
+    };
 
     private void Continue()
     {
@@ -314,14 +370,21 @@
     private Task Close() => OnClose.InvokeAsync();
 
     private string BuildApplicationPrompt() => $"""
-        Apply the workflow migration that the owner has just reviewed and explicitly approved in the visual migration wizard.
+        {(IsProjectOnboarding ? "Configure the new project's workflow that the owner has just reviewed and explicitly approved in the visual onboarding wizard." : "Apply the workflow migration that the owner has just reviewed and explicitly approved in the visual migration wizard.")}
 
         Approved plan:
         {System.Text.Json.JsonSerializer.Serialize(_plan, new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } })}
 
         Implement this plan completely using KittyClaw's API and the project's file-backed processor and skill configuration. Preserve stable identifiers whenever an existing pipeline, column, processor, or skill can be reused. Map every existing ticket and child ticket to exactly one pipeline by purpose. Configure processors, action chains, routing, retry/failure destinations, scheduled tasks and project skills needed by the approved flow. Use OwnerAction for every stage requiring a human decision or missing input. Do not create In Progress columns for agent execution.
 
-        Disable a legacy automation only after its replacement is configured and verified. Keep any automation that has no validated replacement and report it clearly. Verify that all tickets remain accessible, that processors and schedules reload successfully, and summarize every applied change and remaining risk when finished.
+        {(IsProjectOnboarding ? "Replace the placeholder default workflow with the approved organization. Inspect the workspace again when useful, but do not invent operational requirements that contradict the approved plan." : "Disable a legacy automation only after its replacement is configured and verified. Keep any automation that has no validated replacement and report it clearly.")} Verify that all tickets remain accessible, that processors and schedules reload successfully, and summarize every applied change and remaining risk when finished.
+        """;
+
+    private string BuildProjectBrief() => $"""
+        Project purpose: {_projectPurpose}
+        Expected deliverables or distinct work streams: {_projectDeliverables}
+        Human decisions or validation steps: {_projectHumanSteps}
+        Recurring or scheduled work: {_projectSchedules}
         """;
 
     public void Dispose() { _dispose.Cancel(); _dispose.Dispose(); }

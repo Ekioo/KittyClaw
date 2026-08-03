@@ -5169,7 +5169,10 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .migration-wizard-footer > span { flex: 1; }
 .migration-wizard-footer button { min-height: 38px; }
 .migration-secondary { color: #c8cae3; background: transparent; border: 1px solid #484b70; border-radius: 7px; padding: .55rem 1rem; }
-.migration-secondary:hover { background: #2a2c46; }
+.migration-secondary:hover:not(:disabled),
+.migration-secondary:focus-visible { color: #fff; background: #303252; border-color: #7379a7; }
+.migration-secondary:focus-visible { outline: 2px solid #4a9eff; outline-offset: 2px; }
+.migration-secondary:disabled { color: #737792; background: #1b1c2c; border-color: #343650; cursor: default; }
 .migration-launch { background: #22c968 !important; color: #07140c !important; font-weight: 700; }
 .migration-wizard-body { min-height: 0; overflow: auto; padding: 1.5rem; }
 .migration-wizard-steps { display: flex; gap: .25rem; padding: .7rem 1.4rem; overflow-x: auto; background: #1c1d30; border-bottom: 1px solid #343650; }
@@ -5187,10 +5190,20 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .migration-benefits strong { display: block; margin-bottom: .35rem; }
 .migration-benefits p { margin: 0; color: #9da2c2; font-size: .88rem; line-height: 1.4; }
 .migration-safe-note { margin: 1.4rem auto 0; padding: .75rem 1rem; color: #9ca2c0; background: #11121e; border-radius: 8px; font-size: .85rem; }
+.project-onboarding-questions { max-width: 860px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.project-onboarding-questions .migration-lead { grid-column: 1 / -1; text-align: center; }
+.project-onboarding-questions label { display: grid; gap: .45rem; color: #d5d7e8; font-weight: 600; }
+.project-onboarding-questions textarea { min-height: 112px; padding: .75rem; resize: vertical; color: #eef0fb; background: #11121e; border: 1px solid #3b3e5d; border-radius: 8px; line-height: 1.45; font-weight: 400; }
+.project-onboarding-questions textarea:focus { outline: 2px solid #4a9eff; outline-offset: 1px; border-color: transparent; }
 .migration-analyzing { min-height: 340px; display: grid; place-content: center; justify-items: center; text-align: center; color: #b4b8d2; }
 .migration-analyzing strong { margin-top: 1rem; color: #fff; }
 .migration-analyzing p { max-width: 520px; }
 .migration-spinner { width: 42px; height: 42px; border: 3px solid #353852; border-top-color: #37dc7b; border-radius: 50%; animation: spin .8s linear infinite; }
+.migration-error { max-width: 680px; margin: 3rem auto; display: flex; gap: 1rem; padding: 1.2rem; color: #f0d6d9; background: #2b202c; border: 1px solid #71414a; border-radius: 10px; }
+.migration-error-icon { flex: 0 0 30px; width: 30px; height: 30px; display: grid; place-items: center; color: #fff; background: #d65464; border-radius: 50%; font-weight: 800; }
+.migration-error strong { color: #fff; }
+.migration-error p { margin: .4rem 0 1rem; line-height: 1.45; }
+@media (max-width: 760px) { .project-onboarding-questions { grid-template-columns: 1fr; } .project-onboarding-questions .migration-lead { grid-column: auto; } }
 .migration-step-intro { margin: 0 0 1.2rem; color: #b5bad4; }
 .migration-pipeline-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(285px, 1fr)); gap: 1rem; }
 .migration-pipeline-card { position: relative; min-height: 230px; padding: 1rem; background: #202237; border: 1px solid #3b3e5d; border-radius: 10px; }

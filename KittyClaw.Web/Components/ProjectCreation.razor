@@ -87,6 +87,14 @@
     </div>
 }
 
+@if (_createdProject is not null)
+{
+    <WorkflowMigrationWizard ProjectSlug="@_createdProject.Slug"
+                             IsProjectOnboarding="true"
+                             WorkspaceWasEmpty="@_workspaceWasEmpty"
+                             OnClose="FinishOnboarding" />
+}
+
 @code {
     [Parameter] public bool NavigateToProject { get; set; } = true;
     [Parameter] public EventCallback<Project> OnCreated { get; set; }
@@ -102,6 +110,8 @@
     private (string text, string css)? _creationStatus;
     private IDisposable? _escPending;
     private bool _browseProbed;
+    private bool _workspaceWasEmpty;
+    private Project? _createdProject;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -201,6 +211,7 @@
         try
         {
             var workspace = _newWorkspacePath.Trim();
+            _workspaceWasEmpty = !Directory.EnumerateFileSystemEntries(workspace).Any();
             if (!AgentsTemplate.IsGitAvailable())
             {
                 _creationStatus = (L["GitMissingWarning"], "settings-status-err");
@@ -236,9 +247,8 @@
 
             _newProjectName = "";
             _open = false;
+            _createdProject = project;
             await OnCreated.InvokeAsync(project);
-            if (NavigateToProject)
-                Nav.NavigateTo($"/board/{project.Slug}/workflows");
         }
         catch (Exception ex)
         {
@@ -252,6 +262,15 @@
         _open = false;
         _initConflicts = null;
         _creationStatus = null;
+    }
+
+    private Task FinishOnboarding()
+    {
+        var project = _createdProject;
+        _createdProject = null;
+        if (NavigateToProject && project is not null)
+            Nav.NavigateTo($"/board/{project.Slug}");
+        return Task.CompletedTask;
     }
 
     private async Task EnsureAgentMembersAsync(string projectSlug)

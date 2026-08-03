@@ -1,9 +1,40 @@
 using System.Text.Json;
+using KittyClaw.Core.Automation;
+using KittyClaw.Core.Models;
+using KittyClaw.Web.Services;
 
 namespace KittyClaw.Core.Tests.Web;
 
 public sealed class WorkflowMigrationPromptTests
 {
+    [Fact]
+    public void Migration_analysis_compacts_large_boards_below_the_cli_input_limit()
+    {
+        var pipeline = new Pipeline { Id = 1, Name = "Main", Slug = "main", IsDefault = true };
+        var columns = new[] { new BoardColumn { Id = 1, PipelineId = 1, Name = "Todo" } };
+        var labels = new List<Label> { new() { Id = 1, Name = "editorial", Color = "#fff" } };
+        var tickets = Enumerable.Range(1, 1_500).Select(id => new TicketSummary(
+            id, $"Representative ticket {id}", new string('d', 2_000), id % 2 == 0 ? "Todo" : "Review",
+            TicketPriority.NiceToHave, id, null, "owner", DateTime.UtcNow.AddDays(-id), DateTime.UtcNow.AddMinutes(-id),
+            labels, 0, null, id % 5 == 0 ? 1 : null, []) { PipelineId = 1 }).ToList();
+        var config = new AutomationConfig
+        {
+            Automations = Enumerable.Range(1, 50).Select(id => new KittyClaw.Core.Automation.Automation
+            {
+                Id = $"automation-{id}",
+                Name = $"Automation {id}",
+                Trigger = new TicketInColumnTriggerSpec { Columns = ["Todo"] },
+                Actions = [new ExecutePowerShellActionSpec { Script = new string('x', 20_000) }],
+            }).ToList(),
+        };
+
+        var prompt = WorkflowMigrationPlanner.BuildAnalysisPrompt([pipeline], columns, tickets, config, "fr");
+
+        Assert.True(prompt.Length < 250_000, $"Compacted prompt is still too large: {prompt.Length} characters.");
+        Assert.Contains("ticketGroups", prompt);
+        Assert.Contains("legacyAutomations", prompt);
+    }
+
     private static string RepoRoot()
     {
         var directory = Directory.GetCurrentDirectory();
