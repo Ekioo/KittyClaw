@@ -12,8 +12,21 @@ public class BoardPipelineNavigationTests
 
         Assert.Contains("[SupplyParameterFromQuery(Name = \"pipeline\")]", source);
         Assert.Contains("return _selectedPipelineId is int pipeline ? $\"{path}?pipeline={pipeline}\" : path;", source);
-        Assert.Contains("Navigation.NavigateTo(BoardUrl(_subKanbanParentId, ticket.Id), replace: true);", source);
-        Assert.Contains("Navigation.NavigateTo(BoardUrl(_subKanbanParentId, null), replace: true);", source);
+        Assert.Contains("await ReplaceTicketUrlAsync(ticket.Id);", source);
+        Assert.Contains("await ReplaceTicketUrlAsync(null);", source);
+        Assert.Contains("JS.InvokeVoidAsync(\"boardReplaceUrl\", BoardUrl(_subKanbanParentId, ticketId))", source);
+    }
+
+    [Fact]
+    public void Ticket_panel_updates_history_without_rebuilding_the_board_component()
+    {
+        var source = BoardSource();
+        var js = File.ReadAllText(Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory, "../../../../KittyClaw.Web/wwwroot/js/board.js")));
+
+        Assert.Contains("window.boardReplaceUrl", js);
+        Assert.Contains("history.replaceState(window.history.state", js);
+        Assert.DoesNotContain("Navigation.NavigateTo(BoardUrl(_subKanbanParentId, ticket.Id)", source);
     }
 
     [Fact]

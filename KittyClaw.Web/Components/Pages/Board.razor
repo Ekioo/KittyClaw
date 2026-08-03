@@ -710,6 +710,9 @@ else
         return _selectedPipelineId is int pipeline ? $"{path}?pipeline={pipeline}" : path;
     }
 
+    private ValueTask ReplaceTicketUrlAsync(int? ticketId) =>
+        JS.InvokeVoidAsync("boardReplaceUrl", BoardUrl(_subKanbanParentId, ticketId));
+
     // Undo
     private record UndoAction(string Label, Func<Task> Undo, int? AffectedTicketId);
     private readonly Stack<UndoAction> _undoStack = new();
@@ -1483,7 +1486,7 @@ else
         // Clear the "updated" indicator only for the ticket actually opened.
         await MarkTicketViewedAsync(ticket.Id);
 
-        Navigation.NavigateTo(BoardUrl(_subKanbanParentId, ticket.Id), replace: true);
+        await ReplaceTicketUrlAsync(ticket.Id);
     }
 
     private async Task ClosePanel()
@@ -1491,7 +1494,7 @@ else
         await JS.InvokeVoidAsync("saveColumnScrollPositions");
         _restoreScrollAfterRender = true;
         _openTicketId = null;
-        Navigation.NavigateTo(BoardUrl(_subKanbanParentId, null), replace: true);
+        await ReplaceTicketUrlAsync(null);
     }
 
     /// <summary>The panel mutated the ticket — refresh the board's card lists.</summary>
@@ -1505,7 +1508,7 @@ else
     {
         _openTicketId = null;
         await RefreshTicketsAsync();
-        Navigation.NavigateTo(BoardUrl(_subKanbanParentId, null), replace: true);
+        await ReplaceTicketUrlAsync(null);
     }
 
     private void EnterSubKanbanById(int parentId)
