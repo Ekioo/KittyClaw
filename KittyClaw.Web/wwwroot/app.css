@@ -5360,7 +5360,26 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     outline-offset: 2px;
 }
 .column-editor-tab:focus-visible { outline-offset: -2px; }
-.column-editor-tab-state { margin-left: .25rem; color: var(--accent-hover); }
+.column-editor-tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    margin-left: .3rem;
+    padding: 0 .32rem;
+    border-radius: 999px;
+    background: var(--surface3);
+    color: var(--text-muted);
+    font-size: .68rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.column-editor-tab--active .column-editor-tab-count,
+.column-editor-tab-count--configured {
+    background: color-mix(in srgb, var(--accent) 18%, var(--surface3));
+    color: var(--accent-hover);
+}
 .column-editor-grid { display: grid; grid-template-columns: minmax(260px, 1fr) 110px minmax(180px, .65fr) minmax(240px, .8fr); gap: 1rem; align-items: end; }
 .column-editor-grid input, .column-editor-grid select { width: 100%; }
 .column-editor-color { width: 100% !important; height: 2.35rem; }

@@ -262,4 +262,18 @@ public sealed class ColumnProcessorDialogTests
         Assert.Contains("owner-action-badge", unified);
         Assert.Contains(".ticket-card.ticket-owner-action", css);
     }
+
+    [Fact]
+    public void Configuration_tabs_show_collection_counts()
+    {
+        var dialog = File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Web", "Components", "ColumnProcessorDialog.razor"));
+        var css = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "wwwroot", "app.css"));
+
+        Assert.Contains("@(_processorDraft ? 1 : 0)", dialog);
+        Assert.Contains("@(_beforeActions.Count + _afterActions.Count)", dialog);
+        Assert.Contains("@_scheduledTasks.Count", dialog);
+        Assert.Contains("@_routes.Count", dialog);
+        Assert.Contains(".column-editor-tab-count", css);
+    }
 }

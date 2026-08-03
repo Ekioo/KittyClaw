@@ -32,11 +32,11 @@
             <nav class="column-editor-tabs" aria-label="@L["ColumnEditorSections"]">
                 <button class="@GeneralTabClass" @onclick="OpenGeneralTab">@L["ColumnGeneralTab"]</button>
                 <button class="@ProcessorTabClass" @onclick="OpenProcessorTab">
-                    @L["ColumnProcessorTab"] <span class="column-editor-tab-state">@(_processorDraft ? "⚙" : "○")</span>
+                    @L["ColumnProcessorTab"] <span class="column-editor-tab-count @(_processorDraft ? "column-editor-tab-count--configured" : "")">@(_processorDraft ? 1 : 0)</span>
                 </button>
-                <button class="@ActionsTabClass" @onclick="OpenActionsTab">@L["ColumnActionsTab"]</button>
-                <button class="@SchedulesTabClass" @onclick="OpenSchedulesTab">@L["ColumnSchedulesTab"]</button>
-                <button class="@RoutingTabClass" @onclick="OpenRoutingTab">@L["ColumnRoutingTab"]</button>
+                <button class="@ActionsTabClass" @onclick="OpenActionsTab">@L["ColumnActionsTab"] <span class="column-editor-tab-count">@(_beforeActions.Count + _afterActions.Count)</span></button>
+                <button class="@SchedulesTabClass" @onclick="OpenSchedulesTab">@L["ColumnSchedulesTab"] <span class="column-editor-tab-count">@_scheduledTasks.Count</span></button>
+                <button class="@RoutingTabClass" @onclick="OpenRoutingTab">@L["ColumnRoutingTab"] <span class="column-editor-tab-count">@_routes.Count</span></button>
             </nav>
 
             <div class="processor-dialog-body">
