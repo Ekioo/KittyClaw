@@ -12,7 +12,7 @@ This model is intended for business workflows where a ticket is claimed from a c
 - A pipeline owns ordered `BoardColumn` records. Column names are unique only within their pipeline.
 - Tickets reference both `PipelineId` and `ColumnId`. The legacy `Status` string remains synchronized with the column name.
 - A column has a semantic `ColumnRole`: `Normal`, `Waiting`, `Success`, or `Failure`. Logic relies on the role, not on translated or user-editable names.
-- One optional `ColumnProcessor` is attached to a column by stable `ColumnId`.
+- One optional `ColumnProcessor` is attached to a column by stable `ColumnId`. Its optional `Model` overrides the project-level local model; leaving it unset uses the project local model when configured, otherwise the selected provider's default.
 
 There is deliberately no required `InProgress` business column. A durable `ColumnExecution` records `Running`, `Retrying`, `WaitingForChildren`, and terminal execution states while the ticket remains in its current business column.
 
@@ -74,7 +74,7 @@ This avoids coupling child completion to column names or to the parent's pipelin
 
 ## User interface and API
 
-The board displays pipeline tabs and one pipeline at a time. The **Workflows** page manages pipelines, column roles, processors, routing rules, and project skills. Its **Migrate** button opens New Instruction with an editable English migration prompt; the prompt asks for a proposal and explicit approval before changing the project. New project creation opens this page after workspace initialization.
+The board displays pipeline tabs and one pipeline at a time. The **Workflows** page manages pipelines, column roles, processors, routing rules, and project skills. The processor editor exposes models discovered from Claude, Grok, OpenAI Codex, and the project's Ollama endpoint; model discovery is optional, and a previously saved custom value remains selectable when it is no longer advertised. Selecting **Automatic** clears the processor override. The page's **Migrate** button opens New Instruction with an editable English migration prompt; the prompt asks for a proposal and explicit approval before changing the project. New project creation opens this page after workspace initialization.
 
 Relevant endpoints include:
 
