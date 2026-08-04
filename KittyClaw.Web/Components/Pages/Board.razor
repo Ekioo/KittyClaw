@@ -365,6 +365,10 @@ else
             </button>
             <div class="column-context-menu-separator"></div>
             <div class="column-context-menu-title">@L["TicketMenuMoveTo"]</div>
+            @if (_ticketMenuRoutingPolicy?.IsRestricted == true)
+            {
+                <div class="ticket-context-menu-routing-hint">@L["TicketMenuRoutingRestricted"]</div>
+            }
             @if (_ticketMenuColumns.Count == 0)
             {
                 <div class="ticket-context-menu-loading">@L["Loading"]</div>
@@ -739,6 +743,9 @@ else
             .Where(processor => processor.Enabled)
             .Select(processor => processor.ColumnId)
             .ToHashSet();
+        _routingPolicies.Clear();
+        foreach (var processor in processorsTask.Result)
+            _routingPolicies[processor.ColumnId] = ColumnRoutingPolicy.From(processor);
     }
 
     private async Task SelectPipelineAsync(int pipelineId)
@@ -1103,6 +1110,8 @@ else
     private double _ticketMenuX;
     private double _ticketMenuY;
     private readonly Dictionary<int, List<BoardColumn>> _ticketMenuColumns = [];
+    private ColumnRoutingPolicy? _ticketMenuRoutingPolicy;
+    private readonly Dictionary<int, ColumnRoutingPolicy> _routingPolicies = [];
     private bool _columnEditorOpen;
     private BoardColumn? _columnDialogColumn;
     private BoardColumn? _columnDialogTemplate;
@@ -1125,12 +1134,19 @@ else
         _ticketMenuX = e.ClientX;
         _ticketMenuY = e.ClientY;
         _ticketMenuColumns.Clear();
+        _ticketMenuRoutingPolicy = ticket.ColumnId is int sourceColumnId
+            ? _routingPolicies.GetValueOrDefault(sourceColumnId)
+                ?? ColumnRoutingPolicy.From(await ProcessorService.GetAsync(Slug, sourceColumnId))
+            : null;
         StateHasChanged();
 
         var loads = _pipelines.Select(async pipeline =>
             (pipeline.Id, Columns: await ColumnService.ListColumnsAsync(Slug, pipeline.Id)));
         foreach (var result in await Task.WhenAll(loads))
-            _ticketMenuColumns[result.Id] = result.Columns;
+            _ticketMenuColumns[result.Id] = result.Columns
+                .Where(column => _ticketMenuRoutingPolicy is null
+                    || _ticketMenuRoutingPolicy.Allows(ticket.ColumnId ?? 0, column.Id))
+                .ToList();
         StateHasChanged();
     }
 
@@ -1153,7 +1169,7 @@ else
         var oldPipelineId = ticket.PipelineId;
         var oldColumnId = ticket.ColumnId;
         await TicketService.UpdateTicketAsync(Slug, ticket.Id, author: "owner",
-            status: column.Name, pipelineId: pipeline.Id, columnId: column.Id);
+            status: column.Name, pipelineId: pipeline.Id, columnId: column.Id, enforceRouting: true);
         PushUndo($"{L["UndoMove"]} #{ticket.Id}", async () =>
             await TicketService.UpdateTicketAsync(Slug, ticket.Id, author: "owner",
                 status: oldStatus, pipelineId: oldPipelineId, columnId: oldColumnId), ticket.Id);
@@ -1472,9 +1488,20 @@ else
                 targetIndex--;
         }
 
-        await TicketService.ReorderTicketAsync(Slug, ticketId, newStatus, targetIndex);
+        var destination = _columns.FirstOrDefault(column => column.Name == newStatus);
+        var sourceId = _draggedTicket.ColumnId;
+        if (sourceId is int routedSource
+            && destination is not null
+            && _routingPolicies.TryGetValue(routedSource, out var policy)
+            && !policy.Allows(routedSource, destination.Id))
+        {
+            OnDragEnd();
+            return;
+        }
+
+        await TicketService.ReorderTicketAsync(Slug, ticketId, newStatus, targetIndex, enforceRouting: true);
         PushUndo($"{L["UndoMove"]} #{ticketId}", async () =>
-            await TicketService.ReorderTicketAsync(Slug, ticketId, oldStatus, oldIndex), ticketId);
+            await TicketService.ReorderTicketAsync(Slug, ticketId, oldStatus, oldIndex, enforceRouting: false), ticketId);
         await RefreshTicketsAsync();
         await MarkTicketViewedAsync(ticketId);
         _draggedTicket = null;

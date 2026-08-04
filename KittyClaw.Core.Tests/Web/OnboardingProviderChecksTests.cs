@@ -37,4 +37,15 @@ public class OnboardingProviderChecksTests
         Assert.Contains("ProviderClass", source);
         Assert.Contains("optional", source);
     }
+
+    [Fact]
+    public void ProviderProbes_DoNotBlockTheInitialRender()
+    {
+        var source = RepoFile("KittyClaw.Web", "Components", "OnboardingGate.razor");
+
+        Assert.Contains("protected override void OnInitialized()", source);
+        Assert.Contains("if (firstRender && !_checkStarted)", source);
+        Assert.Contains("_ = RecheckAndRefreshAsync();", source);
+        Assert.DoesNotContain("OnInitializedAsync", source);
+    }
 }

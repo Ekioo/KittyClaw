@@ -8,6 +8,7 @@ public class TicketService
 {
     private readonly ProjectService _projectService;
     private readonly MemberService _memberService;
+    private readonly ColumnProcessorService? _columnProcessors;
 
     /// <summary>
     /// Raised after a ticket's status has been persisted.
@@ -25,10 +26,14 @@ public class TicketService
     /// </summary>
     public event Action<string, int, int, string, string>? TicketCommentAdded;
 
-    public TicketService(ProjectService projectService, MemberService memberService)
+    public TicketService(
+        ProjectService projectService,
+        MemberService memberService,
+        ColumnProcessorService? columnProcessors = null)
     {
         _projectService = projectService;
         _memberService = memberService;
+        _columnProcessors = columnProcessors;
     }
 
     /// <summary>
@@ -482,7 +487,7 @@ public class TicketService
     /// when set, the update only applies if the ticket is still in that status —
     /// otherwise <see cref="TicketTransitionConflictException"/> (mapped to HTTP 409).
     /// </summary>
-    public async Task<Ticket?> UpdateTicketAsync(string projectSlug, int ticketId, string? title = null, string? description = null, string author = "owner", TicketPriority? priority = null, string? assignedTo = null, string? status = null, string? expectedStatus = null, int? pipelineId = null, int? columnId = null, bool? blocksParent = null)
+    public async Task<Ticket?> UpdateTicketAsync(string projectSlug, int ticketId, string? title = null, string? description = null, string author = "owner", TicketPriority? priority = null, string? assignedTo = null, string? status = null, string? expectedStatus = null, int? pipelineId = null, int? columnId = null, bool? blocksParent = null, bool enforceRouting = false)
     {
         if (string.IsNullOrWhiteSpace(author))
             throw new InvalidOperationException("Le champ 'author' est requis.");
@@ -522,6 +527,7 @@ public class TicketService
             var source = ticket.ColumnId is int sourceColumnId
                 ? await db.BoardColumns.FindAsync(sourceColumnId)
                 : null;
+            await EnsureRoutingAllowsManualMoveAsync(projectSlug, db, source, destination, enforceRouting);
             ticket.Status = status!;
             ticket.ColumnId = destination!.Id;
             ticket.PipelineId = destination.PipelineId;
@@ -824,7 +830,7 @@ public class TicketService
         return true;
     }
 
-    public async Task ReorderTicketAsync(string projectSlug, int ticketId, string newStatus, int targetIndex)
+    public async Task ReorderTicketAsync(string projectSlug, int ticketId, string newStatus, int targetIndex, bool enforceRouting = false)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureSortOrderColumnAsync(db);
@@ -841,6 +847,7 @@ public class TicketService
         var source = ticket.ColumnId is int sourceColumnId
             ? await db.BoardColumns.FindAsync(sourceColumnId)
             : null;
+        await EnsureRoutingAllowsManualMoveAsync(projectSlug, db, source, destination, enforceRouting);
         ticket.Status = newStatus;
         ticket.ColumnId = destination.Id;
         ColumnAssignmentPolicy.Apply(ticket, source, destination);
@@ -879,6 +886,27 @@ public class TicketService
         await db.SaveChangesAsync();
         if (statusChanged)
             TicketStatusChanged?.Invoke(projectSlug, ticketId, oldStatus, newStatus);
+    }
+
+    private async Task EnsureRoutingAllowsManualMoveAsync(
+        string projectSlug,
+        TodoDbContext db,
+        BoardColumn? source,
+        BoardColumn destination,
+        bool enforceRouting)
+    {
+        if (!enforceRouting || source is null || source.Id == destination.Id || _columnProcessors is null) return;
+        var policy = ColumnRoutingPolicy.From(await _columnProcessors.GetAsync(projectSlug, source.Id));
+        if (policy.Allows(source.Id, destination.Id)) return;
+
+        var allowedNames = await db.BoardColumns
+            .Where(column => policy.AllowedTargetColumnIds.Contains(column.Id))
+            .OrderBy(column => column.PipelineId).ThenBy(column => column.SortOrder)
+            .Select(column => column.Name)
+            .ToListAsync();
+        throw new InvalidOperationException(
+            $"Le routage de la colonne '{source.Name}' n'autorise pas un déplacement manuel vers '{destination.Name}'. " +
+            $"Destinations prévues : {string.Join(", ", allowedNames)}.");
     }
 
     private static string PriorityLabel(TicketPriority p) => p switch

@@ -35,6 +35,7 @@
   "MoveTicketsTo": "Tickets will be moved to:",
   "TicketMenuOpen": "Open ticket",
   "TicketMenuMoveTo": "Move to pipeline / column",
+  "TicketMenuRoutingRestricted": "Destinations are limited by this column's routing.",
   "ColumnDeleteDestinationHelp": "The column that receives every ticket before deletion. KittyClaw also removes routes that targeted the deleted column.",
   "DeleteTicketConfirm": "Delete ticket",
   "NewTicket": "New ticket",

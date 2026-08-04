@@ -3596,6 +3596,14 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     font-size: 0.85rem;
 }
 
+.ticket-context-menu-routing-hint {
+    max-width: 260px;
+    padding: 0.35rem 0.75rem 0.55rem;
+    color: var(--muted, #969bb7);
+    font-size: 0.76rem;
+    line-height: 1.35;
+}
+
 .onboarding-check a.header-action-btn {
     text-decoration: none;
 }

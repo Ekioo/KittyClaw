@@ -800,9 +800,23 @@ else
         var oldStatus = _draggedTicket.Status;
         if (oldStatus == newStatus) { OnDragEnd(); return; }
 
+        if (_draggedTicket.ColumnId is int sourceColumnId)
+        {
+            var processor = await ProcessorService.GetAsync(slug, sourceColumnId);
+            var destination = _lanes!
+                .First(lane => lane.Project.Slug == slug).Columns
+                .FirstOrDefault(column => column.Name == newStatus);
+            if (destination is not null
+                && !ColumnRoutingPolicy.From(processor).Allows(sourceColumnId, destination.Id))
+            {
+                OnDragEnd();
+                return;
+            }
+        }
+
         var lanes = _lanes!;
         var targetIndex = GetTickets(lanes.First(l => l.Project.Slug == slug), newStatus).Count;
-        await TicketService.ReorderTicketAsync(slug, ticketId, newStatus, targetIndex);
+        await TicketService.ReorderTicketAsync(slug, ticketId, newStatus, targetIndex, enforceRouting: true);
         OnDragEnd();
 
         var idx = lanes.FindIndex(l => l.Project.Slug == slug);

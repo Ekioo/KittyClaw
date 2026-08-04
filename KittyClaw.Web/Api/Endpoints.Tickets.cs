@@ -40,7 +40,8 @@ public static partial class Endpoints
             // never observe the transition half-applied. ExpectedStatus mismatches map to 409.
             try
             {
-                var ticket = await ts.UpdateTicketAsync(slug, id, req.Title, req.Description, req.Author, req.Priority, req.AssignedTo, req.Status, req.ExpectedStatus, req.PipelineId, req.ColumnId, req.BlocksParent);
+                var ticket = await ts.UpdateTicketAsync(slug, id, req.Title, req.Description, req.Author, req.Priority, req.AssignedTo, req.Status, req.ExpectedStatus, req.PipelineId, req.ColumnId, req.BlocksParent,
+                    enforceRouting: req.Status is not null || req.ColumnId is not null || req.PipelineId is not null);
                 if (ticket is not null && req.LabelIds is not null)
                     await ts.SetTicketLabelsAsync(slug, id, req.LabelIds);
                 if (ticket is not null) notifier.NotifyProjectUpdated(slug);
@@ -89,7 +90,7 @@ public static partial class Endpoints
         {
             try
             {
-                var ticket = await ts.MoveTicketAsync(slug, id, req.Status, req.Author);
+                var ticket = await ts.UpdateTicketAsync(slug, id, author: req.Author, status: req.Status, enforceRouting: true);
                 if (ticket is not null) notifier.NotifyProjectUpdated(slug);
                 return ticket is null ? Results.NotFound() : Results.Ok(ticket);
             }
@@ -202,7 +203,7 @@ public static partial class Endpoints
         {
             try
             {
-                await ts.ReorderTicketAsync(slug, id, req.Status, req.Index);
+                await ts.ReorderTicketAsync(slug, id, req.Status, req.Index, enforceRouting: true);
                 notifier.NotifyProjectUpdated(slug);
                 return Results.NoContent();
             }

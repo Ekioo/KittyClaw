@@ -100,6 +100,29 @@ public sealed record ProjectSkill(string Slug, string Name, string Description, 
 
 public sealed record ColumnRoute(string Outcome, int TargetColumnId);
 
+/// <summary>
+/// Manual moves reuse the processor routing graph instead of maintaining a second transition
+/// configuration. A column with no declared destination remains unrestricted so legacy boards
+/// and partially configured workflows can never strand a ticket.
+/// </summary>
+public sealed record ColumnRoutingPolicy(bool IsRestricted, IReadOnlySet<int> AllowedTargetColumnIds)
+{
+    public static ColumnRoutingPolicy From(ColumnProcessor? processor)
+    {
+        if (processor is null) return new(false, new HashSet<int>());
+        var targets = new HashSet<int>();
+        if (processor.DefaultTargetColumnId is int defaultTarget) targets.Add(defaultTarget);
+        if (processor.TechnicalFailureColumnId is int technicalFailure) targets.Add(technicalFailure);
+        foreach (var route in processor.Routes) targets.Add(route.TargetColumnId);
+        foreach (var action in processor.BeforeActions.Concat(processor.AfterActions))
+            if (action.FailureTargetColumnId is int failureTarget) targets.Add(failureTarget);
+        return new(targets.Count > 0, targets);
+    }
+
+    public bool Allows(int sourceColumnId, int targetColumnId) =>
+        sourceColumnId == targetColumnId || !IsRestricted || AllowedTargetColumnIds.Contains(targetColumnId);
+}
+
 /// <summary>A deterministic action surrounding the single implicit agent of a column.</summary>
 public sealed record ColumnProcessorAction(
     string Id,

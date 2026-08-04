@@ -17,6 +17,16 @@ This model is intended for business workflows where a ticket is claimed from a c
 
 There is deliberately no required `InProgress` business column. A durable `ColumnExecution` records `Running`, `Retrying`, `WaitingForChildren`, and terminal execution states while the ticket remains in its current business column.
 
+## Manual ticket transitions
+
+Manual moves reuse the source column processor's routing graph. As soon as that processor declares
+a default destination, outcome routes, a technical-failure destination, or action-failure
+destinations, the board and ticket API only accept those destinations for an interactive move.
+Processor and scheduled-action routing remain authoritative and bypass this user-facing guard.
+
+A column without any declared routing destination stays unrestricted. This preserves legacy boards
+and ensures a partially configured workflow cannot strand a ticket with no available move.
+
 ## Processing lifecycle
 
 `ColumnProcessingEngine` is event-driven, with a low-frequency watchdog for delayed retries and configuration changes. For each enabled processor it:

@@ -65,7 +65,7 @@
             }
 
             <div class="modal-actions">
-                <button class="header-action-btn" @onclick="RecheckTools" disabled="@_checking">@(_checking ? L["Checking"] : L["Recheck"])</button>
+                <button class="header-action-btn" @onclick="RecheckAndRefreshAsync" disabled="@_checking">@(_checking ? L["Checking"] : L["Recheck"])</button>
                 <button class="header-action-btn settings-primary" @onclick="DismissOnboarding">@L["Continue"]</button>
             </div>
         </div>
@@ -80,17 +80,23 @@
     private bool _ollamaInstalled;
     private bool _gitInstalled;
     private bool _checking;
+    private bool _checkStarted;
     private IDisposable? _escOnboarding;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         _showOnboarding = !AppSettings.OnboardingSeen;
-        await RecheckTools();
-        _showOnboarding = !AppSettings.OnboardingSeen || !HasAgentProvider || !_gitInstalled;
     }
 
     protected override Task OnAfterRenderAsync(bool firstRender)
     {
+        // External CLI probes can each take several seconds. Starting them only after the
+        // first render keeps the landing page responsive while the onboarding updates in place.
+        if (firstRender && !_checkStarted)
+        {
+            _checkStarted = true;
+            _ = RecheckAndRefreshAsync();
+        }
         if (_showOnboarding && _escOnboarding is null)
             _escOnboarding = EscapeStack.PushWithFocus(JS, () => InvokeAsync(DismissOnboarding));
         else if (!_showOnboarding && _escOnboarding is not null)
@@ -99,6 +105,13 @@
             _escOnboarding = null;
         }
         return Task.CompletedTask;
+    }
+
+    private async Task RecheckAndRefreshAsync()
+    {
+        await RecheckTools();
+        _showOnboarding = !AppSettings.OnboardingSeen || !HasAgentProvider || !_gitInstalled;
+        await InvokeAsync(StateHasChanged);
     }
 
     // Local Ollama models currently use Claude Code as their transport, so an Ollama
