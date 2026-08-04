@@ -23,6 +23,7 @@ public class GrokSupportTests
         SkillFile = "agent/SKILL.md",
         ConcurrencyGroup = "agent",
         StartedAt = DateTime.UtcNow,
+        Model = "grok-4.5",
     };
 
     private static bool TryMap(string line, AgentRun run)
@@ -249,10 +250,11 @@ public class GrokSupportTests
         var assistant = Assert.Single(events, e => e.Kind == "assistant");
         Assert.Equal("[assistant] Tu brief", assistant.Text);
         Assert.Contains(events, e => e.Kind == "result");
-        Assert.Equal(100, run.InputTokens);
+        Assert.Equal(50, run.InputTokens);
         Assert.Equal(3, run.OutputTokens);
         Assert.Equal(50, run.CacheReadTokens);
         Assert.Equal(0.01m, run.TotalCostUsd);
+        Assert.False(run.CostIsEstimated);
     }
 
     [Fact]

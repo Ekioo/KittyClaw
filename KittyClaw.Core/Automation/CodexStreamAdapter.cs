@@ -93,7 +93,14 @@ internal static class CodexStreamAdapter
         var cached = Int(usage, "cached_input_tokens");
         var output = Int(usage, "output_tokens");
         if (input > 0 || cached > 0 || output > 0)
-            run.AddUsage(input, output, cached, 0, null);
+        {
+            // OpenAI reports cached input as a subset of input_tokens. AgentRun stores token
+            // classes separately, so keep only the uncached remainder in InputTokens.
+            var uncachedInput = Math.Max(0, input - cached);
+            var estimated = ModelCostEstimator.TryEstimate(
+                run.Model, uncachedInput, output, cached, 0, out var cost);
+            run.AddUsage(uncachedInput, output, cached, 0, estimated ? cost : null, estimated);
+        }
     }
 
     private static string? ExtractError(JsonElement root)

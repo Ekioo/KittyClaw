@@ -29,5 +29,6 @@
   "AutomationsAhead": "{0} automatizaciones por delante",
   "SessionInterrupted": "KittyClaw se actualizó o la sesión se interrumpió.",
   "SessionInterruptedHint": "La página se recuperará automáticamente cuando sea posible. Recárguela si este mensaje sigue visible.",
-  "ReloadPage": "Recargar la página"
+  "ReloadPage": "Recargar la página",
+  "EstimatedCostTooltip": "Estimación basada en tarifas públicas de tokens; la facturación real puede variar"
 }

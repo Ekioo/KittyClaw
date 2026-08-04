@@ -68,12 +68,13 @@ public sealed class RunCostRecorder : IHostedService
                     CacheWriteTokens: run.CacheWriteTokens,
                     UsdCost: run.TotalCostUsd ?? 0m,
                     DurationSeconds: (endedAt - run.StartedAt).TotalSeconds,
-                    ExitCode: run.ExitCode ?? -1));
+                    ExitCode: run.ExitCode ?? -1,
+                    CostEstimated: run.CostIsEstimated));
             }
 
             if (run.TicketId is int ticketId)
                 await _tickets.AddAgentUsageAsync(run.ProjectSlug, ticketId,
-                    run.TotalTokens, (double)(run.TotalCostUsd ?? 0m));
+                    run.TotalTokens, (double)(run.TotalCostUsd ?? 0m), run.CostIsEstimated);
         }
         catch (Exception ex)
         {

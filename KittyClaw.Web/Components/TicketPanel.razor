@@ -131,7 +131,7 @@
                 <span>@_ticket.CreatedAt.ToString("d")</span>
                 @if (_ticket.AgentTokens > 0)
                 {
-                    <span class="token-badge" title="@($"{_ticket.AgentTokens:N0} tokens")">⛁ @KittyClaw.Web.Services.TokenDisplay.Compact(_ticket.AgentTokens) · @KittyClaw.Web.Services.TokenDisplay.Usd(_ticket.AgentCostUsd)</span>
+                    <span class="token-badge" title="@CostTooltip(_ticket.AgentTokens, _ticket.AgentCostUsd, _ticket.AgentCostEstimated)">⛁ @KittyClaw.Web.Services.TokenDisplay.Compact(_ticket.AgentTokens)@(_ticket.AgentCostUsd > 0 ? $" · {(_ticket.AgentCostEstimated ? "≈ " : "")}{KittyClaw.Web.Services.TokenDisplay.Usd(_ticket.AgentCostUsd)}" : "")</span>
                 }
             </div>
         </div>
@@ -362,6 +362,13 @@
 }
 
 @code {
+    private string CostTooltip(long tokens, double cost, bool estimated)
+    {
+        var value = cost > 0 ? $" · {(estimated ? "≈ " : "")}{KittyClaw.Web.Services.TokenDisplay.Usd(cost)}" : "";
+        var note = estimated ? $" · {L["EstimatedCostTooltip"]}" : "";
+        return $"{tokens:N0} tokens{value}{note}";
+    }
+
     [Parameter, EditorRequired] public string Slug { get; set; } = "";
     [Parameter, EditorRequired] public int TicketId { get; set; }
     /// <summary>Bumped by the parent to force a full reload (e.g. after an undo).</summary>

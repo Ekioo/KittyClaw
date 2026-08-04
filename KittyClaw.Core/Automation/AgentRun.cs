@@ -40,10 +40,12 @@ public sealed class AgentRun
     public int CacheReadTokens { get; private set; }
     public int CacheWriteTokens { get; private set; }
     public decimal? TotalCostUsd { get; private set; }
+    public bool CostIsEstimated { get; private set; }
     public long TotalTokens => (long)InputTokens + OutputTokens + CacheReadTokens + CacheWriteTokens;
     public bool HasUsage => TotalTokens > 0 || TotalCostUsd is not null;
 
-    public void AddUsage(int inputTokens, int outputTokens, int cacheReadTokens, int cacheWriteTokens, decimal? costUsd)
+    public void AddUsage(int inputTokens, int outputTokens, int cacheReadTokens, int cacheWriteTokens,
+        decimal? costUsd, bool costIsEstimated = false)
     {
         lock (_logLock)
         {
@@ -51,7 +53,11 @@ public sealed class AgentRun
             OutputTokens += outputTokens;
             CacheReadTokens += cacheReadTokens;
             CacheWriteTokens += cacheWriteTokens;
-            if (costUsd is not null) TotalCostUsd = (TotalCostUsd ?? 0m) + costUsd.Value;
+            if (costUsd is not null)
+            {
+                TotalCostUsd = (TotalCostUsd ?? 0m) + costUsd.Value;
+                CostIsEstimated |= costIsEstimated;
+            }
         }
     }
 
@@ -154,6 +160,7 @@ public sealed class AgentRunSnapshot
     public int CacheReadTokens { get; set; }
     public int CacheWriteTokens { get; set; }
     public decimal? TotalCostUsd { get; set; }
+    public bool CostIsEstimated { get; set; }
     public CliVersionMetadata? CliVersion { get; set; }
     public List<StreamEvent> Events { get; set; } = [];
     public List<string> PendingSteerMessages { get; set; } = [];
@@ -196,6 +203,7 @@ public sealed class RunLogStore
             CacheReadTokens = run.CacheReadTokens,
             CacheWriteTokens = run.CacheWriteTokens,
             TotalCostUsd = run.TotalCostUsd,
+            CostIsEstimated = run.CostIsEstimated,
             CliVersion = run.CliVersion,
             Events = run.SnapshotBuffer().ToList(),
             PendingSteerMessages = run.PendingSteerMessages.ToList(),
@@ -241,7 +249,8 @@ public sealed class RunLogStore
             run.ExitCode = snapshot.ExitCode;
             run.CliVersion = snapshot.CliVersion;
             run.AddUsage(snapshot.InputTokens, snapshot.OutputTokens,
-                snapshot.CacheReadTokens, snapshot.CacheWriteTokens, snapshot.TotalCostUsd);
+                snapshot.CacheReadTokens, snapshot.CacheWriteTokens, snapshot.TotalCostUsd,
+                snapshot.CostIsEstimated);
             foreach (var ev in snapshot.Events)
                 run.Push(ev);
             foreach (var msg in snapshot.PendingSteerMessages)

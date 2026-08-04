@@ -79,5 +79,6 @@ public sealed record CostLogEntry(
     int CacheWriteTokens,
     decimal UsdCost,
     double DurationSeconds,
-    int ExitCode
+    int ExitCode,
+    bool CostEstimated = false
 );

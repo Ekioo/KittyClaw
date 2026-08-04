@@ -263,7 +263,7 @@ else
                                     }
                                     @if (ticket.AgentTokens > 0)
                                     {
-                                        <span class="token-badge" title="@($"{ticket.AgentTokens:N0} tokens · {KittyClaw.Web.Services.TokenDisplay.Usd(ticket.AgentCostUsd)}")">⛁ @KittyClaw.Web.Services.TokenDisplay.Compact(ticket.AgentTokens)</span>
+                                        <span class="token-badge" title="@CostTooltip(ticket)">⛁ @KittyClaw.Web.Services.TokenDisplay.Compact(ticket.AgentTokens)@(ticket.AgentCostEstimated ? " ≈" : "")</span>
                                     }
                                     @if (!string.IsNullOrEmpty(ticket.AssignedTo))
                                     {
@@ -601,6 +601,15 @@ else
 }
 
 @code {
+    private string CostTooltip(TicketSummary ticket)
+    {
+        var value = ticket.AgentCostUsd > 0
+            ? $" · {(ticket.AgentCostEstimated ? "≈ " : "")}{KittyClaw.Web.Services.TokenDisplay.Usd(ticket.AgentCostUsd)}"
+            : "";
+        var note = ticket.AgentCostEstimated ? $" · {L["EstimatedCostTooltip"]}" : "";
+        return $"{ticket.AgentTokens:N0} tokens{value}{note}";
+    }
+
     [Parameter] public string Slug { get; set; } = "";
     [Parameter] public int? TicketId { get; set; }
     [Parameter] public int? ParentId { get; set; }

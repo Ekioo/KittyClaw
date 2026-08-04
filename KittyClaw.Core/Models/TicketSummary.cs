@@ -26,8 +26,10 @@ public record TicketSummary(
     /// <summary>Cumulative tokens consumed by agent runs on this ticket (all token classes).</summary>
     public long AgentTokens { get; init; }
 
-    /// <summary>Cumulative USD cost of agent runs on this ticket, as priced by the claude CLI.</summary>
+    /// <summary>Cumulative USD cost of agent runs on this ticket.</summary>
     public double AgentCostUsd { get; init; }
+
+    public bool AgentCostEstimated { get; init; }
 
     public int PipelineId { get; init; }
     public int? ColumnId { get; init; }

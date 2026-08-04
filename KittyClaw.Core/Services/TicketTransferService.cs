@@ -106,8 +106,8 @@ public sealed class TicketTransferService(
 
                 foreach (var ticket in transferTickets)
                     await ExecuteAsync(connection, transaction, """
-                        INSERT INTO target.Tickets (Id, PipelineId, ColumnId, Title, Description, Status, Priority, SortOrder, AssignedTo, CreatedBy, CreatedAt, UpdatedAt, ParentId, BlocksParent, FireAt, ScheduleTarget, AgentTokens, AgentCostUsd)
-                        VALUES ($id, $pipelineId, $columnId, $title, $description, $status, $priority, $sortOrder, $assignedTo, $createdBy, $createdAt, $updatedAt, $parentId, $blocksParent, $fireAt, $scheduleTarget, $agentTokens, $agentCostUsd)
+                        INSERT INTO target.Tickets (Id, PipelineId, ColumnId, Title, Description, Status, Priority, SortOrder, AssignedTo, CreatedBy, CreatedAt, UpdatedAt, ParentId, BlocksParent, FireAt, ScheduleTarget, AgentTokens, AgentCostUsd, AgentCostEstimated)
+                        VALUES ($id, $pipelineId, $columnId, $title, $description, $status, $priority, $sortOrder, $assignedTo, $createdBy, $createdAt, $updatedAt, $parentId, $blocksParent, $fireAt, $scheduleTarget, $agentTokens, $agentCostUsd, $agentCostEstimated)
                         """, TicketParameters(ticket, targetPipelineId, targetColumnIds[ticket.Status]));
 
                 foreach (var comment in transferTickets.SelectMany(t => t.Comments))
@@ -176,7 +176,7 @@ public sealed class TicketTransferService(
     }
 
     private static (string Name, object? Value)[] TicketParameters(Ticket t, int targetPipelineId, int targetColumnId) =>
-    [ ("$id", t.Id), ("$pipelineId", targetPipelineId), ("$columnId", targetColumnId), ("$title", t.Title), ("$description", t.Description), ("$status", t.Status), ("$priority", (int)t.Priority), ("$sortOrder", t.SortOrder), ("$assignedTo", t.AssignedTo), ("$createdBy", t.CreatedBy), ("$createdAt", t.CreatedAt), ("$updatedAt", t.UpdatedAt), ("$parentId", t.ParentId), ("$blocksParent", t.BlocksParent), ("$fireAt", t.FireAt), ("$scheduleTarget", t.ScheduleTarget), ("$agentTokens", t.AgentTokens), ("$agentCostUsd", t.AgentCostUsd) ];
+    [ ("$id", t.Id), ("$pipelineId", targetPipelineId), ("$columnId", targetColumnId), ("$title", t.Title), ("$description", t.Description), ("$status", t.Status), ("$priority", (int)t.Priority), ("$sortOrder", t.SortOrder), ("$assignedTo", t.AssignedTo), ("$createdBy", t.CreatedBy), ("$createdAt", t.CreatedAt), ("$updatedAt", t.UpdatedAt), ("$parentId", t.ParentId), ("$blocksParent", t.BlocksParent), ("$fireAt", t.FireAt), ("$scheduleTarget", t.ScheduleTarget), ("$agentTokens", t.AgentTokens), ("$agentCostUsd", t.AgentCostUsd), ("$agentCostEstimated", t.AgentCostEstimated) ];
 
     private static async Task ExecuteAsync(SqliteConnection connection, SqliteTransaction transaction, string sql, params (string Name, object? Value)[] parameters)
     {

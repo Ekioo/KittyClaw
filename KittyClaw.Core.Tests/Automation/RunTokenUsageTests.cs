@@ -97,6 +97,23 @@ public class RunTokenUsageTests : IDisposable
         Assert.Equal(3000, loaded.CacheReadTokens);
         Assert.Equal(400, loaded.CacheWriteTokens);
         Assert.Equal(0.1234m, loaded.TotalCostUsd);
+        Assert.False(loaded.CostIsEstimated);
+    }
+
+    [Fact]
+    public void RunLogStore_RoundTripsEstimatedCostMarker()
+    {
+        using var tmp = new TempDir();
+        var store = new RunLogStore(tmp.Path);
+        var run = NewRun("estimated-run", ticketId: null);
+        run.AddUsage(100, 20, 0, 0, 0.0011m, costIsEstimated: true);
+        run.Status = AgentRunStatus.Completed;
+        run.EndedAt = DateTime.UtcNow;
+        store.Save(run);
+
+        var loaded = store.LoadAll().Single(r => r.RunId == "estimated-run");
+        Assert.True(loaded.CostIsEstimated);
+        Assert.Equal(0.0011m, loaded.TotalCostUsd);
     }
 
     // ── RunCostRecorder: cost-log line + durable ticket totals ────────────────
@@ -132,11 +149,36 @@ public class RunTokenUsageTests : IDisposable
         Assert.NotNull(updated);
         Assert.Equal(3610, updated!.AgentTokens);
         Assert.Equal(0.1234, updated.AgentCostUsd, precision: 6);
+        Assert.False(updated.AgentCostEstimated);
 
         // Second run accumulates on top of the first.
         await recorder.RecordAsync(run);
         updated = await tickets.GetTicketAsync(project.Slug, ticket.Id);
         Assert.Equal(7220, updated!.AgentTokens);
+    }
+
+    [Fact]
+    public async Task RecordAsync_PersistsEstimatedCostMarkerOnTicket()
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("estimated-recorder");
+        var members = new MemberService(projects);
+        var tickets = new TicketService(projects, members);
+        var ticket = await tickets.CreateTicketAsync(project.Slug, "Estimated work");
+        var run = NewRun("estimated-rec", ticket.Id, project.Slug);
+        run.AddUsage(100, 20, 0, 0, 0.0011m, costIsEstimated: true);
+        run.Status = AgentRunStatus.Completed;
+        run.EndedAt = DateTime.UtcNow;
+
+        var recorder = new RunCostRecorder(new AgentRunRegistry(), new CostTracker(),
+            projects, tickets, NullLogger<RunCostRecorder>.Instance);
+        await recorder.RecordAsync(run);
+
+        var updated = await tickets.GetTicketAsync(project.Slug, ticket.Id);
+        Assert.NotNull(updated);
+        Assert.True(updated!.AgentCostEstimated);
+        Assert.Equal(0.0011, updated.AgentCostUsd, precision: 6);
     }
 
     private static AgentRun NewRun(string runId, int? ticketId, string slug = "p") => new()

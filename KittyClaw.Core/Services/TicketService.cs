@@ -137,10 +137,11 @@ public class TicketService
 
     // Adds the cumulative agent token-usage columns to databases created before this feature.
     private static Task EnsureAgentUsageColumnsAsync(TodoDbContext db) =>
-        MigrationGate.RunOnceAsync(db, "tickets-agent-usage", static async d =>
+        MigrationGate.RunOnceAsync(db, "tickets-agent-usage-estimate", static async d =>
         {
             await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE Tickets ADD COLUMN AgentTokens INTEGER NOT NULL DEFAULT 0");
             await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE Tickets ADD COLUMN AgentCostUsd REAL NOT NULL DEFAULT 0");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE Tickets ADD COLUMN AgentCostEstimated INTEGER NOT NULL DEFAULT 0");
         });
 
     // Hot-path indexes: status/parent filters run on every board render, and the activity
@@ -194,6 +195,7 @@ public class TicketService
                     ScheduleTarget = t.ScheduleTarget,
                     AgentTokens = t.AgentTokens,
                     AgentCostUsd = t.AgentCostUsd,
+                    AgentCostEstimated = t.AgentCostEstimated,
                     PipelineId = t.PipelineId,
                     ColumnId = t.ColumnId,
                     BlocksParent = t.BlocksParent,
@@ -278,7 +280,8 @@ public class TicketService
     /// Accumulates a completed agent run's token usage onto the ticket. Durable counterpart of
     /// the in-memory run registry (whose runs are purged after 24h) — called by RunCostRecorder.
     /// </summary>
-    public async Task AddAgentUsageAsync(string projectSlug, int ticketId, long tokens, double costUsd)
+    public async Task AddAgentUsageAsync(string projectSlug, int ticketId, long tokens, double costUsd,
+        bool costEstimated = false)
     {
         if (tokens <= 0 && costUsd <= 0) return;
         await using var db = _projectService.GetProjectDb(projectSlug);
@@ -291,6 +294,7 @@ public class TicketService
         if (ticket is null) return;
         ticket.AgentTokens += tokens;
         ticket.AgentCostUsd += costUsd;
+        ticket.AgentCostEstimated |= costEstimated;
         await db.SaveChangesAsync();
     }
 

@@ -47,6 +47,7 @@ public sealed class CodexSupportTests
         SkillFile = "agent/SKILL.md",
         ConcurrencyGroup = "agent",
         StartedAt = DateTime.UtcNow,
+        Model = "gpt-5.6-sol",
     };
 
     private static void Map(string json, AgentRun run)
@@ -122,9 +123,11 @@ public sealed class CodexSupportTests
         Assert.Equal("thread-123", run.SessionId);
         Assert.Contains(run.SnapshotBuffer(), e => e.Kind == "assistant" && e.Text.Contains("Done"));
         Assert.Contains(run.SnapshotBuffer(), e => e.Kind == "result");
-        Assert.Equal(10, run.InputTokens);
+        Assert.Equal(7, run.InputTokens);
         Assert.Equal(3, run.CacheReadTokens);
         Assert.Equal(4, run.OutputTokens);
+        Assert.True(run.CostIsEstimated);
+        Assert.Equal(0.0001565m, run.TotalCostUsd);
     }
 
     [Fact]

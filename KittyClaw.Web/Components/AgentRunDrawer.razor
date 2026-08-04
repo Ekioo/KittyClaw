@@ -34,8 +34,8 @@
                 }
                 @if (_run.HasUsage)
                 {
-                    <span class="agent-drawer-cost" title="@($"{_run.TotalTokens:N0} tokens (in {_run.InputTokens:N0} / out {_run.OutputTokens:N0} / cache {_run.CacheReadTokens + _run.CacheWriteTokens:N0})")">
-                        ⛁ @TokenDisplay.Compact(_run.TotalTokens)@(_run.TotalCostUsd is decimal c ? $" · {TokenDisplay.Usd((double)c)}" : "")
+                    <span class="agent-drawer-cost" title="@UsageTooltip()">
+                        ⛁ @TokenDisplay.Compact(_run.TotalTokens)@(_run.TotalCostUsd is decimal c ? $" · {(_run.CostIsEstimated ? "≈ " : "")}{TokenDisplay.Usd((double)c)}" : "")
                     </span>
                 }
                 <span>@FormatElapsed(_run.StartedAt)</span>
@@ -376,6 +376,13 @@
     {
         _sseModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/agent-sse.js");
         await _sseModule.InvokeVoidAsync("copyText", text);
+    }
+
+    private string UsageTooltip()
+    {
+        if (_run is null) return "";
+        var tokens = $"{_run.TotalTokens:N0} tokens (in {_run.InputTokens:N0} / out {_run.OutputTokens:N0} / cache {_run.CacheReadTokens + _run.CacheWriteTokens:N0})";
+        return _run.CostIsEstimated ? $"{tokens} · {L["EstimatedCostTooltip"]}" : tokens;
     }
 
     private static string FormatElapsed(DateTime start)

@@ -141,7 +141,15 @@ internal static class GrokStreamAdapter
             }
             decimal? cost = ReadCost(root);
             if (input > 0 || output > 0 || cacheRead > 0 || cost is not null)
-                run.AddUsage(input, output, cacheRead, 0, cost);
+            {
+                // OpenAI-compatible usage counts cached tokens inside prompt/input tokens.
+                var uncachedInput = Math.Max(0, input - cacheRead);
+                decimal estimatedCost = 0m;
+                var estimated = cost is null && ModelCostEstimator.TryEstimate(
+                    run.Model, uncachedInput, output, cacheRead, 0, out estimatedCost);
+                run.AddUsage(uncachedInput, output, cacheRead, 0,
+                    cost ?? (estimated ? estimatedCost : null), estimated);
+            }
         }
         catch { /* usage telemetry must never break the stream pump */ }
     }

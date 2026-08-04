@@ -37,8 +37,11 @@ public class Ticket
     /// </summary>
     public long AgentTokens { get; set; }
 
-    /// <summary>Cumulative USD cost of agent runs on this ticket, as priced by the claude CLI.</summary>
+    /// <summary>Cumulative USD cost of agent runs on this ticket.</summary>
     public double AgentCostUsd { get; set; }
+
+    /// <summary>True when at least part of <see cref="AgentCostUsd"/> was estimated from token rates.</summary>
+    public bool AgentCostEstimated { get; set; }
 
     public List<Comment> Comments { get; set; } = [];
     public List<ActivityEntry> Activities { get; set; } = [];
