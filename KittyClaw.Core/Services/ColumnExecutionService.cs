@@ -56,6 +56,10 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         await using var db = projects.GetProjectDb(projectSlug);
         await ColumnService.EnsureBoardColumnsTableAsync(db);
         await TicketService.EnsureActivityTableAsync(db);
+        // ClaimNext queries the full Ticket entity directly. Legacy project databases must
+        // receive newly added ticket columns before EF prepares that query; the board's
+        // TicketService migration may not have run yet during engine startup.
+        await TicketService.EnsureAgentUsageColumnsAsync(db);
         await EnsureTableAsync(db);
 
         var waiting = await db.ColumnExecutions

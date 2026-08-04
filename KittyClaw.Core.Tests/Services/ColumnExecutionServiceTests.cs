@@ -53,6 +53,25 @@ public sealed class ColumnExecutionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Claim_migrates_legacy_ticket_cost_schema_before_querying()
+    {
+        var project = await _projects.CreateProjectAsync("Legacy ticket cost schema");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Delivery");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: pipeline.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Done", pipelineId: pipeline.Id);
+        var processor = await SaveProcessor(project.Slug, source.Id, target.Id);
+        await using (var db = _projects.GetProjectDb(project.Slug))
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE Tickets DROP COLUMN AgentCostEstimated");
+
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+
+        Assert.Null(execution);
+        await using var migrated = _projects.GetProjectDb(project.Slug);
+        var columns = await migrated.Database.SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('Tickets')").ToListAsync();
+        Assert.Contains("AgentCostEstimated", columns);
+    }
+
+    [Fact]
     public async Task Completion_routes_by_outcome_across_pipelines_using_stable_column_ids()
     {
         var project = await _projects.CreateProjectAsync("Routing");

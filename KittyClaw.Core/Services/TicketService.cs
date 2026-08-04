@@ -136,7 +136,7 @@ public class TicketService
         });
 
     // Adds the cumulative agent token-usage columns to databases created before this feature.
-    private static Task EnsureAgentUsageColumnsAsync(TodoDbContext db) =>
+    internal static Task EnsureAgentUsageColumnsAsync(TodoDbContext db) =>
         MigrationGate.RunOnceAsync(db, "tickets-agent-usage-estimate", static async d =>
         {
             await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE Tickets ADD COLUMN AgentTokens INTEGER NOT NULL DEFAULT 0");
