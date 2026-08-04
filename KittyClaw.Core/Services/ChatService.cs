@@ -44,6 +44,13 @@ public sealed class ChatService
             .ToListAsync();
     }
 
+    public async Task<bool> AnyAsync(string projectSlug, string targetSlug)
+    {
+        await using var db = _projects.GetProjectDb(projectSlug);
+        await EnsureTableAsync(db);
+        return await db.ChatMessages.AnyAsync(m => m.TargetSlug == targetSlug);
+    }
+
     public async Task AppendAsync(string projectSlug, string targetSlug, string role, string text,
                                    string? toolName = null, string? detail = null)
     {

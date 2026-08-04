@@ -17,17 +17,27 @@
         </div>
         <div class="chat-target-list">
             <h3>@L["ChatPickTarget"]</h3>
-            @foreach (var t in _targets)
+            @if (!_ready)
             {
-                <button class="chat-target-item @(t.Kind == "claude" ? "claude-direct" : "")"
-                        @onclick="() => SelectTarget(t)">
-                    <span class="chat-target-name">@t.Name</span>
-                    <span class="chat-target-kind">@(t.Kind == "claude" ? L["ChatTalkToClaude"] : L["ChatMember"])</span>
-                </button>
+                <div class="chat-history-loading" role="status">
+                    <span class="chat-loading-spinner" aria-hidden="true"></span>
+                    <span>@L["ChatLoadingTargets"]</span>
+                </div>
             }
-            @if (_targets.Count == 0 && _ready)
+            else
             {
-                <div class="chat-empty">@L["ChatPickTarget"]</div>
+                @foreach (var t in _targets)
+                {
+                    <button class="chat-target-item @(t.Kind == "claude" ? "claude-direct" : "")"
+                            @onclick="() => SelectTarget(t)">
+                        <span class="chat-target-name">@t.Name</span>
+                        <span class="chat-target-kind">@(t.Kind == "claude" ? L["ChatTalkToClaude"] : L["ChatMember"])</span>
+                    </button>
+                }
+                @if (_targets.Count == 0)
+                {
+                    <div class="chat-empty">@L["ChatPickTarget"]</div>
+                }
             }
         </div>
     }
@@ -45,7 +55,7 @@
                     <span class="chat-drawer-ticket-ref" title="@TicketTitle">· #@tid @(string.IsNullOrEmpty(TicketTitle) ? "" : "— " + SharedRenderHelpers.Truncate(TicketTitle!, 40))</span>
                 }
             </span>
-            <select class="chat-drawer-model-select" @bind="_selectedModel" @bind:after="PersistSelectedModelAsync">
+            <select class="chat-drawer-model-select" @bind="_selectedModel" @bind:after="PersistSelectedModelAsync" disabled="@_historyLoading">
                 <optgroup label="Claude">
                     @foreach (var m in ClaudeModels)
                     {
@@ -84,11 +94,18 @@
                     <option value="@_selectedModel">@_selectedModel</option>
                 }
             </select>
-            <button class="chat-newsession-btn" @onclick="StartNewSession" title="@L["NewSession"]">＋</button>
+            <button class="chat-newsession-btn" @onclick="StartNewSession" disabled="@_historyLoading" title="@L["NewSession"]">＋</button>
             <button class="agent-close-btn" @onclick="Close" title="@L["Close"]">×</button>
         </div>
 
         <div class="chat-messages" @ref="_messagesRef">
+            @if (_historyLoading)
+            {
+                <div class="chat-history-loading" role="status">
+                    <span class="chat-loading-spinner" aria-hidden="true"></span>
+                    <span>@L["ChatLoadingConversation"]</span>
+                </div>
+            }
             @foreach (var msg in _messages)
             {
                 if (msg.Role == "tool_use")
@@ -184,7 +201,7 @@
                     </div>
                 </div>
             }
-            @if (_messages.Count == 0 && !_loading)
+            @if (_messages.Count == 0 && !_loading && !_historyLoading)
             {
                 <div class="chat-empty">
                     @(_activeTarget!.Kind == "member"
@@ -224,7 +241,8 @@
             <textarea @ref="_inputRef"
                       value="@_inputText"
                       @oninput="OnInput"
-                      placeholder="@(_loading ? L["ChatInjectPlaceholder"] : L["ChatPlaceholder"])"
+                      disabled="@_historyLoading"
+                      placeholder="@(_historyLoading ? L["ChatLoadingConversation"] : _loading ? L["ChatInjectPlaceholder"] : L["ChatPlaceholder"])"
                       @onkeydown="OnKeyDown"></textarea>
             @if (_loading && !string.IsNullOrEmpty(_activeStreamId))
             {
@@ -235,7 +253,7 @@
             }
             else
             {
-                <button @onclick="Send" disabled="@((string.IsNullOrWhiteSpace(_inputText) && _pendingImages.Count == 0) || _loading)">@L["Send"]</button>
+                <button @onclick="Send" disabled="@(_historyLoading || (string.IsNullOrWhiteSpace(_inputText) && _pendingImages.Count == 0) || _loading)">@L["Send"]</button>
             }
         </div>
     }
@@ -264,6 +282,7 @@
     private readonly List<ChatTarget> _targets = [];
     private ChatTarget? _activeTarget;
     private bool _ready = false;
+    private bool _historyLoading;
 
     private readonly List<ChatMessage> _messages = [];
     private string _inputText = "";
@@ -311,7 +330,10 @@
     protected override async Task OnInitializedAsync()
     {
         _inputText = InitialMessage ?? "";
-        await FetchOllamaModelsAsync();
+        // Force an initial render before any disk/network work. This matters after a reboot,
+        // when model discovery and SQLite warm-up can take several seconds.
+        await Task.Yield();
+        var modelCatalogTask = FetchOllamaModelsAsync();
         // Ticket-scoped or pre-targeted chat: skip the picker entirely.
         if (!string.IsNullOrWhiteSpace(InitialAgent))
         {
@@ -322,6 +344,7 @@
             _ready = true;
             if (AutoSendInitialMessage && !string.IsNullOrWhiteSpace(_inputText))
                 await Send();
+            await modelCatalogTask;
             return;
         }
 
@@ -347,6 +370,7 @@
         }
         catch { /* leave _view = Selection */ }
         finally { _ready = true; }
+        await modelCatalogTask;
     }
 
     private bool IsAvailableModel(string? model) =>
@@ -378,40 +402,47 @@
     {
         if (string.IsNullOrWhiteSpace(ProjectSlug)) return;
         using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
-        try
-        {
-            _ollamaModels = await http.GetFromJsonAsync<List<string>>($"/api/projects/{ProjectSlug}/ollama-models") ?? new();
-        }
-        catch { _ollamaModels = new(); }
-        try
-        {
-            _grokModels = await http.GetFromJsonAsync<List<string>>("/api/grok-models") ?? new();
-        }
-        catch { _grokModels = new(); }
-        try
-        {
-            _codexModels = await http.GetFromJsonAsync<List<string>>("/api/codex-models") ?? new();
-        }
-        catch { _codexModels = new(); }
+        var ollamaTask = TryFetchModelsAsync(http, $"/api/projects/{ProjectSlug}/ollama-models");
+        var grokTask = TryFetchModelsAsync(http, "/api/grok-models");
+        var codexTask = TryFetchModelsAsync(http, "/api/codex-models");
+        await Task.WhenAll(ollamaTask, grokTask, codexTask);
+        _ollamaModels = await ollamaTask;
+        _grokModels = await grokTask;
+        _codexModels = await codexTask;
+    }
+
+    private static async Task<List<string>> TryFetchModelsAsync(HttpClient http, string uri)
+    {
+        try { return await http.GetFromJsonAsync<List<string>>(uri) ?? new(); }
+        catch { return new(); }
     }
 
     private async Task EnterConversationAsync(ChatTarget target)
     {
         _activeTarget = target;
         _messages.Clear();
+        _view = View.Conversation;
+        _historyLoading = true;
+        StateHasChanged();
         string? latestMessageAt = null;
         try
         {
             using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
-            var modelResponse = await http.GetFromJsonAsync<ChatModelResponse>(
-                $"/api/projects/{ProjectSlug}/chat/model?target={Uri.EscapeDataString(target.Slug)}");
+            var escapedTarget = Uri.EscapeDataString(target.Slug);
+            var modelTask = http.GetFromJsonAsync<ChatModelResponse>(
+                $"/api/projects/{ProjectSlug}/chat/model?target={escapedTarget}");
+            var messagesTask = http.GetFromJsonAsync<List<ServerChatMessage>>(
+                $"/api/projects/{ProjectSlug}/chat/messages?target={escapedTarget}");
+
+            ChatModelResponse? modelResponse = null;
+            List<ServerChatMessage>? msgs = null;
+            try { modelResponse = await modelTask; } catch { }
+            try { msgs = await messagesTask; } catch { }
             if (!string.IsNullOrWhiteSpace(modelResponse?.Model))
             {
                 _sessionModel = modelResponse.Model;
                 _selectedModel = modelResponse.Model;
             }
-            var msgs = await http.GetFromJsonAsync<List<ServerChatMessage>>(
-                $"/api/projects/{ProjectSlug}/chat/messages?target={Uri.EscapeDataString(target.Slug)}");
             if (msgs is not null)
             {
                 foreach (var m in msgs)
@@ -437,7 +468,7 @@
             }
         }
         catch { /* show empty conversation */ }
-        _view = View.Conversation;
+        finally { _historyLoading = false; }
         StateHasChanged();
 
         // If a chat run is still in flight server-side (drawer was closed mid-stream

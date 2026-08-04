@@ -3111,6 +3111,25 @@ body.flow-dnd-active * { cursor: grabbing !important; }
     font-family: monospace;
     border-bottom-left-radius: 3px;
 }
+.chat-history-loading {
+    flex: 1;
+    min-height: 8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+    color: var(--muted, #8a99b0);
+    font-size: 0.9rem;
+}
+.chat-loading-spinner {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    border: 2px solid rgba(138, 153, 176, 0.28);
+    border-top-color: var(--accent, #37dc7b);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+}
 
 .ticket-waiting-guidance {
   margin: .4rem 0 1rem;

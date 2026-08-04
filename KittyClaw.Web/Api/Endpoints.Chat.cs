@@ -53,7 +53,7 @@ public static partial class Endpoints
             if (project is null) return Results.NotFound();
             var workspacePath = ps.ResolveWorkspacePath(project);
             var model = sessions.GetLastChatModel(workspacePath, target);
-            if (model is null && (await cs.ListAsync(slug, target)).Count > 0)
+            if (model is null && await cs.AnyAsync(slug, target))
                 model = runs.LastCompletedForChatTarget(slug, target)?.Model;
             return Results.Ok(new { model });
         }).WithTags("Chat");

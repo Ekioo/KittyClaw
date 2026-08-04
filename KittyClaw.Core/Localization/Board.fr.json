@@ -47,6 +47,8 @@
   "NewSession": "Nouvelle session",
   "Back": "Retour",
   "ChatPickTarget": "À qui voulez-vous parler ?",
+  "ChatLoadingTargets": "Chargement des conversations disponibles…",
+  "ChatLoadingConversation": "Chargement de la conversation précédente…",
   "ChatTalkToClaude": "Chat direct",
   "ChatMember": "Membre du projet",
   "ChatSessionReset": "Session redémarrée (la précédente avait expiré)",
