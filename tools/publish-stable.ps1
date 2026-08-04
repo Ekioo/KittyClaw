@@ -17,8 +17,21 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repo = Resolve-Path (Join-Path $PSScriptRoot '..')
+$resolvedOut = [IO.Path]::GetFullPath($Out)
+$publishedWebRoot = [IO.Path]::GetFullPath((Join-Path $resolvedOut 'wwwroot'))
+if (-not $publishedWebRoot.StartsWith($resolvedOut.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing to clean a published web root outside '$resolvedOut'."
+}
 
 Write-Host "Publishing KittyClaw ($Configuration) to $Out ..." -ForegroundColor Cyan
+
+# dotnet publish skips copying a content file when the destination happens to have a newer
+# timestamp. That can pair a new static-assets manifest with stale JS/CSS and make Kestrel
+# truncate the old file to the new byte length. Remove only the validated published asset
+# directory; logs and sibling executables remain untouched.
+if (Test-Path -LiteralPath $publishedWebRoot -PathType Container) {
+    Remove-Item -LiteralPath $publishedWebRoot -Recurse -Force
+}
 
 # Web + QaRunner: published as siblings (KITTYCLAW_QARUNNER_EXE expects this layout).
 foreach ($proj in 'KittyClaw.Web', 'KittyClaw.QaRunner') {
