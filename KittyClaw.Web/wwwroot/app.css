@@ -3131,6 +3131,12 @@ body.flow-dnd-active * { cursor: grabbing !important; }
     animation: spin .8s linear infinite;
 }
 
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 .ticket-waiting-guidance {
   margin: .4rem 0 1rem;
   padding: .9rem 1rem;

@@ -17,3 +17,5 @@ window.restoreColumnScrollPositions = function () {
 window.boardReplaceUrl = function (url) {
     window.history.replaceState(window.history.state, "", url);
 };
+
+// Static assets are fingerprinted at publish time so repaired files bypass stale browser caches.
