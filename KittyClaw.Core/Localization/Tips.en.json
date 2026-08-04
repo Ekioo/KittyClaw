@@ -13,5 +13,15 @@
   "Tip11": "Paste an image straight into a description or a comment. It is uploaded and linked automatically.",
   "Tip12": "Write #42 in a comment to link a ticket. With #project-slug:7 the reference crosses projects.",
   "Tip13": "Everything the UI does is scriptable. The REST API is documented live at /api/docs.",
-  "Tip14": "Esc closes overlays one at a time. Menu first, then editor, then panel. No mouse needed."
+  "Tip14": "Esc closes overlays one at a time. Menu first, then editor, then panel. No mouse needed.",
+  "Tip15": "Right-click a column, then choose Configure. Its role, color, user guidance, processor, actions, scheduled tasks and routing are all managed in one place.",
+  "Tip16": "A project can contain several independent pipelines. Rename them safely: KittyClaw keeps stable identifiers for tickets and routing.",
+  "Tip17": "A column processor claims one eligible ticket at a time. It runs its actions, optionally calls its agent, then routes the ticket from the result.",
+  "Tip18": "Routing also protects manual moves. When a column declares destinations, the menu and drag-and-drop prevent skipping to an unexpected stage.",
+  "Tip19": "Use the Owner action required role for a human decision. The ticket is highlighted, assigned to the Owner and shows the guidance needed to unblock it.",
+  "Tip20": "Recurring work lives in a column's Scheduled tasks tab. The visual editor builds the frequency without asking you to write a cron expression.",
+  "Tip21": "Project skills describe reusable technical and operational procedures. A processor can make them available, recommended or required for its generic agent.",
+  "Tip22": "Each processor and scheduled task can choose its model. New instructions reuse your last choice, while an existing conversation always keeps its original model.",
+  "Tip23": "A pipeline's orange badge counts its visible unread tickets. Right-click a column and choose Mark all as read to reset its count.",
+  "Tip24": "A legacy automation board can be migrated with the wizard. Review its pipelines and columns step by step before launching the migration."
 }

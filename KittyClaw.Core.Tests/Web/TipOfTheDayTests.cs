@@ -7,12 +7,13 @@ namespace KittyClaw.Core.Tests.Web;
 /// <summary>
 /// Contract tests for the game-style tip-of-the-day on the unified home: a plain
 /// borderless always-visible line in the bottom-right corner (décor, not a dialog —
-/// no dismiss controls), one deterministic tip per day, en/fr tip pools kept in
+/// no dismiss controls), one deterministic tip per day, all translated tip pools kept in
 /// lockstep with the component's TipCount, and at least one security reminder
 /// (local-only tool) in the pool.
 /// </summary>
 public class TipOfTheDayTests
 {
+    private static readonly string[] SupportedLanguages = ["en", "fr", "de", "es", "it"];
     private static string RepoRoot()
     {
         var dir = Directory.GetCurrentDirectory();
@@ -49,22 +50,37 @@ public class TipOfTheDayTests
     }
 
     [Fact]
-    public void TipsJson_EnAndFrKeysMatch()
+    public void TipsJson_AllLanguagesKeysMatch()
     {
-        Assert.Equal(Keys("en"), Keys("fr"));
+        foreach (var language in SupportedLanguages.Skip(1))
+            Assert.Equal(Keys("en"), Keys(language));
     }
 
     [Fact]
-    public void TipsJson_HasExactlyTipCountTips_InBothLanguages()
+    public void TipsJson_HasExactlyTipCountTips_InAllLanguages()
     {
         var count = DeclaredTipCount();
-        foreach (var lang in new[] { "en", "fr" })
+        foreach (var lang in SupportedLanguages)
         {
             var keys = Keys(lang);
             for (var i = 1; i <= count; i++)
                 Assert.Contains($"Tip{i}", keys);
             Assert.DoesNotContain($"Tip{count + 1}", keys);
         }
+    }
+
+    [Fact]
+    public void TipsPool_ExplainsTheNewWorkflowFeatures()
+    {
+        var english = File.ReadAllText(TipsJsonPath("en"));
+
+        Assert.Contains("column processor", english, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Routing also protects manual moves", english);
+        Assert.Contains("Owner action required", english);
+        Assert.Contains("Scheduled tasks", english);
+        Assert.Contains("Project skills", english);
+        Assert.Contains("migration", english, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("orange badge", english);
     }
 
     [Fact]

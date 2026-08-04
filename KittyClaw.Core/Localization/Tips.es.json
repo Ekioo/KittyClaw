@@ -13,5 +13,15 @@
   "Tip11": "Pegue una imagen directamente en una descripción o un comentario. Se carga y vincula automáticamente.",
   "Tip12": "Escribe #42 en un comentario para vincular un ticket. Con #project-slug:7 la referencia cruza proyectos.",
   "Tip13": "Todo lo que hace la interfaz de usuario es programable. La API REST está documentada en vivo en /api/docs.",
-  "Tip14": "Esc cierra las superposiciones una a la vez. Primero menú, luego editor, luego panel. No se necesita ratón."
+  "Tip14": "Esc cierra las superposiciones una a la vez. Primero menú, luego editor, luego panel. No se necesita ratón.",
+  "Tip15": "Haga clic derecho en una columna y elija Configurar. Su rol, color, ayuda al usuario, procesador, acciones, tareas programadas y enrutamiento se gestionan juntos.",
+  "Tip16": "Un proyecto puede contener varios pipelines independientes. Puede renombrarlos con seguridad porque KittyClaw conserva identificadores estables para tickets y rutas.",
+  "Tip17": "Un procesador de columna toma un solo ticket elegible cada vez. Ejecuta sus acciones, llama opcionalmente a su agente y enruta el ticket según el resultado.",
+  "Tip18": "El enrutamiento también protege los movimientos manuales. Si una columna declara destinos, el menú y arrastrar y soltar evitan saltar etapas inesperadas.",
+  "Tip19": "Use el rol «Acción del Owner requerida» para una decisión humana. El ticket se destaca, se asigna al Owner y muestra las instrucciones para desbloquearlo.",
+  "Tip20": "El trabajo recurrente vive en la pestaña Tareas programadas de una columna. El editor visual crea la frecuencia sin pedir una expresión cron.",
+  "Tip21": "Las skills del proyecto describen procedimientos técnicos y operativos reutilizables. Un procesador puede hacerlas disponibles, recomendadas u obligatorias para su agente genérico.",
+  "Tip22": "Cada procesador y tarea programada puede elegir su modelo. Las instrucciones nuevas reutilizan la última elección y una conversación conserva siempre su modelo inicial.",
+  "Tip23": "La insignia naranja de un pipeline cuenta sus tickets visibles no leídos. Haga clic derecho en una columna y elija Marcar todo como leído para reiniciarla.",
+  "Tip24": "Un tablero antiguo de automatizaciones se puede migrar con el asistente. Revise pipelines y columnas paso a paso antes de iniciar la migración."
 }

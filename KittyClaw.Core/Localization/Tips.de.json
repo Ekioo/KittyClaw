@@ -13,5 +13,15 @@
   "Tip11": "Fügen Sie ein Bild direkt in eine Beschreibung oder einen Kommentar ein. Es wird automatisch hochgeladen und verlinkt.",
   "Tip12": "Schreiben Sie #42 in einen Kommentar, um ein Ticket zu verlinken. Mit #project-slug:7 erfolgt die Referenz projektübergreifend.",
   "Tip13": "Alles, was die Benutzeroberfläche tut, ist skriptfähig. Die REST-API ist live unter /api/docs dokumentiert.",
-  "Tip14": "Esc schließt Overlays einzeln. Zuerst das Menü, dann den Editor, dann das Bedienfeld. Keine Maus erforderlich."
+  "Tip14": "Esc schließt Overlays einzeln. Zuerst das Menü, dann den Editor, dann das Bedienfeld. Keine Maus erforderlich.",
+  "Tip15": "Klicken Sie mit der rechten Maustaste auf eine Spalte und wählen Sie Konfigurieren. Rolle, Farbe, Benutzerhinweise, Prozessor, Aktionen, geplante Aufgaben und Routing sind dort gebündelt.",
+  "Tip16": "Ein Projekt kann mehrere unabhängige Pipelines enthalten. Sie können sie sicher umbenennen, da KittyClaw stabile Kennungen für Tickets und Routing behält.",
+  "Tip17": "Ein Spaltenprozessor übernimmt jeweils ein geeignetes Ticket. Er führt Aktionen aus, ruft optional seinen Agenten auf und routet das Ticket anhand des Ergebnisses.",
+  "Tip18": "Das Routing schützt auch manuelle Verschiebungen. Definiert eine Spalte Ziele, verhindern Menü und Drag-and-drop das Überspringen unerwarteter Schritte.",
+  "Tip19": "Verwenden Sie die Rolle „Owner-Aktion erforderlich“ für menschliche Entscheidungen. Das Ticket wird hervorgehoben, dem Owner zugewiesen und zeigt die nötigen Hinweise.",
+  "Tip20": "Wiederkehrende Arbeit befindet sich im Reiter Geplante Aufgaben einer Spalte. Der visuelle Editor erstellt die Häufigkeit ohne Cron-Ausdruck.",
+  "Tip21": "Projekt-Skills beschreiben wiederverwendbare technische und operative Abläufe. Ein Prozessor kann sie für seinen generischen Agenten verfügbar, empfohlen oder erforderlich machen.",
+  "Tip22": "Jeder Prozessor und jede geplante Aufgabe kann ein Modell wählen. Neue Anweisungen verwenden die letzte Auswahl; bestehende Unterhaltungen behalten ihr ursprüngliches Modell.",
+  "Tip23": "Die orange Markierung einer Pipeline zählt sichtbare ungelesene Tickets. Wählen Sie per Rechtsklick auf eine Spalte Alle als gelesen markieren, um den Zähler zurückzusetzen.",
+  "Tip24": "Ein altes Automatisierungs-Board kann mit dem Assistenten migriert werden. Prüfen Sie Pipelines und Spalten schrittweise, bevor Sie die Migration starten."
 }

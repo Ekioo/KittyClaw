@@ -13,5 +13,15 @@
   "Tip11": "Incolla un'immagine direttamente in una descrizione o in un commento. Viene caricato e collegato automaticamente.",
   "Tip12": "Scrivi #42 in un commento per collegare un biglietto. Con #project-slug:7 il riferimento attraversa i progetti.",
   "Tip13": "Tutto ciò che fa l'interfaccia utente è gestibile tramite script. L'API REST è documentata in tempo reale in /api/docs.",
-  "Tip14": "Esc chiude gli overlay uno alla volta. Prima il menu, poi l'editor, quindi il pannello. Non è necessario il mouse."
+  "Tip14": "Esc chiude gli overlay uno alla volta. Prima il menu, poi l'editor, quindi il pannello. Non è necessario il mouse.",
+  "Tip15": "Fai clic destro su una colonna e scegli Configura. Ruolo, colore, guida utente, processore, azioni, attività pianificate e instradamento sono gestiti nello stesso punto.",
+  "Tip16": "Un progetto può contenere più pipeline indipendenti. Puoi rinominarle in sicurezza perché KittyClaw mantiene identificatori stabili per ticket e instradamento.",
+  "Tip17": "Un processore di colonna prende un solo ticket idoneo alla volta. Esegue le azioni, chiama facoltativamente il proprio agente e instrada il ticket in base al risultato.",
+  "Tip18": "L'instradamento protegge anche gli spostamenti manuali. Se una colonna dichiara destinazioni, menu e trascinamento impediscono di saltare a fasi impreviste.",
+  "Tip19": "Usa il ruolo «Azione del Owner richiesta» per una decisione umana. Il ticket viene evidenziato, assegnato al Owner e mostra le istruzioni necessarie per sbloccarlo.",
+  "Tip20": "Il lavoro ricorrente si trova nella scheda Attività pianificate di una colonna. L'editor visuale crea la frequenza senza richiedere un'espressione cron.",
+  "Tip21": "Le skill del progetto descrivono procedure tecniche e operative riutilizzabili. Un processore può renderle disponibili, consigliate o obbligatorie per il suo agente generico.",
+  "Tip22": "Ogni processore e attività pianificata può scegliere il modello. Le nuove istruzioni riutilizzano l'ultima scelta, mentre una conversazione conserva il modello iniziale.",
+  "Tip23": "Il badge arancione di una pipeline conta i ticket visibili non letti. Fai clic destro su una colonna e scegli Segna tutto come letto per azzerarlo.",
+  "Tip24": "Un vecchio board basato sulle automazioni può essere migrato con il wizard. Controlla pipeline e colonne passo dopo passo prima di avviare la migrazione."
 }

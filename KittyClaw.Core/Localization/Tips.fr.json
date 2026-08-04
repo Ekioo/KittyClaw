@@ -13,5 +13,15 @@
   "Tip11": "Collez une image directement dans une description ou un commentaire. Elle est envoyée et liée automatiquement.",
   "Tip12": "Écrivez #42 dans un commentaire pour lier un ticket. Avec #slug-projet:7, la référence traverse les projets.",
   "Tip13": "Tout ce que fait l'interface est scriptable. L'API REST est documentée en direct sur /api/docs.",
-  "Tip14": "Échap ferme les surcouches une par une. Le menu d'abord, puis l'éditeur, puis le panneau. Aucune souris nécessaire."
+  "Tip14": "Échap ferme les surcouches une par une. Le menu d'abord, puis l'éditeur, puis le panneau. Aucune souris nécessaire.",
+  "Tip15": "Clic droit sur une colonne, puis Configurer. Son rôle, sa couleur, son aide utilisateur, son processeur, ses actions, ses tâches planifiées et son routage sont réunis au même endroit.",
+  "Tip16": "Un projet peut contenir plusieurs pipelines indépendants. Vous pouvez les renommer sans casser les tickets ni les routages : KittyClaw conserve leurs identifiants stables.",
+  "Tip17": "Un processeur de colonne prend un seul ticket éligible à la fois. Il exécute ses actions, appelle éventuellement son agent, puis route le ticket selon le résultat.",
+  "Tip18": "Le routage protège aussi les déplacements manuels. Lorsqu'une colonne définit des destinations, le menu et le glisser-déposer empêchent de sauter vers une étape non prévue.",
+  "Tip19": "Utilisez le rôle « Action du Owner requise » pour une décision humaine. Le ticket est mis en évidence, assigné au Owner et affiche les consignes nécessaires pour le débloquer.",
+  "Tip20": "Les tâches récurrentes vivent dans l'onglet Tâches planifiées d'une colonne. L'éditeur visuel construit la fréquence sans vous demander d'écrire une expression cron.",
+  "Tip21": "Les skills du projet décrivent les procédures techniques et opérationnelles réutilisables. Un processeur peut les rendre disponibles, recommandés ou obligatoires pour son agent générique.",
+  "Tip22": "Chaque processeur et chaque tâche planifiée peut choisir son modèle. Les nouvelles instructions réutilisent le dernier modèle choisi, et une conversation conserve toujours son modèle initial.",
+  "Tip23": "La pastille orange d'un pipeline compte ses tickets visibles non lus. Clic droit sur une colonne, puis Tout marquer comme lu, pour remettre son compteur à zéro.",
+  "Tip24": "Un ancien board basé sur les automatisations peut être migré par le wizard. Validez les pipelines et leurs colonnes étape par étape avant de lancer la migration."
 }
