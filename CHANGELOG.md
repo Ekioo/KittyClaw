@@ -4,9 +4,54 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.13] — 2026-08-04
+
+Visual project pipelines, deterministic column processors, guided workflow migration, human hand-off guidance, and a broad reliability and interface polish pass.
+
+### Highlights
+
+KittyClaw projects can now contain **multiple independently named pipelines** backed by stable identifiers. Each column can own one deterministic processor with a mission, model, prompt, skills, ordered actions, schedules, routing rules, retries, and persistent memory. Processor and skill definitions live in the project workspace so workflows are reviewable, versioned, and reproducible through Git.
+
+Legacy automation boards gain a **guided visual migration wizard**. KittyClaw analyzes the existing board, proposes distinct pipelines and columns, lets the user refine every stage conversationally, executes a resumable migration plan, and disables migrated legacy automations. New projects receive the same workflow-planning assistance, including targeted questions when the workspace is empty.
+
+Human hand-offs are now first-class workflow states. Waiting columns can declare owner-action guidance, tickets clearly show what the user must do to unblock them, and manual moves are constrained by the processor's existing routing rules so users cannot accidentally skip required gates.
+
 ### Added
 
-- Waiting and owner-action tickets now display configurable, pipeline-aware unblock guidance between their description and activity; migration planning also proposes these instructions for every human hand-off or automatic wait.
+- Multiple stable-key pipelines per project, with pipeline-aware URLs, navigation, unread counts, duplication, renaming, and cross-pipeline ticket moves.
+- Column processors with project-file persistence, dedicated prompts and memory, selectable Claude/Codex/Grok/Ollama models, recommended or required skills, bounded retries, ordered actions, scheduled tasks, and conditional routing.
+- Durable non-agent processor actions for scripts, HTTP requests, ticket updates, comments, child-ticket creation, and column moves.
+- Visual scheduled-task editor and column-local scheduling, replacing raw cron entry for normal workflows.
+- Right-click column and ticket menus for configuration, insertion, duplication, sorting, marking read, and moving tickets between project pipelines.
+- Pipeline-aware waiting guidance and the distinct owner-action role, visually highlighting tickets that require human intervention.
+- Guided migration and new-project workflow wizards with graphical pipeline/column proposals, iterative prompting, progress feedback, resumable execution, and completion validation.
+- Provider-aware onboarding checks for Claude, Codex, Grok, and Ollama.
+- Claude Opus 5 model selection alongside Fable 5, Sonnet 5, active Opus 4.x models, and Haiku 4.5.
+- Tips covering pipelines, processors, routing, schedules, migration, owner hand-offs, and contextual board controls.
+
+### Changed
+
+- Workflow configuration is centered on the kanban: column structure, processor, actions, schedules, and routing are edited from one contextual dialog.
+- Processor routing is the single source of truth for both automatic outcomes and allowed manual moves.
+- Conversation creation remembers the last chosen model while each established conversation keeps its own model.
+- Pipeline tabs share the board's visual language, remain vertically balanced, and expose visible unread-ticket counts without counting hidden child tickets.
+- Project and column menus, keyboard focus states, tooltips, loading indicators, and workflow screens use harmonized interaction styles.
+- Legacy automations remain compatible for existing projects but migrated workflows disable their replaced automations.
+
+### Fixed
+
+- Prevented processor retry and routing loops, duplicate dispatches, inherited Codex notifications, memory-commit retriggers, and concurrent ownership races.
+- Paused projects no longer execute column processors or scheduled workflow tasks, and resumable work recovers safely after restart.
+- Parent tickets now resume correctly when blocking children reach pipeline-defined success columns, including shared success columns.
+- Ticket drawers preserve the selected secondary pipeline, remain mounted during URL updates, and no longer flash or break stale Blazor circuits.
+- Conversation history renders immediate loading feedback, discovers providers in parallel, avoids loading the same history twice, and animates its progress indicator.
+- Oversized and legacy chat sessions recover their persisted model and resume safely after provider or application restarts.
+- Column processor schema migration runs before claims against older project databases.
+- Static web assets are replaced cleanly during stable publication so stale immutable browser caches cannot serve truncated scripts.
+- Scheduled routes survive renamed columns and are cleaned when columns are deleted.
+- Codex and Grok token costs are estimated when their CLIs omit a monetary total.
+
+---
 
 ## [v0.12] — 2026-08-01
 

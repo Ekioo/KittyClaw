@@ -35,9 +35,15 @@ public class Opus48ModelSupportTests
     }
 
     [Fact]
-    public void Catalog_Contains_Opus48_1m()
+    public void Catalog_Contains_Opus5()
     {
-        Assert.Contains("claude-opus-4-8-1m", ClaudeModelCatalog.Models);
+        Assert.Contains("claude-opus-5", ClaudeModelCatalog.Models);
+    }
+
+    [Fact]
+    public void Catalog_Contains_No_Synthetic_1m_ModelIds()
+    {
+        Assert.DoesNotContain(ClaudeModelCatalog.Models, model => model.EndsWith("-1m"));
     }
 
     [Fact]
