@@ -23,7 +23,11 @@ Write-Host "Publishing KittyClaw ($Configuration) to $Out ..." -ForegroundColor 
 # Web + QaRunner: published as siblings (KITTYCLAW_QARUNNER_EXE expects this layout).
 foreach ($proj in 'KittyClaw.Web', 'KittyClaw.QaRunner') {
     Write-Host "  -> $proj" -ForegroundColor DarkGray
-    dotnet publish (Join-Path $repo $proj) -c $Configuration -o $Out
+    # Static-web-asset manifests include content lengths and fingerprints. Incremental
+    # publish can retain a stale manifest after a JS/CSS edit, causing Kestrel to serve a
+    # truncated asset even though the copied file is complete. Force those manifests to be
+    # rebuilt for every stable publication.
+    dotnet publish (Join-Path $repo $proj) -c $Configuration -o $Out --no-incremental
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed for $proj" }
 }
 
@@ -32,7 +36,7 @@ foreach ($proj in 'KittyClaw.Web', 'KittyClaw.QaRunner') {
 # agents, not just QA. The QaRunner's TestInstance picks it up explicitly via KITTYCLAW_CLAUDE_BIN.
 $mockOut = Join-Path $Out 'qa-mock'
 Write-Host "  -> KittyClaw.ClaudeMock (-> $mockOut)" -ForegroundColor DarkGray
-dotnet publish (Join-Path $repo 'KittyClaw.ClaudeMock') -c $Configuration -o $mockOut
+dotnet publish (Join-Path $repo 'KittyClaw.ClaudeMock') -c $Configuration -o $mockOut --no-incremental
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed for KittyClaw.ClaudeMock" }
 
 Write-Host "`nDone. Stable build is in $Out" -ForegroundColor Green
