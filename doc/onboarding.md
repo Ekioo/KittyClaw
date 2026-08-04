@@ -6,7 +6,7 @@ This guide starts after installation and walks through a first project, from cre
 
 Open **http://localhost:5230**. On the first visit, KittyClaw checks Git and every supported agent provider: Claude Code, OpenAI Codex CLI, Grok Build, and Ollama.
 
-You can continue when an optional provider is missing, and the board remains usable. Agent runs require at least one available provider, however. Template-driven Git actions also require Git. Ollama's endpoint and models are configured per project after creation.
+You can continue when an optional provider is missing, and the board remains usable. Onboarding considers the agent requirement satisfied when at least one of Claude Code, OpenAI Codex CLI, or Grok Build is available. Git is also required for template-driven version-control actions. Ollama is detected and its endpoint and models are configured per project after creation, but local Ollama models currently use Claude Code as their transport, so Ollama alone does not satisfy the agent requirement.
 
 ## Create your first project
 
