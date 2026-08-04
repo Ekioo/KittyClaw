@@ -266,7 +266,7 @@ public class UnifiedBoardTests
     [Fact]
     public void AppRazor_RegistersUnifiedBoardScript()
     {
-        Assert.Contains("/js/unified-board.js", File.ReadAllText(WebPath("Components", "App.razor")));
+        Assert.Contains("@Assets[\"js/unified-board.js\"]", File.ReadAllText(WebPath("Components", "App.razor")));
     }
 
     // ── Localization ─────────────────────────────────────────────────────────

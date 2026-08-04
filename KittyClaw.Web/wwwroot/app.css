@@ -3111,6 +3111,42 @@ body.flow-dnd-active * { cursor: grabbing !important; }
     font-family: monospace;
     border-bottom-left-radius: 3px;
 }
+
+.ticket-waiting-guidance {
+  margin: .4rem 0 1rem;
+  padding: .9rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--waiting-guidance-color) 42%, var(--border));
+  border-left: 3px solid var(--waiting-guidance-color);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--waiting-guidance-color) 9%, var(--surface2));
+}
+
+.ticket-waiting-guidance--action { --waiting-guidance-color: #f59e42; }
+.ticket-waiting-guidance--automatic { --waiting-guidance-color: #a78bfa; }
+
+.ticket-waiting-guidance > header {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  margin-bottom: .55rem;
+  color: var(--text);
+}
+
+.ticket-waiting-guidance-icon {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  color: var(--waiting-guidance-color);
+  background: color-mix(in srgb, var(--waiting-guidance-color) 16%, transparent);
+}
+
+.ticket-waiting-guidance header div { display: grid; gap: .08rem; }
+.ticket-waiting-guidance header small { color: var(--muted); }
+.ticket-waiting-guidance .markdown > :first-child { margin-top: 0; }
+.ticket-waiting-guidance .markdown > :last-child { margin-bottom: 0; }
 .chat-diagnostic-block {
     width: min(80%, 34rem);
     overflow: hidden;

@@ -234,5 +234,20 @@
   "ChatCommandWarning": "El comando informó de una advertencia técnica",
   "ChatTechnicalDetails": "Detalles técnicos",
   "MarkColumnRead": "Marcar todo como leído",
-  "OwnerActionRequired": "Acción requerida"
+  "OwnerActionRequired": "Acción requerida",
+  "ColumnUserGuidance": "Instrucciones del ticket",
+  "ColumnUserGuidanceHelp": "Instrucciones Markdown mostradas entre la descripción y la actividad cuando el ticket está en espera. Explique exactamente qué puede hacer el Owner para desbloquearlo. Déjelo vacío para que KittyClaw derive instrucciones seguras del pipeline.",
+  "ColumnUserGuidancePlaceholder": "- Mover el ticket a Aprobado para validar\n- Moverlo a Rechazado y añadir un comentario para rechazar",
+  "ColumnUserGuidanceFallbackHint": "Este bloque siempre aparece en tickets en espera. Si está vacío, KittyClaw deriva las instrucciones del rol, la planificación, los subtickets bloqueantes y las columnas cercanas.",
+  "TicketWaitingGuidanceTitle": "Cómo desbloquear este ticket",
+  "TicketOwnerActionTitle": "Tu acción es necesaria",
+  "TicketAutomaticWaitingTitle": "Espera automática",
+  "TicketWaitingScheduledGuidance": "No se requiere ninguna acción manual. KittyClaw reanudará este ticket el **{0}** y lo dirigirá hacia **{1}**.",
+  "TicketWaitingNextConfiguredStep": "el siguiente paso configurado",
+  "TicketWaitingChildrenGuidance": "Completa los subtickets bloqueantes mostrados arriba. KittyClaw reanudará este ticket cuando todos alcancen un estado terminal.",
+  "TicketWaitingAutomaticGuidance": "Actualmente no se requiere ninguna acción manual. KittyClaw reanudará el ticket cuando se cumpla su condición de espera.",
+  "TicketOwnerActionApproveRejectGuidance": "- Mueve el ticket a **{0}** para validar y continuar.\n- Muévelo a **{1}** para rechazar y añade un comentario explicando la decisión.",
+  "TicketOwnerActionContinueGuidance": "Realiza la acción solicitada y mueve el ticket a **{0}** para continuar. Añade un comentario si el siguiente paso necesita contexto.",
+  "TicketOwnerActionRejectGuidance": "Añade un comentario con tu decisión. Si rechazas el ticket, muévelo a **{0}**.",
+  "TicketOwnerActionCommentGuidance": "Añade un comentario con la información solicitada o tu decisión y mueve el ticket al siguiente paso adecuado de este pipeline."
 }

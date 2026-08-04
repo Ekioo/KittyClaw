@@ -233,6 +233,22 @@
                     }
                 </div>
 
+                @if (CurrentColumn() is { } guidanceColumn &&
+                    guidanceColumn.Role is ColumnRole.Waiting or ColumnRole.OwnerAction)
+                {
+                    <section class="ticket-waiting-guidance @(guidanceColumn.Role == ColumnRole.OwnerAction ? "ticket-waiting-guidance--action" : "ticket-waiting-guidance--automatic")"
+                             role="note" aria-label="@L["TicketWaitingGuidanceTitle"]">
+                        <header>
+                            <span class="ticket-waiting-guidance-icon">@(guidanceColumn.Role == ColumnRole.OwnerAction ? "⚠" : "◷")</span>
+                            <div>
+                                <strong>@L[guidanceColumn.Role == ColumnRole.OwnerAction ? "TicketOwnerActionTitle" : "TicketAutomaticWaitingTitle"]</strong>
+                                <small>@guidanceColumn.Name</small>
+                            </div>
+                        </header>
+                        <div class="markdown">@((MarkupString)Markdown.ToHtml(WaitingGuidance(guidanceColumn), _mdPipeline))</div>
+                    </section>
+                }
+
                 <div class="thread-section-divider">
                     <div class="activity-header">
                         <span class="section-label">@L["Activity"]</span>
@@ -409,6 +425,53 @@
     private string _loadedKey = "";
     private Dictionary<int, string> _processorNames = [];
 
+    private BoardColumn? CurrentColumn() => _ticket is null
+        ? null
+        : _columns.FirstOrDefault(column => column.Id == _ticket.ColumnId)
+          ?? _columns.FirstOrDefault(column => column.Name.Equals(_ticket.Status, StringComparison.OrdinalIgnoreCase));
+
+    private string WaitingGuidance(BoardColumn column)
+    {
+        if (!string.IsNullOrWhiteSpace(column.UserGuidance))
+            return column.UserGuidance;
+
+        if (column.Role == ColumnRole.Waiting)
+        {
+            if (_ticket?.FireAt is DateTime fireAt)
+                return L.Get("TicketWaitingScheduledGuidance", UtcToLocal(fireAt).ToString("g"),
+                    _ticket.ScheduleTarget ?? L["TicketWaitingNextConfiguredStep"]);
+
+            var summary = _summaries.FirstOrDefault(ticket => ticket.Id == _ticket?.Id);
+            if (summary?.SubTickets.Any(child => child.BlocksParent &&
+                    child.ColumnRole is not ColumnRole.Success and not ColumnRole.Failure) == true)
+                return L["TicketWaitingChildrenGuidance"];
+
+            return L["TicketWaitingAutomaticGuidance"];
+        }
+
+        var next = _columns
+            .Where(candidate => candidate.SortOrder > column.SortOrder &&
+                                candidate.Role is not ColumnRole.Waiting and not ColumnRole.OwnerAction and not ColumnRole.Failure)
+            .OrderBy(candidate => candidate.SortOrder)
+            .FirstOrDefault();
+        var rejected = _columns.FirstOrDefault(candidate => candidate.Role == ColumnRole.Failure);
+
+        if (next is not null && rejected is not null)
+            return L.Get("TicketOwnerActionApproveRejectGuidance", EscapeMarkdown(next.Name), EscapeMarkdown(rejected.Name));
+        if (next is not null)
+            return L.Get("TicketOwnerActionContinueGuidance", EscapeMarkdown(next.Name));
+        if (rejected is not null)
+            return L.Get("TicketOwnerActionRejectGuidance", EscapeMarkdown(rejected.Name));
+        return L["TicketOwnerActionCommentGuidance"];
+    }
+
+    private static string EscapeMarkdown(string value) => value
+        .Replace("\\", "\\\\", StringComparison.Ordinal)
+        .Replace("*", "\\*", StringComparison.Ordinal)
+        .Replace("_", "\\_", StringComparison.Ordinal)
+        .Replace("[", "\\[", StringComparison.Ordinal)
+        .Replace("]", "\\]", StringComparison.Ordinal);
+
     protected override void OnInitialized()
     {
         BoardUpdateNotifier.OnProjectUpdated += OnProjectUpdatedExternal;
@@ -503,6 +566,7 @@
                 return;
             }
             _summaries = await TicketService.ListTicketsAsync(Slug);
+            _columns = await ColumnService.ListColumnsAsync(Slug, _ticket.PipelineId);
             _allLabels = await LabelService.ListLabelsAsync(Slug);
             _allMembers = await MemberService.ListMembersAsync(Slug);
             await RebuildPipelineAsync();

@@ -128,6 +128,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "GET /api/projects/{slug}/chat/targets",
         "GET /api/projects/{slug}/chat/messages",
         "GET /api/projects/{slug}/chat/active",
+        "GET /api/projects/{slug}/chat/model",
         "DELETE /api/projects/{slug}/chat/session",
         "POST /api/projects/{slug}/chat/start",
         // Images
@@ -223,6 +224,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         ["GET /api/projects/{slug}/chat/targets"] = "Chat",
         ["GET /api/projects/{slug}/chat/messages"] = "Chat",
         ["GET /api/projects/{slug}/chat/active"] = "Chat",
+        ["GET /api/projects/{slug}/chat/model"] = "Chat",
         ["DELETE /api/projects/{slug}/chat/session"] = "Chat",
         ["POST /api/projects/{slug}/chat/start"] = "Chat",
         ["POST /api/images"] = "Images",

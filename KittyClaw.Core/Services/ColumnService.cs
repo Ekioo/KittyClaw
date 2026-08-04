@@ -41,9 +41,17 @@ public class ColumnService
                     Name TEXT NOT NULL,
                     Color TEXT NOT NULL DEFAULT '#5a6a80',
                     SortOrder INTEGER NOT NULL DEFAULT 0,
-                    Role INTEGER NOT NULL DEFAULT 0
+                    Role INTEGER NOT NULL DEFAULT 0,
+                    UserGuidance TEXT NOT NULL DEFAULT ''
                 )
             """));
+
+        await MigrationGate.RunOnceAsync(db, "board-columns-user-guidance-v1", static async d =>
+        {
+            var columns = await d.Database.SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('BoardColumns')").ToListAsync();
+            if (!columns.Contains("UserGuidance", StringComparer.OrdinalIgnoreCase))
+                await d.Database.ExecuteSqlRawAsync("ALTER TABLE BoardColumns ADD COLUMN UserGuidance TEXT NOT NULL DEFAULT ''");
+        });
 
         var defaultPipeline = await PipelineService.EnsureWorkflowSchemaAsync(db);
 
@@ -75,7 +83,16 @@ public class ColumnService
                     Role = DefaultColumns[i].Role,
                 });
             }
-            await db.SaveChangesAsync();
+            try { await db.SaveChangesAsync(); }
+            catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+            {
+                // Another request (typically the engine's first tick racing the first board
+                // load) seeded the same pipeline after our empty check. The unique index is
+                // the arbiter; discard our pending copies and use the committed rows.
+                foreach (var entry in db.ChangeTracker.Entries<BoardColumn>()
+                             .Where(entry => entry.State == EntityState.Added))
+                    entry.State = EntityState.Detached;
+            }
         }
         else
         {
@@ -132,7 +149,8 @@ public class ColumnService
 
     public async Task<BoardColumn> CreateColumnAsync(
         string projectSlug, string name, string color = "#5a6a80",
-        int? pipelineId = null, ColumnRole role = ColumnRole.Normal, int? insertIndex = null)
+        int? pipelineId = null, ColumnRole role = ColumnRole.Normal, int? insertIndex = null,
+        string userGuidance = "")
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureBoardColumnsTableAsync(db);
@@ -155,6 +173,7 @@ public class ColumnService
             Color = color,
             SortOrder = targetIndex,
             Role = role,
+            UserGuidance = userGuidance.Trim(),
         };
         db.BoardColumns.Add(column);
         try { await db.SaveChangesAsync(); }
@@ -167,7 +186,8 @@ public class ColumnService
     }
 
     public async Task<BoardColumn?> UpdateColumnAsync(
-        string projectSlug, int columnId, string? name = null, string? color = null, ColumnRole? role = null)
+        string projectSlug, int columnId, string? name = null, string? color = null,
+        ColumnRole? role = null, string? userGuidance = null)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureBoardColumnsTableAsync(db);
@@ -192,6 +212,7 @@ public class ColumnService
         }
         if (color is not null) column.Color = color;
         if (role is not null) column.Role = role.Value;
+        if (userGuidance is not null) column.UserGuidance = userGuidance.Trim();
         await db.SaveChangesAsync();
         await tx.CommitAsync();
         return column;

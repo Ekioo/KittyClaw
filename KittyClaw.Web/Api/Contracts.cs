@@ -52,8 +52,10 @@ public record PatchTicketLabelsRequest(string Author, List<string>? Add = null, 
 public record UpdateLabelRequest(string? Name = null, string? Color = null);
 public record SetTicketLabelsRequest(List<int> LabelIds);
 public record ReorderTicketRequest(string Status, int Index);
-public record CreateColumnRequest(string Name, string Color = "#5a6a80", int? PipelineId = null, ColumnRole Role = ColumnRole.Normal);
-public record UpdateColumnRequest(string? Name = null, string? Color = null, ColumnRole? Role = null);
+public record CreateColumnRequest(string Name, string Color = "#5a6a80", int? PipelineId = null,
+    ColumnRole Role = ColumnRole.Normal, string UserGuidance = "");
+public record UpdateColumnRequest(string? Name = null, string? Color = null, ColumnRole? Role = null,
+    string? UserGuidance = null);
 public record ReorderColumnRequest(int ColumnId, int Index);
 public record CreateMemberRequest(string Name);
 public record UpdateMemberRequest(string? Name = null, string? DefaultModel = null);

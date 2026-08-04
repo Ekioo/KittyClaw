@@ -76,6 +76,24 @@ public sealed class PipelineServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Waiting_column_preserves_configurable_user_guidance()
+    {
+        var project = await _projects.CreateProjectAsync("Guided handoff");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Editorial");
+        var column = await _columns.CreateColumnAsync(project.Slug, "Approval",
+            pipelineId: pipeline.Id, role: ColumnRole.OwnerAction,
+            userGuidance: "Move to **Published** to approve.");
+
+        Assert.Equal("Move to **Published** to approve.", column.UserGuidance);
+
+        await _columns.UpdateColumnAsync(project.Slug, column.Id,
+            userGuidance: "Add a comment, then move to **Published**.");
+        var reloaded = Assert.Single(await _columns.ListColumnsAsync(project.Slug, pipeline.Id));
+
+        Assert.Equal("Add a comment, then move to **Published**.", reloaded.UserGuidance);
+    }
+
+    [Fact]
     public async Task Renaming_pipeline_preserves_stable_identity_and_columns()
     {
         var project = await _projects.CreateProjectAsync("Rename workflow");

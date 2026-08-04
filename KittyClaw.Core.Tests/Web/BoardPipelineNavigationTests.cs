@@ -15,7 +15,8 @@ public class BoardPipelineNavigationTests
         Assert.Contains("return $\"{path}/ticket/{ticket}\";", source);
         Assert.Contains("await ReplaceTicketUrlAsync(ticket.Id);", source);
         Assert.Contains("await ReplaceTicketUrlAsync(null);", source);
-        Assert.Contains("JS.InvokeVoidAsync(\"boardReplaceUrl\", BoardUrl(_subKanbanParentId, ticketId))", source);
+        Assert.Contains("TryInvokeBoardJsAsync(\"boardReplaceUrl\", url)", source);
+        Assert.Contains("Navigation.NavigateTo(url, replace: true)", source);
     }
 
     [Fact]

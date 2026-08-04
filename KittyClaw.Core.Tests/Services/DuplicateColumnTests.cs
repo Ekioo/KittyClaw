@@ -72,6 +72,22 @@ public sealed class DuplicateColumnTests
     }
 
     [Fact]
+    public async Task ConcurrentFirstReads_SeedOneCoherentDefaultBoard()
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("concurrent-seed");
+        var readers = Enumerable.Range(0, 12)
+            .Select(_ => new ColumnService(projects).ListColumnsAsync(project.Slug));
+
+        var results = await Task.WhenAll(readers);
+
+        Assert.All(results, columns => Assert.Equal(7, columns.Count));
+        Assert.All(results, columns => Assert.Equal(columns.Count,
+            columns.Select(column => column.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count()));
+    }
+
+    [Fact]
     public async Task RenameColumn_ToTakenName_IsRefused()
     {
         using var tmp = new TempDir();

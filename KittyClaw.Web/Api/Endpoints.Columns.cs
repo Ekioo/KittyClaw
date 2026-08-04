@@ -13,14 +13,15 @@ public static partial class Endpoints
 
         api.MapPost("/projects/{slug}/columns", async (string slug, CreateColumnRequest req, ColumnService cs, BoardUpdateNotifier notifier) =>
         {
-            var column = await cs.CreateColumnAsync(slug, req.Name, req.Color, req.PipelineId, req.Role);
+            var column = await cs.CreateColumnAsync(slug, req.Name, req.Color, req.PipelineId, req.Role,
+                userGuidance: req.UserGuidance);
             notifier.NotifyProjectUpdated(slug);
             return Results.Created($"/api/projects/{slug}/columns/{column.Id}", column);
         }).WithTags("Columns");
 
         api.MapPatch("/projects/{slug}/columns/{columnId:int}", async (string slug, int columnId, UpdateColumnRequest req, ColumnService cs, BoardUpdateNotifier notifier) =>
         {
-            var column = await cs.UpdateColumnAsync(slug, columnId, req.Name, req.Color, req.Role);
+            var column = await cs.UpdateColumnAsync(slug, columnId, req.Name, req.Color, req.Role, req.UserGuidance);
             if (column is not null) notifier.NotifyProjectUpdated(slug);
             return column is null ? Results.NotFound() : Results.Ok(column);
         }).WithTags("Columns");

@@ -70,6 +70,15 @@
                             </select>
                         </label>
                     </div>
+                    <label class="column-guidance-field">
+                        <FieldHelp Label="@L["ColumnUserGuidance"]" Help="@L["ColumnUserGuidanceHelp"]" />
+                        <textarea class="settings-input workflow-textarea" @bind="_userGuidance"
+                                  placeholder="@L["ColumnUserGuidancePlaceholder"]"></textarea>
+                    </label>
+                    @if (_columnRole is ColumnRole.Waiting or ColumnRole.OwnerAction)
+                    {
+                        <p class="settings-hint">@L["ColumnUserGuidanceFallbackHint"]</p>
+                    }
                     <p class="settings-hint">@L["ColumnStableIdentityHint"]</p>
 
                     @if (!IsCreating && PipelineColumns.Count > 1)
@@ -318,6 +327,7 @@
     private string _columnName = "";
     private string _columnColor = "#5a6a80";
     private ColumnRole _columnRole;
+    private string _userGuidance = "";
     private int _positionIndex;
     private string _name = "";
     private string _mission = "";
@@ -367,6 +377,7 @@
             _columnName = Column?.Name ?? (TemplateColumn is null ? "" : L.Get("ColumnCopyName", TemplateColumn.Name));
             _columnColor = source?.Color ?? "#5a6a80";
             _columnRole = source?.Role ?? ColumnRole.Normal;
+            _userGuidance = source?.UserGuidance ?? "";
             var sourceIndex = source is null ? PipelineColumns.Count : PipelineColumns.FindIndex(column => column.Id == source.Id);
             _positionIndex = Math.Clamp(InsertIndex >= 0 ? InsertIndex : Math.Max(0, sourceIndex), 0, SiblingColumns.Count);
             _deleteTargetId = SiblingColumns.FirstOrDefault()?.Id ?? 0;
@@ -455,11 +466,13 @@
             BoardColumn savedColumn;
             if (IsCreating)
             {
-                savedColumn = await ColumnService.CreateColumnAsync(Slug, trimmedName, _columnColor, PipelineId, _columnRole, _positionIndex);
+                savedColumn = await ColumnService.CreateColumnAsync(Slug, trimmedName, _columnColor, PipelineId,
+                    _columnRole, _positionIndex, _userGuidance);
             }
             else
             {
-                savedColumn = await ColumnService.UpdateColumnAsync(Slug, Column!.Id, trimmedName, _columnColor, _columnRole)
+                savedColumn = await ColumnService.UpdateColumnAsync(Slug, Column!.Id, trimmedName, _columnColor,
+                    _columnRole, _userGuidance)
                     ?? throw new InvalidOperationException(L["ColumnNameAlreadyExists"]);
                 await ColumnService.ReorderColumnAsync(Slug, savedColumn.Id, _positionIndex);
             }

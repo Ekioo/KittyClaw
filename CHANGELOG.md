@@ -4,6 +4,10 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+### Added
+
+- Waiting and owner-action tickets now display configurable, pipeline-aware unblock guidance between their description and activity; migration planning also proposes these instructions for every human hand-off or automatic wait.
+
 ## [v0.12] — 2026-08-01
 
 OpenAI Codex support, a unified multi-project home, lossless cross-project ticket transfers, expanded localization, and safer concurrent board updates.

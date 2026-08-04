@@ -85,6 +85,7 @@ public sealed class ColumnProcessorDialogTests
         string[] keys =
         [
             "ColumnNameHelp", "ColumnColorHelp", "ColumnRoleHelp", "ColumnPositionHelp",
+            "ColumnUserGuidanceHelp",
             "ColumnDeleteDestinationHelp", "ProcessorEnabledHelp", "ProcessorNameHelp",
             "ProcessorMissionHelp", "ProcessorPromptHelp", "ProcessorModelHelp", "ProcessorTicketOrderHelp",
             "ProcessorMaxAttemptsHelp", "ProcessorRetryDelayHelp", "ProcessorTurnLimitHelp",
@@ -263,6 +264,26 @@ public sealed class ColumnProcessorDialogTests
         Assert.Contains("col.Role == ColumnRole.OwnerAction", unified);
         Assert.Contains("owner-action-badge", unified);
         Assert.Contains(".ticket-card.ticket-owner-action", css);
+    }
+
+    [Fact]
+    public void Waiting_tickets_show_configurable_pipeline_guidance_between_description_and_activity()
+    {
+        var dialog = File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Web", "Components", "ColumnProcessorDialog.razor"));
+        var panel = File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Web", "Components", "TicketPanel.razor"));
+        var model = File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Core", "Models", "BoardColumn.cs"));
+
+        Assert.Contains("_userGuidance", dialog);
+        Assert.Contains("ColumnUserGuidanceHelp", dialog);
+        Assert.Contains("UserGuidance", model);
+        Assert.Contains("ticket-waiting-guidance", panel);
+        Assert.Contains("ColumnRole.Waiting or ColumnRole.OwnerAction", panel);
+        Assert.Contains("WaitingGuidance(guidanceColumn)", panel);
+        Assert.True(panel.IndexOf("ticket-waiting-guidance", StringComparison.Ordinal) <
+                    panel.IndexOf("thread-section-divider", StringComparison.Ordinal));
     }
 
     [Fact]

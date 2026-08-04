@@ -25,6 +25,7 @@ public sealed class WorkflowMigrationColumn
     public string Name { get; set; } = "";
     public ColumnRole Role { get; set; } = ColumnRole.Normal;
     public string Description { get; set; } = "";
+    public string UserGuidance { get; set; } = "";
 }
 
 public sealed record WorkflowMigrationJob(
@@ -503,7 +504,7 @@ public sealed class WorkflowMigrationPlanner(
         Approved plan:
         {JsonSerializer.Serialize(plan, Json)}
 
-        Implement this plan completely using KittyClaw's API and the project's file-backed processor and skill configuration. Preserve stable identifiers whenever an existing pipeline, column, processor, or skill can be reused. Map every existing ticket and child ticket to exactly one pipeline by purpose. Configure processors, action chains, routing, retry/failure destinations, scheduled tasks and project skills needed by the approved flow. Use OwnerAction for every stage requiring a human decision or missing input. Do not create In Progress columns for agent execution.
+        Implement this plan completely using KittyClaw's API and the project's file-backed processor and skill configuration. Preserve stable identifiers whenever an existing pipeline, column, processor, or skill can be reused. Map every existing ticket and child ticket to exactly one pipeline by purpose. Configure processors, action chains, routing, retry/failure destinations, scheduled tasks and project skills needed by the approved flow. Use OwnerAction for every stage requiring a human decision or missing input, and save concrete userGuidance explaining the exact comment or destination-column action that unblocks each Waiting or OwnerAction stage. Do not create In Progress columns for agent execution.
 
         You are already running inside the confirmed application job. Never call any /workflow-migrations/analyze, /workflow-migrations/refine, or /workflow-migrations/apply endpoint. Apply the plan directly through the granular pipeline, column, ticket, processor, skill, scheduled-task and automation APIs.
 
@@ -530,7 +531,8 @@ public sealed class WorkflowMigrationPlanner(
             "columns": [{
               "name": "user-friendly column name",
               "role": "Normal|Waiting|OwnerAction|Success|Failure",
-              "description": "what happens here and what moves the ticket onward"
+              "description": "what happens here and what moves the ticket onward",
+              "userGuidance": "for Waiting or OwnerAction: concrete Markdown instructions shown on the ticket"
             }]
           }],
           "risks": ["ambiguity or migration risk"]
@@ -540,7 +542,9 @@ public sealed class WorkflowMigrationPlanner(
         schedules, or terminal outcomes; do not preserve one mixed pipeline merely because the old
         board shared columns. Do not invent an In Progress column for agent execution. Use
         OwnerAction for human decisions or missing input, Waiting only for non-human pauses, and
-        include explicit Success and Failure destinations. Keep the plan concise and user-facing.
+        include explicit Success and Failure destinations. Every Waiting or OwnerAction column must
+        have userGuidance that says whether to comment, which exact column validates, which exact
+        column refuses, or why no manual action is required. Keep the plan concise and user-facing.
         """;
 
     private const string ApplicationInstructions = """

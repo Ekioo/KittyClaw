@@ -11,7 +11,8 @@ This model is intended for business workflows where a ticket is claimed from a c
 - A project owns one or more `Pipeline` records. Renaming a pipeline changes only `Name`; its `Id` and stable `Slug` remain unchanged.
 - A pipeline owns ordered `BoardColumn` records. Column names are unique only within their pipeline.
 - Tickets reference both `PipelineId` and `ColumnId`. The legacy `Status` string remains synchronized with the column name.
-- A column has a semantic `ColumnRole`: `Normal`, `Waiting`, `Success`, or `Failure`. Logic relies on the role, not on translated or user-editable names.
+- A column has a semantic `ColumnRole`: `Normal`, `Waiting`, `OwnerAction`, `Success`, or `Failure`. Logic relies on the role, not on translated or user-editable names. `Waiting` is reserved for non-human pauses; `OwnerAction` marks a decision or missing input and assigns the ticket to the owner.
+- `Waiting` and `OwnerAction` columns may define Markdown `UserGuidance`. The ticket panel always shows an unblock block between description and activity. When guidance is empty, KittyClaw derives a safe explanation from the schedule, blocking children, column role, and nearby success/failure destinations.
 - One optional `ColumnProcessor` is attached to a column by stable `ColumnId`. Its optional `Model` overrides the project-level local model; leaving it unset uses the project local model when configured, otherwise the selected provider's default.
 
 There is deliberately no required `InProgress` business column. A durable `ColumnExecution` records `Running`, `Retrying`, `WaitingForChildren`, and terminal execution states while the ticket remains in its current business column.

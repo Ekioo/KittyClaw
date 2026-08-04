@@ -242,5 +242,20 @@
   "ChatCommandWarning": "The command reported a technical warning",
   "ChatTechnicalDetails": "Technical details",
   "MarkColumnRead": "Mark all as read",
-  "OwnerActionRequired": "Action required"
+  "OwnerActionRequired": "Action required",
+  "ColumnUserGuidance": "Ticket guidance",
+  "ColumnUserGuidanceHelp": "Markdown instructions displayed between the ticket description and activity while it is waiting. Explain exactly what the Owner can do to unblock it. Leave empty to let KittyClaw derive safe guidance from the pipeline.",
+  "ColumnUserGuidancePlaceholder": "- Move the ticket to Approved to validate\n- Move it to Rejected and add a comment to refuse",
+  "ColumnUserGuidanceFallbackHint": "This block is always displayed on waiting tickets. If left empty, KittyClaw derives guidance from the role, schedule, blocking children and surrounding columns.",
+  "TicketWaitingGuidanceTitle": "How to unblock this ticket",
+  "TicketOwnerActionTitle": "Your action is required",
+  "TicketAutomaticWaitingTitle": "Waiting automatically",
+  "TicketWaitingScheduledGuidance": "No manual action is required. KittyClaw will resume this ticket on **{0}** and move it toward **{1}**.",
+  "TicketWaitingNextConfiguredStep": "the configured next step",
+  "TicketWaitingChildrenGuidance": "Complete the blocking sub-tickets shown above. KittyClaw will resume this ticket when all of them reach a terminal state.",
+  "TicketWaitingAutomaticGuidance": "No manual action is currently required. KittyClaw will resume the ticket when its waiting condition is satisfied.",
+  "TicketOwnerActionApproveRejectGuidance": "- Move the ticket to **{0}** to validate and continue.\n- Move it to **{1}** to refuse, and add a comment explaining the decision.",
+  "TicketOwnerActionContinueGuidance": "Complete the requested action, then move the ticket to **{0}** to continue. Add a comment if the next step needs context.",
+  "TicketOwnerActionRejectGuidance": "Add a comment with your decision. If you refuse the ticket, move it to **{0}**.",
+  "TicketOwnerActionCommentGuidance": "Add a comment with the requested information or your decision, then move the ticket to the appropriate next step in this pipeline."
 }

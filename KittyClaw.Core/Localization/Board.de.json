@@ -234,5 +234,20 @@
   "ChatCommandWarning": "Der Befehl hat eine technische Warnung gemeldet",
   "ChatTechnicalDetails": "Technische Details",
   "MarkColumnRead": "Alle als gelesen markieren",
-  "OwnerActionRequired": "Aktion erforderlich"
+  "OwnerActionRequired": "Aktion erforderlich",
+  "ColumnUserGuidance": "Ticket-Anweisungen",
+  "ColumnUserGuidanceHelp": "Markdown-Anweisungen, die bei wartenden Tickets zwischen Beschreibung und Aktivität erscheinen. Beschreiben Sie genau, was der Owner zum Entsperren tun kann. Leer lassen, damit KittyClaw sichere Hinweise aus der Pipeline ableitet.",
+  "ColumnUserGuidancePlaceholder": "- Ticket zur Bestätigung nach Genehmigt verschieben\n- Zum Ablehnen nach Abgelehnt verschieben und kommentieren",
+  "ColumnUserGuidanceFallbackHint": "Dieser Block erscheint immer bei wartenden Tickets. Ohne eigenen Text leitet KittyClaw Hinweise aus Rolle, Zeitplan, blockierenden Untertickets und benachbarten Spalten ab.",
+  "TicketWaitingGuidanceTitle": "So wird dieses Ticket entsperrt",
+  "TicketOwnerActionTitle": "Ihre Aktion ist erforderlich",
+  "TicketAutomaticWaitingTitle": "Automatisches Warten",
+  "TicketWaitingScheduledGuidance": "Keine manuelle Aktion erforderlich. KittyClaw setzt dieses Ticket am **{0}** fort und leitet es zu **{1}** weiter.",
+  "TicketWaitingNextConfiguredStep": "dem konfigurierten nächsten Schritt",
+  "TicketWaitingChildrenGuidance": "Schließen Sie die oben gezeigten blockierenden Untertickets ab. KittyClaw setzt dieses Ticket fort, sobald alle einen Endstatus erreicht haben.",
+  "TicketWaitingAutomaticGuidance": "Derzeit ist keine manuelle Aktion erforderlich. KittyClaw setzt das Ticket fort, sobald die Wartebedingung erfüllt ist.",
+  "TicketOwnerActionApproveRejectGuidance": "- Verschieben Sie das Ticket nach **{0}**, um zu bestätigen und fortzufahren.\n- Verschieben Sie es nach **{1}**, um abzulehnen, und begründen Sie die Entscheidung in einem Kommentar.",
+  "TicketOwnerActionContinueGuidance": "Führen Sie die angeforderte Aktion aus und verschieben Sie das Ticket anschließend nach **{0}**. Ergänzen Sie bei Bedarf einen Kommentar.",
+  "TicketOwnerActionRejectGuidance": "Kommentieren Sie Ihre Entscheidung. Bei Ablehnung verschieben Sie das Ticket nach **{0}**.",
+  "TicketOwnerActionCommentGuidance": "Kommentieren Sie die angeforderte Information oder Ihre Entscheidung und verschieben Sie das Ticket anschließend in den passenden nächsten Schritt dieser Pipeline."
 }
