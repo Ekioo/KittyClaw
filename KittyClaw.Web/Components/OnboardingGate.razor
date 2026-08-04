@@ -7,7 +7,7 @@
 @rendermode InteractiveServer
 @implements IDisposable
 
-@* First-launch onboarding modal (Claude Code + Git detection), extracted from Home.razor
+@* First-launch onboarding modal (agent providers + Git detection), extracted from Home.razor
    so it can gate whichever page is the app's landing route. *@
 @if (_showOnboarding)
 {
@@ -19,11 +19,32 @@
             <p>@L["OnboardingIntro2"]</p>
 
             <h3 style="margin-top:1rem;font-size:0.95rem">@L["OnboardingRequirements"]</h3>
-            <div class="onboarding-check @(_claudeInstalled ? "ok" : "missing")">
-                <span>@(_claudeInstalled ? "✓" : "✗") Claude Code</span>
+            <div class="onboarding-check @ProviderClass(_claudeInstalled)">
+                <span>@(_claudeInstalled ? "✓" : "○") Claude Code</span>
                 @if (!_claudeInstalled)
                 {
                     <a class="header-action-btn" href="https://docs.claude.com/en/docs/claude-code/overview" target="_blank" rel="noopener">@L["OnboardingInstall"]</a>
+                }
+            </div>
+            <div class="onboarding-check @ProviderClass(_codexInstalled)">
+                <span>@(_codexInstalled ? "✓" : "○") OpenAI Codex</span>
+                @if (!_codexInstalled)
+                {
+                    <a class="header-action-btn" href="https://developers.openai.com/codex/cli/" target="_blank" rel="noopener">@L["OnboardingInstall"]</a>
+                }
+            </div>
+            <div class="onboarding-check @ProviderClass(_grokInstalled)">
+                <span>@(_grokInstalled ? "✓" : "○") Grok Build</span>
+                @if (!_grokInstalled)
+                {
+                    <a class="header-action-btn" href="https://docs.x.ai/docs/grok-code-fast-1" target="_blank" rel="noopener">@L["OnboardingInstall"]</a>
+                }
+            </div>
+            <div class="onboarding-check @ProviderClass(_ollamaInstalled)">
+                <span>@(_ollamaInstalled ? "✓" : "○") Ollama</span>
+                @if (!_ollamaInstalled)
+                {
+                    <a class="header-action-btn" href="https://ollama.com/download" target="_blank" rel="noopener">@L["OnboardingInstall"]</a>
                 }
             </div>
             <div class="onboarding-check @(_gitInstalled ? "ok" : "missing")">
@@ -34,13 +55,17 @@
                 }
             </div>
 
-            @if (!_claudeInstalled || !_gitInstalled)
+            @if (!HasAgentProvider || !_gitInstalled)
             {
                 <p class="settings-status settings-status-err" style="margin-top:0.75rem">@L["OnboardingMissingWarning"]</p>
             }
+            else
+            {
+                <p class="onboarding-provider-hint">@L["OnboardingProviderHint"]</p>
+            }
 
             <div class="modal-actions">
-                <button class="header-action-btn" @onclick="RecheckTools">@L["Recheck"]</button>
+                <button class="header-action-btn" @onclick="RecheckTools" disabled="@_checking">@(_checking ? L["Checking"] : L["Recheck"])</button>
                 <button class="header-action-btn settings-primary" @onclick="DismissOnboarding">@L["Continue"]</button>
             </div>
         </div>
@@ -50,13 +75,18 @@
 @code {
     private bool _showOnboarding;
     private bool _claudeInstalled;
+    private bool _codexInstalled;
+    private bool _grokInstalled;
+    private bool _ollamaInstalled;
     private bool _gitInstalled;
+    private bool _checking;
     private IDisposable? _escOnboarding;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
-        RecheckTools();
-        _showOnboarding = !AppSettings.OnboardingSeen || !_claudeInstalled || !_gitInstalled;
+        _showOnboarding = !AppSettings.OnboardingSeen;
+        await RecheckTools();
+        _showOnboarding = !AppSettings.OnboardingSeen || !HasAgentProvider || !_gitInstalled;
     }
 
     protected override Task OnAfterRenderAsync(bool firstRender)
@@ -71,10 +101,33 @@
         return Task.CompletedTask;
     }
 
-    private void RecheckTools()
+    // Local Ollama models currently use Claude Code as their transport, so an Ollama
+    // installation on its own is not yet sufficient to dispatch an agent.
+    private bool HasAgentProvider => _claudeInstalled || _codexInstalled || _grokInstalled;
+
+    private string ProviderClass(bool installed) => installed ? "ok" : "optional";
+
+    private async Task RecheckTools()
     {
-        _claudeInstalled = AgentsTemplate.IsClaudeAvailable();
-        _gitInstalled = AgentsTemplate.IsGitAvailable();
+        _checking = true;
+        try
+        {
+            var claude = Task.Run(AgentsTemplate.IsClaudeAvailable);
+            var codex = Task.Run(AgentsTemplate.IsCodexAvailable);
+            var grok = Task.Run(AgentsTemplate.IsGrokAvailable);
+            var ollama = Task.Run(AgentsTemplate.IsOllamaAvailable);
+            var git = Task.Run(AgentsTemplate.IsGitAvailable);
+            await Task.WhenAll(claude, codex, grok, ollama, git);
+            _claudeInstalled = await claude;
+            _codexInstalled = await codex;
+            _grokInstalled = await grok;
+            _ollamaInstalled = await ollama;
+            _gitInstalled = await git;
+        }
+        finally
+        {
+            _checking = false;
+        }
     }
 
     private Task DismissOnboarding()

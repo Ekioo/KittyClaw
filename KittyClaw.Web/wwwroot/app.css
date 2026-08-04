@@ -3586,6 +3586,16 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     color: #ff6b6b;
 }
 
+.onboarding-check.optional {
+    color: var(--muted, #969bb7);
+}
+
+.onboarding-provider-hint {
+    margin-top: 0.75rem;
+    color: var(--muted, #969bb7);
+    font-size: 0.85rem;
+}
+
 .onboarding-check a.header-action-btn {
     text-decoration: none;
 }

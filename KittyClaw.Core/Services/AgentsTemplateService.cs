@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using KittyClaw.Core.Automation;
 
 namespace KittyClaw.Core.Services;
 
@@ -142,6 +143,22 @@ public sealed class AgentsTemplateService
         try
         {
             var (ok, _) = RunProcess("claude", "--version", workingDirectory: null);
+            return ok;
+        }
+        catch { return false; }
+    }
+
+    public bool IsCodexAvailable() => IsCommandAvailable(CodexCli.Binary ?? "codex", "--version");
+
+    public bool IsGrokAvailable() => IsCommandAvailable(GrokCli.Binary ?? "grok", "--version");
+
+    public bool IsOllamaAvailable() => IsCommandAvailable("ollama", "--version");
+
+    private static bool IsCommandAvailable(string command, string arguments)
+    {
+        try
+        {
+            var (ok, _) = RunProcess(command, arguments, workingDirectory: null);
             return ok;
         }
         catch { return false; }
