@@ -31,6 +31,21 @@ public class SteeringAutoContinueTests
         Assert.True(replay.RetryOnResumeFailure);
         Assert.True(AgentRunner.ShouldRetryExpiredResume(replay, isResume: true, exitCode: 1, assistantEventCount: 0));
         Assert.False(AgentRunner.ShouldRetryExpiredResume(replay, isResume: true, exitCode: 1, assistantEventCount: 1));
+        Assert.True(AgentRunner.ShouldRetryExpiredResume(
+            replay, isResume: true, exitCode: 0, assistantEventCount: 1, resumeContextTooLong: true));
+        Assert.False(AgentRunner.ShouldRetryExpiredResume(
+            replay, isResume: false, exitCode: 0, assistantEventCount: 1, resumeContextTooLong: true));
+    }
+
+    [Fact]
+    public void Prompt_too_long_provider_result_is_a_resume_reset_signal()
+    {
+        Assert.True(AgentRunner.IsPromptTooLongSignal(new StreamEvent(
+            DateTime.UtcNow, "assistant", "Prompt is too long")));
+        Assert.True(AgentRunner.IsPromptTooLongSignal(new StreamEvent(
+            DateTime.UtcNow, "result", "failed", "{\"is_error\":true,\"result\":\"maximum context length exceeded\"}")));
+        Assert.False(AgentRunner.IsPromptTooLongSignal(new StreamEvent(
+            DateTime.UtcNow, "assistant", "The user prompt is long but valid")));
     }
 
     // ── Test 1 ───────────────────────────────────────────────────────────────

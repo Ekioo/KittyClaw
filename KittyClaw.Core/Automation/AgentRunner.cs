@@ -320,10 +320,13 @@ public sealed class AgentRunner
                 }
             }
 
-            if (ShouldRetryExpiredResume(ctx, isResume, attempt.Exit, attempt.AssistantEventCount))
+            if (ShouldRetryExpiredResume(
+                    ctx, isResume, attempt.Exit, attempt.AssistantEventCount, attempt.ResumeContextTooLong))
             {
                 run.Push(new StreamEvent(DateTime.UtcNow, "reset",
-                    "Previous session expired, starting a new one"));
+                    attempt.ResumeContextTooLong
+                        ? "Previous session exceeded the provider context limit, starting a new one"
+                        : "Previous session expired, starting a new one"));
                 _sessions.Clear(ctx.WorkspacePath, scopedAgent, ctx.TicketId);
                 sessionId = Guid.NewGuid().ToString();
                 run.SessionId = backend.CallerChoosesNewSessionId ? sessionId : null;
@@ -387,7 +390,9 @@ public sealed class AgentRunner
                 var replayCtx = replayBaseContext.WithChatReplay(steerText);
                 attempt = await SpawnAndWaitAsync(replayCtx, run, skillContent, sessionId, isResume: true, ct);
                 if (attempt.Cancelled) return run;
-                if (ShouldRetryExpiredResume(replayCtx, isResume: true, attempt.Exit, attempt.AssistantEventCount))
+                if (ShouldRetryExpiredResume(
+                        replayCtx, isResume: true, attempt.Exit, attempt.AssistantEventCount,
+                        attempt.ResumeContextTooLong))
                 {
                     run.Push(new StreamEvent(DateTime.UtcNow, "reset",
                         "Chat session closed before steering was delivered, starting a new turn"));
@@ -477,8 +482,10 @@ public sealed class AgentRunner
     }
 
     internal static bool ShouldRetryExpiredResume(
-        AgentRunContext context, bool isResume, int? exitCode, int assistantEventCount) =>
-        context.RetryOnResumeFailure && isResume && (exitCode ?? -1) != 0 && assistantEventCount == 0;
+        AgentRunContext context, bool isResume, int? exitCode, int assistantEventCount,
+        bool resumeContextTooLong = false) =>
+        context.RetryOnResumeFailure && isResume
+        && (resumeContextTooLong || ((exitCode ?? -1) != 0 && assistantEventCount == 0));
 
     /// <summary>
     /// Codex chooses its thread id and reports it after launch. Any in-run resume (notably
@@ -502,7 +509,23 @@ public sealed class AgentRunner
         int? Exit,
         int AssistantEventCount,
         bool Cancelled,
-        FallbackReason FallbackReason);
+        FallbackReason FallbackReason,
+        bool ResumeContextTooLong = false);
+
+    internal static bool IsPromptTooLongSignal(StreamEvent ev)
+    {
+        if (ev.Kind is not ("assistant" or "result" or "stderr" or "error" or "raw"))
+            return false;
+
+        return ContainsPromptTooLongMarker(ev.Text) || ContainsPromptTooLongMarker(ev.Detail);
+    }
+
+    private static bool ContainsPromptTooLongMarker(string? text) =>
+        !string.IsNullOrWhiteSpace(text)
+        && (text.Contains("prompt is too long", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("prompt too long", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("context length exceeded", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("maximum context length", StringComparison.OrdinalIgnoreCase));
 
     private void PersistDiscoveredSession(AgentRunContext ctx, string scopedAgent, AgentRun run)
     {
@@ -651,9 +674,12 @@ public sealed class AgentRunner
             // provider errors so the outer RunAsync can retry with a fallback model.
             var assistantCount = 0;
             var fallbackReason = 0;
+            var resumeContextTooLong = 0;
             Action<StreamEvent> counter = ev =>
             {
                 if (ev.Kind == "assistant") Interlocked.Increment(ref assistantCount);
+                if (resumeContextTooLong == 0 && IsPromptTooLongSignal(ev))
+                    Interlocked.CompareExchange(ref resumeContextTooLong, 1, 0);
                 if (fallbackReason == 0 && IsQuotaSignal(ev))
                     Interlocked.CompareExchange(ref fallbackReason, (int)FallbackReason.Quota, 0);
                 if (fallbackReason == 0 && IsModelUnavailableSignal(ev))
@@ -761,7 +787,9 @@ public sealed class AgentRunner
                     AppendDebugLog(ctx, $"STOPPED {ctx.AgentName} run={run.RunId}");
                     run.OnEvent -= counter;
                     run.OnEvent -= resultWatch;
-                    return new SpawnResult(null, assistantCount, true, (FallbackReason)fallbackReason);
+                    return new SpawnResult(
+                        null, assistantCount, true, (FallbackReason)fallbackReason,
+                        resumeContextTooLong != 0);
                 }
                 else
                 {
@@ -805,7 +833,9 @@ public sealed class AgentRunner
                     run.AddPendingSteerMessage(queuedMsg);
             }
             run.OnEvent -= counter;
-            return new SpawnResult(exit, assistantCount, false, (FallbackReason)fallbackReason);
+            return new SpawnResult(
+                exit, assistantCount, false, (FallbackReason)fallbackReason,
+                resumeContextTooLong != 0);
         }
         finally
         {
