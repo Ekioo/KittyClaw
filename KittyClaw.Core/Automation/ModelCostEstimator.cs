@@ -8,7 +8,7 @@ namespace KittyClaw.Core.Automation;
 /// </summary>
 public static class ModelCostEstimator
 {
-    public const string RateCardVersion = "2026-08-04";
+    public const string RateCardVersion = "2026-08-05";
 
     public static bool TryEstimate(
         string? model,
@@ -24,6 +24,8 @@ public static class ModelCostEstimator
         var normalized = model.Trim();
         if (normalized.StartsWith("codex:", StringComparison.OrdinalIgnoreCase))
             normalized = normalized["codex:".Length..];
+        if (normalized.StartsWith("mistral:", StringComparison.OrdinalIgnoreCase))
+            normalized = normalized["mistral:".Length..];
 
         Rates? rates = normalized.ToLowerInvariant() switch
         {
@@ -32,6 +34,8 @@ public static class ModelCostEstimator
             "gpt-5.6-luna" => new(1m, 6m, 0.1m, 1.25m),
             "grok-4.5" or "grok-4.5-latest" => new(2m, 6m, 0.3m, 2m),
             "grok-build-0.1" => new(1m, 2m, 0.2m, 1m),
+            "mistral-medium-3.5" or "mistral-vibe-cli-latest" => new(1.5m, 7.5m, 0.15m, 1.5m),
+            "devstral-small" or "devstral-small-latest" => new(0.1m, 0.3m, 0.01m, 0.1m),
             _ => null,
         };
         if (rates is null) return false;

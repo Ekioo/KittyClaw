@@ -150,6 +150,12 @@
                                         @foreach (var model in _codexModels) { <option value="@model">@model</option> }
                                     </optgroup>
                                 }
+                                @if (_mistralModels.Count > 0)
+                                {
+                                    <optgroup label="Mistral Vibe">
+                                        @foreach (var model in _mistralModels) { <option value="@model">@model</option> }
+                                    </optgroup>
+                                }
                                 @if (_ollamaModels.Count > 0)
                                 {
                                     <optgroup label="Local (Ollama)">
@@ -336,8 +342,9 @@
     private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
     private List<string> _ollamaModels = [];
     private List<string> _grokModels = [];
+    private List<string> _mistralModels = [];
     private List<string> _codexModels = [];
-    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_ollamaModels).ToList();
+    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_mistralModels).Concat(_ollamaModels).ToList();
     private int _maxTurns = 100;
     private int _maxAttempts = 3;
     private int _retryBackoff = 60;
@@ -410,10 +417,12 @@
             http.BaseAddress = new Uri(Nav.BaseUri);
             var ollama = http.GetFromJsonAsync<List<string>>($"/api/projects/{Slug}/ollama-models");
             var grok = http.GetFromJsonAsync<List<string>>("/api/grok-models");
+            var mistral = http.GetFromJsonAsync<List<string>>("/api/mistral-models");
             var codex = http.GetFromJsonAsync<List<string>>("/api/codex-models");
-            await Task.WhenAll(ollama, grok, codex);
+            await Task.WhenAll(ollama, grok, codex, mistral);
             _ollamaModels = await ollama ?? [];
             _grokModels = await grok ?? [];
+            _mistralModels = await mistral ?? [];
             _codexModels = await codex ?? [];
         }
         catch

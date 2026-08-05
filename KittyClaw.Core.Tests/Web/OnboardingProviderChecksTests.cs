@@ -21,9 +21,11 @@ public class OnboardingProviderChecksTests
         Assert.Contains("IsClaudeAvailable", source);
         Assert.Contains("IsCodexAvailable", source);
         Assert.Contains("IsGrokAvailable", source);
+        Assert.Contains("IsMistralAvailable", source);
         Assert.Contains("IsOllamaAvailable", source);
         Assert.Contains("OpenAI Codex", source);
         Assert.Contains("Grok Build", source);
+        Assert.Contains("Mistral Vibe", source);
         Assert.Contains("Ollama", source);
     }
 
@@ -33,7 +35,7 @@ public class OnboardingProviderChecksTests
         var source = RepoFile("KittyClaw.Web", "Components", "OnboardingGate.razor");
 
         Assert.Contains("!AppSettings.OnboardingSeen || !HasAgentProvider || !_gitInstalled", source);
-        Assert.Contains("_claudeInstalled || _codexInstalled || _grokInstalled", source);
+        Assert.Contains("_claudeInstalled || _codexInstalled || _grokInstalled || _mistralInstalled", source);
         Assert.Contains("ProviderClass", source);
         Assert.Contains("optional", source);
     }

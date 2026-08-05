@@ -35,6 +35,16 @@ public sealed class ModelCostEstimatorTests
         Assert.Equal(0.13m, cost);
     }
 
+    [Theory]
+    [InlineData("mistral:mistral-medium-3.5", 10.65)]
+    [InlineData("mistral:devstral-small", 0.51)]
+    public void MistralVibeAliases_UseOfficialRateCard(string model, double expected)
+    {
+        Assert.True(ModelCostEstimator.TryEstimate(
+            model, 1_000_000, 1_000_000, 1_000_000, 1_000_000, out var cost));
+        Assert.Equal((decimal)expected, cost);
+    }
+
     [Fact]
     public void UnknownModel_IsNotGuessed()
     {

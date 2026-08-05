@@ -488,13 +488,13 @@ public sealed class AgentRunner
         && (resumeContextTooLong || ((exitCode ?? -1) != 0 && assistantEventCount == 0));
 
     /// <summary>
-    /// Codex chooses its thread id and reports it after launch. Any in-run resume (notably
+    /// Codex and Mistral choose their session id and report it after launch. Any in-run resume (notably
     /// steering replay) must use that discovered id, never KittyClaw's provisional GUID.
     /// Claude and Grok keep the caller-selected id.
     /// </summary>
     internal static string ResolveEffectiveSessionId(
         CliProvider provider, string requestedSessionId, string? discoveredSessionId) =>
-        provider == CliProvider.Codex && !string.IsNullOrWhiteSpace(discoveredSessionId)
+        provider is CliProvider.Codex or CliProvider.Mistral && !string.IsNullOrWhiteSpace(discoveredSessionId)
             ? discoveredSessionId
             : requestedSessionId;
 

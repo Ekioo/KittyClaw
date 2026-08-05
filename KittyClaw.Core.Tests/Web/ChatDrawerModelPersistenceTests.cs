@@ -43,6 +43,7 @@ public class ChatDrawerModelPersistenceTests
         Assert.Contains("_ollamaModels.Contains(model)", source);
         Assert.Contains("_grokModels.Contains(model)", source);
         Assert.Contains("_codexModels.Contains(model)", source);
+        Assert.Contains("_mistralModels.Contains(model)", source);
     }
 
     private static string FindRepoRoot()

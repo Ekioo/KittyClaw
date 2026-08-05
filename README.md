@@ -14,7 +14,7 @@
   <a href="https://kittyclaw.dev">kittyclaw.dev</a> · <a href="https://kittyclaw.dev/#waitlist">Get early access</a>
 </p>
 
-A kanban board that **orchestrates agentic projects**. A project can be split into independently named pipelines whose stable identities survive renames. Columns can own generic processors with persistent memory, reusable project skills, ordered ticket selection, durable retries, and switch-like routing to columns in any pipeline. Right-click a column and choose **Configure column** to edit its name, color, role, position, ticket guidance, processor, and routing without losing the visual context of the board. Tickets in `Waiting` or `OwnerAction` columns always show a prominent contextual block between their description and activity, explaining whether the owner must comment or move the ticket to a specific validation/refusal column, or whether KittyClaw will resume it automatically. Columns can also be inserted between existing lanes or added at the end directly from the Kanban; the Workflows page remains the global pipeline-and-skills overview. Execution state is separate from business columns, so an `InProgress` column is optional. The legacy `AutomationEngine` remains available for trigger-based rules, cron/interval work, and backward compatibility. Agents run through Claude Code, OpenAI Codex, Grok Build, or a local Ollama model while their output streams into the app.
+A kanban board that **orchestrates agentic projects**. A project can be split into independently named pipelines whose stable identities survive renames. Columns can own generic processors with persistent memory, reusable project skills, ordered ticket selection, durable retries, and switch-like routing to columns in any pipeline. Right-click a column and choose **Configure column** to edit its name, color, role, position, ticket guidance, processor, and routing without losing the visual context of the board. Tickets in `Waiting` or `OwnerAction` columns always show a prominent contextual block between their description and activity, explaining whether the owner must comment or move the ticket to a specific validation/refusal column, or whether KittyClaw will resume it automatically. Columns can also be inserted between existing lanes or added at the end directly from the Kanban; the Workflows page remains the global pipeline-and-skills overview. Execution state is separate from business columns, so an `InProgress` column is optional. The legacy `AutomationEngine` remains available for trigger-based rules, cron/interval work, and backward compatibility. Agents run through Claude Code, OpenAI Codex, Grok Build, Mistral Vibe, or a local Ollama model while their output streams into the app.
 
 Each processor is versioned with its project in
 `.agents/processors/column-<id>/processor.json`. This authoritative definition contains its
@@ -27,7 +27,7 @@ definition under `.agents/processors/column-<id>/memory/MEMORY.md`.
 - **.NET 10** / **Blazor Server** (interactive SSR)
 - **SQLite** via Entity Framework Core (one DB per project)
 - **OpenAPI** with auto-generated Markdown docs
-- Agent execution: at least one supported CLI — **[Claude Code CLI](https://docs.claude.com/en/docs/claude-code/overview)**, **[OpenAI Codex CLI](doc/codex-cli.md)**, or **[Grok Build](doc/grok-build.md)**. **[Ollama](https://ollama.com)** is also supported for local models through Claude Code CLI ([local-model setup](doc/local-models.md)).
+- Agent execution: at least one supported CLI — **[Claude Code CLI](https://docs.claude.com/en/docs/claude-code/overview)**, **[OpenAI Codex CLI](doc/codex-cli.md)**, **[Grok Build](doc/grok-build.md)**, or **[Mistral Vibe](doc/mistral-vibe.md)**. **[Ollama](https://ollama.com)** is also supported for local models through Claude Code CLI ([local-model setup](doc/local-models.md)).
 - Optional for repository initialization, Git-aware automations, and agent commits: **[Git](https://git-scm.com/downloads)**
 
 ## Getting Started
@@ -35,10 +35,10 @@ definition under `.agents/processors/column-<id>/memory/MEMORY.md`.
 ### Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- At least one agent CLI on your `PATH`: Claude Code (`claude`), OpenAI Codex (`codex`), or Grok Build (`grok`). Local-model execution requires both Claude Code CLI and a reachable Ollama server.
+- At least one agent CLI on your `PATH`: Claude Code (`claude`), OpenAI Codex (`codex`), Grok Build (`grok`), or Mistral Vibe (`vibe`). Local-model execution requires both Claude Code CLI and a reachable Ollama server.
 - Optional: [Git](https://git-scm.com/downloads) (`git` on your `PATH`) for repository initialization, Git-aware automations, and agent commits
 
-On first launch, the onboarding popup checks only for Claude Code and Git; it does not probe Codex, Grok Build, or Ollama. Those checks describe the default setup path, not the runtime's provider support. You can continue without either detected tool and configure another backend. Agent runs require their selected backend to be available, while Git-dependent features require Git.
+On first launch, the onboarding popup checks Git and every supported provider CLI, including Mistral Vibe. Optional providers may be installed later; agent runs require their selected backend to be available, while Git-dependent features require Git.
 
 ### Run
 

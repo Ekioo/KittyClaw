@@ -20,6 +20,7 @@ internal static partial class CliVersionProbe
     {
         CliProvider.Codex => CodexCli.Binary ?? "codex",
         CliProvider.Grok => GrokCli.Binary ?? "grok",
+        CliProvider.Mistral => MistralCli.Binary ?? "vibe",
         _ => ProcessLifecycleManager.ClaudeBinary,
     };
 
@@ -28,6 +29,7 @@ internal static partial class CliVersionProbe
         {
             CliProvider.Codex => "KITTYCLAW_CODEX_EXPECTED_VERSION",
             CliProvider.Grok => "KITTYCLAW_GROK_EXPECTED_VERSION",
+            CliProvider.Mistral => "KITTYCLAW_MISTRAL_EXPECTED_VERSION",
             _ => "KITTYCLAW_CLAUDE_EXPECTED_VERSION",
         });
 

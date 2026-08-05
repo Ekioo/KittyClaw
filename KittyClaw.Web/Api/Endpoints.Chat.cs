@@ -67,6 +67,7 @@ public static partial class Endpoints
             sessions.Clear(workspacePath, $"chat:{target}", null);
             sessions.Clear(workspacePath, $"grok:chat:{target}", null);
             sessions.Clear(workspacePath, $"codex:chat:{target}", null);
+            sessions.Clear(workspacePath, $"mistral:chat:{target}", null);
             sessions.ClearLastChatModel(workspacePath, target);
             return Results.NoContent();
         }).WithTags("Chat");
@@ -103,7 +104,8 @@ public static partial class Endpoints
                     provider = routing.Provider;
                     modelEnv = routing.ExtraEnv is null ? null : new Dictionary<string, string>(routing.ExtraEnv);
                 }
-                else if (GrokCli.IsGrokModel(requestedModel) || CodexCli.IsCodexModel(requestedModel))
+                else if (GrokCli.IsGrokModel(requestedModel) || CodexCli.IsCodexModel(requestedModel)
+                         || MistralCli.IsMistralModel(requestedModel))
                 {
                     // Surface a missing native CLI in the chat stream rather than silently
                     // answering with the default Claude model.
@@ -140,6 +142,7 @@ public static partial class Endpoints
                 sessions.Clear(workspacePath, $"chat:{baseAgent}", effectiveTicketId);
                 sessions.Clear(workspacePath, $"grok:chat:{baseAgent}", effectiveTicketId);
                 sessions.Clear(workspacePath, $"codex:chat:{baseAgent}", effectiveTicketId);
+                sessions.Clear(workspacePath, $"mistral:chat:{baseAgent}", effectiveTicketId);
                 sessions.ClearLastChatProvider(workspacePath, target);
                 sessions.ClearLastChatModel(workspacePath, target);
             }

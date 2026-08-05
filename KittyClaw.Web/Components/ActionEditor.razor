@@ -79,6 +79,15 @@
                             }
                         </optgroup>
                     }
+                    @if (_mistralModels.Count > 0)
+                    {
+                        <optgroup label="Mistral Vibe">
+                            @foreach (var m in _mistralModels)
+                            {
+                                <option value="@m">@m</option>
+                            }
+                        </optgroup>
+                    }
                     @if (_ollamaModels.Count > 0)
                     {
                         <optgroup label="Local (Ollama)">
@@ -289,8 +298,9 @@
 
     private List<string> _ollamaModels = new();
     private List<string> _grokModels = new();
+    private List<string> _mistralModels = new();
     private List<string> _codexModels = new();
-    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_ollamaModels).ToList();
+    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_mistralModels).Concat(_ollamaModels).ToList();
 
     protected override async Task OnInitializedAsync()
     {
@@ -302,6 +312,7 @@
                 http.BaseAddress = new Uri(Nav.BaseUri);
                 _ollamaModels = await http.GetFromJsonAsync<List<string>>($"/api/projects/{Slug}/ollama-models") ?? new();
                 _grokModels = await http.GetFromJsonAsync<List<string>>("/api/grok-models") ?? new();
+                _mistralModels = await http.GetFromJsonAsync<List<string>>("/api/mistral-models") ?? new();
                 _codexModels = await http.GetFromJsonAsync<List<string>>("/api/codex-models") ?? new();
             }
             catch { /* non-blocking */ }

@@ -69,7 +69,7 @@ else
                 <select class="settings-input" style="max-width:340px"
                         value="@_fallbackModel"
                         @onchange="OnFallbackModelChanged"
-                        @key="@($"fallback-select-{_grokModels.Count}-{_discoveredModels.Count}-{_fallbackModel}")">
+                        @key="@($"fallback-select-{_grokModels.Count}-{_mistralModels.Count}-{_discoveredModels.Count}-{_fallbackModel}")">
                     <option value="">@L["FallbackDisabled"]</option>
                     <optgroup label="Claude">
                         @foreach (var model in ClaudeModels)
@@ -90,6 +90,15 @@ else
                     {
                         <optgroup label="OpenAI Codex">
                             @foreach (var model in _codexModels)
+                            {
+                                <option value="@model">@model</option>
+                            }
+                        </optgroup>
+                    }
+                    @if (_mistralModels.Count > 0)
+                    {
+                        <optgroup label="Mistral Vibe">
+                            @foreach (var model in _mistralModels)
                             {
                                 <option value="@model">@model</option>
                             }
@@ -182,6 +191,15 @@ else
                                         {
                                             <optgroup label="OpenAI Codex">
                                                 @foreach (var model in _codexModels)
+                                                {
+                                                    <option value="@model">@model</option>
+                                                }
+                                            </optgroup>
+                                        }
+                                        @if (_mistralModels.Count > 0)
+                                        {
+                                            <optgroup label="Mistral Vibe">
+                                                @foreach (var model in _mistralModels)
                                                 {
                                                     <option value="@model">@model</option>
                                                 }
@@ -342,9 +360,10 @@ else
     private List<string> _discoveredModels = new();
     private List<string> _grokModels = new();
     private List<string> _codexModels = new();
+    private List<string> _mistralModels = new();
     private string? _localModelsError;
     private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
-    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_discoveredModels).ToList();
+    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_mistralModels).Concat(_discoveredModels).ToList();
 
     private List<Member> _members = new();
     private int? _editingMemberId;
@@ -380,6 +399,8 @@ else
         catch { _grokModels = new(); }
         try { _codexModels = (await KittyClaw.Core.Automation.CodexCli.ListModelsAsync()).ToList(); }
         catch { _codexModels = new(); }
+        try { _mistralModels = (await KittyClaw.Core.Automation.MistralCli.ListModelsAsync()).ToList(); }
+        catch { _mistralModels = new(); }
         _fallbackModel = _project.FallbackModel ?? "";
     }
 

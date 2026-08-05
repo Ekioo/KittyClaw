@@ -9,6 +9,8 @@ public enum CliProvider
     Grok,
     /// <summary>OpenAI Codex CLI (`codex`) — used for explicitly qualified codex:* models.</summary>
     Codex,
+    /// <summary>Mistral Vibe CLI (`vibe`) — used for explicitly qualified mistral:* models.</summary>
+    Mistral,
 }
 
 /// <summary>
@@ -57,6 +59,19 @@ public static class ModelRouting
                     $"OpenAI model '{model}': the Codex CLI (codex) was not found on this machine. " +
                     "Install it from https://developers.openai.com/codex/cli or point KITTYCLAW_CODEX_BIN at the binary.");
             return new Resolution(CliProvider.Codex, null, null, CodexCli.ToCliModel(model));
+        }
+
+        if (MistralCli.IsMistralModel(model))
+        {
+            if (!MistralCli.IsInstalled)
+                return new Resolution(CliProvider.Claude, null,
+                    $"Mistral model '{model}': the Mistral Vibe CLI (vibe) was not found on this machine. " +
+                    "Install it from https://docs.mistral.ai/vibe/code/cli/install-setup or point KITTYCLAW_MISTRAL_BIN at the binary.");
+            var cliModel = MistralCli.ToCliModel(model);
+            return new Resolution(CliProvider.Mistral, new Dictionary<string, string>
+            {
+                ["VIBE_ACTIVE_MODEL"] = cliModel,
+            }, null, cliModel);
         }
 
         if (GrokCli.IsGrokModel(model))

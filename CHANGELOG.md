@@ -4,6 +4,8 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+- Added native Mistral Vibe support with `mistral:*` model routing, resumable provider-scoped sessions, streaming activity normalization, onboarding detection, model selectors, API discovery, version probing, documentation, and rate-card entries.
+
 ## [v0.13] — 2026-08-04
 
 Visual project pipelines, deterministic column processors, guided workflow migration, human hand-off guidance, and a broad reliability and interface polish pass.

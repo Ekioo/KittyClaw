@@ -7,7 +7,7 @@ public class CliVersionProbeTests
 {
     public static TheoryData<CliProvider> Providers => new()
     {
-        CliProvider.Claude, CliProvider.Codex, CliProvider.Grok,
+        CliProvider.Claude, CliProvider.Codex, CliProvider.Grok, CliProvider.Mistral,
     };
 
     [Theory]

@@ -152,6 +152,8 @@ public sealed class AgentsTemplateService
 
     public bool IsGrokAvailable() => IsCommandAvailable(GrokCli.Binary ?? "grok", "--version");
 
+    public bool IsMistralAvailable() => IsCommandAvailable(MistralCli.Binary ?? "vibe", "--version");
+
     public bool IsOllamaAvailable() => IsCommandAvailable("ollama", "--version");
 
     private static bool IsCommandAvailable(string command, string arguments)

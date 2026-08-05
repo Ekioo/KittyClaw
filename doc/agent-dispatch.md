@@ -1,7 +1,7 @@
 # Agent dispatch
 
 ## Purpose
-Runs an agent through the selected Claude Code, Grok Build, OpenAI Codex, or Ollama-backed CLI, streams its stdout/stderr in near-real-time to the UI, tracks lifecycle (started, exited, killed), and persists a run record for later inspection.
+Runs an agent through the selected Claude Code, Grok Build, OpenAI Codex, Mistral Vibe, or Ollama-backed CLI, streams its stdout/stderr in near-real-time to the UI, tracks lifecycle (started, exited, killed), and persists a run record for later inspection.
 
 ## Key components
 
@@ -14,7 +14,7 @@ Runs an agent through the selected Claude Code, Grok Build, OpenAI Codex, or Oll
 
 ## CLI binary and version pinning
 
-KittyClaw records the effective external CLI provider, binary identity, and detected version on every run and exposes it through the runs API. Detection uses `<binary> --version` with a three-second timeout; failure is recorded as a warning and never blocks dispatch. Binary overrides are `KITTYCLAW_CLAUDE_BIN`, `KITTYCLAW_CODEX_BIN`, and `KITTYCLAW_GROK_BIN`. Set these before starting KittyClaw to pin each provider to a specific executable. Optional `KITTYCLAW_CLAUDE_EXPECTED_VERSION`, `KITTYCLAW_CODEX_EXPECTED_VERSION`, and `KITTYCLAW_GROK_EXPECTED_VERSION` values add a visible non-blocking warning when the detected version differs.
+KittyClaw records the effective external CLI provider, binary identity, and detected version on every run and exposes it through the runs API. Detection uses `<binary> --version` with a three-second timeout; failure is recorded as a warning and never blocks dispatch. Binary overrides are `KITTYCLAW_CLAUDE_BIN`, `KITTYCLAW_CODEX_BIN`, `KITTYCLAW_GROK_BIN`, and `KITTYCLAW_MISTRAL_BIN`. Set these before starting KittyClaw to pin each provider to a specific executable. Optional `KITTYCLAW_CLAUDE_EXPECTED_VERSION`, `KITTYCLAW_CODEX_EXPECTED_VERSION`, `KITTYCLAW_GROK_EXPECTED_VERSION`, and `KITTYCLAW_MISTRAL_EXPECTED_VERSION` values add a visible non-blocking warning when the detected version differs.
 - `KittyClaw.Core/Automation/SessionRegistry.cs` — tracks active sessions per agent for steering and inactivity detection in `.agents/channel/dispatch-state.json`. State updates are serialized as atomic read-modify-write operations. On transient filesystem `IOException` failures, writes are retried up to six times with exponential delays from 25 to 400 ms; non-I/O failures and exhausted retries are surfaced to the caller.
 - `KittyClaw.Core/Automation/CostTracker.cs` — appends per-run `CostLogEntry` lines to `<workspace>/.agents/channel/cost-log.jsonl` (rotated monthly) and answers the daily-budget check (`IsBudgetExceeded`) from that file. A provider-reported monetary total is authoritative. When Codex or Grok only reports token classes, `ModelCostEstimator` applies its explicit, versioned public rate card; unknown models remain unpriced. Estimated entries carry `CostEstimated=true`.
 - `KittyClaw.Core/Automation/RunCostRecorder.cs` — hosted service subscribed to `AgentRunRegistry.OnRunEnded`. For every run that reported usage it writes the `CostLogEntry` via `CostTracker` and accumulates token/USD totals onto the ticket (`Tickets.AgentTokens` / `Tickets.AgentCostUsd` via `TicketService.AddAgentUsageAsync`) — the durable per-ticket figure shown on the board card and ticket panel, which survives the 24h run-log purge. `Tickets.AgentCostEstimated` remains true once any estimated amount contributes to that cumulative total. Run-level usage and its estimate marker also surface in the run drawer header and the `/runs` API DTOs.
@@ -30,5 +30,6 @@ KittyClaw records the effective external CLI provider, binary identity, and dete
 - Optionally Ollama — local model names continue through the Anthropic-compatible endpoint and are not confused with qualified Codex selections (see [Local models](./local-models.md)).
 - `claude` CLI on PATH — the actual agent runtime.
 - Optionally the `grok` CLI — runs the dispatch instead of claude when a `grok-*` model is selected (see [Grok Build](./grok-build.md)).
+- Optionally the `vibe` CLI — runs explicitly qualified `mistral:*` selections (see [Mistral Vibe](./mistral-vibe.md)).
 - Workspace-side `.agents/<agent>/` files (skill, memory, preamble) seeded by the [project template](./project-template.md).
 - [Storage](./storage.md) — run snapshots persisted under `%APPDATA%/KittyClaw/runs/`.

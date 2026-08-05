@@ -42,6 +42,7 @@ internal abstract class AgentCliBackend
     {
         CliProvider.Grok => GrokBackend.Instance,
         CliProvider.Codex => CodexBackend.Instance,
+        CliProvider.Mistral => MistralBackend.Instance,
         _ => ClaudeBackend.Instance,
     };
 
@@ -133,5 +134,30 @@ internal abstract class AgentCliBackend
 
         internal override string MapStderrKind(string line) =>
             line.Contains(" WARN ", StringComparison.Ordinal) ? "diagnostic" : "stderr";
+    }
+
+    private sealed class MistralBackend : AgentCliBackend
+    {
+        internal static readonly MistralBackend Instance = new();
+        internal override CliProvider Provider => CliProvider.Mistral;
+        internal override string SessionPrefix => "mistral:";
+        internal override bool CallerChoosesNewSessionId => false;
+
+        internal override Task<AgentCliInvocation> BuildInvocationAsync(
+            AgentRunContext context, string prompt, string sessionId, bool isResume,
+            CancellationToken cancellationToken)
+        {
+            var args = new List<string>
+            {
+                "--prompt", "--max-turns", context.MaxTurns.ToString(),
+                "--output", "streaming", "--agent", "auto-approve", "--trust",
+            };
+            if (isResume) { args.Add("--resume"); args.Add(sessionId); }
+            return Task.FromResult(new AgentCliInvocation(
+                MistralCli.Binary ?? "vibe", args, WritePromptToStdin: true));
+        }
+
+        internal override bool TryMapEvent(JsonElement root, string line, AgentRun run) =>
+            MistralStreamAdapter.TryMap(root, line, run);
     }
 }

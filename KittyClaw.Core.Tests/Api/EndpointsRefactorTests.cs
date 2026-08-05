@@ -109,6 +109,8 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "GET /api/grok-models",
         // Codex
         "GET /api/codex-models",
+        // Mistral
+        "GET /api/mistral-models",
         // Automations
         "GET /api/projects/{slug}/automations",
         "PUT /api/projects/{slug}/automations",
@@ -205,6 +207,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         ["GET /api/projects/{slug}/ollama-models"] = "Ollama",
         ["GET /api/grok-models"] = "Grok",
         ["GET /api/codex-models"] = "Codex",
+        ["GET /api/mistral-models"] = "Mistral",
         ["POST /api/projects/{slug}/workflow-migrations/analyze"] = "Workflow migrations",
         ["POST /api/projects/{slug}/workflow-migrations/apply"] = "Workflow migrations",
         ["POST /api/projects/{slug}/workflow-migrations/refine"] = "Workflow migrations",

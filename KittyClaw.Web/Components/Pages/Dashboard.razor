@@ -279,6 +279,15 @@ else
                                     }
                                 </optgroup>
                             }
+                            @if (_mistralModels.Count > 0)
+                            {
+                                <optgroup label="Mistral Vibe">
+                                    @foreach (var m in _mistralModels)
+                                    {
+                                        <option value="@m">@m</option>
+                                    }
+                                </optgroup>
+                            }
                             @if (_ollamaModels.Count > 0)
                             {
                                 <optgroup label="Local (Ollama)">
@@ -320,9 +329,10 @@ else
     private string _workspace = "";
     private List<string> _ollamaModels = new();
     private List<string> _grokModels = new();
+    private List<string> _mistralModels = new();
     private List<string> _codexModels = new();
     private static readonly IReadOnlyList<string> AvailableModels = ClaudeModelCatalog.Models;
-    private List<string> AllModels => AvailableModels.Concat(_grokModels).Concat(_codexModels).Concat(_ollamaModels).ToList();
+    private List<string> AllModels => AvailableModels.Concat(_grokModels).Concat(_codexModels).Concat(_mistralModels).Concat(_ollamaModels).ToList();
 
     private List<DashboardTileLayout> _tiles = [];
     private List<string> _availableSlugs = [];
@@ -386,6 +396,8 @@ else
             _grokModels = await http.GetFromJsonAsync<List<string>>("/api/grok-models") ?? new();
         }
         catch { _grokModels = new(); }
+        try { _mistralModels = await http.GetFromJsonAsync<List<string>>("/api/mistral-models") ?? new(); }
+        catch { _mistralModels = new(); }
         try
         {
             _codexModels = await http.GetFromJsonAsync<List<string>>("/api/codex-models") ?? new();

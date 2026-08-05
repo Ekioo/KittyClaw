@@ -80,6 +80,15 @@
                         }
                     </optgroup>
                 }
+                @if (_mistralModels.Count > 0)
+                {
+                    <optgroup label="Mistral Vibe">
+                        @foreach (var m in _mistralModels)
+                        {
+                            <option value="@m">@m</option>
+                        }
+                    </optgroup>
+                }
                 @if (_ollamaModels.Count > 0)
                 {
                     <optgroup label="Local (Ollama)">
@@ -301,9 +310,10 @@
     private List<string> _ollamaModels = new();
     private List<string> _grokModels = new();
     private List<string> _codexModels = new();
+    private List<string> _mistralModels = new();
     private const string DefaultModel = ClaudeModelCatalog.DefaultModel;
     private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
-    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_ollamaModels).ToList();
+    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_mistralModels).Concat(_ollamaModels).ToList();
     private string SelectedModelStorageKey => $"kc-chat-model-{ProjectSlug}";
 
     // Image paste (#115). Accepted clipboard images await Send() in this buffer; rejections
@@ -376,7 +386,7 @@
     private bool IsAvailableModel(string? model) =>
         !string.IsNullOrWhiteSpace(model) &&
         (ClaudeModels.Contains(model) || _ollamaModels.Contains(model) ||
-         _grokModels.Contains(model) || _codexModels.Contains(model));
+         _grokModels.Contains(model) || _codexModels.Contains(model) || _mistralModels.Contains(model));
 
     private async Task PersistSelectedModelAsync()
     {
@@ -405,10 +415,12 @@
         var ollamaTask = TryFetchModelsAsync(http, $"/api/projects/{ProjectSlug}/ollama-models");
         var grokTask = TryFetchModelsAsync(http, "/api/grok-models");
         var codexTask = TryFetchModelsAsync(http, "/api/codex-models");
-        await Task.WhenAll(ollamaTask, grokTask, codexTask);
+        var mistralTask = TryFetchModelsAsync(http, "/api/mistral-models");
+        await Task.WhenAll(ollamaTask, grokTask, codexTask, mistralTask);
         _ollamaModels = await ollamaTask;
         _grokModels = await grokTask;
         _codexModels = await codexTask;
+        _mistralModels = await mistralTask;
     }
 
     private static async Task<List<string>> TryFetchModelsAsync(HttpClient http, string uri)
