@@ -186,6 +186,7 @@
     private async Task BrowseWorkspace()
     {
         _browsing = true;
+        _creationStatus = null;
         try
         {
             var resp = await NewHttp().PostAsJsonAsync("/api/browse/folder", new { initialPath = _newWorkspacePath });
@@ -198,6 +199,14 @@
                     OnWorkspaceChanged();
                 }
             }
+            else if (resp.StatusCode != System.Net.HttpStatusCode.NoContent)
+            {
+                _creationStatus = ($"{L["Error"]}: {resp.ReasonPhrase ?? resp.StatusCode.ToString()}", "settings-status-err");
+            }
+        }
+        catch (Exception ex)
+        {
+            _creationStatus = ($"{L["Error"]}: {ex.Message}", "settings-status-err");
         }
         finally { _browsing = false; }
     }

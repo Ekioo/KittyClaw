@@ -440,6 +440,7 @@ else
     private async Task BrowseWorkspace()
     {
         _browsing = true;
+        _workspaceStatus = null;
         try
         {
             var resp = await NewHttp().PostAsJsonAsync("/api/browse/folder", new { initialPath = _workspacePath });
@@ -448,6 +449,14 @@ else
                 var body = await resp.Content.ReadFromJsonAsync<BrowseResult>();
                 if (body?.Path is not null) _workspacePath = body.Path;
             }
+            else if (resp.StatusCode != System.Net.HttpStatusCode.NoContent)
+            {
+                _workspaceStatus = ($"{L["Error"]}: {resp.ReasonPhrase ?? resp.StatusCode.ToString()}", "settings-status-err");
+            }
+        }
+        catch (Exception ex)
+        {
+            _workspaceStatus = ($"{L["Error"]}: {ex.Message}", "settings-status-err");
         }
         finally { _browsing = false; }
     }
