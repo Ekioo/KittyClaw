@@ -4,10 +4,37 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
-- Added native Mistral Vibe support with `mistral:*` model routing, resumable provider-scoped sessions, streaming activity normalization, onboarding detection, model selectors, API discovery, version probing, documentation, and rate-card entries.
-- Added a cross-platform in-app workspace browser with roots, breadcrumbs, parent navigation, and direct path entry for project creation and workspace settings.
-- Clarified new-project setup throughout the wizard and documentation: it analyzes existing folders, asks targeted questions for empty workspaces, and creates an approved workflow without presenting the operation as a legacy migration.
-- Preserved tickets already in semantic success columns during legacy workflow migration and visually distinguished allowed and forbidden routing destinations during drag-and-drop.
+## [v0.14] — 2026-08-05
+
+Native Mistral Vibe support, cross-platform workspace selection, and safer guided workflow setup and migration.
+
+### Highlights
+
+KittyClaw can now run processors, scheduled tasks, dashboard agents, and conversations through **Mistral Vibe**, with provider-qualified models, resumable sessions, normalized streaming activity, onboarding detection, and cost estimates.
+
+Project creation now uses a **cross-platform in-app folder browser** instead of relying on an operating-system dialog that could open behind the browser. After initialization, the setup wizard clearly analyzes the selected workspace, asks targeted questions when it is empty, and creates only the workflow explicitly approved by the owner.
+
+Legacy migration and manual routing are safer: completed tickets remain completed, and drag-and-drop makes allowed destinations visible while subduing forbidden workflow transitions.
+
+### Added
+
+- Native Mistral Vibe provider support with `mistral:*` model routing, resumable provider-scoped sessions, streaming normalization, model discovery, version probing, onboarding checks, documentation, and rate-card entries.
+- Integrated Windows, macOS, and Linux workspace browser with home and root shortcuts, mounted drives, breadcrumbs, parent navigation, and direct absolute-path entry.
+
+### Changed
+
+- New-project initialization uses dedicated setup terminology and progress states, distinct from legacy-board migration.
+- The workflow setup wizard analyzes populated folders and asks about purpose, deliverables, human decisions, and scheduled work when the workspace is empty.
+- Allowed ticket destinations receive a light visual emphasis during drag-and-drop while forbidden columns remain visible but subdued.
+- README and architecture documentation now describe processor-driven projects, contextual column configuration, Mistral Vibe, and the current setup and migration flows.
+
+### Fixed
+
+- Legacy workflow migration preserves tickets that were already in semantic `Success` columns instead of reopening historical work.
+- Project folder selection no longer depends on a native Windows dialog that may appear behind the browser window.
+- New-project wizard buttons, progress messages, errors, and completion copy no longer incorrectly refer to migration.
+
+---
 
 ## [v0.13] — 2026-08-04
 
