@@ -16,7 +16,7 @@
 
     @if (_step != WizardStep.Intro && _plan is not null && !_applicationStarted)
     {
-        <nav class="migration-wizard-steps" aria-label="@L["MigrationWizardProgress"]">
+        <nav class="migration-wizard-steps" aria-label="@ContextText("MigrationWizardProgress", "ProjectOnboardingProgress")">
             <button class="@StepClass(WizardStep.Pipelines)" @onclick="() => GoTo(WizardStep.Pipelines)">1 <span>@L["MigrationWizardPipelines"]</span></button>
             @for (var i = 0; i < _plan.Pipelines.Count; i++)
             {
@@ -32,8 +32,8 @@
         {
             <div class="migration-completed" role="status">
                 <span class="migration-completed-icon">✓</span>
-                <strong>@L["MigrationWizardCompletedTitle"]</strong>
-                <p>@L["MigrationWizardCompletedHint"]</p>
+                <strong>@ContextText("MigrationWizardCompletedTitle", "ProjectOnboardingCompletedTitle")</strong>
+                <p>@ContextText("MigrationWizardCompletedHint", "ProjectOnboardingCompletedHint")</p>
                 @if (!string.IsNullOrWhiteSpace(_migrationResult))
                 {
                     <div class="migration-completed-result">@_migrationResult</div>
@@ -53,14 +53,14 @@
         else if (_step == WizardStep.Intro)
         {
             <div class="migration-intro">
-                <div class="migration-intro-icon">⇄</div>
+                <div class="migration-intro-icon">@(IsProjectOnboarding ? "✦" : "⇄")</div>
                 <p class="migration-lead">@L[IsProjectOnboarding ? "ProjectOnboardingIntro" : "MigrationWizardIntro"]</p>
                 <div class="migration-benefits">
                     <article><span>✓</span><div><strong>@L["MigrationBenefitReliableTitle"]</strong><p>@L["MigrationBenefitReliableText"]</p></div></article>
                     <article><span>✓</span><div><strong>@L["MigrationBenefitVisibleTitle"]</strong><p>@L["MigrationBenefitVisibleText"]</p></div></article>
                     <article><span>✓</span><div><strong>@L["MigrationBenefitAdaptedTitle"]</strong><p>@L["MigrationBenefitAdaptedText"]</p></div></article>
                 </div>
-                <p class="migration-safe-note">@L["MigrationWizardSafeNote"]</p>
+                <p class="migration-safe-note">@ContextText("MigrationWizardSafeNote", "ProjectOnboardingSafeNote")</p>
             </div>
         }
         else if (_busy)
@@ -78,7 +78,7 @@
                 <p>@ProgressHint</p>
                 @if (Elapsed >= TimeSpan.FromSeconds(75))
                 {
-                    <small>@L["MigrationWizardLongRunningHint"]</small>
+                    <small>@ContextText("MigrationWizardLongRunningHint", "ProjectOnboardingLongRunningHint")</small>
                 }
             </div>
         }
@@ -87,9 +87,13 @@
             <div class="migration-error" role="alert">
                 <span class="migration-error-icon">!</span>
                 <div>
-                    <strong>@L[_applicationStarted ? "MigrationWizardApplyErrorTitle" : "MigrationWizardErrorTitle"]</strong>
+                    <strong>@(_applicationStarted
+                        ? ContextText("MigrationWizardApplyErrorTitle", "ProjectOnboardingApplyErrorTitle")
+                        : L["MigrationWizardErrorTitle"])</strong>
                     <p>@_error</p>
-                    <button class="settings-primary" @onclick="RetryAsync" disabled="@_busy">↻ @L[_applicationStarted ? "MigrationWizardRetryApply" : "MigrationWizardRetryAnalysis"]</button>
+                    <button class="settings-primary" @onclick="RetryAsync" disabled="@_busy">↻ @(_applicationStarted
+                        ? ContextText("MigrationWizardRetryApply", "ProjectOnboardingRetryApply")
+                        : L["MigrationWizardRetryAnalysis"])</button>
                 </div>
             </div>
         }
@@ -199,7 +203,7 @@
             }
             else
             {
-                <button class="settings-primary migration-launch" disabled="true"><span class="migration-button-spinner"></span>@L["MigrationWizardApplying"]</button>
+                <button class="settings-primary migration-launch" disabled="true"><span class="migration-button-spinner"></span>@ContextText("MigrationWizardApplying", "ProjectOnboardingApplying")</button>
             }
         }
         else
@@ -226,7 +230,7 @@
             }
             else if (_step == WizardStep.Review)
             {
-                <button class="settings-primary migration-launch" @onclick="LaunchMigrationAsync" disabled="@_busy">@L["MigrationWizardLaunch"]</button>
+                <button class="settings-primary migration-launch" @onclick="LaunchMigrationAsync" disabled="@_busy">@ContextText("MigrationWizardLaunch", "ProjectOnboardingLaunch")</button>
             }
         }
     </footer>
@@ -267,12 +271,12 @@
     private WorkflowMigrationPipeline? CurrentPipeline => _plan is not null && _pipelineIndex >= 0 && _pipelineIndex < _plan.Pipelines.Count ? _plan.Pipelines[_pipelineIndex] : null;
     private string Title => _step switch
     {
-        _ when _migrationCompleted => L["MigrationWizardCompletedTitle"],
-        _ when _applicationStarted => L["MigrationWizardApplyingTitle"],
+        _ when _migrationCompleted => ContextText("MigrationWizardCompletedTitle", "ProjectOnboardingCompletedTitle"),
+        _ when _applicationStarted => ContextText("MigrationWizardApplyingTitle", "ProjectOnboardingApplyingTitle"),
         WizardStep.Questions => L["ProjectOnboardingQuestionsTitle"],
         WizardStep.Pipelines => L["MigrationWizardPipelinesTitle"],
         WizardStep.Pipeline => CurrentPipeline?.Name ?? L["MigrationWizardPipelineTitle"],
-        WizardStep.Review => L["MigrationWizardReviewTitle"],
+        WizardStep.Review => ContextText("MigrationWizardReviewTitle", "ProjectOnboardingReviewTitle"),
         _ => L[IsProjectOnboarding ? "ProjectOnboardingTitle" : "MigrationWizardTitle"],
     };
     private TimeSpan Elapsed => _jobStartedAt is null ? TimeSpan.Zero : DateTime.UtcNow - _jobStartedAt.Value;
@@ -281,17 +285,17 @@
         : $"{Math.Max(0, (int)Elapsed.TotalSeconds)} s";
     private string ProgressLabel => _progressCode switch
     {
-        "applying" => L["MigrationWizardProgressApplying"],
+        "applying" => ContextText("MigrationWizardProgressApplying", "ProjectOnboardingProgressApplying"),
         "configuring" => L["MigrationWizardProgressConfiguring"],
-        "verifying" => L["MigrationWizardProgressVerifying"],
+        "verifying" => ContextText("MigrationWizardProgressVerifying", "ProjectOnboardingProgressVerifying"),
         "preparing" => L["MigrationWizardProgressPreparing"],
         "inspecting" => L["MigrationWizardProgressInspecting"],
         "finalizing" => L["MigrationWizardProgressFinalizing"],
-        _ => L["MigrationWizardProgressAnalyzing"],
+        _ => ContextText("MigrationWizardProgressAnalyzing", "ProjectOnboardingProgressAnalyzing"),
     };
     private string ProgressHint => _applicationStarted
-        ? L["MigrationWizardApplyingHint"]
-        : L["MigrationWizardAnalyzingHint"];
+        ? ContextText("MigrationWizardApplyingHint", "ProjectOnboardingApplyingHint")
+        : ContextText("MigrationWizardAnalyzingHint", "ProjectOnboardingAnalyzingHint");
     private string ActivityLabel => _lastActivityAt is not null
         && DateTime.UtcNow - _lastActivityAt.Value <= TimeSpan.FromSeconds(12)
             ? L["MigrationWizardActivityReceived"]
@@ -387,11 +391,11 @@
     private string FriendlyError(string? code) => code switch
     {
         "provider-rate-limited" => L["MigrationWizardErrorRateLimited"],
-        "application-failed" => L["MigrationWizardErrorApplyFailed"],
-        "input-too-large" => L["MigrationWizardErrorTooLarge"],
+        "application-failed" => ContextText("MigrationWizardErrorApplyFailed", "ProjectOnboardingErrorApplyFailed"),
+        "input-too-large" => ContextText("MigrationWizardErrorTooLarge", "ProjectOnboardingErrorTooLarge"),
         "interrupted" => L["MigrationWizardErrorInterrupted"],
         "invalid-plan" => L["MigrationWizardErrorInvalidPlan"],
-        "agent-failed" => L["MigrationWizardErrorAgentFailed"],
+        "agent-failed" => ContextText("MigrationWizardErrorAgentFailed", "ProjectOnboardingErrorAgentFailed"),
         _ => L["MigrationWizardAnalysisFailed"],
     };
 
@@ -449,6 +453,8 @@
     }
 
     private string RoleLabel(ColumnRole role) => L[$"WorkflowRole{role}"];
+    private string ContextText(string migrationKey, string onboardingKey) =>
+        L[IsProjectOnboarding ? onboardingKey : migrationKey];
     private Task LaunchMigrationAsync()
     {
         if (_plan is null || _busy || _applicationStarted) return Task.CompletedTask;

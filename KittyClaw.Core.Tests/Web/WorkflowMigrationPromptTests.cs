@@ -150,6 +150,28 @@ public sealed class WorkflowMigrationPromptTests
     }
 
     [Fact]
+    public void Project_onboarding_wizard_uses_setup_copy_instead_of_migration_copy()
+    {
+        var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "WorkflowMigrationWizard.razor"));
+
+        Assert.Contains("ContextText(\"MigrationWizardLaunch\", \"ProjectOnboardingLaunch\")", source);
+        Assert.Contains("ContextText(\"MigrationWizardApplying\", \"ProjectOnboardingApplying\")", source);
+        Assert.Contains("ContextText(\"MigrationWizardCompletedTitle\", \"ProjectOnboardingCompletedTitle\")", source);
+        Assert.Contains("ContextText(\"MigrationWizardLongRunningHint\", \"ProjectOnboardingLongRunningHint\")", source);
+
+        foreach (var language in new[] { "en", "fr", "de", "es", "it" })
+        {
+            var path = Path.Combine(RepoRoot(), "KittyClaw.Core", "Localization", $"Workflows.{language}.json");
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            var onboardingCopy = document.RootElement.EnumerateObject()
+                .Where(property => property.Name.StartsWith("ProjectOnboarding", StringComparison.Ordinal))
+                .Select(property => property.Value.GetString() ?? string.Empty);
+
+            Assert.DoesNotContain(onboardingCopy, value => value.Contains("migration", StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    [Fact]
     public void Approved_application_prompt_preserves_the_migration_safety_contract()
     {
         var prompt = WorkflowMigrationPlanner.BuildApplicationPrompt(new WorkflowMigrationPlan
