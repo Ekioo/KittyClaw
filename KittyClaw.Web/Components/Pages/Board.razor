@@ -123,16 +123,20 @@ else
         @foreach (var col in _columns)
         {
             var colIndex = _columns.IndexOf(col);
+            var ticketDropAllowed = IsTicketDropAllowed(col);
+            var ticketDropClass = _draggedTicket is null
+                ? ""
+                : ticketDropAllowed ? "column-ticket-drop-allowed" : "column-ticket-drop-forbidden";
             <div class="column-insert-slot" aria-hidden="false">
                 <button class="column-insert-btn" title="@L["InsertColumnHere"]" aria-label="@L["InsertColumnHere"]"
                         @onclick="() => OpenCreateColumn(colIndex)">+</button>
             </div>
-            <div @key="col.Id" class="column @(_draggedColumn?.Id == col.Id ? "column-dragging" : "")"
+            <div @key="col.Id" class="column @(_draggedColumn?.Id == col.Id ? "column-dragging" : "") @ticketDropClass"
                  style="--col-color: @col.Color"
                  @ondragover="(e) => OnDragOverColumn(col.Name, e)"
-                 @ondragover:preventDefault
+                 @ondragover:preventDefault="@ticketDropAllowed"
                  @ondrop="() => OnDrop(col.Name)"
-                 @ondrop:preventDefault>
+                 @ondrop:preventDefault="@ticketDropAllowed">
                 @if (_draggedColumn is not null && _draggedTicket is null && _colDropIndex == colIndex && _draggedColumn.Id != col.Id)
                 {
                     <div class="column-drop-indicator"></div>
@@ -172,7 +176,7 @@ else
                     @for (int i = 0; i <= columnTickets.Count; i++)
                     {
                         var slotIndex = i;
-                        @if (_draggedTicket is not null)
+                        @if (_draggedTicket is not null && ticketDropAllowed)
                         {
                             var isActiveSlot = _dragOverStatus == col.Name && _dragActiveSlot == slotIndex && !IsNoOpReorder(col.Name, slotIndex);
                             <div class="drop-slot @(isActiveSlot ? "active" : "")"
@@ -195,10 +199,10 @@ else
                                  @ondragstart="() => OnDragStart(ticket)"
                                  @ondragend="OnDragEnd"
                                  @ondragover="() => OnDragOverCard(col.Name, index, ticket)"
-                                 @ondragover:preventDefault
+                                 @ondragover:preventDefault="@ticketDropAllowed"
                                  @ondragover:stopPropagation
                                  @ondrop="() => OnDropAsChild(ticket, col.Name)"
-                                 @ondrop:preventDefault
+                                 @ondrop:preventDefault="@ticketDropAllowed"
                                  @ondrop:stopPropagation
                                  @oncontextmenu="e => OpenTicketMenuAsync(ticket, e)"
                                  @oncontextmenu:preventDefault
@@ -1408,6 +1412,18 @@ else
         _colDropIndex = newIdx;
     }
 
+    private bool IsTicketDropAllowed(BoardColumn destination)
+    {
+        if (_draggedTicket is null) return false;
+        if (_draggedTicket.ColumnId is not int sourceId) return true;
+        return !_routingPolicies.TryGetValue(sourceId, out var policy)
+            || policy.Allows(sourceId, destination.Id);
+    }
+
+    private bool IsTicketDropAllowed(string status) =>
+        _columns.FirstOrDefault(column => column.Name == status) is { } destination
+        && IsTicketDropAllowed(destination);
+
     private async Task OnColumnDrop()
     {
         if (_draggedColumn is null) return;
@@ -1425,7 +1441,7 @@ else
 
     private void OnDragOverCard(string status, int cardIndex, TicketSummary ticket)
     {
-        if (_draggedTicket is null || _draggedTicket.Id == ticket.Id) return;
+        if (_draggedTicket is null || _draggedTicket.Id == ticket.Id || !IsTicketDropAllowed(status)) return;
         var newDropTarget = (_subKanbanParentId is null) ? ticket.Id : (int?)null;
         if (_dragOverStatus == status && _dragHoverIndex == cardIndex && _dragActiveSlot == -1 && _dropTargetTicketId == newDropTarget)
         {
@@ -1440,7 +1456,7 @@ else
 
     private void OnDragOverSlot(string status, int slotIndex)
     {
-        if (_draggedTicket is null) return;
+        if (_draggedTicket is null || !IsTicketDropAllowed(status)) return;
         if (_dragOverStatus == status && _dragActiveSlot == slotIndex && _dragHoverIndex == -1 && _dropTargetTicketId == null)
         {
             _suppressRender = true;
@@ -1454,7 +1470,7 @@ else
 
     private void OnDragOverColumn(string status, DragEventArgs e)
     {
-        if (_draggedTicket is null) return;
+        if (_draggedTicket is null || !IsTicketDropAllowed(status)) return;
         var slotCount = GetTickets(status).Count;
         if (_dragOverStatus == status && _dragHoverIndex == -1 && _dragActiveSlot == slotCount && _dropTargetTicketId == null)
         {
@@ -1523,6 +1539,11 @@ else
     private async Task OnDropAsChild(TicketSummary target, string colName)
     {
         if (_draggedTicket is null || _draggedTicket.Id == target.Id) return;
+        if (!IsTicketDropAllowed(colName))
+        {
+            OnDragEnd();
+            return;
+        }
 
         // In main board: make child
         if (_dropTargetTicketId == target.Id && _subKanbanParentId is null)

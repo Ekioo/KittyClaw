@@ -300,9 +300,25 @@ a:hover { color: var(--accent-hover); }
     flex-direction: column;
     border: 1px solid var(--border-strong);
     box-shadow: 0 2px 12px rgba(0,0,0,0.35);
-    transition: border-color 0.15s;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s, opacity 0.15s, filter 0.15s;
     height: 100%;
     position: relative;
+}
+
+/* Ticket drag affordances mirror the routing policy enforced by the service. */
+.column.column-ticket-drop-allowed {
+    border-color: color-mix(in srgb, var(--col-color) 52%, var(--border-strong));
+    background: color-mix(in srgb, var(--col-color) 4%, var(--surface));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--col-color) 16%, transparent),
+                0 2px 14px rgba(0, 0, 0, 0.36);
+}
+.column.column-ticket-drop-forbidden {
+    opacity: .58;
+    filter: saturate(.5);
+    box-shadow: none;
+}
+.column.column-ticket-drop-forbidden .column-body {
+    cursor: no-drop;
 }
 
 .column-header {
