@@ -1,0 +1,142 @@
+{
+  "setup": [
+    {
+      "type": "createProject",
+      "name": "checkout-demo",
+      "workspacePath": "C:\\Sources\\KittyClaw"
+    },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/checkout-demo/members",
+      "body": {
+        "name": "programmer"
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "checkout-demo",
+      "title": "Prevent duplicate checkout submissions",
+      "status": "InProgress",
+      "priority": "Required",
+      "assignedTo": "programmer"
+    },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/checkout-demo/chat/start",
+      "body": {
+        "target": "programmer#ticket-{ticketId}",
+        "message": "Disable the Place order button during submission, restore it after failure, keep it disabled after success, and add regression coverage.",
+        "model": "claude-sonnet-4-6",
+        "forceNew": true
+      },
+      "extract": {
+        "runId": "runId"
+      }
+    },
+    {
+      "type": "waitForRun",
+      "project": "checkout-demo",
+      "ms": 30000
+    }
+  ],
+  "actions": [
+    {
+      "type": "navigate",
+      "url": "/board/checkout-demo"
+    },
+    {
+      "type": "wait",
+      "ms": 1500
+    },
+    {
+      "type": "assertVisible",
+      "selector": ".ticket-card:has-text(\"Prevent duplicate checkout submissions\")"
+    },
+    {
+      "type": "assertVisible",
+      "selector": ".ticket-card:has-text(\"Prevent duplicate checkout submissions\") .agent-log-btn"
+    },
+    {
+      "type": "screenshot",
+      "name": "01-live-board",
+      "description": "The realistic checkout ticket is visibly in progress on the live board with its run attached."
+    },
+    {
+      "type": "click",
+      "selector": ".ticket-card:has-text(\"Prevent duplicate checkout submissions\") .agent-log-btn"
+    },
+    {
+      "type": "wait",
+      "ms": 700
+    },
+    {
+      "type": "assertVisible",
+      "selector": ".agent-drawer .console-msg-detail:has-text(\"Implemented the checkout submission guard\")"
+    },
+    {
+      "type": "assertVisible",
+      "selector": ".agent-drawer .console-msg-detail:has-text(\"Tests: 2 added, total suite green\")"
+    },
+    {
+      "type": "screenshot",
+      "name": "02-readable-run",
+      "description": "The readable run states the behavior changed and the verification result in plain language."
+    },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/checkout-demo/tickets/{ticketId}/comments",
+      "body": {
+        "author": "programmer",
+        "content": "## Implementation evidence\n- Changed scope: checkout submission guard\n- Tests: double-click and failed-request regressions pass\n- Visual verification: checkout button state verified\n- Verdict: READY FOR QA"
+      }
+    },
+    {
+      "type": "setStatus",
+      "project": "checkout-demo",
+      "value": "{ticketId}",
+      "status": "Review"
+    },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/checkout-demo/tickets/{ticketId}/comments",
+      "body": {
+        "author": "owner",
+        "content": "Human validation: evidence reviewed and release approved."
+      }
+    },
+    {
+      "type": "navigate",
+      "url": "/board/checkout-demo/ticket/{ticketId}"
+    },
+    {
+      "type": "wait",
+      "ms": 700
+    },
+    {
+      "type": "assertVisible",
+      "selector": ".ticket-panel:has-text(\"Implementation evidence\")"
+    },
+    {
+      "type": "assertVisible",
+      "selector": ".ticket-panel:has-text(\"Human validation: evidence reviewed and release approved.\")"
+    },
+    {
+      "type": "assertJson",
+      "path": "/api/projects/checkout-demo/tickets/{ticketId}",
+      "jsonPath": "status",
+      "expected": "Review"
+    },
+    {
+      "type": "screenshot",
+      "name": "03-human-validation",
+      "description": "The ticket remains in Review with implementation evidence and an explicit human release decision."
+    }
+  ],
+  "verdict": {
+    "passOn": "all-asserts-pass"
+  }
+}

@@ -89,6 +89,7 @@ public sealed class ScenarioRunner
             case "assignTicket":
             case "setStatus":
             case "createDependency":
+            case "waitForRun":
                 await ExecuteApiActionAsync(action, ct);
                 break;
             default:
@@ -154,6 +155,30 @@ public sealed class ScenarioRunner
                     {
                         var json = await resp.Content.ReadFromJsonAsync<JsonElement>(ct);
                         ExtractVars(json, action.Extract);
+                    }
+                    break;
+                }
+            case "waitForRun":
+                {
+                    var project = Resolve(action.Project ?? "qa-test");
+                    var slug = SlugOf(project);
+                    var runId = Resolve(action.Value ?? (_vars.TryGetValue("runId", out var rv) ? rv : null)
+                        ?? throw new InvalidOperationException("waitForRun: no runId — set 'value' or use after a step that extracts 'runId'"));
+                    var timeoutMs = action.Ms ?? 30000;
+                    var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+                    while (true)
+                    {
+                        var resp = await _http.GetAsync($"{_instanceApiUrl}/api/projects/{slug}/runs/{runId}", ct);
+                        if (resp.IsSuccessStatusCode)
+                        {
+                            var json = await resp.Content.ReadFromJsonAsync<JsonElement>(ct);
+                            if (json.TryGetProperty("status", out var statusEl)
+                                && statusEl.GetString() is { } s && s != "Running")
+                                break;
+                        }
+                        if (DateTime.UtcNow > deadline)
+                            throw new TimeoutException($"waitForRun: run {runId} did not complete within {timeoutMs} ms");
+                        await Task.Delay(500, ct);
                     }
                     break;
                 }
@@ -363,6 +388,7 @@ public sealed class ScenarioRunner
             case "createTicket":
             case "assignTicket":
             case "setStatus":
+            case "waitForRun":
                 await ExecuteApiActionAsync(action, ct);
                 break;
             default:

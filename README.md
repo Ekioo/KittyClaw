@@ -1,12 +1,6 @@
 # KittyClaw
 
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=nqDHH1T5TwA">
-    <img src="https://img.youtube.com/vi/nqDHH1T5TwA/maxresdefault.jpg" alt="KittyClaw demo" width="800" />
-  </a>
-</p>
-
-<p align="center">
   <img src="docs/assets/demo.webp" alt="KittyClaw demo" width="800" />
 </p>
 
@@ -14,7 +8,13 @@
   <a href="https://kittyclaw.dev">kittyclaw.dev</a> · <a href="https://kittyclaw.dev/#waitlist">Get early access</a>
 </p>
 
-A kanban board that **orchestrates agentic projects**. A project can be split into independently named pipelines whose stable identities survive renames. Columns can own generic processors with persistent memory, reusable project skills, ordered ticket selection, durable retries, and switch-like routing to columns in any pipeline. Right-click a column and choose **Configure column** to edit its name, color, role, position, ticket guidance, processor, and routing without losing the visual context of the board. Tickets in `Waiting` or `OwnerAction` columns always show a prominent contextual block between their description and activity, explaining whether the owner must comment or move the ticket to a specific validation/refusal column, or whether KittyClaw will resume it automatically. Columns can also be inserted between existing lanes or added at the end directly from the Kanban; the Workflows page remains the global pipeline-and-skills overview. Execution state is separate from business columns, so an `InProgress` column is optional. The legacy `AutomationEngine` remains available for trigger-based rules, cron/interval work, and backward compatibility. Agents run through Claude Code, OpenAI Codex, Grok Build, Mistral Vibe, or a local Ollama model while their output streams into the app.
+**KittyClaw is a local control plane for software work performed by AI agents.** Submit a software ticket, watch it move across the live board, read the run that changed the code, inspect its verification evidence, and make the final release decision yourself.
+
+The product proves three things in one journey: **a live board**, **a readable run**, and **human validation before external release**. New boards start with `Backlog`, `Todo`, `InProgress`, `Blocked`, `Scheduled`, `Review`, and `Done` (columns remain customizable). Runs can use Claude Code, OpenAI Codex, Grok Build, or a local Ollama model.
+
+Follow the [guided five-minute demo](docs/product-journey-demo.md) to repeat the journey with a realistic software ticket. The companion [activation test protocol](docs/activation-test-protocol.md) measures whether qualified trial users reach their first run within ten minutes.
+
+A project can be split into independently named pipelines whose stable identities survive renames. Columns can own generic processors with persistent memory, reusable project skills, ordered ticket selection, durable retries, and switch-like routing to columns in any pipeline. Right-click a column and choose **Configure column** to edit its name, color, role, position, ticket guidance, processor, and routing without losing the visual context of the board. Tickets in `Waiting` or `OwnerAction` columns always show a prominent contextual block between their description and activity, explaining whether the owner must comment or move the ticket to a specific validation/refusal column, or whether KittyClaw will resume it automatically. Columns can also be inserted between existing lanes or added at the end directly from the Kanban; the Workflows page remains the global pipeline-and-skills overview. Execution state is separate from business columns, so an `InProgress` column is optional. The legacy `AutomationEngine` remains available for trigger-based rules, cron/interval work, and backward compatibility. Agents run through Claude Code, OpenAI Codex, Grok Build, Mistral Vibe, or a local Ollama model while their output streams into the app.
 
 Each processor is versioned with its project in
 `.agents/processors/column-<id>/processor.json`. This authoritative definition contains its
