@@ -6,7 +6,6 @@
 @inject AutomationEngine AutomationEngine
 @inject MemberService MemberService
 @inject LocalizationService L
-@inject IHttpClientFactory HttpFactory
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject KittyClaw.Web.Services.EscapeKeyStack EscapeStack
@@ -35,12 +34,9 @@
             <p class="settings-hint">@L["WorkspaceHint"]</p>
             <div class="settings-row">
                 <input class="settings-input" placeholder="@L["WorkspacePlaceholder"]" @bind="_newWorkspacePath" @bind:event="oninput" @bind:after="OnWorkspaceChanged" />
-                @if (_canBrowse)
-                {
-                    <button class="settings-browse" @onclick="BrowseWorkspace" disabled="@_browsing">
-                        @(_browsing ? "…" : $"📁 {L["Browse"]}")
-                    </button>
-                }
+                <button class="settings-browse" type="button" @onclick="OpenFolderPicker">
+                    📁 @L["Browse"]
+                </button>
             </div>
 
             @if (!string.IsNullOrWhiteSpace(_newWorkspacePath) && _workspaceExists == false)
@@ -87,6 +83,13 @@
     </div>
 }
 
+@if (_folderPickerOpen)
+{
+    <FolderPickerDialog InitialPath="@_newWorkspacePath"
+                        OnSelected="SelectWorkspaceFolder"
+                        OnCancel="CloseFolderPicker" />
+}
+
 @if (_createdProject is not null)
 {
     <WorkflowMigrationWizard ProjectSlug="@_createdProject.Slug"
@@ -102,46 +105,23 @@
     private bool _open;
     private string _newProjectName = "";
     private string _newWorkspacePath = "";
-    private bool _browsing, _canBrowse;
+    private bool _folderPickerOpen;
     private bool _initializing;
     private bool _creatingFolder;
     private bool? _workspaceExists;
     private List<string>? _initConflicts;
     private (string text, string css)? _creationStatus;
     private IDisposable? _escPending;
-    private bool _browseProbed;
     private bool _workspaceWasEmpty;
     private Project? _createdProject;
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    protected override Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && !_browseProbed)
-        {
-            _browseProbed = true;
-            await ProbeBrowseAsync();
-        }
-
         if (_open && _escPending is null)
             _escPending = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CancelCreation(); StateHasChanged(); }));
         else if (!_open && _escPending is not null)
         { _escPending.Dispose(); _escPending = null; }
-    }
-
-    private HttpClient NewHttp()
-    {
-        var h = HttpFactory.CreateClient();
-        h.BaseAddress = new Uri(Nav.BaseUri);
-        return h;
-    }
-
-    private async Task ProbeBrowseAsync()
-    {
-        try
-        {
-            var caps = await NewHttp().GetFromJsonAsync<BrowseCapabilities>("/api/browse/capabilities");
-            _canBrowse = caps?.FolderPicker == true;
-        }
-        catch { _canBrowse = false; }
+        return Task.CompletedTask;
     }
 
     private void OpenCreation()
@@ -183,33 +163,20 @@
         finally { _creatingFolder = false; }
     }
 
-    private async Task BrowseWorkspace()
+    private void OpenFolderPicker()
     {
-        _browsing = true;
         _creationStatus = null;
-        try
-        {
-            var resp = await NewHttp().PostAsJsonAsync("/api/browse/folder", new { initialPath = _newWorkspacePath });
-            if (resp.StatusCode == System.Net.HttpStatusCode.OK)
-            {
-                var body = await resp.Content.ReadFromJsonAsync<BrowseResult>();
-                if (body?.Path is not null)
-                {
-                    _newWorkspacePath = body.Path;
-                    OnWorkspaceChanged();
-                }
-            }
-            else if (resp.StatusCode != System.Net.HttpStatusCode.NoContent)
-            {
-                _creationStatus = ($"{L["Error"]}: {resp.ReasonPhrase ?? resp.StatusCode.ToString()}", "settings-status-err");
-            }
-        }
-        catch (Exception ex)
-        {
-            _creationStatus = ($"{L["Error"]}: {ex.Message}", "settings-status-err");
-        }
-        finally { _browsing = false; }
+        _folderPickerOpen = true;
     }
+
+    private void SelectWorkspaceFolder(string path)
+    {
+        _newWorkspacePath = path;
+        _folderPickerOpen = false;
+        OnWorkspaceChanged();
+    }
+
+    private void CloseFolderPicker() => _folderPickerOpen = false;
 
     private async Task StartInitialize()
     {
@@ -269,6 +236,7 @@
     private void CancelCreation()
     {
         _open = false;
+        _folderPickerOpen = false;
         _initConflicts = null;
         _creationStatus = null;
     }
@@ -296,6 +264,4 @@
         _escPending?.Dispose();
     }
 
-    private sealed record BrowseCapabilities(bool FolderPicker);
-    private sealed record BrowseResult(string Path);
 }

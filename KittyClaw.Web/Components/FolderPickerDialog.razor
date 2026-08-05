@@ -1,0 +1,277 @@
+@inject LocalizationService L
+@inject IJSRuntime JS
+@inject EscapeKeyStack EscapeStack
+@implements IDisposable
+
+<div class="modal-backdrop folder-picker-backdrop">
+    <div class="modal-dialog folder-picker-dialog" @onclick:stopPropagation>
+        <div class="folder-picker-header">
+            <div>
+                <span class="folder-picker-eyebrow">@L["FolderPickerLocation"]</span>
+                <h2>@L["FolderPickerTitle"]</h2>
+            </div>
+            <button class="modal-close-btn" type="button" title="@L["Cancel"]" @onclick="Cancel">×</button>
+        </div>
+
+        <div class="folder-picker-path-row">
+            <input class="settings-input folder-picker-path"
+                   aria-label="@L["FolderPickerPath"]"
+                   placeholder="@L["FolderPickerPathPlaceholder"]"
+                   @bind="_pathInput"
+                   @bind:event="oninput"
+                   @onkeydown="HandlePathKeyDown" />
+            <button class="header-action-btn" type="button" @onclick="OpenTypedPath" disabled="@_loading">
+                @L["FolderPickerOpen"]
+            </button>
+        </div>
+
+        <nav class="folder-picker-breadcrumbs" aria-label="@L["FolderPickerBreadcrumbs"]">
+            @foreach (var crumb in _breadcrumbs)
+            {
+                <button type="button" @onclick="() => NavigateTo(crumb.Path)" disabled="@_loading">@crumb.Label</button>
+                @if (crumb != _breadcrumbs[^1])
+                {
+                    <span aria-hidden="true">›</span>
+                }
+            }
+        </nav>
+
+        <div class="folder-picker-browser">
+            <aside class="folder-picker-roots" aria-label="@L["FolderPickerRoots"]">
+                <span class="folder-picker-section-title">@L["FolderPickerRoots"]</span>
+                @foreach (var root in _roots)
+                {
+                    <button type="button"
+                            class="@(PathsEqual(root.Path, _currentPath) ? "active" : null)"
+                            @onclick="() => NavigateTo(root.Path)"
+                            disabled="@_loading">
+                        <span aria-hidden="true">@root.Icon</span>
+                        <span>@root.Label</span>
+                    </button>
+                }
+            </aside>
+
+            <section class="folder-picker-content" aria-live="polite">
+                <div class="folder-picker-toolbar">
+                    <button type="button" class="folder-picker-up" @onclick="GoToParent" disabled="@(_loading || _parentPath is null)">
+                        <span aria-hidden="true">↑</span> @L["FolderPickerParent"]
+                    </button>
+                    <span class="folder-picker-count">@L.Get("FolderPickerFolderCount", _directories.Count)</span>
+                </div>
+
+                @if (_loading)
+                {
+                    <div class="folder-picker-state">
+                        <span class="loading-spinner" aria-hidden="true"></span>
+                        <span>@L["Loading"]</span>
+                    </div>
+                }
+                else if (!string.IsNullOrWhiteSpace(_error))
+                {
+                    <div class="folder-picker-state folder-picker-error">@_error</div>
+                }
+                else if (_directories.Count == 0)
+                {
+                    <div class="folder-picker-state">@L["FolderPickerEmpty"]</div>
+                }
+                else
+                {
+                    <div class="folder-picker-list">
+                        @foreach (var directory in _directories)
+                        {
+                            <button type="button" @onclick="() => NavigateTo(directory.Path)">
+                                <span class="folder-picker-icon" aria-hidden="true">📁</span>
+                                <span class="folder-picker-name">@directory.Name</span>
+                                <span class="folder-picker-chevron" aria-hidden="true">›</span>
+                            </button>
+                        }
+                    </div>
+                }
+            </section>
+        </div>
+
+        <div class="folder-picker-footer">
+            <div class="folder-picker-selection">
+                <span>@L["FolderPickerSelected"]</span>
+                <strong title="@_currentPath">@_currentPath</strong>
+            </div>
+            <div class="modal-actions">
+                <button class="header-action-btn" type="button" @onclick="Cancel">@L["Cancel"]</button>
+                <button class="header-action-btn settings-primary" type="button" @onclick="SelectCurrent" disabled="@(_loading || string.IsNullOrWhiteSpace(_currentPath))">
+                    @L["FolderPickerSelect"]
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string? InitialPath { get; set; }
+    [Parameter] public EventCallback<string> OnSelected { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private readonly List<FolderLocation> _roots = [];
+    private readonly List<FolderLocation> _breadcrumbs = [];
+    private readonly List<FolderEntry> _directories = [];
+    private string _currentPath = "";
+    private string _pathInput = "";
+    private string? _parentPath;
+    private string? _error;
+    private bool _loading;
+    private int _navigationVersion;
+    private IDisposable? _escapeRegistration;
+
+    protected override async Task OnInitializedAsync()
+    {
+        LoadRoots();
+        var initial = ResolveInitialPath(InitialPath);
+        await NavigateTo(initial);
+    }
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _escapeRegistration = EscapeStack.PushWithFocus(
+                JS,
+                () => InvokeAsync(Cancel));
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void LoadRoots()
+    {
+        var seen = new HashSet<string>(PathComparer);
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (Directory.Exists(home) && seen.Add(NormalizeForComparison(home)))
+            _roots.Add(new FolderLocation(home, L["FolderPickerHome"], "⌂"));
+
+        foreach (var drive in DriveInfo.GetDrives())
+        {
+            try
+            {
+                if (!drive.IsReady || !Directory.Exists(drive.RootDirectory.FullName))
+                    continue;
+
+                var path = drive.RootDirectory.FullName;
+                if (!seen.Add(NormalizeForComparison(path)))
+                    continue;
+
+                var label = OperatingSystem.IsWindows()
+                    ? string.IsNullOrWhiteSpace(drive.VolumeLabel) ? drive.Name : $"{drive.Name} {drive.VolumeLabel}"
+                    : path;
+                _roots.Add(new FolderLocation(path, label, "◉"));
+            }
+            catch
+            {
+                // A removable or network drive can disappear while the list is built.
+            }
+        }
+    }
+
+    private static string ResolveInitialPath(string? requestedPath)
+    {
+        if (!string.IsNullOrWhiteSpace(requestedPath) && Directory.Exists(requestedPath))
+            return Path.GetFullPath(requestedPath);
+
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (Directory.Exists(home))
+            return home;
+
+        return Directory.GetCurrentDirectory();
+    }
+
+    private async Task NavigateTo(string path)
+    {
+        var version = ++_navigationVersion;
+        _loading = true;
+        _error = null;
+
+        try
+        {
+            var result = await Task.Run(() => ReadDirectory(path));
+            if (version != _navigationVersion)
+                return;
+
+            _currentPath = result.Path;
+            _pathInput = result.Path;
+            _parentPath = result.ParentPath;
+            _directories.Clear();
+            _directories.AddRange(result.Directories);
+            RebuildBreadcrumbs(result.Path);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or ArgumentException or NotSupportedException)
+        {
+            if (version == _navigationVersion)
+                _error = L.Get("FolderPickerError", ex.Message);
+        }
+        finally
+        {
+            if (version == _navigationVersion)
+                _loading = false;
+        }
+    }
+
+    private static DirectoryResult ReadDirectory(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("The path is empty.");
+
+        var fullPath = Path.GetFullPath(Environment.ExpandEnvironmentVariables(path.Trim()));
+        if (!Directory.Exists(fullPath))
+            throw new DirectoryNotFoundException(fullPath);
+
+        var current = new DirectoryInfo(fullPath);
+        var directories = current.EnumerateDirectories()
+            .OrderBy(directory => directory.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Take(1000)
+            .Select(directory => new FolderEntry(directory.Name, directory.FullName))
+            .ToList();
+
+        return new DirectoryResult(current.FullName, current.Parent?.FullName, directories);
+    }
+
+    private void RebuildBreadcrumbs(string path)
+    {
+        _breadcrumbs.Clear();
+        var cursor = new DirectoryInfo(path);
+        while (cursor is not null)
+        {
+            var label = cursor.Parent is null ? cursor.FullName : cursor.Name;
+            _breadcrumbs.Add(new FolderLocation(cursor.FullName, label, ""));
+            cursor = cursor.Parent;
+        }
+
+        _breadcrumbs.Reverse();
+    }
+
+    private Task OpenTypedPath() => NavigateTo(_pathInput);
+    private Task GoToParent() => _parentPath is null ? Task.CompletedTask : NavigateTo(_parentPath);
+
+    private async Task HandlePathKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+            await OpenTypedPath();
+    }
+
+    private Task SelectCurrent() => OnSelected.InvokeAsync(_currentPath);
+    private Task Cancel() => OnCancel.InvokeAsync();
+
+    private static bool PathsEqual(string left, string right) =>
+        !string.IsNullOrWhiteSpace(left)
+        && !string.IsNullOrWhiteSpace(right)
+        && PathComparer.Equals(NormalizeForComparison(left), NormalizeForComparison(right));
+
+    private static string NormalizeForComparison(string path) =>
+        Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+
+    private static StringComparer PathComparer =>
+        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    public void Dispose() => _escapeRegistration?.Dispose();
+
+    private sealed record FolderLocation(string Path, string Label, string Icon);
+    private sealed record FolderEntry(string Name, string Path);
+    private sealed record DirectoryResult(string Path, string? ParentPath, IReadOnlyList<FolderEntry> Directories);
+}

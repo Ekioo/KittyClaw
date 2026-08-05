@@ -44,12 +44,9 @@ else
             <p class="settings-hint">@L["WorkspaceHint"]</p>
             <div class="settings-row">
                 <input class="settings-input" placeholder="@L["WorkspacePlaceholder"]" @bind="_workspacePath" @bind:event="oninput" />
-                @if (_canBrowse)
-                {
-                    <button class="settings-browse" @onclick="BrowseWorkspace" disabled="@_browsing">
-                        @(_browsing ? "…" : $"📁 {L["Browse"]}")
-                    </button>
-                }
+                <button class="settings-browse" type="button" @onclick="OpenFolderPicker">
+                    📁 @L["Browse"]
+                </button>
                 <button class="settings-primary" @onclick="SaveWorkspace" disabled="@_savingWorkspace">
                     @(_savingWorkspace ? "…" : L["Save"])
                 </button>
@@ -343,12 +340,19 @@ else
     }
 }
 
+@if (_folderPickerOpen)
+{
+    <FolderPickerDialog InitialPath="@_workspacePath"
+                        OnSelected="SelectWorkspaceFolder"
+                        OnCancel="CloseFolderPicker" />
+}
+
 @code {
     [Parameter] public string Slug { get; set; } = "";
 
     private Project? _project;
     private string _workspacePath = "";
-    private bool _savingWorkspace, _browsing, _canBrowse;
+    private bool _savingWorkspace, _folderPickerOpen;
     private (string text, string css)? _workspaceStatus;
 
     private string _fallbackModel = "";
@@ -391,7 +395,6 @@ else
         _workspacePath = _project.WorkspacePath ?? "";
         _localModelBaseUrl = _project.LocalModelBaseUrl ?? "";
         await ReloadAllAsync();
-        await ProbeBrowseAsync();
         // Load model catalogs first, then apply the saved fallback so the <select> has a
         // matching <option> on first paint (avoids showing "Disabled" while value is set).
         if (!string.IsNullOrWhiteSpace(_localModelBaseUrl)) await DiscoverLocalModels();
@@ -424,42 +427,19 @@ else
         return h;
     }
 
-    private async Task ProbeBrowseAsync()
+    private void OpenFolderPicker()
     {
-        try
-        {
-            var caps = await NewHttp().GetFromJsonAsync<BrowseCapabilities>("/api/browse/capabilities");
-            _canBrowse = caps?.FolderPicker == true;
-        }
-        catch { _canBrowse = false; }
-    }
-
-    private sealed record BrowseCapabilities(bool FolderPicker);
-    private sealed record BrowseResult(string Path);
-
-    private async Task BrowseWorkspace()
-    {
-        _browsing = true;
         _workspaceStatus = null;
-        try
-        {
-            var resp = await NewHttp().PostAsJsonAsync("/api/browse/folder", new { initialPath = _workspacePath });
-            if (resp.StatusCode == System.Net.HttpStatusCode.OK)
-            {
-                var body = await resp.Content.ReadFromJsonAsync<BrowseResult>();
-                if (body?.Path is not null) _workspacePath = body.Path;
-            }
-            else if (resp.StatusCode != System.Net.HttpStatusCode.NoContent)
-            {
-                _workspaceStatus = ($"{L["Error"]}: {resp.ReasonPhrase ?? resp.StatusCode.ToString()}", "settings-status-err");
-            }
-        }
-        catch (Exception ex)
-        {
-            _workspaceStatus = ($"{L["Error"]}: {ex.Message}", "settings-status-err");
-        }
-        finally { _browsing = false; }
+        _folderPickerOpen = true;
     }
+
+    private void SelectWorkspaceFolder(string path)
+    {
+        _workspacePath = path;
+        _folderPickerOpen = false;
+    }
+
+    private void CloseFolderPicker() => _folderPickerOpen = false;
 
     private async Task SaveWorkspace()
     {
