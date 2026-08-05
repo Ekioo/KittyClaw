@@ -53,13 +53,19 @@ Both wrap `dotnet watch --project KittyClaw.Web --non-interactive` and serve the
 
 ### Creating a project
 
-From the home page, type a name and click **Create**. A popup asks you to set a workspace folder (absolute path to a repo/folder) and offers to create it if missing. Click **Initialize** to:
+From the home page, select **Create a project**, enter a name, and choose its workspace. The built-in folder browser works on Windows, macOS, and Linux without opening a native system dialog behind the browser. It exposes the home directory, mounted drives or filesystem roots, breadcrumbs, parent navigation, and direct path entry. You can also type an absolute path and create the folder when it does not exist.
+
+Click **Initialize** to:
 
 1. Create the project registry entry + per-project SQLite DB.
 2. Copy the project template from `ProjectTemplate/` (`preamble.md`, `{agent}/SKILL.md`, `{agent}/memory/MEMORY.md` index, `memory-consolidation.md`, `automations.json`, `CLAUDE.md`) into the workspace — agent files under `<workspace>/.agents/`, `CLAUDE.md` at the workspace root.
 3. Run `git init` if the workspace is not already a git repo (skipped if `git` isn't installed).
 4. Create a member for each agent slug found in the template.
-5. Navigate to the board.
+5. Open the project setup wizard.
+
+The setup wizard analyzes an existing workspace and proposes distinct pipelines, columns, human hand-offs, processors, routing, and schedules. For an empty folder it first asks a few questions about the project's purpose, deliverables, human decisions, and recurring work. Proposals are graphical: you can add or remove pipelines, review each pipeline's columns, refine a step with a prompt, and move backward before approval. Nothing is created during this preparation; **Create the workflow** applies and verifies the approved plan, then opens the board.
+
+This new-project setup is intentionally separate from the legacy-board migration wizard. Migration terminology and legacy-automation cleanup are shown only when an existing automation-based board needs conversion.
 
 The workspace folder itself is never deleted by KittyClaw, even when you delete a project.
 
@@ -120,10 +126,13 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 
 ## UI Features
 
-- Onboarding popup on first launch that checks the default Claude Code + Git setup (other supported backends are configured separately)
-- Project creation popup with workspace selection + one-click agent template initialization
+- Onboarding popup on first launch that checks Git, Claude Code, OpenAI Codex, Grok Build, Mistral Vibe, and Ollama
+- Cross-platform in-app workspace browser with roots, breadcrumbs, direct path entry, and folder creation
+- Guided new-project setup that analyzes the workspace and proposes editable pipelines and columns before creating the workflow
+- Guided legacy-board migration that preserves completed tickets and retires replaced automations only after verification
 - Unified multi-project home with project cards and kanban swimlanes
-- Kanban board with drag-and-drop
+- Multi-pipeline Kanban with visually distinguished allowed and forbidden drop targets based on processor routing
+- Contextual column editor for structure, role, owner guidance, processor, ordered actions, scheduled tasks, and routing
 - Customizable dashboard view with free-drag tiles (Markdown, KPI, charts, Heatmap, Timeline, …), AI chat-based tile creation, and auto-refresh via LLM prompts
 - Ticket detail panel with comments and activity timeline
 - Live agent run drawer (SSE stream of provider output, steer + stop controls)
@@ -133,11 +142,11 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 - Advanced search syntax: `#42`, `@owner`, `>date`, `priority:critical`, `label:bug`, `by:owner`
 - Sub-tickets with parent/child relationships and progress tracking
 - Lossless, atomic ticket-tree transfers between projects through the REST API
-- Column management (create, reorder, customize colors)
+- Column management directly from the board (insert, duplicate, reorder, configure, and mark read)
 - Label and member management
 - Image upload in descriptions and comments
 - Local model support ([Ollama](doc/local-models.md)): per-project base URL with model autodiscovery, per-member default model, per-action override in the Automation Editor
-- Provider-aware dispatch through Claude Code, [OpenAI Codex](doc/codex-cli.md), [Grok Build](doc/grok-build.md), or Ollama, with conversation handoff and unavailable-model fallback
+- Provider-aware dispatch through Claude Code, [OpenAI Codex](doc/codex-cli.md), [Grok Build](doc/grok-build.md), [Mistral Vibe](doc/mistral-vibe.md), or Ollama, with conversation handoff and unavailable-model fallback
 
 ## Dashboard
 

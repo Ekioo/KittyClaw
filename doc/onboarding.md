@@ -11,27 +11,42 @@ You can continue when an optional provider is missing, and the board remains usa
 ## Create your first project
 
 1. On the home page, select **Create a project**.
-2. Enter a project name and an absolute path to its workspace. This can be an existing repository or a new folder; use **Create folder** if the path does not exist yet.
+2. Enter a project name and choose its workspace. **Browse** opens KittyClaw's integrated folder browser, not an operating-system dialog. It works on Windows, macOS, and Linux and provides home/root shortcuts, mounted drives, breadcrumbs, parent navigation, and direct path entry. You can still type an absolute path manually; use **Create folder** if it does not exist yet.
 3. Select **Initialize**. KittyClaw then:
    - creates the project registry entry and its board database;
    - copies the built-in skills, memory files, and `automations.json` into `<workspace>/.agents/`, plus `CLAUDE.md` into the workspace root;
    - runs `git init` if the workspace is not already a repository and Git is available;
    - creates one board member for each built-in agent role; and
-   - loads the project's automations.
+   - opens the project workflow setup wizard.
 
 If template files already exist, KittyClaw asks whether to overwrite them or keep the existing versions.
 
 KittyClaw never deletes the workspace folder. Deleting a project removes it from KittyClaw, not the files you pointed it at.
+
+### Design the initial workflow
+
+For a non-empty workspace, KittyClaw analyzes its files and proposes pipelines adapted to the work it finds. For an empty folder, the wizard first asks four short questions: the project's purpose, its distinct deliverables, decisions that require a person, and recurring or scheduled work.
+
+The proposal remains editable inside the wizard:
+
+- validate, add, or remove pipelines from the graphical overview;
+- review each pipeline's ordered columns and short operating description;
+- use the prompt field at any step to request a modification;
+- move backward without losing the proposal; and
+- review the complete workflow before selecting **Create the workflow**.
+
+No pipeline or processor is created during analysis. The final action applies the approved plan, verifies it, and keeps progress and errors in the wizard until completion. The interface consistently calls this **project setup**; **migration** is reserved for converting an existing legacy-automation board.
 
 ## Your first 10 minutes
 
 Use one small, low-risk task to learn the full loop:
 
 1. Create and initialize a project as described above, then open its full board.
-2. Select `+` in the **Todo** column. Give the ticket a narrow title, describe the expected result, assign it to `programmer`, and create it.
-3. The default automation moves the ticket to **InProgress** and starts the agent. Open the active-run drawer to follow its output, answer a question, steer the run, or stop it.
-4. Wait for the ticket to reach **Review**. The default QA automation checks programmer tickets at this stage; read the ticket comments and run result, then inspect the work in the workspace.
-5. Use the [Before Done checklist](#before-moving-a-ticket-to-done). If the result is ready, move the ticket to **Done**. If not, leave a specific comment and move it back to **Todo** for another pass.
+2. Open the pipeline that matches the task and create a ticket in its entry column. Give it a narrow title and describe the expected result.
+3. If the column has an enabled processor, KittyClaw claims the first eligible ticket according to its configured order. Open the active-run drawer to follow agent actions, answer a question, steer the run, or stop it.
+4. Follow the configured routing. Allowed manual destinations are highlighted while dragging; forbidden columns remain visible but subdued so required gates cannot be skipped accidentally.
+5. If the ticket reaches a `Waiting` or `OwnerAction` column, use the instruction block between its description and activity. It explains the exact comment or move needed to resume the pipeline.
+6. When the ticket reaches a success column, inspect the workspace changes, comments, action results, and agent output before accepting the result.
 
 ## Choose a home view
 
@@ -52,9 +67,9 @@ KittyClaw's project chat can inspect the live API documentation and modify the c
 
 > Adapt my Kanban to a publishing workflow. I want the columns Backlog, Writing, Editorial Review, Scheduled, and Published, in that order. Preserve existing tickets, choose distinct colors, and check automations that refer to old column names. Ask me before deleting anything or making an ambiguous move.
 
-KittyClaw can create, rename, recolor, reorder, and delete columns through its API. Deleting a populated column requires choosing where its tickets move, so the prompt asks for confirmation when the intent is unclear. Automations refer to columns by name and may also need updating after a rename. The built-in **Scheduled** column has special date-based behavior; read [ticket scheduling](./ticket-scheduling.md) before replacing it.
+Most column work no longer needs a chat instruction. Right-click a column header and choose **Configure column** to edit its name, color, role, position, owner guidance, processor, actions, scheduled tasks, and routing. Use **Insert before**, **Insert after**, or **Duplicate column** for structural changes while keeping the visual context of the board.
 
-Review the result in **Settings → Columns**.
+Routing is also the source of truth for allowed manual moves. A processor with declared destinations prevents users from dragging a ticket past required stages; a column with no routing remains unrestricted so an incomplete workflow cannot strand tickets. See [pipeline and column processing](./column-workflows.md).
 
 ### Create and configure a project agent
 
@@ -76,14 +91,13 @@ KittyClaw can create the tile's `.dashboard/<tile-slug>/` files in the current w
 
 ## Use the board
 
-New boards have seven columns:
-
-**Backlog → Todo → InProgress → Blocked → Scheduled → Review → Done**
+New boards use the pipelines and columns approved in the setup wizard; there is no mandatory `InProgress` column. Execution state is tracked separately from business columns.
 
 - Create a ticket with the `+` button in a column header.
 - Open a ticket to edit its title, description, priority, labels, assignee, status, comments, and schedule.
 - Drag tickets between columns when the board is in manual sort mode.
-- Use **Settings** to manage the workspace path, members, columns, labels, and model configuration.
+- Right-click a column to configure it or mark its visible tickets as read.
+- Use **Settings** to manage the workspace path, members, labels, and model configuration.
 
 **Scheduled** is for work that should enter another stage later. Set a date, time, and target column from the ticket panel; KittyClaw promotes the ticket when it becomes due. See [ticket scheduling](./ticket-scheduling.md).
 

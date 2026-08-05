@@ -5,6 +5,9 @@ All notable changes to KittyClaw.
 ## [Unreleased]
 
 - Added native Mistral Vibe support with `mistral:*` model routing, resumable provider-scoped sessions, streaming activity normalization, onboarding detection, model selectors, API discovery, version probing, documentation, and rate-card entries.
+- Added a cross-platform in-app workspace browser with roots, breadcrumbs, parent navigation, and direct path entry for project creation and workspace settings.
+- Clarified new-project setup throughout the wizard and documentation: it analyzes existing folders, asks targeted questions for empty workspaces, and creates an approved workflow without presenting the operation as a legacy migration.
+- Preserved tickets already in semantic success columns during legacy workflow migration and visually distinguished allowed and forbidden routing destinations during drag-and-drop.
 
 ## [v0.13] — 2026-08-04
 

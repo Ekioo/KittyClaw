@@ -8,7 +8,7 @@ For a high-level overview see the root [README.md](../README.md). For repo layou
 
 ## Features
 
-- [Onboarding](./onboarding.md) — step-by-step first project guide, from workspace initialization to an agent-assisted ticket.
+- [Onboarding](./onboarding.md) — cross-platform workspace selection, guided workflow design, and the first processor-driven ticket.
 - [OpenAI Codex CLI](./codex-cli.md) — dispatching explicitly qualified `codex:*` models to the `codex` CLI.
 - [Mistral Vibe](./mistral-vibe.md) — dispatching explicitly qualified `mistral:*` models to the `vibe` CLI.
 - [Automation engine](./automation-engine.md) — triggers, conditions, and actions that dispatch agents.

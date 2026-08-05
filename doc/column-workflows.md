@@ -85,7 +85,13 @@ This avoids coupling child completion to column names or to the parent's pipelin
 
 ## User interface and API
 
-The board displays pipeline tabs and one pipeline at a time. The **Workflows** page manages pipelines, column roles, processors, routing rules, and project skills. The processor editor exposes models discovered from Claude, Grok, OpenAI Codex, and the project's Ollama endpoint; model discovery is optional, and a previously saved custom value remains selectable when it is no longer advertised. Selecting **Automatic** clears the processor override. The page's **Migrate** button opens New Instruction with an editable English migration prompt; the prompt asks for a proposal and explicit approval before changing the project. New project creation opens this page after workspace initialization.
+The board displays pipeline tabs and one pipeline at a time. Pipeline tabs include visible unread counts; hidden child tickets are not counted. During drag-and-drop, routing destinations are highlighted lightly while forbidden columns are subdued and do not expose an active drop target.
+
+Column configuration is intentionally local to the board. Right-click a header and choose **Configure column** to edit the column's identity, role, position, owner guidance, processor, ordered actions, scheduled tasks, and routing in one dialog. The same menu inserts or duplicates columns and marks the column read. The **Workflows** page remains the project-level overview for pipelines and reusable skills rather than duplicating every column editor.
+
+The processor editor exposes models discovered from Claude, Grok, OpenAI Codex, Mistral Vibe, and the project's Ollama endpoint; model discovery is optional, and a previously saved custom value remains selectable when it is no longer advertised. Selecting **Automatic** clears the processor override.
+
+New-project initialization launches a dedicated setup mode after the workspace template is written. KittyClaw analyzes a populated folder, or asks targeted questions for an empty one, then proposes graphical pipelines and columns. The owner can refine each step and must approve the final plan before **Create the workflow** applies it. Existing automation-based boards use a separate migration mode: it preserves tickets already in semantic `Success` columns, converts or retires legacy behavior, and refuses completion while any legacy automation definition remains.
 
 Relevant endpoints include:
 

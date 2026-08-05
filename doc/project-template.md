@@ -16,6 +16,7 @@ Source of truth for new-project initialization. When a project is created, these
 
 ## Entry points
 - Project creation flow (Home page → Create → Initialize).
+- After template initialization, the new-project wizard analyzes the workspace and replaces the placeholder board organization with the workflow explicitly approved by the owner. Empty workspaces receive a short requirements questionnaire first.
 - **Re-initialize agent template** action on the in-app Automations page.
 
 ## External dependencies
