@@ -76,21 +76,8 @@ public static class CodexCli
         return null;
     }
 
-    private static bool IsUsableBinary(string path)
-    {
-        if (!File.Exists(path)) return false;
-        try
-        {
-            var result = ProcessRunner.RunAsync(
-                    path, "--version", workingDirectory: null, TimeSpan.FromSeconds(5))
-                .GetAwaiter().GetResult();
-            return result.Success;
-        }
-        catch
-        {
-            return false;
-        }
-    }
+    private static bool IsUsableBinary(string path) =>
+        File.Exists(path) && ProcessRunner.ProbeSync(path, "--version", TimeSpan.FromSeconds(5));
 
     internal static void ResetForTests() =>
         _binary = new Lazy<string?>(ResolveBinary);

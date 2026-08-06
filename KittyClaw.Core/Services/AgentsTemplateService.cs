@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Reflection;
 using KittyClaw.Core.Automation;
 
@@ -110,13 +109,13 @@ public sealed class AgentsTemplateService
         var gitDir = Path.Combine(workspacePath, ".git");
         if (!Directory.Exists(gitDir) && !File.Exists(gitDir))
         {
-            if (!IsGitAvailable())
+            if (!await IsGitAvailableAsync())
             {
                 gitInitResult = GitInitResult.GitMissing;
             }
             else
             {
-                var (ok, _) = RunProcess("git", "init", workspacePath);
+                var (ok, _) = await RunProcessAsync("git", "init", workspacePath);
                 gitInitResult = ok ? GitInitResult.Created : GitInitResult.Failed;
             }
         }
@@ -128,50 +127,37 @@ public sealed class AgentsTemplateService
         return new InitializeResult(written, skipped, gitInitResult);
     }
 
-    public bool IsGitAvailable()
+    public Task<bool> IsGitAvailableAsync() => IsCommandAvailableAsync("git", "--version");
+
+    public Task<bool> IsClaudeAvailableAsync() => IsCommandAvailableAsync("claude", "--version");
+
+    public Task<bool> IsCodexAvailableAsync() =>
+        IsCommandAvailableAsync(CodexCli.Binary ?? "codex", "--version");
+
+    public Task<bool> IsGrokAvailableAsync() =>
+        IsCommandAvailableAsync(GrokCli.Binary ?? "grok", "--version");
+
+    public Task<bool> IsMistralAvailableAsync() =>
+        IsCommandAvailableAsync(MistralCli.Binary ?? "vibe", "--version");
+
+    public Task<bool> IsOllamaAvailableAsync() => IsCommandAvailableAsync("ollama", "--version");
+
+    private static async Task<bool> IsCommandAvailableAsync(string command, string arguments)
     {
         try
         {
-            var (ok, _) = RunProcess("git", "--version", workingDirectory: null);
+            var (ok, _) = await RunProcessAsync(command, arguments, workingDirectory: null);
             return ok;
         }
         catch { return false; }
     }
 
-    public bool IsClaudeAvailable()
+    private static async Task<(bool Ok, string Output)> RunProcessAsync(
+        string file, string args, string? workingDirectory)
     {
         try
         {
-            var (ok, _) = RunProcess("claude", "--version", workingDirectory: null);
-            return ok;
-        }
-        catch { return false; }
-    }
-
-    public bool IsCodexAvailable() => IsCommandAvailable(CodexCli.Binary ?? "codex", "--version");
-
-    public bool IsGrokAvailable() => IsCommandAvailable(GrokCli.Binary ?? "grok", "--version");
-
-    public bool IsMistralAvailable() => IsCommandAvailable(MistralCli.Binary ?? "vibe", "--version");
-
-    public bool IsOllamaAvailable() => IsCommandAvailable("ollama", "--version");
-
-    private static bool IsCommandAvailable(string command, string arguments)
-    {
-        try
-        {
-            var (ok, _) = RunProcess(command, arguments, workingDirectory: null);
-            return ok;
-        }
-        catch { return false; }
-    }
-
-    private static (bool Ok, string Output) RunProcess(string file, string args, string? workingDirectory)
-    {
-        try
-        {
-            var res = ProcessRunner.RunAsync(file, args, workingDirectory, TimeSpan.FromSeconds(10))
-                .GetAwaiter().GetResult();
+            var res = await ProcessRunner.RunAsync(file, args, workingDirectory, TimeSpan.FromSeconds(10));
             return (res.Success, res.Stdout + res.Stderr);
         }
         catch { return (false, ""); }

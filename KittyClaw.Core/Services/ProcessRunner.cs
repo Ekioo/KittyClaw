@@ -18,6 +18,42 @@ public static class ProcessRunner
     }
 
     /// <summary>
+    /// Synchronous availability probe for use from <c>Lazy&lt;T&gt;</c> initializers that
+    /// cannot be async. Uses event-based pipe draining and <see cref="Process.WaitForExit(int)"/>
+    /// — no async machinery — so this is genuine blocking I/O, not sync-over-async.
+    /// Returns <c>true</c> when the process exits with code 0 within <paramref name="timeout"/>.
+    /// </summary>
+    public static bool ProbeSync(string fileName, string arguments, TimeSpan timeout)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = arguments,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            using var proc = Process.Start(psi);
+            if (proc is null) return false;
+            // Drain pipes via internal thread pool to prevent buffer-fill deadlock.
+            proc.BeginOutputReadLine();
+            proc.BeginErrorReadLine();
+            bool exited = proc.WaitForExit((int)timeout.TotalMilliseconds);
+            if (!exited)
+            {
+                try { proc.Kill(entireProcessTree: true); } catch { }
+                return false;
+            }
+            proc.WaitForExit(); // flush async stream handlers before reading ExitCode
+            return proc.ExitCode == 0;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>
     /// Runs the process to completion. Returns a TimedOut result (process tree killed) when
     /// <paramref name="timeout"/> elapses; throws OperationCanceledException (process tree
     /// killed) when <paramref name="ct"/> fires.

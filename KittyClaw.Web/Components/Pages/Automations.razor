@@ -428,7 +428,7 @@ else
         try
         {
             var workspace = ProjectService.ResolveWorkspacePath(_project);
-            if (!AgentsTemplate.IsGitAvailable())
+            if (!await AgentsTemplate.IsGitAvailableAsync())
             {
                 _statusMessage = (L["GitMissingWarning"], "settings-status-err");
             }

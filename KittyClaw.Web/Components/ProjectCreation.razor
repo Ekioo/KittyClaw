@@ -188,7 +188,7 @@
         {
             var workspace = _newWorkspacePath.Trim();
             _workspaceWasEmpty = !Directory.EnumerateFileSystemEntries(workspace).Any();
-            if (!AgentsTemplate.IsGitAvailable())
+            if (!await AgentsTemplate.IsGitAvailableAsync())
             {
                 _creationStatus = (L["GitMissingWarning"], "settings-status-err");
             }

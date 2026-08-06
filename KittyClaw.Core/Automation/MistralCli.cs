@@ -64,16 +64,8 @@ public static class MistralCli
         return null;
     }
 
-    private static bool IsUsableBinary(string path)
-    {
-        if (!File.Exists(path)) return false;
-        try
-        {
-            return ProcessRunner.RunAsync(path, "--version", null, TimeSpan.FromSeconds(5))
-                .GetAwaiter().GetResult().Success;
-        }
-        catch { return false; }
-    }
+    private static bool IsUsableBinary(string path) =>
+        File.Exists(path) && ProcessRunner.ProbeSync(path, "--version", TimeSpan.FromSeconds(5));
 
     internal static void ResetForTests() => _binary = new Lazy<string?>(ResolveBinary);
 }
