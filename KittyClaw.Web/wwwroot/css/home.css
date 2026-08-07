@@ -1,0 +1,345 @@
+﻿/* Unified multi-project board (/board) */
+.unified-board {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem 2rem;
+}
+.board-lane {
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    overflow: hidden;
+}
+.board-lane-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.7rem 1rem;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.12s;
+}
+.board-lane-header:hover { background: var(--surface2); }
+.board-lane-caret {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    width: 1em;
+    flex-shrink: 0;
+}
+.board-lane-title { margin: 0; }
+.board-lane-slug {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+.board-lane-ticket-total {
+    background: var(--surface3);
+    color: var(--text-muted);
+    border-radius: 10px;
+    padding: 0.1rem 0.55rem;
+    font-size: 0.73rem;
+    font-weight: 500;
+}
+.board-lane-columns {
+    height: auto;
+    max-height: 480px;
+    padding: 0 0.75rem 0.75rem;
+}
+.board-lane-columns .column { height: 440px; }
+.board-lane-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    padding: 0 1rem 0.85rem;
+}
+.board-lane-summary-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    color: var(--sc, var(--text-muted));
+    background: color-mix(in srgb, var(--sc, var(--border-strong)) 12%, transparent);
+    border-radius: 999px;
+    padding: 0.2rem 0.65rem;
+}
+.board-lane-summary-chip b { color: var(--text); font-weight: 700; }
+
+/* Cross-lane drag rejection: only the source lane's columns ever get the
+   preventDefault + drop handler wired up (see UnifiedBoard.razor), so every other
+   lane keeps the browser's native "not-allowed" drop cursor. This highlight only
+   ever applies within the source lane. */
+.column-drop-hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-dim);
+}
+
+/* Unified board as default workspace: single top bar + lane quick actions */
+.board-lane-ticket-total { flex-shrink: 0; }
+.board-lane-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+}
+.lane-action {
+    min-height: 28px;
+    padding: 0.25rem 0.55rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--surface2);
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+}
+.lane-action:hover {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+    color: var(--accent-hover);
+}
+.lane-action-paused { color: var(--accent-hover); }
+.unified-page-header { flex-wrap: wrap; }
+.unified-filter-bar { min-width: min(320px, 100%); }
+.unified-create-project {
+    margin-left: 0;
+    padding: 0;
+}
+.unified-create-project input { min-width: 220px; }
+
+@media (max-width: 900px) {
+    .board-lane-header {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+    .pipeline-tabs--lane {
+        order: 2;
+        width: calc(100% - 1.6rem);
+        max-width: none;
+        margin-left: 1.6rem;
+    }
+    .board-lane-actions {
+        order: 3;
+        width: 100%;
+        margin-left: 1.6rem;
+        justify-content: flex-start;
+    }
+    .unified-page-header .filter-bar,
+    .unified-page-header .create-project {
+        flex: 1 1 280px;
+        max-width: none;
+    }
+}
+
+/* View-mode toggle on the unified home: <button> entries must render exactly like the
+   <a>/<span> segments — without this, the global button styling (primary green) leaks in. */
+.view-toggle button.view-toggle-btn {
+    appearance: none;
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 500;
+    line-height: inherit;
+    border: none;
+    background: transparent;
+    padding: 0.3rem 0.85rem;
+}
+
+/* ── Tip of the day (unified home footer) ─────────────────────────────────
+   A quiet bordered strip inside the page footer, one line per sentence. The
+   colors stay close to the page background so it reads as décor, not a popup.
+   The width is FIXED so the ↻ button never moves when the tip changes. The
+   container ignores pointer events; only the ↻ next button is clickable. */
+.tip-of-the-day {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    width: min(640px, calc(100vw - 2rem));
+    padding: 0.4rem 0.7rem;
+    background: color-mix(in srgb, var(--surface) 40%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+    border-radius: 8px;
+    font-size: 0.76rem;
+    line-height: 1.5;
+    color: var(--text-dim);
+    pointer-events: none;
+}
+
+.tip-of-the-day .tip-lines {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+}
+
+.tip-of-the-day .tip-next-btn {
+    pointer-events: auto;
+    background: transparent;
+    border: none;
+    padding: 0.1rem 0.3rem;
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    cursor: pointer;
+    border-radius: 4px;
+    line-height: 1;
+}
+
+.tip-of-the-day .tip-next-btn:hover {
+    color: var(--text-muted);
+}
+
+/* ---- Unified home: page column + footer ---------------------------------- */
+/* The home page is one flex column filling the viewport, so the footer (tip of
+   the day + legal notice) sits after the content — or on the bottom edge of the
+   screen when the page is short — and never floats over the board. */
+.unified-page {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* One footer line: tip strip centered, legal notice on the right. The 1fr side
+   columns keep the tip truly centered regardless of the notice width. */
+.unified-footer {
+    margin-top: auto;
+    padding: 1.5rem 1rem 0.75rem;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 0.5rem 1rem;
+}
+
+.unified-footer .tip-of-the-day {
+    grid-column: 2;
+}
+
+/* Appropriate Legal Notice required by NOTICE.md's additional terms: derivatives
+   may restyle it but must keep it visible. Bottom-right, colophon-style. */
+.legal-notice {
+    grid-column: 3;
+    justify-self: end;
+    align-self: end;
+    font-size: 0.72rem;
+    line-height: 1.5;
+    text-align: right;
+    color: var(--text-dim);
+}
+
+/* Below ~1240px the side column can no longer hold the notice next to the
+   640px tip strip, so the footer stacks: tip centered, notice under it. */
+@media (max-width: 1240px) {
+    .unified-footer {
+        grid-template-columns: 1fr;
+    }
+
+    .unified-footer .tip-of-the-day {
+        grid-column: 1;
+        justify-self: center;
+    }
+
+    .legal-notice {
+        grid-column: 1;
+    }
+}
+
+.legal-notice a {
+    color: inherit;
+    text-decoration: underline;
+}
+
+.legal-notice a:hover {
+    color: var(--text-muted);
+}
+
+.automation-queue { display: grid; gap: .35rem; margin: .45rem 0; }
+.automation-queue-entry { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; padding: .35rem .5rem; border-left: 3px solid var(--border); background: color-mix(in srgb, var(--surface) 85%, transparent); border-radius: .25rem; font-size: .78rem; }
+.automation-queue.compact .automation-queue-entry { padding: .2rem .35rem; }
+.automation-queue-name { font-weight: 600; }
+.automation-queue-state, .automation-queue-ahead { color: var(--text-muted); }
+.automation-queue-reason { flex-basis: 100%; color: var(--text-muted); }
+.queue-running { border-left-color: #3b82f6; }
+.queue-completed { border-left-color: #22c55e; }
+.queue-failed { border-left-color: #ef4444; }
+.queue-skipped, .queue-cancelled { border-left-color: #94a3b8; }
+.pipeline-tabs {
+    display: flex;
+    gap: .25rem;
+    width: max-content;
+    max-width: calc(100% - 2rem);
+    margin: .75rem 1rem;
+    padding: .2rem;
+    box-sizing: border-box;
+    background: var(--surface2);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.pipeline-tabs::-webkit-scrollbar { display: none; }
+
+.pipeline-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: .42rem;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted, #9aa4b2);
+    padding: .3rem .85rem;
+    font: inherit;
+    font-size: .82rem;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    text-decoration: none;
+    transition: color .15s, background .15s;
+}
+
+.pipeline-unread-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.15rem;
+    height: 1.15rem;
+    padding: 0 .3rem;
+    box-sizing: border-box;
+    border-radius: 999px;
+    background: #f59e0b;
+    color: #211607;
+    font-size: .68rem;
+    font-weight: 750;
+    line-height: 1;
+    box-shadow: 0 0 0 1px color-mix(in srgb, #f59e0b 72%, white);
+}
+.pipeline-tab:hover {
+    background: var(--surface3);
+    color: var(--text);
+}
+
+.pipeline-tab:focus-visible {
+    outline-color: var(--focus-ring);
+    color: var(--text);
+}
+
+.pipeline-tab--active {
+    background: var(--surface3);
+    color: var(--text);
+}
+
+.pipeline-tabs--lane {
+    flex: 0 1 auto;
+    width: auto;
+    max-width: min(48vw, 52rem);
+    margin: 0 0 0 .25rem;
+}
+
+.workflow-settings { max-width: 1100px; gap: 1rem; }
+.workflow-migration-card { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; }
+.workflow-migration-card h2 { margin-bottom: .35rem; }
+.workflow-migration-card p { margin: 0; }
+

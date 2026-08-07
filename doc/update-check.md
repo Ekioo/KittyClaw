@@ -8,7 +8,7 @@ Detects when a newer KittyClaw release is published on GitHub and surfaces a dis
 - `KittyClaw.Core/Services/VersionCompare.cs` — `IsNewer(current, latest)` parses `Major.Minor.Build`, tolerates a leading `v`/`V`, and returns `false` for unparseable inputs.
 - `KittyClaw.Core/Services/AppSettingsService.cs` — persists `UpdateDismissedVersion` and `UpdateCheckLastRun` in `%APPDATA%/KittyClaw/settings.json` so dismissals and throttling survive restarts.
 - `KittyClaw.Web/Components/Layout/UpdateBanner.razor` — `@rendermode InteractiveServer` component that subscribes to `OnChange`, renders the banner when `HasUpdate` is true, and calls `Dismiss()` on the ✕ button. Embedded in `MainLayout.razor` via `<UpdateBanner />`.
-- `KittyClaw.Web/wwwroot/app.css` — `.update-banner`, `.update-banner-icon`, `.update-banner-text`, `.update-banner-dismiss` styles.
+- `KittyClaw.Web/wwwroot/css/dashboard.css` — `.update-banner`, `.update-banner-icon`, `.update-banner-text`, `.update-banner-dismiss` styles.
 
 ## Entry points
 - Background poll: started by `AddHostedService(UpdateCheckService)` in `Program.cs`; runs once on startup, then every hour, but only hits GitHub when the last run is older than 24h.

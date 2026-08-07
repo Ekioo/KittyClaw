@@ -7,7 +7,7 @@ public sealed class BoardViewportLayoutTests
     {
         var root = RepoRoot();
         var board = File.ReadAllText(Path.Combine(root, "KittyClaw.Web", "Components", "Pages", "Board.razor"));
-        var css = File.ReadAllText(Path.Combine(root, "KittyClaw.Web", "wwwroot", "app.css"));
+        var css = KittyClaw.Core.Tests.Helpers.AppCssHelper.ReadAll(root);
 
         Assert.Contains("<div class=\"board-layout\">", board);
         Assert.Contains(".board-layout {", css);

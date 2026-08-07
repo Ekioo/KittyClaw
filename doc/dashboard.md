@@ -56,7 +56,7 @@ A tile folder without a sidecar is treated as a static tile; rendering falls bac
 - `KittyClaw.Core/Services/DashboardRefreshScheduling.cs` — pure-function helpers for daily-at scheduling. `ShouldFireDailyAt(now, lastRefresh, hhmm)` returns `true` when the target time has been reached today and the tile has not yet fired today. Side-effect-free; unit-tested independently.
 - `KittyClaw.Web/Components/Pages/Dashboard.razor` — Blazor page rendering tiles on a 20 px dot-grid with free drag-and-drop (mouse events), resize handles, a chat-based AI tile creation panel, a refresh log drawer, and a **frequency picker** in the tile config popup. The picker presents labelled presets (Never / Every N minutes / Every N hours / Every N days / Daily at HH:mm) and maps them to sidecar fields via `TileFrequency`.
 - `KittyClaw.Web/wwwroot/js/dashboard.js` — client-side drag/resize helpers.
-- `KittyClaw.Web/wwwroot/app.css` — dashboard-specific layout and tile styles.
+- `KittyClaw.Web/wwwroot/css/dashboard.css` — dashboard-specific layout and tile styles.
 
 ## Entry points
 - **UI**: "Dashboard" tab in the project topbar, alongside the Kanban view.

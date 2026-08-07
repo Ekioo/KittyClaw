@@ -90,7 +90,7 @@ public class BoardUnreadStateTests
     public void PipelineTabs_ShowUnreadTicketCountWithAccessibleBadge()
     {
         var board = File.ReadAllText(BoardPath);
-        var css = File.ReadAllText(WebPath("wwwroot", "app.css"));
+        var css = KittyClaw.Core.Tests.Helpers.AppCssHelper.ReadAll();
 
         Assert.Contains("PipelineUnreadCount(pipeline.Id)", board);
         Assert.Contains("ticket.PipelineId == pipelineId &&", board);

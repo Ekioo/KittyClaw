@@ -32,7 +32,7 @@ public class AskUserQuestionBugfixTests
         LoadFile(Path.Combine("KittyClaw.Core", "Automation", "AgentRunner.cs"));
 
     private static string AppCss() =>
-        LoadFile(Path.Combine("KittyClaw.Web", "wwwroot", "app.css"));
+        KittyClaw.Core.Tests.Helpers.AppCssHelper.ReadAll();
 
     // Case A: AgentStreamPump sets run.IsAwaitingUserAnswer = true when emitting ask_user_question
     [Fact]

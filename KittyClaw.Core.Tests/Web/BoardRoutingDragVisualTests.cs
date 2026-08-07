@@ -7,7 +7,7 @@ public sealed class BoardRoutingDragVisualTests
     {
         var root = RepoRoot();
         var board = File.ReadAllText(Path.Combine(root, "KittyClaw.Web", "Components", "Pages", "Board.razor"));
-        var css = File.ReadAllText(Path.Combine(root, "KittyClaw.Web", "wwwroot", "app.css"));
+        var css = KittyClaw.Core.Tests.Helpers.AppCssHelper.ReadAll(root);
 
         Assert.Contains("var ticketDropAllowed = IsTicketDropAllowed(col);", board);
         Assert.Contains("_draggedTicket is not null && ticketDropAllowed", board);

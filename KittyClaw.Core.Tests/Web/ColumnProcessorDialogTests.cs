@@ -163,7 +163,7 @@ public sealed class ColumnProcessorDialogTests
             RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Board.razor"));
         var unified = File.ReadAllText(Path.Combine(
             RepoRoot(), "KittyClaw.Web", "Components", "Pages", "UnifiedBoard.razor"));
-        var css = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "wwwroot", "app.css"));
+        var css = KittyClaw.Core.Tests.Helpers.AppCssHelper.ReadAll(RepoRoot());
 
         Assert.Contains("column-processor-indicator", board);
         Assert.Contains("_activeProcessorColumnIds.Contains(col.Id)", board);
@@ -176,7 +176,7 @@ public sealed class ColumnProcessorDialogTests
     [Fact]
     public void Project_pipeline_tabs_are_left_aligned_and_vertically_balanced()
     {
-        var css = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "wwwroot", "app.css"));
+        var css = KittyClaw.Core.Tests.Helpers.AppCssHelper.ReadAll(RepoRoot());
 
         Assert.Contains("margin: .75rem 1rem;", css);
     }
@@ -184,7 +184,7 @@ public sealed class ColumnProcessorDialogTests
     [Fact]
     public void New_workflow_controls_follow_the_dark_application_theme()
     {
-        var css = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "wwwroot", "app.css"));
+        var css = KittyClaw.Core.Tests.Helpers.AppCssHelper.ReadAll(RepoRoot());
 
         Assert.Matches(@"(?s)\.column-context-menu\s*\{[^}]*background:\s*var\(--surface2\);[^}]*border:\s*1px solid var\(--border-strong\);", css);
         Assert.Matches(@"(?s)\.processor-dialog select,\s*\.workflow-settings select\s*\{[^}]*background:\s*var\(--surface2\);[^}]*color:\s*var\(--text\);", css);
@@ -257,7 +257,7 @@ public sealed class ColumnProcessorDialogTests
             RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Board.razor"));
         var unified = File.ReadAllText(Path.Combine(
             RepoRoot(), "KittyClaw.Web", "Components", "Pages", "UnifiedBoard.razor"));
-        var css = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "wwwroot", "app.css"));
+        var css = KittyClaw.Core.Tests.Helpers.AppCssHelper.ReadAll(RepoRoot());
 
         Assert.Contains("col.Role == ColumnRole.OwnerAction", board);
         Assert.Contains("owner-action-badge", board);
@@ -291,7 +291,7 @@ public sealed class ColumnProcessorDialogTests
     {
         var dialog = File.ReadAllText(Path.Combine(
             RepoRoot(), "KittyClaw.Web", "Components", "ColumnProcessorDialog.razor"));
-        var css = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "wwwroot", "app.css"));
+        var css = KittyClaw.Core.Tests.Helpers.AppCssHelper.ReadAll(RepoRoot());
 
         Assert.Contains("@(_processorDraft ? 1 : 0)", dialog);
         Assert.Contains("@(_beforeActions.Count + _afterActions.Count)", dialog);

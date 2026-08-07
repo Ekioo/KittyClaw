@@ -101,7 +101,7 @@ public class TipOfTheDayTests
         var src = File.ReadAllText(ComponentPath());
         Assert.DoesNotContain("localStorage", src);
         Assert.Contains("NextTip", src);
-        var css = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "wwwroot", "app.css"));
+        var css = KittyClaw.Core.Tests.Helpers.AppCssHelper.ReadAll(RepoRoot());
         var tipCss = css[css.IndexOf(".tip-of-the-day", StringComparison.Ordinal)..];
         Assert.Contains("pointer-events: none;", tipCss);
         Assert.Contains("pointer-events: auto;", tipCss);

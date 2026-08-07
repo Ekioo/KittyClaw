@@ -130,7 +130,7 @@ public class ChatImagePasteContractTests
     [Fact]
     public void App_css_styles_paste_previews_and_error_banner()
     {
-        var src = Read("KittyClaw.Web/wwwroot/app.css");
+        var src = KittyClaw.Core.Tests.Helpers.AppCssHelper.ReadAll();
         Assert.Contains(".chat-paste-preview", src);
         Assert.Contains(".chat-paste-error", src);
     }

@@ -22,19 +22,8 @@ public class HomeAgentBadgeTests
         return File.ReadAllText(path);
     }
 
-    private static string LoadAppCss()
-    {
-        var dir = Directory.GetCurrentDirectory();
-        while (dir is not null && !File.Exists(Path.Combine(dir, "KittyClaw.sln"))
-                               && !File.Exists(Path.Combine(dir, "KittyClaw.slnx")))
-        {
-            dir = Path.GetDirectoryName(dir);
-        }
-        Assert.NotNull(dir);
-        var path = Path.Combine(dir!, "KittyClaw.Web", "wwwroot", "app.css");
-        Assert.True(File.Exists(path), $"app.css not found at {path}");
-        return File.ReadAllText(path);
-    }
+    private static string LoadAppCss() =>
+        KittyClaw.Core.Tests.Helpers.AppCssHelper.ReadAll();
 
     // Case 1 & 2: AgentRunsState is injected — prerequisite for badge appearing/disappearing
     [Fact]

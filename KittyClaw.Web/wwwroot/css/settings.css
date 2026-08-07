@@ -1,0 +1,99 @@
+﻿/* ─── Settings page ────────────────────────────────────────────────── */
+.settings-container {
+    max-width: 900px;
+    margin: 1rem auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding: 0 1rem;
+}
+.settings-section {
+    background: var(--panel-bg, #1e2230);
+    border: 1px solid var(--border, #333);
+    border-radius: 8px;
+    padding: 1.2rem;
+}
+.settings-section h2 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+.settings-hint { color: var(--muted, #8a99b0); font-size: 0.9rem; margin-bottom: 1rem; }
+.settings-hint code { background: #11141b; padding: 0.1rem 0.35rem; border-radius: 3px; }
+.settings-row { display: flex; gap: 0.6rem; align-items: center; }
+.settings-input {
+    flex: 1;
+    padding: 0.5rem 0.7rem;
+    background: #11141b;
+    border: 1px solid var(--border, #333);
+    border-radius: 4px;
+    color: #c8d0e0;
+    font-family: monospace;
+}
+.settings-primary {
+    background: var(--accent); color: #052e16;
+    border: 1px solid transparent; padding: 0.45rem 0.9rem;
+    border-radius: 6px; cursor: pointer;
+    font-weight: 600;
+    text-decoration: none; display: inline-block;
+    transition: background 0.15s, color 0.15s;
+}
+.settings-primary,
+.settings-primary:hover { color: #052e16; border-color: transparent; }
+.settings-primary:hover { background: var(--accent-hover); }
+.settings-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+.settings-browse {
+    background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border-strong);
+    padding: 0.45rem 0.8rem;
+    border-radius: 6px; cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.settings-browse:hover { background: var(--accent-dim); border-color: var(--accent); color: var(--accent-hover); }
+.settings-browse:disabled { opacity: 0.4; cursor: not-allowed; }
+.settings-status { margin-top: 0.6rem; padding: 0.4rem 0.7rem; border-radius: 4px; font-size: 0.9rem; }
+.settings-status-ok { background: #3ecf8e22; color: #3ecf8e; }
+.settings-status-err { background: #f06b6b22; color: #f06b6b; }
+.settings-warning { background: #f59e4222; color: #f59e42; padding: 0.6rem; border-radius: 4px; }
+.settings-members { width: 100%; border-collapse: collapse; }
+.settings-members th, .settings-members td {
+    text-align: left; padding: 0.5rem; border-bottom: 1px solid var(--border, #333);
+}
+.settings-members select {
+    background: #11141b;
+    color: #c8d0e0;
+    border: 1px solid var(--border, #333);
+    padding: 0.3rem 0.4rem;
+    border-radius: 4px;
+}
+/* Unified list layout for settings subsections (members, columns, labels) */
+.settings-list { width: 100%; border-collapse: collapse; }
+.settings-list th, .settings-list td {
+    text-align: left; padding: 0.5rem; border-bottom: 1px solid var(--border, #333);
+    vertical-align: middle;
+}
+.settings-list th { font-weight: 600; color: var(--muted, #8a99b0); font-size: 0.85rem; }
+.settings-list input[type="text"], .settings-list input:not([type]) {
+    background: #11141b; color: #c8d0e0;
+    border: 1px solid var(--border, #333);
+    padding: 0.35rem 0.5rem; border-radius: 4px; width: 100%;
+}
+.settings-list input[type="color"], input.color-input {
+    width: 42px; height: 30px; padding: 2px;
+    background: #11141b; border: 1px solid var(--border, #333);
+    border-radius: 4px; cursor: pointer; vertical-align: middle;
+}
+.settings-list .add-row td { background: #0c0f16; }
+.settings-list .add-row td:last-child { text-align: right; }
+.settings-list .row-actions { white-space: nowrap; text-align: right; }
+.settings-list .icon-btn {
+    background: transparent; border: 1px solid var(--border, #333);
+    color: #c8d0e0; padding: 0.2rem 0.5rem; border-radius: 4px;
+    cursor: pointer; margin-left: 0.3rem;
+}
+.settings-list .icon-btn:hover { border-color: #4a9eff; color: #60afff; }
+.settings-list .icon-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.settings-list .icon-btn.delete-icon:hover { border-color: #f06b6b; color: #f06b6b; }
+.settings-list .save-btn { border-color: #3ecf8e; color: #3ecf8e; }
+.color-swatch {
+    display: inline-block; width: 16px; height: 16px;
+    border-radius: 3px; vertical-align: middle;
+    border: 1px solid var(--border, #333); margin-right: 0.4rem;
+}
+

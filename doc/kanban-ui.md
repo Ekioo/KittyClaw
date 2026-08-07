@@ -5,7 +5,7 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 
 ## Key components
 - `KittyClaw.Web/` — Blazor Server app (`@rendermode InteractiveServer`).
-- `KittyClaw.Web/wwwroot/app.css` — single global stylesheet.
+- `KittyClaw.Web/wwwroot/css/` — application stylesheet, split into cohesive files loaded in order via `App.razor` (`base.css`, `shared.css`, `board.css`, `ticket-card.css`, `ticket-panel.css`, `agent-run.css`, `settings.css`, `automations.css`, `chat.css`, `dashboard.css`, `home.css`, `settings-editor.css`).
 - `KittyClaw.Web/wwwroot/js/` — JS interop helpers.
 - `KittyClaw.Web/Services/BoardFilterState.cs` — per-circuit (scoped) service holding the board search filter text. Registered as `AddScoped` so each browser tab gets an independent instance; a Singleton registration would cause filter text typed in one tab to appear in all other open tabs.
 - `KittyClaw.Web/Services/BoardSortState.cs` — singleton service that holds per-column sort settings (mode + direction) keyed by `slug\0column`. Exposes `ApplySort` to reorder a ticket list by Title, Priority, Assignee, CreatedAt, or UpdatedAt with ascending/descending direction. Manual mode (default) leaves the original order unchanged.

@@ -4,7 +4,7 @@ Single source of truth for KittyClaw's visual language. When adding new UI, reus
 existing CSS variables and component patterns rather than introducing one-off colors,
 radii, or font sizes.
 
-All variables are defined at the top of [`KittyClaw.Web/wwwroot/app.css`](../KittyClaw.Web/wwwroot/app.css).
+All variables are defined at the top of [`KittyClaw.Web/wwwroot/css/base.css`](../KittyClaw.Web/wwwroot/css/base.css).
 
 ## Palette
 
@@ -81,7 +81,7 @@ Status-grid uses a fixed mapping: `ok` → `--accent-success`, `warn` → `#f59e
 ## Form controls
 
 Inputs, textareas, and selects in popups must use this exact pattern (see
-`.tile-config-field input/textarea/select` in app.css):
+`.tile-config-field input/textarea/select` in `dashboard.css`):
 
 - `background: var(--surface2)`
 - `border: 1px solid var(--border)`
@@ -143,7 +143,7 @@ ring inward when clipping requires it, but should continue using `--focus-ring`.
 ## Dashboard tiles (renderer-specific)
 
 Each template renders inside `.dashboard-tile-content` with a fixed root class.
-See `TileRenderer.cs` and `app.css` for the per-template implementations:
+See `TileRenderer.cs` and `dashboard.css` for the per-template implementations:
 
 - `.tile-markdown`, `.tile-table`, `.tile-kpi`, `.tile-kpi-grid`,
   `.tile-progress`, `.tile-sparkline`, `.tile-bar-chart`, `.tile-donut`,

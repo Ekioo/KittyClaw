@@ -1,0 +1,38 @@
+﻿:root {
+    --bg: #05050a;
+    --surface: #191928;
+    --surface2: #232338;
+    --surface3: #2e2e48;
+    --accent: #22c55e;
+    --accent-dim: rgba(34, 197, 94, 0.15);
+    --accent-hover: #4ade80;
+    --accent-info: #3b82f6;
+    --accent-info-hover: #60a5fa;
+    --accent-success: #22c55e;
+    --text: #e4e4f0;
+    --text-muted: #7a7a96;
+    --text-dim: #46466a;
+    --border: #2e2e48;
+    --border-strong: #464672;
+    --focus-ring: #60a5fa;
+
+    --s-blocked:    #f06b6b;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+}
+
+h1 { font-size: 1.4rem; font-weight: 600; letter-spacing: -0.02em; }
+h2 { font-size: 1.1rem; font-weight: 600; letter-spacing: -0.01em; }
+h3 { font-size: 0.95rem; font-weight: 600; margin: 1.25rem 0 0.6rem; color: var(--text); }
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-hover); }
+

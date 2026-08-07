@@ -13,7 +13,7 @@ public sealed class FocusStyleContractTests
     [Fact]
     public void PipelineTabs_OverridePrimaryHoverAndUseSharedFocusRing()
     {
-        var css = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "wwwroot", "app.css"));
+        var css = KittyClaw.Core.Tests.Helpers.AppCssHelper.ReadAll(RepoRoot());
         var hoverRule = Rule(css, ".pipeline-tab:hover");
         var focusRule = Rule(css, ".pipeline-tab:focus-visible");
 

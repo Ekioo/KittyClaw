@@ -46,7 +46,7 @@ tools/                     Repo helpers (publish-stable.ps1, …).
 - **DTOs** are `record` types.
 - **Services** are singletons injected via DI in `KittyClaw.Web/Program.cs`.
 - **Blazor components**: `@rendermode InteractiveServer`, `[Parameter]`, `StateHasChanged()`. Prefer direct service calls over HTTP self-calls.
-- **CSS** lives in a single `KittyClaw.Web/wwwroot/app.css`. **JS** in `KittyClaw.Web/wwwroot/js/`.
+- **CSS** lives under `KittyClaw.Web/wwwroot/css/` (12 cohesive files loaded in order via `App.razor`). **JS** in `KittyClaw.Web/wwwroot/js/`.
 - **English everywhere**: code comments, commit messages, ticket content, `ProjectTemplate/**`.
 
 ## Project template embedding
