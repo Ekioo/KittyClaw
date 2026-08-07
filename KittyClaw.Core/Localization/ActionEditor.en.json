@@ -1,6 +1,8 @@
 {
   "ActionType": "Type",
   "ActionRunSkill": "Run Claude skill",
+  "ActionRunAgent": "Run agent",
+  "Agent": "Agent",
   "ActionMoveTicket": "Move ticket",
   "ActionSetLabels": "Set labels",
   "ActionAssignTicket": "Assign ticket",

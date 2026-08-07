@@ -1,6 +1,8 @@
-{
+﻿{
   "ActionType": "Typ",
   "ActionRunSkill": "Führe die Fertigkeit „Claude“ aus",
+  "ActionRunAgent": "Agent starten",
+  "Agent": "Agent",
   "ActionMoveTicket": "Ticket verschieben",
   "ActionSetLabels": "Etiketten festlegen",
   "ActionAssignTicket": "Ticket zuweisen",

@@ -1,6 +1,8 @@
-{
+﻿{
   "ActionType": "Tipo",
   "ActionRunSkill": "Esegui l'abilità Claude",
+  "ActionRunAgent": "Avvia l'agente",
+  "Agent": "Agente",
   "ActionMoveTicket": "Sposta biglietto",
   "ActionSetLabels": "Imposta le etichette",
   "ActionAssignTicket": "Assegna biglietto",

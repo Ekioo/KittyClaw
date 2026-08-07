@@ -1,6 +1,8 @@
-{
+﻿{
   "ActionType": "Tipo",
   "ActionRunSkill": "Ejecutar habilidad de Claude",
+  "ActionRunAgent": "Ejecutar agente",
+  "Agent": "Agente",
   "ActionMoveTicket": "Mover billete",
   "ActionSetLabels": "Establecer etiquetas",
   "ActionAssignTicket": "Asignar ticket",

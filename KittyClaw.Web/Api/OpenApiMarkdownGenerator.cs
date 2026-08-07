@@ -365,6 +365,14 @@ public static class OpenApiMarkdownGenerator
         sb.AppendLine("|------|--------|-------------|");
         sb.AppendLine("| `runAgent` | `agent`, `maxTurns?`, `concurrencyGroup?`, `mutuallyExclusiveWith[]`, `context?`, `env?`, `model?` | Launches the named agent; its skill is resolved by convention to `.agents/{agent}/SKILL.md` |");
         sb.AppendLine("| `moveTicketStatus` | `to` | Moves the ticket to the given column |");
+        sb.AppendLine("| `setLabels` | `add[]`, `remove[]` | Adds or removes labels on the ticket |");
+        sb.AppendLine("| `assignTicket` | `slug?` | Assigns or unassigns the ticket |");
+        sb.AppendLine("| `addComment` | `content`, `author` | Adds a comment to the ticket |");
+        sb.AppendLine("| `commitAgentMemory` | `agent` | Commits the selected agent's memory changes |");
+        sb.AppendLine("| `consolidateAgentMemory` | `agent`, `model?`, `maxTurns?`, `instructionFile?` | Consolidates an agent's persistent memory |");
+        sb.AppendLine("| `executePowerShell` | `script?`, `scriptFile?`, `arguments[]`, `timeoutSeconds?`, `abortOnFailure?`, `coalesceOverlapping?`, `env?` | Runs a PowerShell script in the project workspace |");
+        sb.AppendLine("| `createTicket` | `title`, `description?`, `status?`, `assignedTo?`, `priority?`, `labels[]`, `parentId?`, `createdBy?`, `skipIfExists?` | Creates a ticket |");
+        sb.AppendLine("| `httpRequest` | `method?`, `url`, `headers?`, `body?`, `contentType?`, `timeoutSeconds?`, `abortOnFailure?`, `allowLocalTargets?` | Sends an outbound HTTP request with local targets blocked by default |");
         sb.AppendLine();
         sb.AppendLine("### Concurrency");
         sb.AppendLine();
