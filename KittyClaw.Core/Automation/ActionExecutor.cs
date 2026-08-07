@@ -7,13 +7,13 @@ namespace KittyClaw.Core.Automation;
 
 /// <summary>
 /// Evaluates automation conditions and executes action sequences.
-/// Owns the git semaphore and all Execute*ActionAsync helpers.
+/// Delegates individual action types to focused handler classes; owns chain orchestration
+/// and the in-flight chain/detached-action guards.
 /// </summary>
 internal sealed class ActionExecutor
 {
     private readonly TicketService _tickets;
     private readonly MemberService _members;
-    private readonly LabelService _labels;
     private readonly SessionRegistry _sessions;
     private readonly AgentRunRegistry _runs;
     private readonly AgentRunner _runner;
@@ -23,10 +23,9 @@ internal sealed class ActionExecutor
     private readonly RunStateManager _runState;
     private readonly ILogger _logger;
 
-    // Serializes in-process git operations per repository. Keyed by the git cwd so one
-    // repo's slow/hung git (bounded by ProcessRunner's timeout) can't stall other projects.
-    private static readonly ConcurrentDictionary<string, SemaphoreSlim> _gitLocks =
-        new(StringComparer.OrdinalIgnoreCase);
+    private readonly TicketMutationHandler _ticketMutation;
+    private readonly AgentMemoryHandler _agentMemory;
+    private readonly NetworkActionHandler _network;
 
     // Tracks in-flight action chains keyed by "{automationId}:{ticketId}".
     // Prevents concurrent chains for the same (automation, ticket) pair.
@@ -52,7 +51,6 @@ internal sealed class ActionExecutor
     {
         _tickets = tickets;
         _members = members;
-        _labels = labels;
         _sessions = sessions;
         _runs = runs;
         _runner = runner;
@@ -61,6 +59,10 @@ internal sealed class ActionExecutor
         _projects = projects;
         _runState = runState;
         _logger = logger;
+
+        _ticketMutation = new TicketMutationHandler(tickets, labels, members, loc, logger);
+        _agentMemory = new AgentMemoryHandler(tickets, members, projects, runner, sessions, logger);
+        _network = new NetworkActionHandler(tickets, logger);
     }
 
     // ── Condition evaluation ────────────────────────────────────────────────
@@ -194,7 +196,7 @@ internal sealed class ActionExecutor
 
     // ── Action execution ────────────────────────────────────────────────────
 
-    private sealed class ActionState
+    internal sealed class ActionState
     {
         public AgentRun? LastRun;
         public string? StatusBeforeMove;
@@ -406,26 +408,6 @@ internal sealed class ActionExecutor
                 .Replace("{ticketId}", firing.TicketId?.ToString() ?? "none");
 
         if (await _runState.ShouldSkipAsync(rt, a, firing, agentName, group)) return (true, null, agentName);
-
-        // Dependency gate: do not dispatch if the ticket has unresolved blockers.
-        if (firing.TicketId is int depCheckId)
-        {
-            var depTicket = await _tickets.GetTicketAsync(rt.Slug, depCheckId);
-            if (depTicket is not null)
-            {
-                var unresolved = depTicket.BlockedBy
-                    .Where(b => !string.Equals(b.Status, "Done", StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-                if (unresolved.Count > 0)
-                {
-                    await PostBlockerCommentIfNewAsync(rt.Slug, depCheckId, unresolved, depTicket.Comments);
-                    _logger.LogInformation(
-                        "Skipping dispatch for ticket #{Id}: {N} unresolved blocker(s)",
-                        depCheckId, unresolved.Count);
-                    return (true, null, agentName);
-                }
-            }
-        }
 
         var project = await _projects.GetProjectAsync(rt.Slug);
         var fallbackModel = project?.FallbackModel;
@@ -684,16 +666,16 @@ internal sealed class ActionExecutor
         switch (action)
         {
             case MoveTicketStatusActionSpec m when firing.TicketId is not null:
-                await ExecuteMoveTicketStatusActionAsync(rt, firing, m, state);
+                await _ticketMutation.ExecuteMoveTicketStatusAsync(rt, firing, m, state);
                 return false;
             case SetLabelsActionSpec s when firing.TicketId is not null:
-                await ExecuteSetLabelsActionAsync(rt, firing, s);
+                await _ticketMutation.ExecuteSetLabelsAsync(rt, firing, s);
                 return false;
             case AddCommentActionSpec ac when firing.TicketId is not null:
-                await ExecuteAddCommentActionAsync(rt, firing, ac);
+                await _ticketMutation.ExecuteAddCommentAsync(rt, firing, ac);
                 return false;
             case AssignTicketActionSpec at when firing.TicketId is not null:
-                await ExecuteAssignTicketActionAsync(rt, firing, at);
+                await _ticketMutation.ExecuteAssignTicketAsync(rt, firing, at);
                 return false;
             case MoveTicketStatusActionSpec or SetLabelsActionSpec or AddCommentActionSpec or AssignTicketActionSpec:
                 // Ticket-scoped action on a firing with no ticket (e.g. interval trigger):
@@ -701,18 +683,18 @@ internal sealed class ActionExecutor
                 _logger.LogWarning("{Type} skipped: the trigger firing carries no ticket", action.GetType().Name);
                 return false;
             case CommitAgentMemoryActionSpec cm:
-                await ExecuteCommitAgentMemoryActionAsync(rt, cm, firing);
+                await _agentMemory.ExecuteCommitAgentMemoryAsync(rt, cm, firing);
                 return false;
             case ConsolidateAgentMemoryActionSpec csm:
-                await ExecuteConsolidateAgentMemoryActionAsync(rt, csm, firing, parentRun, ct);
+                await _agentMemory.ExecuteConsolidateAgentMemoryAsync(rt, csm, firing, parentRun, ct);
                 return false;
             case CreateTicketActionSpec cta:
-                await ExecuteCreateTicketActionAsync(rt, cta);
+                await _ticketMutation.ExecuteCreateTicketAsync(rt, cta);
                 return false;
             case HttpRequestActionSpec hr:
-                return await ExecuteHttpRequestActionAsync(hr, rt, firing, ct);
+                return await _network.ExecuteHttpRequestAsync(hr, rt, firing, ct);
             case ExecutePowerShellActionSpec ps:
-                return await ExecutePowerShellAsync(ps, rt.Workspace!, rt.Slug, firing, ct);
+                return await _network.ExecutePowerShellAsync(ps, rt.Workspace!, rt.Slug, firing, ct);
             case RunAgentActionSpec:
                 throw new InvalidOperationException(
                     "runAgent is dispatched by the chain owners, never by ExecuteChainActionAsync.");
@@ -722,199 +704,7 @@ internal sealed class ActionExecutor
         }
     }
 
-    private async Task ExecuteMoveTicketStatusActionAsync(ProjectRuntime rt, TriggerFiring firing, MoveTicketStatusActionSpec m, ActionState state)
-    {
-        if (string.Equals(firing.TicketStatus, m.To, StringComparison.OrdinalIgnoreCase))
-            return;
-        try
-        {
-            var ticketBefore = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId!.Value);
-            state.StatusBeforeMove = ticketBefore?.Status;
-            state.AssigneeBeforeMove = ticketBefore?.AssignedTo;
-            await _tickets.MoveTicketAsync(rt.Slug, firing.TicketId!.Value, m.To, "automation");
-            state.StatusAfterMove = m.To;
-        }
-        catch (Exception ex) { _logger.LogWarning(ex, "moveTicketStatus failed for ticket #{Id} in project {Project}", firing.TicketId, rt.Slug); }
-    }
-
-    private async Task ExecuteSetLabelsActionAsync(ProjectRuntime rt, TriggerFiring firing, SetLabelsActionSpec s)
-    {
-        try
-        {
-            var ticket = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId!.Value);
-            if (ticket is null) return;
-            var currentNames = ticket.Labels.Select(l => l.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            foreach (var name in s.Add) currentNames.Add(name);
-            foreach (var name in s.Remove) currentNames.Remove(name);
-            var allLabels = await _labels.ListLabelsAsync(rt.Slug);
-            var newIds = allLabels.Where(l => currentNames.Contains(l.Name)).Select(l => l.Id).ToList();
-            await _tickets.SetTicketLabelsAsync(rt.Slug, firing.TicketId!.Value, newIds);
-            var parts = new List<string>();
-            if (s.Add.Count > 0) parts.Add(_loc.Get("ActLabelsAdded", string.Join(", ", s.Add)));
-            if (s.Remove.Count > 0) parts.Add(_loc.Get("ActLabelsRemoved", string.Join(", ", s.Remove)));
-            if (parts.Count > 0)
-                try { await _tickets.AddActivityAsync(rt.Slug, firing.TicketId!.Value, _loc.Get("ActLabelsChanged", string.Join(" / ", parts)), "automation"); }
-                catch { /* non-blocking */ }
-        }
-        catch (Exception ex) { _logger.LogWarning(ex, "setLabels failed for ticket #{Id} in project {Project}", firing.TicketId, rt.Slug); }
-    }
-
-    private async Task ExecuteAddCommentActionAsync(ProjectRuntime rt, TriggerFiring firing, AddCommentActionSpec ac)
-    {
-        try
-        {
-            var content = ac.Content
-                .Replace("{ticketId}", firing.TicketId?.ToString() ?? "")
-                .Replace("{ticketTitle}", firing.TicketTitle ?? "");
-            if (content.Contains("{assignee}"))
-            {
-                var ticket = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId!.Value);
-                content = content.Replace("{assignee}", ticket?.AssignedTo ?? "");
-            }
-            await _tickets.AddCommentAsync(rt.Slug, firing.TicketId!.Value, content, ac.Author);
-        }
-        catch (Exception ex) { _logger.LogWarning(ex, "addComment failed for ticket #{Id} in project {Project}", firing.TicketId, rt.Slug); }
-    }
-
-    private async Task ExecuteAssignTicketActionAsync(ProjectRuntime rt, TriggerFiring firing, AssignTicketActionSpec at)
-    {
-        try
-        {
-            var slug = at.Slug;
-            if (slug is not null && slug.Contains("{previousAssignee}"))
-            {
-                var ticket = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId!.Value);
-                slug = slug.Replace("{previousAssignee}", ticket?.AssignedTo ?? "");
-            }
-            if (string.IsNullOrEmpty(slug))
-            {
-                await _tickets.UpdateTicketAsync(rt.Slug, firing.TicketId!.Value, assignedTo: "", author: "automation");
-            }
-            else
-            {
-                var members = await _members.ListMembersAsync(rt.Slug);
-                if (!members.Any(m => string.Equals(m.Slug, slug, StringComparison.OrdinalIgnoreCase)))
-                {
-                    _logger.LogWarning("assignTicket: member '{Slug}' not found in project {Project}", slug, rt.Slug);
-                    return;
-                }
-                await _tickets.UpdateTicketAsync(rt.Slug, firing.TicketId!.Value, assignedTo: slug, author: "automation");
-            }
-        }
-        catch (Exception ex) { _logger.LogWarning(ex, "assignTicket failed for ticket #{Id} in project {Project}", firing.TicketId, rt.Slug); }
-    }
-
-    private async Task ExecuteConsolidateAgentMemoryActionAsync(
-        ProjectRuntime rt,
-        ConsolidateAgentMemoryActionSpec spec,
-        TriggerFiring? firing,
-        AgentRun? parentRun,
-        CancellationToken ct)
-    {
-        try
-        {
-            var agent = spec.Agent;
-            if (agent.Contains("{assignee}"))
-            {
-                if (firing?.TicketId is null)
-                {
-                    _logger.LogInformation("consolidateAgentMemory: {{assignee}} placeholder but no firing ticket — skipping");
-                    return;
-                }
-                var t = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
-                if (string.IsNullOrEmpty(t?.AssignedTo))
-                {
-                    _logger.LogInformation("consolidateAgentMemory: {{assignee}} placeholder but ticket #{Id} has no assignee — skipping", firing.TicketId);
-                    return;
-                }
-                agent = agent.Replace("{assignee}", t.AssignedTo);
-            }
-
-            if (parentRun?.Status == AgentRunStatus.Failed && (parentRun.ExitCode ?? 0) < 0)
-            {
-                _logger.LogInformation("consolidateAgentMemory: parent run {Id} failed (exit {Exit}) — skipping", parentRun.RunId, parentRun.ExitCode);
-                return;
-            }
-
-            var instructionPath = Path.Combine(
-                rt.Workspace!,
-                spec.InstructionFile.Replace('/', Path.DirectorySeparatorChar));
-
-            if (!File.Exists(instructionPath))
-            {
-                _logger.LogWarning("consolidateAgentMemory: instruction file not found: {Path}", instructionPath);
-                return;
-            }
-
-            var instructionContent = (await File.ReadAllTextAsync(instructionPath, ct))
-                .Replace("{agentSlug}", agent);
-            var eventsSummary = BuildEventsSummary(parentRun);
-
-            const string scope = "consolidate";
-            _sessions.Clear(rt.Workspace!, $"{scope}:{agent}", ticketId: null);
-
-            var project = await _projects.GetProjectAsync(rt.Slug);
-            var member = await _members.GetMemberBySlugAsync(rt.Slug, agent);
-            var memberModel = string.IsNullOrWhiteSpace(member?.DefaultModel) ? null : member.DefaultModel;
-            var projectFallback = string.IsNullOrWhiteSpace(project?.FallbackModel) ? null : project.FallbackModel;
-            var localDefault = string.IsNullOrWhiteSpace(project?.LocalModelName) ? null : project.LocalModelName;
-            var effectiveModel = FirstConfiguredModel(spec.Model, memberModel, projectFallback, localDefault);
-            var routing = ModelRouting.Resolve(effectiveModel, project?.LocalModelBaseUrl);
-            var target = routing.ToTarget(effectiveModel);
-
-            // Preserve the project's quota fallback when a more specific primary target won.
-            // If it is already the primary, retrying the same target would only duplicate failure.
-            AgentDispatchTarget? fallbackTarget = null;
-            if (projectFallback is not null &&
-                !string.Equals(projectFallback, effectiveModel, StringComparison.OrdinalIgnoreCase))
-            {
-                var fallbackRouting = ModelRouting.Resolve(projectFallback, project?.LocalModelBaseUrl);
-                if (fallbackRouting.Error is null)
-                    fallbackTarget = fallbackRouting.ToTarget(projectFallback);
-                else
-                    _logger.LogWarning(
-                        "consolidateAgentMemory: fallback target '{Model}' is unusable for {Agent}: {Error}",
-                        projectFallback, agent, fallbackRouting.Error);
-            }
-
-            _logger.LogInformation(
-                "consolidateAgentMemory: resolved {Agent} to {Provider}:{Model}{Fallback}",
-                agent, target.Provider, target.Model ?? "default",
-                fallbackTarget is null ? "" : $" (fallback {fallbackTarget.Provider}:{fallbackTarget.Model ?? "default"})");
-
-            var runCtx = new AgentRunContext
-            {
-                ProjectSlug = rt.Slug,
-                WorkspacePath = rt.Workspace!,
-                AgentName = agent,
-                SkillFile = $"{agent}/SKILL.md",
-                MaxTurns = spec.MaxTurns,
-                ConcurrencyGroup = $"consolidate-{agent}",
-                InlineSkillContent = instructionContent,
-                ExtraContext = string.IsNullOrWhiteSpace(eventsSummary)
-                    ? "No events were recorded for this run."
-                    : eventsSummary,
-                SessionScope = scope,
-                Target = target,
-                FallbackTarget = fallbackTarget,
-                RetryOnResumeFailure = true,
-                MaxRunDuration = TimeSpan.FromMinutes(30),
-            };
-
-            var run = await _runner.RunAsync(runCtx, ct);
-
-            var memoryPaths = $"\".agents/{agent}/memory\" \".agents/{agent}/memory.md\"";
-            var diff = await RunGitAsync(rt.Workspace!, $"diff --shortstat HEAD -- {memoryPaths}");
-            var diffSummary = diff.stdout.Trim();
-            _logger.LogInformation("consolidate {Agent}: run {Status} (exit {Exit}){Diff}",
-                agent, run.Status, run.ExitCode,
-                string.IsNullOrWhiteSpace(diffSummary) ? "" : $" — {diffSummary}");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "consolidateAgentMemory: failed for {Agent}", spec.Agent);
-        }
-    }
+    // ── Static helpers (internal — tested directly) ─────────────────────────
 
     internal static string? FirstConfiguredModel(params string?[] candidates) =>
         candidates.FirstOrDefault(model => !string.IsNullOrWhiteSpace(model))?.Trim();
@@ -931,340 +721,6 @@ internal sealed class ActionExecutor
             .Replace("{time}", now.ToString("HH:mm"))
             .Replace("{monday}", monday.ToString("yyyy-MM-dd"))
             .Replace("{firstOfMonth}", firstOfMonth.ToString("yyyy-MM-dd"));
-    }
-
-    private async Task ExecuteCreateTicketActionAsync(ProjectRuntime rt, CreateTicketActionSpec cta)
-    {
-        try
-        {
-            var now = DateTime.Now;
-            string Resolve(string s) => ResolveCreateTicketPlaceholders(s, now);
-
-            var title = Resolve(cta.Title);
-            if (string.IsNullOrWhiteSpace(title))
-            {
-                _logger.LogWarning("createTicket: resolved title is empty — skipping");
-                return;
-            }
-
-            if (cta.SkipIfExists)
-            {
-                var existing = await _tickets.ListTicketsAsync(rt.Slug);
-                var openStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Backlog", "Todo", "InProgress", "Blocked", "Review" };
-                if (existing.Any(t => openStatuses.Contains(t.Status) && string.Equals(t.Title, title, StringComparison.OrdinalIgnoreCase)))
-                {
-                    _logger.LogInformation("createTicket: open ticket with title '{Title}' already exists — skipping", title);
-                    return;
-                }
-            }
-
-            List<int>? labelIds = null;
-            if (cta.Labels.Count > 0)
-            {
-                var allLabels = await _labels.ListLabelsAsync(rt.Slug);
-                labelIds = allLabels
-                    .Where(l => cta.Labels.Any(n => string.Equals(n, l.Name, StringComparison.OrdinalIgnoreCase)))
-                    .Select(l => l.Id)
-                    .ToList();
-            }
-
-            var priority = Enum.TryParse<KittyClaw.Core.Models.TicketPriority>(cta.Priority, ignoreCase: true, out var p)
-                ? p : KittyClaw.Core.Models.TicketPriority.NiceToHave;
-
-            var ticket = await _tickets.CreateTicketAsync(
-                rt.Slug,
-                title,
-                description: Resolve(cta.Description),
-                createdBy: string.IsNullOrWhiteSpace(cta.CreatedBy) ? "automation" : cta.CreatedBy,
-                status: cta.Status,
-                labelIds: labelIds,
-                priority: priority,
-                assignedTo: string.IsNullOrWhiteSpace(cta.AssignedTo) ? null : cta.AssignedTo,
-                parentId: cta.ParentId);
-
-            _logger.LogInformation("createTicket: created ticket #{Id} '{Title}' in project {Project}", ticket.Id, ticket.Title, rt.Slug);
-        }
-        catch (Exception ex) { _logger.LogWarning(ex, "createTicket failed in project {Project}", rt.Slug); }
-    }
-
-    private async Task ExecuteCommitAgentMemoryActionAsync(ProjectRuntime rt, CommitAgentMemoryActionSpec cm, TriggerFiring? firing = null)
-    {
-        try
-        {
-            var agent = cm.Agent;
-            if (agent.Contains("{assignee}"))
-            {
-                if (firing?.TicketId is null)
-                {
-                    _logger.LogInformation("commitAgentMemory: {{assignee}} placeholder but no firing ticket — skipping");
-                    return;
-                }
-                var t = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
-                if (string.IsNullOrEmpty(t?.AssignedTo))
-                {
-                    _logger.LogInformation("commitAgentMemory: {{assignee}} placeholder but ticket #{Id} has no assignee — skipping", firing.TicketId);
-                    return;
-                }
-                agent = agent.Replace("{assignee}", t.AssignedTo);
-            }
-
-            var workspace = rt.Workspace!;
-            // Memory lives either in the new per-topic layout (.agents/{agent}/memory/) or, until an
-            // agent has consolidated, in the legacy flat file (.agents/{agent}/memory.md). Commit
-            // whichever exist — both, during the migration window.
-            var memoryDirAbs = Path.Combine(workspace, ".agents", agent, "memory");
-            var legacyAbs = Path.Combine(workspace, ".agents", agent, "memory.md");
-            var hasDir = Directory.Exists(memoryDirAbs);
-            var hasLegacy = File.Exists(legacyAbs);
-            if (!hasDir && !hasLegacy)
-            {
-                _logger.LogInformation("commitAgentMemory: no memory found for {Agent} under {Path}", agent, Path.GetDirectoryName(legacyAbs));
-                return;
-            }
-
-            // Prefer a nested .agents/.git repo if present (decouples agent config from main project repo).
-            // Otherwise fall back to the main workspace repo.
-            var agentsDir = Path.Combine(workspace, ".agents");
-            string gitCwd;
-            string relBase;
-            if (Directory.Exists(Path.Combine(agentsDir, ".git")))
-            {
-                gitCwd = agentsDir;
-                relBase = $"{agent}";
-            }
-            else if (Directory.Exists(Path.Combine(workspace, ".git")))
-            {
-                gitCwd = workspace;
-                relBase = $".agents/{agent}";
-            }
-            else
-            {
-                _logger.LogDebug("commitAgentMemory: no git repo at {Path} or {Agents} — skipping", workspace, agentsDir);
-                return;
-            }
-
-            // Only pass paths that exist. Some Git versions reject the entire `git add` when one
-            // pathspec is absent, which prevented a new-format-only memory tree from being committed.
-            var pathArgs = string.Join(" ", new[]
-            {
-                hasDir ? $"\"{relBase}/memory\"" : null,
-                hasLegacy ? $"\"{relBase}/memory.md\"" : null,
-            }.Where(path => path is not null));
-
-            var gitLock = _gitLocks.GetOrAdd(gitCwd, _ => new SemaphoreSlim(1, 1));
-            await gitLock.WaitAsync();
-            try
-            {
-                var diff = await RunGitAsync(gitCwd, $"diff --quiet --exit-code -- {pathArgs}");
-                // diff --quiet returns 1 when there are tracked-file changes; untracked new topic
-                // files are invisible to it, so also check `status --porcelain` before bailing.
-                var status = await RunGitAsync(gitCwd, $"status --porcelain -- {pathArgs}");
-                if (diff.exitCode == 0 && string.IsNullOrWhiteSpace(status.stdout))
-                {
-                    _logger.LogDebug("commitAgentMemory: {Agent} memory is clean, nothing to commit", agent);
-                    return;
-                }
-
-                var add = await RunGitAsync(gitCwd, $"add -- {pathArgs}");
-                if (add.exitCode != 0)
-                {
-                    _logger.LogWarning("commitAgentMemory: git add failed for {Agent}: {Err}", agent, add.stderr);
-                    return;
-                }
-
-                var ticketSuffix = firing?.TicketId is int tid ? $" (#{tid})" : "";
-                var msg = $"chore(memory): {agent}{ticketSuffix}";
-                // Memory commits are generated by KittyClaw, not by the workspace owner. Give
-                // them the same stable technical identity used by agents for their own commits.
-                // Besides making history explicit, this lets gitCommit triggers ignore an
-                // agent's complete post-run chain (including its memory commit) and prevents
-                // self-triggering loops such as documentalist -> commit memory -> documentalist.
-                var identity = BuildAgentGitIdentity(agent);
-                var commit = await RunGitAsync(
-                    gitCwd,
-                    $"-c user.name=\"{identity}\" -c user.email=\"{identity}@kittyclaw.local\" commit --no-verify -m \"{msg}\" -- {pathArgs}");
-                if (commit.exitCode != 0)
-                {
-                    _logger.LogWarning("commitAgentMemory: git commit failed for {Agent}: {Err}", agent, commit.stderr);
-                    return;
-                }
-
-                _logger.LogInformation("commitAgentMemory: committed {Agent} memory", agent);
-            }
-            finally { gitLock.Release(); }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "commitAgentMemory: failed to commit memory for {Agent}", cm.Agent);
-        }
-    }
-
-    // Returns true when AbortOnFailure is set and the process exited with a non-zero code.
-    /// <summary>
-    /// Sends the outbound HTTP request of an httpRequest action (ticket #137). Returns true when
-    /// the remaining chain should abort (AbortOnFailure set and the request failed). Security:
-    /// http/https only; loopback/link-local targets refused at connect time unless
-    /// AllowLocalTargets (see <see cref="HttpActionClient"/>); redirects disabled; response read
-    /// capped; neither the full URL (webhook tokens live in paths) nor header values are logged.
-    /// </summary>
-    private async Task<bool> ExecuteHttpRequestActionAsync(HttpRequestActionSpec spec, ProjectRuntime rt, TriggerFiring firing, CancellationToken ct)
-    {
-        try
-        {
-            var url = await ResolveHttpPlaceholdersAsync(spec.Url, rt, firing);
-            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
-                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
-            {
-                _logger.LogWarning("httpRequest: invalid or non-http(s) URL — request refused");
-                return spec.AbortOnFailure;
-            }
-            var method = spec.Method.ToUpperInvariant() switch
-            {
-                "GET" => HttpMethod.Get,
-                "POST" => HttpMethod.Post,
-                "PUT" => HttpMethod.Put,
-                "PATCH" => HttpMethod.Patch,
-                "DELETE" => HttpMethod.Delete,
-                _ => null,
-            };
-            if (method is null)
-            {
-                _logger.LogWarning("httpRequest: unsupported method '{Method}' — request refused", spec.Method);
-                return spec.AbortOnFailure;
-            }
-
-            using var request = new HttpRequestMessage(method, uri);
-            if (!string.IsNullOrEmpty(spec.Body))
-                request.Content = new StringContent(
-                    await ResolveHttpPlaceholdersAsync(spec.Body, rt, firing),
-                    System.Text.Encoding.UTF8, spec.ContentType);
-            foreach (var (name, value) in spec.Headers)
-            {
-                var resolved = await ResolveHttpPlaceholdersAsync(value, rt, firing);
-                if (!request.Headers.TryAddWithoutValidation(name, resolved))
-                    request.Content?.Headers.TryAddWithoutValidation(name, resolved);
-            }
-
-            var client = spec.AllowLocalTargets ? HttpActionClient.Unguarded : HttpActionClient.Guarded;
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, spec.TimeoutSeconds)));
-
-            var started = DateTime.UtcNow;
-            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token);
-            // Drain at most MaxResponseBytes; the body is never stored.
-            await using (var stream = await response.Content.ReadAsStreamAsync(cts.Token))
-            {
-                var buffer = new byte[8192];
-                var remaining = HttpActionClient.MaxResponseBytes;
-                while (remaining > 0)
-                {
-                    var read = await stream.ReadAsync(buffer.AsMemory(0, Math.Min(buffer.Length, remaining)), cts.Token);
-                    if (read == 0) break;
-                    remaining -= read;
-                }
-            }
-            _logger.LogInformation("httpRequest {Method} {Host} -> {Status} in {Ms}ms",
-                method, uri.Host, (int)response.StatusCode, (int)(DateTime.UtcNow - started).TotalMilliseconds);
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogWarning("httpRequest non-2xx ({Status}) from {Host}; abortOnFailure={Abort}",
-                    (int)response.StatusCode, uri.Host, spec.AbortOnFailure);
-                return spec.AbortOnFailure;
-            }
-            return false;
-        }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-        {
-            _logger.LogWarning("httpRequest timed out after {Timeout}s", spec.TimeoutSeconds);
-            return spec.AbortOnFailure;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "httpRequest failed");
-            return spec.AbortOnFailure;
-        }
-    }
-
-    private async Task<string> ResolveHttpPlaceholdersAsync(string template, ProjectRuntime rt, TriggerFiring firing)
-    {
-        var s = template.Replace("{ticketId}", firing.TicketId?.ToString() ?? "");
-        // Signal-path firings carry only the ticket id (no title/status snapshot) — resolve
-        // whatever the template needs from the live ticket, like the condition path does (#135).
-        var needsLookup = s.Contains("{assignee}") || s.Contains("{ticketStatus}")
-            || (s.Contains("{ticketTitle}") && firing.TicketTitle is null);
-        Models.Ticket? ticket = null;
-        if (needsLookup && firing.TicketId is int id)
-            ticket = await _tickets.GetTicketAsync(rt.Slug, id);
-        return s
-            .Replace("{ticketTitle}", firing.TicketTitle ?? ticket?.Title ?? "")
-            .Replace("{ticketStatus}", firing.TicketStatus ?? ticket?.Status ?? "")
-            .Replace("{assignee}", ticket?.AssignedTo ?? "");
-    }
-
-    private async Task<bool> ExecutePowerShellAsync(ExecutePowerShellActionSpec spec, string workspacePath, string slug, TriggerFiring firing, CancellationToken ct)
-    {
-        try
-        {
-            string Render(string s) => (s ?? string.Empty)
-                .Replace("{ticketId}", firing.TicketId?.ToString() ?? "")
-                .Replace("{ticketTitle}", firing.TicketTitle ?? "")
-                .Replace("{slug}", slug ?? "");
-
-            string scriptArg;
-            if (!string.IsNullOrWhiteSpace(spec.ScriptFile))
-            {
-                var rendered = Render(spec.ScriptFile);
-                var path = Path.IsPathRooted(rendered)
-                    ? rendered
-                    : Path.Combine(workspacePath, rendered);
-                scriptArg = $"-File \"{path}\"";
-            }
-            else
-            {
-                var bytes = System.Text.Encoding.Unicode.GetBytes(Render(spec.Script));
-                scriptArg = $"-EncodedCommand {Convert.ToBase64String(bytes)}";
-            }
-
-            var extraArgs = spec.Arguments.Count > 0
-                ? " " + string.Join(" ", spec.Arguments.Select(a => $"\"{Render(a)}\""))
-                : "";
-
-            var pwshBin = ShellResolver.ResolvePowerShell();
-            var res = await ProcessRunner.RunAsync(
-                pwshBin,
-                $"-NonInteractive -NoProfile {scriptArg}{extraArgs}",
-                workspacePath,
-                TimeSpan.FromSeconds(spec.TimeoutSeconds),
-                spec.Env,
-                ct);
-
-            if (res.TimedOut)
-            {
-                _logger.LogWarning("executePowerShell timed out after {Timeout}s; process tree killed", spec.TimeoutSeconds);
-                return spec.AbortOnFailure;
-            }
-
-            _logger.LogInformation("executePowerShell exited {Code}. stdout={Stdout} stderr={Stderr}",
-                res.ExitCode, res.Stdout.Trim(), res.Stderr.Trim());
-
-            if (res.ExitCode != 0)
-            {
-                _logger.LogWarning("executePowerShell non-zero exit ({Code}); abortOnFailure={Abort}", res.ExitCode, spec.AbortOnFailure);
-                return spec.AbortOnFailure;
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Engine shutdown / chain cancellation — the process tree was already killed.
-            _logger.LogWarning("executePowerShell cancelled");
-            if (spec.AbortOnFailure) return true;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "executePowerShell failed");
-            if (spec.AbortOnFailure) return true;
-        }
-        return false;
     }
 
     // ── Dependency gate helpers ─────────────────────────────────────────────
@@ -1298,56 +754,5 @@ internal sealed class ActionExecutor
         {
             _logger.LogWarning(ex, "Failed to post blocker comment for ticket #{Id}", ticketId);
         }
-    }
-
-    // ── Git helpers ─────────────────────────────────────────────────────────
-
-    private static string BuildAgentGitIdentity(string agent)
-    {
-        var identity = new string(agent
-            .ToLowerInvariant()
-            .Select(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.' ? c : '-')
-            .ToArray())
-            .Trim('-', '.');
-        return string.IsNullOrEmpty(identity) ? "agent" : identity;
-    }
-
-    private static async Task<(int exitCode, string stdout, string stderr)> RunGitAsync(string cwd, string args)
-    {
-        // 2-minute cap: a git blocked on a credential prompt or a stale index.lock must not
-        // hold the per-repo git lock forever.
-        var res = await ProcessRunner.RunAsync("git", args, cwd, TimeSpan.FromMinutes(2));
-        return (res.ExitCode ?? -1, res.Stdout, res.TimedOut ? "git timed out after 2 minutes" : res.Stderr);
-    }
-
-    private static string BuildEventsSummary(AgentRun? run)
-    {
-        if (run is null) return "";
-        var lines = new List<string>();
-        foreach (var ev in run.SnapshotBuffer())
-        {
-            if (ev.Kind is "assistant" or "tool_use" or "result")
-            {
-                var text = ev.Kind == "tool_use"
-                    ? $"[tool_use] {ev.Text}: {TruncateDetail(ev.Detail, 120)}"
-                    : $"[{ev.Kind}] {TruncateLine(ev.Text, 200)}";
-                lines.Add(text);
-            }
-            if (lines.Count >= 80) break;
-        }
-        return lines.Count == 0 ? "" : string.Join("\n", lines);
-    }
-
-    private static string TruncateLine(string? s, int max)
-    {
-        if (string.IsNullOrEmpty(s)) return "";
-        s = s.Replace('\n', ' ').Replace('\r', ' ');
-        return s.Length <= max ? s : s[..max] + "…";
-    }
-
-    private static string TruncateDetail(string? s, int max)
-    {
-        if (string.IsNullOrEmpty(s)) return "{}";
-        return s.Length <= max ? s : s[..max] + "…";
     }
 }
