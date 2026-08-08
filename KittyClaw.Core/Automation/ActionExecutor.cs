@@ -407,6 +407,26 @@ internal sealed class ActionExecutor
 
         if (await _runState.ShouldSkipAsync(rt, a, firing, agentName, group)) return (true, null, agentName);
 
+        // Dependency gate: do not dispatch if the ticket has unresolved blockers.
+        if (firing.TicketId is int depCheckId)
+        {
+            var depTicket = await _tickets.GetTicketAsync(rt.Slug, depCheckId);
+            if (depTicket is not null)
+            {
+                var unresolved = depTicket.BlockedBy
+                    .Where(b => !string.Equals(b.Status, "Done", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (unresolved.Count > 0)
+                {
+                    await PostBlockerCommentIfNewAsync(rt.Slug, depCheckId, unresolved, depTicket.Comments);
+                    _logger.LogInformation(
+                        "Skipping dispatch for ticket #{Id}: {N} unresolved blocker(s)",
+                        depCheckId, unresolved.Count);
+                    return (true, null, agentName);
+                }
+            }
+        }
+
         var project = await _projects.GetProjectAsync(rt.Slug);
         var fallbackModel = project?.FallbackModel;
 
@@ -1245,6 +1265,39 @@ internal sealed class ActionExecutor
             if (spec.AbortOnFailure) return true;
         }
         return false;
+    }
+
+    // ── Dependency gate helpers ─────────────────────────────────────────────
+
+    private const string BlockerMarkerPrefix = "<!-- dep-blocked:";
+
+    // Posts a comment naming the unresolved blockers, but only when no existing automation
+    // comment already covers exactly this set (avoids re-posting every dispatch cycle).
+    private async Task PostBlockerCommentIfNewAsync(
+        string projectSlug,
+        int ticketId,
+        List<Models.TicketDependencyInfo> unresolved,
+        List<Models.Comment> existingComments)
+    {
+        var ids = string.Join(",", unresolved.OrderBy(b => b.TicketId).Select(b => b.TicketId));
+        var marker = $"{BlockerMarkerPrefix} {ids} -->";
+        if (existingComments.Any(c => c.Content.Contains(marker, StringComparison.Ordinal)))
+            return;
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Dispatch blocked: this ticket has unresolved blockers:");
+        foreach (var b in unresolved)
+            sb.AppendLine($"- #{b.TicketId} **{b.Title}** (status: {b.Status})");
+        sb.AppendLine();
+        sb.AppendLine("Dispatch will resume automatically once all blockers reach Done.");
+        sb.Append(marker);
+        try
+        {
+            await _tickets.AddCommentAsync(projectSlug, ticketId, sb.ToString(), "automation");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to post blocker comment for ticket #{Id}", ticketId);
+        }
     }
 
     // ── Git helpers ─────────────────────────────────────────────────────────
