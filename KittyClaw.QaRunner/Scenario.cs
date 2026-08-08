@@ -42,12 +42,14 @@ public sealed class ScenarioAction
     // assertJson fields
     public string? JsonPath { get; set; }
 
-    // Convenience shortcut fields (createTicket, assignTicket, setStatus)
+    // Convenience shortcut fields (createTicket, assignTicket, setStatus, createDependency)
     public string? Title { get; set; }
     public string? Status { get; set; }
     public string? Priority { get; set; }
     public string? AssignedTo { get; set; }
     public string? CreatedBy { get; set; }
+    /// <summary>Secondary ticket id for createDependency: the blocker ticket id.</summary>
+    public string? Target { get; set; }
 }
 
 public sealed class ScenarioVerdict

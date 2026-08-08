@@ -88,6 +88,7 @@ public sealed class ScenarioRunner
             case "createTicket":
             case "assignTicket":
             case "setStatus":
+            case "createDependency":
                 await ExecuteApiActionAsync(action, ct);
                 break;
             default:
@@ -132,6 +133,28 @@ public sealed class ScenarioRunner
                     var body = new { status = Resolve(action.Status ?? throw new InvalidOperationException("setStatus: 'status' is required")), author = "qa-runner" };
                     var resp = await _http.PatchAsJsonAsync($"{_instanceApiUrl}/api/projects/{slug}/tickets/{id}/status", body, ct);
                     resp.EnsureSuccessStatusCode();
+                    break;
+                }
+            case "createDependency":
+                {
+                    var project = Resolve(action.Project ?? "qa-test");
+                    var slug = SlugOf(project);
+                    var blockedId = int.Parse(Resolve(action.Value ?? _vars.GetValueOrDefault("ticketId") ?? throw new InvalidOperationException("createDependency: 'value' (blocked ticket id) is required")));
+                    var blockerId = int.Parse(Resolve(action.Target ?? throw new InvalidOperationException("createDependency: 'target' (blocker ticket id) is required")));
+                    var depUrl = $"{_instanceApiUrl}/api/projects/{slug}/tickets/{blockedId}/dependencies";
+                    var depJson = $"{{\"blockedById\":{blockerId}}}";
+                    var depContent = new StringContent(depJson, System.Text.Encoding.UTF8, "application/json");
+                    var resp = await _http.PostAsync(depUrl, depContent, ct);
+                    if (!resp.IsSuccessStatusCode)
+                    {
+                        var body = await resp.Content.ReadAsStringAsync(ct);
+                        throw new InvalidOperationException($"createDependency failed {(int)resp.StatusCode}: {body}");
+                    }
+                    if (action.Extract?.Count > 0)
+                    {
+                        var json = await resp.Content.ReadFromJsonAsync<JsonElement>(ct);
+                        ExtractVars(json, action.Extract);
+                    }
                     break;
                 }
             case "api":
