@@ -199,6 +199,35 @@ public static partial class Endpoints
             return ok ? Results.NoContent() : Results.NotFound();
         }).WithTags("Comments");
 
+        // Dependencies
+        api.MapPost("/projects/{slug}/tickets/{id:int}/dependencies", async (string slug, int id, AddDependencyRequest req, TicketService ts) =>
+        {
+            try
+            {
+                var dep = await ts.AddDependencyAsync(slug, id, req.BlockedById);
+                return Results.Created($"/api/projects/{slug}/tickets/{id}/dependencies/{dep.Id}", dep);
+            }
+            catch (DependencyValidationException ex)
+            {
+                return Results.UnprocessableEntity(new { error = ex.Message, reason = ex.Reason });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).WithTags("Dependencies")
+        .Produces<TicketDependency>(StatusCodes.Status201Created)
+        .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
+        .ProducesProblem(StatusCodes.Status400BadRequest);
+
+        api.MapDelete("/projects/{slug}/tickets/{id:int}/dependencies/{depId:int}", async (string slug, int id, int depId, TicketService ts) =>
+        {
+            var removed = await ts.RemoveDependencyAsync(slug, id, depId);
+            return removed ? Results.NoContent() : Results.NotFound();
+        }).WithTags("Dependencies")
+        .Produces(StatusCodes.Status204NoContent)
+        .ProducesProblem(StatusCodes.Status404NotFound);
+
         // Activity
         api.MapGet("/projects/{slug}/tickets/{id:int}/activity", async (string slug, int id, TicketService ts) =>
         {

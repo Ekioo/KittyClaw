@@ -17,6 +17,7 @@ public class TodoDbContext : DbContext
     public DbSet<ColumnScheduledTaskRun> ColumnScheduledTaskRuns => Set<ColumnScheduledTaskRun>();
     public DbSet<Member> Members => Set<Member>();
     public DbSet<ChatMessageRow> ChatMessages => Set<ChatMessageRow>();
+    public DbSet<TicketDependency> TicketDependencies => Set<TicketDependency>();
 
     private readonly string _dbPath;
 
@@ -105,6 +106,13 @@ public class TodoDbContext : DbContext
         modelBuilder.Entity<ChatMessageRow>(e =>
         {
             e.HasKey(m => m.Id);
+        });
+
+        modelBuilder.Entity<TicketDependency>(e =>
+        {
+            e.HasKey(d => d.Id);
+            e.HasIndex(d => new { d.BlockedTicketId, d.BlocksTicketId }).IsUnique();
+            e.HasIndex(d => d.BlocksTicketId);
         });
     }
 }

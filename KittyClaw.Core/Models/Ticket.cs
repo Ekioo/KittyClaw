@@ -48,4 +48,10 @@ public class Ticket
     public List<Label> Labels { get; set; } = [];
     [System.ComponentModel.DataAnnotations.Schema.NotMapped]
     public List<SubTicketInfo> SubTickets { get; set; } = [];
+    /// <summary>Tickets that must complete before this one can start (populated on GET).</summary>
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public List<TicketDependencyInfo> BlockedBy { get; set; } = [];
+    /// <summary>Tickets that this ticket blocks (populated on GET).</summary>
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public List<TicketDependencyInfo> Blocks { get; set; } = [];
 }

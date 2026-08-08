@@ -73,3 +73,4 @@ public record ChatTargetsResponse(string? LastTarget, List<ChatTargetDto> Target
 public record ChatMessageDto(string Role, string Text, string? ToolName, string? Detail, string CreatedAt);
 public record MoveTileRequest(int X, int Y); // required — pixel coords snapped to 20px grid
 public record ResizeTileRequest(int Width, int Height); // required — pixels snapped to 20px grid
+public record AddDependencyRequest(int BlockedById);

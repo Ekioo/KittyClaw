@@ -155,6 +155,28 @@ public class TicketService
             await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE Tickets ADD COLUMN AgentCostEstimated INTEGER NOT NULL DEFAULT 0");
         });
 
+    // Ensures the TicketDependencies table exists (directed blocked-by edges between tickets).
+    // Unique constraint on (BlockedTicketId, BlocksTicketId) enforces one edge per ordered pair.
+    // Both lookup directions are indexed: BlockedTicketId (what blocks this ticket?) and
+    // BlocksTicketId (what does this ticket block?).
+    internal static Task EnsureTicketDependenciesTableAsync(TodoDbContext db) =>
+        MigrationGate.RunOnceAsync(db, "ticket-dependencies-v1", static async d =>
+        {
+            await d.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS TicketDependencies (
+                    Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    BlockedTicketId INTEGER NOT NULL,
+                    BlocksTicketId INTEGER NOT NULL,
+                    CreatedAt TEXT NOT NULL,
+                    UNIQUE (BlockedTicketId, BlocksTicketId)
+                )
+            """);
+            await d.Database.ExecuteSqlRawAsync(
+                "CREATE INDEX IF NOT EXISTS IX_TicketDependencies_BlockedTicketId ON TicketDependencies(BlockedTicketId)");
+            await d.Database.ExecuteSqlRawAsync(
+                "CREATE INDEX IF NOT EXISTS IX_TicketDependencies_BlocksTicketId ON TicketDependencies(BlocksTicketId)");
+        });
+
     // Hot-path indexes: status/parent filters run on every board render, and the activity
     // subquery in ListTicketsAsync scans per ticket. Must run after the column migrations.
     private static Task EnsureTicketIndexesAsync(TodoDbContext db) =>
@@ -249,6 +271,7 @@ public class TicketService
         await EnsureAssignedToColumnAsync(db);
         await EnsureScheduleColumnsAsync(db);
         await EnsureAgentUsageColumnsAsync(db);
+        await EnsureTicketDependenciesTableAsync(db);
         var ticket = await db.Tickets
             .Include(t => t.Comments.OrderBy(c => c.CreatedAt))
             .Include(t => t.Activities.OrderBy(a => a.CreatedAt))
@@ -271,7 +294,129 @@ public class TicketService
         {
             ColumnRole = t.ColumnId is int columnId && subRoles.TryGetValue(columnId, out var role) ? role : ColumnRole.Normal,
         }).ToList();
+        ticket.BlockedBy = await (
+            from d in db.TicketDependencies
+            join t in db.Tickets on d.BlocksTicketId equals t.Id
+            where d.BlockedTicketId == ticketId
+            orderby d.Id
+            select new TicketDependencyInfo(d.Id, t.Id, t.Title, t.Status)
+        ).ToListAsync();
+        ticket.Blocks = await (
+            from d in db.TicketDependencies
+            join t in db.Tickets on d.BlockedTicketId equals t.Id
+            where d.BlocksTicketId == ticketId
+            orderby d.Id
+            select new TicketDependencyInfo(d.Id, t.Id, t.Title, t.Status)
+        ).ToListAsync();
         return ticket;
+    }
+
+    /// <summary>
+    /// Creates a directed "blocked-by" edge: <paramref name="ticketId"/> is blocked by
+    /// <paramref name="blockedById"/>. Validates all rejection cases atomically.
+    /// </summary>
+    /// <returns>The new <see cref="TicketDependency"/>.</returns>
+    /// <exception cref="InvalidOperationException">Thrown with a machine-readable <c>reason</c> prefix for all rejection cases.</exception>
+    public async Task<TicketDependency> AddDependencyAsync(string projectSlug, int ticketId, int blockedById)
+    {
+        if (ticketId == blockedById)
+            throw new DependencyValidationException("self_reference", "A ticket cannot depend on itself.");
+
+        await using var db = _projectService.GetProjectDb(projectSlug);
+        await EnsureTicketDependenciesTableAsync(db);
+
+        await using var tx = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+
+        var blockedTicket = await db.Tickets.AsNoTracking()
+            .Select(t => new { t.Id, t.Title, t.Status, t.ColumnId })
+            .FirstOrDefaultAsync(t => t.Id == ticketId);
+        if (blockedTicket is null)
+            throw new DependencyValidationException("missing_ticket", $"Ticket #{ticketId} does not exist in project '{projectSlug}'.");
+
+        var blockerTicket = await db.Tickets.AsNoTracking()
+            .Select(t => new { t.Id, t.Title, t.Status })
+            .FirstOrDefaultAsync(t => t.Id == blockedById);
+        if (blockerTicket is null)
+            throw new DependencyValidationException("missing_ticket", $"Ticket #{blockedById} does not exist in project '{projectSlug}'. Cross-project references are not supported.");
+
+        // Reject if the blocked ticket is already in a terminal column (Done/Failed).
+        if (blockedTicket.ColumnId is int colId)
+        {
+            var col = await db.BoardColumns.AsNoTracking().FirstOrDefaultAsync(c => c.Id == colId);
+            if (col is not null && (col.Role == ColumnRole.Success || col.Role == ColumnRole.Failure))
+                throw new DependencyValidationException("incompatible_state",
+                    $"Ticket #{ticketId} is in a terminal column ('{col.Name}') and cannot gain new blockers.");
+        }
+
+        // Duplicate edge check (fast path before cycle detection).
+        var duplicate = await db.TicketDependencies
+            .AnyAsync(d => d.BlockedTicketId == ticketId && d.BlocksTicketId == blockedById);
+        if (duplicate)
+            throw new DependencyValidationException("duplicate_edge",
+                $"Ticket #{ticketId} is already directly blocked by #{blockedById}.");
+
+        // Cycle detection: would adding (ticketId blocked-by blockedById) create a cycle?
+        // Check if blockedById is reachable from ticketId following "blocked-by" edges.
+        if (await WouldCreateCycleAsync(db, ticketId, blockedById))
+            throw new DependencyValidationException("cycle",
+                $"Adding this dependency would create a directed cycle: ticket #{ticketId} already transitively blocks #{blockedById}.");
+
+        var dep = new TicketDependency
+        {
+            BlockedTicketId = ticketId,
+            BlocksTicketId = blockedById,
+            CreatedAt = DateTime.UtcNow,
+        };
+        db.TicketDependencies.Add(dep);
+        await db.SaveChangesAsync();
+        await tx.CommitAsync();
+        return dep;
+    }
+
+    /// <summary>
+    /// Removes the dependency edge with <paramref name="depId"/> from the project.
+    /// Returns false when the edge does not exist or belongs to a different ticket.
+    /// </summary>
+    public async Task<bool> RemoveDependencyAsync(string projectSlug, int ticketId, int depId)
+    {
+        await using var db = _projectService.GetProjectDb(projectSlug);
+        await EnsureTicketDependenciesTableAsync(db);
+
+        var dep = await db.TicketDependencies
+            .FirstOrDefaultAsync(d => d.Id == depId && d.BlockedTicketId == ticketId);
+        if (dep is null) return false;
+
+        db.TicketDependencies.Remove(dep);
+        await db.SaveChangesAsync();
+        return true;
+    }
+
+    /// <summary>
+    /// Returns true if adding edge (ticketId blocked-by blockedById) would create a cycle.
+    /// Uses BFS from <paramref name="ticketId"/> following outgoing "blocks" edges
+    /// (BlocksTicketId → BlockedTicketId direction) to check whether <paramref name="blockedById"/>
+    /// is reachable.
+    /// </summary>
+    private static async Task<bool> WouldCreateCycleAsync(TodoDbContext db, int ticketId, int blockedById)
+    {
+        var visited = new HashSet<int>();
+        var queue = new Queue<int>();
+        queue.Enqueue(ticketId);
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            if (!visited.Add(current)) continue;
+            var downstream = await db.TicketDependencies
+                .Where(d => d.BlocksTicketId == current)
+                .Select(d => d.BlockedTicketId)
+                .ToListAsync();
+            foreach (var next in downstream)
+            {
+                if (next == blockedById) return true;
+                if (!visited.Contains(next)) queue.Enqueue(next);
+            }
+        }
+        return false;
     }
 
     /// <summary>Loads only the fields needed by comment automation polling in one query.</summary>
