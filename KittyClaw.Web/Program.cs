@@ -80,6 +80,9 @@ builder.Services.AddSingleton<ColumnActionExecutor>();
 builder.Services.AddSingleton<CostTracker>();
 // Durable cost records: cost-log.jsonl (daily budget) + per-ticket token/USD totals.
 builder.Services.AddHostedService<RunCostRecorder>();
+// Evidence: capture and attach verifiable evidence bundles to run and ticket records.
+builder.Services.AddSingleton(new KittyClaw.Core.Evidence.EvidenceStore(dataDir));
+builder.Services.AddHostedService<KittyClaw.Core.Evidence.RunEvidenceAttacher>();
 builder.Services.AddSingleton<AutomationEngine>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomationEngine>());
 builder.Services.AddSingleton<ColumnProcessingEngine>();

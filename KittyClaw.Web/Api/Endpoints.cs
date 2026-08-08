@@ -14,6 +14,7 @@ public static partial class Endpoints
         MapProjectLabels(api);
         MapTicketLabels(api);
         MapTicketReorder(api);
+        MapTicketEvidence(api);
         MapMembers(api);
         MapBrowse(api);
         MapSkills(api);

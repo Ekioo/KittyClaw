@@ -138,6 +138,10 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "POST /api/projects/{slug}/runs/{runId}/stop",
         "POST /api/projects/{slug}/runs/{runId}/retry",
         "GET /api/projects/{slug}/concurrency-groups",
+        // Evidence
+        "GET /api/projects/{slug}/runs/{runId}/evidence",
+        "GET /api/projects/{slug}/tickets/{id}/evidence",
+        "GET /api/projects/{slug}/tickets/{id}/brief",
         // Chat
         "GET /api/projects/{slug}/chat/targets",
         "GET /api/projects/{slug}/chat/messages",
@@ -246,6 +250,9 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         ["POST /api/projects/{slug}/runs/{runId}/stop"] = "Runs",
         ["POST /api/projects/{slug}/runs/{runId}/retry"] = "Runs",
         ["GET /api/projects/{slug}/concurrency-groups"] = "Runs",
+        ["GET /api/projects/{slug}/runs/{runId}/evidence"] = "Runs",
+        ["GET /api/projects/{slug}/tickets/{id}/evidence"] = "Evidence",
+        ["GET /api/projects/{slug}/tickets/{id}/brief"] = "Evidence",
         ["GET /api/projects/{slug}/chat/targets"] = "Chat",
         ["GET /api/projects/{slug}/chat/messages"] = "Chat",
         ["GET /api/projects/{slug}/chat/active"] = "Chat",

@@ -1,4 +1,5 @@
 @using Markdig
+@using KittyClaw.Core.Evidence
 @using KittyClaw.Core.Models
 @using KittyClaw.Core.Services
 @using KittyClaw.Core.Extensions
@@ -236,17 +237,28 @@
                 @if (CurrentColumn() is { } guidanceColumn &&
                     guidanceColumn.Role is ColumnRole.Waiting or ColumnRole.OwnerAction)
                 {
-                    <section class="ticket-waiting-guidance @(guidanceColumn.Role == ColumnRole.OwnerAction ? "ticket-waiting-guidance--action" : "ticket-waiting-guidance--automatic")"
-                             role="note" aria-label="@L["TicketWaitingGuidanceTitle"]">
-                        <header>
-                            <span class="ticket-waiting-guidance-icon">@(guidanceColumn.Role == ColumnRole.OwnerAction ? "⚠" : "◷")</span>
-                            <div>
-                                <strong>@L[guidanceColumn.Role == ColumnRole.OwnerAction ? "TicketOwnerActionTitle" : "TicketAutomaticWaitingTitle"]</strong>
-                                <small>@guidanceColumn.Name</small>
-                            </div>
-                        </header>
-                        <div class="markdown">@((MarkupString)Markdown.ToHtml(WaitingGuidance(guidanceColumn), _mdPipeline))</div>
-                    </section>
+                    @if (guidanceColumn.Role == ColumnRole.OwnerAction && _ticket is not null)
+                    {
+                        <DecisionBriefPanel Slug="@Slug"
+                                            TicketId="@_ticket.Id"
+                                            Columns="@_columns"
+                                            CurrentColumn="@guidanceColumn"
+                                            OnDecisionTaken="@RefreshAsync" />
+                    }
+                    else
+                    {
+                        <section class="ticket-waiting-guidance ticket-waiting-guidance--automatic"
+                                 role="note" aria-label="@L["TicketWaitingGuidanceTitle"]">
+                            <header>
+                                <span class="ticket-waiting-guidance-icon">◷</span>
+                                <div>
+                                    <strong>@L["TicketAutomaticWaitingTitle"]</strong>
+                                    <small>@guidanceColumn.Name</small>
+                                </div>
+                            </header>
+                            <div class="markdown">@((MarkupString)Markdown.ToHtml(WaitingGuidance(guidanceColumn), _mdPipeline))</div>
+                        </section>
+                    }
                 }
 
                 <div class="thread-section-divider">

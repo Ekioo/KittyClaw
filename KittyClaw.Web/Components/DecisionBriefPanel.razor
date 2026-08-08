@@ -1,0 +1,182 @@
+@using KittyClaw.Core.Evidence
+@using KittyClaw.Core.Models
+@using KittyClaw.Core.Services
+@inject EvidenceStore EvidenceStore
+@inject TicketService TicketService
+@inject LocalizationService L
+
+<div class="decision-brief-panel">
+    @if (_brief is not null)
+    {
+        <section class="decision-brief decision-brief--@VerdictClass(_brief.Verdict)"
+                 role="region" aria-label="@L["DecisionBriefLabel"]">
+            <header class="decision-brief-header">
+                <div class="decision-brief-verdict">
+                    <span class="decision-brief-verdict-icon">@VerdictIcon(_brief.Verdict)</span>
+                    <strong>@L[$"DecisionVerdict{_brief.Verdict}"]</strong>
+                </div>
+                <small class="decision-brief-captured">@_brief.CapturedAt.ToString("g")</small>
+            </header>
+
+            <div class="decision-brief-metrics">
+                <span>@_brief.FilesChanged @L["BriefFilesChanged"]</span>
+                @if (_brief.CommandsRun > 0)
+                {
+                    <span>@_brief.CommandsRun @L["BriefCommandsRun"]</span>
+                }
+                @if (_brief.TestsPassed + _brief.TestsFailed > 0)
+                {
+                    <span class="@(_brief.TestsFailed > 0 ? "brief-metric--fail" : "brief-metric--ok")">
+                        @_brief.TestsPassed @L["BriefTestsPassed"]
+                        @if (_brief.TestsFailed > 0)
+                        {
+                            <span>, @_brief.TestsFailed @L["BriefTestsFailed"]</span>
+                        }
+                    </span>
+                }
+                @if (_brief.RepositoryClean == true)
+                {
+                    <span class="brief-metric--ok">@L["BriefRepoClean"]</span>
+                }
+                else if (_brief.RepositoryClean == false)
+                {
+                    <span class="brief-metric--fail">@L["BriefRepoDirty"]</span>
+                }
+            </div>
+
+            @if (_brief.Findings.Count > 0)
+            {
+                <ul class="decision-brief-findings">
+                    @foreach (var finding in _brief.Findings.OrderByDescending(f => f.IsBlocking))
+                    {
+                        <li class="brief-finding @(finding.IsBlocking ? "brief-finding--blocking" : "brief-finding--info")">
+                            @finding.Summary
+                        </li>
+                    }
+                </ul>
+            }
+
+            @if (_brief.RecoveryGuidance.Action != RecoveryAction.None)
+            {
+                <div class="decision-brief-recovery">
+                    <strong>@L[$"RecoveryAction{_brief.RecoveryGuidance.Action}"]</strong>
+                    <span> — @_brief.RecoveryGuidance.Reason</span>
+                </div>
+            }
+
+            @if (_brief.RunIds.Count > 0)
+            {
+                <details class="decision-brief-runs">
+                    <summary>@L.Get("BriefRunCount", _brief.RunIds.Count)</summary>
+                    <div class="decision-brief-run-list">
+                        @foreach (var runId in _brief.RunIds)
+                        {
+                            <code class="decision-brief-run-id">@runId</code>
+                        }
+                    </div>
+                </details>
+            }
+        </section>
+    }
+    else
+    {
+        <div class="decision-brief-empty">@L["BriefNoEvidence"]</div>
+    }
+
+    <div class="decision-brief-actions">
+        @if (_acceptColumn is not null)
+        {
+            <button class="brief-action-btn brief-action-btn--accept" disabled="@_acting"
+                    @onclick="AcceptAsync">
+                &#10003; @L.Get("BriefAccept", _acceptColumn.Name)
+            </button>
+        }
+        <button class="brief-action-btn brief-action-btn--correct" disabled="@_acting"
+                @onclick="CorrectAsync">
+            &#8617; @L["BriefRequestCorrection"]
+        </button>
+        @if (_rejectColumn is not null)
+        {
+            <button class="brief-action-btn brief-action-btn--stop" disabled="@_acting"
+                    @onclick="StopAsync">
+                &#10005; @L["BriefStop"]
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Slug { get; set; } = "";
+    [Parameter, EditorRequired] public int TicketId { get; set; }
+    [Parameter] public List<BoardColumn> Columns { get; set; } = [];
+    [Parameter] public BoardColumn? CurrentColumn { get; set; }
+    [Parameter] public EventCallback OnDecisionTaken { get; set; }
+
+    private TicketDecisionBrief? _brief;
+    private bool _acting;
+    private string _loadedKey = "";
+    private BoardColumn? _acceptColumn;
+    private BoardColumn? _rejectColumn;
+
+    protected override void OnParametersSet()
+    {
+        var key = $"{Slug}/{TicketId}/{CurrentColumn?.Id}";
+        if (key == _loadedKey) return;
+        _loadedKey = key;
+        _acceptColumn = Columns
+            .Where(c => c.SortOrder > (CurrentColumn?.SortOrder ?? 0) &&
+                        c.Role is not ColumnRole.Waiting and not ColumnRole.OwnerAction and not ColumnRole.Failure)
+            .OrderBy(c => c.SortOrder)
+            .FirstOrDefault();
+        _rejectColumn = Columns.FirstOrDefault(c => c.Role == ColumnRole.Failure);
+        LoadBrief();
+    }
+
+    private void LoadBrief()
+    {
+        _brief = null;
+        var evidence = EvidenceStore.LoadTicket(TicketId.ToString());
+        if (evidence is null) return;
+        EvidenceStore.ApplyStaleness(evidence, EvidenceStore.DefaultStalenessThreshold);
+        _brief = DecisionBriefComposer.Compose(evidence);
+    }
+
+    private Task AcceptAsync() =>
+        TakeDecisionAsync(_acceptColumn!.Name, L["BriefDecisionAccepted"]);
+
+    private Task CorrectAsync() =>
+        TakeDecisionAsync("Todo", L["BriefDecisionCorrectionRequested"]);
+
+    private Task StopAsync() =>
+        TakeDecisionAsync(_rejectColumn!.Name, L["BriefDecisionStopped"]);
+
+    private async Task TakeDecisionAsync(string targetStatus, string record)
+    {
+        _acting = true;
+        StateHasChanged();
+        try
+        {
+            await TicketService.AddCommentAsync(Slug, TicketId, record);
+            await TicketService.MoveTicketAsync(Slug, TicketId, targetStatus, "owner");
+            await OnDecisionTaken.InvokeAsync();
+        }
+        finally
+        {
+            _acting = false;
+        }
+    }
+
+    private static string VerdictClass(DecisionVerdict v) => v switch
+    {
+        DecisionVerdict.Ship => "ship",
+        DecisionVerdict.Fix => "fix",
+        _ => "block",
+    };
+
+    private static string VerdictIcon(DecisionVerdict v) => v switch
+    {
+        DecisionVerdict.Ship => "✓",
+        DecisionVerdict.Fix => "⚠",
+        _ => "✗",
+    };
+}

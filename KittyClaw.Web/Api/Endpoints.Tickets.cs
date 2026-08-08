@@ -1,3 +1,4 @@
+using KittyClaw.Core.Evidence;
 using KittyClaw.Core.Models;
 using KittyClaw.Core.Services;
 using KittyClaw.Web.Services;
@@ -212,6 +213,29 @@ public static partial class Endpoints
                 .OrderBy(x => ((dynamic)x).at);
             return Results.Ok(timeline);
         }).WithTags("Activity");
+    }
+
+    private static void MapTicketEvidence(RouteGroupBuilder api)
+    {
+        api.MapGet("/projects/{slug}/tickets/{id:int}/evidence", async (string slug, int id, EvidenceStore store, TicketService ts) =>
+        {
+            var ticket = await ts.GetTicketAsync(slug, id);
+            if (ticket is null) return Results.NotFound();
+            var evidence = store.LoadTicket(id.ToString());
+            if (evidence is null) return Results.NotFound();
+            EvidenceStore.ApplyStaleness(evidence, EvidenceStore.DefaultStalenessThreshold);
+            return Results.Ok(evidence);
+        }).WithTags("Evidence");
+
+        api.MapGet("/projects/{slug}/tickets/{id:int}/brief", async (string slug, int id, EvidenceStore store, TicketService ts) =>
+        {
+            var ticket = await ts.GetTicketAsync(slug, id);
+            if (ticket is null) return Results.NotFound();
+            var evidence = store.LoadTicket(id.ToString());
+            if (evidence is null) return Results.NotFound();
+            EvidenceStore.ApplyStaleness(evidence, EvidenceStore.DefaultStalenessThreshold);
+            return Results.Ok(DecisionBriefComposer.Compose(evidence));
+        }).WithTags("Evidence");
     }
 
     private static void MapTicketReorder(RouteGroupBuilder api)

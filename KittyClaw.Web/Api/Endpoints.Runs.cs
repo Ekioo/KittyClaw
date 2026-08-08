@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using KittyClaw.Core.Automation;
+using KittyClaw.Core.Evidence;
 using KittyClaw.Core.Services;
 
 namespace KittyClaw.Web.Api;
@@ -124,6 +125,16 @@ public static partial class Endpoints
             if (run is null || run.ProjectSlug != slug) return Results.NotFound();
             run.Cancellation.Cancel();
             return Results.NoContent();
+        }).WithTags("Runs");
+
+        api.MapGet("/projects/{slug}/runs/{runId}/evidence", (string slug, string runId, EvidenceStore store, AgentRunRegistry reg) =>
+        {
+            var run = reg.Get(runId);
+            if (run is not null && run.ProjectSlug != slug) return Results.NotFound();
+            var evidence = store.LoadRun(runId);
+            if (evidence is null) return Results.NotFound();
+            EvidenceStore.ApplyStaleness(evidence, EvidenceStore.DefaultStalenessThreshold);
+            return Results.Ok(evidence);
         }).WithTags("Runs");
 
         api.MapPost("/projects/{slug}/runs/{runId}/retry", async (string slug, string runId,

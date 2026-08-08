@@ -5603,6 +5603,162 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     border: 1px solid var(--border-strong);
     border-radius: 8px;
 }
+
+/* ── Decision brief panel (ticket-160) ─────────────────────────────────── */
+.decision-brief-panel {
+  margin: .4rem 0 1rem;
+}
+
+.decision-brief {
+  padding: .9rem 1rem;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--brief-color, #4ade80) 35%, var(--border));
+  border-left: 3px solid var(--brief-color, #4ade80);
+  background: color-mix(in srgb, var(--brief-color, #4ade80) 8%, var(--surface2));
+}
+.decision-brief--ship { --brief-color: #4ade80; }
+.decision-brief--fix  { --brief-color: #f59e42; }
+.decision-brief--block { --brief-color: #f87171; }
+
+.decision-brief-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: .6rem;
+}
+.decision-brief-verdict {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.decision-brief-verdict-icon {
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  color: var(--brief-color, #4ade80);
+  background: color-mix(in srgb, var(--brief-color, #4ade80) 18%, transparent);
+  font-size: .9rem;
+}
+.decision-brief-captured { color: var(--muted); font-size: .8rem; }
+
+.decision-brief-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem .8rem;
+  margin-bottom: .55rem;
+  font-size: .82rem;
+  color: var(--muted);
+}
+.brief-metric--ok  { color: #4ade80; }
+.brief-metric--fail { color: #f87171; }
+
+.decision-brief-findings {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 .55rem;
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+}
+.brief-finding {
+  padding: .25rem .55rem;
+  border-radius: 5px;
+  font-size: .82rem;
+}
+.brief-finding--blocking {
+  background: color-mix(in srgb, #f87171 12%, var(--surface2));
+  color: #f87171;
+}
+.brief-finding--info {
+  background: color-mix(in srgb, #94a3b8 10%, var(--surface2));
+  color: var(--muted);
+}
+
+.decision-brief-recovery {
+  margin-bottom: .55rem;
+  padding: .3rem .55rem;
+  border-radius: 5px;
+  font-size: .82rem;
+  background: color-mix(in srgb, #f59e42 10%, var(--surface2));
+  color: var(--text);
+}
+.decision-brief-recovery strong { color: #f59e42; }
+
+.decision-brief-runs {
+  margin-bottom: .55rem;
+  font-size: .8rem;
+  color: var(--muted);
+}
+.decision-brief-runs summary { cursor: pointer; user-select: none; }
+.decision-brief-run-list {
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+  margin-top: .3rem;
+}
+.decision-brief-run-id {
+  font-family: var(--font-mono, monospace);
+  font-size: .77rem;
+  color: var(--muted);
+}
+
+.decision-brief-empty {
+  margin: .4rem 0 .8rem;
+  padding: .6rem .8rem;
+  border-radius: 7px;
+  font-size: .83rem;
+  color: var(--muted);
+  background: var(--surface2);
+  border: 1px dashed var(--border);
+}
+
+.decision-brief-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  margin-top: .7rem;
+}
+.brief-action-btn {
+  padding: .38rem .85rem;
+  border-radius: 7px;
+  border: 1px solid var(--border-strong);
+  font-size: .83rem;
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--surface2);
+  color: var(--text);
+  transition: background .12s, border-color .12s;
+}
+.brief-action-btn:disabled { opacity: .5; cursor: default; }
+.brief-action-btn--accept {
+  background: color-mix(in srgb, #4ade80 14%, var(--surface2));
+  border-color: color-mix(in srgb, #4ade80 45%, var(--border));
+  color: #1a7a3c;
+}
+.brief-action-btn--accept:hover:not(:disabled) {
+  background: color-mix(in srgb, #4ade80 22%, var(--surface2));
+}
+.brief-action-btn--correct {
+  background: color-mix(in srgb, #f59e42 12%, var(--surface2));
+  border-color: color-mix(in srgb, #f59e42 40%, var(--border));
+  color: #a05c10;
+}
+.brief-action-btn--correct:hover:not(:disabled) {
+  background: color-mix(in srgb, #f59e42 20%, var(--surface2));
+}
+.brief-action-btn--stop {
+  background: color-mix(in srgb, #f87171 12%, var(--surface2));
+  border-color: color-mix(in srgb, #f87171 40%, var(--border));
+  color: #9b1c1c;
+}
+.brief-action-btn--stop:hover:not(:disabled) {
+  background: color-mix(in srgb, #f87171 20%, var(--surface2));
+}
 .workflow-edit-row { align-items: center; }
 .workflow-edit-row > .settings-hint { margin: 0; white-space: nowrap; }
 .workflow-settings .settings-row + .settings-row { margin-top: .6rem; }
