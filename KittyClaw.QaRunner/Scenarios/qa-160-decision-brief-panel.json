@@ -1,0 +1,41 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "qa-160-decision-brief" },
+    {
+      "type": "api",
+      "method": "GET",
+      "path": "/api/projects/qa-160-decision-brief/columns"
+    },
+    {
+      "type": "api",
+      "method": "PATCH",
+      "path": "/api/projects/qa-160-decision-brief/columns/6",
+      "body": { "role": 4 }
+    },
+    {
+      "type": "createTicket",
+      "project": "qa-160-decision-brief",
+      "title": "Verify decision brief panel renders in Review",
+      "status": "Todo"
+    },
+    {
+      "type": "setStatus",
+      "project": "qa-160-decision-brief",
+      "status": "Review"
+    }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-160-decision-brief/ticket/{ticketId}" },
+    { "type": "wait", "ms": 3000 },
+    {
+      "type": "screenshot",
+      "name": "qa-160-brief-panel-empty",
+      "description": "DecisionBriefPanel in Review column (OwnerAction) — no evidence seeded, shows empty state with Accept/Request-correction/Stop action buttons."
+    },
+    { "type": "assertVisible", "selector": ".decision-brief-panel" },
+    { "type": "assertVisible", "selector": ".decision-brief-actions" },
+    { "type": "assertVisible", "selector": ".decision-brief-empty" },
+    { "type": "assertVisible", "selector": ".brief-action-btn--correct" }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}
