@@ -215,6 +215,10 @@ else
                                     {
                                         <span class="owner-action-badge" title="@L["OwnerActionRequired"]">⚠ @L["OwnerActionRequired"]</span>
                                     }
+                                    @if (ticket.UnresolvedBlockerCount > 0)
+                                    {
+                                        <span class="blocker-indicator" title="@L.Get("CardBlockerTooltip", ticket.UnresolvedBlockerCount)">🔒 @ticket.UnresolvedBlockerCount</span>
+                                    }
                                     @{
                                         var activeRun = AgentRuns.ActiveForTicket(Slug, ticket.Id);
                                         var lastRun = activeRun is null ? AgentRuns.LastForTicket(Slug, ticket.Id) : null;

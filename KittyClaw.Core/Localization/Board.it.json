@@ -273,5 +273,11 @@
   "BriefStop": "Ferma",
   "BriefDecisionAccepted": "Decisione registrata: accettato.",
   "BriefDecisionCorrectionRequested": "Decisione registrata: correzione richiesta.",
-  "BriefDecisionStopped": "Decisione registrata: fermato."
+  "BriefDecisionStopped": "Decisione registrata: fermato.",
+  "BlockedBy": "Bloccato da",
+  "Blocks": "Blocca",
+  "BlockerIdPlaceholder": "ID ticket…",
+  "AddBlocker": "Aggiungi",
+  "RemoveDependency": "Rimuovi",
+  "CardBlockerTooltip": "Bloccato da {0} ticket non risolto/i"
 }

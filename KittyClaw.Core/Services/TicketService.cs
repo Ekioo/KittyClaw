@@ -257,9 +257,25 @@ public class TicketService
                 ColumnRole = x.ColumnId is int columnId && childRoles.TryGetValue(columnId, out var role) ? role : ColumnRole.Normal,
             }).ToList());
 
-        return allTickets.Select(t => subsByParent.TryGetValue(t.Id, out var subs)
-            ? t with { SubTickets = subs }
-            : t).ToList();
+        // Load unresolved blocker counts (blockers whose status is not "Done") for all returned tickets.
+        await EnsureTicketDependenciesTableAsync(db);
+        var ticketIds = allTickets.Select(t => t.Id).ToList();
+        var unresolvedCounts = ticketIds.Count > 0
+            ? await db.TicketDependencies
+                .Where(d => ticketIds.Contains(d.BlockedTicketId))
+                .Join(db.Tickets, d => d.BlocksTicketId, t => t.Id, (d, t) => new { d.BlockedTicketId, t.Status })
+                .Where(x => x.Status != "Done")
+                .GroupBy(x => x.BlockedTicketId)
+                .Select(g => new { BlockedId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.BlockedId, x => x.Count)
+            : [];
+
+        return allTickets.Select(t =>
+        {
+            var subs = subsByParent.TryGetValue(t.Id, out var s) ? s : t.SubTickets;
+            var blockerCount = unresolvedCounts.TryGetValue(t.Id, out var c) ? c : 0;
+            return t with { SubTickets = subs, UnresolvedBlockerCount = blockerCount };
+        }).ToList();
     }
 
     public async Task<Ticket?> GetTicketAsync(string projectSlug, int ticketId)

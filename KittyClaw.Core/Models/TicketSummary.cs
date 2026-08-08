@@ -34,6 +34,8 @@ public record TicketSummary(
     public int PipelineId { get; init; }
     public int? ColumnId { get; init; }
     public bool BlocksParent { get; init; } = true;
+    /// <summary>Count of blockers whose status is not "Done" (unresolved).</summary>
+    public int UnresolvedBlockerCount { get; init; }
 }
 
 public record SubTicketInfo(int Id, string Title, string Status, string? AssignedTo)

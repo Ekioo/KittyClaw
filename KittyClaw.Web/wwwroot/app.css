@@ -6060,3 +6060,58 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 .skill-editor summary { cursor: pointer; }
 @media (max-width: 700px) { .skill-matrix { grid-template-columns: 1fr; } }
 .sub-ticket-blocking-toggle { font-size: .72rem; white-space: nowrap; }
+
+/* Blocker indicator on ticket cards */
+.blocker-indicator {
+    display: inline-flex; align-items: center; gap: .2rem;
+    padding: .08rem .35rem;
+    border: 1px solid color-mix(in srgb, #f87171 50%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, #f87171 15%, transparent);
+    color: #fca5a5; font-size: .62rem; font-weight: 700; line-height: 1.25;
+    white-space: nowrap; flex-shrink: 0;
+}
+
+/* Dependency sections in ticket panel */
+.dep-section { padding: .3rem 0; border-bottom: 1px solid var(--border, #303744); }
+.dep-list { display: flex; flex-direction: column; gap: .2rem; margin: .2rem 0 .25rem; }
+.dep-row {
+    display: flex; align-items: center; gap: .45rem;
+    padding: .18rem .4rem; border-radius: 5px;
+    background: color-mix(in srgb, var(--surface2) 60%, transparent);
+}
+.dep-row:hover { background: var(--surface2); }
+.dep-link {
+    flex: 1; font-size: .82rem; color: var(--accent);
+    text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dep-link:hover { text-decoration: underline; }
+.dep-status {
+    font-size: .7rem; padding: .1rem .35rem; border-radius: 999px;
+    white-space: nowrap; font-weight: 600;
+}
+.dep-status--done { background: color-mix(in srgb, #22c55e 15%, transparent); color: #4ade80; }
+.dep-status--pending { background: color-mix(in srgb, #f59e0b 15%, transparent); color: #fbbf24; }
+.dep-remove-btn {
+    background: none; border: none; color: var(--text-muted);
+    cursor: pointer; font-size: .85rem; padding: 0 .2rem; border-radius: 3px; line-height: 1;
+}
+.dep-remove-btn:hover { color: #f87171; background: color-mix(in srgb, #f87171 15%, transparent); }
+.dep-add-row {
+    display: flex; align-items: center; gap: .4rem;
+    padding: .35rem 0;
+}
+.dep-add-input {
+    width: 90px; padding: .22rem .4rem;
+    border: 1px solid var(--border, #303744); border-radius: 5px;
+    background: var(--surface2); color: var(--text); font-size: .82rem;
+}
+.dep-add-input:focus { outline: none; border-color: var(--accent); }
+.dep-add-btn {
+    padding: .18rem .55rem; border: 1px solid var(--border, #303744);
+    border-radius: 5px; background: var(--surface2); color: var(--text);
+    font-size: .8rem; cursor: pointer;
+}
+.dep-add-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.dep-add-btn:disabled { opacity: .4; cursor: default; }
+.dep-error { font-size: .78rem; color: #f87171; padding: .15rem 0; }

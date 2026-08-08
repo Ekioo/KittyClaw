@@ -203,6 +203,44 @@ public sealed class TicketDependencyApiTests
         Assert.Equal("cycle", ex.Reason);
     }
 
+    // ------------------------------------------------------------------
+    // ListTicketsAsync: UnresolvedBlockerCount
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task ListTickets_BlockedTicket_ReportsUnresolvedCount()
+    {
+        using var tmp = new TempDir();
+        var (svc, slug) = await BuildSutAsync(tmp);
+        var blocker = await svc.CreateTicketAsync(slug, "Blocker");
+        var blocked = await svc.CreateTicketAsync(slug, "Blocked");
+        await svc.AddDependencyAsync(slug, blocked.Id, blocker.Id);
+
+        var summaries = await svc.ListTicketsAsync(slug);
+        var blockedSummary = summaries.Single(t => t.Id == blocked.Id);
+        var blockerSummary = summaries.Single(t => t.Id == blocker.Id);
+
+        Assert.Equal(1, blockedSummary.UnresolvedBlockerCount);
+        Assert.Equal(0, blockerSummary.UnresolvedBlockerCount);
+    }
+
+    [Fact]
+    public async Task ListTickets_BlockerDone_CountDropsToZero()
+    {
+        using var tmp = new TempDir();
+        var (svc, slug) = await BuildSutAsync(tmp);
+        var blocker = await svc.CreateTicketAsync(slug, "Blocker");
+        var blocked = await svc.CreateTicketAsync(slug, "Blocked");
+        await svc.AddDependencyAsync(slug, blocked.Id, blocker.Id);
+
+        await svc.UpdateTicketAsync(slug, blocker.Id, status: "Done", author: "test");
+
+        var summaries = await svc.ListTicketsAsync(slug);
+        var blockedSummary = summaries.Single(t => t.Id == blocked.Id);
+
+        Assert.Equal(0, blockedSummary.UnresolvedBlockerCount);
+    }
+
     [Fact]
     public async Task AddDependency_NoCycle_Succeeds()
     {

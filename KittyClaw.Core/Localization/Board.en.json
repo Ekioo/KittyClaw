@@ -281,5 +281,11 @@
   "BriefStop": "Stop",
   "BriefDecisionAccepted": "Decision recorded: accepted.",
   "BriefDecisionCorrectionRequested": "Decision recorded: correction requested.",
-  "BriefDecisionStopped": "Decision recorded: stopped."
+  "BriefDecisionStopped": "Decision recorded: stopped.",
+  "BlockedBy": "Blocked by",
+  "Blocks": "Blocks",
+  "BlockerIdPlaceholder": "Ticket ID…",
+  "AddBlocker": "Add",
+  "RemoveDependency": "Remove",
+  "CardBlockerTooltip": "Blocked by {0} unresolved ticket(s)"
 }

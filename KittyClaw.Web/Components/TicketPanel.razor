@@ -213,6 +213,58 @@
             </div>
         }
 
+        @* ── Dependencies section ── *@
+        @if (_ticket.BlockedBy.Count > 0)
+        {
+            <div class="dep-section">
+                <div class="section-header">
+                    <span class="section-label">@L["BlockedBy"] (@_ticket.BlockedBy.Count)</span>
+                </div>
+                <div class="dep-list">
+                    @foreach (var b in _ticket.BlockedBy)
+                    {
+                        <div class="dep-row">
+                            <a class="dep-link" href="/board/@Slug/ticket/@b.TicketId">#@b.TicketId @b.Title</a>
+                            <span class="dep-status @(string.Equals(b.Status, "Done", StringComparison.OrdinalIgnoreCase) ? "dep-status--done" : "dep-status--pending")">@b.Status</span>
+                            <button class="dep-remove-btn" title="@L["RemoveDependency"]"
+                                    @onclick="() => RemoveBlockerAsync(b.DependencyId)" @onclick:stopPropagation>×</button>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+        @if (_ticket.Blocks.Count > 0)
+        {
+            <div class="dep-section">
+                <div class="section-header">
+                    <span class="section-label">@L["Blocks"] (@_ticket.Blocks.Count)</span>
+                </div>
+                <div class="dep-list">
+                    @foreach (var b in _ticket.Blocks)
+                    {
+                        <div class="dep-row">
+                            <a class="dep-link" href="/board/@Slug/ticket/@b.TicketId">#@b.TicketId @b.Title</a>
+                            <span class="dep-status @(string.Equals(b.Status, "Done", StringComparison.OrdinalIgnoreCase) ? "dep-status--done" : "dep-status--pending")">@b.Status</span>
+                            <button class="dep-remove-btn" title="@L["RemoveDependency"]"
+                                    @onclick="() => RemoveBlockedAsync(b.DependencyId, b.TicketId)" @onclick:stopPropagation>×</button>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+        <div class="dep-add-row">
+            <span class="section-label-sm">@L["BlockedBy"]:</span>
+            <input class="dep-add-input" type="number" min="1" placeholder="@L["BlockerIdPlaceholder"]"
+                   @bind="_addBlockerIdText" @bind:event="oninput"
+                   @onkeydown="HandleDepKeyDown" />
+            <button class="dep-add-btn" @onclick="AddBlockerAsync"
+                    disabled="@(!int.TryParse(_addBlockerIdText, out _))">@L["AddBlocker"]</button>
+        </div>
+        @if (_depError is not null)
+        {
+            <div class="dep-error">@_depError</div>
+        }
+
         @* ── Ticket body (thread layout) ── *@
             <div class="ticket-panel-thread">
                 <div class="section-header">
@@ -433,6 +485,10 @@
     private string? _chatInitialAgent;
     private string? _chatInitialAgentName;
 
+    // Dependency state
+    private string _addBlockerIdText = "";
+    private string? _depError;
+
     // Escape key handler tokens
     private IDisposable? _escClose;
     private IDisposable? _escFullscreenEditor;
@@ -537,6 +593,8 @@
         _pasteListenerAttached = false;
         _labelSearch = "";
         _assigneeSearch = "";
+        _addBlockerIdText = "";
+        _depError = null;
         ClosePriorityPicker();
         CloseLabelDropdown();
         CloseAssigneeDropdown();
@@ -996,6 +1054,51 @@
     {
         // Small delay handled by @onmousedown on dropdown items
         CloseLabelDropdown();
+    }
+
+    // ── Dependencies ──
+
+    private async Task AddBlockerAsync()
+    {
+        if (_ticket is null || !int.TryParse(_addBlockerIdText, out var blockerId)) return;
+        _depError = null;
+        try
+        {
+            await TicketService.AddDependencyAsync(Slug, _ticket.Id, blockerId);
+            _addBlockerIdText = "";
+            await RefreshAsync();
+        }
+        catch (DependencyValidationException ex) { _depError = ex.Message; }
+        catch (Exception ex) { _depError = ex.Message; }
+    }
+
+    private async Task RemoveBlockerAsync(int depId)
+    {
+        if (_ticket is null) return;
+        _depError = null;
+        try
+        {
+            await TicketService.RemoveDependencyAsync(Slug, _ticket.Id, depId);
+            await RefreshAsync();
+        }
+        catch (Exception ex) { _depError = ex.Message; }
+    }
+
+    private async Task RemoveBlockedAsync(int depId, int blockedTicketId)
+    {
+        _depError = null;
+        try
+        {
+            await TicketService.RemoveDependencyAsync(Slug, blockedTicketId, depId);
+            await RefreshAsync();
+        }
+        catch (Exception ex) { _depError = ex.Message; }
+    }
+
+    private async Task HandleDepKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await AddBlockerAsync();
+        else if (e.Key == "Escape") { _addBlockerIdText = ""; _depError = null; }
     }
 
     // ── Assignee ──

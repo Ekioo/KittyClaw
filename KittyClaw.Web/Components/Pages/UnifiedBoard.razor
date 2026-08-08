@@ -189,6 +189,10 @@ else
                                             {
                                                 <span class="owner-action-badge" title="@L["OwnerActionRequired"]">⚠ @L["OwnerActionRequired"]</span>
                                             }
+                                            @if (ticket.UnresolvedBlockerCount > 0)
+                                            {
+                                                <span class="blocker-indicator" title="@L.Get("CardBlockerTooltip", ticket.UnresolvedBlockerCount)">🔒 @ticket.UnresolvedBlockerCount</span>
+                                            }
                                             <span class="ticket-id">#@ticket.Id</span>
                                         </div>
                                         <span class="ticket-title">@ticket.Title</span>
