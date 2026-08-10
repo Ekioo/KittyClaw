@@ -223,7 +223,13 @@ public static partial class Endpoints
         api.MapDelete("/projects/{slug}/tickets/{id:int}/dependencies/{depId:int}", async (string slug, int id, int depId, TicketService ts) =>
         {
             var removed = await ts.RemoveDependencyAsync(slug, id, depId);
-            return removed ? Results.NoContent() : Results.NotFound();
+            return removed
+                ? Results.NoContent()
+                : Results.NotFound(new
+                {
+                    error = "Dependency edge was not found for this ticket.",
+                    reason = "dependency_not_found"
+                });
         }).WithTags("Dependencies")
         .Produces(StatusCodes.Status204NoContent)
         .ProducesProblem(StatusCodes.Status404NotFound);
