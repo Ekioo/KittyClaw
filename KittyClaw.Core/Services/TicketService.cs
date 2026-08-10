@@ -87,6 +87,7 @@ public class TicketService
         var columns = await db.BoardColumns.Where(c => c.PipelineId == pipelineId).ToListAsync();
         return columns.FirstOrDefault(c => string.Equals(c.Name, "Scheduled", StringComparison.OrdinalIgnoreCase))
             ?? columns.FirstOrDefault(c => string.Equals(c.Name, "Planifié", StringComparison.OrdinalIgnoreCase))
+            ?? columns.Where(c => c.Role == ColumnRole.Waiting).OrderBy(c => c.SortOrder).FirstOrDefault()
             ?? throw new InvalidOperationException($"Aucune colonne de planification n'existe dans le pipeline #{pipelineId}.");
     }
 

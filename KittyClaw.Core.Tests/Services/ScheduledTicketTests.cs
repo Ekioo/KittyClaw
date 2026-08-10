@@ -163,6 +163,40 @@ public sealed class ScheduledTicketTests
     }
 
     [Fact]
+    public async Task ScheduleTicketAsync_UsesWaitingRoleAcrossPipelines_WhenNoNamedScheduledColumnExists()
+    {
+        using var tmp = new TempDir();
+        var (projects, svc, slug) = BuildSut(tmp);
+        var pipelines = new PipelineService(projects);
+        var columns = new ColumnService(projects);
+        var fireAt = new DateTime(2026, 8, 11, 8, 0, 0, DateTimeKind.Utc);
+
+        foreach (var (pipelineName, waitingName) in new[]
+                 {
+                     ("Pilotage", "En attente"),
+                     ("Développement", "Dépendance technique")
+                 })
+        {
+            var pipeline = await pipelines.CreateAsync(slug, pipelineName);
+            var waiting = await columns.CreateColumnAsync(
+                slug, waitingName, pipelineId: pipeline.Id, role: KittyClaw.Core.Models.ColumnRole.Waiting);
+            var ready = await columns.CreateColumnAsync(slug, "À traiter", pipelineId: pipeline.Id);
+            var ticket = await svc.CreateTicketAsync(
+                slug, $"Récurrence {pipelineName}", status: ready.Name,
+                pipelineId: pipeline.Id, columnId: ready.Id);
+
+            var scheduled = await svc.ScheduleTicketAsync(
+                slug, ticket.Id, fireAt, ready.Name, "owner");
+
+            Assert.NotNull(scheduled);
+            Assert.Equal(waiting.Id, scheduled!.ColumnId);
+            Assert.Equal(waiting.Name, scheduled.Status);
+            Assert.Equal(fireAt, scheduled.FireAt);
+            Assert.Equal(ready.Name, scheduled.ScheduleTarget);
+        }
+    }
+
+    [Fact]
     public async Task ProcessorSchedule_InArbitrarilyNamedWaitingColumn_IsDueAndPromoted()
     {
         using var tmp = new TempDir();
