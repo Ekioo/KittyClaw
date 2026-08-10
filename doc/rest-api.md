@@ -15,6 +15,7 @@ Exposes the project, ticket, comment, member, label, column, and automation data
 - `/api/projects/{slug}/...` — projects, tickets, comments, columns, members, labels, mentions, automations.
 - `GET /api/projects/{slug}/chat/model?target={target}` — returns the model bound to an existing chat conversation. For legacy conversations with history but no stored binding, it returns the model from the last completed run; otherwise it returns `null`.
 - `POST /api/projects/{slug}/tickets/{id}/transfer` — atomically transfers a ticket tree to another project while preserving identifiers and history; see [Lossless ticket transfer](./ticket-transfer.md).
+- `POST /api/projects/{slug}/tickets` — enforces the project-wide Blocked-ticket limit before persistence. At saturation it returns HTTP 409 with `code: "blocked_ticket_limit_reached"`, the observed count, configured limit, and matching column IDs. An explicit `saturationOverride` is accepted only for owner-created recovery work with a non-empty audit reason.
 - `GET /api/projects/{slug}/tickets/{id}/brief` — returns the canonical, provenance-preserving [evidence decision brief](./evidence-decision-briefs.md); returns `404` when the ticket does not exist or has no captured evidence.
 - `POST /api/projects/{slug}/chat/start` accepts an optional `images` array (`ChatImageDto[]`). Each DTO carries `dataUrl` (base64 data URL), `mime`, `name`, and `sizeBytes`. Server-side: MIME allow-list (JPEG, PNG, GIF, WebP), 5 MB per-image cap, 5 images per turn cap, base64 decoded and persisted to `<workspace>/.agents/channel/tmp/chat-{runId}-{i}.{ext}` before being forwarded as `ImagePaths` to `AgentRunContext`. Invalid images return HTTP 400 `image_rejected`.
 
@@ -25,6 +26,7 @@ Exposes the project, ticket, comment, member, label, column, and automation data
 - Ticket endpoints declare typed response schemas via `.Produces<T>()` and `.ProducesProblem()`. The OpenAPI spec at `/openapi/v1.json` includes full response types and error codes (400, 404) for all ticket CRUD operations. `GET /api/docs` renders these schemas with accurate example values (e.g. `"author": "owner"` is shown in every mutating request body).
 - `GET /api/projects/{slug}/tickets` returns `TicketSummary[]` (a lighter projection), while individual ticket endpoints return the full `Ticket` type.
 - Cross-project transfers preflight identifiers and project-specific mappings. A conflict returns a validation error without mutating either database.
+- Blocked-ticket saturation is configured by `blockedTicketLimit` in `.agents/automations.json` (default `7`; `0` disables the guard). The count spans every pipeline, uses the semantic `Blocked` column role, and retains compatibility with legacy columns named exactly `Blocked`; other waiting columns do not count.
 
 ## Member deletion
 - `DELETE /api/projects/{slug}/members/{memberId}` — removes a member and unassigns them from all tickets.
