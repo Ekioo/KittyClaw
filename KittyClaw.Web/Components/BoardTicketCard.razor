@@ -1,0 +1,151 @@
+@inject AgentRunsState AgentRuns
+@inject LocalizationService L
+
+<div class="ticket-card @(IsSelected ? "selected" : "") @(IsDragging ? "dragging" : "") @(IsCardTarget ? "drop-target" : "") @(IsUpdated ? "ticket-updated" : "") @(ColRole == ColumnRole.OwnerAction ? "ticket-owner-action" : "")"
+     draggable="true"
+     @ondragstart="OnDragStartHandler"
+     @ondragend="OnDragEndHandler"
+     @ondragover="OnDragOverHandler"
+     @ondragover:preventDefault="@IsDropAllowed"
+     @ondragover:stopPropagation
+     @ondrop="OnDropHandler"
+     @ondrop:preventDefault="@IsDropAllowed"
+     @ondrop:stopPropagation
+     @oncontextmenu="OnContextMenuHandler"
+     @oncontextmenu:preventDefault
+     @oncontextmenu:stopPropagation
+     @onclick="OnClickHandler">
+    <div class="ticket-card-top">
+        <span class="priority-dot priority-@GetPriorityClass(Ticket.Priority)" title="@GetPriorityLabel(Ticket.Priority)"></span>
+        @if (ColRole == ColumnRole.OwnerAction)
+        {
+            <span class="owner-action-badge" title="@L["OwnerActionRequired"]">⚠ @L["OwnerActionRequired"]</span>
+        }
+        @if (Ticket.UnresolvedBlockerCount > 0)
+        {
+            <span class="blocker-indicator" title="@L.Get("CardBlockerTooltip", Ticket.UnresolvedBlockerCount)">🔒 @Ticket.UnresolvedBlockerCount</span>
+        }
+        @{
+            var activeRun = AgentRuns.ActiveForTicket(Slug, Ticket.Id);
+            var lastRun = activeRun is null ? AgentRuns.LastForTicket(Slug, Ticket.Id) : null;
+        }
+        @if (activeRun is not null)
+        {
+            <span class="agent-spinner"
+                  title="@activeRun.AgentName en cours"
+                  @onclick="() => OnOpenRunDrawer.InvokeAsync(activeRun.RunId)"
+                  @onclick:stopPropagation></span>
+        }
+        else if (lastRun is not null)
+        {
+            <button class="agent-log-btn agent-log-@lastRun.Status.ToString().ToLowerInvariant()"
+                    title="Voir le dernier run (@lastRun.AgentName · @lastRun.Status)"
+                    @onclick="() => OnOpenRunDrawer.InvokeAsync(lastRun.RunId)"
+                    @onclick:stopPropagation>log</button>
+        }
+        <span class="ticket-id">#@Ticket.Id</span>
+    </div>
+    <span class="ticket-title">@Ticket.Title</span>
+    <AutomationQueueSummary Slug="@Slug" TicketId="@Ticket.Id" Compact="true" />
+    @if (Ticket.Labels.Count > 0)
+    {
+        <div class="label-list">
+            @foreach (var label in Ticket.Labels)
+            {
+                <span class="label-pill" style="--lc: @label.Color">@label.Name</span>
+            }
+        </div>
+    }
+    @if (Ticket.SubTickets.Count > 0)
+    {
+        <div class="sub-ticket-indicator" @onclick="OnEnterSubKanbanHandler" @onclick:stopPropagation title="@L["ViewSubTickets"]">
+            <span class="sub-ticket-icon">&#128194;</span>
+            @foreach (var subCol in Columns)
+            {
+                var cnt = Ticket.SubTickets.Count(s => s.Status == subCol.Name);
+                if (cnt > 0)
+                {
+                    <span class="sub-status-chip" style="--sc: @subCol.Color" title="@subCol.Name">@cnt</span>
+                }
+            }
+        </div>
+    }
+    <div class="ticket-card-bottom">
+        @if (Ticket.FireAt is not null)
+        {
+            var days = (Ticket.FireAt.Value.Date - DateTime.UtcNow.Date).Days;
+            <span class="schedule-badge" title="@Ticket.FireAt.Value.ToString("yyyy-MM-dd HH:mm") UTC → @(Ticket.ScheduleTarget ?? "Todo")">@(days <= 0 ? "J" : $"J-{days}")</span>
+        }
+        @if (Ticket.AgentTokens > 0)
+        {
+            <span class="token-badge" title="@CostTooltip()">⛁ @KittyClaw.Web.Services.TokenDisplay.Compact(Ticket.AgentTokens)@(Ticket.AgentCostEstimated ? " ≈" : "")</span>
+        }
+        @if (!string.IsNullOrEmpty(Ticket.AssignedTo))
+        {
+            <span class="assignee-badge" title="@Ticket.AssignedTo">@MemberDisplayName(Ticket.AssignedTo)</span>
+        }
+        <small class="ticket-author">@Ticket.CreatedBy</small>
+    </div>
+</div>
+
+@code {
+    [Parameter] public TicketSummary Ticket { get; set; } = null!;
+    [Parameter] public bool IsSelected { get; set; }
+    [Parameter] public bool IsDragging { get; set; }
+    [Parameter] public bool IsCardTarget { get; set; }
+    [Parameter] public bool IsUpdated { get; set; }
+    [Parameter] public bool IsDropAllowed { get; set; }
+    [Parameter] public ColumnRole ColRole { get; set; }
+    [Parameter] public List<BoardColumn> Columns { get; set; } = [];
+    [Parameter] public string Slug { get; set; } = "";
+    [Parameter] public List<Member> AllMembers { get; set; } = [];
+    [Parameter] public EventCallback OnDragStart { get; set; }
+    [Parameter] public EventCallback OnDragEnd { get; set; }
+    [Parameter] public EventCallback OnDragOverCard { get; set; }
+    [Parameter] public EventCallback OnDropAsChild { get; set; }
+    [Parameter] public EventCallback<MouseEventArgs> OnContextMenu { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+    [Parameter] public EventCallback<string> OnOpenRunDrawer { get; set; }
+    [Parameter] public EventCallback OnEnterSubKanban { get; set; }
+
+    private Task OnDragStartHandler() => OnDragStart.InvokeAsync();
+    private Task OnDragEndHandler() => OnDragEnd.InvokeAsync();
+    private Task OnDragOverHandler() => OnDragOverCard.InvokeAsync();
+    private Task OnDropHandler() => OnDropAsChild.InvokeAsync();
+    private Task OnContextMenuHandler(MouseEventArgs e) => OnContextMenu.InvokeAsync(e);
+    private Task OnClickHandler() => OnClick.InvokeAsync();
+    private Task OnEnterSubKanbanHandler() => OnEnterSubKanban.InvokeAsync();
+
+    private string MemberDisplayName(string? slug)
+    {
+        if (string.IsNullOrEmpty(slug)) return "";
+        return AllMembers.FirstOrDefault(m => m.Slug == slug)?.Name ?? slug;
+    }
+
+    private string CostTooltip()
+    {
+        var value = Ticket.AgentCostUsd > 0
+            ? $" · {(Ticket.AgentCostEstimated ? "≈ " : "")}{KittyClaw.Web.Services.TokenDisplay.Usd(Ticket.AgentCostUsd)}"
+            : "";
+        var note = Ticket.AgentCostEstimated ? $" · {L["EstimatedCostTooltip"]}" : "";
+        return $"{Ticket.AgentTokens:N0} tokens{value}{note}";
+    }
+
+    private string GetPriorityLabel(TicketPriority p) => p switch
+    {
+        TicketPriority.Idea => L["PriorityIdea"],
+        TicketPriority.NiceToHave => L["PriorityNiceToHave"],
+        TicketPriority.Required => L["PriorityRequired"],
+        TicketPriority.Critical => L["PriorityCritical"],
+        _ => p.ToString()
+    };
+
+    private static string GetPriorityClass(TicketPriority p) => p switch
+    {
+        TicketPriority.Idea => "idea",
+        TicketPriority.NiceToHave => "nice",
+        TicketPriority.Required => "required",
+        TicketPriority.Critical => "critical",
+        _ => "nice"
+    };
+}

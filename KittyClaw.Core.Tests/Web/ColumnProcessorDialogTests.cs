@@ -254,12 +254,14 @@ public sealed class ColumnProcessorDialogTests
     public void OwnerAction_tickets_are_emphasized_on_project_and_unified_boards()
     {
         var board = File.ReadAllText(Path.Combine(
-            RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Board.razor"));
+            RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Board.razor"))
+            + File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Web", "Components", "BoardTicketCard.razor"));
         var unified = File.ReadAllText(Path.Combine(
             RepoRoot(), "KittyClaw.Web", "Components", "Pages", "UnifiedBoard.razor"));
         var css = KittyClaw.Core.Tests.Helpers.AppCssHelper.ReadAll(RepoRoot());
 
-        Assert.Contains("col.Role == ColumnRole.OwnerAction", board);
+        Assert.Contains("ColRole == ColumnRole.OwnerAction", board);
         Assert.Contains("owner-action-badge", board);
         Assert.Contains("col.Role == ColumnRole.OwnerAction", unified);
         Assert.Contains("owner-action-badge", unified);

@@ -1,0 +1,168 @@
+@inject TicketService TicketService
+@inject LabelService LabelService
+@inject EscapeKeyStack EscapeStack
+@inject IJSRuntime JS
+@inject LocalizationService L
+@implements IDisposable
+
+<div class="ticket-modal-overlay">
+    <div class="create-popup">
+        <div class="create-popup-header">
+            <h2>@L["NewTicket"]</h2>
+            <button class="close-btn" @onclick="CloseAsync">&times;</button>
+        </div>
+        <div class="create-popup-body">
+            <label class="field-label">@L["Title"]</label>
+            <input class="create-input" @bind="_title" @bind:event="oninput" placeholder="@L["TicketTitlePlaceholder"]" />
+
+            <label class="field-label">@L["DescriptionMarkdown"]</label>
+            <textarea @ref="_descTextarea" class="create-textarea" @bind="_description" @bind:event="oninput" placeholder="@L["DescriptionPlaceholder"]"></textarea>
+
+            <label class="field-label">@L["Priority"]</label>
+            <div class="priority-picker">
+                @foreach (var p in Enum.GetValues<TicketPriority>())
+                {
+                    <button class="priority-option @(_priority == p ? "active" : "")"
+                            @onclick="() => _priority = p">
+                        <span class="priority-dot priority-@GetPriorityClass(p)"></span>
+                        @GetPriorityLabel(p)
+                    </button>
+                }
+            </div>
+
+            <label class="field-label">@L["Labels"]</label>
+            <div class="label-picker">
+                @foreach (var label in _allLabels)
+                {
+                    var selected = _labelIds.Contains(label.Id);
+                    <button class="label-toggle @(selected ? "active" : "")"
+                            style="--lc: @label.Color"
+                            @onclick="() => ToggleLabel(label.Id)">
+                        @label.Name
+                    </button>
+                }
+                @if (_showNewLabelForm)
+                {
+                    <div class="new-label-form">
+                        <input @bind="_newLabelName" placeholder="@L["LabelNamePlaceholder"]" />
+                        <input type="color" @bind="_newLabelColor" />
+                        <button class="save-btn icon-btn" @onclick="CreateLabelAsync">&#10003;</button>
+                        <button class="cancel-icon-btn icon-btn" @onclick="() => _showNewLabelForm = false">&#10005;</button>
+                    </div>
+                }
+                else
+                {
+                    <button class="label-add-btn" @onclick="() => _showNewLabelForm = true">+ Label</button>
+                }
+            </div>
+
+            <label class="field-label">@L["AssignTo"]</label>
+            <div class="assignee-picker-wrapper">
+                <select class="assignee-select" @bind="_assignedTo">
+                    <option value="">@L["Unassigned"]</option>
+                    @foreach (var member in AllMembers)
+                    {
+                        <option value="@member.Slug">@member.Name (@member.Slug)</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <div class="create-popup-footer">
+            <button class="cancel-btn" @onclick="CloseAsync">@L["Cancel"]</button>
+            <button @onclick="CreateAsync" disabled="@string.IsNullOrWhiteSpace(_title)">@L["CreateTicket"]</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+    [Parameter] public List<BoardColumn> Columns { get; set; } = [];
+    [Parameter] public int? SubKanbanParentId { get; set; }
+    [Parameter] public int? SelectedPipelineId { get; set; }
+    [Parameter] public List<Member> AllMembers { get; set; } = [];
+    [Parameter] public EventCallback<Ticket?> OnCreated { get; set; }
+    [Parameter] public EventCallback OnClosed { get; set; }
+
+    private string _title = "";
+    private string _description = "";
+    private TicketPriority _priority = TicketPriority.NiceToHave;
+    private List<int> _labelIds = [];
+    private List<Label> _allLabels = [];
+    private bool _showNewLabelForm;
+    private string _newLabelName = "";
+    private string _newLabelColor = "#6366f1";
+    private string _assignedTo = "";
+    private ElementReference _descTextarea;
+    private IDisposable? _escHandle;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _allLabels = await LabelService.ListLabelsAsync(Slug);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _escHandle = EscapeStack.PushWithFocus(JS,
+                () => InvokeAsync(async () => { await OnClosed.InvokeAsync(); }));
+            try { await JS.InvokeVoidAsync("attachImagePaste", _descTextarea, "/api/images"); }
+            catch { }
+        }
+    }
+
+    public void Dispose() => _escHandle?.Dispose();
+
+    private async Task CloseAsync() => await OnClosed.InvokeAsync();
+
+    private void ToggleLabel(int id)
+    {
+        if (_labelIds.Contains(id)) _labelIds.Remove(id);
+        else _labelIds.Add(id);
+    }
+
+    private async Task CreateLabelAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newLabelName)) return;
+        var label = await LabelService.CreateLabelAsync(Slug, _newLabelName.Trim(), _newLabelColor);
+        _allLabels = await LabelService.ListLabelsAsync(Slug);
+        _labelIds.Add(label.Id);
+        _newLabelName = "";
+        _newLabelColor = "#6366f1";
+        _showNewLabelForm = false;
+    }
+
+    private async Task CreateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_title) || Columns.Count == 0) return;
+        var status = Columns[0].Name;
+        var ticket = await TicketService.CreateTicketAsync(
+            Slug, _title.Trim(), _description.Trim(),
+            status: status,
+            labelIds: _labelIds,
+            priority: _priority,
+            assignedTo: string.IsNullOrEmpty(_assignedTo) ? null : _assignedTo,
+            parentId: SubKanbanParentId,
+            pipelineId: SelectedPipelineId,
+            columnId: Columns[0].Id);
+        await OnCreated.InvokeAsync(ticket);
+    }
+
+    private string GetPriorityLabel(TicketPriority p) => p switch
+    {
+        TicketPriority.Idea => L["PriorityIdea"],
+        TicketPriority.NiceToHave => L["PriorityNiceToHave"],
+        TicketPriority.Required => L["PriorityRequired"],
+        TicketPriority.Critical => L["PriorityCritical"],
+        _ => p.ToString()
+    };
+
+    private static string GetPriorityClass(TicketPriority p) => p switch
+    {
+        TicketPriority.Idea => "idea",
+        TicketPriority.NiceToHave => "nice",
+        TicketPriority.Required => "required",
+        TicketPriority.Critical => "critical",
+        _ => "nice"
+    };
+}

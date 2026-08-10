@@ -18,7 +18,7 @@ public sealed class TicketContextMenuTests
         var source = File.ReadAllText(Path.Combine(
             RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Board.razor"));
 
-        Assert.Contains("@oncontextmenu=\"e => OpenTicketMenuAsync(ticket, e)\"", source);
+        Assert.Contains("OnContextMenu=\"@(e => OpenTicketMenuAsync(ticket, e))\"", source);
         Assert.Contains("TicketMenuMoveTo", source);
         Assert.Contains("ColumnService.ListColumnsAsync(Slug, pipeline.Id)", source);
         Assert.Contains("pipelineId: pipeline.Id, columnId: column.Id", source);

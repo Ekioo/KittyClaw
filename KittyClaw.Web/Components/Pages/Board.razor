@@ -2,7 +2,6 @@
 @page "/board/{Slug}/ticket/{TicketId:int}"
 @page "/board/{Slug}/sub/{ParentId:int}"
 @page "/board/{Slug}/sub/{ParentId:int}/ticket/{TicketId:int}"
-@using Markdig
 @using Microsoft.AspNetCore.Components
 @using KittyClaw.Core.Models
 @using KittyClaw.Core.Services
@@ -14,7 +13,6 @@
 @inject KittyClaw.Web.Services.BoardSortState SortState
 @inject KittyClaw.Web.Services.BoardUpdateNotifier BoardUpdateNotifier
 @inject KittyClaw.Web.Services.AgentRunsState AgentRuns
-@inject LabelService LabelService
 @inject ColumnService ColumnService
 @inject PipelineService PipelineService
 @inject ColumnProcessorService ProcessorService
@@ -51,35 +49,7 @@ else
             <span class="view-toggle-btn view-toggle-btn--active">@L["KanbanView"]</span>
             <a class="view-toggle-btn" href="/board/@Slug/dashboard">@L["Dashboard"]</a>
         </div>
-        <div class="filter-bar">
-            <div class="filter-input-wrapper">
-                <span class="filter-icon">&#128269;</span>
-                <input class="filter-input"
-                       placeholder="@L["Filter"]"
-                       @bind="_filterText"
-                       @bind:event="oninput"
-                       @onfocus="() => _filterHintVisible = true"
-                       @onblur="OnFilterBlur" />
-                @if (!string.IsNullOrEmpty(_filterText))
-                {
-                    <button class="filter-clear" @onclick="() => _filterText = string.Empty">&times;</button>
-                }
-                @if (_filterHintVisible)
-                {
-                    <div class="filter-hint-popup">
-                        <div class="filter-hint-title">@L["FilterSyntax"]</div>
-                        <div class="filter-hint-row"><code>#42</code> @L["FilterByNumber"]</div>
-                        <div class="filter-hint-row"><code>@@owner</code> @L["FilterAssignedTo"]</div>
-                        <div class="filter-hint-row"><code>&gt;2026-03-01</code> @L["FilterAfter"]</div>
-                        <div class="filter-hint-row"><code>&lt;2026-03-28</code> @L["FilterBefore"]</div>
-                        <div class="filter-hint-row"><code>priority:critical</code> @L["FilterByPriority"]</div>
-                        <div class="filter-hint-row"><code>label:bug</code> @L["FilterByLabel"]</div>
-                        <div class="filter-hint-row"><code>by:owner</code> @L["FilterCreatedBy"]</div>
-                        <div class="filter-hint-row">@L["FilterFreeText"]</div>
-                    </div>
-                }
-            </div>
-        </div>
+        <BoardFilterBar OnChanged="ResetLoadedColumns" />
         <div class="header-right">
             <button class="header-action-btn pause-btn @(_project.IsPaused ? "pause-btn--paused" : "")"
                     title="@(_project.IsPaused ? L["Resume"] : L["Pause"])"
@@ -195,92 +165,26 @@ else
                             var ticket = columnTickets[i];
                             var index = i;
                             var isCardTarget = _draggedTicket is not null && _dragActiveSlot < 0 && _dragOverStatus == col.Name && _dragHoverIndex == index && _dropTargetTicketId == ticket.Id;
-                            <div class="ticket-card @(_openTicketId == ticket.Id ? "selected" : "") @(_draggedTicket?.Id == ticket.Id ? "dragging" : "") @(isCardTarget ? "drop-target" : "") @(IsTicketUpdated(ticket) ? "ticket-updated" : "") @(col.Role == ColumnRole.OwnerAction ? "ticket-owner-action" : "")"
-                                 draggable="true"
-                                 @ondragstart="() => OnDragStart(ticket)"
-                                 @ondragend="OnDragEnd"
-                                 @ondragover="() => OnDragOverCard(col.Name, index, ticket)"
-                                 @ondragover:preventDefault="@ticketDropAllowed"
-                                 @ondragover:stopPropagation
-                                 @ondrop="() => OnDropAsChild(ticket, col.Name)"
-                                 @ondrop:preventDefault="@ticketDropAllowed"
-                                 @ondrop:stopPropagation
-                                 @oncontextmenu="e => OpenTicketMenuAsync(ticket, e)"
-                                 @oncontextmenu:preventDefault
-                                 @oncontextmenu:stopPropagation
-                                 @onclick="() => SelectTicket(ticket)">
-                                <div class="ticket-card-top">
-                                    <span class="priority-dot priority-@GetPriorityClass(ticket.Priority)" title="@GetPriorityLabel(ticket.Priority)"></span>
-                                    @if (col.Role == ColumnRole.OwnerAction)
-                                    {
-                                        <span class="owner-action-badge" title="@L["OwnerActionRequired"]">⚠ @L["OwnerActionRequired"]</span>
-                                    }
-                                    @if (ticket.UnresolvedBlockerCount > 0)
-                                    {
-                                        <span class="blocker-indicator" title="@L.Get("CardBlockerTooltip", ticket.UnresolvedBlockerCount)">🔒 @ticket.UnresolvedBlockerCount</span>
-                                    }
-                                    @{
-                                        var activeRun = AgentRuns.ActiveForTicket(Slug, ticket.Id);
-                                        var lastRun = activeRun is null ? AgentRuns.LastForTicket(Slug, ticket.Id) : null;
-                                    }
-                                    @if (activeRun is not null)
-                                    {
-                                        <span class="agent-spinner"
-                                              title="@activeRun.AgentName en cours"
-                                              @onclick="() => OpenRunDrawer(activeRun.RunId)"
-                                              @onclick:stopPropagation></span>
-                                    }
-                                    else if (lastRun is not null)
-                                    {
-                                        <button class="agent-log-btn agent-log-@lastRun.Status.ToString().ToLowerInvariant()"
-                                                title="Voir le dernier run (@lastRun.AgentName · @lastRun.Status)"
-                                                @onclick="() => OpenRunDrawer(lastRun.RunId)"
-                                                @onclick:stopPropagation>log</button>
-                                    }
-                                    <span class="ticket-id">#@ticket.Id</span>
-                                </div>
-                                <span class="ticket-title">@ticket.Title</span>
-                                <AutomationQueueSummary Slug="@Slug" TicketId="@ticket.Id" Compact="true" />
-                                @if (ticket.Labels.Count > 0)
-                                {
-                                    <div class="label-list">
-                                        @foreach (var label in ticket.Labels)
-                                        {
-                                            <span class="label-pill" style="--lc: @label.Color">@label.Name</span>
-                                        }
-                                    </div>
-                                }
-                                @if (ticket.SubTickets.Count > 0)
-                                {
-                                    <div class="sub-ticket-indicator" @onclick="() => EnterSubKanban(ticket)" @onclick:stopPropagation title="@L["ViewSubTickets"]">
-                                        <span class="sub-ticket-icon">&#128194;</span>
-                                        @foreach (var subCol in _columns)
-                                        {
-                                            var cnt = ticket.SubTickets.Count(s => s.Status == subCol.Name);
-                                            if (cnt > 0)
-                                            {
-                                                <span class="sub-status-chip" style="--sc: @subCol.Color" title="@subCol.Name">@cnt</span>
-                                            }
-                                        }
-                                    </div>
-                                }
-                                <div class="ticket-card-bottom">
-                                    @if (ticket.FireAt is not null)
-                                    {
-                                        var days = (ticket.FireAt.Value.Date - DateTime.UtcNow.Date).Days;
-                                        <span class="schedule-badge" title="@ticket.FireAt.Value.ToString("yyyy-MM-dd HH:mm") UTC → @(ticket.ScheduleTarget ?? "Todo")">@(days <= 0 ? "J" : $"J-{days}")</span>
-                                    }
-                                    @if (ticket.AgentTokens > 0)
-                                    {
-                                        <span class="token-badge" title="@CostTooltip(ticket)">⛁ @KittyClaw.Web.Services.TokenDisplay.Compact(ticket.AgentTokens)@(ticket.AgentCostEstimated ? " ≈" : "")</span>
-                                    }
-                                    @if (!string.IsNullOrEmpty(ticket.AssignedTo))
-                                    {
-                                        <span class="assignee-badge" title="@ticket.AssignedTo">@MemberDisplayName(ticket.AssignedTo)</span>
-                                    }
-                                    <small class="ticket-author">@ticket.CreatedBy</small>
-                                </div>
-                            </div>
+                            <BoardTicketCard
+                                @key="ticket.Id"
+                                Ticket="ticket"
+                                ColRole="col.Role"
+                                IsSelected="@(_openTicketId == ticket.Id)"
+                                IsDragging="@(_draggedTicket?.Id == ticket.Id)"
+                                IsCardTarget="@isCardTarget"
+                                IsUpdated="@IsTicketUpdated(ticket)"
+                                IsDropAllowed="@ticketDropAllowed"
+                                Columns="_columns"
+                                Slug="@Slug"
+                                AllMembers="_allMembers"
+                                OnDragStart="@(() => OnDragStart(ticket))"
+                                OnDragEnd="OnDragEnd"
+                                OnDragOverCard="@(() => OnDragOverCard(col.Name, index, ticket))"
+                                OnDropAsChild="@(() => OnDropAsChild(ticket, col.Name))"
+                                OnContextMenu="@(e => OpenTicketMenuAsync(ticket, e))"
+                                OnClick="@(() => SelectTicket(ticket))"
+                                OnOpenRunDrawer="OpenRunDrawer"
+                                 OnEnterSubKanban="@(() => EnterSubKanban(ticket))" />
                         }
                     }
                     @if (allTickets.Count > loaded)
@@ -482,74 +386,14 @@ else
     @* ── Create ticket popup ── *@
     @if (_showCreatePopup)
     {
-        <div class="ticket-modal-overlay">
-            <div class="create-popup">
-                <div class="create-popup-header">
-                    <h2>@L["NewTicket"]</h2>
-                    <button class="close-btn" @onclick="CloseCreatePopup">&times;</button>
-                </div>
-                <div class="create-popup-body">
-                    <label class="field-label">@L["Title"]</label>
-                    <input class="create-input" @bind="_newTicketTitle" @bind:event="oninput" placeholder="@L["TicketTitlePlaceholder"]" />
-
-                    <label class="field-label">@L["DescriptionMarkdown"]</label>
-                    <textarea @ref="_createTicketDescTextarea" class="create-textarea" @bind="_newTicketDescription" @bind:event="oninput" placeholder="@L["DescriptionPlaceholder"]"></textarea>
-
-                    <label class="field-label">@L["Priority"]</label>
-                    <div class="priority-picker">
-                        @foreach (var p in Enum.GetValues<TicketPriority>())
-                        {
-                            <button class="priority-option @(_newTicketPriority == p ? "active" : "")"
-                                    @onclick="() => _newTicketPriority = p">
-                                <span class="priority-dot priority-@GetPriorityClass(p)"></span>
-                                @GetPriorityLabel(p)
-                            </button>
-                        }
-                    </div>
-
-                    <label class="field-label">@L["Labels"]</label>
-                    <div class="label-picker">
-                        @foreach (var label in _allLabels)
-                        {
-                            var selected = _newTicketLabelIds.Contains(label.Id);
-                            <button class="label-toggle @(selected ? "active" : "")"
-                                    style="--lc: @label.Color"
-                                    @onclick="() => ToggleLabel(label.Id)">
-                                @label.Name
-                            </button>
-                        }
-                        @if (_showNewLabelForm)
-                        {
-                            <div class="new-label-form">
-                                <input @bind="_newLabelName" placeholder="@L["LabelNamePlaceholder"]" />
-                                <input type="color" @bind="_newLabelColor" />
-                                <button class="save-btn icon-btn" @onclick="CreateLabel">&#10003;</button>
-                                <button class="cancel-icon-btn icon-btn" @onclick="() => _showNewLabelForm = false">&#10005;</button>
-                            </div>
-                        }
-                        else
-                        {
-                            <button class="label-add-btn" @onclick="() => _showNewLabelForm = true">+ Label</button>
-                        }
-                    </div>
-
-                    <label class="field-label">@L["AssignTo"]</label>
-                    <div class="assignee-picker-wrapper">
-                        <select class="assignee-select" @bind="_newTicketAssignedTo">
-                            <option value="">@L["Unassigned"]</option>
-                            @foreach (var member in _allMembers)
-                            {
-                                <option value="@member.Slug">@member.Name (@member.Slug)</option>
-                            }
-                        </select>
-                    </div>
-                </div>
-                <div class="create-popup-footer">
-                    <button class="cancel-btn" @onclick="CloseCreatePopup">@L["Cancel"]</button>
-                    <button @onclick="CreateTicket" disabled="@string.IsNullOrWhiteSpace(_newTicketTitle)">@L["CreateTicket"]</button>
-                </div>
-            </div>
-        </div>
+        <BoardCreateTicketDialog
+            Slug="@Slug"
+            Columns="_columns"
+            SubKanbanParentId="_subKanbanParentId"
+            SelectedPipelineId="_selectedPipelineId"
+            AllMembers="_allMembers"
+            OnCreated="OnTicketDialogCreated"
+            OnClosed="CloseCreatePopup" />
     }
 
     @if (_openTicketId is int openTicketId)
@@ -610,15 +454,6 @@ else
 }
 
 @code {
-    private string CostTooltip(TicketSummary ticket)
-    {
-        var value = ticket.AgentCostUsd > 0
-            ? $" · {(ticket.AgentCostEstimated ? "≈ " : "")}{KittyClaw.Web.Services.TokenDisplay.Usd(ticket.AgentCostUsd)}"
-            : "";
-        var note = ticket.AgentCostEstimated ? $" · {L["EstimatedCostTooltip"]}" : "";
-        return $"{ticket.AgentTokens:N0} tokens{value}{note}";
-    }
-
     [Parameter] public string Slug { get; set; } = "";
     [Parameter] public int? TicketId { get; set; }
     [Parameter] public int? ParentId { get; set; }
@@ -651,14 +486,6 @@ else
 
     // Create popup
     private bool _showCreatePopup = false;
-    private string _newTicketTitle = "";
-    private string _newTicketDescription = "";
-    private List<int> _newTicketLabelIds = [];
-    private TicketPriority _newTicketPriority = TicketPriority.NiceToHave;
-    private List<Label> _allLabels = [];
-    private bool _showNewLabelForm = false;
-    private string _newLabelName = "";
-    private string _newLabelColor = "#6366f1";
 
     // Column management
     private string _deleteColumnMoveTo = "";
@@ -678,7 +505,6 @@ else
 
     // Members
     private List<Member> _allMembers = [];
-    private string _newTicketAssignedTo = "";
 
     // Sub-ticket / sub-kanban
     private int? _subKanbanParentId = null;
@@ -847,26 +673,6 @@ else
         StateHasChanged();
     }
 
-    private ElementReference _createTicketDescTextarea;
-
-    // Filter bar
-    private string _filterText
-    {
-        get => FilterState.FilterText;
-        set
-        {
-            if (FilterState.FilterText != value)
-            {
-                FilterState.FilterText = value;
-                ResetLoadedColumns();
-            }
-        }
-    }
-    private bool _filterHintVisible = false;
-
-    private void OnFilterBlur() => _filterHintVisible = false;
-
-
     private string? _activeRunDrawerId;
     private async Task ToggleProjectPause()
     {
@@ -921,7 +727,6 @@ else
             await LoadSelectedPipelineColumnsAsync();
             ResetLoadedColumns();
             _tickets = await TicketService.ListTicketsAsync(Slug);
-            _allLabels = await LabelService.ListLabelsAsync(Slug);
             _allMembers = await MemberService.ListMembersAsync(Slug);
 
             // A legacy board deserves an explicit migration path, but opening a deep-linked
@@ -961,7 +766,6 @@ else
             await LoadSelectedPipelineColumnsAsync();
             ResetLoadedColumns();
             _tickets = await TicketService.ListTicketsAsync(Slug);
-            _allLabels = await LabelService.ListLabelsAsync(Slug);
             _allMembers = await MemberService.ListMembersAsync(Slug);
             StateHasChanged();
         });
@@ -974,7 +778,6 @@ else
         if (_undoHandler is not null)
             _ = JS.InvokeVoidAsync("unregisterUndoShortcut", _undoHandler);
         _dotNetRef?.Dispose();
-        _escCreatePopup?.Dispose();
         _escRunDrawer?.Dispose();
         _escChatDrawer?.Dispose();
         _escTrashDialog?.Dispose();
@@ -1063,15 +866,6 @@ else
             _restoreScrollAfterRender = false;
             await TryInvokeBoardJsAsync("restoreColumnScrollPositions");
         }
-        // Wire up image paste on the create-ticket description textarea every time
-        // the popup is shown. The JS handler guards against double-attaching, and the
-        // textarea element is recreated by the @if block when the popup reopens, so a
-        // fresh attach per show is the right semantics.
-        if (_showCreatePopup)
-        {
-            try { await JS.InvokeVoidAsync("attachImagePaste", _createTicketDescTextarea, "/api/images"); }
-            catch { /* element may not be in DOM yet on the very first frame */ }
-        }
     }
 
 
@@ -1080,8 +874,8 @@ else
         // Main board: top-level tickets. Sub-kanban: only children of its parent.
         IEnumerable<TicketSummary> tickets = TicketsInColumnContext(status);
 
-        if (!string.IsNullOrWhiteSpace(_filterText))
-            tickets = ApplyFilter(tickets);
+        if (!string.IsNullOrWhiteSpace(FilterState.FilterText))
+            tickets = BoardTicketFilter.Apply(tickets, FilterState.FilterText, GetPriorityLabel);
 
         var sort = SortState.Get(Slug, status);
         if (sort.Mode != KittyClaw.Web.Services.ColumnSortMode.Manual)
@@ -1309,65 +1103,6 @@ else
         catch { /* ignore */ }
     }
 
-    private IEnumerable<TicketSummary> ApplyFilter(IEnumerable<TicketSummary> tickets)
-    {
-        var tokens = _filterText.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        foreach (var token in tokens)
-        {
-            // #N — ticket by number
-            if (token.StartsWith('#') && int.TryParse(token[1..], out var id))
-            {
-                tickets = tickets.Where(t => t.Id == id);
-                continue;
-            }
-            // @slug — assigned to
-            if (token.StartsWith('@'))
-            {
-                var slug = token[1..];
-                tickets = tickets.Where(t => t.AssignedTo != null && t.AssignedTo.Contains(slug, StringComparison.OrdinalIgnoreCase));
-                continue;
-            }
-            // >date — updated after
-            if (token.StartsWith('>') && DateTime.TryParse(token[1..], out var after))
-            {
-                tickets = tickets.Where(t => t.UpdatedAt >= after);
-                continue;
-            }
-            // <date — updated before
-            if (token.StartsWith('<') && DateTime.TryParse(token[1..], out var before))
-            {
-                tickets = tickets.Where(t => t.UpdatedAt <= before);
-                continue;
-            }
-            // priority:xxx
-            if (token.StartsWith("priority:", StringComparison.OrdinalIgnoreCase))
-            {
-                var pVal = token[9..];
-                tickets = tickets.Where(t => GetPriorityLabel(t.Priority).Contains(pVal, StringComparison.OrdinalIgnoreCase)
-                    || GetPriorityClass(t.Priority).Contains(pVal, StringComparison.OrdinalIgnoreCase));
-                continue;
-            }
-            // label:xxx
-            if (token.StartsWith("label:", StringComparison.OrdinalIgnoreCase))
-            {
-                var lVal = token[6..];
-                tickets = tickets.Where(t => t.Labels.Any(l => l.Name.Contains(lVal, StringComparison.OrdinalIgnoreCase)));
-                continue;
-            }
-            // by:xxx — created by
-            if (token.StartsWith("by:", StringComparison.OrdinalIgnoreCase))
-            {
-                var byVal = token[3..];
-                tickets = tickets.Where(t => t.CreatedBy.Contains(byVal, StringComparison.OrdinalIgnoreCase));
-                continue;
-            }
-            // Free text — search in title, description & comments
-            tickets = tickets.Where(t => t.Title.Contains(token, StringComparison.OrdinalIgnoreCase)
-                || t.Description.Contains(token, StringComparison.OrdinalIgnoreCase));
-        }
-        return tickets;
-    }
-
     private string GetPriorityLabel(TicketPriority p) => p switch
     {
         TicketPriority.Idea => L["PriorityIdea"],
@@ -1375,15 +1110,6 @@ else
         TicketPriority.Required => L["PriorityRequired"],
         TicketPriority.Critical => L["PriorityCritical"],
         _ => p.ToString()
-    };
-
-    private static string GetPriorityClass(TicketPriority p) => p switch
-    {
-        TicketPriority.Idea => "idea",
-        TicketPriority.NiceToHave => "nice",
-        TicketPriority.Required => "required",
-        TicketPriority.Critical => "critical",
-        _ => "nice"
     };
 
     private void OnDragStart(TicketSummary ticket) => _draggedTicket = ticket;
@@ -1611,58 +1337,21 @@ else
     }
 
     // Escape key handler tokens for popups
-    private IDisposable? _escCreatePopup;
     private IDisposable? _escRunDrawer;
     private IDisposable? _escChatDrawer;
     private IDisposable? _escTrashDialog;
 
     // Create popup
-    private void OpenCreatePopup()
-    {
-        _newTicketTitle = "";
-        _newTicketDescription = "";
-        _newTicketLabelIds = [];
-        _newTicketPriority = TicketPriority.NiceToHave;
-        _newTicketAssignedTo = "";
-        _showNewLabelForm = false;
-        _showCreatePopup = true;
-        _escCreatePopup?.Dispose();
-        _escCreatePopup = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseCreatePopup(); StateHasChanged(); }));
-    }
+    private void OpenCreatePopup() => _showCreatePopup = true;
 
-    private void CloseCreatePopup()
+    private void CloseCreatePopup() => _showCreatePopup = false;
+
+    private async Task OnTicketDialogCreated(Ticket? ticket)
     {
         _showCreatePopup = false;
-        _escCreatePopup?.Dispose();
-        _escCreatePopup = null;
-    }
-
-    private void ToggleLabel(int id)
-    {
-        if (_newTicketLabelIds.Contains(id)) _newTicketLabelIds.Remove(id);
-        else _newTicketLabelIds.Add(id);
-    }
-
-    private async Task CreateLabel()
-    {
-        if (string.IsNullOrWhiteSpace(_newLabelName)) return;
-        var label = await LabelService.CreateLabelAsync(Slug, _newLabelName.Trim(), _newLabelColor);
-        _allLabels = await LabelService.ListLabelsAsync(Slug);
-        _newTicketLabelIds.Add(label.Id);
-        _newLabelName = "";
-        _newLabelColor = "#6366f1";
-        _showNewLabelForm = false;
-    }
-
-    private async Task CreateTicket()
-    {
-        if (string.IsNullOrWhiteSpace(_newTicketTitle) || _columns.Count == 0) return;
-        var status = _columns[0].Name;
-        var ticket = await TicketService.CreateTicketAsync(Slug, _newTicketTitle.Trim(), _newTicketDescription.Trim(), status: status, labelIds: _newTicketLabelIds, priority: _newTicketPriority, assignedTo: string.IsNullOrEmpty(_newTicketAssignedTo) ? null : _newTicketAssignedTo, parentId: _subKanbanParentId, pipelineId: _selectedPipelineId, columnId: _columns[0].Id);
         if (ticket is not null)
             PushUndo($"{L["UndoCreate"]} #{ticket.Id}", async () =>
                 await TicketService.DeleteTicketAsync(Slug, ticket.Id));
-        _showCreatePopup = false;
         await RefreshTicketsAsync();
         if (ticket is not null)
             await MarkTicketViewedAsync(ticket.Id);
