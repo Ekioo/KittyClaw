@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using KittyClaw.Core.Data;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 
 namespace KittyClaw.Core.Services;
 
@@ -13,6 +14,7 @@ public record DashboardTileLayout(string Slug, int X = 0, int Y = 0, int Width =
 public class DashboardService
 {
     private readonly ProjectService _projectService;
+    private readonly ILogger<DashboardService> _logger;
     private static readonly JsonSerializerOptions _json = new() { PropertyNameCaseInsensitive = true };
 
     // Convention-based filenames inside each tile folder.
@@ -23,9 +25,10 @@ public class DashboardService
     private static readonly HashSet<string> ScriptExtensions =
         new(StringComparer.OrdinalIgnoreCase) { ".ps1", ".sh", ".js", ".py" };
 
-    public DashboardService(ProjectService projectService)
+    public DashboardService(ProjectService projectService, ILogger<DashboardService>? logger = null)
     {
         _projectService = projectService;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<DashboardService>.Instance;
     }
 
     // -- Layout (per-project SQLite) ---------------------------------------------
@@ -59,7 +62,11 @@ public class DashboardService
         var result = await cmd.ExecuteScalarAsync();
         if (result is null) return [];
         try { return JsonSerializer.Deserialize<List<DashboardTileLayout>>(result.ToString()!, _json) ?? []; }
-        catch { return []; }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to deserialize LayoutJson for project {Slug}; returning empty layout", slug);
+            return [];
+        }
     }
 
     // Disk-driven: a tile is visible as soon as its .dashboard/<slug>/ folder exists, no
@@ -365,6 +372,7 @@ public class DashboardService
             catch (Exception ex)
             {
                 log?.Invoke($"[migrate] WARNING: {Path.GetFileName(sidecarPath)}: {ex.Message}");
+                _logger.LogWarning(ex, "Failed to migrate tile {Sidecar} for project {Slug}", Path.GetFileName(sidecarPath), projectSlug);
             }
         }
 
@@ -388,7 +396,10 @@ public class DashboardService
             var current = JsonSerializer.Deserialize<List<DashboardTileLayout>>(raw, _json) ?? [];
             if (current.Any(t => !string.IsNullOrWhiteSpace(t.Slug))) return;
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "LayoutJson for project {Slug} is not in current format; attempting legacy migration", projectSlug);
+        }
 
         try
         {
@@ -403,7 +414,10 @@ public class DashboardService
                 .ToList();
             await SaveTilesAsync(projectSlug, migrated);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to migrate legacy layout for project {Slug}; layout will remain as-is", projectSlug);
+        }
     }
 
     private record LegacyTileLayout(string FileName = "", int X = 0, int Y = 0, int Width = 300, int Height = 200);

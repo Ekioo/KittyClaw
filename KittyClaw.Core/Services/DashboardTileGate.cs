@@ -1,4 +1,5 @@
 ﻿using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 
 namespace KittyClaw.Core.Services;
 
@@ -15,6 +16,7 @@ public sealed class DashboardTileGate : IDisposable
     public event Action? StateChanged;
 
     private readonly string _registryDbPath;
+    private readonly ILogger<DashboardTileGate> _logger;
     private readonly SemaphoreSlim _sem = new(1, 1);
     private readonly object _lock = new();
 
@@ -23,9 +25,10 @@ public sealed class DashboardTileGate : IDisposable
 
     private record QueueEntry(string Slug, string TileSlug, bool Manual, TaskCompletionSource<bool> Tcs);
 
-    public DashboardTileGate(ProjectService projectService)
+    public DashboardTileGate(ProjectService projectService, ILogger<DashboardTileGate>? logger = null)
     {
         _registryDbPath = Path.Combine(projectService.DataDir, "registry.db");
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<DashboardTileGate>.Instance;
     }
 
     // -- Public API ---------------------------------------------------------------
@@ -179,7 +182,10 @@ public sealed class DashboardTileGate : IDisposable
                     result[$"{slug}:{tileSlug}"] = dt;
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load LastFinishedAt from {DbPath}; scheduling will use default order", _registryDbPath);
+        }
         return result;
     }
 
@@ -201,7 +207,10 @@ public sealed class DashboardTileGate : IDisposable
             cmd.Parameters.AddWithValue("@ts", DateTime.UtcNow.ToString("O"));
             await cmd.ExecuteNonQueryAsync();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to persist LastFinishedAt for {Slug}/{TileSlug}", slug, tileSlug);
+        }
     }
 
     private static void EnsureTable(SqliteConnection conn)
