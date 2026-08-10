@@ -1,4 +1,7 @@
+using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using KittyClaw.Core.Automation;
 using KittyClaw.Core.Data;
 using KittyClaw.Core.Models;
 
@@ -10,6 +13,9 @@ public class TicketService
     private readonly MemberService _memberService;
     private readonly ColumnProcessorService? _columnProcessors;
     private readonly SemaphoreSlim _scheduledPromotionLock = new(1, 1);
+    private readonly AutomationStore? _automationStore;
+    private readonly ILogger<TicketService>? _logger;
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _creationGates = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Raised after a ticket's status has been persisted.
@@ -30,11 +36,15 @@ public class TicketService
     public TicketService(
         ProjectService projectService,
         MemberService memberService,
-        ColumnProcessorService? columnProcessors = null)
+        ColumnProcessorService? columnProcessors = null,
+        AutomationStore? automationStore = null,
+        ILogger<TicketService>? logger = null)
     {
         _projectService = projectService;
         _memberService = memberService;
         _columnProcessors = columnProcessors;
+        _automationStore = automationStore;
+        _logger = logger;
     }
 
     /// <summary>
@@ -304,10 +314,18 @@ public class TicketService
         string status = "Backlog", List<int>? labelIds = null,
         TicketPriority priority = TicketPriority.NiceToHave, string? assignedTo = null,
         int? parentId = null, int? pipelineId = null, int? columnId = null,
-        bool blocksParent = true)
+        bool blocksParent = true, bool recoveryOverride = false, string? overrideReason = null)
     {
         if (string.IsNullOrWhiteSpace(createdBy))
             throw new InvalidOperationException("Le champ 'createdBy' est requis.");
+        if (recoveryOverride && (!string.Equals(createdBy, "owner", StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(overrideReason)))
+            throw new InvalidOperationException("A recovery override requires createdBy 'owner' and a non-empty reason.");
+
+        var creationGate = _creationGates.GetOrAdd(projectSlug, _ => new SemaphoreSlim(1, 1));
+        await creationGate.WaitAsync();
+        try
+        {
         if (!string.IsNullOrEmpty(assignedTo) && !await _memberService.MemberExistsAsync(projectSlug, assignedTo))
             throw new InvalidOperationException($"Le membre '{assignedTo}' n'existe pas.");
         await using var db = _projectService.GetProjectDb(projectSlug);
@@ -320,6 +338,23 @@ public class TicketService
         var column = await RequireColumnAsync(db, status, pipelineId, columnId);
         status = column.Name;
         pipelineId = column.PipelineId;
+        var blockedLimit = _automationStore is null
+            ? 7
+            : (await _automationStore.LoadAsync(projectSlug)).Config.BlockedTicketLimit ?? 7;
+        var blockedColumnIds = await db.BoardColumns
+            .Where(c => c.Role == ColumnRole.Blocked || c.Name == "Blocked")
+            .Select(c => c.Id)
+            .ToListAsync();
+        var blockedCount = blockedLimit > 0 && blockedColumnIds.Count > 0
+            ? await db.Tickets.CountAsync(t => t.ColumnId != null && blockedColumnIds.Contains(t.ColumnId.Value))
+            : 0;
+        if (blockedLimit > 0 && blockedCount >= blockedLimit && !recoveryOverride)
+        {
+            _logger?.LogWarning(
+                "Ticket creation refused for project {ProjectSlug}: {BlockedCount} blocked tickets reached limit {BlockedLimit}",
+                projectSlug, blockedCount, blockedLimit);
+            throw new TicketCreationSaturationException(projectSlug, blockedCount, blockedLimit, blockedColumnIds);
+        }
         if (parentId is not null)
         {
             var parentExists = await db.Tickets.AnyAsync(t => t.Id == parentId.Value);
@@ -359,10 +394,27 @@ public class TicketService
             Author = createdBy,
             Text = "a créé le ticket"
         });
+        if (recoveryOverride)
+        {
+            db.ActivityEntries.Add(new ActivityEntry
+            {
+                TicketId = ticket.Id,
+                Author = createdBy,
+                Text = $"used recovery saturation override: {overrideReason!.Trim()}"
+            });
+            _logger?.LogWarning(
+                "Recovery saturation override used for project {ProjectSlug} by {Author}: {Reason}",
+                projectSlug, createdBy, overrideReason.Trim());
+        }
         await db.SaveChangesAsync();
         await tx.CommitAsync();
         TicketCreated?.Invoke(projectSlug, ticket.Id);
         return ticket;
+        }
+        finally
+        {
+            creationGate.Release();
+        }
     }
 
     // Delegates to UpdateTicketAsync so there is exactly ONE write path for status

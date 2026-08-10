@@ -8,6 +8,8 @@ public sealed class AutomationConfig
     public List<Automation> Automations { get; set; } = new();
     public decimal? DailyBudgetUsd { get; set; }
     public int? MinDescriptionLength { get; set; }
+    /// <summary>Maximum live tickets in Blocked columns before ordinary creation is refused. Defaults to 7; zero disables the guard.</summary>
+    public int? BlockedTicketLimit { get; set; }
 
     /// <summary>Round-trips fields not modeled here (agents may annotate automations.json with
     /// custom keys); without this they would be silently dropped on save (ticket #115).</summary>

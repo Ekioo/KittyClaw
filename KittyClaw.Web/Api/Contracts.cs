@@ -29,7 +29,9 @@ public record CreateTicketRequest(
     string Title, string CreatedBy, string Status, string Description = "",
     List<int>? LabelIds = null, TicketPriority Priority = TicketPriority.NiceToHave,
     string? AssignedTo = null, int? ParentId = null, int? PipelineId = null,
-    int? ColumnId = null, bool BlocksParent = true);
+    int? ColumnId = null, bool BlocksParent = true,
+    TicketCreationOverride? SaturationOverride = null);
+public record TicketCreationOverride(string Kind, string Reason);
 // The root PATCH applies every provided field — Status included — in ONE atomic write,
 // through the same semantics as the dedicated /status endpoint (column validation,
 // Scheduled cleanup, activity, engine signal after commit). This is the hand-off

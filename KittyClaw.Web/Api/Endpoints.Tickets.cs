@@ -17,12 +17,28 @@ public static partial class Endpoints
         {
             try
             {
+                if (req.SaturationOverride is not null
+                    && !string.Equals(req.SaturationOverride.Kind, "recovery", StringComparison.OrdinalIgnoreCase))
+                    return Results.BadRequest(new { error = "Unsupported saturation override kind.", code = "invalid_saturation_override" });
                 var ticket = await ts.CreateTicketAsync(
                     slug, req.Title, req.Description, req.CreatedBy, req.Status,
                     req.LabelIds, req.Priority, req.AssignedTo, req.ParentId,
-                    req.PipelineId, req.ColumnId, req.BlocksParent);
+                    req.PipelineId, req.ColumnId, req.BlocksParent,
+                    req.SaturationOverride is not null, req.SaturationOverride?.Reason);
                 notifier.NotifyProjectUpdated(slug);
                 return Results.Created($"/api/projects/{slug}/tickets/{ticket.Id}", ticket);
+            }
+            catch (TicketCreationSaturationException ex)
+            {
+                return Results.Conflict(new
+                {
+                    error = ex.Message,
+                    code = TicketCreationSaturationException.ErrorCode,
+                    blockedCount = ex.BlockedCount,
+                    blockedLimit = ex.BlockedLimit,
+                    blockedColumnIds = ex.BlockedColumnIds,
+                    overrideKind = "recovery"
+                });
             }
             catch (InvalidOperationException ex)
             {
@@ -30,6 +46,7 @@ public static partial class Endpoints
             }
         }).WithTags("Tickets")
         .Produces<Ticket>(StatusCodes.Status201Created)
+        .ProducesProblem(StatusCodes.Status409Conflict)
         .ProducesProblem(StatusCodes.Status400BadRequest);
 
         api.MapPatch("/projects/{slug}/tickets/{id:int}", async (string slug, int id, UpdateTicketRequest req, TicketService ts, BoardUpdateNotifier notifier) =>

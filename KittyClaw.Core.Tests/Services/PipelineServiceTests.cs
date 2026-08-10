@@ -26,6 +26,7 @@ public sealed class PipelineServiceTests : IDisposable
         Assert.Equal(2, (int)ColumnRole.Success);
         Assert.Equal(3, (int)ColumnRole.Failure);
         Assert.Equal(4, (int)ColumnRole.OwnerAction);
+        Assert.Equal(5, (int)ColumnRole.Blocked);
     }
 
     [Fact]
@@ -40,7 +41,7 @@ public sealed class PipelineServiceTests : IDisposable
         Assert.True(pipeline.IsDefault);
         Assert.Equal(PipelineService.DefaultPipelineSlug, pipeline.Slug);
         Assert.All(columns, column => Assert.Equal(pipeline.Id, column.PipelineId));
-        Assert.Equal(ColumnRole.Waiting, columns.Single(c => c.Name == "Blocked").Role);
+        Assert.Equal(ColumnRole.Blocked, columns.Single(c => c.Name == "Blocked").Role);
         Assert.Equal(ColumnRole.Success, columns.Single(c => c.Name == "Done").Role);
     }
 

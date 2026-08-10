@@ -23,7 +23,7 @@ public class ColumnService
         ("Backlog",      "#5a6a80", ColumnRole.Normal),
         ("Todo",         "#4a9eff", ColumnRole.Normal),
         ("InProgress",   "#f59e42", ColumnRole.Normal),
-        ("Blocked",      "#f06b6b", ColumnRole.Waiting),
+        ("Blocked",      "#f06b6b", ColumnRole.Blocked),
         ("Scheduled",    "#eab308", ColumnRole.Waiting),
         ("Review",       "#a78bfa", ColumnRole.Normal),
         ("Done",         "#3ecf8e", ColumnRole.Success),

@@ -23,4 +23,6 @@ public enum ColumnRole
     Failure = 3,
     /// <summary>A human decision or intervention is required before the ticket can continue.</summary>
     OwnerAction = 4,
+    /// <summary>Work that cannot progress without an external dependency or intervention.</summary>
+    Blocked = 5,
 }

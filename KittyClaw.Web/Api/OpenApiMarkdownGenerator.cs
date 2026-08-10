@@ -297,6 +297,7 @@ public static class OpenApiMarkdownGenerator
         sb.AppendLine("{");
         sb.AppendLine("  \"dailyBudgetUsd\": 70,");
         sb.AppendLine("  \"minDescriptionLength\": 50,");
+        sb.AppendLine("  \"blockedTicketLimit\": 7,");
         sb.AppendLine("  \"automations\": [");
         sb.AppendLine("    {");
         sb.AppendLine("      \"id\": \"unique-id\",");
@@ -317,6 +318,11 @@ public static class OpenApiMarkdownGenerator
         sb.AppendLine("| `automations` | array | List of automations |");
         sb.AppendLine("| `dailyBudgetUsd` | number | Daily budget cap (blocks non-CEO dispatches beyond this) |");
         sb.AppendLine("| `minDescriptionLength` | integer | Minimum description length required to allow dispatch |");
+        sb.AppendLine("| `blockedTicketLimit` | integer | Refuses ordinary ticket creation when this many live tickets are in Blocked-role columns (default 7; 0 disables) |");
+        sb.AppendLine();
+        sb.AppendLine("`blockedTicketLimit` is enforced centrally for API, UI, and automation-created tickets. Columns with the semantic `Blocked` role count across every pipeline; legacy columns named exactly `Blocked` also count for compatibility. Other `Waiting` columns (including `Scheduled`) do not count. At saturation, `POST /tickets` returns HTTP 409 with code `blocked_ticket_limit_reached`, the count, limit, and matching column IDs, before writing a ticket or activity.");
+        sb.AppendLine();
+        sb.AppendLine("Recovery work may use the explicit request field `saturationOverride: { \"kind\": \"recovery\", \"reason\": \"...\" }`. It is accepted only with `createdBy: \"owner\"` and a non-empty reason, and the created ticket receives a dedicated audit activity. This override is for work that reduces or clears saturation, not ordinary portfolio expansion.");
         sb.AppendLine();
         sb.AppendLine("**Automation fields:**");
         sb.AppendLine();

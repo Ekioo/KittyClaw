@@ -58,6 +58,7 @@ public sealed partial class PipelineService
                     ORDER BY c.Id LIMIT 1
                 ) WHERE ColumnId IS NULL;
                 UPDATE BoardColumns SET Role = 1 WHERE Role = 0 AND Name IN ('Blocked', 'Scheduled');
+                UPDATE BoardColumns SET Role = 5 WHERE Name = 'Blocked' AND Role IN (0, 1);
                 UPDATE BoardColumns SET Role = 2 WHERE Role = 0 AND Name IN ('Done', 'Published', 'Delivered');
                 UPDATE BoardColumns SET Role = 3 WHERE Role = 0 AND Name IN ('Rejected', 'Cancelled', 'Abandoned');
                 DROP INDEX IF EXISTS IX_BoardColumns_Name;
@@ -69,6 +70,12 @@ public sealed partial class PipelineService
                 CREATE INDEX IF NOT EXISTS IX_Tickets_PipelineId_ColumnId
                     ON Tickets(PipelineId, ColumnId);
                 """);
+        });
+
+        await MigrationGate.RunOnceAsync(db, "blocked-column-role-v1", static async d =>
+        {
+            await d.Database.ExecuteSqlRawAsync(
+                "UPDATE BoardColumns SET Role = 5 WHERE Name = 'Blocked' AND Role IN (0, 1)");
         });
 
         return await db.Pipelines.AsNoTracking().SingleAsync(p => p.IsDefault);
