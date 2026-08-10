@@ -191,8 +191,8 @@ public sealed class WorkflowMigrationPromptTests
         Assert.Contains("Do not leave any legacy automation definition, enabled or disabled", prompt);
         Assert.Contains("fail the migration instead of silently preserving it", prompt);
         Assert.Contains("Map every existing ticket and child ticket to exactly one pipeline", prompt);
-        Assert.Contains("already in a Success column is completed historical work", prompt);
-        Assert.Contains("must remain in a Success-role column", prompt);
+        Assert.Contains("already in a Success or Failure column is completed historical work", prompt);
+        Assert.Contains("must remain in a terminal (Success or Failure) column", prompt);
         Assert.Contains("Never call any /workflow-migrations/analyze", prompt);
         Assert.Contains("Apply the plan directly through the granular pipeline", prompt);
     }
@@ -243,6 +243,139 @@ public sealed class WorkflowMigrationPromptTests
             PipelineId = pipelineId,
             ColumnId = columnId,
         };
+
+    [Fact]
+    public void Completed_ticket_snapshot_captures_failure_tickets_by_column_id()
+    {
+        var columns = new[]
+        {
+            new BoardColumn { Id = 10, PipelineId = 1, Name = "Done", Color = "#0f0", Role = ColumnRole.Success },
+            new BoardColumn { Id = 11, PipelineId = 1, Name = "Abandoned", Color = "#f00", Role = ColumnRole.Failure },
+            new BoardColumn { Id = 12, PipelineId = 1, Name = "In Progress", Color = "#999", Role = ColumnRole.Normal },
+        };
+        var tickets = new[]
+        {
+            Ticket(1, "Done", 1, 10),
+            Ticket(2, "Abandoned", 1, 11),
+            Ticket(3, "In Progress", 1, 12),
+        };
+
+        var completed = WorkflowMigrationPlanner.CaptureCompletedTickets(columns, tickets);
+
+        Assert.Equal([1, 2], completed.Select(t => t.TicketId));
+        Assert.Equal(ColumnRole.Success, completed.Single(t => t.TicketId == 1).OriginalRole);
+        Assert.Equal(ColumnRole.Failure, completed.Single(t => t.TicketId == 2).OriginalRole);
+    }
+
+    [Fact]
+    public void Completed_ticket_snapshot_captures_failure_tickets_via_legacy_name_fallback()
+    {
+        var columns = new[]
+        {
+            new BoardColumn { Id = 10, PipelineId = 1, Name = "Abandonné ou échec", Color = "#f00", Role = ColumnRole.Failure },
+            new BoardColumn { Id = 11, PipelineId = 1, Name = "Validation éditoriale", Color = "#fa0", Role = ColumnRole.OwnerAction },
+        };
+        var tickets = new[]
+        {
+            Ticket(99, "Abandonné ou échec", 1, null),
+            Ticket(100, "Validation éditoriale", 1, null),
+        };
+
+        var completed = WorkflowMigrationPlanner.CaptureCompletedTickets(columns, tickets);
+
+        Assert.Equal([99], completed.Select(t => t.TicketId));
+        Assert.Equal(ColumnRole.Failure, completed[0].OriginalRole);
+    }
+
+    [Fact]
+    public void Completed_ticket_snapshot_captures_localized_success_via_legacy_name_fallback()
+    {
+        var columns = new[]
+        {
+            new BoardColumn { Id = 10, PipelineId = 1, Name = "Publié et vérifié", Color = "#0f0", Role = ColumnRole.Success },
+        };
+        var tickets = new[]
+        {
+            Ticket(101, "Publié et vérifié", 1, null),
+        };
+
+        var completed = WorkflowMigrationPlanner.CaptureCompletedTickets(columns, tickets);
+
+        var snapshot = Assert.Single(completed);
+        Assert.Equal(101, snapshot.TicketId);
+        Assert.Equal(ColumnRole.Success, snapshot.OriginalRole);
+    }
+
+    [Fact]
+    public void Completed_ticket_snapshot_excludes_scheduled_waiting_ticket()
+    {
+        var columns = new[]
+        {
+            new BoardColumn { Id = 10, PipelineId = 1, Name = "Programmé", Color = "#fa0", Role = ColumnRole.Waiting },
+        };
+        var tickets = new[]
+        {
+            Ticket(102, "Programmé", 1, 10),
+        };
+
+        var completed = WorkflowMigrationPlanner.CaptureCompletedTickets(columns, tickets);
+
+        Assert.Empty(completed);
+    }
+
+    [Fact]
+    public void Completed_ticket_snapshot_excludes_authentic_owner_action_ticket()
+    {
+        var columns = new[]
+        {
+            new BoardColumn { Id = 10, PipelineId = 1, Name = "Validation éditoriale", Color = "#fa0", Role = ColumnRole.OwnerAction },
+        };
+        var tickets = new[]
+        {
+            Ticket(103, "Validation éditoriale", 1, 10),
+        };
+
+        var completed = WorkflowMigrationPlanner.CaptureCompletedTickets(columns, tickets);
+
+        Assert.Empty(completed);
+    }
+
+    [Fact]
+    public void Completion_guard_prefers_failure_column_for_failure_snapshot()
+    {
+        var snapshot = new WorkflowMigrationPlanner.CompletedTicketSnapshot(5, 1, "Abandoned", ColumnRole.Failure);
+        var migratedTicket = Ticket(5, "In Progress", 2, 30);
+        var columns = new[]
+        {
+            new BoardColumn { Id = 30, PipelineId = 2, Name = "In Progress", Color = "#999", Role = ColumnRole.Normal },
+            new BoardColumn { Id = 31, PipelineId = 2, Name = "Done", Color = "#0f0", Role = ColumnRole.Success },
+            new BoardColumn { Id = 32, PipelineId = 2, Name = "Abandoned", Color = "#f00", Role = ColumnRole.Failure },
+        };
+
+        var destination = WorkflowMigrationPlanner.SelectCompletionDestination(snapshot, migratedTicket, columns);
+
+        Assert.NotNull(destination);
+        Assert.Equal(32, destination.Id);
+        Assert.Equal(ColumnRole.Failure, destination.Role);
+    }
+
+    [Fact]
+    public void Completion_guard_falls_back_to_success_when_no_failure_column_exists_after_migration()
+    {
+        var snapshot = new WorkflowMigrationPlanner.CompletedTicketSnapshot(5, 1, "Abandoned", ColumnRole.Failure);
+        var migratedTicket = Ticket(5, "In Progress", 2, 30);
+        var columns = new[]
+        {
+            new BoardColumn { Id = 30, PipelineId = 2, Name = "In Progress", Color = "#999", Role = ColumnRole.Normal },
+            new BoardColumn { Id = 31, PipelineId = 2, Name = "Done", Color = "#0f0", Role = ColumnRole.Success },
+        };
+
+        var destination = WorkflowMigrationPlanner.SelectCompletionDestination(snapshot, migratedTicket, columns);
+
+        Assert.NotNull(destination);
+        Assert.Equal(31, destination.Id);
+        Assert.Equal(ColumnRole.Success, destination.Role);
+    }
 
     [Fact]
     public void Completed_migration_rejects_even_disabled_legacy_definitions()

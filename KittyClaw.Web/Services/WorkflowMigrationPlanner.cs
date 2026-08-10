@@ -333,16 +333,30 @@ public sealed class WorkflowMigrationPlanner(
         IReadOnlyCollection<TicketSummary> ticketRows)
     {
         var byId = columnRows.ToDictionary(column => column.Id);
-        return ticketRows
-            .Where(ticket =>
-                ticket.ColumnId is int columnId
-                    ? byId.TryGetValue(columnId, out var column) && column.Role == ColumnRole.Success
-                    : columnRows.Any(column => column.Role == ColumnRole.Success
-                        && column.PipelineId == ticket.PipelineId
-                        && string.Equals(column.Name, ticket.Status, StringComparison.OrdinalIgnoreCase)))
-            .Select(ticket => new CompletedTicketSnapshot(ticket.Id, ticket.PipelineId, ticket.Status))
-            .ToList();
+        var result = new List<CompletedTicketSnapshot>();
+        foreach (var ticket in ticketRows)
+        {
+            ColumnRole? role = null;
+            if (ticket.ColumnId is int columnId)
+            {
+                if (byId.TryGetValue(columnId, out var column) && IsTerminalRole(column.Role))
+                    role = column.Role;
+            }
+            else
+            {
+                var match = columnRows.FirstOrDefault(column => IsTerminalRole(column.Role)
+                    && column.PipelineId == ticket.PipelineId
+                    && string.Equals(column.Name, ticket.Status, StringComparison.OrdinalIgnoreCase));
+                if (match is not null)
+                    role = match.Role;
+            }
+            if (role.HasValue)
+                result.Add(new CompletedTicketSnapshot(ticket.Id, ticket.PipelineId, ticket.Status, role.Value));
+        }
+        return result;
     }
+
+    private static bool IsTerminalRole(ColumnRole role) => role is ColumnRole.Success or ColumnRole.Failure;
 
     private async Task<int> PreserveCompletedTicketsAsync(string slug,
         IReadOnlyCollection<CompletedTicketSnapshot> completedTickets)
@@ -360,12 +374,12 @@ public sealed class WorkflowMigrationPlanner(
 
             if (ticket.ColumnId is int currentColumnId
                 && columnsById.TryGetValue(currentColumnId, out var currentColumn)
-                && currentColumn.Role == ColumnRole.Success)
+                && currentColumn.Role == snapshot.OriginalRole)
                 continue;
 
             var destination = SelectCompletionDestination(snapshot, ticket, currentColumns)
                 ?? throw new InvalidOperationException(
-                    $"Migration created no Success column in which completed ticket #{snapshot.TicketId} can remain completed.");
+                    $"Migration created no terminal column in which completed ticket #{snapshot.TicketId} can remain closed.");
 
             await tickets.UpdateTicketAsync(slug, snapshot.TicketId,
                 author: "KittyClaw",
@@ -380,23 +394,40 @@ public sealed class WorkflowMigrationPlanner(
     }
 
     internal static BoardColumn? SelectCompletionDestination(CompletedTicketSnapshot snapshot,
-        TicketSummary ticket, IReadOnlyCollection<BoardColumn> currentColumns) =>
-        currentColumns
-            .Where(column => column.Role == ColumnRole.Success && column.PipelineId == ticket.PipelineId)
+        TicketSummary ticket, IReadOnlyCollection<BoardColumn> currentColumns)
+    {
+        var preferredRole = snapshot.OriginalRole;
+        return currentColumns
+            .Where(column => column.Role == preferredRole && column.PipelineId == ticket.PipelineId)
             .OrderBy(column => column.SortOrder)
             .ThenBy(column => column.Id)
             .FirstOrDefault()
         ?? currentColumns
-            .Where(column => column.Role == ColumnRole.Success && column.PipelineId == snapshot.PipelineId)
+            .Where(column => column.Role == preferredRole && column.PipelineId == snapshot.PipelineId)
             .OrderBy(column => column.SortOrder)
             .ThenBy(column => column.Id)
             .FirstOrDefault()
         ?? currentColumns
-            .Where(column => column.Role == ColumnRole.Success)
+            .Where(column => column.Role == preferredRole)
             .OrderBy(column => column.PipelineId)
             .ThenBy(column => column.SortOrder)
             .ThenBy(column => column.Id)
-            .FirstOrDefault();
+            .FirstOrDefault()
+        // Failure tickets fall back to any Success column when no Failure column exists after migration.
+        ?? (preferredRole == ColumnRole.Failure
+            ? currentColumns
+                .Where(column => column.Role == ColumnRole.Success && column.PipelineId == ticket.PipelineId)
+                .OrderBy(column => column.SortOrder)
+                .ThenBy(column => column.Id)
+                .FirstOrDefault()
+              ?? currentColumns
+                .Where(column => column.Role == ColumnRole.Success)
+                .OrderBy(column => column.PipelineId)
+                .ThenBy(column => column.SortOrder)
+                .ThenBy(column => column.Id)
+                .FirstOrDefault()
+            : null);
+    }
 
     private async Task<string> BuildAnalysisPromptAsync(string slug, string language)
     {
@@ -592,7 +623,7 @@ public sealed class WorkflowMigrationPlanner(
         Approved plan:
         {JsonSerializer.Serialize(plan, Json)}
 
-        Implement this plan completely using KittyClaw's API and the project's file-backed processor and skill configuration. Preserve stable identifiers whenever an existing pipeline, column, processor, or skill can be reused. Map every existing ticket and child ticket to exactly one pipeline by purpose. A ticket that is already in a Success column is completed historical work: it must remain in a Success-role column after migration and must never be routed back into an actionable, waiting, owner-action or failure stage. Configure processors, action chains, routing, retry/failure destinations, scheduled tasks and project skills needed by the approved flow. Use OwnerAction for every stage requiring a human decision or missing input, and save concrete userGuidance explaining the exact comment or destination-column action that unblocks each Waiting or OwnerAction stage. Do not create In Progress columns for agent execution.
+        Implement this plan completely using KittyClaw's API and the project's file-backed processor and skill configuration. Preserve stable identifiers whenever an existing pipeline, column, processor, or skill can be reused. Map every existing ticket and child ticket to exactly one pipeline by purpose. A ticket that is already in a Success or Failure column is completed historical work: it must remain in a terminal (Success or Failure) column after migration and must never be routed back into an actionable, waiting, or owner-action stage. Configure processors, action chains, routing, retry/failure destinations, scheduled tasks and project skills needed by the approved flow. Use OwnerAction for every stage requiring a human decision or missing input, and save concrete userGuidance explaining the exact comment or destination-column action that unblocks each Waiting or OwnerAction stage. Do not create In Progress columns for agent execution.
 
         You are already running inside the confirmed application job. Never call any /workflow-migrations/analyze, /workflow-migrations/refine, or /workflow-migrations/apply endpoint. Apply the plan directly through the granular pipeline, column, ticket, processor, skill, scheduled-task and automation APIs.
 
@@ -604,7 +635,7 @@ public sealed class WorkflowMigrationPlanner(
         public string Code { get; } = code;
     }
 
-    internal sealed record CompletedTicketSnapshot(int TicketId, int PipelineId, string Status);
+    internal sealed record CompletedTicketSnapshot(int TicketId, int PipelineId, string Status, ColumnRole OriginalRole = ColumnRole.Success);
 
     private const string PlannerInstructions = """
         You are KittyClaw's read-only workflow planning agent. Never modify files, databases,
