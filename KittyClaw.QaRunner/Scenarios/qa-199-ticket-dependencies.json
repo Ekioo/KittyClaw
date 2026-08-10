@@ -1,0 +1,54 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "qa-199-ticket-dependencies" },
+    {
+      "type": "createTicket",
+      "project": "qa-199-ticket-dependencies",
+      "title": "Blocker ticket",
+      "status": "Todo",
+      "extract": { "blockerId": "id" }
+    },
+    {
+      "type": "createTicket",
+      "project": "qa-199-ticket-dependencies",
+      "title": "Blocked ticket",
+      "status": "Todo",
+      "extract": { "blockedId": "id" }
+    },
+    {
+      "type": "createDependency",
+      "project": "qa-199-ticket-dependencies",
+      "value": "{blockedId}",
+      "target": "{blockerId}"
+    }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-199-ticket-dependencies" },
+    { "type": "wait", "ms": 750 },
+    { "type": "assertVisible", "selector": ".blocker-indicator" },
+    { "type": "assertCount", "selector": ".ticket-card", "expected": "2" },
+    { "type": "assertCount", "selector": ".blocker-indicator", "expected": "1" },
+    {
+      "type": "screenshot",
+      "name": "qa-199-blocked-card",
+      "description": "The blocked card shows its unresolved dependency indicator while the blocker card remains unmarked."
+    },
+    { "type": "navigate", "url": "/board/qa-199-ticket-dependencies/ticket/{blockedId}" },
+    { "type": "wait", "ms": 500 },
+    { "type": "assertVisible", "selector": ".dep-section .dep-link" },
+    { "type": "assertText", "selector": ".dep-section .dep-link", "expected": "#{blockerId} Blocker ticket" },
+    { "type": "fill", "selector": ".dep-add-input", "value": "{blockedId}" },
+    { "type": "click", "selector": ".dep-add-btn" },
+    { "type": "assertVisible", "selector": ".dep-error" },
+    {
+      "type": "screenshot",
+      "name": "qa-199-panel-and-error",
+      "description": "The ticket panel lists its blocker and surfaces the API self-reference validation error."
+    },
+    { "type": "navigate", "url": "/board/qa-199-ticket-dependencies/ticket/{blockerId}" },
+    { "type": "wait", "ms": 500 },
+    { "type": "assertVisible", "selector": ".dep-section .dep-link" },
+    { "type": "assertText", "selector": ".dep-section .dep-link", "expected": "#{blockedId} Blocked ticket" }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

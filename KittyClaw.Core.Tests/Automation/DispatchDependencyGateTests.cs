@@ -187,11 +187,25 @@ public sealed class DispatchDependencyGateTests
         // the dependency gate has already been evaluated (before the run starts).
         await executor.ExecuteAutomationAsync(rt, automation, firing, CancellationToken.None);
 
+        await AssertEventuallyAsync(
+            () => runs.AllForTicket(slug, blocked.Id).Any(),
+            TimeSpan.FromSeconds(5));
+
         var updated = await tickets.GetTicketAsync(slug, blocked.Id);
         var blockerComments = updated!.Comments
             .Where(c => c.Author == "automation" && c.Content.Contains("Dispatch blocked"))
             .ToList();
 
         Assert.Empty(blockerComments);
+        Assert.NotEmpty(runs.AllForTicket(slug, blocked.Id));
+    }
+
+    private static async Task AssertEventuallyAsync(Func<bool> assertion, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (!assertion() && DateTime.UtcNow < deadline)
+            await Task.Delay(25);
+
+        Assert.True(assertion(), "Expected dispatch run was not registered before the timeout.");
     }
 }

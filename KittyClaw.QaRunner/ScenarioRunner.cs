@@ -270,6 +270,21 @@ public sealed class ScenarioRunner
                     });
                     break;
                 }
+            case "assertCount":
+                {
+                    var selector = Required(Resolve(action.Selector), "assertCount.selector");
+                    var expected = int.Parse(Required(Resolve(action.Expected), "assertCount.expected"));
+                    var actual = await page.Locator(selector).CountAsync();
+                    result.Assertions.Add(new AssertionEntry
+                    {
+                        Selector = selector,
+                        Property = "count",
+                        Expected = expected.ToString(),
+                        Actual = actual.ToString(),
+                        Passed = actual == expected,
+                    });
+                    break;
+                }
             case "assertValue":
                 {
                     var selector = Required(Resolve(action.Selector), "assertValue.selector");

@@ -403,8 +403,17 @@ public class TicketService
         if (dep is null) return false;
 
         db.TicketDependencies.Remove(dep);
-        await db.SaveChangesAsync();
-        return true;
+        try
+        {
+            await db.SaveChangesAsync();
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Another request removed the same edge after this context loaded it.
+            // Preserve the endpoint's missing-edge contract instead of surfacing a 500.
+            return false;
+        }
     }
 
     /// <summary>

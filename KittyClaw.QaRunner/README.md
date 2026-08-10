@@ -182,6 +182,7 @@ These require Playwright (run inside `actions`, after setup).
 | `assertCss`    | `selector`, `property`, `expected`       | Reads `getComputedStyle(...).getPropertyValue(prop)`.                 |
 | `assertText`   | `selector`, `expected`                   | Reads `textContent`.                                                  |
 | `assertVisible`| `selector`                               | Asserts element is visible.                                           |
+| `assertCount`  | `selector`, `expected`                   | Asserts the exact number of matching elements.                        |
 | `assertValue`  | `selector`, `expected`                   | Asserts the current value of an input or select.                       |
 | `assertJson`   | `path`, `jsonPath`, `expected`           | GET `path`, extract `jsonPath` (dotted), assert equals `expected`.    |
 
