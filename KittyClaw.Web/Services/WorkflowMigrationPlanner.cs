@@ -3,6 +3,7 @@ using System.Text.Json;
 using KittyClaw.Core.Automation;
 using KittyClaw.Core.Models;
 using KittyClaw.Core.Services;
+using Microsoft.Extensions.Logging;
 
 namespace KittyClaw.Web.Services;
 
@@ -52,7 +53,8 @@ public sealed class WorkflowMigrationPlanner(
     TicketService tickets,
     AutomationStore automations,
     AgentRunner runner,
-    LocalizationService localization)
+    LocalizationService localization,
+    ILogger<WorkflowMigrationPlanner>? logger = null)
 {
     private readonly ConcurrentDictionary<string, WorkflowMigrationJob> _jobs = [];
     private readonly object _applicationSync = new();
@@ -111,7 +113,7 @@ public sealed class WorkflowMigrationPlanner(
             var workspace = projects.ResolveWorkspacePath(project);
             var prompt = currentPlan is null
                 ? mode == "onboarding"
-                    ? BuildWorkspaceAnalysisPrompt(workspace, brief, localization.Lang)
+                    ? BuildWorkspaceAnalysisPrompt(workspace, brief, localization.Lang, logger)
                     : await BuildAnalysisPromptAsync(slug, localization.Lang)
                 : BuildRefinementPrompt(currentPlan, instruction!, refinement!.Value, localization.Lang);
 
@@ -192,6 +194,8 @@ public sealed class WorkflowMigrationPlanner(
                 _ when ex.Message.Contains("structured plan", StringComparison.OrdinalIgnoreCase) => "invalid-plan",
                 _ => "analysis-failed",
             };
+            logger?.LogError(ex, "Workflow migration planning job {JobId} failed for project {ProjectSlug} (code: {ErrorCode})",
+                jobId, slug, code);
             _jobs[jobId] = _jobs[jobId] with
             {
                 Status = "failed",
@@ -301,6 +305,8 @@ public sealed class WorkflowMigrationPlanner(
         catch (Exception ex)
         {
             var code = ex is WorkflowMigrationPlanningException known ? known.Code : "application-failed";
+            logger?.LogError(ex, "Workflow migration application job {JobId} failed for project {ProjectSlug} (code: {ErrorCode})",
+                jobId, slug, code);
             _jobs[jobId] = _jobs[jobId] with
             {
                 Status = "failed",
@@ -536,7 +542,7 @@ public sealed class WorkflowMigrationPlanner(
         {JsonSerializer.Serialize(plan, Json)}
         """;
 
-    internal static string BuildWorkspaceAnalysisPrompt(string workspace, string? brief, string language)
+    internal static string BuildWorkspaceAnalysisPrompt(string workspace, string? brief, string language, ILogger? logger = null)
     {
         var ignored = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -561,12 +567,12 @@ public sealed class WorkflowMigrationPlanner(
                     || name.Equals("docker-compose.yml", StringComparison.OrdinalIgnoreCase))
                 {
                     try { manifests.Add(new { path = relative, content = Truncate(File.ReadAllText(path), 6_000) }); }
-                    catch { }
+                    catch (Exception ex) { logger?.LogDebug(ex, "Skipping manifest {Path} — file could not be read", relative); }
                 }
                 if (files.Count >= 1_500) break;
             }
         }
-        catch { }
+        catch (Exception ex) { logger?.LogWarning(ex, "Workspace file scan failed or incomplete for {Workspace}", workspace); }
 
         var snapshot = new
         {

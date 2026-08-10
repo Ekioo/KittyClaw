@@ -414,4 +414,47 @@ public sealed class WorkflowMigrationPromptTests
         Assert.Contains("if (AutoSendInitialMessage", source);
         Assert.Contains("_inputText = InitialMessage ?? \"\";", source);
     }
+
+    [Fact]
+    public void ParsePlan_throws_when_agent_response_contains_no_json()
+    {
+        var ex = Assert.ThrowsAny<InvalidOperationException>(
+            () => WorkflowMigrationPlanner.ParsePlan("I could not generate a migration plan."));
+        Assert.Contains("no structured plan", ex.Message);
+    }
+
+    [Fact]
+    public void ParsePlan_extracts_plan_from_response_with_surrounding_commentary()
+    {
+        var json = """{"summary":"two pipelines","pipelines":[{"name":"Dev","description":"dev","columns":[{"name":"Todo","role":"Normal","description":"open","userGuidance":""}]}],"risks":[]}""";
+        var plan = WorkflowMigrationPlanner.ParsePlan($"Here is your plan:\n{json}\nLet me know if changes are needed.");
+        Assert.Equal("two pipelines", plan.Summary);
+        Assert.Single(plan.Pipelines);
+    }
+
+    [Fact]
+    public void ParsePlan_strips_assistant_prefix_before_extracting_json()
+    {
+        var json = """{"summary":"onboarding","pipelines":[{"name":"Delivery","description":"d","columns":[{"name":"Todo","role":"Normal","description":"open","userGuidance":""}]}],"risks":[]}""";
+        var plan = WorkflowMigrationPlanner.ParsePlan($"[assistant] {json}");
+        Assert.Equal("onboarding", plan.Summary);
+    }
+
+    [Fact]
+    public void Workspace_analysis_prompt_does_not_throw_when_workspace_path_does_not_exist()
+    {
+        var prompt = WorkflowMigrationPlanner.BuildWorkspaceAnalysisPrompt(
+            Path.Combine(Path.GetTempPath(), "nonexistent-workspace-" + Guid.NewGuid().ToString("N")), null, "en");
+        Assert.Contains("fileCount", prompt);
+    }
+
+    [Fact]
+    public void Migration_failures_are_logged_not_swallowed()
+    {
+        var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Services", "WorkflowMigrationPlanner.cs"));
+        Assert.DoesNotContain("catch { }", source);
+        Assert.Contains("LogWarning", source);
+        Assert.Contains("LogError", source);
+        Assert.Contains("LogDebug", source);
+    }
 }
