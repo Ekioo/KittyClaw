@@ -19,6 +19,7 @@ For a high-level overview see the root [README.md](../README.md). For repo layou
 - [REST API](./rest-api.md) — OpenAPI-driven endpoints under `/api`, with auto-generated Markdown docs.
 - [Storage](./storage.md) — SQLite registry, per-project DBs, run logs, and workspace-side agent state.
 - [Kanban UI](./kanban-ui.md) — Blazor Server board, ticket panel, agent run drawer.
+- [Evidence decision briefs](./evidence-decision-briefs.md) — traceable run evidence, recovery guidance, and human accept/correct/stop decisions in owner-action columns.
 - [Ticket scheduling](./ticket-scheduling.md) — park tickets until a future time, then promote them into the workflow.
 - [Lossless ticket transfer](./ticket-transfer.md) — atomically move a complete ticket tree and its history between projects.
 - [Dashboard](./dashboard.md) — free-form tile view backed by `.dashboard/` Markdown files with drag-and-drop layout.

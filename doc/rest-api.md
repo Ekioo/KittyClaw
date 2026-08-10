@@ -15,6 +15,7 @@ Exposes the project, ticket, comment, member, label, column, and automation data
 - `/api/projects/{slug}/...` — projects, tickets, comments, columns, members, labels, mentions, automations.
 - `GET /api/projects/{slug}/chat/model?target={target}` — returns the model bound to an existing chat conversation. For legacy conversations with history but no stored binding, it returns the model from the last completed run; otherwise it returns `null`.
 - `POST /api/projects/{slug}/tickets/{id}/transfer` — atomically transfers a ticket tree to another project while preserving identifiers and history; see [Lossless ticket transfer](./ticket-transfer.md).
+- `GET /api/projects/{slug}/tickets/{id}/brief` — returns the canonical, provenance-preserving [evidence decision brief](./evidence-decision-briefs.md); returns `404` when the ticket does not exist or has no captured evidence.
 - `POST /api/projects/{slug}/chat/start` accepts an optional `images` array (`ChatImageDto[]`). Each DTO carries `dataUrl` (base64 data URL), `mime`, `name`, and `sizeBytes`. Server-side: MIME allow-list (JPEG, PNG, GIF, WebP), 5 MB per-image cap, 5 images per turn cap, base64 decoded and persisted to `<workspace>/.agents/channel/tmp/chat-{runId}-{i}.{ext}` before being forwarded as `ImagePaths` to `AgentRunContext`. Invalid images return HTTP 400 `image_rejected`.
 
 ## Conventions
