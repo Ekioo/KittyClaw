@@ -14,6 +14,7 @@ For a high-level overview see the root [README.md](../README.md). For repo layou
 - [Automation engine](./automation-engine.md) — triggers, conditions, and actions that dispatch agents.
 - [Pipeline and column processing](./column-workflows.md) — stable multi-pipeline workflows, generic column agents, routing, retries, project skills, and child-ticket completion.
 - [Agent dispatch](./agent-dispatch.md) — running the `claude` CLI as a subprocess and streaming its output.
+- [Temporary approvals](./temporary-approvals.md) — traceable, expiring approval requests that pause and resume provider runs at the process boundary.
 - [Project template](./project-template.md) — embedded `ProjectTemplate/` files copied into each workspace on Initialize.
 - [REST API](./rest-api.md) — OpenAPI-driven endpoints under `/api`, with auto-generated Markdown docs.
 - [Storage](./storage.md) — SQLite registry, per-project DBs, run logs, and workspace-side agent state.
