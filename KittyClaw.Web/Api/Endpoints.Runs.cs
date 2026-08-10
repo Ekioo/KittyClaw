@@ -12,6 +12,32 @@ public static partial class Endpoints
 
     private static void MapRuns(RouteGroupBuilder api)
     {
+        if (string.Equals(Environment.GetEnvironmentVariable("KITTYCLAW_ENABLE_QA_ENDPOINTS"), "1", StringComparison.Ordinal))
+        {
+            api.MapPost("/projects/{slug}/qa/runs", (string slug, QaSeedRunsRequest req, AgentRunRegistry reg) =>
+            {
+                var ticketIds = req.TicketIds.Select(int.Parse).ToArray();
+                if (ticketIds.Length == 0 || req.Count is < 1 or > 500)
+                    return Results.BadRequest(new { error = "ticketIds and count (1..500) are required" });
+
+                for (var i = 0; i < req.Count; i++)
+                {
+                    reg.Register(new AgentRun
+                    {
+                        RunId = $"qa-{Guid.NewGuid():N}",
+                        ProjectSlug = slug,
+                        TicketId = ticketIds[i % ticketIds.Length],
+                        AgentName = $"qa-agent-{i + 1}",
+                        SkillFile = "qa",
+                        ConcurrencyGroup = $"qa-load-{i + 1}",
+                        StartedAt = DateTime.UtcNow,
+                    });
+                }
+
+                return Results.Ok(new { count = req.Count });
+            }).ExcludeFromDescription();
+        }
+
         api.MapGet("/projects/{slug}/runs", (string slug, AgentRunRegistry reg) =>
             Results.Ok(reg.ActiveForProject(slug).Select(r => new
             {
@@ -189,6 +215,8 @@ public static partial class Endpoints
             return Results.Ok(new { runId = newRunId });
         }).WithTags("Runs");
     }
+
+    private sealed record QaSeedRunsRequest(IReadOnlyList<string> TicketIds, int Count);
 
     private static async Task WriteSseAsync(HttpResponse res, StreamEvent ev, CancellationToken ct)
     {

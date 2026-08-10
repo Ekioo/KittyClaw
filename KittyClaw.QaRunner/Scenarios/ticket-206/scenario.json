@@ -1,0 +1,247 @@
+{
+  "environment": {
+    "KITTYCLAW_ENABLE_QA_ENDPOINTS": "1"
+  },
+  "setup": [
+    {
+      "type": "createProject",
+      "name": "responsive-board"
+    },
+    {
+      "type": "createTicket",
+      "project": "responsive-board",
+      "title": "Background run 01",
+      "status": "InProgress",
+      "extract": {
+        "ticket1": "id"
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "responsive-board",
+      "title": "Background run 02",
+      "status": "InProgress",
+      "extract": {
+        "ticket2": "id"
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "responsive-board",
+      "title": "Background run 03",
+      "status": "InProgress",
+      "extract": {
+        "ticket3": "id"
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "responsive-board",
+      "title": "Background run 04",
+      "status": "InProgress",
+      "extract": {
+        "ticket4": "id"
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "responsive-board",
+      "title": "Background run 05",
+      "status": "InProgress",
+      "extract": {
+        "ticket5": "id"
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "responsive-board",
+      "title": "Background run 06",
+      "status": "InProgress",
+      "extract": {
+        "ticket6": "id"
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "responsive-board",
+      "title": "Background run 07",
+      "status": "InProgress",
+      "extract": {
+        "ticket7": "id"
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "responsive-board",
+      "title": "Background run 08",
+      "status": "InProgress",
+      "extract": {
+        "ticket8": "id"
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "responsive-board",
+      "title": "Background run 09",
+      "status": "InProgress",
+      "extract": {
+        "ticket9": "id"
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "responsive-board",
+      "title": "Background run 10",
+      "status": "InProgress",
+      "extract": {
+        "ticket10": "id"
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "responsive-board",
+      "title": "Background run 11",
+      "status": "InProgress",
+      "extract": {
+        "ticket11": "id"
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "responsive-board",
+      "title": "Background run 12",
+      "status": "InProgress",
+      "extract": {
+        "ticket12": "id"
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "responsive-board",
+      "title": "Background run 13",
+      "status": "InProgress",
+      "extract": {
+        "ticket13": "id"
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "responsive-board",
+      "title": "Background run 14",
+      "status": "InProgress",
+      "extract": {
+        "ticket14": "id"
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "responsive-board",
+      "title": "Background run 15",
+      "status": "InProgress",
+      "extract": {
+        "ticket15": "id"
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "responsive-board",
+      "title": "Background run 16",
+      "status": "InProgress",
+      "extract": {
+        "ticket16": "id"
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "responsive-board",
+      "title": "Background run 17",
+      "status": "InProgress",
+      "extract": {
+        "ticket17": "id"
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "responsive-board",
+      "title": "Background run 18",
+      "status": "InProgress",
+      "extract": {
+        "ticket18": "id"
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "responsive-board",
+      "title": "Background run 19",
+      "status": "InProgress",
+      "extract": {
+        "ticket19": "id"
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "responsive-board",
+      "title": "Background run 20",
+      "status": "InProgress",
+      "extract": {
+        "ticket20": "id"
+      }
+    },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/responsive-board/qa/runs",
+      "body": {
+        "ticketIds": [
+          "{ticket1}",
+          "{ticket2}",
+          "{ticket3}",
+          "{ticket4}",
+          "{ticket5}",
+          "{ticket6}",
+          "{ticket7}",
+          "{ticket8}",
+          "{ticket9}",
+          "{ticket10}",
+          "{ticket11}",
+          "{ticket12}",
+          "{ticket13}",
+          "{ticket14}",
+          "{ticket15}",
+          "{ticket16}",
+          "{ticket17}",
+          "{ticket18}",
+          "{ticket19}",
+          "{ticket20}"
+        ],
+        "count": 40
+      }
+    }
+  ],
+  "actions": [
+    {
+      "type": "assertNavigationDuration",
+      "url": "/board/responsive-board",
+      "waitForSelector": ".board",
+      "maxMs": 2000
+    },
+    {
+      "type": "assertCount",
+      "selector": ".ticket-card",
+      "expected": "20"
+    },
+    {
+      "type": "assertCount",
+      "selector": ".agent-spinner",
+      "expected": "20"
+    },
+    {
+      "type": "screenshot",
+      "name": "responsive-board-under-40-active-runs",
+      "description": "Board remains responsive with 40 synthetic active agent runs distributed over 20 visible tickets"
+    }
+  ],
+  "verdict": {
+    "passOn": "all-asserts-pass"
+  }
+}

@@ -174,7 +174,9 @@ These require Playwright (run inside `actions`, after setup).
 | `type`         | Fields                                   | Effect                                                                |
 |----------------|------------------------------------------|-----------------------------------------------------------------------|
 | `navigate`     | `url` (relative or absolute)             | Goes to the URL on the test instance.                                 |
+| `assertNavigationDuration` | `url`, `waitForSelector`, `maxMs` | Navigates, waits for visible content, and asserts elapsed time. |
 | `click`        | `selector`                               | CSS selector click.                                                   |
+| `assertInteractionDuration` | `selector`, `waitForSelector`, `maxMs` | Clicks, waits for the target to become visible, and asserts elapsed time. |
 | `fill`         | `selector`, `value`                      | Set input value.                                                      |
 | `selectOption` | `selector`, `value`                      | Select an option by value.                                            |
 | `wait`         | `ms`                                     | Pause N ms.                                                           |

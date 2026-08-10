@@ -200,6 +200,44 @@ public sealed class ScenarioRunner
             case "click":
                 await page.ClickAsync(Required(Resolve(action.Selector), "click.selector"));
                 break;
+            case "assertInteractionDuration":
+                {
+                    var selector = Required(Resolve(action.Selector), "assertInteractionDuration.selector");
+                    var waitForSelector = Required(Resolve(action.WaitForSelector), "assertInteractionDuration.waitForSelector");
+                    var maxMs = action.MaxMs ?? throw new InvalidOperationException("assertInteractionDuration: 'maxMs' is required");
+                    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                    await page.ClickAsync(selector);
+                    await page.Locator(waitForSelector).WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                    stopwatch.Stop();
+                    result.Assertions.Add(new AssertionEntry
+                    {
+                        Selector = selector,
+                        Property = $"click-to-visible:{waitForSelector}",
+                        Expected = $"<={maxMs} ms",
+                        Actual = $"{stopwatch.ElapsedMilliseconds} ms",
+                        Passed = stopwatch.ElapsedMilliseconds <= maxMs,
+                    });
+                    break;
+                }
+            case "assertNavigationDuration":
+                {
+                    var target = Combine(_instanceApiUrl, Required(Resolve(action.Url), "assertNavigationDuration.url"));
+                    var waitForSelector = Required(Resolve(action.WaitForSelector), "assertNavigationDuration.waitForSelector");
+                    var maxMs = action.MaxMs ?? throw new InvalidOperationException("assertNavigationDuration: 'maxMs' is required");
+                    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                    await page.GotoAsync(target, new() { WaitUntil = WaitUntilState.Load });
+                    await page.Locator(waitForSelector).WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                    stopwatch.Stop();
+                    result.Assertions.Add(new AssertionEntry
+                    {
+                        Selector = target,
+                        Property = $"navigation-to-visible:{waitForSelector}",
+                        Expected = $"<={maxMs} ms",
+                        Actual = $"{stopwatch.ElapsedMilliseconds} ms",
+                        Passed = stopwatch.ElapsedMilliseconds <= maxMs,
+                    });
+                    break;
+                }
             case "fill":
                 await page.FillAsync(Required(Resolve(action.Selector), "fill.selector"), Resolve(action.Value ?? ""));
                 break;

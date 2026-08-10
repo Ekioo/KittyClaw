@@ -59,7 +59,7 @@ var screenshotDir = Path.Combine(Path.GetTempPath(), "kittyclaw-qa-shots-" + Gui
 Directory.CreateDirectory(screenshotDir);
 
 ScenarioResult result;
-await using (var instance = await TestInstance.StartAsync(webExe))
+await using (var instance = await TestInstance.StartAsync(webExe, scenario.Environment))
 {
     Console.Error.WriteLine($"[qa-runner] test instance up at {instance.ApiUrl}");
     var runner = new ScenarioRunner(instance.ApiUrl, screenshotDir);

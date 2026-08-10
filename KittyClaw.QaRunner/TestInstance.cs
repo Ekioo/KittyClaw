@@ -27,7 +27,10 @@ public sealed class TestInstance : IAsyncDisposable
         _ownsDataDir = ownsDataDir;
     }
 
-    public static async Task<TestInstance> StartAsync(string webExePath, CancellationToken ct = default)
+    public static async Task<TestInstance> StartAsync(
+        string webExePath,
+        IReadOnlyDictionary<string, string>? environment = null,
+        CancellationToken ct = default)
     {
         if (!File.Exists(webExePath))
             throw new FileNotFoundException($"KittyClaw.Web exe not found at {webExePath}", webExePath);
@@ -56,6 +59,11 @@ public sealed class TestInstance : IAsyncDisposable
         // Development: skips HSTS (no HTTPS configured here, HSTS would break HTTP requests)
         // and gives the dev-time static-asset path resolution.
         psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        if (environment is not null)
+        {
+            foreach (var (name, value) in environment)
+                psi.Environment[name] = value;
+        }
         // Point content root at the source dir so MapStaticAssets / static web assets manifest
         // can resolve wwwroot paths (the bin/Debug build doesn't copy wwwroot, only references it
         // through KittyClaw.Web.staticwebassets.runtime.json).

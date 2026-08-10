@@ -309,6 +309,7 @@ public sealed class RunLogStore
 public sealed class AgentRunRegistry
 {
     private readonly ConcurrentDictionary<string, AgentRun> _runs = new();
+    private readonly ConcurrentDictionary<(string ProjectSlug, int TicketId), ConcurrentDictionary<string, AgentRun>> _runsByTicket = new();
     private readonly RunLogStore? _store;
 
     public event Action<AgentRun>? OnRunStarted;
@@ -331,12 +332,16 @@ public sealed class AgentRunRegistry
                 store.Save(run);
             }
             _runs[run.RunId] = run;
+            Index(run);
         }
     }
 
     public AgentRun Register(AgentRun run)
     {
+        if (_runs.TryGetValue(run.RunId, out var previous))
+            Unindex(previous);
         _runs[run.RunId] = run;
+        Index(run);
         OnRunStarted?.Invoke(run);
         return run;
     }
@@ -363,10 +368,10 @@ public sealed class AgentRunRegistry
         _runs.Values.Where(r => r.Status == AgentRunStatus.Running);
 
     public IEnumerable<AgentRun> ActiveForTicket(string projectSlug, int ticketId) =>
-        _runs.Values.Where(r => r.ProjectSlug == projectSlug && r.TicketId == ticketId && r.Status == AgentRunStatus.Running);
+        RunsForTicket(projectSlug, ticketId).Where(r => r.Status == AgentRunStatus.Running);
 
     public IEnumerable<AgentRun> AllForTicket(string projectSlug, int ticketId) =>
-        _runs.Values.Where(r => r.ProjectSlug == projectSlug && r.TicketId == ticketId);
+        RunsForTicket(projectSlug, ticketId);
 
     public IEnumerable<AgentRun> AllForProject(string projectSlug) =>
         _runs.Values.Where(r => r.ProjectSlug == projectSlug);
@@ -380,7 +385,11 @@ public sealed class AgentRunRegistry
         return _runs.Values.Any(r => r.ProjectSlug == projectSlug && set.Contains(r.ConcurrencyGroup) && r.Status == AgentRunStatus.Running);
     }
 
-    public void Remove(string runId) => _runs.TryRemove(runId, out _);
+    public void Remove(string runId)
+    {
+        if (_runs.TryRemove(runId, out var run))
+            Unindex(run);
+    }
 
     public AgentRun? LastCompletedForChatTarget(string projectSlug, string chatTarget) =>
         _runs.Values
@@ -393,8 +402,31 @@ public sealed class AgentRunRegistry
         var cutoff = DateTime.UtcNow - age;
         foreach (var r in _runs.Values.Where(r => r.Status != AgentRunStatus.Running && r.EndedAt is not null && r.EndedAt < cutoff).ToList())
         {
-            _runs.TryRemove(r.RunId, out _);
-            _store?.Delete(r.RunId);
+            if (_runs.TryRemove(r.RunId, out var removed))
+            {
+                Unindex(removed);
+                _store?.Delete(r.RunId);
+            }
         }
+    }
+
+    private IEnumerable<AgentRun> RunsForTicket(string projectSlug, int ticketId) =>
+        _runsByTicket.TryGetValue((projectSlug, ticketId), out var runs)
+            ? runs.Values
+            : [];
+
+    private void Index(AgentRun run)
+    {
+        if (run.TicketId is not int ticketId) return;
+        var runs = _runsByTicket.GetOrAdd((run.ProjectSlug, ticketId), _ => new());
+        runs[run.RunId] = run;
+    }
+
+    private void Unindex(AgentRun run)
+    {
+        if (run.TicketId is not int ticketId) return;
+        var key = (run.ProjectSlug, ticketId);
+        if (!_runsByTicket.TryGetValue(key, out var runs)) return;
+        runs.TryRemove(run.RunId, out _);
     }
 }

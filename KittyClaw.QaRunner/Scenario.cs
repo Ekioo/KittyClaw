@@ -10,6 +10,7 @@ namespace KittyClaw.QaRunner;
 /// </summary>
 public sealed class Scenario
 {
+    public Dictionary<string, string> Environment { get; set; } = new();
     public List<ScenarioAction> Setup { get; set; } = new();
     public List<ScenarioAction> Actions { get; set; } = new();
     public ScenarioVerdict Verdict { get; set; } = new();
@@ -30,6 +31,8 @@ public sealed class ScenarioAction
     public string? Project { get; set; }
     public string? WorkspacePath { get; set; }
     public int? Ms { get; set; }
+    public int? MaxMs { get; set; }
+    public string? WaitForSelector { get; set; }
 
     // Generic api action fields
     public string? Method { get; set; }

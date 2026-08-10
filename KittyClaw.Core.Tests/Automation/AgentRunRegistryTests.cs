@@ -7,6 +7,46 @@ namespace KittyClaw.Core.Tests.Automation;
 public class AgentRunRegistryTests
 {
     [Fact]
+    public void TicketQueries_ReturnOnlyIndexedRunsForTheRequestedProjectAndTicket()
+    {
+        var registry = new AgentRunRegistry();
+        var expected = NewRun("expected", "project-a", 42);
+        var completed = NewRun("completed", "project-a", 42);
+        var otherTicket = NewRun("other-ticket", "project-a", 43);
+        var otherProject = NewRun("other-project", "project-b", 42);
+        registry.Register(expected);
+        registry.Register(completed);
+        registry.Register(otherTicket);
+        registry.Register(otherProject);
+        registry.Complete(completed.RunId, AgentRunStatus.Completed, 0);
+
+        Assert.Equal([expected.RunId], registry.ActiveForTicket("project-a", 42).Select(r => r.RunId));
+        Assert.Equal(
+            [completed.RunId, expected.RunId],
+            registry.AllForTicket("project-a", 42).Select(r => r.RunId).Order());
+    }
+
+    [Fact]
+    public void TicketIndex_StaysConsistentWhenRunsAreReplacedRemovedAndPurged()
+    {
+        var registry = new AgentRunRegistry();
+        registry.Register(NewRun("replace", "project-a", 1));
+        registry.Register(NewRun("replace", "project-a", 2));
+        var removed = NewRun("removed", "project-a", 2);
+        registry.Register(removed);
+        registry.Remove(removed.RunId);
+        var expired = NewRun("expired", "project-a", 2);
+        expired.Status = AgentRunStatus.Completed;
+        expired.EndedAt = DateTime.UtcNow.AddDays(-2);
+        registry.Register(expired);
+
+        registry.PurgeOld(TimeSpan.FromDays(1));
+
+        Assert.Empty(registry.AllForTicket("project-a", 1));
+        Assert.Equal(["replace"], registry.AllForTicket("project-a", 2).Select(r => r.RunId));
+    }
+
+    [Fact]
     public void Complete_IsIdempotent_DoesNotDowngradeTerminalStatus()
     {
         var registry = new AgentRunRegistry();
@@ -66,6 +106,17 @@ public class AgentRunRegistryTests
         Assert.Equal(AgentRunStatus.Stopped, loaded!.Status);
         Assert.NotNull(loaded.EndedAt);
     }
+
+    private static AgentRun NewRun(string runId, string projectSlug, int? ticketId) => new()
+    {
+        RunId = runId,
+        ProjectSlug = projectSlug,
+        TicketId = ticketId,
+        AgentName = "agent",
+        SkillFile = "agent/SKILL.md",
+        ConcurrencyGroup = "agent",
+        StartedAt = DateTime.UtcNow,
+    };
 }
 
 [Collection("MockClaude")]
