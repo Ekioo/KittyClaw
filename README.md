@@ -38,7 +38,7 @@ definition under `.agents/processors/column-<id>/memory/MEMORY.md`.
 - At least one agent CLI on your `PATH`: Claude Code (`claude`), OpenAI Codex (`codex`), Grok Build (`grok`), or Mistral Vibe (`vibe`). Local-model execution requires both Claude Code CLI and a reachable Ollama server.
 - Optional: [Git](https://git-scm.com/downloads) (`git` on your `PATH`) for repository initialization, Git-aware automations, and agent commits
 
-On first launch, the onboarding popup checks Git and every supported provider CLI, including Mistral Vibe. Optional providers may be installed later; agent runs require their selected backend to be available, while Git-dependent features require Git.
+On first launch, the onboarding popup checks Git and every supported provider CLI using the same resolved executable paths as dispatch: Claude Code (`claude` / `KITTYCLAW_CLAUDE_BIN`), OpenAI Codex (`codex` / `KITTYCLAW_CODEX_BIN`), Grok Build (`grok`, `~/.grok/bin`, or `KITTYCLAW_GROK_BIN`), and Mistral Vibe (`vibe` / `KITTYCLAW_MISTRAL_BIN`). It also reports optional Ollama availability. Any one agent provider is sufficient, failed or timed-out probes remain non-blocking, and Git-dependent features still require Git.
 
 ### Run
 

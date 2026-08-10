@@ -57,6 +57,7 @@ builder.Services.AddSingleton<ApprovalWorkflowService>();
 builder.Services.AddSingleton<BoundaryObservationService>();
 builder.Services.AddSingleton<DashboardService>();
 builder.Services.AddSingleton<AgentsTemplateService>();
+builder.Services.AddSingleton<AgentCliReadinessService>();
 builder.Services.AddScoped<KittyClaw.Web.Services.BoardFilterState>();
 builder.Services.AddScoped<KittyClaw.Web.Services.BoardSortState>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.BoardUpdateNotifier>();

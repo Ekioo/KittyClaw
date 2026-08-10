@@ -3797,14 +3797,20 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
 }
 
 .onboarding-check {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(9rem, auto) 1fr auto;
     align-items: center;
-    justify-content: space-between;
+    gap: 0.75rem;
     padding: 0.5rem 0.75rem;
     margin: 0.35rem 0;
     border-radius: 6px;
     font-size: 0.9rem;
     background: var(--surface2, #2a2a30);
+}
+
+.onboarding-check small {
+    color: var(--text-muted);
+    text-align: left;
 }
 
 .onboarding-check.ok {

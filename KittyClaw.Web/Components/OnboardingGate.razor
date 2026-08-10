@@ -1,5 +1,6 @@
 @using KittyClaw.Core.Services
-@inject AgentsTemplateService AgentsTemplate
+@using KittyClaw.Core.Automation
+@inject AgentCliReadinessService CliReadiness
 @inject AppSettingsService AppSettings
 @inject LocalizationService L
 @inject IJSRuntime JS
@@ -19,50 +20,56 @@
             <p>@L["OnboardingIntro2"]</p>
 
             <h3 style="margin-top:1rem;font-size:0.95rem">@L["OnboardingRequirements"]</h3>
-            <div class="onboarding-check @ProviderClass(_claudeInstalled)">
-                <span>@(_claudeInstalled ? "✓" : "○") Claude Code</span>
-                @if (!_claudeInstalled)
+            <div class="onboarding-check @ProviderClass(_readiness.Claude)">
+                <span>@(_readiness.Claude ? "✓" : "○") Claude Code</span>
+                @if (!_readiness.Claude)
                 {
+                    <small>@L["OnboardingClaudeGuidance"]</small>
                     <a class="header-action-btn" href="https://docs.claude.com/en/docs/claude-code/overview" target="_blank" rel="noopener">@L["OnboardingInstall"]</a>
                 }
             </div>
-            <div class="onboarding-check @ProviderClass(_codexInstalled)">
-                <span>@(_codexInstalled ? "✓" : "○") OpenAI Codex</span>
-                @if (!_codexInstalled)
+            <div class="onboarding-check @ProviderClass(_readiness.Codex)">
+                <span>@(_readiness.Codex ? "✓" : "○") OpenAI Codex</span>
+                @if (!_readiness.Codex)
                 {
+                    <small>@L["OnboardingCodexGuidance"]</small>
                     <a class="header-action-btn" href="https://developers.openai.com/codex/cli/" target="_blank" rel="noopener">@L["OnboardingInstall"]</a>
                 }
             </div>
-            <div class="onboarding-check @ProviderClass(_grokInstalled)">
-                <span>@(_grokInstalled ? "✓" : "○") Grok Build</span>
-                @if (!_grokInstalled)
+            <div class="onboarding-check @ProviderClass(_readiness.Grok)">
+                <span>@(_readiness.Grok ? "✓" : "○") Grok Build</span>
+                @if (!_readiness.Grok)
                 {
+                    <small>@L["OnboardingGrokGuidance"]</small>
                     <a class="header-action-btn" href="https://docs.x.ai/docs/grok-code-fast-1" target="_blank" rel="noopener">@L["OnboardingInstall"]</a>
                 }
             </div>
-            <div class="onboarding-check @ProviderClass(_mistralInstalled)">
-                <span>@(_mistralInstalled ? "✓" : "○") Mistral Vibe</span>
-                @if (!_mistralInstalled)
+            <div class="onboarding-check @ProviderClass(_readiness.Mistral)">
+                <span>@(_readiness.Mistral ? "✓" : "○") Mistral Vibe</span>
+                @if (!_readiness.Mistral)
                 {
+                    <small>@L["OnboardingMistralGuidance"]</small>
                     <a class="header-action-btn" href="https://docs.mistral.ai/vibe/code/cli/install-setup" target="_blank" rel="noopener">@L["OnboardingInstall"]</a>
                 }
             </div>
-            <div class="onboarding-check @ProviderClass(_ollamaInstalled)">
-                <span>@(_ollamaInstalled ? "✓" : "○") Ollama</span>
-                @if (!_ollamaInstalled)
+            <div class="onboarding-check @ProviderClass(_readiness.Ollama)">
+                <span>@(_readiness.Ollama ? "✓" : "○") Ollama</span>
+                @if (!_readiness.Ollama)
                 {
+                    <small>@L["OnboardingOllamaGuidance"]</small>
                     <a class="header-action-btn" href="https://ollama.com/download" target="_blank" rel="noopener">@L["OnboardingInstall"]</a>
                 }
             </div>
-            <div class="onboarding-check @(_gitInstalled ? "ok" : "missing")">
-                <span>@(_gitInstalled ? "✓" : "✗") Git</span>
-                @if (!_gitInstalled)
+            <div class="onboarding-check @(_readiness.Git ? "ok" : "missing")">
+                <span>@(_readiness.Git ? "✓" : "✗") Git</span>
+                @if (!_readiness.Git)
                 {
+                    <small>@L["OnboardingGitGuidance"]</small>
                     <a class="header-action-btn" href="https://git-scm.com/downloads" target="_blank" rel="noopener">@L["OnboardingInstall"]</a>
                 }
             </div>
 
-            @if (!HasAgentProvider || !_gitInstalled)
+            @if (!_readiness.HasAgentProvider || !_readiness.Git)
             {
                 <p class="settings-status settings-status-err" style="margin-top:0.75rem">@L["OnboardingMissingWarning"]</p>
             }
@@ -81,12 +88,7 @@
 
 @code {
     private bool _showOnboarding;
-    private bool _claudeInstalled;
-    private bool _codexInstalled;
-    private bool _grokInstalled;
-    private bool _mistralInstalled;
-    private bool _ollamaInstalled;
-    private bool _gitInstalled;
+    private CliReadiness _readiness = new(false, false, false, false, false, false);
     private bool _checking;
     private bool _checkStarted;
     private IDisposable? _escOnboarding;
@@ -118,13 +120,9 @@
     private async Task RecheckAndRefreshAsync()
     {
         await RecheckTools();
-        _showOnboarding = !AppSettings.OnboardingSeen || !HasAgentProvider || !_gitInstalled;
+        _showOnboarding = !AppSettings.OnboardingSeen || !_readiness.HasAgentProvider || !_readiness.Git;
         await InvokeAsync(StateHasChanged);
     }
-
-    // Local Ollama models currently use Claude Code as their transport, so an Ollama
-    // installation on its own is not yet sufficient to dispatch an agent.
-    private bool HasAgentProvider => _claudeInstalled || _codexInstalled || _grokInstalled || _mistralInstalled;
 
     private string ProviderClass(bool installed) => installed ? "ok" : "optional";
 
@@ -133,19 +131,7 @@
         _checking = true;
         try
         {
-            var claude = Task.Run(AgentsTemplate.IsClaudeAvailable);
-            var codex = Task.Run(AgentsTemplate.IsCodexAvailable);
-            var grok = Task.Run(AgentsTemplate.IsGrokAvailable);
-            var mistral = Task.Run(AgentsTemplate.IsMistralAvailable);
-            var ollama = Task.Run(AgentsTemplate.IsOllamaAvailable);
-            var git = Task.Run(AgentsTemplate.IsGitAvailable);
-            await Task.WhenAll(claude, codex, grok, mistral, ollama, git);
-            _claudeInstalled = await claude;
-            _codexInstalled = await codex;
-            _grokInstalled = await grok;
-            _mistralInstalled = await mistral;
-            _ollamaInstalled = await ollama;
-            _gitInstalled = await git;
+            _readiness = await CliReadiness.ProbeAsync();
         }
         finally
         {
