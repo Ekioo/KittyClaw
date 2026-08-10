@@ -12,6 +12,8 @@ Promotion raises the same ticket-status signal as a manual move, so existing sta
 - In the ticket panel, select **Schedule…**, then choose a local date/time and a target column.
 - KittyClaw stores the instant in UTC and checks due tickets every 30 seconds.
 - Due tickets in active projects move to their target column. The default target is **Todo**.
+- Processor-created schedules may wait in any column whose role is **Waiting**; overdue tickets are recovered by the same polling loop.
+- Renaming a target column updates pending schedules in that pipeline. If the target no longer exists, promotion remains pending and logs an actionable diagnostic.
 - Paused projects are skipped until they are resumed.
 - Moving a scheduled ticket to another column manually clears its fire time and target.
 - Cards in **Scheduled** show a `J`/`J-N` day badge and sort by fire time before manual order.
@@ -39,7 +41,7 @@ To cancel a schedule, move the ticket out of **Scheduled** through the regular s
 
 - `KittyClaw.Core/Models/Ticket.cs` — persists `FireAt` and `ScheduleTarget`.
 - `KittyClaw.Core/Services/TicketService.cs` — schedules, lists due tickets, promotes them, and clears stale schedule data on manual moves.
-- `KittyClaw.Core/Services/ColumnService.cs` — seeds and backfills the **Scheduled** column.
+- `KittyClaw.Core/Services/ColumnService.cs` — seeds and backfills the **Scheduled** column and keeps pending targets synchronized when columns are renamed.
 - `KittyClaw.Core/Services/ScheduledPromotionService.cs` — polls active projects and promotes due tickets.
 - `KittyClaw.Web/Components/TicketPanel.razor` — schedule editor in the ticket panel.
 - `KittyClaw.Web/Components/Pages/Board.razor` — countdown badge and scheduled-column ordering.
