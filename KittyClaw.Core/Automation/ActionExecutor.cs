@@ -409,6 +409,26 @@ internal sealed class ActionExecutor
 
         if (await _runState.ShouldSkipAsync(rt, a, firing, agentName, group)) return (true, null, agentName);
 
+        // Dependency gate: do not dispatch if the ticket has unresolved blockers.
+        if (firing.TicketId is int depCheckId)
+        {
+            var depTicket = await _tickets.GetTicketAsync(rt.Slug, depCheckId);
+            if (depTicket is not null)
+            {
+                var unresolved = depTicket.BlockedBy
+                    .Where(b => !string.Equals(b.Status, "Done", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (unresolved.Count > 0)
+                {
+                    await PostBlockerCommentIfNewAsync(rt.Slug, depCheckId, unresolved, depTicket.Comments);
+                    _logger.LogInformation(
+                        "Skipping dispatch for ticket #{Id}: {N} unresolved blocker(s)",
+                        depCheckId, unresolved.Count);
+                    return (true, null, agentName);
+                }
+            }
+        }
+
         var project = await _projects.GetProjectAsync(rt.Slug);
         var fallbackModel = project?.FallbackModel;
 
