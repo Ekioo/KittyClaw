@@ -2,8 +2,7 @@
   "setup": [
     {
       "type": "createProject",
-      "name": "checkout-demo",
-      "workspacePath": "C:\\Sources\\KittyClaw"
+      "name": "checkout-demo"
     },
     {
       "type": "api",
@@ -53,6 +52,12 @@
     {
       "type": "assertVisible",
       "selector": ".ticket-card:has-text(\"Prevent duplicate checkout submissions\")"
+    },
+    {
+      "type": "assertJson",
+      "path": "/api/projects/checkout-demo/runs/{runId}",
+      "jsonPath": "ticketId",
+      "expected": "{ticketId}"
     },
     {
       "type": "assertVisible",
