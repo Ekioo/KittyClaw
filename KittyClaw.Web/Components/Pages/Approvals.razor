@@ -1,0 +1,111 @@
+@page "/board/{Slug}/approvals"
+@using KittyClaw.Core.Models
+@inject ProjectService ProjectService
+@inject ApprovalRegistryService Registry
+@inject ApprovalWorkflowService Workflow
+@rendermode InteractiveServer
+
+<PageTitle>Runtime approvals</PageTitle>
+
+<div class="page-header">
+    <a class="back-link" href="/board/@Slug">&larr; Board</a>
+    <h1>Runtime approvals</h1>
+    <button class="header-action-btn" @onclick="LoadAsync">Refresh</button>
+</div>
+
+@if (_loading)
+{
+    <p>Loading approvals…</p>
+}
+else if (_requests.Count == 0)
+{
+    <div class="approval-empty">No approval requests have been recorded.</div>
+}
+else
+{
+    <div class="approval-list">
+        @foreach (var request in _requests.OrderByDescending(r => r.ObservedAt))
+        {
+            var decisions = Decisions(request.RequestId);
+            var receipts = Receipts(request.RequestId);
+            <article class="approval-card approval-card--@request.State" data-request-id="@request.RequestId">
+                <header>
+                    <div><span class="approval-state">@request.State</span> <strong>@request.Operation</strong></div>
+                    <span>@request.ObservedAt.ToLocalTime().ToString("g")</span>
+                </header>
+                <dl class="approval-grid">
+                    <dt>Action</dt><dd>@request.ActionClass</dd>
+                    <dt>Destination / resource</dt><dd>@request.ResourceDisplay <code>@request.ResourceCanonicalId</code></dd>
+                    <dt>Reason</dt><dd>@request.Reason</dd>
+                    <dt>Scope</dt><dd>@(request.ScopeRequested ?? "single effect")</dd>
+                    <dt>Duration</dt><dd>@Duration(request)</dd>
+                    <dt>Provider</dt><dd>@request.ProviderName @request.ProviderCliVersion · @request.EnforcementProfile</dd>
+                    <dt>Run</dt><dd><code>@request.RunId</code></dd>
+                    <dt>Ticket</dt><dd><a href="/board/@Slug/ticket/@request.TicketId">#@request.TicketId</a></dd>
+                </dl>
+                @if (request.State == "pending")
+                {
+                    <div class="approval-actions">
+                        <button class="approval-allow" @onclick="() => DecideAsync(request, ApprovalDecisionKind.AllowOnce)">Allow once</button>
+                        <button class="approval-ticket" @onclick="() => DecideAsync(request, ApprovalDecisionKind.AllowForTicket)">Allow for this ticket</button>
+                        <button class="approval-deny" @onclick="() => DecideAsync(request, ApprovalDecisionKind.Deny)">Deny</button>
+                    </div>
+                }
+                @if (decisions.Count > 0 || receipts.Count > 0)
+                {
+                    <details class="approval-audit">
+                        <summary>Audit history (@(decisions.Count + receipts.Count))</summary>
+                        @foreach (var decision in decisions)
+                        {
+                            <p><strong>@decision.Kind</strong> by @decision.Actor · @decision.CreatedAt.ToLocalTime().ToString("g") · scope @decision.Scope · expires @decision.ExpiresAt.ToLocalTime().ToString("g")</p>
+                        }
+                        @foreach (var receipt in receipts)
+                        {
+                            <p><strong>@receipt.Outcome</strong> · @receipt.EnforcementPointId · @receipt.EndedAt.ToLocalTime().ToString("g") · integrity <code>@receipt.IntegrityHash[..12]</code></p>
+                        }
+                    </details>
+                }
+            </article>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+    private bool _loading = true;
+    private IReadOnlyList<ApprovalRequestRecord> _requests = [];
+    private IReadOnlyList<ApprovalDecisionRecord> _decisions = [];
+    private IReadOnlyList<ApprovalReceiptRecord> _receipts = [];
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        if (await ProjectService.GetProjectAsync(Slug) is not null)
+        {
+            _requests = await Registry.QueryRequestsAsync(Slug, new());
+            _decisions = await Registry.QueryDecisionsAsync(Slug);
+            _receipts = await Registry.QueryReceiptsAsync(Slug);
+        }
+        _loading = false;
+    }
+
+    private List<ApprovalDecisionRecord> Decisions(string id) => _decisions.Where(d => d.RequestId == id).OrderByDescending(d => d.CreatedAt).ToList();
+    private List<ApprovalReceiptRecord> Receipts(string id) => _receipts.Where(r => r.RequestId == id).OrderByDescending(r => r.EndedAt).ToList();
+    private static string Duration(ApprovalRequestRecord r) => r.DurationRequestedSeconds is int seconds ? TimeSpan.FromSeconds(seconds).ToString() : $"until {r.ExpiresAt.ToLocalTime():g}";
+
+    private async Task DecideAsync(ApprovalRequestRecord request, ApprovalDecisionKind kind)
+    {
+        var now = DateTime.UtcNow;
+        var expiry = kind == ApprovalDecisionKind.AllowForTicket
+            ? new[] { request.ExpiresAt, now.AddHours(24) }.Min()
+            : kind == ApprovalDecisionKind.AllowOnce && request.DurationRequestedSeconds is int seconds
+                ? new[] { request.ExpiresAt, now.AddSeconds(seconds) }.Min()
+                : request.ExpiresAt;
+        await Workflow.DecideAsync(Slug, new(Guid.NewGuid().ToString("N"), request.RequestId, kind,
+            "owner", now, expiry, kind == ApprovalDecisionKind.AllowForTicket ? $"ticket:{request.TicketId}" : "once",
+            "Operator decision from the runtime approval queue", null));
+        await LoadAsync();
+    }
+}

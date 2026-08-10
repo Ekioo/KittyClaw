@@ -78,7 +78,48 @@ public sealed class AgentRun
     public Channel<string> SteeringQueue { get; } = Channel.CreateUnbounded<string>();
     public CancellationTokenSource Cancellation { get; } = new();
     public bool IsAwaitingUserAnswer { get; set; }
+    private readonly object _approvalLock = new();
+    private string? _awaitingApprovalRequestId;
+    private TaskCompletionSource? _approvalResolution;
+    internal event Action<bool>? ApprovalWaitChanged;
+    public string? AwaitingApprovalRequestId
+    {
+        get { lock (_approvalLock) return _awaitingApprovalRequestId; }
+    }
     public event Action<StreamEvent>? OnEvent;
+
+    public bool TryPauseForApproval(string requestId)
+    {
+        lock (_approvalLock)
+        {
+            if (_awaitingApprovalRequestId is not null) return false;
+            _awaitingApprovalRequestId = requestId;
+            _approvalResolution = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+        ApprovalWaitChanged?.Invoke(true);
+        return true;
+    }
+
+    public bool TryResumeFromApproval(string requestId)
+    {
+        TaskCompletionSource? resolution;
+        lock (_approvalLock)
+        {
+            if (_awaitingApprovalRequestId != requestId) return false;
+            _awaitingApprovalRequestId = null;
+            resolution = _approvalResolution;
+            _approvalResolution = null;
+        }
+        ApprovalWaitChanged?.Invoke(false);
+        resolution?.TrySetResult();
+        return true;
+    }
+
+    public Task WaitForApprovalResolutionAsync(CancellationToken ct)
+    {
+        lock (_approvalLock)
+            return _approvalResolution?.Task.WaitAsync(ct) ?? Task.CompletedTask;
+    }
 
     private readonly List<string> _pendingSteerMessages = new();
     public IReadOnlyList<string> PendingSteerMessages => _pendingSteerMessages;

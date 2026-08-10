@@ -9,16 +9,16 @@ public static partial class Endpoints
     {
         var approvals = api.MapGroup("/projects/{slug}/approvals").WithTags("Approvals");
 
-        approvals.MapPost("/requests", async (string slug, ApprovalRequestInput input, ApprovalRegistryService registry) =>
-            await MapWrite(() => registry.RegisterRequestAsync(slug, input)))
+        approvals.MapPost("/requests", async (string slug, ApprovalRequestInput input, ApprovalWorkflowService workflow) =>
+            await MapWrite(() => workflow.RegisterRequestAsync(slug, input)))
             .Produces<ApprovalRequestRecord>().ProducesProblem(StatusCodes.Status400BadRequest);
 
         approvals.MapGet("/requests", async (string slug, string? runId, int? ticketId, string? provider, ApprovalRegistryService registry) =>
             Results.Ok(await registry.QueryRequestsAsync(slug, new(runId, ticketId, provider))))
             .Produces<IReadOnlyList<ApprovalRequestRecord>>();
 
-        approvals.MapPost("/decisions", async (string slug, ApprovalDecisionInput input, ApprovalRegistryService registry) =>
-            await MapWrite(() => registry.DecideAsync(slug, input)))
+        approvals.MapPost("/decisions", async (string slug, ApprovalDecisionInput input, ApprovalWorkflowService workflow) =>
+            await MapWrite(() => workflow.DecideAsync(slug, input)))
             .Produces<ApprovalDecisionRecord>().ProducesProblem(StatusCodes.Status400BadRequest);
 
         approvals.MapGet("/decisions", async (string slug, string? requestId, ApprovalRegistryService registry) =>

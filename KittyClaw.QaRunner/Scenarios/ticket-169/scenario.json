@@ -1,0 +1,51 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "approval-queue" },
+    { "type": "createTicket", "project": "approval-queue", "title": "Publish release", "status": "InProgress" },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/approval-queue/approvals/requests",
+      "body": {
+        "requestId": "qa-approval-169",
+        "dedupeKey": "publish-release-example",
+        "schemaVersion": 1,
+        "actionClass": "external_data_transfer",
+        "operation": "publish",
+        "resourceKind": "network_destination",
+        "resourceCanonicalId": "https://releases.example.test",
+        "resourceDisplay": "releases.example.test",
+        "reason": "Publish the verified release artifact",
+        "riskSummary": "Transfers an artifact to an external destination",
+        "scopeRequested": "single publication",
+        "durationRequestedSeconds": 300,
+        "providerName": "codex",
+        "providerCliVersion": "1.2.3",
+        "adapterVersion": "approval-adapter-1",
+        "enforcementProfile": "observe",
+        "runId": "qa-run-169",
+        "ticketId": 1,
+        "agentSlug": "programmer",
+        "observedAt": "2026-08-02T08:00:00Z",
+        "expiresAt": "2030-08-02T09:00:00Z",
+        "toolName": "shell",
+        "redactedArgumentsHash": "SHA256:qa",
+        "evidenceSource": "qa"
+      }
+    }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/approval-queue/approvals" },
+    { "type": "assertVisible", "selector": ".approval-card[data-request-id='qa-approval-169']" },
+    { "type": "assertVisible", "selector": ".approval-allow" },
+    { "type": "assertVisible", "selector": ".approval-ticket" },
+    { "type": "assertVisible", "selector": ".approval-deny" },
+    { "type": "assertText", "selector": ".approval-card dd:nth-of-type(2)", "expected": "releases.example.test https://releases.example.test" },
+    { "type": "screenshot", "name": "runtime-approval-pending", "description": "Pending runtime approval with traceable context and temporary decisions" },
+    { "type": "click", "selector": ".approval-allow" },
+    { "type": "click", "selector": ".approval-audit summary" },
+    { "type": "assertVisible", "selector": ".approval-audit" },
+    { "type": "screenshot", "name": "runtime-approval-audit", "description": "Allowed-once decision visible in audit history" }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

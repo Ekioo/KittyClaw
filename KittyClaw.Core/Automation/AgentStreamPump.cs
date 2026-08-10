@@ -30,6 +30,8 @@ internal static class AgentStreamPump
                 }
                 if (line is null) break;
                 if (string.IsNullOrWhiteSpace(line)) continue;
+                try { await run.WaitForApprovalResolutionAsync(ct); }
+                catch (OperationCanceledException) { break; }
                 try
                 {
                     using var doc = JsonDocument.Parse(line);

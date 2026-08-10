@@ -1,4 +1,5 @@
 using KittyClaw.Core.Services;
+using KittyClaw.Core.Models;
 using KittyClaw.Core.Tests.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -35,6 +36,73 @@ public sealed class MockClaudeBinFixture : IDisposable
 [Collection("MockClaude")]
 public class AgentRunnerMockIntegrationTests
 {
+    [Fact]
+    public async Task PendingApproval_SuspendsProviderProcessUntilMatchingDecision()
+    {
+        Assert.True(OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS());
+
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("approval-process-gate");
+        var workspace = projects.ResolveWorkspacePath(project);
+        Directory.CreateDirectory(workspace);
+
+        var scenarioDir = Path.Combine(tmp.Path, "mock-scenarios");
+        Directory.CreateDirectory(scenarioDir);
+        await File.WriteAllTextAsync(Path.Combine(scenarioDir, "approval-effect.ndjson"), string.Join('\n', new[]
+        {
+            "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"{{session_id}}\",\"model\":\"mock\"}",
+            "{\"_meta\":{\"delay_ms\":750}}",
+            "{\"_meta\":{\"write_file\":{\"path\":\"protected-effect.txt\",\"content\":\"executed\"}}}",
+            "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":42,\"num_turns\":1}",
+        }));
+        TestSkillBuilder.Create(workspace, "test-agent", scenario: "approval-effect");
+
+        var runs = new AgentRunRegistry();
+        var runner = new AgentRunner(new SessionRegistry(), runs, new RunConcurrencyGate(1),
+            NullLogger<AgentRunner>.Instance);
+        var workflow = new ApprovalWorkflowService(new ApprovalRegistryService(projects), runs);
+        var ctx = new AgentRunContext
+        {
+            ProjectSlug = project.Slug,
+            WorkspacePath = workspace,
+            AgentName = "test-agent",
+            SkillFile = "test-agent/SKILL.md",
+            MaxTurns = 1,
+            TicketId = 169,
+            Env = new Dictionary<string, string> { ["KITTYCLAW_MOCK_SCENARIOS_DIR"] = scenarioDir },
+        };
+
+        var runTask = runner.RunAsync(ctx, CancellationToken.None);
+        AgentRun? active = null;
+        for (var i = 0; i < 100 && active is null; i++)
+        {
+            active = runs.ActiveForProject(project.Slug).SingleOrDefault();
+            if (active is null) await Task.Delay(20);
+        }
+        Assert.NotNull(active);
+
+        var now = DateTime.UtcNow;
+        await workflow.RegisterRequestAsync(project.Slug, new(
+            "request-process-gate", "dedupe-process-gate", 1, "external_data_transfer", "publish",
+            "network_destination", "https://example.test", "example.test", "Publish release artifact",
+            "External transfer", "once", 300, "claude", "mock", "adapter-1", "enforce",
+            active.RunId, 169, "test-agent", now, now.AddMinutes(5), "shell", "SHA256", "tool-call"));
+
+        var effectPath = Path.Combine(workspace, "protected-effect.txt");
+        await Task.Delay(1200);
+        Assert.False(File.Exists(effectPath));
+        Assert.False(runTask.IsCompleted);
+
+        await workflow.DecideAsync(project.Slug, new(
+            "decision-process-gate", "request-process-gate", ApprovalDecisionKind.AllowOnce,
+            "owner", DateTime.UtcNow, DateTime.UtcNow.AddMinutes(5), "once", "approved", null));
+
+        var run = await runTask.WaitAsync(TimeSpan.FromSeconds(15));
+        Assert.Equal(AgentRunStatus.Completed, run.Status);
+        Assert.Equal("executed", await File.ReadAllTextAsync(effectPath));
+    }
+
     [Fact]
     public async Task DispatchedAgent_ReceivesStreamEventsFromMock()
     {

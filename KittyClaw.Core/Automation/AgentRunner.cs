@@ -668,6 +668,7 @@ public sealed class AgentRunner
         // otherwise inherit claude's stdout/stderr pipe and outlive it, so the pipe never reaches
         // EOF and the pump tasks (hence the whole run) would hang forever. No-op on non-Windows.
         var job = ProcessJobObject.TryCreateAndAssign(proc);
+        using var approvalGate = new ProcessApprovalGate(proc, run);
         try
         {
             if (ctx.PendingSteerMessages?.Count > 0)
@@ -809,6 +810,16 @@ public sealed class AgentRunner
             }
 
             run.OnEvent -= resultWatch;
+
+            // A subprocess can finish while its last protected operation is still awaiting an
+            // owner decision. Keep the run active and its post-run automation blocked until the
+            // matching temporary decision arrives (or the run is cancelled).
+            try { await run.WaitForApprovalResolutionAsync(linkedWithTimeout.Token); }
+            catch (OperationCanceledException) when (linkedWithTimeout.IsCancellationRequested)
+            {
+                run.OnEvent -= counter;
+                return new SpawnResult(null, assistantCount, true, (FallbackReason)fallbackReason);
+            }
 
             // Close the job to terminate any descendant the agent left running (e.g. a backgrounded
             // server). That releases the inherited write handle so the stdout/stderr pipe reaches
