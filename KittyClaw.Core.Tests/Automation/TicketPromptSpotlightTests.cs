@@ -52,6 +52,19 @@ public class TicketPromptSpotlightTests
     }
 
     [Fact]
+    public async Task DispatchPrompt_IncludesCanonicalCaseSensitiveProjectSlug()
+    {
+        using var tmp = new TempDir();
+        var ctx = TicketContext(tmp.Path, "normal title");
+
+        var prompt = await AgentRunner.BuildPromptAsync(ctx, "# skill content", isResume: false, CancellationToken.None);
+
+        Assert.Contains("the exact project slug is \"spotlight-test\"", prompt);
+        Assert.Contains("project slugs are case-sensitive", prompt);
+        Assert.DoesNotContain("the exact project slug is \"Spotlight-Test\"", prompt);
+    }
+
+    [Fact]
     public async Task OwnerFeedbackResumePrompt_WrapsTitleInUntrustedBlock_WithNotice()
     {
         using var tmp = new TempDir();

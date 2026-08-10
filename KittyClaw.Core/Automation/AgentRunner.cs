@@ -1013,6 +1013,12 @@ public sealed class AgentRunner
         sb.AppendLine(BuildLanguageInstruction(uiLanguage));
         sb.AppendLine();
 
+        // The workspace folder and display name are not API identifiers. Agents otherwise
+        // tend to derive a title-cased slug from them (for example "KittyClaw"), which the
+        // case-sensitive project API correctly rejects. Always provide the canonical value.
+        sb.AppendLine($"[KittyClaw API: the exact project slug is \"{ctx.ProjectSlug}\". Use it verbatim in every /api/projects/{{slug}} URL; project slugs are case-sensitive.]");
+        sb.AppendLine();
+
         await AppendMemoryAsync(sb, ctx, ct);
 
         return sb.ToString();
