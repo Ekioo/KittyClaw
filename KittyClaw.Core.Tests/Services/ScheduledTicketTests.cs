@@ -163,6 +163,131 @@ public sealed class ScheduledTicketTests
     }
 
     [Fact]
+    public async Task ProcessorSchedule_InArbitrarilyNamedWaitingColumn_IsDueAndPromoted()
+    {
+        using var tmp = new TempDir();
+        var (projects, svc, slug) = BuildSut(tmp);
+        var pipelines = new PipelineService(projects);
+        var columns = new ColumnService(projects);
+        var pipeline = await pipelines.CreateAsync(slug, "Publication");
+        var waiting = await columns.CreateColumnAsync(
+            slug, "Publication différée", pipelineId: pipeline.Id,
+            role: KittyClaw.Core.Models.ColumnRole.Waiting);
+        var ready = await columns.CreateColumnAsync(slug, "Prêt à publier", pipelineId: pipeline.Id);
+        var ticket = await svc.CreateTicketAsync(
+            slug, "Annonce", status: ready.Name, pipelineId: pipeline.Id, columnId: ready.Id);
+        var now = new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc);
+
+        await using (var db = projects.GetProjectDb(slug))
+        {
+            var scheduled = await db.Tickets.FindAsync(ticket.Id);
+            scheduled!.Status = waiting.Name;
+            scheduled.ColumnId = waiting.Id;
+            scheduled.FireAt = now.AddMinutes(-1);
+            scheduled.ScheduleTarget = ready.Name;
+            await db.SaveChangesAsync();
+        }
+
+        var dueIds = await svc.ListDueScheduledTicketIdsAsync(slug, now);
+        var promoted = await svc.PromoteScheduledAsync(slug, ticket.Id);
+
+        Assert.Contains(ticket.Id, dueIds);
+        Assert.Equal(ready.Id, promoted!.ColumnId);
+        Assert.Equal(ready.Name, promoted.Status);
+        Assert.Null(promoted.FireAt);
+        Assert.Null(promoted.ScheduleTarget);
+    }
+
+    [Fact]
+    public async Task RenamingWakeTarget_UpdatesPendingSchedule_AndPromotionUsesNewName()
+    {
+        using var tmp = new TempDir();
+        var (projects, svc, slug) = BuildSut(tmp);
+        var pipelines = new PipelineService(projects);
+        var columns = new ColumnService(projects);
+        var pipeline = await pipelines.CreateAsync(slug, "Migration");
+        var waiting = await columns.CreateColumnAsync(
+            slug, "Observation", pipelineId: pipeline.Id,
+            role: KittyClaw.Core.Models.ColumnRole.Waiting);
+        var target = await columns.CreateColumnAsync(slug, "À lancer", pipelineId: pipeline.Id);
+        var ticket = await svc.CreateTicketAsync(
+            slug, "Reprise", status: target.Name, pipelineId: pipeline.Id, columnId: target.Id);
+        var fireAt = DateTime.UtcNow.AddMinutes(-1);
+
+        await using (var db = projects.GetProjectDb(slug))
+        {
+            var scheduled = await db.Tickets.FindAsync(ticket.Id);
+            scheduled!.Status = waiting.Name;
+            scheduled.ColumnId = waiting.Id;
+            scheduled.FireAt = fireAt;
+            scheduled.ScheduleTarget = target.Name;
+            await db.SaveChangesAsync();
+        }
+
+        await columns.UpdateColumnAsync(slug, target.Id, name: "Prêt à exécuter");
+        var pending = await svc.GetTicketAsync(slug, ticket.Id);
+        var promoted = await svc.PromoteScheduledAsync(slug, ticket.Id);
+
+        Assert.Equal("Prêt à exécuter", pending!.ScheduleTarget);
+        Assert.Equal(target.Id, promoted!.ColumnId);
+        Assert.Equal("Prêt à exécuter", promoted.Status);
+    }
+
+    [Fact]
+    public async Task MissingWakeTarget_ProducesActionableDiagnostic_AndKeepsSchedulePending()
+    {
+        using var tmp = new TempDir();
+        var (projects, svc, slug) = BuildSut(tmp);
+        var pipelines = new PipelineService(projects);
+        var columns = new ColumnService(projects);
+        var pipeline = await pipelines.CreateAsync(slug, "Diagnostic");
+        var waiting = await columns.CreateColumnAsync(
+            slug, "Observation", pipelineId: pipeline.Id,
+            role: KittyClaw.Core.Models.ColumnRole.Waiting);
+        var ticket = await svc.CreateTicketAsync(
+            slug, "Cible perdue", status: waiting.Name, pipelineId: pipeline.Id, columnId: waiting.Id);
+
+        await using (var db = projects.GetProjectDb(slug))
+        {
+            var scheduled = await db.Tickets.FindAsync(ticket.Id);
+            scheduled!.FireAt = DateTime.UtcNow.AddMinutes(-1);
+            scheduled.ScheduleTarget = "Colonne supprimée";
+            await db.SaveChangesAsync();
+        }
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.PromoteScheduledAsync(slug, ticket.Id));
+        var pending = await svc.GetTicketAsync(slug, ticket.Id);
+
+        Assert.Contains($"ticket #{ticket.Id}", error.Message);
+        Assert.Contains("Colonne supprimée", error.Message);
+        Assert.Contains($"pipeline #{pipeline.Id}", error.Message);
+        Assert.NotNull(pending!.FireAt);
+        Assert.Equal("Colonne supprimée", pending.ScheduleTarget);
+    }
+
+    [Fact]
+    public async Task ConcurrentPromotion_ConsumesScheduleOnce_AndSignalsOnce()
+    {
+        using var tmp = new TempDir();
+        var (_, svc, slug) = BuildSut(tmp);
+        var ticket = await svc.CreateTicketAsync(slug, "Réveil unique", status: "Todo");
+        await svc.ScheduleTicketAsync(slug, ticket.Id, DateTime.UtcNow.AddMinutes(-1), "Todo", "owner");
+        var signals = 0;
+        svc.TicketStatusChanged += (_, id, _, _) =>
+        {
+            if (id == ticket.Id) Interlocked.Increment(ref signals);
+        };
+
+        var results = await Task.WhenAll(
+            svc.PromoteScheduledAsync(slug, ticket.Id),
+            svc.PromoteScheduledAsync(slug, ticket.Id));
+
+        Assert.Single(results, result => result is not null);
+        Assert.Equal(1, signals);
+    }
+
+    [Fact]
     public async Task PromoteScheduledAsync_IsNoOp_WhenTicketNotScheduled()
     {
         using var tmp = new TempDir();

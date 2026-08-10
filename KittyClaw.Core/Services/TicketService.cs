@@ -9,6 +9,7 @@ public class TicketService
     private readonly ProjectService _projectService;
     private readonly MemberService _memberService;
     private readonly ColumnProcessorService? _columnProcessors;
+    private readonly SemaphoreSlim _scheduledPromotionLock = new(1, 1);
 
     /// <summary>
     /// Raised after a ticket's status has been persisted.
@@ -411,7 +412,9 @@ public class TicketService
     }
 
     /// <summary>
-    /// Returns the ids of Scheduled tickets whose <c>FireAt</c> is due (&lt;= <paramref name="now"/>).
+    /// Returns the ids of waiting tickets whose <c>FireAt</c> is due (&lt;= <paramref name="now"/>).
+    /// Processor-driven schedules may use any Waiting column name, so the role and persisted
+    /// wake instant are authoritative rather than the legacy Scheduled/Planifié names.
     /// </summary>
     public async Task<List<int>> ListDueScheduledTicketIdsAsync(string projectSlug, DateTime now)
     {
@@ -421,7 +424,7 @@ public class TicketService
             .Select(c => new { c.Id, c.Name, c.Role })
             .ToListAsync();
         var scheduledColumnIds = columns
-            .Where(c => c.Role == ColumnRole.Waiting && IsScheduledColumnName(c.Name))
+            .Where(c => c.Role == ColumnRole.Waiting)
             .Select(c => c.Id)
             .ToArray();
         return await db.Tickets
@@ -434,51 +437,59 @@ public class TicketService
 
     /// <summary>
     /// Promotes a Scheduled ticket to its <c>ScheduleTarget</c> (default "Todo"), clears
-    /// <c>FireAt</c>, and fires <see cref="TicketStatusChanged"/> so automations (e.g. a
-    /// <c>statusChange { from: "Scheduled" }</c> trigger) run. No-op if the ticket is not Scheduled.
+    /// <c>FireAt</c>, and fires <see cref="TicketStatusChanged"/> so automations run. No-op if the
+    /// ticket is no longer in a Waiting column, which prevents a consumed wake from resurrecting
+    /// completed work.
     /// </summary>
     public async Task<Ticket?> PromoteScheduledAsync(string projectSlug, int ticketId, string author = "automation")
     {
-        await using var db = _projectService.GetProjectDb(projectSlug);
-        await EnsureActivityTableAsync(db);
-        await EnsureScheduleColumnsAsync(db);
-        await ColumnService.EnsureBoardColumnsTableAsync(db);
-        var ticket = await db.Tickets.FindAsync(ticketId);
-        if (ticket is null || ticket.FireAt is null)
-            return null;
-        if (ticket.ColumnId is null)
-            return null;
-        var currentColumn = await db.BoardColumns.FindAsync(ticket.ColumnId.Value);
-        if (currentColumn is null
-            || currentColumn.Role != ColumnRole.Waiting
-            || !IsScheduledColumnName(currentColumn.Name))
-            return null;
-        var scheduledStatus = ticket.Status;
-        var target = string.IsNullOrWhiteSpace(ticket.ScheduleTarget) ? "Todo" : ticket.ScheduleTarget!;
-        BoardColumn targetColumn;
-        try { targetColumn = await RequireColumnAsync(db, target, ticket.PipelineId); }
-        catch (InvalidOperationException)
+        await _scheduledPromotionLock.WaitAsync();
+        try
         {
-            // Fall back to Todo when the stored target was deleted; still require Todo to exist.
-            try { targetColumn = await RequireColumnAsync(db, "À traiter", ticket.PipelineId); }
-            catch (InvalidOperationException) { targetColumn = await RequireColumnAsync(db, "Todo", ticket.PipelineId); }
+            await using var db = _projectService.GetProjectDb(projectSlug);
+            await EnsureActivityTableAsync(db);
+            await EnsureScheduleColumnsAsync(db);
+            await ColumnService.EnsureBoardColumnsTableAsync(db);
+            var ticket = await db.Tickets.FindAsync(ticketId);
+            if (ticket is null || ticket.FireAt is null || ticket.ColumnId is null)
+                return null;
+            var currentColumn = await db.BoardColumns.FindAsync(ticket.ColumnId.Value);
+            if (currentColumn is null || currentColumn.Role != ColumnRole.Waiting)
+                return null;
+            var scheduledStatus = ticket.Status;
+            var target = string.IsNullOrWhiteSpace(ticket.ScheduleTarget) ? "Todo" : ticket.ScheduleTarget!;
+            BoardColumn targetColumn;
+            try
+            {
+                targetColumn = await RequireColumnAsync(db, target, ticket.PipelineId);
+            }
+            catch (InvalidOperationException ex)
+            {
+                throw new InvalidOperationException(
+                    $"Impossible de réveiller le ticket #{ticketId} du projet '{projectSlug}' : " +
+                    $"la colonne cible planifiée '{target}' est absente du pipeline #{ticket.PipelineId}.", ex);
+            }
+            target = targetColumn.Name;
+            ColumnAssignmentPolicy.Apply(ticket, currentColumn, targetColumn);
+            ticket.Status = target;
+            ticket.ColumnId = targetColumn.Id;
+            ticket.FireAt = null;
+            ticket.ScheduleTarget = null;
+            ticket.UpdatedAt = DateTime.UtcNow;
+            db.ActivityEntries.Add(new ActivityEntry
+            {
+                TicketId = ticketId,
+                Author = author,
+                Text = $"planification déclenchée : {scheduledStatus} → {target}"
+            });
+            await db.SaveChangesAsync();
+            TicketStatusChanged?.Invoke(projectSlug, ticketId, scheduledStatus, target);
+            return ticket;
         }
-        target = targetColumn.Name;
-        ColumnAssignmentPolicy.Apply(ticket, currentColumn, targetColumn);
-        ticket.Status = target;
-        ticket.ColumnId = targetColumn.Id;
-        ticket.FireAt = null;
-        ticket.ScheduleTarget = null;
-        ticket.UpdatedAt = DateTime.UtcNow;
-        db.ActivityEntries.Add(new ActivityEntry
+        finally
         {
-            TicketId = ticketId,
-            Author = author,
-            Text = $"planification déclenchée : {scheduledStatus} → {target}"
-        });
-        await db.SaveChangesAsync();
-        TicketStatusChanged?.Invoke(projectSlug, ticketId, scheduledStatus, target);
-        return ticket;
+            _scheduledPromotionLock.Release();
+        }
     }
 
     /// <summary>

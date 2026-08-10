@@ -209,6 +209,9 @@ public class ColumnService
             await db.Database.ExecuteSqlRawAsync(
                 "UPDATE Tickets SET Status = {0} WHERE ColumnId = {1} OR (ColumnId IS NULL AND PipelineId = {2} AND Status = {3})",
                 name, column.Id, column.PipelineId, oldName);
+            await db.Database.ExecuteSqlRawAsync(
+                "UPDATE Tickets SET ScheduleTarget = {0} WHERE PipelineId = {1} AND ScheduleTarget = {2}",
+                name, column.PipelineId, oldName);
         }
         if (color is not null) column.Color = color;
         if (role is not null) column.Role = role.Value;
