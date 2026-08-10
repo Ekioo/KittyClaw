@@ -22,6 +22,20 @@ public sealed class DuplicateColumnTests
     }
 
     [Fact]
+    public async Task ConcurrentFirstReads_SeedDefaultColumnsOnce()
+    {
+        using var tmp = new TempDir();
+        var (columns, slug, _) = BuildSut(tmp);
+
+        var reads = await Task.WhenAll(Enumerable.Range(0, 12)
+            .Select(_ => columns.ListColumnsAsync(slug)));
+
+        Assert.All(reads, board => Assert.Equal(7, board.Count));
+        Assert.All(reads, board => Assert.Equal(board.Count,
+            board.Select(column => column.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count()));
+    }
+
+    [Fact]
     public async Task BoardWithPreexistingDuplicates_IsHealedOnFirstRead()
     {
         using var tmp = new TempDir();

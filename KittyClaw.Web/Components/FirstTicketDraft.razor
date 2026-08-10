@@ -1,0 +1,70 @@
+@using KittyClaw.Core.Services
+@inject FirstTicketDraftService DraftService
+@inject LocalizationService L
+
+<section class="modal-backdrop">
+    <div class="modal-dialog first-ticket-draft" @onclick:stopPropagation>
+        <h2>@L["FirstTicketDraftTitle"]</h2>
+        <p class="settings-hint">@L["FirstTicketDraftIntro"]</p>
+
+        @if (_draft is null)
+        {
+            <div class="migration-analyzing" aria-live="polite"><span class="migration-spinner"></span></div>
+        }
+        else
+        {
+            <label class="settings-label">@L["FirstTicketTitle"]</label>
+            <input id="first-ticket-title" class="settings-input" @bind="_title" @bind:event="oninput" @bind:after="TrackEdit" />
+            <label class="settings-label">@L["FirstTicketContext"]</label>
+            <textarea id="first-ticket-context" class="settings-input" @bind="_context" @bind:event="oninput" @bind:after="TrackEdit"></textarea>
+            <label class="settings-label">@L["FirstTicketOutcome"]</label>
+            <textarea id="first-ticket-outcome" class="settings-input" @bind="_outcome" @bind:event="oninput" @bind:after="TrackEdit"></textarea>
+            <label class="settings-label">@L["FirstTicketCriteria"]</label>
+            <textarea id="first-ticket-criteria" class="settings-input" @bind="_criteria" @bind:event="oninput" @bind:after="TrackEdit"></textarea>
+            @if (!string.IsNullOrWhiteSpace(_error)) { <div class="settings-status settings-status-err">@_error</div> }
+            <div class="modal-actions">
+                <button id="confirm-first-ticket" class="header-action-btn settings-primary" @onclick="ConfirmAsync" disabled="@(_busy || string.IsNullOrWhiteSpace(_title) || string.IsNullOrWhiteSpace(_outcome))">
+                    @(_busy ? "…" : L["FirstTicketContinue"])
+                </button>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public RepositoryIntakeState Intake { get; set; } = default!;
+    [Parameter, EditorRequired] public string ProjectSlug { get; set; } = "";
+    [Parameter] public EventCallback<int> OnConfirmed { get; set; }
+    private FirstTicketDraftModel? _draft;
+    private string _title = "", _context = "", _outcome = "", _criteria = "";
+    private string? _error;
+    private bool _busy, _editTracked;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _draft = await DraftService.DraftAsync(Intake);
+        (_title, _context, _outcome, _criteria) = (_draft.Title, _draft.Context, _draft.ExpectedOutcome, _draft.AcceptanceCriteria);
+    }
+
+    private async Task TrackEdit()
+    {
+        if (_editTracked) return;
+        _editTracked = true;
+        await DraftService.MarkEditedAsync(Intake.JourneyId);
+    }
+
+    private async Task ConfirmAsync()
+    {
+        if (_draft is null || _busy) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            var edited = _draft with { Title = _title, Context = _context, ExpectedOutcome = _outcome, AcceptanceCriteria = _criteria };
+            var ticket = await DraftService.ConfirmAsync(ProjectSlug, edited);
+            await OnConfirmed.InvokeAsync(ticket.Id);
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+}

@@ -19,7 +19,8 @@ public sealed class ColumnAgentDispatcher(
     AgentRunner runner,
     ProjectService projects,
     ProjectSkillService skills,
-    ColumnProcessorService processors) : IColumnAgentDispatcher
+    ColumnProcessorService processors,
+    FirstRunProviderService firstRun) : IColumnAgentDispatcher
 {
     public async Task<ColumnDispatchResult> DispatchAsync(
         string projectSlug, ColumnProcessor processor, ColumnExecution execution,
@@ -62,6 +63,18 @@ public sealed class ColumnAgentDispatcher(
         };
 
         var run = await runner.RunAsync(context, cancellationToken);
+        var journeyId = FirstRunJourneyId(ticket);
+        if (journeyId is not null && ticket.Status.Equals("Qualify", StringComparison.OrdinalIgnoreCase))
+        {
+            var usedFallback = run.SnapshotBuffer().Any(e => e.Kind == "fallback");
+            if (usedFallback || run.Status != AgentRunStatus.Completed)
+                await firstRun.RecordFailureAsync(new FirstRunProviderPlan(journeyId,
+                    new FirstRunProvider(target.Provider.ToString().ToLowerInvariant(), target.Model),
+                    fallback is null ? null : new FirstRunProvider(fallback.Provider.ToString().ToLowerInvariant(), fallback.Model), null),
+                    usedFallback ? "primary-provider-unavailable" : $"run-{run.Status.ToString().ToLowerInvariant()}", cancellationToken);
+            if (run.Status == AgentRunStatus.Completed)
+                await firstRun.RecordCompletedAsync(journeyId, cancellationToken);
+        }
         if (run.Status != AgentRunStatus.Completed)
             return new ColumnDispatchResult(run, null, $"Agent run ended with status {run.Status} (exit {run.ExitCode}).");
 
@@ -69,6 +82,17 @@ public sealed class ColumnAgentDispatcher(
         if (!TryParseResult(assistant, out var result, out var error))
             return new ColumnDispatchResult(run, null, error);
         return new ColumnDispatchResult(run, result, null);
+    }
+
+    internal static string? FirstRunJourneyId(Ticket ticket)
+    {
+        const string marker = "Journey: `";
+        if (ticket.Description is null) return null;
+        var start = ticket.Description.IndexOf(marker, StringComparison.Ordinal);
+        if (start < 0) return null;
+        start += marker.Length;
+        var end = ticket.Description.IndexOf('`', start);
+        return end > start ? ticket.Description[start..end] : null;
     }
 
     internal async Task<string> BuildProfileAsync(string projectSlug, ColumnProcessor processor)

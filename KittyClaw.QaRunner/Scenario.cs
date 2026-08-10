@@ -11,9 +11,25 @@ namespace KittyClaw.QaRunner;
 public sealed class Scenario
 {
     public Dictionary<string, string> Environment { get; set; } = new();
+    public ScenarioInstance Instance { get; set; } = new();
+    public ScenarioReport Report { get; set; } = new();
     public List<ScenarioAction> Setup { get; set; } = new();
     public List<ScenarioAction> Actions { get; set; } = new();
     public ScenarioVerdict Verdict { get; set; } = new();
+}
+
+public sealed class ScenarioInstance
+{
+    public List<string> Providers { get; set; } = ["claude"];
+    public string MockScenario { get; set; } = "column-success";
+    public string? UnavailableModel { get; set; }
+    public bool ProvidersInitiallyUnavailable { get; set; }
+}
+
+public sealed class ScenarioReport
+{
+    public string? Issue { get; set; }
+    public bool SettingsOpened { get; set; }
 }
 
 public sealed class ScenarioAction
@@ -31,6 +47,8 @@ public sealed class ScenarioAction
     public string? Description { get; set; }
     public string? Project { get; set; }
     public string? WorkspacePath { get; set; }
+    public string? SaveAs { get; set; }
+    public bool InitializeGit { get; set; }
     public int? Ms { get; set; }
     public int? MaxMs { get; set; }
     public string? WaitForSelector { get; set; }
@@ -72,6 +90,19 @@ public sealed class ScenarioResult
     public string? Notes { get; set; }
     public List<ScreenshotEntry> Screenshots { get; set; } = new();
     public List<AssertionEntry> Assertions { get; set; } = new();
+    public JourneyReport? Journey { get; set; }
+}
+
+public sealed class JourneyReport
+{
+    public string? Issue { get; set; }
+    public string? Provider { get; set; }
+    public string? FallbackProvider { get; set; }
+    public bool FallbackUsed { get; set; }
+    public bool SettingsOpened { get; set; }
+    public double? RepositoryToCompletedRunMinutes { get; set; }
+    public string? FinalOutcome { get; set; }
+    public bool MeetsFifteenMinuteTarget { get; set; }
 }
 
 public sealed class ScreenshotEntry

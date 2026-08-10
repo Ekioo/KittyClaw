@@ -45,7 +45,16 @@ var projectSecretVault = new ProjectSecretVault(dataDir);
 builder.Services.AddSingleton(projectSecretVault);
 builder.Services.AddSingleton(new ProjectService(dataDir, projectSecretVault));
 builder.Services.AddSingleton<GitRepositoryInitializationService>();
+builder.Services.AddSingleton(new RepositoryIntakeService(dataDir));
+builder.Services.AddSingleton(sp => new FirstRunProviderService(dataDir,
+    sp.GetRequiredService<AgentCliReadinessService>()));
+builder.Services.AddSingleton(sp => new DashboardGuidanceService(dataDir));
+builder.Services.AddSingleton(new FirstProjectActivationMetricsService(dataDir));
 builder.Services.AddSingleton<TicketService>();
+builder.Services.AddSingleton(sp => new FirstTicketDraftService(dataDir, sp.GetRequiredService<TicketService>()));
+builder.Services.AddSingleton(sp => new MinimalWorkflowService(dataDir,
+    sp.GetRequiredService<PipelineService>(), sp.GetRequiredService<ColumnService>(),
+    sp.GetRequiredService<ColumnProcessorService>(), sp.GetRequiredService<TicketService>()));
 builder.Services.AddSingleton<TicketTransferService>();
 builder.Services.AddSingleton<LabelService>();
 builder.Services.AddSingleton<ColumnService>();

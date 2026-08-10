@@ -1,0 +1,32 @@
+{
+  "setup": [
+    { "type": "createTemporaryDirectory", "saveAs": "nonGitPath" },
+    { "type": "createTemporaryDirectory", "saveAs": "validGitPath", "initializeGit": true }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/" },
+    { "type": "wait", "ms": 1200 },
+    { "type": "click", "selector": ".unified-page-header > .settings-primary" },
+    { "type": "fill", "selector": "#new-project-name", "value": "Repository intake journey" },
+    { "type": "fill", "selector": "#repository-path", "value": "{validGitPath}-missing" },
+    { "type": "fill", "selector": "#first-objective", "value": "Guide the first repository" },
+    { "type": "click", "selector": "#validate-repository" },
+    { "type": "wait", "ms": 300 },
+    { "type": "assertVisible", "selector": ".settings-status-err:not(:has(button))" },
+    { "type": "assertText", "selector": ".settings-status-err:not(:has(button))", "expected": "This folder does not exist. Choose an existing repository." },
+    { "type": "assertValue", "selector": "#first-objective", "expected": "Guide the first repository" },
+    { "type": "fill", "selector": "#repository-path", "value": "{nonGitPath}" },
+    { "type": "click", "selector": "#validate-repository" },
+    { "type": "wait", "ms": 300 },
+    { "type": "assertText", "selector": ".settings-status-err:not(:has(button))", "expected": "This folder is not a Git repository. Select a repository that already contains Git metadata." },
+    { "type": "assertValue", "selector": "#first-objective", "expected": "Guide the first repository" },
+    { "type": "fill", "selector": "#repository-path", "value": "{validGitPath}" },
+    { "type": "click", "selector": "#validate-repository" },
+    { "type": "assertValue", "selector": "#first-ticket-title", "expected": "Guide the first repository" },
+    { "type": "click", "selector": "#confirm-first-ticket" },
+    { "type": "wait", "ms": 1200 },
+    { "type": "assertVisible", "selector": ".migration-wizard:visible" },
+    { "type": "screenshot", "name": "repository-intake-recovered", "description": "Successful repository intake retry reaches framing with the objective retained and no settings detour" }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

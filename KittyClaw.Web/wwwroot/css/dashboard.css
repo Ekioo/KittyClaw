@@ -38,6 +38,20 @@
     position: relative;
 }
 
+/* ── First-project guidance panel ── */
+.dashboard-guidance { margin: 0 0 1rem; padding: 1.35rem 1.5rem; border: 1px solid #3b4c70; border-radius: 14px; background: linear-gradient(135deg, #161d31, #111522); box-shadow: 0 10px 30px #0004; }
+.dashboard-guidance--recoverableerror { border-color: #d89b3c; background: linear-gradient(135deg, #2b2115, #17151a); }
+.dashboard-guidance--completed { border-color: #3e9c71; background: linear-gradient(135deg, #12271f, #111a18); }
+.dashboard-guidance-step { color: #8fb8ff; font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.dashboard-guidance h2 { margin: .35rem 0; font-size: 1.35rem; }
+.dashboard-guidance p { max-width: 760px; margin: .35rem 0 .9rem; color: var(--text-muted); line-height: 1.5; }
+.dashboard-guidance-error { color: #f2c46d !important; }
+.dashboard-guidance-action { display: inline-flex; padding: .65rem 1rem; border-radius: 8px; background: var(--accent); color: white; font-weight: 700; text-decoration: none; }
+.dashboard-activity-summary { display: grid; grid-template-columns: repeat(3, minmax(100px, 1fr)); gap: .75rem; margin: 0 0 1rem; }
+.dashboard-activity-summary div { display: flex; align-items: baseline; gap: .5rem; padding: .8rem 1rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface2); }
+.dashboard-activity-summary strong { font-size: 1.3rem; }
+.dashboard-activity-summary span { color: var(--text-muted); }
+
 /* Free-canvas grid — 20px dot grid, dots appear during drag/resize */
 .dashboard-grid {
     position: relative;

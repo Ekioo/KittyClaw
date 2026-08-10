@@ -49,7 +49,18 @@ public sealed class AgentCliReadinessService
         var mistral = ProbeSafelyAsync(_resolveMistral, "--version");
         var ollama = ProbeSafelyAsync(() => "ollama", "--version");
         await Task.WhenAll(git, claude, codex, grok, mistral, ollama);
-        return new CliReadiness(git.Result, claude.Result, codex.Result, grok.Result, mistral.Result, ollama.Result);
+        // Isolated QA instances restrict provider readiness to the mock-backed ones so
+        // first-run provider selection stays deterministic on developer machines.
+        var allowList = Environment.GetEnvironmentVariable("KITTYCLAW_PROVIDER_ALLOWLIST")?
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        bool Allowed(string provider, bool probed) => probed && (allowList is null || allowList.Contains(provider));
+        return new CliReadiness(git.Result,
+            Allowed("claude", claude.Result),
+            Allowed("codex", codex.Result),
+            Allowed("grok", grok.Result),
+            Allowed("mistral", mistral.Result),
+            Allowed("ollama", ollama.Result));
     }
 
     private async Task<bool> ProbeSafelyAsync(Func<string?> resolve, string arguments)

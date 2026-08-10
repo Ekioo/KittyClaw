@@ -29,8 +29,11 @@ public class ScenarioParseTests
     {
         var json = """
         {
+          "instance": { "providers": ["codex"], "unavailableModel": "gpt-broken" },
+          "report": { "issue": "Provider launch", "settingsOpened": false },
           "setup": [
             { "type": "createGitRepository", "name": "repositoryPath", "value": "integration" },
+            { "type": "createTemporaryDirectory", "saveAs": "fixturePath", "initializeGit": true },
             { "type": "createProject", "name": "qa-test", "workspacePath": "D:/foo" },
             { "type": "commitGitFile", "workspacePath": "{repositoryPath}", "target": "integration", "name": "fixture.txt", "text": "ready" },
             { "type": "togglePause", "project": "qa-test" }
@@ -50,12 +53,18 @@ public class ScenarioParseTests
         var s = JsonSerializer.Deserialize<Scenario>(json, Opts);
 
         Assert.NotNull(s);
-        Assert.Equal(4, s!.Setup.Count);
+        Assert.Equal(["codex"], s!.Instance.Providers);
+        Assert.Equal("gpt-broken", s.Instance.UnavailableModel);
+        Assert.Equal("Provider launch", s.Report.Issue);
+        Assert.Equal(5, s.Setup.Count);
         Assert.Equal("createGitRepository", s.Setup[0].Type);
         Assert.Equal("repositoryPath", s.Setup[0].Name);
-        Assert.Equal("createProject", s.Setup[1].Type);
-        Assert.Equal("D:/foo", s.Setup[1].WorkspacePath);
-        Assert.Equal("commitGitFile", s.Setup[2].Type);
+        Assert.Equal("createTemporaryDirectory", s.Setup[1].Type);
+        Assert.Equal("fixturePath", s.Setup[1].SaveAs);
+        Assert.True(s.Setup[1].InitializeGit);
+        Assert.Equal("createProject", s.Setup[2].Type);
+        Assert.Equal("D:/foo", s.Setup[2].WorkspacePath);
+        Assert.Equal("commitGitFile", s.Setup[3].Type);
         Assert.Equal(6, s.Actions.Count);
         Assert.Equal("/", s.Actions[0].Url);
         Assert.Equal("codex:gpt-5.6-sol", s.Actions[1].Value);

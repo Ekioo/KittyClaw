@@ -9,6 +9,7 @@
 @inject IHttpClientFactory HttpFactory
 @inject LocalizationService L
 @inject AppSettingsService AppSettings
+@inject FirstProjectActivationMetricsService ActivationMetrics
 @rendermode InteractiveServer
 @implements IDisposable
 
@@ -619,6 +620,7 @@ else
         L.OnLanguageChanged += OnLanguageChanged;
         _project = await ProjectService.GetProjectAsync(Slug);
         if (_project is null) return;
+        await ActivationMetrics.RecordSettingsOpenedAsync(Slug);
         _workspacePath = _project.WorkspacePath ?? "";
         _worktreesEnabled = _project.WorktreesEnabled;
         _integrationBranch = _project.IntegrationBranch ?? "";

@@ -2,6 +2,9 @@
 @using KittyClaw.Core.Services
 @using KittyClaw.Core.Automation
 @inject ProjectService ProjectService
+@inject RepositoryIntakeService RepositoryIntake
+@inject MinimalWorkflowService MinimalWorkflow
+@inject FirstRunProviderService FirstRunProvider
 @inject AgentsTemplateService AgentsTemplate
 @inject AutomationEngine AutomationEngine
 @inject MemberService MemberService
@@ -22,11 +25,11 @@
         <div class="modal-dialog" @onclick:stopPropagation>
             <h2>@L["CreateProjectButton"]</h2>
             <p>@L["CreationSetupIntro"]</p>
-            <p class="settings-hint">After initialization, you will define the project's pipelines, columns, processors and skills.</p>
+            <p class="settings-hint">@L["RepositoryIntakeIntro"]</p>
 
             <label class="settings-label">@L["ProjectName"] *</label>
             <div class="settings-row">
-                <input class="settings-input" placeholder="@L["NewProjectPlaceholder"]"
+                <input id="new-project-name" class="settings-input" placeholder="@L["NewProjectPlaceholder"]"
                        data-testid="create-project-name"
                        @bind="_newProjectName" @bind:event="oninput" @onkeydown="HandleKeyDown" />
             </div>
@@ -34,11 +37,14 @@
             <label class="settings-label">@L["WorkspacePath"] *</label>
             <p class="settings-hint">@L["WorkspaceHint"]</p>
             <div class="settings-row">
-                <input class="settings-input" data-testid="create-project-workspace" placeholder="@L["WorkspacePlaceholder"]" @bind="_newWorkspacePath" @bind:event="oninput" @bind:after="OnWorkspaceChanged" />
+                <input id="repository-path" class="settings-input" data-testid="create-project-workspace" placeholder="@L["WorkspacePlaceholder"]" @bind="_newWorkspacePath" @bind:event="oninput" @bind:after="OnWorkspaceChanged" />
                 <button class="settings-browse" type="button" @onclick="OpenFolderPicker">
                     📁 @L["Browse"]
                 </button>
             </div>
+
+            <label class="settings-label">@L["FirstObjective"] *</label>
+            <textarea id="first-objective" class="settings-input" placeholder="@L["FirstObjectiveHint"]" @bind="_objective" @bind:event="oninput"></textarea>
 
             @if (!string.IsNullOrWhiteSpace(_newWorkspacePath) && _workspaceExists == false)
             {
@@ -87,8 +93,8 @@
 
             <div class="modal-actions">
                 <button class="header-action-btn" @onclick="CancelCreation" disabled="@_initializing">@L["Cancel"]</button>
-                <button class="header-action-btn settings-primary" data-testid="create-project-initialize" @onclick="StartInitialize" disabled="@(_initializing || _initConflicts is not null || string.IsNullOrWhiteSpace(_newProjectName) || string.IsNullOrWhiteSpace(_newWorkspacePath) || _workspaceExists != true)">
-                    @(_initializing ? "…" : L["Initialize"])
+                <button id="validate-repository" class="header-action-btn settings-primary" data-testid="create-project-initialize" @onclick="StartInitialize" disabled="@(_initializing || _initConflicts is not null || string.IsNullOrWhiteSpace(_newProjectName) || string.IsNullOrWhiteSpace(_newWorkspacePath) || string.IsNullOrWhiteSpace(_objective))">
+                    @(_initializing ? "…" : L["ValidateRepository"])
                 </button>
             </div>
         </div>
@@ -102,12 +108,26 @@
                         OnCancel="CloseFolderPicker" />
 }
 
-@if (_createdProject is not null)
+@if (_createdProject is not null && _validatedIntake is not null && !_firstTicketConfirmed)
+{
+    <FirstTicketDraft ProjectSlug="@_createdProject.Slug" Intake="@_validatedIntake" OnConfirmed="FirstTicketConfirmed" />
+}
+else if (_createdProject is not null)
 {
     <WorkflowMigrationWizard ProjectSlug="@_createdProject.Slug"
                              IsProjectOnboarding="true"
                              WorkspaceWasEmpty="@_workspaceWasEmpty"
+                             InitialPurpose="@_objective"
                              OnClose="FinishOnboarding" />
+}
+
+@if (_providerGuidance is not null)
+{
+    <div class="modal-backdrop"><div class="modal-dialog" @onclick:stopPropagation>
+        <h2>@L["FirstRunProviderTitle"]</h2>
+        <div class="settings-status settings-status-err">@_providerGuidance</div>
+        <div class="modal-actions"><button id="retry-first-run-provider" class="header-action-btn settings-primary" @onclick="RetryFirstRunAsync">@L["FirstRunProviderRetry"]</button></div>
+    </div></div>
 }
 
 @code {
@@ -118,6 +138,8 @@
     private string _newProjectName = "";
     private string _newWorkspacePath = "";
     private bool _folderPickerOpen;
+    private string _objective = "";
+    private string? _journeyId;
     private bool _initializing;
     private bool _creatingFolder;
     private bool? _workspaceExists;
@@ -129,6 +151,10 @@
     private AgentsTemplateService.GitWorkspaceInspection? _gitWorkspace;
     private bool _initializeGit = true;
     private int _workspaceInspectionVersion;
+    private RepositoryIntakeState? _validatedIntake;
+    private bool _firstTicketConfirmed;
+    private int? _firstTicketId;
+    private string? _providerGuidance;
 
     protected override Task OnAfterRenderAsync(bool firstRender)
     {
@@ -144,6 +170,8 @@
         _open = true;
         _newProjectName = "";
         _newWorkspacePath = "";
+        _objective = "";
+        _journeyId = null;
         _workspaceExists = null;
         _creationStatus = null;
         _initConflicts = null;
@@ -206,12 +234,15 @@
     private async Task StartInitialize()
     {
         if (!_open || _initializing) return;
-        if (string.IsNullOrWhiteSpace(_newProjectName) || string.IsNullOrWhiteSpace(_newWorkspacePath) || _workspaceExists != true) return;
+        if (string.IsNullOrWhiteSpace(_newProjectName) || string.IsNullOrWhiteSpace(_newWorkspacePath) || string.IsNullOrWhiteSpace(_objective)) return;
         _initializing = true;
         _creationStatus = null;
         try
         {
             var workspace = _newWorkspacePath.Trim();
+            var intake = await RepositoryIntake.SelectAndValidateAsync(_journeyId, workspace, _objective);
+            _journeyId = intake.JourneyId;
+            _validatedIntake = intake;
             _workspaceWasEmpty = !Directory.EnumerateFileSystemEntries(workspace).Any();
             await OnWorkspaceChanged();
             if (_gitWorkspace?.Kind == AgentsTemplateService.GitWorkspaceKind.GitUnavailable)
@@ -227,6 +258,11 @@
             {
                 _initConflicts = conflicts;
             }
+        }
+        catch (RepositoryIntakeException ex)
+        {
+            _journeyId = ex.JourneyId;
+            _creationStatus = (L[ex.ErrorCode], "settings-status-err");
         }
         finally { _initializing = false; }
     }
@@ -251,6 +287,7 @@
             _newProjectName = "";
             _open = false;
             _createdProject = project;
+            _firstTicketConfirmed = false;
             await OnCreated.InvokeAsync(project);
         }
         catch (Exception ex)
@@ -275,6 +312,29 @@
         if (NavigateToProject && project is not null)
             Nav.NavigateTo($"/board/{project.Slug}");
         return Task.CompletedTask;
+    }
+
+    private async Task FirstTicketConfirmed(int ticketId)
+    {
+        if (_createdProject is null || _validatedIntake is null) return;
+        _firstTicketId = ticketId;
+        await StartFirstRunAsync();
+    }
+
+    private async Task RetryFirstRunAsync() => await StartFirstRunAsync();
+
+    private async Task StartFirstRunAsync()
+    {
+        if (_createdProject is null || _validatedIntake is null || _firstTicketId is null) return;
+        var plan = await FirstRunProvider.SelectAsync(_validatedIntake.JourneyId);
+        if (!plan.Ready) { _providerGuidance = plan.Guidance; return; }
+        _providerGuidance = null;
+        await ProjectService.UpdateProjectAsync(_createdProject.Slug, _validatedIntake.RepositoryPath,
+            plan.Fallback?.Model, updateFallback: true);
+        await MinimalWorkflow.EnsureAsync(_createdProject.Slug, _firstTicketId.Value,
+            _validatedIntake.JourneyId, plan.Primary!.Model,
+            ct => FirstRunProvider.MarkStartedAsync(_validatedIntake.JourneyId, ct));
+        _firstTicketConfirmed = true;
     }
 
     private async Task EnsureAgentMembersAsync(string projectSlug)

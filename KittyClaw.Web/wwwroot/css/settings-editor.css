@@ -43,6 +43,10 @@
 .migration-benefits strong { display: block; margin-bottom: .35rem; }
 .migration-benefits p { margin: 0; color: #9da2c2; font-size: .88rem; line-height: 1.4; }
 .migration-safe-note { margin: 1.4rem auto 0; padding: .75rem 1rem; color: #9ca2c0; background: #11121e; border-radius: 8px; font-size: .85rem; }
+.first-ticket-draft { max-width: 720px; }
+.first-ticket-draft .settings-label { display: block; margin: .85rem 0 .35rem; }
+.first-ticket-draft .settings-input { display: block; width: 100%; box-sizing: border-box; }
+.first-ticket-draft textarea { min-height: 82px; resize: vertical; }
 .project-onboarding-questions { max-width: 860px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .project-onboarding-questions .migration-lead { grid-column: 1 / -1; text-align: center; }
 .project-onboarding-questions label { display: grid; gap: .45rem; color: #d5d7e8; font-weight: 600; }

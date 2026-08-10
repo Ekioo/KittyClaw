@@ -1,0 +1,24 @@
+{
+  "setup": [
+    { "type": "createTemporaryDirectory", "saveAs": "repositoryPath", "initializeGit": true }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/" },
+    { "type": "wait", "ms": 1200 },
+    { "type": "click", "selector": ".unified-page-header > .settings-primary" },
+    { "type": "fill", "selector": "#new-project-name", "value": "Provider fallback journey" },
+    { "type": "fill", "selector": "#repository-path", "value": "{repositoryPath}" },
+    { "type": "fill", "selector": "#first-objective", "value": "Deliver the first provider-neutral result" },
+    { "type": "click", "selector": "#validate-repository" },
+    { "type": "wait", "ms": 2000 },
+    { "type": "screenshot", "name": "first-ticket-provider-ready", "description": "First ticket draft after repository intake and before provider selection" },
+    { "type": "click", "selector": "#confirm-first-ticket" },
+    { "type": "wait", "ms": 1500 },
+    { "type": "assertJson", "path": "/api/projects/provider-fallback-journey/tickets/1", "jsonPath": "status", "expected": "Qualify" },
+    { "type": "navigate", "url": "/board/provider-fallback-journey/ticket/1" },
+    { "type": "wait", "ms": 1000 },
+    { "type": "assertText", "selector": ".pipeline-tab--active span:first-child", "expected": "First success" },
+    { "type": "screenshot", "name": "provider-neutral-first-run", "description": "First ticket activated in the minimal workflow after automatic provider selection" }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

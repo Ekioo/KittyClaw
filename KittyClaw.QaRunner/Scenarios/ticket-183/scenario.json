@@ -1,0 +1,20 @@
+{
+  "actions": [
+    { "type": "navigate", "url": "/" },
+    { "type": "wait", "ms": 1200 },
+    { "type": "click", "selector": ".unified-page-header > .settings-primary" },
+    { "type": "fill", "selector": "#new-project-name", "value": "Minimal workflow journey" },
+    { "type": "fill", "selector": "#repository-path", "value": "C:\\Sources\\KittyClaw\\qa-ticket-183-pass" },
+    { "type": "fill", "selector": "#first-objective", "value": "Deliver the first useful result" },
+    { "type": "click", "selector": "#validate-repository" },
+    { "type": "click", "selector": "#confirm-first-ticket" },
+    { "type": "wait", "ms": 1200 },
+    { "type": "assertJson", "path": "/api/projects/minimal-workflow-journey/tickets/1", "jsonPath": "status", "expected": "Qualify" },
+    { "type": "navigate", "url": "/board/minimal-workflow-journey/ticket/1" },
+    { "type": "wait", "ms": 1000 },
+    { "type": "assertText", "selector": ".pipeline-tab--active span:first-child", "expected": "First success" },
+    { "type": "assertVisible", "selector": ".column:nth-of-type(2)" },
+    { "type": "screenshot", "name": "minimal-workflow-ready", "description": "Dedicated first-success pipeline with the ticket in Qualify and human decision as the terminal column" }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

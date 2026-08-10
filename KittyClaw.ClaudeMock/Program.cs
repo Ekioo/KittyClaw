@@ -12,6 +12,14 @@ using KittyClaw.ClaudeMock;
 var sessionId = ArgParser.Get(args, "--session-id") ?? ArgParser.Get(args, "-s");
 var model = ArgParser.Get(args, "--model");
 
+if (args.Contains("--version"))
+{
+    var readinessFile = Environment.GetEnvironmentVariable("KITTYCLAW_MOCK_READINESS_FILE");
+    if (!string.IsNullOrWhiteSpace(readinessFile) && !File.Exists(readinessFile)) return 1;
+    Console.WriteLine("kittyclaw-mock 1.0");
+    return 0;
+}
+
 // Claude: prompt arrives on stdin. Grok (KittyClaw headless): --prompt-file, empty stdin.
 // Read the file when present so scenario markers in the prompt still resolve.
 var promptFile = ArgParser.Get(args, "--prompt-file");
@@ -38,6 +46,21 @@ if (scenario is null)
 {
     await Console.Error.WriteLineAsync($"mock-claude: no scenario named '{scenarioName}' (and no default)");
     return 2;
+}
+
+if (args.FirstOrDefault() == "exec")
+{
+    Console.WriteLine("{\"type\":\"thread.started\",\"thread_id\":\"mock-codex-thread\"}");
+    Console.WriteLine("{\"type\":\"turn.started\"}");
+    Console.WriteLine("{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"{\\\"outcome\\\":\\\"done\\\",\\\"skillsUsed\\\":[],\\\"summary\\\":\\\"First run complete.\\\"}\"}}");
+    Console.WriteLine("{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":10,\"output_tokens\":10}}");
+    return 0;
+}
+if (args.Contains("--output-format") && args.Contains("streaming-json"))
+{
+    Console.WriteLine("{\"type\":\"text\",\"data\":\"{\\\"outcome\\\":\\\"done\\\",\\\"skillsUsed\\\":[],\\\"summary\\\":\\\"First run complete.\\\"}\"}");
+    Console.WriteLine("{\"type\":\"end\",\"stopReason\":\"EndTurn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":10}}");
+    return 0;
 }
 
 // Real claude loads PreToolUse/PostToolUse hooks from --settings; the mock honors the same file so

@@ -67,11 +67,16 @@ var scenarioEnvironment = scenario.Environment.ToDictionary(
     StringComparer.Ordinal);
 
 ScenarioResult result;
-await using (var instance = await TestInstance.StartAsync(webExe, scenarioEnvironment))
+await using (var instance = await TestInstance.StartAsync(webExe, scenarioEnvironment, scenario.Instance))
 {
     Console.Error.WriteLine($"[qa-runner] test instance up at {instance.ApiUrl}");
-    var runner = new ScenarioRunner(instance.ApiUrl, screenshotDir, initialVariables: scenarioVariables);
+    var runner = new ScenarioRunner(instance.ApiUrl, screenshotDir,
+        initialVariables: scenarioVariables,
+        providerReadinessFile: instance.ProviderReadinessFile);
     result = await runner.RunAsync(scenario);
+    result.Journey = await runner.BuildJourneyReportAsync(scenario.Report);
+    if (result.Verdict != "PASS")
+        result.Notes = $"{result.Notes}\n{instance.DiagnosticOutput}";
 }
 
 // Upload screenshots to the *target* API (the orchestrator that holds the ticket).

@@ -18,12 +18,16 @@ public sealed class ScenarioRunner
     private readonly string _screenshotDir;
     private readonly HttpClient _http;
     private readonly Dictionary<string, string> _vars = new(StringComparer.Ordinal);
+    private readonly List<string> _temporaryDirectories = new();
+    private ScenarioResult? _lastResult;
+    private readonly string? _providerReadinessFile;
 
     public ScenarioRunner(
         string instanceApiUrl,
         string screenshotDir,
         HttpClient? http = null,
-        IReadOnlyDictionary<string, string>? initialVariables = null)
+        IReadOnlyDictionary<string, string>? initialVariables = null,
+        string? providerReadinessFile = null)
     {
         _instanceApiUrl = instanceApiUrl.TrimEnd('/');
         _screenshotDir = screenshotDir;
@@ -35,38 +39,78 @@ public sealed class ScenarioRunner
             foreach (var (name, value) in initialVariables)
                 _vars[name] = value;
         }
+        _providerReadinessFile = providerReadinessFile;
     }
 
     public async Task<ScenarioResult> RunAsync(Scenario scenario, CancellationToken ct = default)
     {
         var result = new ScenarioResult { Verdict = "PASS" };
 
-        // Setup phase: API calls only, no browser.
-        foreach (var action in scenario.Setup)
+        try
         {
-            await ExecuteSetupAsync(action, ct);
+            foreach (var action in scenario.Setup)
+            {
+                await ExecuteSetupAsync(action, ct);
+            }
+
+            using var pw = await Playwright.CreateAsync();
+            await using var browser = await pw.Chromium.LaunchAsync(new() { Headless = true });
+            await using var ctxBrowser = await browser.NewContextAsync(new()
+            {
+                ViewportSize = new() { Width = 1440, Height = 900 },
+            });
+            var page = await ctxBrowser.NewPageAsync();
+
+            foreach (var action in scenario.Actions)
+            {
+                await ExecuteActionAsync(action, page, result, ct);
+            }
+
+            if (scenario.Verdict.PassOn == "all-asserts-pass" && result.Assertions.Any(a => !a.Passed))
+            {
+                result.Verdict = "FAIL";
+                result.Notes = (result.Notes ?? "") + " | Assertion(s) failed.";
+            }
+
+            _lastResult = result;
+            return result;
         }
-
-        using var pw = await Playwright.CreateAsync();
-        await using var browser = await pw.Chromium.LaunchAsync(new() { Headless = true });
-        await using var ctxBrowser = await browser.NewContextAsync(new()
+        finally
         {
-            ViewportSize = new() { Width = 1440, Height = 900 },
-        });
-        var page = await ctxBrowser.NewPageAsync();
-
-        foreach (var action in scenario.Actions)
-        {
-            await ExecuteActionAsync(action, page, result, ct);
+            foreach (var directory in _temporaryDirectories)
+            {
+                try { Directory.Delete(directory, recursive: true); } catch { }
+            }
         }
+    }
 
-        if (scenario.Verdict.PassOn == "all-asserts-pass" && result.Assertions.Any(a => !a.Passed))
+    public async Task<JourneyReport> BuildJourneyReportAsync(ScenarioReport report, CancellationToken ct = default)
+    {
+        using var response = await _http.GetAsync("/api/activation/first-project", ct);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        var root = document.RootElement;
+        var events = root.GetProperty("events").EnumerateArray().ToList();
+        var selected = events.LastOrDefault(e => e.GetProperty("name").GetString() == "provider_selected");
+        var fallback = events.LastOrDefault(e => e.GetProperty("name").GetString() == "provider_fallback_started");
+        var completed = events.LastOrDefault(e => e.GetProperty("name").GetString() == "first_run_completed");
+        string? Read(JsonElement element, string name) => element.ValueKind == JsonValueKind.Object &&
+            element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+        double? duration = completed.ValueKind == JsonValueKind.Object && completed.TryGetProperty("durationMilliseconds", out var value)
+            && value.ValueKind == JsonValueKind.Number ? value.GetDouble() / 60000d : root.GetProperty("medianRepositoryToCompletedRunMinutes").ValueKind == JsonValueKind.Number
+                ? root.GetProperty("medianRepositoryToCompletedRunMinutes").GetDouble() : null;
+        var finalOutcome = _lastResult?.Assertions.LastOrDefault(a => a.Property == "json" && a.Selector == "status")?.Actual;
+        return new JourneyReport
         {
-            result.Verdict = "FAIL";
-            result.Notes = (result.Notes ?? "") + " | Assertion(s) failed.";
-        }
-
-        return result;
+            Issue = report.Issue,
+            Provider = Read(selected, "provider"),
+            FallbackProvider = Read(selected, "fallbackProvider"),
+            FallbackUsed = fallback.ValueKind == JsonValueKind.Object,
+            SettingsOpened = report.SettingsOpened,
+            RepositoryToCompletedRunMinutes = duration,
+            FinalOutcome = finalOutcome,
+            MeetsFifteenMinuteTarget = duration is < 15
+        };
     }
 
     private async Task ExecuteSetupAsync(ScenarioAction action, CancellationToken ct)
@@ -116,6 +160,28 @@ public sealed class ScenarioRunner
                     CommitGitFile(repository, branch, file, Resolve(action.Text ?? "fixture\n"));
                     break;
                 }
+            case "createTemporaryDirectory":
+                {
+                    var variable = Required(action.SaveAs, "createTemporaryDirectory.saveAs");
+                    var directory = Path.Combine(Path.GetTempPath(), "kittyclaw-qa-fixture-" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(directory);
+                    _temporaryDirectories.Add(directory);
+                    _vars[variable] = directory;
+                    if (action.InitializeGit)
+                    {
+                        using var process = Process.Start(new ProcessStartInfo("git", $"init \"{directory}\"")
+                        {
+                            UseShellExecute = false,
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true,
+                            CreateNoWindow = true,
+                        }) ?? throw new InvalidOperationException("Unable to start git init for QA fixture.");
+                        await process.WaitForExitAsync(ct);
+                        if (process.ExitCode != 0)
+                            throw new InvalidOperationException($"git init failed for QA fixture: {await process.StandardError.ReadToEndAsync(ct)}");
+                    }
+                    break;
+                }
             case "createProject":
                 {
                     var name = Resolve(action.Name ?? action.Project ?? "qa-test");
@@ -144,6 +210,11 @@ public sealed class ScenarioRunner
             case "createDependency":
             case "waitForRun":
                 await ExecuteApiActionAsync(action, ct);
+                break;
+            case "enableProviders":
+                if (string.IsNullOrWhiteSpace(_providerReadinessFile))
+                    throw new InvalidOperationException("enableProviders requires providersInitiallyUnavailable.");
+                await File.WriteAllTextAsync(_providerReadinessFile, "ready", ct);
                 break;
             default:
                 throw new InvalidOperationException($"Unknown setup action: {action.Type}");
@@ -557,6 +628,11 @@ public sealed class ScenarioRunner
             case "setStatus":
             case "waitForRun":
                 await ExecuteApiActionAsync(action, ct);
+                break;
+            case "enableProviders":
+                if (string.IsNullOrWhiteSpace(_providerReadinessFile))
+                    throw new InvalidOperationException("enableProviders requires providersInitiallyUnavailable.");
+                await File.WriteAllTextAsync(_providerReadinessFile, "ready", ct);
                 break;
             default:
                 throw new InvalidOperationException($"Unknown action: {action.Type}");

@@ -14,6 +14,7 @@
 @inject AgentRunner AgentRunner
 @inject DashboardTileGate TileGate
 @inject DashboardScriptRunner ScriptRunner
+@inject DashboardGuidanceService GuidanceService
 @inject AgentRunsState RunsState
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
@@ -44,6 +45,31 @@ else
     </div>
 
     <div class="dashboard-view">
+        @if (_guidance is not null)
+        {
+            <section class="dashboard-guidance dashboard-guidance--@_guidance.Stage.ToString().ToLowerInvariant()"
+                     data-testid="dashboard-guidance" data-stage="@_guidance.Stage.ToString().ToLowerInvariant()">
+                <div class="dashboard-guidance-step">@GuidanceStep</div>
+                <h2>@GuidanceTitle</h2>
+                <p>@GuidanceMessage</p>
+                @if (_guidance.Stage == DashboardGuidanceStage.RecoverableError)
+                {
+                    <p class="dashboard-guidance-error" data-testid="dashboard-guidance-error">@L["GuidanceRecoverableHint"]</p>
+                }
+                <a class="dashboard-guidance-action" href="/board/@Slug" @onclick="RecordPrimaryAction"
+                   data-testid="dashboard-primary-action">@GuidanceAction</a>
+            </section>
+        }
+
+        @if (_hasRealActivity)
+        {
+            <section class="dashboard-activity-summary" data-testid="dashboard-real-activity">
+                <div><strong>@_ticketCount</strong><span>@L["GuidanceTickets"]</span></div>
+                <div><strong>@RunsState.AllForProject(Slug).Count()</strong><span>@L["GuidanceRuns"]</span></div>
+                <div><strong>@_resultCount</strong><span>@L["GuidanceResults"]</span></div>
+            </section>
+        }
+
         @if (_tiles.Count == 0 && _availableSlugs.Count == 0)
         {
             <div class="dashboard-empty">
@@ -357,6 +383,40 @@ else
     private DateTime _clockUtc = DateTime.UtcNow;
     private readonly CancellationTokenSource _refreshTimingCts = new();
     private Task? _refreshTimingLoop;
+    private DashboardGuidanceState? _guidance;
+    private int _ticketCount;
+    private int _resultCount;
+    private bool _hasRealActivity;
+
+    private string GuidanceStep => _guidance?.Stage switch
+    {
+        DashboardGuidanceStage.Empty => L["GuidanceStepReady"],
+        DashboardGuidanceStage.Running => L["GuidanceStepRunning"],
+        DashboardGuidanceStage.RecoverableError => L["GuidanceStepRecoverable"],
+        DashboardGuidanceStage.Completed => L["GuidanceStepCompleted"],
+        _ => ""
+    };
+    private string GuidanceTitle => L[_guidance?.Stage switch
+    {
+        DashboardGuidanceStage.Running => "GuidanceRunningTitle",
+        DashboardGuidanceStage.RecoverableError => "GuidanceRecoverableTitle",
+        DashboardGuidanceStage.Completed => "GuidanceCompletedTitle",
+        _ => "GuidanceReadyTitle"
+    }];
+    private string GuidanceMessage => L[_guidance?.Stage switch
+    {
+        DashboardGuidanceStage.Running => "GuidanceRunningMessage",
+        DashboardGuidanceStage.RecoverableError => "GuidanceRecoverableMessage",
+        DashboardGuidanceStage.Completed => "GuidanceCompletedMessage",
+        _ => "GuidanceReadyMessage"
+    }];
+    private string GuidanceAction => L[_guidance?.Stage switch
+    {
+        DashboardGuidanceStage.Running => "GuidanceFollowRun",
+        DashboardGuidanceStage.RecoverableError => "GuidanceRetry",
+        DashboardGuidanceStage.Completed => "GuidanceDecide",
+        _ => "GuidanceStart"
+    }];
 
     private DashboardTileLayout? _resizingTile;
     private DotNetObjectReference<Dashboard>? _dotNetRef;
@@ -508,6 +568,11 @@ else
         _workspace = ProjectService.ResolveWorkspacePath(_project);
         _availableSlugs = DashboardService.GetAvailableSlugs(_workspace);
         _tiles = await DashboardService.GetTilesAsync(Slug, _workspace);
+        _guidance = await GuidanceService.LoadAsync(Slug);
+        await LoadActivityAsync();
+        await GuidanceService.RecordAsync(Slug, _guidance.JourneyId, "dashboard_guidance_viewed");
+        if (_guidance.HasFirstResult && _hasRealActivity)
+            await GuidanceService.RecordAsync(Slug, _guidance.JourneyId, "guidance_replaced_by_activity");
         await LoadOllamaModelsAsync();
 
         await LoadAllContentAsync();
@@ -541,8 +606,44 @@ else
         _dotNetRef?.Dispose();
     }
 
-    private void OnRunsStateChanged() => InvokeAsync(StateHasChanged);
+    private void OnRunsStateChanged() => _ = InvokeAsync(RefreshGuidanceAsync);
     private void OnTileGateStateChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task RefreshGuidanceAsync()
+    {
+        _guidance = await GuidanceService.LoadAsync(Slug);
+        await LoadActivityAsync();
+        if (_guidance.HasFirstResult && _hasRealActivity)
+            await GuidanceService.RecordAsync(Slug, _guidance.JourneyId, "guidance_replaced_by_activity");
+        StateHasChanged();
+    }
+
+    private async Task LoadActivityAsync()
+    {
+        var http = HttpFactory.CreateClient();
+        http.BaseAddress = new Uri(Navigation.BaseUri);
+        try
+        {
+            var tickets = await http.GetFromJsonAsync<List<TicketSummary>>($"/api/projects/{Slug}/tickets");
+            _ticketCount = tickets?.Count ?? 0;
+        }
+        catch { _ticketCount = 0; }
+        var runs = RunsState.AllForProject(Slug).ToList();
+        _ticketCount = Math.Max(_ticketCount,
+            runs.Where(r => r.TicketId.HasValue).Select(r => r.TicketId).Distinct().Count());
+        _resultCount = Math.Max(_tiles.Count, runs.Count(r => r.Status == AgentRunStatus.Completed));
+        _hasRealActivity = _ticketCount > 0 || runs.Count > 0 || _resultCount > 0;
+    }
+
+    private Task RecordPrimaryAction() => GuidanceService.RecordAsync(
+        Slug, _guidance?.JourneyId, "dashboard_primary_action_used");
+
+    private async Task OpenSettings()
+    {
+        if (_guidance is not null && !_guidance.HasFirstResult)
+            await GuidanceService.RecordAsync(Slug, _guidance.JourneyId, "settings_opened_before_first_result");
+        Navigation.NavigateTo($"/board/{Slug}/settings");
+    }
 
     private void AutoStartEmptyTiles()
     {

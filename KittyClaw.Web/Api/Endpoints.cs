@@ -35,5 +35,6 @@ public static partial class Endpoints
         MapDeepSeek(api);
         MapApprovals(api);
         MapBoundaryObservations(api);
+        MapActivationMetrics(api);
     }
 }
