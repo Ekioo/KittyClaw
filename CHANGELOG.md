@@ -4,6 +4,45 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.15] — 2026-08-11
+
+Provider-neutral approval enforcement, verifiable delivery evidence, explicit ticket dependencies, and a more resilient high-load interface.
+
+### Highlights
+
+KittyClaw can now enforce temporary human approvals at sensitive runtime boundaries independently of the selected agent provider. Approval requests, decisions, enforcement receipts, and boundary observations are persisted and exposed through dedicated APIs and an operator-facing approval screen.
+
+Implementation reviews gain structured, provider-neutral evidence. Runs capture observable repository and command results, attach provenance and freshness metadata, and compose decision briefs with explicit accept, correct, or stop actions instead of relying on unverified agent claims.
+
+Ticket dependencies are now first-class and atomic. The API validates dependency changes, the board displays blockers and dependants, and automated dispatch cannot start work while unresolved dependencies remain. Saturation controls also prevent blocked queues from growing silently while preserving an audited recovery path.
+
+### Added
+
+- Persistent temporary approval registry, approval workflow, boundary-observation mode, enforcement receipts, APIs, and localized approval interface.
+- Provider-neutral evidence schema, provenance and freshness rules, run/ticket evidence storage, recovery guidance, repeatable benchmark coverage, and decision briefs for review.
+- Atomic ticket-dependency creation and removal with cycle validation, migration support, board visibility, QA scenarios, and dispatch gating.
+- Configurable blocked-ticket saturation guard with structured API failures and an owner-only audited recovery override.
+- Onboarding readiness checks for every supported agent CLI through a centralized asynchronous service.
+- GitHub issue, pull-request, contribution, and community-standard templates.
+
+### Changed
+
+- The board page, ticket creation dialog, ticket cards, filters, and stylesheet bundle are split into focused components while preserving behavior and improving responsiveness under agent load.
+- Automation actions are decomposed into focused ticket-mutation, network, and agent-memory handlers with structural consistency tests guarding their contracts.
+- Waiting-column guidance falls back to semantic column roles when a workflow has no explicit user guidance.
+- Agent prompts receive the canonical project slug so API interactions remain scoped to the correct project.
+
+### Fixed
+
+- Automated dispatch remains blocked until every dependency is resolved, including after the action-executor refactor.
+- Overdue scheduled tickets recover safely instead of remaining stranded after an interruption.
+- Workflow migration preserves tickets already in terminal success columns and reports actionable diagnostics when migration fails.
+- The board stays responsive during sustained agent activity and no longer depends on a monolithic stylesheet or page component.
+- Onboarding provider contract tests now follow the centralized readiness model without weakening provider coverage.
+- Owner decision actions resolve their destinations from processor routing instead of a historical `Todo` column name, and correction requests no longer terminate the UI circuit on renamed workflows.
+
+---
+
 ## [v0.14] — 2026-08-05
 
 Native Mistral Vibe support, cross-platform workspace selection, and safer guided workflow setup and migration.
