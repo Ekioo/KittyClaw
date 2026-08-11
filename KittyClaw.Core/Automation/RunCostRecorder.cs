@@ -57,6 +57,9 @@ public sealed class RunCostRecorder : IHostedService
             if (project is not null)
             {
                 var workspace = _projects.ResolveWorkspacePath(project);
+                int? pipelineId = null;
+                if (run.TicketId is int snapshotTicketId)
+                    pipelineId = (await _tickets.GetTicketAsync(run.ProjectSlug, snapshotTicketId))?.PipelineId;
                 _cost.LogRun(workspace, new CostLogEntry(
                     At: endedAt,
                     Agent: run.AgentName,
@@ -69,7 +72,10 @@ public sealed class RunCostRecorder : IHostedService
                     UsdCost: run.TotalCostUsd ?? 0m,
                     DurationSeconds: (endedAt - run.StartedAt).TotalSeconds,
                     ExitCode: run.ExitCode ?? -1,
-                    CostEstimated: run.CostIsEstimated));
+                    CostEstimated: run.CostIsEstimated,
+                    ProjectSlug: run.ProjectSlug,
+                    PipelineId: pipelineId,
+                    RunId: run.RunId));
             }
 
             if (run.TicketId is int ticketId)

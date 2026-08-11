@@ -144,6 +144,9 @@ public class RunTokenUsageTests : IDisposable
         var line = File.ReadAllLines(logPath).Single();
         Assert.Contains("\"UsdCost\":0.1234", line);
         Assert.Contains($"\"TicketId\":{ticket.Id}", line);
+        Assert.Contains($"\"ProjectSlug\":\"{project.Slug}\"", line);
+        Assert.Contains($"\"PipelineId\":{ticket.PipelineId}", line);
+        Assert.Contains("\"RunId\":\"rec-run\"", line);
 
         var updated = await tickets.GetTicketAsync(project.Slug, ticket.Id);
         Assert.NotNull(updated);

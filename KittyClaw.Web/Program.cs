@@ -79,6 +79,7 @@ builder.Services.AddSingleton<AgentRunner>();
 builder.Services.AddSingleton<IColumnAgentDispatcher, ColumnAgentDispatcher>();
 builder.Services.AddSingleton<ColumnActionExecutor>();
 builder.Services.AddSingleton<CostTracker>();
+builder.Services.AddSingleton<CostReportService>();
 // Durable cost records: cost-log.jsonl (daily budget) + per-ticket token/USD totals.
 builder.Services.AddHostedService<RunCostRecorder>();
 // Evidence: capture and attach verifiable evidence bundles to run and ticket records.

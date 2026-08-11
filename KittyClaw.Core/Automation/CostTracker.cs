@@ -80,5 +80,8 @@ public sealed record CostLogEntry(
     decimal UsdCost,
     double DurationSeconds,
     int ExitCode,
-    bool CostEstimated = false
+    bool CostEstimated = false,
+    string? ProjectSlug = null,
+    int? PipelineId = null,
+    string? RunId = null
 );
