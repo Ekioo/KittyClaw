@@ -2,7 +2,7 @@
 
 ## Status
 
-**Opt-in pattern.** The helper scripts and the automation placeholder shipped here exist so a project *can* adopt per-ticket worktrees, but `ProjectTemplate/Agents/**` does **not** enable it by default. A freshly initialized KittyClaw project keeps all agents working in the single project workspace.
+**Opt-in pattern.** Each project persists a `WorktreesEnabled` flag and an integration branch, but the flag defaults to disabled for both new and migrated projects. The helper scripts and the automation placeholder shipped here exist so a project *can* adopt per-ticket worktrees, but `ProjectTemplate/Agents/**` does **not** enable it by default. A freshly initialized KittyClaw project keeps all agents working in the single project workspace.
 
 Adopt this pattern only if you need filesystem isolation between concurrent agentic work on different tickets (e.g. several programmers in flight simultaneously, or a desire to keep `main` clean while work is in progress).
 
@@ -10,6 +10,7 @@ Adopt this pattern only if you need filesystem isolation between concurrent agen
 
 These pieces are in the repo and available to every project:
 
+- Project registry settings — `WorktreesEnabled` and `IntegrationBranch` are exposed by `GET /api/projects/{slug}` and can be changed independently through `PATCH /api/projects/{slug}`. Enabling validates that the workspace is a usable Git repository, that Git supports worktrees, and that the named local integration branch exists before persisting the change.
 - `tools/worktree-ensure.ps1` — idempotent. Creates a worktree from local `main` if absent, or returns the path of the existing one. Convention: branch `ticket/<N>`, folder `<repo>.worktrees/ticket-<N>`. Usage: `powershell.exe -NoProfile -File tools/worktree-ensure.ps1 <N>`; the absolute path is printed on the last stdout line.
 - `tools/worktree-merge.ps1` — rebases the local unpublished ticket branch onto `dev`, fast-forwards `dev` to it, then removes the worktree and deletes the branch. This keeps ticket integration linear without merge commits.
 - `{ticketId}` placeholder support in `concurrencyGroup` and `mutuallyExclusiveWith` (see [automation engine](./automation-engine.md)). Lets you serialize agents per-ticket without serializing across tickets.
