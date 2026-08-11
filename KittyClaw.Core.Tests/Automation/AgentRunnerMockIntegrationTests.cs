@@ -6,9 +6,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace KittyClaw.Core.Tests.Automation;
 
 // Finds KittyClaw.ClaudeMock/bin/**/claude(.exe) by walking up from the test assembly and sets
-// KITTYCLAW_CLAUDE_BIN before any AgentRunner is constructed, because ResolveClaudeBinary is a
-// static Lazy that caches on first access — the env var must be in place before that happens.
-[CollectionDefinition("MockClaude")]
+// KITTYCLAW_CLAUDE_BIN for the hermetic AgentRunner tests in this non-parallel collection.
+[CollectionDefinition("MockClaude", DisableParallelization = true)]
 public sealed class MockClaudeCollection : ICollectionFixture<MockClaudeBinFixture> { }
 
 public sealed class MockClaudeBinFixture : IDisposable
@@ -36,6 +35,28 @@ public sealed class MockClaudeBinFixture : IDisposable
 [Collection("MockClaude")]
 public class AgentRunnerMockIntegrationTests
 {
+    [Fact]
+    public void ExplicitClaudeBinaryOverride_IsObservedAfterAnEarlierResolution()
+    {
+        var original = Environment.GetEnvironmentVariable("KITTYCLAW_CLAUDE_BIN");
+        Assert.False(string.IsNullOrWhiteSpace(original));
+
+        _ = ProcessLifecycleManager.ClaudeBinary;
+
+        var replacement = Path.GetTempFileName();
+        try
+        {
+            Environment.SetEnvironmentVariable("KITTYCLAW_CLAUDE_BIN", replacement);
+
+            Assert.Equal(replacement, ProcessLifecycleManager.ClaudeBinary);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("KITTYCLAW_CLAUDE_BIN", original);
+            File.Delete(replacement);
+        }
+    }
+
     [Fact]
     public async Task PendingApproval_SuspendsProviderProcessUntilMatchingDecision()
     {

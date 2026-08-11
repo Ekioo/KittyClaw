@@ -11,9 +11,9 @@ internal static class ProcessLifecycleManager
     //   1. Sibling of host exe: <baseDir>/claude(.exe)
     //   2. <baseDir>/tools/claude(.exe)
     //   3. "claude" — resolved via PATH (production default)
-    private static readonly Lazy<string> _claudeBinary = new(ResolveClaudeBinary);
-
-    internal static string ClaudeBinary => _claudeBinary.Value;
+    // Resolve on access so an explicit test/QA override cannot lose a race with an earlier
+    // readiness probe that happened to resolve the production fallback first.
+    internal static string ClaudeBinary => ResolveClaudeBinary();
 
     internal static string ResolveApiUrl()
     {
@@ -81,7 +81,7 @@ internal static class ProcessLifecycleManager
                 CliProvider.Grok => GrokCli.Binary ?? "grok",
                 CliProvider.Codex => CodexCli.Binary ?? "codex",
                 CliProvider.Mistral => MistralCli.Binary ?? "vibe",
-                _ => _claudeBinary.Value,
+                _ => ClaudeBinary,
             }),
             WorkingDirectory = ctx.WorkspacePath,
             RedirectStandardInput = true,

@@ -4,6 +4,12 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.15.1] — 2026-08-11
+
+### Fixed
+
+- Hermetic agent-runner tests now honor late CLI test overrides even when an earlier readiness probe resolved the production fallback first, eliminating the Windows/Linux CI initialization race seen on v0.15.0.
+
 ## [v0.15] — 2026-08-11
 
 Provider-neutral approval enforcement, verifiable delivery evidence, explicit ticket dependencies, and a more resilient high-load interface.
