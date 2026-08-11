@@ -5,7 +5,6 @@ using KittyClaw.Core.Models;
 namespace KittyClaw.Core.Services;
 
 public sealed record TicketWorktree(string Path, string Branch, int RootTicketId);
-public sealed record TicketWorktreeState(string Path, string Branch, int RootTicketId, bool Exists, bool IsDirty, string? Error);
 
 /// <summary>Resolves and creates the canonical Git worktree used by a ticket family.</summary>
 public sealed class TicketWorktreeService(ProjectService projects, TicketService tickets)
@@ -142,28 +141,6 @@ public sealed class TicketWorktreeService(ProjectService projects, TicketService
         }
     }
 
+
     private sealed record GitResult(int ExitCode, string Output, string Error);
 }
-    public async Task<TicketWorktreeState?> InspectAsync(string projectSlug, int ticketId)
-    {
-        var project = await projects.GetProjectAsync(projectSlug)
-            ?? throw new InvalidOperationException($"Project '{projectSlug}' does not exist.");
-        if (!project.WorktreesEnabled) return null;
-
-        var workspace = projects.ResolveWorkspacePath(project);
-        var rootTicketId = await ResolveRootTicketIdAsync(projectSlug, ticketId);
-        var repositoryRoot = Path.GetFullPath(RunGit(workspace, ["rev-parse", "--show-toplevel"]).Output.Trim());
-        var branch = $"ticket/{rootTicketId}";
-        var repositoryName = Path.GetFileName(Path.TrimEndingDirectorySeparator(repositoryRoot));
-        var parent = Directory.GetParent(repositoryRoot)?.FullName
-            ?? throw new InvalidOperationException($"Git repository '{repositoryRoot}' has no parent directory.");
-        var path = Path.GetFullPath(Path.Combine(parent, $"{repositoryName}.worktrees", $"ticket-{rootTicketId}"));
-        var registered = FindRegisteredWorktree(repositoryRoot, path);
-        if (registered is null)
-            return new(path, branch, rootTicketId, false, false, null);
-        if (!string.Equals(registered, $"refs/heads/{branch}", StringComparison.Ordinal))
-            return new(path, branch, rootTicketId, true, false, $"Registered on {registered}.");
-        var status = RunGit(path, ["status", "--porcelain"], throwOnError: false);
-        return new(path, branch, rootTicketId, true, !string.IsNullOrWhiteSpace(status.Output),
-            status.ExitCode == 0 ? null : status.Error.Trim());
-    }
