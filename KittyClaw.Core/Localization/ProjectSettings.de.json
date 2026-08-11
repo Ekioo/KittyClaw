@@ -46,5 +46,10 @@
   "DangerZone": "Gefahrenzone",
   "DeleteProject": "Projekt löschen",
   "DeleteProjectConfirm": "Projekt löschen",
-  "DeleteProjectWarning": "Alle Tickets und zugehörigen Daten werden dauerhaft gelöscht. Der Arbeitsbereichsordner auf der Festplatte wird NICHT gelöscht."
+  "DeleteProjectWarning": "Alle Tickets und zugehörigen Daten werden dauerhaft gelöscht. Der Arbeitsbereichsordner auf der Festplatte wird NICHT gelöscht.",
+  "WorktreeSettings": "Git-Worktrees",
+  "WorktreeSettingsHint": "Optionaler Modus: isoliert Agenten nach Stammticket und serialisiert ihre lokale Integration.",
+  "WorktreeEnable": "Worktrees für dieses Projekt aktivieren",
+  "WorktreeEnableEffect": "Untertickets teilen den Worktree ihres Stammtickets; deaktivierte Projekte behalten den Standardablauf.",
+  "WorktreePrerequisites": "Voraussetzungen: Arbeitsbereich in einem Git-Repository, verfügbarer Befehl git worktree und vorhandener lokaler Integrations-Branch. Die Integration verwendet Rebase + Fast-Forward ohne automatischen Push."
 }

@@ -46,5 +46,10 @@
   "DangerZone": "Zona pericolosa",
   "DeleteProject": "Elimina progetto",
   "DeleteProjectConfirm": "Elimina progetto",
-  "DeleteProjectWarning": "Tutti i biglietti e i dati associati verranno eliminati definitivamente. La cartella dell'area di lavoro sul disco NON viene eliminata."
+  "DeleteProjectWarning": "Tutti i biglietti e i dati associati verranno eliminati definitivamente. La cartella dell'area di lavoro sul disco NON viene eliminata.",
+  "WorktreeSettings": "Worktree Git",
+  "WorktreeSettingsHint": "Modalità opzionale: isola gli agenti per ticket radice e serializza la loro integrazione locale.",
+  "WorktreeEnable": "Abilita i worktree per questo progetto",
+  "WorktreeEnableEffect": "I sottoticket condividono il worktree del ticket radice; i progetti disabilitati mantengono il flusso standard.",
+  "WorktreePrerequisites": "Prerequisiti: area di lavoro in un repository Git, comando git worktree disponibile e branch di integrazione locale esistente. L'integrazione usa rebase + fast-forward senza push automatico."
 }
