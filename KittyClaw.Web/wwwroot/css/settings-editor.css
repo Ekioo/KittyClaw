@@ -174,6 +174,7 @@
 .decision-brief-run-id { color: var(--muted); font-family: var(--font-mono, monospace); font-size: .77rem; }
 .decision-brief-empty { margin: .4rem 0 .8rem; padding: .6rem .8rem; border: 1px dashed var(--border); border-radius: 7px; background: var(--surface2); color: var(--muted); font-size: .83rem; }
 .decision-brief-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .7rem; }
+.decision-brief-action-error { margin-top: .6rem; padding: .55rem .7rem; border: 1px solid color-mix(in srgb, var(--danger) 55%, transparent); border-radius: 7px; background: color-mix(in srgb, var(--danger) 10%, transparent); color: var(--danger); font-size: .82rem; }
 .brief-action-btn { padding: .38rem .85rem; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--surface2); color: var(--text); font-size: .83rem; font-weight: 500; cursor: pointer; transition: background .12s, border-color .12s; }
 .brief-action-btn:disabled { opacity: .5; cursor: default; }
 .brief-action-btn--accept { border-color: color-mix(in srgb, #4ade80 45%, var(--border)); background: color-mix(in srgb, #4ade80 14%, var(--surface2)); color: #1a7a3c; }

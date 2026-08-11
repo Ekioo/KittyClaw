@@ -282,6 +282,7 @@
   "BriefDecisionAccepted": "Décision enregistrée : accepté.",
   "BriefDecisionCorrectionRequested": "Décision enregistrée : correction demandée.",
   "BriefDecisionStopped": "Décision enregistrée : arrêté.",
+  "BriefActionFailed": "La décision n’a pas pu être appliquée : {0}",
   "BlockedBy": "Bloqué par",
   "Blocks": "Bloque",
   "BlockerIdPlaceholder": "ID du ticket…",

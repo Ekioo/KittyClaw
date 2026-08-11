@@ -1,0 +1,49 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "qa-ticket-223" },
+    { "type": "api", "method": "GET", "path": "/api/projects/qa-ticket-223/columns" },
+    {
+      "type": "api",
+      "method": "PATCH",
+      "path": "/api/projects/qa-ticket-223/columns/6",
+      "body": { "role": 4 }
+    },
+    {
+      "type": "api",
+      "method": "PUT",
+      "path": "/api/projects/qa-ticket-223/columns/6/processor",
+      "body": {
+        "name": "Owner decision routing",
+        "mission": "Expose the configured owner decision destinations.",
+        "enabled": false,
+        "defaultTargetColumnId": 7,
+        "routes": [
+          { "outcome": "approved", "targetColumnId": 7 },
+          { "outcome": "changes_requested", "targetColumnId": 2 }
+        ]
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "qa-ticket-223",
+      "title": "Request a correction without crashing the UI",
+      "status": "Todo"
+    },
+    { "type": "setStatus", "project": "qa-ticket-223", "status": "Review" }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-ticket-223/ticket/{ticketId}" },
+    { "type": "wait", "ms": 1500 },
+    { "type": "assertVisible", "selector": ".brief-action-btn--correct" },
+    { "type": "click", "selector": ".brief-action-btn--correct" },
+    { "type": "wait", "ms": 1000 },
+    { "type": "assertText", "selector": ".ticket-meta span:first-child", "expected": "Todo" },
+    { "type": "assertCount", "selector": ".decision-brief-panel", "expected": "0" },
+    {
+      "type": "screenshot",
+      "name": "ticket-223-correction-applied",
+      "description": "After requesting correction, the ticket is in the configured Todo destination and the ticket UI remains interactive."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

@@ -3,6 +3,8 @@
 @using KittyClaw.Core.Services
 @inject EvidenceStore EvidenceStore
 @inject TicketService TicketService
+@inject ColumnProcessorService ProcessorService
+@inject ColumnExecutionService ExecutionService
 @inject LocalizationService L
 
 <div class="decision-brief-panel">
@@ -91,10 +93,13 @@
                 &#10003; @L.Get("BriefAccept", _acceptColumn.Name)
             </button>
         }
-        <button class="brief-action-btn brief-action-btn--correct" disabled="@_acting"
-                @onclick="CorrectAsync">
-            &#8617; @L["BriefRequestCorrection"]
-        </button>
+        @if (_correctionColumn is not null)
+        {
+            <button class="brief-action-btn brief-action-btn--correct" disabled="@_acting"
+                    @onclick="CorrectAsync">
+                &#8617; @L["BriefRequestCorrection"]
+            </button>
+        }
         @if (_rejectColumn is not null)
         {
             <button class="brief-action-btn brief-action-btn--stop" disabled="@_acting"
@@ -103,6 +108,10 @@
             </button>
         }
     </div>
+    @if (_actionError is not null)
+    {
+        <div class="decision-brief-action-error" role="alert">@_actionError</div>
+    }
 </div>
 
 @code {
@@ -116,19 +125,22 @@
     private bool _acting;
     private string _loadedKey = "";
     private BoardColumn? _acceptColumn;
+    private BoardColumn? _correctionColumn;
     private BoardColumn? _rejectColumn;
+    private string? _actionError;
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
         var key = $"{Slug}/{TicketId}/{CurrentColumn?.Id}";
         if (key == _loadedKey) return;
         _loadedKey = key;
-        _acceptColumn = Columns
-            .Where(c => c.SortOrder > (CurrentColumn?.SortOrder ?? 0) &&
-                        c.Role is not ColumnRole.Waiting and not ColumnRole.OwnerAction and not ColumnRole.Failure)
-            .OrderBy(c => c.SortOrder)
-            .FirstOrDefault();
-        _rejectColumn = Columns.FirstOrDefault(c => c.Role == ColumnRole.Failure);
+        var processors = await ProcessorService.ListAsync(Slug);
+        var executions = await ExecutionService.ListAsync(Slug, TicketId);
+        var targets = DecisionActionRouting.Resolve(Columns, processors, executions, CurrentColumn);
+        _acceptColumn = targets.Accepted;
+        _correctionColumn = targets.CorrectionRequested;
+        _rejectColumn = targets.Stopped;
+        _actionError = null;
         LoadBrief();
     }
 
@@ -141,24 +153,30 @@
         _brief = DecisionBriefComposer.Compose(evidence);
     }
 
-    private Task AcceptAsync() =>
-        TakeDecisionAsync(_acceptColumn!.Name, L["BriefDecisionAccepted"]);
-
     private Task CorrectAsync() =>
-        TakeDecisionAsync("Todo", L["BriefDecisionCorrectionRequested"]);
+        TakeDecisionAsync(_correctionColumn!, L["BriefDecisionCorrectionRequested"]);
 
     private Task StopAsync() =>
-        TakeDecisionAsync(_rejectColumn!.Name, L["BriefDecisionStopped"]);
+        TakeDecisionAsync(_rejectColumn!, L["BriefDecisionStopped"]);
 
-    private async Task TakeDecisionAsync(string targetStatus, string record)
+    private Task AcceptAsync() =>
+        TakeDecisionAsync(_acceptColumn!, L["BriefDecisionAccepted"]);
+
+    private async Task TakeDecisionAsync(BoardColumn targetColumn, string record)
     {
         _acting = true;
+        _actionError = null;
         StateHasChanged();
         try
         {
-            await TicketService.AddCommentAsync(Slug, TicketId, record);
-            await TicketService.MoveTicketAsync(Slug, TicketId, targetStatus, "owner");
+            await TicketService.UpdateTicketAsync(
+                Slug, TicketId, author: "owner", pipelineId: targetColumn.PipelineId,
+                columnId: targetColumn.Id, enforceRouting: true, comment: record);
             await OnDecisionTaken.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            _actionError = L.Get("BriefActionFailed", ex.Message);
         }
         finally
         {

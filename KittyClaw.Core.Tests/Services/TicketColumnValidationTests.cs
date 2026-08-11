@@ -58,6 +58,35 @@ public sealed class TicketColumnValidationTests
     }
 
     [Fact]
+    public async Task UpdateTicket_WithComment_CommitsDecisionAndMoveTogether()
+    {
+        using var tmp = new TempDir();
+        var (svc, slug) = BuildSut(tmp);
+        var ticket = await svc.CreateTicketAsync(slug, "Decision", status: "Todo");
+
+        await svc.UpdateTicketAsync(slug, ticket.Id, status: "Done", comment: "Decision recorded.");
+
+        var reloaded = await svc.GetTicketAsync(slug, ticket.Id);
+        Assert.Equal("Done", reloaded!.Status);
+        Assert.Contains(reloaded.Comments, comment => comment.Content == "Decision recorded.");
+    }
+
+    [Fact]
+    public async Task UpdateTicket_WithComment_InvalidDestinationPersistsNeitherChange()
+    {
+        using var tmp = new TempDir();
+        var (svc, slug) = BuildSut(tmp);
+        var ticket = await svc.CreateTicketAsync(slug, "Decision", status: "Todo");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.UpdateTicketAsync(slug, ticket.Id, status: "Missing", comment: "Must not persist."));
+
+        var reloaded = await svc.GetTicketAsync(slug, ticket.Id);
+        Assert.Equal("Todo", reloaded!.Status);
+        Assert.DoesNotContain(reloaded.Comments, comment => comment.Content == "Must not persist.");
+    }
+
+    [Fact]
     public async Task ReorderTicket_UnknownStatus_Throws()
     {
         using var tmp = new TempDir();

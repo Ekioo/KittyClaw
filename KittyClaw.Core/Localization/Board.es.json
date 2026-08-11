@@ -274,6 +274,7 @@
   "BriefDecisionAccepted": "Decisión registrada: aceptado.",
   "BriefDecisionCorrectionRequested": "Decisión registrada: corrección solicitada.",
   "BriefDecisionStopped": "Decisión registrada: detenido.",
+  "BriefActionFailed": "No se pudo aplicar la decisión: {0}",
   "BlockedBy": "Bloqueado por",
   "Blocks": "Bloquea",
   "BlockerIdPlaceholder": "ID del ticket…",

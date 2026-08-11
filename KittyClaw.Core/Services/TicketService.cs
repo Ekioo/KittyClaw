@@ -725,10 +725,12 @@ public class TicketService
     /// when set, the update only applies if the ticket is still in that status —
     /// otherwise <see cref="TicketTransitionConflictException"/> (mapped to HTTP 409).
     /// </summary>
-    public async Task<Ticket?> UpdateTicketAsync(string projectSlug, int ticketId, string? title = null, string? description = null, string author = "owner", TicketPriority? priority = null, string? assignedTo = null, string? status = null, string? expectedStatus = null, int? pipelineId = null, int? columnId = null, bool? blocksParent = null, bool enforceRouting = false)
+    public async Task<Ticket?> UpdateTicketAsync(string projectSlug, int ticketId, string? title = null, string? description = null, string author = "owner", TicketPriority? priority = null, string? assignedTo = null, string? status = null, string? expectedStatus = null, int? pipelineId = null, int? columnId = null, bool? blocksParent = null, bool enforceRouting = false, string? comment = null)
     {
         if (string.IsNullOrWhiteSpace(author))
             throw new InvalidOperationException("Le champ 'author' est requis.");
+        if (comment is not null && string.IsNullOrWhiteSpace(comment))
+            throw new InvalidOperationException("Le champ 'comment' ne peut pas être vide.");
         if (!string.IsNullOrEmpty(assignedTo) && !await _memberService.MemberExistsAsync(projectSlug, assignedTo))
             throw new InvalidOperationException($"Le membre '{assignedTo}' n'existe pas.");
         await using var db = _projectService.GetProjectDb(projectSlug);
@@ -850,11 +852,24 @@ public class TicketService
                 Text = blocksParent.Value ? "a rendu ce sous-ticket bloquant" : "a rendu ce sous-ticket non bloquant"
             });
         }
+        Comment? addedComment = null;
+        if (comment is not null)
+        {
+            addedComment = new Comment
+            {
+                TicketId = ticketId,
+                Content = comment.Trim(),
+                Author = author
+            };
+            db.Comments.Add(addedComment);
+        }
         ticket.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
         // Signal AFTER commit: the engine can only ever observe the fully-written state.
         if (oldStatus is not null)
             TicketStatusChanged?.Invoke(projectSlug, ticketId, oldStatus, ticket.Status!);
+        if (addedComment is not null)
+            TicketCommentAdded?.Invoke(projectSlug, ticketId, addedComment.Id, author, addedComment.Content);
         return ticket;
     }
 

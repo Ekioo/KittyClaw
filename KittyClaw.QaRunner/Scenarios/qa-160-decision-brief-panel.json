@@ -13,6 +13,21 @@
       "body": { "role": 4 }
     },
     {
+      "type": "api",
+      "method": "PUT",
+      "path": "/api/projects/qa-160-decision-brief/columns/6/processor",
+      "body": {
+        "name": "Owner decision routing",
+        "mission": "Expose the configured owner decision destinations.",
+        "enabled": false,
+        "defaultTargetColumnId": 7,
+        "routes": [
+          { "outcome": "approved", "targetColumnId": 7 },
+          { "outcome": "changes_requested", "targetColumnId": 2 }
+        ]
+      }
+    },
+    {
       "type": "createTicket",
       "project": "qa-160-decision-brief",
       "title": "Verify decision brief panel renders in Review",
@@ -30,7 +45,7 @@
     {
       "type": "screenshot",
       "name": "qa-160-brief-panel-empty",
-      "description": "DecisionBriefPanel in Review column (OwnerAction) — no evidence seeded, shows empty state with Accept/Request-correction/Stop action buttons."
+      "description": "DecisionBriefPanel in Review column (OwnerAction) — no evidence seeded, with owner actions resolved from configured routing."
     },
     { "type": "assertVisible", "selector": ".decision-brief-panel" },
     { "type": "assertVisible", "selector": ".decision-brief-actions" },

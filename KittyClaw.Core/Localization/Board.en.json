@@ -282,6 +282,7 @@
   "BriefDecisionAccepted": "Decision recorded: accepted.",
   "BriefDecisionCorrectionRequested": "Decision recorded: correction requested.",
   "BriefDecisionStopped": "Decision recorded: stopped.",
+  "BriefActionFailed": "The decision could not be applied: {0}",
   "BlockedBy": "Blocked by",
   "Blocks": "Blocks",
   "BlockerIdPlaceholder": "Ticket ID…",

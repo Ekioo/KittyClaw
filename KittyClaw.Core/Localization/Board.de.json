@@ -274,6 +274,7 @@
   "BriefDecisionAccepted": "Entscheidung erfasst: akzeptiert.",
   "BriefDecisionCorrectionRequested": "Entscheidung erfasst: Korrektur angefordert.",
   "BriefDecisionStopped": "Entscheidung erfasst: gestoppt.",
+  "BriefActionFailed": "Die Entscheidung konnte nicht angewendet werden: {0}",
   "BlockedBy": "Blockiert durch",
   "Blocks": "Blockiert",
   "BlockerIdPlaceholder": "Ticket-ID…",
