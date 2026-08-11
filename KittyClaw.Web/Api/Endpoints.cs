@@ -10,6 +10,7 @@ public static partial class Endpoints
         MapPipelines(api);
         MapWorkflowMigrations(api);
         MapProjects(api);
+        MapWorktreeMerges(api);
         MapTickets(api);
         MapProjectLabels(api);
         MapTicketLabels(api);
