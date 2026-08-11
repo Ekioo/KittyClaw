@@ -27,6 +27,6 @@ For a high-level overview see the root [README.md](../README.md). For repo layou
 - [Graphic charter](./graphic-charter.md) — palette, typography, spacing, form controls, button variants. Reference before adding any new UI.
 - [Update check](./update-check.md) — background poll of GitHub Releases that surfaces a dismissible "new version available" banner in the app shell.
 - [Telemetry](./telemetry.md) — anonymous daily heartbeat to Umami Cloud (instance id, version, OS); always on outside Development.
-- [Per-ticket worktree workflow](./worktree-workflow.md) — opt-in pattern; helper scripts and `{ticketId}` placeholder ship, but agent SKILLs in `ProjectTemplate` do not use it by default.
+- [Per-ticket worktree workflow](./worktree-workflow.md) — opt-in canonical root-ticket worktrees, isolated agent execution, and linear integration helpers.
 - [Local models (Ollama)](./local-models.md) — dispatching agents to a local Ollama model via the Anthropic-compat endpoint.
 - [Grok Build (xAI CLI)](./grok-build.md) — dispatching agents to the `grok` CLI when it is installed on the host.
