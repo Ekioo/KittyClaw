@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using KittyClaw.Core.Services;
 
@@ -9,6 +10,8 @@ public sealed class AgentRunContext
 {
     public required string ProjectSlug { get; init; }
     public required string WorkspacePath { get; init; }
+    /// <summary>Process cwd. When null, the control workspace is used.</summary>
+    internal string? ExecutionWorkspacePath { get; set; }
     public required string AgentName { get; init; }
     public required string SkillFile { get; init; }
     public int? TicketId { get; init; }
@@ -164,14 +167,17 @@ public sealed class AgentRunContext
 
 public sealed class AgentRunner
 {
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> WorktreeExecutionGates =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly SessionRegistry _sessions;
     private readonly AgentRunRegistry _runs;
     private readonly RunConcurrencyGate _gate;
     private readonly ILogger<AgentRunner> _logger;
     private readonly AppSettingsService? _appSettings;
     private readonly BoundaryObservationService? _boundaryObserver;
+    private readonly TicketWorktreeService? _worktrees;
 
-    public AgentRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<AgentRunner> logger, AppSettingsService? appSettings = null, BoundaryObservationService? boundaryObserver = null)
+    public AgentRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<AgentRunner> logger, AppSettingsService? appSettings = null, BoundaryObservationService? boundaryObserver = null, TicketWorktreeService? worktrees = null)
     {
         _sessions = sessions;
         _runs = runs;
@@ -179,6 +185,7 @@ public sealed class AgentRunner
         _logger = logger;
         _appSettings = appSettings;
         _boundaryObserver = boundaryObserver;
+        _worktrees = worktrees;
     }
 
     public async Task<AgentRun> RunAsync(AgentRunContext ctx, CancellationToken ct)
@@ -200,6 +207,32 @@ public sealed class AgentRunner
         if (_boundaryObserver is not null) run.OnEvent += ev => _boundaryObserver.Observe(run, ev);
         _boundaryObserver?.RecordRun(run);
         _runs.Register(run);
+
+        SemaphoreSlim? worktreeExecutionGate = null;
+        try
+        {
+            if (_worktrees is not null && ctx.TicketId is int ticketId)
+            {
+                var worktree = await _worktrees.ResolveAsync(ctx.ProjectSlug, ticketId, ct);
+                if (worktree is not null)
+                {
+                    ctx.ExecutionWorkspacePath = worktree.Path;
+                    run.Push(new StreamEvent(DateTime.UtcNow, "worktree",
+                        $"Using worktree {worktree.Path} on branch {worktree.Branch} for root ticket #{worktree.RootTicketId}"));
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _runs.Complete(run.RunId, AgentRunStatus.Stopped, null);
+            return run;
+        }
+        catch (Exception ex)
+        {
+            run.Push(new StreamEvent(DateTime.UtcNow, "error", $"Worktree resolution failed: {ex.Message}"));
+            _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
+            return run;
+        }
 
         var provider = ctx.Target.Provider;
         run.CliVersion = await CliVersionProbe.ProbeAsync(provider,
@@ -282,6 +315,22 @@ public sealed class AgentRunner
         // so the host doesn't OOM under heavy automation. Chats bypass entirely.
         var isChat = ctx.SessionScope == "chat";
         IDisposable slot;
+        if (ctx.ExecutionWorkspacePath is not null)
+        {
+            worktreeExecutionGate = WorktreeExecutionGates.GetOrAdd(
+                ctx.ExecutionWorkspacePath, _ => new SemaphoreSlim(1, 1));
+            if (worktreeExecutionGate.CurrentCount == 0)
+                run.Push(new StreamEvent(DateTime.UtcNow, "queued", $"Waiting for worktree {ctx.ExecutionWorkspacePath}"));
+            try
+            {
+                await worktreeExecutionGate.WaitAsync(run.Cancellation.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                _runs.Complete(run.RunId, AgentRunStatus.Stopped, null);
+                return run;
+            }
+        }
         var snap = _gate.Snapshot();
         if (!isChat && snap.Active >= snap.Max)
         {
@@ -294,6 +343,7 @@ public sealed class AgentRunner
         }
         catch (OperationCanceledException)
         {
+            worktreeExecutionGate?.Release();
             _runs.Complete(run.RunId, AgentRunStatus.Stopped, null);
             return run;
         }
@@ -482,6 +532,7 @@ public sealed class AgentRunner
             _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
             slot.Dispose();
             CleanupImageTempFiles(ctx);
+            worktreeExecutionGate?.Release();
         }
     }
 
@@ -661,7 +712,7 @@ public sealed class AgentRunner
         }
 
         run.Push(new StreamEvent(DateTime.UtcNow, "launch",
-            $"{ctx.AgentName} {(isResume ? "(resume)" : "(new)")} session={sessionId[..8]} cwd={ctx.WorkspacePath} skill={ctx.SkillFile}"));
+            $"{ctx.AgentName} {(isResume ? "(resume)" : "(new)")} session={sessionId[..8]} cwd={ctx.ExecutionWorkspacePath ?? ctx.WorkspacePath} skill={ctx.SkillFile}"));
 
         // Confine claude and every process it spawns to a job that is killed when we close it.
         // This is the root-cause guard against stuck runs: a process the agent backgrounds would

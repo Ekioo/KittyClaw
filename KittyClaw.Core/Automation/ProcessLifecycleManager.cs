@@ -83,7 +83,7 @@ internal static class ProcessLifecycleManager
                 CliProvider.Mistral => MistralCli.Binary ?? "vibe",
                 _ => ClaudeBinary,
             }),
-            WorkingDirectory = ctx.WorkspacePath,
+            WorkingDirectory = ctx.ExecutionWorkspacePath ?? ctx.WorkspacePath,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,

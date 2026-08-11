@@ -75,6 +75,8 @@ builder.Services.AddSingleton<AgentRunRegistry>(sp => new AgentRunRegistry(sp.Ge
 // KITTYCLAW_MAX_CONCURRENT_AGENTS env var if 3 is too tight or too loose for the host.
 var maxConcurrent = int.TryParse(Environment.GetEnvironmentVariable("KITTYCLAW_MAX_CONCURRENT_AGENTS"), out var mc) && mc > 0 ? mc : 3;
 builder.Services.AddSingleton(new RunConcurrencyGate(maxConcurrent));
+builder.Services.AddSingleton<TicketWorktreeService>();
+builder.Services.AddSingleton<WorktreeMergeQueueService>();
 builder.Services.AddSingleton<AgentRunner>();
 builder.Services.AddSingleton<IColumnAgentDispatcher, ColumnAgentDispatcher>();
 builder.Services.AddSingleton<ColumnActionExecutor>();
