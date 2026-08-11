@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -43,6 +44,10 @@ public partial class ProjectService
             try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN LocalModelBaseUrl TEXT NULL"); }
             catch { /* column already exists */ }
             try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN LocalModelName TEXT NULL"); }
+            catch { /* column already exists */ }
+            try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN WorktreesEnabled INTEGER NOT NULL DEFAULT 0"); }
+            catch { /* column already exists */ }
+            try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN IntegrationBranch TEXT NULL"); }
             catch { /* column already exists */ }
             _dbInitialized = true;
         }
@@ -153,7 +158,13 @@ public partial class ProjectService
         }
     }
 
-    public async Task<Project?> UpdateProjectAsync(string slug, string? workspacePath, string? fallbackModel = null, bool updateFallback = false)
+    public async Task<Project?> UpdateProjectAsync(
+        string slug,
+        string? workspacePath,
+        string? fallbackModel = null,
+        bool updateFallback = false,
+        bool? worktreesEnabled = null,
+        string? integrationBranch = null)
     {
         if (!string.IsNullOrWhiteSpace(workspacePath))
             ValidateWorkspacePath(workspacePath.Trim());
@@ -161,7 +172,28 @@ public partial class ProjectService
         await using var db = new RegistryDbContext(_registryPath);
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Slug == slug);
         if (project is null) return null;
-        project.WorkspacePath = string.IsNullOrWhiteSpace(workspacePath) ? null : workspacePath.Trim();
+
+        // A worktree-only PATCH must not clear the workspace merely because WorkspacePath
+        // was omitted from JSON. Preserve the historical clear behavior for ordinary patches.
+        var updatesWorktreeSettings = worktreesEnabled.HasValue || integrationBranch is not null;
+        if (!updatesWorktreeSettings || workspacePath is not null)
+            project.WorkspacePath = string.IsNullOrWhiteSpace(workspacePath) ? null : workspacePath.Trim();
+
+        var normalizedBranch = integrationBranch?.Trim();
+        var resultingBranch = integrationBranch is null ? project.IntegrationBranch : normalizedBranch;
+        var resultingEnabled = worktreesEnabled ?? project.WorktreesEnabled;
+        if (resultingEnabled)
+        {
+            var workspace = string.IsNullOrWhiteSpace(workspacePath)
+                ? ResolveWorkspacePath(project)
+                : workspacePath.Trim();
+            ValidateWorktreeConfiguration(workspace, resultingBranch);
+        }
+
+        if (integrationBranch is not null)
+            project.IntegrationBranch = string.IsNullOrWhiteSpace(normalizedBranch) ? null : normalizedBranch;
+        if (worktreesEnabled.HasValue)
+            project.WorktreesEnabled = worktreesEnabled.Value;
         if (updateFallback)
         {
             project.FallbackModel = string.IsNullOrWhiteSpace(fallbackModel) ? null : fallbackModel.Trim();
@@ -169,6 +201,62 @@ public partial class ProjectService
         project.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
         return project;
+    }
+
+    private static void ValidateWorktreeConfiguration(string workspacePath, string? integrationBranch)
+    {
+        if (string.IsNullOrWhiteSpace(integrationBranch))
+            throw new InvalidOperationException("La branche d’intégration est requise pour activer les worktrees.");
+        if (!Directory.Exists(workspacePath))
+            throw new InvalidOperationException($"Le workspace '{workspacePath}' n’existe pas.");
+
+        var repository = RunGit(workspacePath, ["rev-parse", "--is-inside-work-tree"]);
+        if (!repository.Success || !string.Equals(repository.Output.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Le workspace '{workspacePath}' n’est pas un dépôt Git utilisable.");
+
+        var worktreeSupport = RunGit(workspacePath, ["worktree", "list", "--porcelain"]);
+        if (!worktreeSupport.Success)
+            throw new InvalidOperationException("Cette version de Git ne prend pas en charge les worktrees.");
+
+        var validBranch = RunGit(workspacePath, ["check-ref-format", "--branch", integrationBranch]);
+        if (!validBranch.Success)
+            throw new InvalidOperationException($"La branche d’intégration '{integrationBranch}' est invalide.");
+
+        var branchExists = RunGit(workspacePath, ["show-ref", "--verify", "--quiet", $"refs/heads/{integrationBranch}"]);
+        if (!branchExists.Success)
+            throw new InvalidOperationException($"La branche d’intégration '{integrationBranch}' n’existe pas dans le dépôt.");
+    }
+
+    private static (bool Success, string Output) RunGit(string workspacePath, IReadOnlyList<string> arguments)
+    {
+        try
+        {
+            var startInfo = new ProcessStartInfo("git")
+            {
+                WorkingDirectory = workspacePath,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            foreach (var argument in arguments)
+                startInfo.ArgumentList.Add(argument);
+            using var process = Process.Start(startInfo);
+            if (process is null)
+                return (false, "");
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit(10_000);
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+                return (false, output);
+            }
+            return (process.ExitCode == 0, output);
+        }
+        catch
+        {
+            return (false, "");
+        }
     }
 
     public async Task<Project?> SaveLocalModelConfigAsync(string slug, string? baseUrl, string? modelName)

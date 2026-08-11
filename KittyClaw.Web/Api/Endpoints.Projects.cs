@@ -32,7 +32,9 @@ public static partial class Endpoints
         {
             try
             {
-                var project = await ps.UpdateProjectAsync(slug, req.WorkspacePath, req.FallbackModel, req.UpdateFallbackModel);
+                var project = await ps.UpdateProjectAsync(
+                    slug, req.WorkspacePath, req.FallbackModel, req.UpdateFallbackModel,
+                    req.WorktreesEnabled, req.IntegrationBranch);
                 return project is null ? Results.NotFound() : Results.Ok(project);
             }
             catch (InvalidOperationException ex)
