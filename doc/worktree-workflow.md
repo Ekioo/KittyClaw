@@ -13,6 +13,7 @@ These pieces are in the repo and available to every project:
 - Project registry settings — `WorktreesEnabled` and `IntegrationBranch` are exposed by `GET /api/projects/{slug}` and can be changed independently through `PATCH /api/projects/{slug}`. Enabling validates that the workspace is a usable Git repository, that Git supports worktrees, and that the named local integration branch exists before persisting the change.
 - `TicketWorktreeService` — follows the ticket parent chain, then creates or reuses `<repo>.worktrees/ticket-<root-id>` on branch `ticket/<root-id>`. Git failures are reported in the run without cleaning or changing the primary checkout.
 - `AgentRunner` — keeps loading skills and `.agents/**` from the control workspace while launching the provider process in the resolved worktree. Runs sharing a worktree are serialized; runs for different roots may execute concurrently.
+- `WorktreeMergeQueueService` — persists integration requests per project, processes them in creation order, and serializes rebase plus fast-forward operations. It records dirty-checkout failures and rebase conflicts without deleting the ticket worktree, supports explicit resume, and recovers interrupted processing after restart.
 - `tools/worktree-ensure.ps1` — idempotent. Creates a worktree from local `main` if absent, or returns the path of the existing one. Convention: branch `ticket/<N>`, folder `<repo>.worktrees/ticket-<N>`. Usage: `powershell.exe -NoProfile -File tools/worktree-ensure.ps1 <N>`; the absolute path is printed on the last stdout line.
 - `tools/worktree-merge.ps1` — rebases the local unpublished ticket branch onto `dev`, fast-forwards `dev` to it, then removes the worktree and deletes the branch. This keeps ticket integration linear without merge commits.
 - `{ticketId}` placeholder support in `concurrencyGroup` and `mutuallyExclusiveWith` (see [automation engine](./automation-engine.md)). Lets you serialize agents per-ticket without serializing across tickets.
@@ -41,6 +42,10 @@ Set `worktreesEnabled: true` and a valid local `integrationBranch` through `PATC
 ## Entry points
 
 - `TicketWorktreeService.ResolveAsync` — resolves the root ticket and prepares its canonical worktree before a run starts.
+- `GET /api/projects/{slug}/worktree-merges` — lists durable queue state and integration results.
+- `POST /api/projects/{slug}/worktree-merges` — idempotently enqueues a ticket family for integration.
+- `POST /api/projects/{slug}/worktree-merges/process-next` — processes the oldest pending request.
+- `POST /api/projects/{slug}/worktree-merges/{requestId}/resume` — resumes a failed or conflict-paused request after correction.
 - `AgentRunner.RunAsync` — selects the execution directory and applies the per-worktree execution gate.
 - `tools/worktree-ensure.ps1`, `tools/worktree-merge.ps1` — explicit helpers for implementation and integration workflows.
 - `KittyClaw.Core/Automation/ActionExecutor.cs` and `RunStateManager.cs` — perform the `{ticketId}` substitution in `concurrencyGroup` and `mutuallyExclusiveWith`.
