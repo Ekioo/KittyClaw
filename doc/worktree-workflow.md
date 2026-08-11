@@ -30,7 +30,9 @@ These pieces are in the repo and available to every project:
 
 ## How to enable it for a project
 
-Set `worktreesEnabled: true` and a valid local `integrationBranch` through `PATCH /api/projects/{slug}`. No agent-skill or automation changes are required for ticket-bound runs. Runs without a ticket keep using the control workspace.
+Open the project settings, enable **Git worktrees**, enter an existing local integration branch, and save. The form validates the repository, Git worktree support, and the branch before activation. The same settings remain available through `PATCH /api/projects/{slug}` with `worktreesEnabled: true` and `integrationBranch`.
+
+When enabled, each ticket drawer shows the canonical root ticket, path and branch shared by the whole ticket family. It also shows worktree cleanliness and merge-queue state/position, with actionable guidance for waiting, dirty checkouts, conflicts, failures and successful integration. Safe retry/resume actions are available for pending or failed requests. When disabled, this panel is absent and the normal ticket flow is unchanged.
 
 ## Caveats
 

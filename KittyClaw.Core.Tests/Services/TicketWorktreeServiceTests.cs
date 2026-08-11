@@ -49,6 +49,29 @@ public sealed class TicketWorktreeServiceTests
     }
 
     [Fact]
+    public async Task Inspect_ReportsSharedIdentityAndDirtyState_WithoutCreatingMissingWorktree()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var parent = await fixture.Tickets.CreateTicketAsync(fixture.ProjectSlug, "Parent");
+        var child = await fixture.Tickets.CreateTicketAsync(fixture.ProjectSlug, "Child", parentId: parent.Id);
+
+        var before = await fixture.Worktrees.InspectAsync(fixture.ProjectSlug, child.Id);
+        Assert.NotNull(before);
+        Assert.False(before.Exists);
+        Assert.Equal(parent.Id, before.RootTicketId);
+        Assert.Equal($"ticket/{parent.Id}", before.Branch);
+
+        await fixture.Worktrees.ResolveAsync(fixture.ProjectSlug, parent.Id, CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(before.Path, "uncommitted.txt"), "keep");
+        var parentState = await fixture.Worktrees.InspectAsync(fixture.ProjectSlug, parent.Id);
+        var childState = await fixture.Worktrees.InspectAsync(fixture.ProjectSlug, child.Id);
+
+        Assert.Equal(parentState, childState);
+        Assert.True(childState!.Exists);
+        Assert.True(childState.IsDirty);
+    }
+
+    [Fact]
     public async Task DisabledMode_PreservesWorkspaceAndCreatesNothing()
     {
         using var fixture = await Fixture.CreateAsync(enable: false);

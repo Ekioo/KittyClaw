@@ -254,8 +254,6 @@ public sealed class WorktreeMergeQueueService(ProjectService projects, TicketWor
         return result;
     }
 
-    private sealed record GitResult(int ExitCode, string Output, string Error);
-}
     public async Task<(WorktreeMergeRequest? Request, int? Position)> GetForTicketAsync(string projectSlug, int ticketId)
     {
         var root = await worktrees.ResolveRootTicketIdAsync(projectSlug, ticketId);
@@ -265,3 +263,6 @@ public sealed class WorktreeMergeQueueService(ProjectService projects, TicketWor
         var position = rows.Where(row => row.Status == WorktreeMergeStatus.Pending && row.Id <= request.Id).Count();
         return (request, position);
     }
+
+    private sealed record GitResult(int ExitCode, string Output, string Error);
+}

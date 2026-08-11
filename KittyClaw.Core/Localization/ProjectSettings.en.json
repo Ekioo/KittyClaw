@@ -46,5 +46,10 @@
   "DangerZone": "Danger zone",
   "DeleteProject": "Delete project",
   "DeleteProjectConfirm": "Delete project",
-  "DeleteProjectWarning": "All tickets and associated data will be permanently deleted. The workspace folder on disk is NOT deleted."
+  "DeleteProjectWarning": "All tickets and associated data will be permanently deleted. The workspace folder on disk is NOT deleted.",
+  "WorktreeSettings": "Git worktrees",
+  "WorktreeSettingsHint": "Opt-in mode: isolates agents by root ticket and serializes their local integration.",
+  "WorktreeEnable": "Enable worktrees for this project",
+  "WorktreeEnableEffect": "Child tickets share their root ticket worktree; disabled projects keep the standard flow.",
+  "WorktreePrerequisites": "Prerequisites: workspace inside a Git repository, git worktree available, and an existing local integration branch. Integration uses rebase + fast-forward with no automatic push."
 }

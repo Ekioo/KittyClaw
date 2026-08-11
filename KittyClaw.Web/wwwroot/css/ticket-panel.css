@@ -582,6 +582,25 @@ select:focus-visible,
     padding: 0.6rem 1.25rem;
     border-bottom: 1px solid var(--border);
 }
+.worktree-summary {
+    padding: .75rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .35rem 1rem;
+    font-size: .78rem;
+}
+.worktree-summary-title { grid-column: 1 / -1; display: flex; align-items: center; gap: .6rem; }
+.worktree-summary p, .worktree-error, .worktree-conflicts { grid-column: 1 / -1; margin: .15rem 0; }
+.worktree-summary code { overflow-wrap: anywhere; color: #5eead4; }
+.worktree-state { border-radius: 999px; padding: .12rem .5rem; font-weight: 650; }
+.worktree-state--success { color: #4ade80; background: #22c55e1f; }
+.worktree-state--waiting { color: #fbbf24; background: #f59e0b1f; }
+.worktree-state--danger, .worktree-error, .worktree-conflicts { color: #f87171; }
+.worktree-state--neutral { color: var(--text-muted); background: var(--surface3); }
+.worktree-action { grid-column: 1 / -1; justify-self: start; padding: .3rem .7rem; }
+@media (max-width: 760px) { .worktree-summary { grid-template-columns: 1fr; } }
 .ticket-assignee-row {
     display: flex;
     flex-wrap: wrap;

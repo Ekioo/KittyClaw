@@ -46,5 +46,10 @@
   "DangerZone": "Zone de danger",
   "DeleteProject": "Supprimer le projet",
   "DeleteProjectConfirm": "Supprimer le projet",
-  "DeleteProjectWarning": "Tous les tickets et données associés seront définitivement supprimés. Le dossier de workspace sur le disque N'EST PAS supprimé."
+  "DeleteProjectWarning": "Tous les tickets et données associés seront définitivement supprimés. Le dossier de workspace sur le disque N'EST PAS supprimé.",
+  "WorktreeSettings": "Worktrees Git",
+  "WorktreeSettingsHint": "Mode opt-in : isole les agents par ticket racine et sérialise leur intégration locale.",
+  "WorktreeEnable": "Activer les worktrees pour ce projet",
+  "WorktreeEnableEffect": "Les sous-tickets partagent le worktree de leur ticket racine ; les projets désactivés gardent le parcours standard.",
+  "WorktreePrerequisites": "Prérequis : dossier de travail dans un dépôt Git, commande git worktree disponible et branche d’intégration locale existante. La fusion effectue rebase + fast-forward, sans push automatique."
 }

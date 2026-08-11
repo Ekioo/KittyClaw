@@ -10,6 +10,8 @@
 @inject ColumnService ColumnService
 @inject ColumnProcessorService ProcessorService
 @inject MemberService MemberService
+@inject TicketWorktreeService TicketWorktreeService
+@inject WorktreeMergeQueueService WorktreeMergeQueueService
 @inject KittyClaw.Web.Services.BoardUpdateNotifier BoardUpdateNotifier
 @inject IJSRuntime JS
 @inject LocalizationService L
@@ -61,6 +63,37 @@
                 <button class="close-btn" @onclick="CloseAsync">&times;</button>
             </div>
         </div>
+
+        @if (_worktreeState is not null)
+        {
+            <section class="worktree-summary" data-testid="ticket-worktree-summary">
+                <div class="worktree-summary-title"><strong>@L["WorktreeTitle"]</strong><span class="worktree-state worktree-state--@WorktreeTone()">@WorktreeStatusLabel()</span></div>
+                <div><span>@L["WorktreeRoot"]</span> <strong>#@_worktreeState.RootTicketId</strong></div>
+                <div><span>@L["WorktreeBranch"]</span> <code data-testid="worktree-branch">@_worktreeState.Branch</code></div>
+                <div><span>@L["WorktreePath"]</span> <code data-testid="worktree-path">@_worktreeState.Path</code></div>
+                <p>@WorktreeGuidance()</p>
+                @if (_mergeRequest?.ConflictFiles is { Length: > 0 })
+                {
+                    <div class="worktree-conflicts">@L["WorktreeConflictFiles"] @_mergeRequest.ConflictFiles</div>
+                }
+                @if (_mergeRequest?.Error is { Length: > 0 })
+                {
+                    <div class="worktree-error">@_mergeRequest.Error</div>
+                }
+                @if (_mergeRequest?.Status is WorktreeMergeStatus.Conflict or WorktreeMergeStatus.Failed)
+                {
+                    <button class="worktree-action" @onclick="ResumeMergeAsync" disabled="@_worktreeActionBusy">@L["WorktreeResume"]</button>
+                }
+                else if (_mergeRequest?.Status == WorktreeMergeStatus.Pending)
+                {
+                    <button class="worktree-action" @onclick="ProcessMergeAsync" disabled="@_worktreeActionBusy">@L["WorktreeRetry"]</button>
+                }
+            </section>
+        }
+        else if (_worktreeLoadError is not null)
+        {
+            <div class="worktree-summary worktree-error" data-testid="ticket-worktree-error">@L["WorktreeLoadError"] @_worktreeLoadError</div>
+        }
 
         @* ── Labels row ── *@
         <div class="ticket-labels-row">
@@ -454,6 +487,11 @@
     private List<BoardColumn> _columns = [];
     private List<Label> _allLabels = [];
     private List<Member> _allMembers = [];
+    private TicketWorktreeState? _worktreeState;
+    private WorktreeMergeRequest? _mergeRequest;
+    private int? _mergePosition;
+    private string? _worktreeLoadError;
+    private bool _worktreeActionBusy;
 
     private bool _confirmDelete;
     private bool _editingTitle;
@@ -609,6 +647,7 @@
         _allMembers = await MemberService.ListMembersAsync(Slug);
         _processorNames = (await ProcessorService.ListAsync(Slug))
             .ToDictionary(processor => processor.ColumnId, processor => processor.Name);
+        await LoadWorktreeAsync();
         await RebuildPipelineAsync();
     }
 
@@ -619,9 +658,70 @@
         _summaries = await TicketService.ListTicketsAsync(Slug);
         if (_ticket is not null)
             _columns = await ColumnService.ListColumnsAsync(Slug, _ticket.PipelineId);
+        await LoadWorktreeAsync();
         await RebuildPipelineAsync();
         await OnChanged.InvokeAsync();
         await OnMutatedTicket.InvokeAsync(TicketId);
+    }
+
+    private async Task LoadWorktreeAsync()
+    {
+        _worktreeState = null; _mergeRequest = null; _mergePosition = null; _worktreeLoadError = null;
+        try
+        {
+            _worktreeState = await TicketWorktreeService.InspectAsync(Slug, TicketId);
+            if (_worktreeState is not null)
+                (_mergeRequest, _mergePosition) = await WorktreeMergeQueueService.GetForTicketAsync(Slug, TicketId);
+        }
+        catch (Exception ex) { _worktreeLoadError = ex.Message; }
+    }
+
+    private string WorktreeStatusLabel() => _mergeRequest?.Status switch
+    {
+        WorktreeMergeStatus.Pending => _mergePosition is int p ? L.Get("WorktreeQueuedPosition", p) : L["WorktreeQueued"],
+        WorktreeMergeStatus.Processing => L["WorktreeProcessing"],
+        WorktreeMergeStatus.Conflict => L["WorktreeConflict"],
+        WorktreeMergeStatus.Failed => L["WorktreeFailed"],
+        WorktreeMergeStatus.Completed => L["WorktreeCompleted"],
+        _ when _worktreeState?.IsDirty == true => L["WorktreeDirty"],
+        _ when _worktreeState?.Exists == true => L["WorktreeReady"],
+        _ => L["WorktreeNotCreated"]
+    };
+
+    private string WorktreeTone() => _mergeRequest?.Status switch
+    {
+        WorktreeMergeStatus.Completed => "success",
+        WorktreeMergeStatus.Conflict or WorktreeMergeStatus.Failed => "danger",
+        WorktreeMergeStatus.Pending or WorktreeMergeStatus.Processing => "waiting",
+        _ when _worktreeState?.IsDirty == true => "danger",
+        _ => "neutral"
+    };
+
+    private string WorktreeGuidance() => _mergeRequest?.Status switch
+    {
+        WorktreeMergeStatus.Pending => L["WorktreePendingGuidance"],
+        WorktreeMergeStatus.Processing => L["WorktreeProcessingGuidance"],
+        WorktreeMergeStatus.Conflict => L["WorktreeConflictGuidance"],
+        WorktreeMergeStatus.Failed => L["WorktreeFailedGuidance"],
+        WorktreeMergeStatus.Completed => L["WorktreeCompletedGuidance"],
+        _ when _worktreeState?.IsDirty == true => L["WorktreeDirtyGuidance"],
+        _ when _worktreeState?.Exists == true => L["WorktreeReadyGuidance"],
+        _ => L["WorktreeNotCreatedGuidance"]
+    };
+
+    private async Task ResumeMergeAsync()
+    {
+        if (_mergeRequest is null) return;
+        _worktreeActionBusy = true;
+        try { await WorktreeMergeQueueService.ResumeAsync(Slug, _mergeRequest.Id, CancellationToken.None); await LoadWorktreeAsync(); }
+        finally { _worktreeActionBusy = false; }
+    }
+
+    private async Task ProcessMergeAsync()
+    {
+        _worktreeActionBusy = true;
+        try { await WorktreeMergeQueueService.ProcessNextAsync(Slug, CancellationToken.None); await LoadWorktreeAsync(); }
+        finally { _worktreeActionBusy = false; }
     }
 
     private async Task ToggleBlockingAsync(SubTicketInfo child)

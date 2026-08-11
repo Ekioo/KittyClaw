@@ -39,6 +39,24 @@ else
             </div>
         </section>
 
+        <section class="settings-section" data-testid="worktree-settings">
+            <h2>@L["WorktreeSettings"]</h2>
+            <p class="settings-hint">@L["WorktreeSettingsHint"]</p>
+            <label class="settings-option">
+                <input type="checkbox" @bind="_worktreesEnabled" />
+                <span><strong>@L["WorktreeEnable"]</strong><small>@L["WorktreeEnableEffect"]</small></span>
+            </label>
+            <div class="settings-row" style="margin-top:.8rem">
+                <input class="settings-input" data-testid="integration-branch" placeholder="dev" @bind="_integrationBranch" @bind:event="oninput" />
+                <button class="settings-primary" data-testid="save-worktrees" @onclick="SaveWorktrees" disabled="@_savingWorktrees">@(_savingWorktrees ? "…" : L["Save"])</button>
+            </div>
+            <p class="settings-hint" style="margin:.6rem 0 0">@L["WorktreePrerequisites"]</p>
+            @if (_worktreeStatus is not null)
+            {
+                <div class="settings-status @_worktreeStatus.Value.css" data-testid="worktree-settings-status">@_worktreeStatus.Value.text</div>
+            }
+        </section>
+
         <section class="settings-section">
             <h2>@L["WorkspacePath"]</h2>
             <p class="settings-hint">@L["WorkspaceHint"]</p>
@@ -354,6 +372,9 @@ else
     private string _workspacePath = "";
     private bool _savingWorkspace, _folderPickerOpen;
     private (string text, string css)? _workspaceStatus;
+    private bool _worktreesEnabled, _savingWorktrees;
+    private string _integrationBranch = "";
+    private (string text, string css)? _worktreeStatus;
 
     private string _fallbackModel = "";
     private bool _savingFallback;
@@ -393,6 +414,8 @@ else
         _project = await ProjectService.GetProjectAsync(Slug);
         if (_project is null) return;
         _workspacePath = _project.WorkspacePath ?? "";
+        _worktreesEnabled = _project.WorktreesEnabled;
+        _integrationBranch = _project.IntegrationBranch ?? "";
         _localModelBaseUrl = _project.LocalModelBaseUrl ?? "";
         await ReloadAllAsync();
         // Load model catalogs first, then apply the saved fallback so the <select> has a
@@ -468,6 +491,29 @@ else
             }
         }
         finally { _savingWorkspace = false; }
+    }
+
+    private async Task SaveWorktrees()
+    {
+        _savingWorktrees = true;
+        _worktreeStatus = null;
+        try
+        {
+            var body = new { worktreesEnabled = _worktreesEnabled, integrationBranch = string.IsNullOrWhiteSpace(_integrationBranch) ? null : _integrationBranch.Trim() };
+            var resp = await NewHttp().PatchAsJsonAsync($"/api/projects/{Slug}", body);
+            if (resp.IsSuccessStatusCode)
+            {
+                _project = await ProjectService.GetProjectAsync(Slug);
+                _worktreeStatus = (L["Saved"], "settings-status-ok");
+            }
+            else
+            {
+                var detail = await resp.Content.ReadAsStringAsync();
+                try { detail = System.Text.Json.JsonDocument.Parse(detail).RootElement.GetProperty("error").GetString() ?? detail; } catch { }
+                _worktreeStatus = ($"{L["Error"]}: {detail}", "settings-status-err");
+            }
+        }
+        finally { _savingWorktrees = false; }
     }
 
     private async Task SaveFallbackModel()

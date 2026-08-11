@@ -1,0 +1,33 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "qa-worktree-216", "workspacePath": "C:\\Sources\\KittyClaw\\qa-worktree-216-repo-v2" },
+    { "type": "api", "method": "PATCH", "path": "/api/projects/qa-worktree-216", "body": { "worktreesEnabled": true, "integrationBranch": "integration" } },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-worktree-216/tickets", "body": { "title": "Canonical root", "createdBy": "qa-runner", "status": "Backlog" }, "extract": { "parentId": "id" } },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-worktree-216/tickets", "body": { "title": "Shared child", "createdBy": "qa-runner", "status": "Backlog", "parentId": "{parentId}" }, "extract": { "childId": "id" } },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-worktree-216/tickets", "body": { "title": "Conflict root", "createdBy": "qa-runner", "status": "Backlog" }, "extract": { "conflictId": "id" } },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-worktree-216/worktree-merges", "body": { "ticketId": "{childId}" } },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-worktree-216/worktree-merges", "body": { "ticketId": "{conflictId}" } }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-worktree-216/settings" },
+    { "type": "assertVisible", "selector": "[data-testid='worktree-settings']" },
+    { "type": "assertValue", "selector": "[data-testid='integration-branch']", "expected": "integration" },
+    { "type": "screenshot", "name": "worktree-settings-enabled", "description": "Opt-in worktree settings and prerequisites" },
+    { "type": "navigate", "url": "/board/qa-worktree-216/ticket/{childId}" },
+    { "type": "assertVisible", "selector": "[data-testid='ticket-worktree-summary']" },
+    { "type": "assertText", "selector": "[data-testid='worktree-branch']", "expected": "ticket/{parentId}" },
+    { "type": "assertText", "selector": ".worktree-state", "expected": "Queued · position 1" },
+    { "type": "screenshot", "name": "worktree-child-shared-queued", "description": "Child ticket shares root identity and shows merge queue position" },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-worktree-216/worktree-merges/process-next" },
+    { "type": "navigate", "url": "/board/qa-worktree-216/ticket/{parentId}" },
+    { "type": "assertText", "selector": ".worktree-state", "expected": "Integrated" },
+    { "type": "screenshot", "name": "worktree-merge-success", "description": "Successful integration shown on the root ticket" },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-worktree-216/worktree-merges/process-next" },
+    { "type": "navigate", "url": "/board/qa-worktree-216/ticket/{conflictId}" },
+    { "type": "assertText", "selector": ".worktree-state", "expected": "Conflict" },
+    { "type": "assertVisible", "selector": ".worktree-conflicts" },
+    { "type": "assertVisible", "selector": ".worktree-action" },
+    { "type": "screenshot", "name": "worktree-merge-conflict", "description": "Conflict diagnosis, files and safe resume action" }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}
