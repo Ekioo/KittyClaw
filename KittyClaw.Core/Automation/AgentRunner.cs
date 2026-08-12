@@ -681,7 +681,7 @@ public sealed class AgentRunner
                 && info.TryGetProperty("status", out var status)
                 && string.Equals(status.GetString(), "rejected", StringComparison.OrdinalIgnoreCase);
         }
-        catch { return false; }
+        catch (JsonException) { return false; /* Optional provider payload: non-rejected is the intended fallback. */ }
     }
 
     private async Task<SpawnResult> SpawnAndWaitAsync(
@@ -775,7 +775,8 @@ public sealed class AgentRunner
 
             using var killReg = linkedWithTimeout.Token.Register(() =>
             {
-                try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { /* cleanup, process may already be exiting */ }
+                try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); }
+                catch (Exception ex) { _logger.LogDebug(ex, "Cancellation cleanup could not kill process for project {ProjectSlug} run {RunId}", ctx.ProjectSlug, run.RunId); }
             });
 
             // Terminal-result watchdog. claude emits a `result` (or `max_turns`) event when its
@@ -810,7 +811,8 @@ public sealed class AgentRunner
             try
             {
                 await proc.WaitForExitAsync(waitCts.Token);
-                try { proc.StandardInput.Close(); } catch { /* stdin may already be closed */ }
+                try { proc.StandardInput.Close(); }
+                catch (Exception ex) { _logger.LogDebug(ex, "Process stdin was already unavailable for project {ProjectSlug} run {RunId}", ctx.ProjectSlug, run.RunId); }
                 exit = proc.ExitCode;
             }
             catch (OperationCanceledException)
@@ -826,7 +828,7 @@ public sealed class AgentRunner
                     _logger.LogWarning(
                         "{Agent} run={RunId} timed out after {Duration}; killing the process tree",
                         ctx.AgentName, run.RunId, ctx.MaxRunDuration);
-                    try { proc.Kill(entireProcessTree: true); } catch { /* best-effort */ }
+                    TryKillProcess(proc, ctx, run, "timeout cleanup");
                     job?.Dispose();
                     run.Push(new StreamEvent(DateTime.UtcNow, "error",
                         $"Run exceeded maximum duration of {ctx.MaxRunDuration?.TotalMinutes:F0} minutes and was killed"));
@@ -837,7 +839,7 @@ public sealed class AgentRunner
                 else if (linkedWithTimeout.IsCancellationRequested)
                 {
                     // Genuine stop / external cancellation.
-                    try { proc.Kill(entireProcessTree: true); } catch { /* cleanup on cancellation */ }
+                    TryKillProcess(proc, ctx, run, "cancellation cleanup");
                     job?.Dispose(); // also terminate any descendant the agent backgrounded
                     _runs.Complete(run.RunId, AgentRunStatus.Stopped, null);
                     AppendDebugLog(ctx, $"STOPPED {ctx.AgentName} run={run.RunId}");
@@ -855,7 +857,7 @@ public sealed class AgentRunner
                     _logger.LogWarning(
                         "{Agent} run={RunId} emitted its result but did not exit within {Grace}s; killing the process tree (a backgrounded child likely kept it alive)",
                         ctx.AgentName, run.RunId, ResultExitGrace.TotalSeconds);
-                    try { proc.Kill(entireProcessTree: true); } catch { /* best-effort */ }
+                    TryKillProcess(proc, ctx, run, "result watchdog cleanup");
                     exit = resultOutcome == 1 ? 0 : 1;
                 }
             }
@@ -884,13 +886,15 @@ public sealed class AgentRunner
                     "stdout/stderr did not reach EOF {Grace}s after {Agent} run={RunId} exited (a backgrounded child likely holds the pipe) — abandoning drain",
                     PumpDrainGrace.TotalSeconds, ctx.AgentName, run.RunId);
                 linkedWithTimeout.Cancel(); // unblocks ReadLineAsync(ct); killReg is a no-op since proc already exited
-                try { await drain; } catch { /* pumps observe cancellation */ }
+                try { await drain; }
+                catch (Exception ex) { _logger.LogDebug(ex, "Stream pump drain ended during cleanup for project {ProjectSlug} run {RunId}", ctx.ProjectSlug, run.RunId); }
             }
             // Cancel linkedWithTimeout so PumpSteeringAsync stops: without this it competes with
             // RunAsync's IsAwaitingUserAnswer wait for messages on the same SteeringQueue,
             // consuming the user's answer and preventing the run from resuming promptly.
             if (!linkedWithTimeout.IsCancellationRequested) linkedWithTimeout.Cancel();
-            try { await steerTask; } catch { }
+            try { await steerTask; }
+            catch (Exception ex) { _logger.LogDebug(ex, "Steering pump ended during cleanup for project {ProjectSlug} run {RunId}", ctx.ProjectSlug, run.RunId); }
             // Drain any messages that arrived after process exit into PendingSteerMessages,
             // unless IsAwaitingUserAnswer is set — RunAsync will read the answer itself.
             if (!run.IsAwaitingUserAnswer)
@@ -910,10 +914,22 @@ public sealed class AgentRunner
         }
     }
 
-    private static void TryDeleteFile(string? path)
+    private void TryDeleteFile(string? path)
     {
         if (path is null) return;
-        try { File.Delete(path); } catch { /* best-effort cleanup */ }
+        try { File.Delete(path); }
+        catch (Exception ex) { _logger.LogDebug(ex, "Failed to delete temporary runner file {FileName}", Path.GetFileName(path)); }
+    }
+
+    private void TryKillProcess(System.Diagnostics.Process proc, AgentRunContext ctx, AgentRun run, string operation)
+    {
+        try { proc.Kill(entireProcessTree: true); }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Runner process cleanup failed for project {ProjectSlug} run {RunId} agent {AgentName} during {Operation}",
+                ctx.ProjectSlug, run.RunId, ctx.AgentName, operation);
+        }
     }
 
     /// <summary>
@@ -1027,12 +1043,13 @@ public sealed class AgentRunner
         return sb.ToString();
     }
 
-    private static void CleanupImageTempFiles(AgentRunContext ctx)
+    private void CleanupImageTempFiles(AgentRunContext ctx)
     {
         if (ctx.ImagePaths is null || ctx.ImagePaths.Count == 0) return;
         foreach (var p in ctx.ImagePaths)
         {
-            try { File.Delete(p); } catch { /* best-effort cleanup */ }
+            try { File.Delete(p); }
+            catch (Exception ex) { _logger.LogDebug(ex, "Failed to delete temporary image for project {ProjectSlug} agent {AgentName}", ctx.ProjectSlug, ctx.AgentName); }
         }
     }
 

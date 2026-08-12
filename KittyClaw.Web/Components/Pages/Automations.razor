@@ -15,6 +15,7 @@
 @inject MemberService MemberService
 @inject AgentRunsState RunsState
 @inject KittyClaw.Web.Services.EscapeKeyStack EscapeStack
+@inject ILogger<Automations> Logger
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -369,8 +370,10 @@ else
         _nextRunTimer?.Dispose();
         if (_dndModule is not null)
         {
-            try { await _dndModule.InvokeVoidAsync("dispose"); } catch { }
-            try { await _dndModule.DisposeAsync(); } catch { }
+            try { await _dndModule.InvokeVoidAsync("dispose"); }
+            catch (Exception ex) { Logger.LogDebug(ex, "Failed to dispose automation drag-and-drop behavior for project {ProjectSlug}", Slug); }
+            try { await _dndModule.DisposeAsync(); }
+            catch (Exception ex) { Logger.LogDebug(ex, "Failed to dispose automation JS module for project {ProjectSlug}", Slug); }
         }
         _dotnetRef?.Dispose();
         _escInitConflicts?.Dispose();
@@ -401,7 +404,11 @@ else
                         : err.RootElement.TryGetProperty("error", out var e) ? e.GetString() ?? body
                         : body;
                 }
-                catch { msg = body; }
+                catch (JsonException ex)
+                {
+                    Logger.LogDebug(ex, "Automation error response was not JSON for project {ProjectSlug}", Slug);
+                    msg = body;
+                }
                 _configLoadError = true;
                 _statusMessage = ($"automations.json — {msg}", "settings-status-err");
                 return;
@@ -512,7 +519,10 @@ else
                     if (doc.RootElement.TryGetProperty("preservedIds", out var p) && p.ValueKind == JsonValueKind.Array)
                         preservedCount = p.GetArrayLength();
                 }
-                catch { }
+                catch (JsonException ex)
+                {
+                    Logger.LogDebug(ex, "Automation save response metadata could not be parsed for project {ProjectSlug}", Slug);
+                }
                 _statusMessage = preservedCount > 0
                     ? (string.Format(L["SavedPreservedFromDisk"], preservedCount), "settings-status-ok")
                     : (L["Saved"], "settings-status-ok");

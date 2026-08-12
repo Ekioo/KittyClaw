@@ -5,6 +5,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject LocalizationService L
+@inject ILogger<ChatDrawer> Logger
 @implements IAsyncDisposable
 
 <div class="chat-drawer-overlay" @onclick="Close"></div>
@@ -378,7 +379,7 @@
                 }
             }
         }
-        catch { /* leave _view = Selection */ }
+        catch (Exception ex) { Logger.LogDebug(ex, "Chat targets could not be loaded for project {ProjectSlug}; keeping target selection visible", ProjectSlug); }
         finally { _ready = true; }
         await modelCatalogTask;
     }
@@ -394,7 +395,7 @@
         {
             await JS.InvokeVoidAsync("localStorage.setItem", SelectedModelStorageKey, _selectedModel);
         }
-        catch { /* localStorage unavailable — selection remains valid for this drawer instance */ }
+        catch (Exception ex) { Logger.LogDebug(ex, "Selected chat model could not be persisted for project {ProjectSlug}; keeping the in-memory selection", ProjectSlug); }
     }
 
     private async Task RestoreRememberedModelAsync()
@@ -405,17 +406,17 @@
             if (IsAvailableModel(storedModel))
                 _selectedModel = storedModel!;
         }
-        catch { /* localStorage unavailable — keep the current model */ }
+        catch (Exception ex) { Logger.LogDebug(ex, "Selected chat model could not be restored for project {ProjectSlug}; keeping the current model", ProjectSlug); }
     }
 
     private async Task FetchOllamaModelsAsync()
     {
         if (string.IsNullOrWhiteSpace(ProjectSlug)) return;
         using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
-        var ollamaTask = TryFetchModelsAsync(http, $"/api/projects/{ProjectSlug}/ollama-models");
-        var grokTask = TryFetchModelsAsync(http, "/api/grok-models");
-        var codexTask = TryFetchModelsAsync(http, "/api/codex-models");
-        var mistralTask = TryFetchModelsAsync(http, "/api/mistral-models");
+        var ollamaTask = TryFetchModelsAsync(http, $"/api/projects/{ProjectSlug}/ollama-models", "ollama");
+        var grokTask = TryFetchModelsAsync(http, "/api/grok-models", "grok");
+        var codexTask = TryFetchModelsAsync(http, "/api/codex-models", "codex");
+        var mistralTask = TryFetchModelsAsync(http, "/api/mistral-models", "mistral");
         await Task.WhenAll(ollamaTask, grokTask, codexTask, mistralTask);
         _ollamaModels = await ollamaTask;
         _grokModels = await grokTask;
@@ -423,10 +424,14 @@
         _mistralModels = await mistralTask;
     }
 
-    private static async Task<List<string>> TryFetchModelsAsync(HttpClient http, string uri)
+    private async Task<List<string>> TryFetchModelsAsync(HttpClient http, string uri, string provider)
     {
         try { return await http.GetFromJsonAsync<List<string>>(uri) ?? new(); }
-        catch { return new(); }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Optional {Provider} model catalog could not be loaded for project {ProjectSlug}", provider, ProjectSlug);
+            return new();
+        }
     }
 
     private async Task EnterConversationAsync(ChatTarget target)
@@ -448,8 +453,10 @@
 
             ChatModelResponse? modelResponse = null;
             List<ServerChatMessage>? msgs = null;
-            try { modelResponse = await modelTask; } catch { }
-            try { msgs = await messagesTask; } catch { }
+            try { modelResponse = await modelTask; }
+            catch (Exception ex) { Logger.LogDebug(ex, "Chat model metadata could not be loaded for project {ProjectSlug} target {TargetSlug}", ProjectSlug, target.Slug); }
+            try { msgs = await messagesTask; }
+            catch (Exception ex) { Logger.LogDebug(ex, "Chat history could not be loaded for project {ProjectSlug} target {TargetSlug}", ProjectSlug, target.Slug); }
             if (!string.IsNullOrWhiteSpace(modelResponse?.Model))
             {
                 _sessionModel = modelResponse.Model;
@@ -479,7 +486,7 @@
                 }
             }
         }
-        catch { /* show empty conversation */ }
+        catch (Exception ex) { Logger.LogDebug(ex, "Chat conversation initialization failed for project {ProjectSlug} target {TargetSlug}; showing an empty conversation", ProjectSlug, target.Slug); }
         finally { _historyLoading = false; }
         StateHasChanged();
 
@@ -510,7 +517,7 @@
             await _sseModule.InvokeVoidAsync("start", _dotnetRef, url);
             StateHasChanged();
         }
-        catch { /* best-effort */ }
+        catch (Exception ex) { Logger.LogDebug(ex, "Active chat run could not be reattached for project {ProjectSlug} target {TargetSlug}", ProjectSlug, target.Slug); }
     }
 
     private async Task SelectTarget(ChatTarget t)
@@ -544,9 +551,11 @@
         try
         {
             using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
-            await http.DeleteAsync($"/api/projects/{ProjectSlug}/chat/session?target={Uri.EscapeDataString(_activeTarget.Slug)}");
+            var response = await http.DeleteAsync($"/api/projects/{ProjectSlug}/chat/session?target={Uri.EscapeDataString(_activeTarget.Slug)}");
+            if (!response.IsSuccessStatusCode)
+                Logger.LogDebug("Chat session reset returned status {StatusCode} for project {ProjectSlug} target {TargetSlug}", (int)response.StatusCode, ProjectSlug, _activeTarget.Slug);
         }
-        catch { /* best-effort */ }
+        catch (Exception ex) { Logger.LogDebug(ex, "Chat session reset failed for project {ProjectSlug} target {TargetSlug}; resetting the drawer locally", ProjectSlug, _activeTarget.Slug); }
         _messages.Clear();
         _loading = false;
         _sessionModel = null;
@@ -569,19 +578,22 @@
                 await RestoreRememberedModelAsync();
                 StateHasChanged();
             }
-            try { await _inputRef.FocusAsync(); } catch { }
+            try { await _inputRef.FocusAsync(); }
+            catch (Exception ex) { Logger.LogDebug(ex, "Chat input focus failed for project {ProjectSlug}", ProjectSlug); }
         }
         if (_view == View.Conversation)
         {
-            try { await JS.InvokeVoidAsync("chatDrawerInstallEnterGuard", _inputRef); } catch { }
+            try { await JS.InvokeVoidAsync("chatDrawerInstallEnterGuard", _inputRef); }
+            catch (Exception ex) { Logger.LogDebug(ex, "Chat enter guard installation failed for project {ProjectSlug}", ProjectSlug); }
             _dotnetRef ??= DotNetObjectReference.Create(this);
-            try { await JS.InvokeVoidAsync("chatDrawerInstallPasteHandler", _inputRef, _dotnetRef); } catch { }
+            try { await JS.InvokeVoidAsync("chatDrawerInstallPasteHandler", _inputRef, _dotnetRef); }
+            catch (Exception ex) { Logger.LogDebug(ex, "Chat paste handler installation failed for project {ProjectSlug}", ProjectSlug); }
         }
         try
         {
             await JS.InvokeVoidAsync("chatDrawerScrollToBottom", _messagesRef);
         }
-        catch { }
+        catch (Exception ex) { Logger.LogDebug(ex, "Chat scroll update failed for project {ProjectSlug}", ProjectSlug); }
     }
 
     private async Task OnKeyDown(KeyboardEventArgs e)
@@ -611,11 +623,15 @@
                 $"/api/projects/{ProjectSlug}/runs/{_activeStreamId}/steer",
                 new { text });
             if (!resp.IsSuccessStatusCode)
-                _messages.Add(new ChatMessage("error", $"Inject failed: {resp.StatusCode}"));
+            {
+                AddErrorMessage("Impossible d’envoyer l’instruction. Réessayez.");
+                Logger.LogWarning("Chat steer request failed for project {ProjectSlug} run {RunId} with status {StatusCode}", ProjectSlug, _activeStreamId, (int)resp.StatusCode);
+            }
         }
         catch (Exception ex)
         {
-            _messages.Add(new ChatMessage("error", ex.Message));
+            AddErrorMessage("Impossible d’envoyer l’instruction. Réessayez.");
+            Logger.LogWarning(ex, "Chat steer request failed for project {ProjectSlug} run {RunId}", ProjectSlug, _activeStreamId);
         }
         StateHasChanged();
     }
@@ -678,7 +694,8 @@
                 new { message = text, target = _activeTarget.Slug, ticketId = TicketId, images = imagesPayload, model = _selectedModel, forceNew });
             if (!resp.IsSuccessStatusCode)
             {
-                _messages.Add(new ChatMessage("error", $"Error {resp.StatusCode}"));
+                AddErrorMessage("Impossible de démarrer la conversation. Réessayez.");
+                Logger.LogWarning("Chat start request failed for project {ProjectSlug} target {TargetSlug} with status {StatusCode}", ProjectSlug, _activeTarget.Slug, (int)resp.StatusCode);
                 _loading = false;
                 StateHasChanged();
                 return;
@@ -705,7 +722,8 @@
         }
         catch (Exception ex)
         {
-            _messages.Add(new ChatMessage("error", ex.Message));
+            AddErrorMessage("Impossible de démarrer la conversation. Réessayez.");
+            Logger.LogWarning(ex, "Chat start request failed for project {ProjectSlug} target {TargetSlug}", ProjectSlug, _activeTarget.Slug);
             _loading = false;
             StateHasChanged();
         }
@@ -850,7 +868,7 @@
                     : Array.Empty<string>();
             return (fallbackPrompt, fallbackOptions);
         }
-        catch { return ("", []); }
+        catch (System.Text.Json.JsonException) { return ("", []); /* Optional question payload: empty prompt is the intended fallback. */ }
     }
 
     private async Task SubmitAskUserQuestion(AskUserQuestionMessage msg, string answer)
@@ -862,9 +880,21 @@
         using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
         try
         {
-            await http.PostAsJsonAsync($"/api/projects/{ProjectSlug}/runs/{runId}/steer", new { text = answer });
+            var response = await http.PostAsJsonAsync($"/api/projects/{ProjectSlug}/runs/{runId}/steer", new { text = answer });
+            if (!response.IsSuccessStatusCode)
+            {
+                msg.IsAnswered = false;
+                AddErrorMessage("Impossible d’envoyer la réponse. Réessayez.");
+                Logger.LogWarning("Question submission failed for project {ProjectSlug} run {RunId} with status {StatusCode}", ProjectSlug, runId, (int)response.StatusCode);
+            }
         }
-        catch { /* best-effort */ }
+        catch (Exception ex)
+        {
+            msg.IsAnswered = false;
+            AddErrorMessage("Impossible d’envoyer la réponse. Réessayez.");
+            Logger.LogWarning(ex, "Question submission failed for project {ProjectSlug} run {RunId}", ProjectSlug, runId);
+        }
+        StateHasChanged();
     }
 
     [JSInvokable]
@@ -888,7 +918,8 @@
     {
         if (_sseModule is not null && _activeStreamId is not null)
         {
-            try { await _sseModule.InvokeVoidAsync("stop"); } catch { }
+            try { await _sseModule.InvokeVoidAsync("stop"); }
+            catch (Exception ex) { Logger.LogDebug(ex, "Failed to stop chat SSE module for project {ProjectSlug} run {RunId}", ProjectSlug, _activeStreamId); }
         }
         if (_activeRun is not null)
             _activeRun.OnEvent -= HandleEvent;
@@ -907,9 +938,18 @@
         try
         {
             using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
-            await http.PostAsync($"/api/projects/{ProjectSlug}/runs/{runId}/stop", content: null);
+            var response = await http.PostAsync($"/api/projects/{ProjectSlug}/runs/{runId}/stop", content: null);
+            if (!response.IsSuccessStatusCode)
+            {
+                AddErrorMessage("Impossible d’arrêter l’exécution. Vous pouvez réessayer.");
+                Logger.LogWarning("Chat stop request failed for project {ProjectSlug} run {RunId} with status {StatusCode}", ProjectSlug, runId, (int)response.StatusCode);
+            }
         }
-        catch { /* best-effort: if the stop call fails the SSE will still detach below */ }
+        catch (Exception ex)
+        {
+            AddErrorMessage("Impossible d’arrêter l’exécution. Vous pouvez réessayer.");
+            Logger.LogWarning(ex, "Chat stop request failed for project {ProjectSlug} run {RunId}", ProjectSlug, runId);
+        }
         await StopStream();
         _loading = false;
         StateHasChanged();
@@ -927,7 +967,8 @@
         _dotnetRef?.Dispose();
         if (_sseModule is not null)
         {
-            try { await _sseModule.DisposeAsync(); } catch { }
+            try { await _sseModule.DisposeAsync(); }
+            catch (Exception ex) { Logger.LogDebug(ex, "Failed to dispose chat JS module for project {ProjectSlug} run {RunId}", ProjectSlug, _activeStreamId); }
         }
     }
 

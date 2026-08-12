@@ -5,6 +5,7 @@
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject LocalizationService L
+@inject ILogger<AgentRunDrawer> Logger
 @implements IAsyncDisposable
 
 @if (_run is not null)
@@ -48,6 +49,11 @@
                 <button class="agent-close-btn" @onclick="Close" title="@L["Close"]">×</button>
             </div>
         </div>
+
+        @if (!string.IsNullOrEmpty(_actionError))
+        {
+            <div class="agent-action-error" role="alert">@_actionError</div>
+        }
 
         <div class="agent-drawer-console" @ref="_consoleRef">
             @foreach (var entry in RunDrawerEventPresentation.Group(_events.ToList()))
@@ -192,6 +198,7 @@
     private ElementReference _consoleRef;
     private bool _needsInitScroll;
     private bool _needsScroll;
+    private string? _actionError;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -253,7 +260,8 @@
     {
         if (_run is not null) _run.OnEvent -= HandleEvent;
         if (_sseModule is not null && _activeStreamId is not null)
-            try { await _sseModule.InvokeVoidAsync("disposeAutoScroll"); } catch { }
+            try { await _sseModule.InvokeVoidAsync("disposeAutoScroll"); }
+            catch (Exception ex) { Logger.LogDebug(ex, "Failed to dispose run drawer auto-scroll for run {RunId}", _activeStreamId); }
         _activeStreamId = null;
     }
 
@@ -272,18 +280,43 @@
         using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
         try
         {
-            await http.PostAsJsonAsync($"/api/projects/{_run.ProjectSlug}/runs/{_run.RunId}/steer", payload);
+            var response = await http.PostAsJsonAsync($"/api/projects/{_run.ProjectSlug}/runs/{_run.RunId}/steer", payload);
+            if (!response.IsSuccessStatusCode)
+            {
+                _actionError = "Impossible d’envoyer l’instruction. Réessayez.";
+                Logger.LogWarning("Steer request failed for project {ProjectSlug} run {RunId} with status {StatusCode}", _run.ProjectSlug, _run.RunId, (int)response.StatusCode);
+                return;
+            }
             _events.Add(new StreamEvent(DateTime.UtcNow, "user", _steerText));
             _steerText = "";
+            _actionError = null;
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _actionError = "Impossible d’envoyer l’instruction. Réessayez.";
+            Logger.LogWarning(ex, "Steer request failed for project {ProjectSlug} run {RunId}", _run.ProjectSlug, _run.RunId);
+        }
     }
 
     private async Task Stop()
     {
         if (_run is null) return;
         using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
-        try { await http.PostAsync($"/api/projects/{_run.ProjectSlug}/runs/{_run.RunId}/stop", null); } catch { }
+        try
+        {
+            var response = await http.PostAsync($"/api/projects/{_run.ProjectSlug}/runs/{_run.RunId}/stop", null);
+            if (!response.IsSuccessStatusCode)
+            {
+                _actionError = "Impossible d’arrêter l’exécution. Réessayez.";
+                Logger.LogWarning("Stop request failed for project {ProjectSlug} run {RunId} with status {StatusCode}", _run.ProjectSlug, _run.RunId, (int)response.StatusCode);
+            }
+            else _actionError = null;
+        }
+        catch (Exception ex)
+        {
+            _actionError = "Impossible d’arrêter l’exécution. Réessayez.";
+            Logger.LogWarning(ex, "Stop request failed for project {ProjectSlug} run {RunId}", _run.ProjectSlug, _run.RunId);
+        }
     }
 
     private async Task Retry()
@@ -300,8 +333,17 @@
                 if (body is not null && OnRetried.HasDelegate)
                     await OnRetried.InvokeAsync(body.RunId);
             }
+            else
+            {
+                _actionError = "Impossible de relancer l’exécution. Réessayez.";
+                Logger.LogWarning("Retry request failed for project {ProjectSlug} run {RunId} with status {StatusCode}", _run.ProjectSlug, _run.RunId, (int)resp.StatusCode);
+            }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _actionError = "Impossible de relancer l’exécution. Réessayez.";
+            Logger.LogWarning(ex, "Retry request failed for project {ProjectSlug} run {RunId}", _run.ProjectSlug, _run.RunId);
+        }
         finally { _retrying = false; }
     }
 
@@ -337,7 +379,7 @@
             if (root.TryGetProperty("subtype", out var s))
                 return s.GetString() ?? "result";
         }
-        catch { }
+        catch (System.Text.Json.JsonException) { /* Optional preview payload: raw text is the intended fallback. */ }
         return Truncate(text, 80);
     }
 
@@ -357,7 +399,7 @@
                 return preview.Length > 0 ? preview : text;
             }
         }
-        catch { }
+        catch (System.Text.Json.JsonException) { /* Optional rate-limit payload: raw text is the intended fallback. */ }
         return Truncate(text, 80);
     }
 
@@ -396,7 +438,8 @@
         await StopStream();
         if (_sseModule is not null)
         {
-            try { await _sseModule.DisposeAsync(); } catch { }
+            try { await _sseModule.DisposeAsync(); }
+            catch (Exception ex) { Logger.LogDebug(ex, "Failed to dispose run drawer JS module for run {RunId}", RunId); }
         }
     }
 }

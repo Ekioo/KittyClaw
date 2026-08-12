@@ -132,6 +132,16 @@
     display: flex;
     gap: 0.4rem;
 }
+
+.agent-action-error {
+    margin: 0.65rem 1rem 0;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid rgba(239, 107, 107, 0.45);
+    border-radius: 0.4rem;
+    background: rgba(127, 29, 29, 0.24);
+    color: #fecaca;
+    font-size: 0.85rem;
+}
 .agent-stop-btn {
     background: #f06b6b22;
     color: #f06b6b;
