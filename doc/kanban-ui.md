@@ -28,7 +28,7 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 - Multi-pipeline Kanban with drag-and-drop; processor routing lightly highlights allowed destinations and subdues forbidden columns while dragging.
 - Ticket detail panel with comments and activity timeline.
 - Owner-action ticket panels expose a concise evidence decision brief and record the selected accept, correction, or stop decision in ticket history before moving the ticket.
-- Live agent run drawer (SSE stream of Claude Code output, steer + stop controls).
+- Live agent run drawer (SSE stream of Claude Code output, steer + stop controls). Failed steer, stop, and retry requests leave the drawer open and display a concise French error so the action can be attempted again.
 - Animated spinner badge on project cards (`Home.razor`) when one or more agent runs are active for that project (sourced from `AgentRunsState`).
 - New-instruction chat drawer to send an ad-hoc prompt to an agent, with image paste support (paste screenshots or images directly into the textarea; thumbnails shown before send; up to 5 images per turn). Each conversation keeps its selected model across turns and drawer reopenings. New conversations use the last available model selected for the project in the same browser; resetting a conversation clears its server-side model binding. When the agent invokes `AskUserQuestion`, the chat drawer renders an interactive prompt widget — either multiple-choice buttons or a free-text textarea — and the user's answer is sent back via the `/steer` endpoint. Answered widgets are locked in place so history remains readable.
 - Automations page: list, enable/disable, edit (triggers / conditions / actions), reload from disk, re-initialize agent template.
