@@ -3,6 +3,7 @@
 @inject EscapeKeyStack EscapeStack
 @inject IJSRuntime JS
 @inject LocalizationService L
+@inject ILogger<BoardCreateTicketDialog> Logger
 @implements IDisposable
 
 <div class="ticket-modal-overlay">
@@ -107,7 +108,10 @@
             _escHandle = EscapeStack.PushWithFocus(JS,
                 () => InvokeAsync(async () => { await OnClosed.InvokeAsync(); }));
             try { await JS.InvokeVoidAsync("attachImagePaste", _descTextarea, "/api/images"); }
-            catch { }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Image paste initialization failed");
+            }
         }
     }
 
