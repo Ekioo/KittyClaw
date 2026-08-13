@@ -74,6 +74,7 @@
   "ActAgentCompleted": "agente terminado {0}",
   "ActAgentFailed": "el agente {0} falló",
   "ActAgentStopped": "el agente {0} fue detenido",
+  "ActAgentDefinitionMissing": "no se puede despachar: el asignado '{0}' no tiene definición de agente (falta .agents/{0}/SKILL.md)",
   "ActLabelsAdded": "añadido: {0}",
   "ActLabelsRemoved": "eliminado: {0}",
   "ActLabelsChanged": "etiquetas cambiadas ({0})",

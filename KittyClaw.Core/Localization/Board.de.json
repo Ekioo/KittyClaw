@@ -74,6 +74,7 @@
   "ActAgentCompleted": "fertiger Agent {0}",
   "ActAgentFailed": "Agent {0} ist fehlgeschlagen",
   "ActAgentStopped": "Agent {0} wurde gestoppt",
+  "ActAgentDefinitionMissing": "Dispatch nicht möglich: Zugewiesener '{0}' hat keine Agent-Definition (.agents/{0}/SKILL.md fehlt)",
   "ActLabelsAdded": "hinzugefügt: {0}",
   "ActLabelsRemoved": "entfernt: {0}",
   "ActLabelsChanged": "geänderte Bezeichnungen ({0})",

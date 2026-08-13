@@ -44,7 +44,7 @@ public class SignalPathConditionTests
         var store = new AutomationStore(projects);
         var manager = new ProjectRuntimeManager(store, new TriggerStateStore(projects), NullLogger.Instance);
         var handler = new TriggerHandler(
-            projects, manager, executor, tickets, members, sessions, runs, NullLogger.Instance);
+            projects, manager, executor, tickets, members, sessions, runs, loc, NullLogger.Instance);
 
         return new Harness(executor, handler, manager, tickets, store, project.Slug, workspace);
     }

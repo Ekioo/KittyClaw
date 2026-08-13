@@ -48,7 +48,7 @@ public class ColumnPollFirstMatchTests
         var manager = new ProjectRuntimeManager(store, new TriggerStateStore(projects), NullLogger.Instance);
         var queue = new AutomationQueueStore(projects);
         var handler = new TriggerHandler(
-            projects, manager, executor, tickets, members, sessions, runs, queue, NullLogger.Instance);
+            projects, manager, executor, tickets, members, sessions, runs, queue, loc, NullLogger.Instance);
         var processor = new AutomationQueueProcessor(
             projects, tickets, queue, manager, executor, NullLogger.Instance);
 

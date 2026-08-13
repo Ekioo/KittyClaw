@@ -21,12 +21,13 @@ internal sealed class TriggerHandler
     private readonly ILogger _logger;
     private readonly AutomationQueueStore _queue;
     private readonly ColumnPresenceSweepTracker _presenceSweeps = new(TimeSpan.FromSeconds(30));
+    private readonly MissingAgentDefinitionWarner _missingAgentWarner;
 
     public TriggerHandler(ProjectService projects, ProjectRuntimeManager runtimeManager,
         ActionExecutor executor, TicketService tickets, MemberService members,
-        SessionRegistry sessions, AgentRunRegistry runs, ILogger logger)
+        SessionRegistry sessions, AgentRunRegistry runs, LocalizationService loc, ILogger logger)
         : this(projects, runtimeManager, executor, tickets, members, sessions, runs,
-            new AutomationQueueStore(projects), logger) { }
+            new AutomationQueueStore(projects), loc, logger) { }
 
     public TriggerHandler(
         ProjectService projects,
@@ -37,6 +38,7 @@ internal sealed class TriggerHandler
         SessionRegistry sessions,
         AgentRunRegistry runs,
         AutomationQueueStore queue,
+        LocalizationService loc,
         ILogger logger)
     {
         _projects = projects;
@@ -48,6 +50,7 @@ internal sealed class TriggerHandler
         _runs = runs;
         _queue = queue;
         _logger = logger;
+        _missingAgentWarner = new MissingAgentDefinitionWarner(tickets, loc, logger);
         // Ticket mutations arrive synchronously from TicketService. Marking the project dirty
         // here lets the same engine tick refresh occurrence state before evaluating its regular
         // poll triggers, without rereading every ticket in every project once per second.
@@ -133,6 +136,10 @@ internal sealed class TriggerHandler
                 catch (Exception ex) { _logger.LogWarning(ex, "Trigger eval failed for {Id}", automation.Id); continue; }
                 foreach (var firing in firings)
                 {
+                    // Before conditions: an assignedTo allowlist mismatch is exactly how a ticket
+                    // assigned to a member without an agent definition freezes silently (#211).
+                    if (isColumnPoll)
+                        await _missingAgentWarner.ObserveColumnFiringAsync(rt, automation, firing, DateTime.UtcNow);
                     if (!await _executor.ConditionsMatchAsync(rt, automation, firing)) continue;
                     if (isColumnPoll && firing.TicketId is int ticketId)
                     {

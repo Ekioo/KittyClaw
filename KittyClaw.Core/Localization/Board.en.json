@@ -74,6 +74,7 @@
   "ActAgentCompleted": "finished agent {0}",
   "ActAgentFailed": "agent {0} failed",
   "ActAgentStopped": "agent {0} was stopped",
+  "ActAgentDefinitionMissing": "cannot dispatch: assignee '{0}' has no agent definition (.agents/{0}/SKILL.md missing)",
   "ActLabelsAdded": "added: {0}",
   "ActLabelsRemoved": "removed: {0}",
   "ActLabelsChanged": "changed labels ({0})",

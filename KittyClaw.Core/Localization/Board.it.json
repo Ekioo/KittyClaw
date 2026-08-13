@@ -74,6 +74,7 @@
   "ActAgentCompleted": "agente finito {0}",
   "ActAgentFailed": "agente {0} non riuscito",
   "ActAgentStopped": "l'agente {0} è stato arrestato",
+  "ActAgentDefinitionMissing": "impossibile avviare: l'assegnatario '{0}' non ha una definizione di agente (.agents/{0}/SKILL.md mancante)",
   "ActLabelsAdded": "aggiunto: {0}",
   "ActLabelsRemoved": "rimosso: {0}",
   "ActLabelsChanged": "etichette modificate ({0})",

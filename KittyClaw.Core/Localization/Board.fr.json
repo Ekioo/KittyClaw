@@ -74,6 +74,7 @@
   "ActAgentCompleted": "a terminé l'agent {0}",
   "ActAgentFailed": "l'agent {0} a échoué",
   "ActAgentStopped": "l'agent {0} a été arrêté",
+  "ActAgentDefinitionMissing": "dispatch impossible : l'assigné « {0} » n'a pas de définition d'agent (.agents/{0}/SKILL.md manquant)",
   "ActLabelsAdded": "ajouté : {0}",
   "ActLabelsRemoved": "retiré : {0}",
   "ActLabelsChanged": "a modifié les labels ({0})",
