@@ -2,6 +2,7 @@ using KittyClaw.Core.Automation;
 using KittyClaw.Core.Evidence;
 using KittyClaw.Core.Services;
 using KittyClaw.Core.Tests.Helpers;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace KittyClaw.Core.Tests.Evidence;
 
@@ -21,6 +22,7 @@ public sealed class RunEvidenceCaptureTests : IAsyncLifetime
         await File.WriteAllTextAsync(Path.Combine(_gitRepo, "readme.txt"), "hello");
         await Git("add .");
         await Git("commit -m init");
+        await Git("update-ref refs/remotes/origin/dev HEAD");
     }
 
     public Task DisposeAsync()
@@ -81,6 +83,41 @@ public sealed class RunEvidenceCaptureTests : IAsyncLifetime
         Assert.Equal(provider, cmd.Provenance.Provider);
         Assert.Equal(EvidenceTrust.Verified, cmd.Provenance.Trust);
         Assert.Equal(run.RunId, cmd.Provenance.RunId);
+    }
+
+    [Fact]
+    public async Task RunEvidenceAttacher_AttachAsync_PersistsProjectScopedRunAndTicketBundles()
+    {
+        var projects = new ProjectService(Path.Combine(_tmp.Path, "data"));
+        var project = await projects.CreateProjectAsync("Test Project");
+        await projects.UpdateProjectAsync(project.Slug, _gitRepo);
+        var store = new EvidenceStore(Path.Combine(_tmp.Path, "evidence-store"));
+        var attacher = new RunEvidenceAttacher(
+            new AgentRunRegistry(), store, projects, NullLogger<RunEvidenceAttacher>.Instance);
+        var run = MakeRun("attach-run");
+        run = new AgentRun
+        {
+            RunId = run.RunId,
+            ProjectSlug = project.Slug,
+            TicketId = run.TicketId,
+            AgentName = run.AgentName,
+            SkillFile = run.SkillFile,
+            ConcurrencyGroup = run.ConcurrencyGroup,
+            StartedAt = run.StartedAt,
+            Model = "claude-sonnet-4-6",
+            Status = AgentRunStatus.Completed,
+            ExitCode = 0,
+        };
+
+        await attacher.AttachAsync(run);
+
+        var runEvidence = store.LoadRun(project.Slug, run.RunId);
+        var ticketEvidence = store.LoadTicket(project.Slug, run.TicketId!.Value.ToString());
+        Assert.NotNull(runEvidence);
+        Assert.NotNull(ticketEvidence);
+        Assert.Equal(project.Slug, runEvidence!.ProjectSlug);
+        Assert.All(runEvidence.CommandsRun, item => Assert.Equal(run.RunId, item.Provenance.RunId));
+        Assert.Equal(run.RunId, Assert.Single(ticketEvidence!.RunIds));
     }
 
     [Fact]
@@ -189,7 +226,7 @@ public sealed class RunEvidenceCaptureTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task CaptureAsync_ModifiedFile_AppearsInChangedFiles()
+    public async Task CaptureAsync_DirtyWorkspace_DoesNotCountTransientModificationAsDelivered()
     {
         await File.WriteAllTextAsync(Path.Combine(_gitRepo, "readme.txt"), "modified");
         var run = MakeRun();
@@ -198,15 +235,11 @@ public sealed class RunEvidenceCaptureTests : IAsyncLifetime
 
         Assert.NotNull(evidence.RepositoryState);
         Assert.False(evidence.RepositoryState!.IsClean);
-        var changed = Assert.Single(evidence.ChangedFiles);
-        Assert.Equal("readme.txt", changed.Path);
-        Assert.Equal(FileChangeKind.Modified, changed.Kind);
-        Assert.Equal("git", changed.Provenance.Source);
-        Assert.Equal(EvidenceTrust.Verified, changed.Provenance.Trust);
+        Assert.Empty(evidence.ChangedFiles);
     }
 
     [Fact]
-    public async Task CaptureAsync_NewStagedFile_AppearsAsAdded()
+    public async Task CaptureAsync_StagedTransientFile_DoesNotAppearAsDelivered()
     {
         var newFile = Path.Combine(_gitRepo, "new.cs");
         await File.WriteAllTextAsync(newFile, "class New {}");
@@ -215,10 +248,24 @@ public sealed class RunEvidenceCaptureTests : IAsyncLifetime
 
         var evidence = await RunEvidenceCapture.CaptureAsync(run, _gitRepo, "codex");
 
-        var added = evidence.ChangedFiles.FirstOrDefault(f => f.Path.Contains("new.cs"));
-        Assert.NotNull(added);
-        Assert.Equal(FileChangeKind.Added, added!.Kind);
-        Assert.Equal(EvidenceTrust.Verified, added.Provenance.Trust);
+        Assert.DoesNotContain(evidence.ChangedFiles, f => f.Path.Contains("new.cs"));
+    }
+
+    [Fact]
+    public async Task CaptureAsync_CleanTicketBranch_ReportsExactlyCommittedFilesFromStableBase()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_gitRepo, "report.md"), "report");
+        await File.WriteAllTextAsync(Path.Combine(_gitRepo, "memory.md"), "memory");
+        await Git("add report.md memory.md");
+        await Git("commit -m ticket");
+
+        var evidence = await RunEvidenceCapture.CaptureAsync(MakeRun(), _gitRepo, "codex");
+
+        Assert.True(evidence.RepositoryState!.IsClean);
+        Assert.False(string.IsNullOrWhiteSpace(evidence.RepositoryState.BaseCommitSha));
+        Assert.Equal(new[] { "memory.md", "report.md" },
+            evidence.ChangedFiles.Select(f => f.Path).OrderBy(p => p).ToArray());
+        Assert.All(evidence.ChangedFiles, f => Assert.Equal(FileChangeKind.Added, f.Kind));
     }
 
     [Fact]

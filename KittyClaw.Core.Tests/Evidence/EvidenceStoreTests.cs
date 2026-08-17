@@ -23,13 +23,13 @@ public sealed class EvidenceStoreTests : IDisposable
         new(source, provider, runId, DateTime.UtcNow, EvidenceTrust.Verified);
 
     private static TicketEvidence MakeEvidence(string ticketId = "42",
-        string runId = "run-1", string provider = "claude")
+        string runId = "run-1", string provider = "claude", string projectSlug = "test-proj")
     {
         var prov = MakeProv(provider: provider, runId: runId);
         var e = new TicketEvidence
         {
             TicketId = ticketId,
-            ProjectSlug = "test-proj",
+            ProjectSlug = projectSlug,
             CapturedAt = DateTime.UtcNow,
         };
         e.RunIds.Add(runId);
@@ -52,7 +52,7 @@ public sealed class EvidenceStoreTests : IDisposable
         var evidence = MakeEvidence(runId: "run-rt");
 
         _store.SaveRun(evidence);
-        var loaded = _store.LoadRun("run-rt");
+        var loaded = _store.LoadRun("test-proj", "run-rt");
 
         Assert.NotNull(loaded);
         Assert.Equal(evidence.TicketId, loaded!.TicketId);
@@ -66,7 +66,7 @@ public sealed class EvidenceStoreTests : IDisposable
     [Fact]
     public void LoadRun_MissingFile_ReturnsNull()
     {
-        Assert.Null(_store.LoadRun("no-such-run"));
+        Assert.Null(_store.LoadRun("test-proj", "no-such-run"));
     }
 
     // ── LoadTicket ────────────────────────────────────────────────────────────
@@ -74,7 +74,7 @@ public sealed class EvidenceStoreTests : IDisposable
     [Fact]
     public void LoadTicket_MissingFile_ReturnsNull()
     {
-        Assert.Null(_store.LoadTicket("99"));
+        Assert.Null(_store.LoadTicket("test-proj", "99"));
     }
 
     // ── MergeAndSave ─────────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ public sealed class EvidenceStoreTests : IDisposable
         Assert.Single(merged.CommandsRun);
         Assert.Equal(EvidenceStatus.Complete, merged.Status);
 
-        var loaded = _store.LoadTicket("10");
+        var loaded = _store.LoadTicket("test-proj", "10");
         Assert.NotNull(loaded);
         Assert.Contains("run-a", loaded!.RunIds);
     }
@@ -161,12 +161,29 @@ public sealed class EvidenceStoreTests : IDisposable
     }
 
     [Fact]
+    public void MergeAndSave_LatestCommittedDiff_ReplacesTransientSnapshot()
+    {
+        var transient = MakeEvidence(ticketId: "226", runId: "run-old");
+        transient.ChangedFiles.Add(new ChangedFile("transient.txt", FileChangeKind.Modified, null,
+            MakeProv(runId: "run-old")));
+        var delivered = MakeEvidence(ticketId: "226", runId: "run-new");
+        delivered.ChangedFiles.Add(new ChangedFile("delivered.md", FileChangeKind.Added, null,
+            MakeProv(runId: "run-new")));
+
+        _store.MergeAndSave(transient);
+        var merged = _store.MergeAndSave(delivered);
+
+        Assert.Equal("delivered.md", Assert.Single(merged.ChangedFiles).Path);
+        Assert.Equal(2, merged.RunIds.Count);
+    }
+
+    [Fact]
     public void MergeAndSave_RunEvidenceSavedSeparately()
     {
         var run1 = MakeEvidence(ticketId: "60", runId: "run-separate");
         _store.MergeAndSave(run1);
 
-        var runLoaded = _store.LoadRun("run-separate");
+        var runLoaded = _store.LoadRun("test-proj", "run-separate");
         Assert.NotNull(runLoaded);
         Assert.Equal("60", runLoaded!.TicketId);
     }
@@ -239,9 +256,24 @@ public sealed class EvidenceStoreTests : IDisposable
     [Fact]
     public void LoadRun_CorruptFile_ReturnsNull()
     {
-        var path = Path.Combine(_tmp.Path, "runs", "bad-run.evidence.json");
+        var path = Path.Combine(_tmp.Path, "runs", "evidence", "test-proj", "run-bad-run.evidence.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, "not valid json {{{");
 
-        Assert.Null(_store.LoadRun("bad-run"));
+        Assert.Null(_store.LoadRun("test-proj", "bad-run"));
+    }
+
+    [Fact]
+    public void MergeAndSave_SameTicketIdInDifferentProjects_RemainsIsolated()
+    {
+        var first = MakeEvidence(ticketId: "42", runId: "run-a");
+        var second = MakeEvidence(ticketId: "42", runId: "run-b", projectSlug: "other-proj");
+
+        _store.MergeAndSave(first);
+        _store.MergeAndSave(second);
+
+        Assert.Equal("run-a", Assert.Single(_store.LoadTicket("test-proj", "42")!.RunIds));
+        Assert.Equal("run-b", Assert.Single(_store.LoadTicket("other-proj", "42")!.RunIds));
+        Assert.Null(_store.LoadRun("other-proj", "run-a"));
     }
 }

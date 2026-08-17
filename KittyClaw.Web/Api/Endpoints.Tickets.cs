@@ -256,7 +256,7 @@ public static partial class Endpoints
         {
             var ticket = await ts.GetTicketAsync(slug, id);
             if (ticket is null) return Results.NotFound();
-            var evidence = store.LoadTicket(id.ToString());
+            var evidence = store.LoadTicket(slug, id.ToString());
             if (evidence is null) return Results.NotFound();
             EvidenceStore.ApplyStaleness(evidence, EvidenceStore.DefaultStalenessThreshold);
             return Results.Ok(evidence);
@@ -266,7 +266,7 @@ public static partial class Endpoints
         {
             var ticket = await ts.GetTicketAsync(slug, id);
             if (ticket is null) return Results.NotFound();
-            var evidence = store.LoadTicket(id.ToString());
+            var evidence = store.LoadTicket(slug, id.ToString());
             if (evidence is null) return Results.NotFound();
             EvidenceStore.ApplyStaleness(evidence, EvidenceStore.DefaultStalenessThreshold);
             return Results.Ok(DecisionBriefComposer.Compose(evidence));

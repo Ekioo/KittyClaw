@@ -95,6 +95,7 @@ public static class RunEvidenceCapture
     {
         string? branch = null;
         string? sha = null;
+        string? baseSha = null;
         bool? isClean = null;
         var untracked = new List<string>();
         var gitAccessible = false;
@@ -116,6 +117,11 @@ public static class RunEvidenceCapture
                 gitAccessible = true;
                 sha = OrNull(shaResult.Stdout.Trim());
             }
+
+            var baseResult = await ProcessRunner.RunAsync("git", "merge-base HEAD origin/dev",
+                workingDirectory: workspacePath, timeout: GitTimeout, ct: ct);
+            if (baseResult.Success)
+                baseSha = OrNull(baseResult.Stdout.Trim());
 
             var statusResult = await ProcessRunner.RunAsync("git", "status --porcelain",
                 workingDirectory: workspacePath, timeout: GitTimeout, ct: ct);
@@ -143,11 +149,14 @@ public static class RunEvidenceCapture
 
         evidence.RepositoryState = new RepositoryState(
             branch, sha, isClean, untracked,
-            MakeProvenance(provider, "git", runId));
+            MakeProvenance(provider, "git", runId)) { BaseCommitSha = baseSha };
 
         try
         {
-            var diffResult = await ProcessRunner.RunAsync("git", "diff --name-status HEAD",
+            if (baseSha is null || sha is null)
+                return;
+
+            var diffResult = await ProcessRunner.RunAsync("git", $"diff --name-status {baseSha}..{sha}",
                 workingDirectory: workspacePath, timeout: GitTimeout, ct: ct);
             if (diffResult.Success)
                 ParseDiff(evidence, diffResult.Stdout, MakeProvenance(provider, "git", runId));

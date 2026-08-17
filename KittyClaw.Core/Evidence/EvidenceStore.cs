@@ -5,8 +5,8 @@ namespace KittyClaw.Core.Evidence;
 
 /// <summary>
 /// Persists and retrieves evidence bundles with freshness metadata and source identity.
-/// Per-run bundles are stored at <c>&lt;dataDir&gt;/runs/&lt;runId&gt;.evidence.json</c>.
-/// Per-ticket merged bundles are stored at <c>&lt;dataDir&gt;/runs/ticket-&lt;ticketId&gt;.evidence.json</c>.
+/// Bundles are stored below a project-scoped directory so identifiers from distinct
+/// projects can never overwrite or expose one another.
 /// </summary>
 public sealed class EvidenceStore
 {
@@ -32,21 +32,22 @@ public sealed class EvidenceStore
     public void SaveRun(TicketEvidence evidence)
     {
         var runId = evidence.RunIds.Count > 0 ? evidence.RunIds[0] : "unknown";
-        var path = Path.Combine(_runsDir, $"{runId}.evidence.json");
+        var path = RunPath(evidence.ProjectSlug, runId);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, JsonSerializer.Serialize(evidence, s_json));
     }
 
     /// <summary>Loads the per-run evidence bundle for <paramref name="runId"/>. Returns null if absent or corrupt.</summary>
-    public TicketEvidence? LoadRun(string runId)
+    public TicketEvidence? LoadRun(string projectSlug, string runId)
     {
-        var path = Path.Combine(_runsDir, $"{runId}.evidence.json");
+        var path = RunPath(projectSlug, runId);
         return TryLoad(path);
     }
 
     /// <summary>Loads the merged per-ticket evidence bundle. Returns null if absent or corrupt.</summary>
-    public TicketEvidence? LoadTicket(string ticketId)
+    public TicketEvidence? LoadTicket(string projectSlug, string ticketId)
     {
-        var path = TicketPath(ticketId);
+        var path = TicketPath(projectSlug, ticketId);
         return TryLoad(path);
     }
 
@@ -58,7 +59,7 @@ public sealed class EvidenceStore
     /// </summary>
     public TicketEvidence MergeAndSave(TicketEvidence runEvidence)
     {
-        var existing = LoadTicket(runEvidence.TicketId);
+        var existing = LoadTicket(runEvidence.ProjectSlug, runEvidence.TicketId);
         var merged = BuildMerged(existing, runEvidence);
         merged.Status = ProvenanceRules.ComputeStatus(merged);
         SaveRun(runEvidence);
@@ -69,7 +70,8 @@ public sealed class EvidenceStore
     /// <summary>Persists the merged per-ticket evidence bundle directly.</summary>
     public void SaveTicket(TicketEvidence evidence)
     {
-        var path = TicketPath(evidence.TicketId);
+        var path = TicketPath(evidence.ProjectSlug, evidence.TicketId);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, JsonSerializer.Serialize(evidence, s_json));
     }
 
@@ -100,7 +102,6 @@ public sealed class EvidenceStore
         if (existing is not null)
         {
             merged.RunIds.AddRange(existing.RunIds);
-            merged.ChangedFiles.AddRange(existing.ChangedFiles);
             merged.CommandsRun.AddRange(existing.CommandsRun);
             merged.Retries.AddRange(existing.Retries);
             if (existing.RepositoryState is not null)
@@ -112,6 +113,8 @@ public sealed class EvidenceStore
             if (!merged.RunIds.Contains(runId, StringComparer.Ordinal))
                 merged.RunIds.Add(runId);
 
+        // Changed files are a repository snapshot, not an event log. The latest stable
+        // base-to-commit diff replaces transient or stale lists from earlier runs.
         merged.ChangedFiles.AddRange(incoming.ChangedFiles);
         merged.CommandsRun.AddRange(incoming.CommandsRun);
         merged.Retries.AddRange(incoming.Retries);
@@ -133,6 +136,19 @@ public sealed class EvidenceStore
         catch { return null; }
     }
 
-    private string TicketPath(string ticketId) =>
-        Path.Combine(_runsDir, $"ticket-{ticketId}.evidence.json");
+    private string RunPath(string projectSlug, string runId) =>
+        Path.Combine(ProjectDirectory(projectSlug), $"run-{SafeSegment(runId)}.evidence.json");
+
+    private string TicketPath(string projectSlug, string ticketId) =>
+        Path.Combine(ProjectDirectory(projectSlug), $"ticket-{SafeSegment(ticketId)}.evidence.json");
+
+    private string ProjectDirectory(string projectSlug) =>
+        Path.Combine(_runsDir, "evidence", SafeSegment(projectSlug));
+
+    private static string SafeSegment(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "unknown";
+        var invalid = Path.GetInvalidFileNameChars();
+        return string.Concat(value.Select(c => invalid.Contains(c) || c is '/' or '\\' ? '_' : c));
+    }
 }

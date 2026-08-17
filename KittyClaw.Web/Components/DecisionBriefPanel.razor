@@ -147,7 +147,7 @@
     private void LoadBrief()
     {
         _brief = null;
-        var evidence = EvidenceStore.LoadTicket(TicketId.ToString());
+        var evidence = EvidenceStore.LoadTicket(Slug, TicketId.ToString());
         if (evidence is null) return;
         EvidenceStore.ApplyStaleness(evidence, EvidenceStore.DefaultStalenessThreshold);
         _brief = DecisionBriefComposer.Compose(evidence);

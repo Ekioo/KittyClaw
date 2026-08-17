@@ -178,7 +178,9 @@ public static partial class Endpoints
         {
             var run = reg.Get(runId);
             if (run is not null && run.ProjectSlug != slug) return Results.NotFound();
-            var evidence = store.LoadRun(runId);
+            var evidence = store.LoadRun(slug, runId);
+            if (evidence is not null && !string.Equals(evidence.ProjectSlug, slug, StringComparison.Ordinal))
+                return Results.NotFound();
             if (evidence is null) return Results.NotFound();
             EvidenceStore.ApplyStaleness(evidence, EvidenceStore.DefaultStalenessThreshold);
             return Results.Ok(evidence);

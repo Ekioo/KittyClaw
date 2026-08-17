@@ -90,7 +90,11 @@ public sealed record RepositoryState(
     bool? IsClean,
     List<string> UntrackedFiles,
     EvidenceProvenance Provenance
-);
+)
+{
+    /// <summary>Stable merge-base used to compute the committed ticket diff.</summary>
+    public string? BaseCommitSha { get; init; }
+}
 
 /// <summary>One failed attempt before the successful (or final) run.</summary>
 public sealed record RetryRecord(

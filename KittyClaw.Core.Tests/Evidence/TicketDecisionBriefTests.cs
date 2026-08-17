@@ -34,7 +34,8 @@ public sealed class TicketDecisionBriefTests
             Provenance: Prov(commandTrust)));
         e.ChangedFiles.Add(new ChangedFile("src/Foo.cs", FileChangeKind.Modified, null, Prov()));
         if (repoClean.HasValue)
-            e.RepositoryState = new RepositoryState("main", "abc", repoClean, [], Prov());
+            e.RepositoryState = new RepositoryState("ticket/42", "abc", repoClean, [], Prov())
+                { BaseCommitSha = "base" };
         return e;
     }
 
@@ -128,6 +129,7 @@ public sealed class TicketDecisionBriefTests
         var brief = DecisionBriefComposer.Compose(e);
 
         Assert.Equal(2, brief.FilesChanged);
+        Assert.Equal(new[] { "a.cs", "b.cs" }, brief.ChangedFiles.Select(f => f.Path));
     }
 
     [Fact]
@@ -148,6 +150,9 @@ public sealed class TicketDecisionBriefTests
         var brief = DecisionBriefComposer.Compose(MakeEvidence(repoClean: false));
 
         Assert.Equal(false, brief.RepositoryClean);
+        Assert.Equal("ticket/42", brief.RepositoryBranch);
+        Assert.Equal("abc", brief.RepositoryCommitSha);
+        Assert.Equal("base", brief.RepositoryBaseCommitSha);
     }
 
     [Fact]

@@ -34,10 +34,14 @@ public sealed class TicketDecisionBrief
     public required DecisionVerdict Verdict { get; init; }
     public required EvidenceStatus EvidenceStatus { get; init; }
     public required int FilesChanged { get; init; }
+    public required List<ChangedFile> ChangedFiles { get; init; }
     public required int CommandsRun { get; init; }
     public required int TestsPassed { get; init; }
     public required int TestsFailed { get; init; }
     public required bool? RepositoryClean { get; init; }
+    public required string? RepositoryBranch { get; init; }
+    public required string? RepositoryCommitSha { get; init; }
+    public required string? RepositoryBaseCommitSha { get; init; }
     public required List<string> RunIds { get; init; }
     public required List<DecisionFinding> Findings { get; init; }
     /// <summary>Actionable recovery guidance derived from the evidence status.</summary>
