@@ -17,6 +17,7 @@ For a high-level overview see the root [README.md](../README.md). For repo layou
 - [Temporary approvals](./temporary-approvals.md) — traceable, expiring approval requests that pause and resume provider runs at the process boundary.
 - [Project template](./project-template.md) — embedded `ProjectTemplate/` files copied into each workspace on Initialize.
 - [REST API](./rest-api.md) — OpenAPI-driven endpoints under `/api`, with auto-generated Markdown docs.
+- [MCP server](./mcp.md) — embedded Streamable-HTTP endpoint at `/mcp`; seven board tools for any MCP client.
 - [Storage](./storage.md) — SQLite registry, per-project DBs, run logs, and workspace-side agent state.
 - [Kanban UI](./kanban-ui.md) — Blazor Server board, ticket panel, agent run drawer.
 - [Evidence decision briefs](./evidence-decision-briefs.md) — traceable run evidence, recovery guidance, and human accept/correct/stop decisions in owner-action columns.

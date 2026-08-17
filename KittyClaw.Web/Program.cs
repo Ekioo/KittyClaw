@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using KittyClaw.Core.Automation;
@@ -119,6 +120,30 @@ if (!builder.Environment.IsDevelopment())
 if (OperatingSystem.IsWindows())
     builder.Services.AddSingleton<KittyClaw.Core.Platform.IFolderPicker, KittyClaw.Core.Platform.WindowsFolderPicker>();
 
+// Embedded MCP server (Streamable HTTP) at /mcp — 7 tools proxying the board services, so
+// any MCP client can drive the board: `claude mcp add --transport http kittyclaw
+// http://localhost:5230/mcp`. Same trust boundary as the REST API (unauthenticated,
+// localhost, self-hosted single machine). It is opt-in: set KITTYCLAW_MCP_ENABLED=1
+// to register the tools and route. See doc/mcp.md.
+var mcpEnabledFlag = Environment.GetEnvironmentVariable("KITTYCLAW_MCP_ENABLED");
+var mcpEnabled = mcpEnabledFlag == "1"
+    || string.Equals(mcpEnabledFlag, "true", StringComparison.OrdinalIgnoreCase);
+if (mcpEnabled)
+{
+    builder.Services.AddMcpServer(options => options.ServerInfo = new()
+    {
+        Name = "kittyclaw",
+        Title = "KittyClaw",
+        Version = KittyClaw.Web.Services.VersionFormatter.Format(
+            typeof(Program).Assembly
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+                ?.InformationalVersion),
+        WebsiteUrl = "https://kittyclaw.dev",
+    })
+        .WithHttpTransport()
+        .WithTools<KittyClaw.Web.Api.McpTools>(KittyClaw.Web.Api.McpTools.SerializerOptions);
+}
+
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
@@ -179,6 +204,12 @@ app.Use(async (context, next) =>
 
 app.MapOpenApi();
 app.MapTodoApi();
+
+if (mcpEnabled)
+{
+    // MCP speaks JSON-RPC, not REST — keep it out of the OpenAPI/api-docs surface.
+    app.MapMcp("/mcp").ExcludeFromDescription();
+}
 
 if (app.Environment.IsDevelopment())
 {

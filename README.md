@@ -104,6 +104,16 @@ All endpoints are under `/api`. The documentation is auto-generated from the liv
 - Human-readable Markdown: `GET http://localhost:5230/api/docs`
 - Machine-readable JSON: `GET http://localhost:5230/openapi/v1.json`
 
+## MCP server
+
+KittyClaw can expose an embedded [MCP](https://modelcontextprotocol.io) endpoint at `http://localhost:5230/mcp` (Streamable HTTP), so any MCP client can drive the board — list projects, create and move tickets, comment, and read the board layout — without touching the REST API. Set `KITTYCLAW_MCP_ENABLED=1` before starting KittyClaw, then hook it up to Claude Code with:
+
+```bash
+claude mcp add --transport http kittyclaw http://localhost:5230/mcp
+```
+
+Seven tools ship in v1: `list_projects`, `list_tickets`, `get_ticket`, `create_ticket`, `comment_ticket`, `move_ticket`, `board_overview`. The endpoint is disabled by default and uses the same localhost trust boundary as the REST API. Details in [doc/mcp.md](doc/mcp.md).
+
 ## For AI Agents
 
 This app is designed to be operated by AI agents through its REST API. Here's how to get started:
