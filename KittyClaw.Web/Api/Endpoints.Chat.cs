@@ -1,4 +1,5 @@
 using System.Text;
+using System.Collections.Concurrent;
 using KittyClaw.Core.Automation;
 using KittyClaw.Core.Services;
 
@@ -6,6 +7,7 @@ namespace KittyClaw.Web.Api;
 
 public static partial class Endpoints
 {
+    private static readonly ConcurrentDictionary<string, byte> QaFailNextChatStarts = new(StringComparer.Ordinal);
     private static void MapChat(RouteGroupBuilder api)
     {
         // Owner chat (ad-hoc Claude session)
@@ -74,6 +76,10 @@ public static partial class Endpoints
 
         api.MapPost("/projects/{slug}/chat/start", async (string slug, ChatStartRequest req, ProjectService ps, MemberService ms, ChatService cs, TicketService ts, AgentRunner runner, SessionRegistry sessions, AgentRunRegistry runReg, HttpContext http) =>
         {
+            if (string.Equals(Environment.GetEnvironmentVariable("KITTYCLAW_ENABLE_QA_ENDPOINTS"), "1", StringComparison.Ordinal)
+                && QaFailNextChatStarts.TryRemove(slug, out _))
+                return Results.Json(new { error = "qa_forced_chat_start_failure" }, statusCode: StatusCodes.Status503ServiceUnavailable);
+
             var project = await ps.GetProjectAsync(slug);
             if (project is null) return Results.NotFound();
 

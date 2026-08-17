@@ -125,6 +125,21 @@ public class ChatImagePasteContractTests
         // JSInvokable bridge.
         Assert.Contains("invokeMethodAsync", src);
         Assert.Contains("OnImagePasted", src);
+        Assert.Contains("getData('text/plain')", src);
+        Assert.Contains("OnImagePasteStarted", src);
+        Assert.Contains("OnImagePasteCompleted", src);
+    }
+
+    [Fact]
+    public void ChatDrawer_preserves_draft_until_start_succeeds_and_localizes_accessible_controls()
+    {
+        var src = Read("KittyClaw.Web/Components/ChatDrawer.razor");
+        var post = src.IndexOf("PostAsJsonAsync($\"/api/projects/{ProjectSlug}/chat/start\"", StringComparison.Ordinal);
+        var clear = src.IndexOf("_pendingImages.Clear();", post, StringComparison.Ordinal);
+        Assert.True(post >= 0 && clear > post);
+        Assert.Contains("role=\"alert\"", src);
+        Assert.Contains("ChatImageRemove", src);
+        Assert.Contains("_pasteLoading", src);
     }
 
     [Fact]

@@ -20,6 +20,10 @@ public sealed class AgentRun
     public string? SessionId { get; set; }
     public string? Model { get; set; }
     public string? ChatTarget { get; set; }
+    /// <summary>Image references accepted for this run. Retained for QA observability after best-effort file cleanup.</summary>
+    public IReadOnlyList<string> InputImagePaths { get; init; } = [];
+    /// <summary>Content hashes captured before temporary image cleanup, used for ordered diagnostics.</summary>
+    public IReadOnlyList<string> InputImageHashes { get; init; } = [];
     public AgentRunStatus Status { get; set; } = AgentRunStatus.Running;
     public DateTime? EndedAt { get; set; }
     public int? ExitCode { get; set; }

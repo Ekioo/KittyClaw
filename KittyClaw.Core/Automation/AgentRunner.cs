@@ -201,6 +201,10 @@ public sealed class AgentRunner
             StartedAt = DateTime.UtcNow,
             Model = ctx.Target.Model,
             ChatTarget = ctx.ChatTarget,
+            InputImagePaths = ctx.ImagePaths ?? [],
+            InputImageHashes = (ctx.ImagePaths ?? [])
+                .Select(path => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant())
+                .ToArray(),
             LockTimeoutMinutes = ctx.LockTimeoutMinutes,
         };
         if (ctx.OnEventHook is not null) run.OnEvent += ctx.OnEventHook;

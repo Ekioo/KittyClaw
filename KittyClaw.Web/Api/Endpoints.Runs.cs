@@ -14,6 +14,12 @@ public static partial class Endpoints
     {
         if (string.Equals(Environment.GetEnvironmentVariable("KITTYCLAW_ENABLE_QA_ENDPOINTS"), "1", StringComparison.Ordinal))
         {
+            api.MapPost("/projects/{slug}/qa/chat/fail-next-start", (string slug) =>
+            {
+                QaFailNextChatStarts[slug] = 0;
+                return Results.Ok(new { armed = true });
+            }).ExcludeFromDescription();
+
             api.MapPost("/projects/{slug}/qa/runs", (string slug, QaSeedRunsRequest req, AgentRunRegistry reg) =>
             {
                 var ticketIds = req.TicketIds.Select(int.Parse).ToArray();
@@ -35,6 +41,21 @@ public static partial class Endpoints
                 }
 
                 return Results.Ok(new { count = req.Count });
+            }).ExcludeFromDescription();
+
+            api.MapGet("/projects/{slug}/qa/runs/latest-input-images", (string slug, AgentRunRegistry reg) =>
+            {
+                var run = reg.AllForProject(slug)
+                    .OrderByDescending(r => r.StartedAt)
+                    .FirstOrDefault(r => r.ChatTarget is not null);
+                return run is null
+                    ? Results.NotFound()
+                    : Results.Ok(new
+                    {
+                        count = run.InputImagePaths.Count,
+                        extensions = run.InputImagePaths.Select(Path.GetExtension).ToArray(),
+                        hashes = run.InputImageHashes,
+                    });
             }).ExcludeFromDescription();
         }
 

@@ -1,0 +1,82 @@
+{
+  "environment": { "KITTYCLAW_ENABLE_QA_ENDPOINTS": "1" },
+  "setup": [
+    { "type": "createProject", "name": "qa-ticket-257" }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-ticket-257" },
+    { "type": "wait", "ms": 1000 },
+    { "type": "click", "selector": ".new-instruction-btn" },
+    { "type": "wait", "ms": 1500 },
+    { "type": "click", "selector": ".chat-target-item.claude-direct" },
+    { "type": "wait", "ms": 300 },
+    { "type": "pasteText", "selector": ".chat-input-area textarea", "value": "Texte seul" },
+    { "type": "assertValue", "selector": ".chat-input-area textarea", "expected": "Texte seul" },
+    { "type": "fill", "selector": ".chat-input-area textarea", "value": "" },
+    {
+      "type": "pasteImage",
+      "selector": ".chat-input-area textarea",
+      "property": "image/svg+xml",
+      "value": "PHN2Zy8+"
+    },
+    { "type": "wait", "ms": 100 },
+    { "type": "assertVisible", "selector": ".chat-paste-error[role=alert]" },
+    {
+      "type": "pasteImage",
+      "selector": ".chat-input-area textarea",
+      "property": "image/png",
+      "value": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nS8AAAAASUVORK5CYII="
+    },
+    {
+      "type": "pasteImage",
+      "selector": ".chat-input-area textarea",
+      "property": "image/png",
+      "value": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nS8AAAAASUVORK5CYII="
+    },
+    { "type": "wait", "ms": 300 },
+    { "type": "assertCount", "selector": ".chat-paste-preview img", "expected": "2" },
+    { "type": "click", "selector": ".chat-paste-remove" },
+    { "type": "assertCount", "selector": ".chat-paste-preview img", "expected": "1" },
+    { "type": "click", "selector": ".chat-paste-remove" },
+    {
+      "type": "pasteImage",
+      "selector": ".chat-input-area textarea",
+      "property": "image/png",
+      "value": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nS8AAAAASUVORK5CYII="
+    },
+    {
+      "type": "pasteImage",
+      "selector": ".chat-input-area textarea",
+      "property": "image/png",
+      "text": "Analyse ces captures dans l'ordre",
+      "value": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    },
+    { "type": "wait", "ms": 300 },
+    { "type": "assertCount", "selector": ".chat-paste-preview img", "expected": "2" },
+    { "type": "assertVisible", "selector": ".chat-paste-remove[aria-label]" },
+    { "type": "assertValue", "selector": ".chat-input-area textarea", "expected": "Analyse ces captures dans l'ordre" },
+    {
+      "type": "screenshot",
+      "name": "ticket-257-pasted-image-preview",
+      "selector": ".chat-input-area",
+      "description": "Nouvelle instruction affiche la capture collée, son aperçu et l’action de retrait accessible."
+    },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-ticket-257/qa/chat/fail-next-start" },
+    { "type": "click", "selector": ".chat-input-area > button" },
+    { "type": "wait", "ms": 300 },
+    { "type": "assertCount", "selector": ".chat-paste-preview img", "expected": "2" },
+    { "type": "assertValue", "selector": ".chat-input-area textarea", "expected": "Analyse ces captures dans l'ordre" },
+    { "type": "assertVisible", "selector": ".chat-message-error" },
+    { "type": "click", "selector": ".chat-input-area > button" },
+    { "type": "wait", "ms": 800 },
+    { "type": "assertJson", "path": "/api/projects/qa-ticket-257/qa/runs/latest-input-images", "jsonPath": "count", "expected": "2" },
+    { "type": "assertJson", "path": "/api/projects/qa-ticket-257/qa/runs/latest-input-images", "jsonPath": "extensions.0", "expected": ".png" },
+    { "type": "assertJson", "path": "/api/projects/qa-ticket-257/qa/runs/latest-input-images", "jsonPath": "extensions.1", "expected": ".png" },
+    { "type": "assertJson", "path": "/api/projects/qa-ticket-257/qa/runs/latest-input-images", "jsonPath": "hashes.0", "expected": "24d410d14e37401e8565fae033bea64e068e1e9207db8b9c5903c53dd163f1b6" },
+    { "type": "assertJson", "path": "/api/projects/qa-ticket-257/qa/runs/latest-input-images", "jsonPath": "hashes.1", "expected": "431ced6916a2a21a156e38701afe55bbd7f88969fbbfc56d7fe099d47f265460" },
+    { "type": "assertText", "selector": ".chat-message-user .chat-bubble", "expected": "Analyse ces captures dans l'ordre" },
+    { "type": "assertCount", "selector": ".chat-message-user .chat-bubble", "expected": "1" },
+    { "type": "assertCount", "selector": ".chat-paste-preview", "expected": "0" }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

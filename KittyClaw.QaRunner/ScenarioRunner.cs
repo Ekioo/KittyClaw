@@ -271,6 +271,42 @@ public sealed class ScenarioRunner
             case "fill":
                 await page.FillAsync(Required(Resolve(action.Selector), "fill.selector"), Resolve(action.Value ?? ""));
                 break;
+            case "pasteImage":
+                {
+                    var selector = Required(Resolve(action.Selector), "pasteImage.selector");
+                    var base64 = Required(Resolve(action.Value), "pasteImage.value");
+                    var mime = Resolve(action.Property ?? "image/png");
+                    var text = Resolve(action.Text);
+                    await page.EvalOnSelectorAsync(selector, @"(el, payload) => {
+                        const binary = atob(payload.base64);
+                        const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+                        const file = new File([bytes], 'clipboard-image.png', { type: payload.mime });
+                        const transfer = new DataTransfer();
+                        transfer.items.add(file);
+                        if (payload.text) transfer.setData('text/plain', payload.text);
+                        const allowed = el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }));
+                        if (allowed && payload.text) {
+                            el.value = el.value + payload.text;
+                            el.dispatchEvent(new Event('input', { bubbles: true }));
+                        }
+                    }", new { base64, mime, text });
+                    break;
+                }
+            case "pasteText":
+                {
+                    var selector = Required(Resolve(action.Selector), "pasteText.selector");
+                    var text = Resolve(action.Value);
+                    await page.EvalOnSelectorAsync(selector, @"(el, text) => {
+                        const transfer = new DataTransfer();
+                        transfer.setData('text/plain', text);
+                        const allowed = el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }));
+                        if (allowed) {
+                            el.value = el.value + text;
+                            el.dispatchEvent(new Event('input', { bubbles: true }));
+                        }
+                    }", text);
+                    break;
+                }
             case "selectOption":
                 await page.SelectOptionAsync(
                     Required(Resolve(action.Selector), "selectOption.selector"),
@@ -442,8 +478,12 @@ public sealed class ScenarioRunner
         JsonElement current = json;
         foreach (var part in parts)
         {
-            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(part, out current))
-                return null;
+            if (current.ValueKind == JsonValueKind.Object && current.TryGetProperty(part, out var property))
+                current = property;
+            else if (current.ValueKind == JsonValueKind.Array && int.TryParse(part, out var index)
+                     && index >= 0 && index < current.GetArrayLength())
+                current = current[index];
+            else return null;
         }
         return current.ValueKind == JsonValueKind.String ? current.GetString() : current.GetRawText();
     }

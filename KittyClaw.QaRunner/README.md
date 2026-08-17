@@ -179,6 +179,8 @@ These require Playwright (run inside `actions`, after setup).
 | `dragAndDrop`  | `selector`, `target`                     | Drag the source element onto the target element.                       |
 | `assertInteractionDuration` | `selector`, `waitForSelector`, `maxMs` | Clicks, waits for the target to become visible, and asserts elapsed time. |
 | `fill`         | `selector`, `value`                      | Set input value.                                                      |
+| `pasteImage`   | `selector`, `value` (base64), optional `property` (MIME), `text` | Dispatch a real clipboard paste containing an image and optional mixed plain text. |
+| `pasteText`    | `selector`, `value`                     | Dispatch a plain-text clipboard paste and emulate the browser's default insertion. |
 | `selectOption` | `selector`, `value`                      | Select an option by value.                                            |
 | `wait`         | `ms`                                     | Pause N ms.                                                           |
 | `screenshot`   | `name`, optional `description`, `selector` | Full-page PNG, or a focused element PNG when `selector` is provided. Uploaded post-run. |

@@ -232,7 +232,11 @@
         <div class="chat-input-area @(_loading ? "chat-input-area-thinking" : "")">
             @if (!string.IsNullOrEmpty(_pasteError))
             {
-                <div class="chat-paste-error">@_pasteError</div>
+                <div class="chat-paste-error" role="alert">@_pasteError</div>
+            }
+            @if (_pasteLoading)
+            {
+                <div class="chat-paste-status" role="status">@L["ChatImageLoading"]</div>
             }
             @if (_pendingImages.Count > 0)
             {
@@ -243,7 +247,7 @@
                         var img = _pendingImages[i];
                         <div class="chat-paste-preview">
                             <img src="@img.DataUrl" alt="@img.Name" />
-                            <button type="button" class="chat-paste-remove" @onclick="() => RemoveImage(idx)" title="Remove">×</button>
+                            <button type="button" class="chat-paste-remove" @onclick="() => RemoveImage(idx)" title="@L.Get("ChatImageRemove", img.Name)" aria-label="@L.Get("ChatImageRemove", img.Name)">×</button>
                         </div>
                     }
                 </div>
@@ -254,6 +258,7 @@
                       disabled="@_historyLoading"
                       placeholder="@(_historyLoading ? L["ChatLoadingConversation"] : _loading ? L["ChatInjectPlaceholder"] : L["ChatPlaceholder"])"
                       @onkeydown="OnKeyDown"></textarea>
+            <div class="chat-paste-hint">@L["ChatImageFormats"]</div>
             @if (_loading && !string.IsNullOrEmpty(_activeStreamId))
             {
                 <div class="chat-input-actions">
@@ -263,7 +268,7 @@
             }
             else
             {
-                <button @onclick="Send" disabled="@(_historyLoading || (string.IsNullOrWhiteSpace(_inputText) && _pendingImages.Count == 0) || _loading)">@L["Send"]</button>
+                <button @onclick="Send" disabled="@(_historyLoading || (string.IsNullOrWhiteSpace(_inputText) && _pendingImages.Count == 0) || _loading || _pasteLoading || !string.IsNullOrEmpty(_pasteError))">@L["Send"]</button>
             }
         </div>
     }
@@ -322,6 +327,22 @@
     public sealed record PendingImage(string DataUrl, string Mime, string Name, long SizeBytes);
     private readonly List<PendingImage> _pendingImages = [];
     private string? _pasteError;
+    private bool _pasteLoading;
+
+    [JSInvokable]
+    public Task OnImagePasteStarted(int count)
+    {
+        _pasteLoading = count > 0;
+        _pasteError = null;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task OnImagePasteCompleted()
+    {
+        _pasteLoading = false;
+        return InvokeAsync(StateHasChanged);
+    }
 
     private record ChatMessage(string Role, string Text);
     private sealed record DiagnosticMessage(string DiagnosticRole, string Summary, string Detail)
@@ -646,12 +667,11 @@
     {
         if (_pendingImages.Count >= 5)
         {
-            _pasteError = "too many images attached (max 5)";
+            _pasteError = L["ChatImageTooMany"];
         }
         else
         {
             _pendingImages.Add(img);
-            _pasteError = null;
         }
         return InvokeAsync(StateHasChanged);
     }
@@ -659,7 +679,13 @@
     [JSInvokable]
     public Task OnImagePasteError(string reason)
     {
-        _pasteError = reason;
+        _pasteError = reason switch
+        {
+            "unsupported_type" => L["ChatImageUnsupported"],
+            "too_large" => L["ChatImageTooLarge"],
+            "too_many" => L["ChatImageTooMany"],
+            _ => L["ChatImageReadFailed"]
+        };
         return InvokeAsync(StateHasChanged);
     }
 
@@ -675,12 +701,7 @@
 
         _hitMaxTurns = false;
         _streamingText = null;
-        if (!string.IsNullOrEmpty(text))
-            _messages.Add(new ChatMessage("user", text));
         var imagesPayload = _pendingImages.Select(p => new { dataUrl = p.DataUrl, mime = p.Mime, name = p.Name, sizeBytes = p.SizeBytes }).ToList();
-        _inputText = "";
-        _pendingImages.Clear();
-        _pasteError = null;
         _loading = true;
         StateHasChanged();
 
@@ -702,6 +723,12 @@
             }
             var body = await resp.Content.ReadFromJsonAsync<ChatStartResponse>();
             if (body is null) { _loading = false; StateHasChanged(); return; }
+
+            if (!string.IsNullOrEmpty(text))
+                _messages.Add(new ChatMessage("user", text));
+            _inputText = "";
+            _pendingImages.Clear();
+            _pasteError = null;
 
             _sessionModel = _selectedModel;
             _activeRun = RunsState.Get(body.RunId);
@@ -958,6 +985,9 @@
     private async Task Close()
     {
         await StopStream();
+        _pendingImages.Clear();
+        _pasteError = null;
+        _pasteLoading = false;
         if (OnClose.HasDelegate) await OnClose.InvokeAsync();
     }
 

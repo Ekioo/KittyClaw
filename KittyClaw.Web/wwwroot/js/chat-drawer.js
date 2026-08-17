@@ -16,7 +16,8 @@ window.chatDrawerInstallEnterGuard = function (el) {
 // Image paste support (#115). Watches the chat textarea for `paste` events carrying
 // image clipboard items, validates them client-side, and bridges accepted images back
 // to the Blazor component via JSInvokable callbacks. Plain-text pastes pass through
-// unchanged because preventDefault() only fires when at least one image item is found.
+// unchanged. For mixed clipboard content, the browser inserts the text while this
+// handler independently reads the images.
 window.chatDrawerInstallPasteHandler = function (el, dotnetRef) {
     if (!el || el.__pasteHandlerInstalled) return;
     el.__pasteHandlerInstalled = true;
@@ -35,37 +36,46 @@ window.chatDrawerInstallPasteHandler = function (el, dotnetRef) {
         }
         if (imageItems.length === 0) return; // let plain-text paste work normally
 
-        e.preventDefault();
+        var pastedText = cd.getData ? cd.getData('text/plain') : '';
+        if (!pastedText) e.preventDefault();
 
         if (imageItems.length > MAX_IMAGES) {
-            dotnetRef.invokeMethodAsync('OnImagePasteError', 'too many images pasted at once (max ' + MAX_IMAGES + ')');
+            dotnetRef.invokeMethodAsync('OnImagePasteError', 'too_many');
             return;
         }
 
-        imageItems.forEach(function (item) {
-            var file = item.getAsFile();
-            if (!file) return;
-            if (!ALLOWED[file.type]) {
-                dotnetRef.invokeMethodAsync('OnImagePasteError', 'unsupported image type: ' + file.type);
-                return;
+        dotnetRef.invokeMethodAsync('OnImagePasteStarted', imageItems.length);
+        (async function () {
+            for (var index = 0; index < imageItems.length; index++) {
+                var file = imageItems[index].getAsFile();
+                if (!file) continue;
+                if (!ALLOWED[file.type]) {
+                    await dotnetRef.invokeMethodAsync('OnImagePasteError', 'unsupported_type');
+                    continue;
+                }
+                if (file.size > MAX_BYTES) {
+                    await dotnetRef.invokeMethodAsync('OnImagePasteError', 'too_large');
+                    continue;
+                }
+                try {
+                    var dataUrl = await new Promise(function (resolve, reject) {
+                        var reader = new FileReader();
+                        reader.onload = function () { resolve(reader.result); };
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                    });
+                    await dotnetRef.invokeMethodAsync('OnImagePasted', {
+                        dataUrl: dataUrl,
+                        mime: file.type,
+                        name: file.name || 'pasted-image',
+                        sizeBytes: file.size
+                    });
+                } catch (_) {
+                    await dotnetRef.invokeMethodAsync('OnImagePasteError', 'read_failed');
+                }
             }
-            if (file.size > MAX_BYTES) {
-                dotnetRef.invokeMethodAsync('OnImagePasteError', 'image too large (max 5 MB)');
-                return;
-            }
-            var reader = new FileReader();
-            reader.onload = function () {
-                dotnetRef.invokeMethodAsync('OnImagePasted', {
-                    dataUrl: reader.result,
-                    mime: file.type,
-                    name: file.name || 'pasted-image',
-                    sizeBytes: file.size
-                });
-            };
-            reader.onerror = function () {
-                dotnetRef.invokeMethodAsync('OnImagePasteError', 'failed to read image');
-            };
-            reader.readAsDataURL(file);
+        })().finally(function () {
+            dotnetRef.invokeMethodAsync('OnImagePasteCompleted');
         });
     });
 };
