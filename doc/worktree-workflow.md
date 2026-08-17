@@ -2,7 +2,7 @@
 
 ## Status
 
-**Opt-in pattern.** Each project persists a `WorktreesEnabled` flag and an integration branch, but the flag defaults to disabled for both new and migrated projects. When enabled, ticket-bound agent runs automatically use the canonical worktree of the root ticket. A freshly initialized KittyClaw project keeps all agents working in the single project workspace.
+**Opt-in pattern.** Each project persists a `WorktreesEnabled` flag, an integration branch, and optionally a `RepositoryPath` distinct from its control `WorkspacePath`. The flag defaults to disabled for both new and migrated projects. When enabled, ticket-bound agent runs automatically use the canonical worktree of the root ticket. A freshly initialized KittyClaw project keeps all agents working in the single project workspace.
 
 Adopt this pattern only if you need filesystem isolation between concurrent agentic work on different tickets (e.g. several programmers in flight simultaneously, or a desire to keep `main` clean while work is in progress).
 
@@ -10,7 +10,7 @@ Adopt this pattern only if you need filesystem isolation between concurrent agen
 
 These pieces are in the repo and available to every project:
 
-- Project registry settings — `WorktreesEnabled` and `IntegrationBranch` are exposed by `GET /api/projects/{slug}` and can be changed independently through `PATCH /api/projects/{slug}`. Enabling validates that the workspace is a usable Git repository, that Git supports worktrees, and that the named local integration branch exists before persisting the change.
+- Project registry settings — `WorktreesEnabled`, `IntegrationBranch`, `RepositoryPath`, and the read-only `ResolvedRepositoryPath` are exposed by `GET /api/projects/{slug}`. A relative repository path is resolved from the control workspace and persisted as an absolute path. Enabling validates the exact configured Git root, worktree support, and the named local integration branch before persisting the change.
 - `TicketWorktreeService` — follows the ticket parent chain, then creates or reuses `<repo>.worktrees/ticket-<root-id>` on branch `ticket/<root-id>`. Git failures are reported in the run without cleaning or changing the primary checkout.
 - `AgentRunner` — keeps loading skills and `.agents/**` from the control workspace while launching the provider process in the resolved worktree. Runs sharing a worktree are serialized; runs for different roots may execute concurrently.
 - `WorktreeMergeQueueService` — persists integration requests per project, processes them in creation order, and serializes rebase plus fast-forward operations. It records dirty-checkout failures and rebase conflicts without deleting the ticket worktree, supports explicit resume, and recovers interrupted processing after restart.
@@ -30,7 +30,9 @@ These pieces are in the repo and available to every project:
 
 ## How to enable it for a project
 
-Open the project settings, enable **Git worktrees**, enter an existing local integration branch, and save. The form validates the repository, Git worktree support, and the branch before activation. The same settings remain available through `PATCH /api/projects/{slug}` with `worktreesEnabled: true` and `integrationBranch`.
+Open the project settings, enter the code repository (absolute or relative to the control workspace), enable **Git worktrees**, enter an existing local integration branch, and save. The form shows the effectively resolved repository and validates its exact Git root, worktree support, and branch before activation. The same settings remain available through `PATCH /api/projects/{slug}` with `repositoryPath`, `worktreesEnabled: true`, and `integrationBranch`.
+
+For compatibility, projects with no `RepositoryPath` keep the historical workspace-based Git resolution; migration never guesses a nested repository or changes the target. Configure `RepositoryPath` explicitly to opt into a distinct or nested code repository. Control files (`.agents/**`, memories, skills, automations, and dashboard files) always remain rooted at `WorkspacePath`.
 
 When enabled, each ticket drawer shows the canonical root ticket, path and branch shared by the whole ticket family. It also shows worktree cleanliness and merge-queue state/position, with actionable guidance for waiting, dirty checkouts, conflicts, failures and successful integration. Safe retry/resume actions are available for pending or failed requests. When disabled, this panel is absent and the normal ticket flow is unchanged.
 
