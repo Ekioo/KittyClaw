@@ -8,6 +8,8 @@ For a high-level overview see the root [README.md](../README.md). For repo layou
 
 ## Features
 
+- [Repository data policy](./repository-data-policy.md) — prevents execution evidence and private exports from entering published history.
+
 - [Onboarding](./onboarding.md) — cross-platform workspace selection, guided workflow design, and the first processor-driven ticket.
 - [OpenAI Codex CLI](./codex-cli.md) — dispatching explicitly qualified `codex:*` models to the `codex` CLI.
 - [Mistral Vibe](./mistral-vibe.md) — dispatching explicitly qualified `mistral:*` models to the `vibe` CLI.

@@ -49,3 +49,7 @@ Thumbs.db
 .gate-*.err
 .judge-*.out
 .judge-*.err
+
+# Execution evidence and private exports are local-only. Maintained synthetic
+# fixtures belong in their owning test project's Fixtures/ directory.
+evidence/

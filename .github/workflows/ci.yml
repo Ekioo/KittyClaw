@@ -27,6 +27,10 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Repository data policy
+        shell: pwsh
+        run: ./tools/Test-RepositoryDataPolicy.ps1 -SelfTest
+
       - name: Build
         run: |
           dotnet build KittyClaw.Web -c Release --nologo
