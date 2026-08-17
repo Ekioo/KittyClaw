@@ -59,6 +59,17 @@ if ($SelfTest) {
 }
 
 $failures = [System.Collections.Generic.List[string]]::new()
+$forbiddenBlobs = @{
+    'bcd4ef7506534abb4573a2716b2b8875c3b3b8a7' = 'Bloomii CSV export'
+    'e0f90ec6173ac062c6547e5c5a4cb199ce737db2' = 'Bloomii JSON export'
+}
+$reachableObjects = & git -C $repo rev-list --objects HEAD
+foreach ($line in $reachableObjects) {
+    $objectId = ($line -split ' ', 2)[0]
+    if ($forbiddenBlobs.ContainsKey($objectId)) {
+        $failures.Add("history contains forbidden blob $objectId ($($forbiddenBlobs[$objectId]))")
+    }
+}
 $tracked = & git -C $repo ls-files
 foreach ($relative in $tracked) {
     $full = Join-Path $repo $relative

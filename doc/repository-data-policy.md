@@ -16,6 +16,8 @@ be committed.
   pull request and push to `main` or `dev`.
 - `.githooks/pre-commit` provides the same guard locally after contributors set
   `core.hooksPath` to `.githooks`.
+- `.githooks/pre-push` rejects branches whose ancestry reintroduces either
+  purged Bloomii export blob.
 - `.gitignore` excludes the entire `evidence/` tree.
 
 Maintained fixtures must be minimal, synthetic, portable, and stored below a
@@ -39,3 +41,8 @@ Historical removal of published private data is a coordinated incident action:
 freeze integrations, create and verify an immutable mirror backup, rewrite all
 affected refs in one pass, publish only if remote leases remain unchanged, and
 require clone and branch resynchronization afterward.
+
+After the 2026-08-17 purge, branches based on the previous graph must not be
+merged or pushed. Recreate them from the current `origin/dev` and reapply only
+their business changes. The scanner checks the complete `HEAD` ancestry for
+the two forbidden Bloomii blob identifiers.
