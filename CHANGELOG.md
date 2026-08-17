@@ -6,7 +6,7 @@ All notable changes to KittyClaw.
 
 ### Added
 
-- Embedded MCP server (Streamable HTTP) at `/mcp` via the official `ModelContextProtocol.AspNetCore` SDK: seven v1 tools (`list_projects`, `list_tickets`, `get_ticket`, `create_ticket`, `comment_ticket`, `move_ticket`, `board_overview`) proxying the existing board services, so any MCP client (e.g. `claude mcp add --transport http kittyclaw http://localhost:5230/mcp`) can drive the board. Disable with `KITTYCLAW_MCP_DISABLED=1`. Registry metadata in `server.json`; docs in `doc/mcp.md`.
+- Embedded MCP server (Streamable HTTP) at `/mcp` via the official `ModelContextProtocol.AspNetCore` SDK: seven v1 tools (`list_projects`, `list_tickets`, `get_ticket`, `create_ticket`, `comment_ticket`, `move_ticket`, `board_overview`) proxying the existing board services, so any MCP client (e.g. `claude mcp add --transport http kittyclaw http://localhost:5230/mcp`) can drive the board. The server is disabled by default; enable it with `KITTYCLAW_MCP_ENABLED=1`, then remove the variable or set it to `0` and restart KittyClaw to disable it. Registry metadata in `server.json`; docs in `doc/mcp.md`.
 
 ## [v0.15.1] — 2026-08-11
 
