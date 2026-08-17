@@ -35,7 +35,8 @@ public sealed class PausedProjectRestartRecoveryTests : IDisposable
 
         var actions = new ColumnActionExecutor(projects, tickets, NullLogger<ColumnActionExecutor>.Instance);
         using var engine = new ColumnProcessingEngine(projects, tickets, processors, executions,
-            new NeverDispatch(), actions, NullLogger<ColumnProcessingEngine>.Instance);
+            new NeverDispatch(), actions, new ColumnMemoryCapitalizationService(projects),
+            NullLogger<ColumnProcessingEngine>.Instance);
         await engine.StartAsync(CancellationToken.None);
         try
         {

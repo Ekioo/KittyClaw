@@ -35,8 +35,34 @@ and ensures a partially configured workflow cannot strand a ticket with no avail
 2. creates a durable execution claim, protected by a unique active-ticket index;
 3. dispatches the generic column agent with its mission, persistent memory, ticket context, and project skills;
 4. validates the structured outcome and required-skill report;
-5. selects an outcome route (switch-like rule) or the default route;
-6. moves the ticket atomically to the target column, possibly in another pipeline.
+5. runs the native memory-capitalization checkpoint;
+6. selects an outcome route (switch-like rule) or the default route;
+7. moves the ticket atomically to the target column, possibly in another pipeline.
+
+### Native processor-memory capitalization
+
+Every successful agent dispatch reaches a durable post-processing checkpoint before after-actions
+and business routing. The structured result carries a `lessons` array. An empty array is an explicit
+successful `NoChange`; concrete lessons are normalized, deduplicated and persisted under
+`.agents/processors/column-<column-id>/memory/`. The lightweight `MEMORY.md` index is injected into
+the next run, while `pipeline-lessons.md` contains the bounded detail (the newest 50 lessons).
+
+Each execution exposes `CapitalizationStatus`, `CapitalizationError`, and `CapitalizedAt`. The topic
+file is the durable journal; each file replacement is atomic, and the injectable index is rebuilt from
+that journal whenever an existing checkpoint is replayed. A stop between topic and index replacement
+therefore repairs the index instead of accepting a partially committed checkpoint. Stable execution
+checkpoint markers make replay idempotent. If persistence fails or the host stops during this stage, the already saved agent result
+is retained and the execution becomes retryable; recovery resumes capitalization without dispatching
+the business agent again. Routing does not proceed silently past a failed checkpoint.
+
+For a `changes_requested` result, the engine finds the most recent completed execution that routed
+the ticket into the validating column and also records the feedback in that upstream processor's
+memory. This attribution remains valid if either processor is later disabled because it uses stable
+processor and column identifiers.
+
+Processor memory is distinct from specialist memory under `.agents/<specialist>/memory/`. It is also
+independent of legacy `consolidateAgentMemory` and `commitAgentMemory` automation actions: no entry in
+`.agents/automations.json` is needed for the native checkpoint.
 
 Before a route with the `Success` role is applied, the execution must consume the current ticket
 version and, for an `owner-feedback` signal, the exact triggering owner comment plus fresh delivery

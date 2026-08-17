@@ -40,14 +40,17 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                     AgentResultJson TEXT NULL,
                     ProgressFingerprint TEXT NULL,
                     ProgressSignalsJson TEXT NOT NULL DEFAULT '[]',
-                    LoopDiagnosticJson TEXT NULL
-                    ,TriggerTicketUpdatedAt TEXT NULL
-                    ,TriggerSignalType TEXT NOT NULL DEFAULT 'column_scan'
-                    ,TriggerOwnerCommentId INTEGER NULL
-                    ,TriggerOwnerCommentCreatedAt TEXT NULL
-                    ,ConsumedTicketUpdatedAt TEXT NULL
-                    ,ConsumedOwnerCommentId INTEGER NULL
-                    ,ContextRejectionReason TEXT NULL
+                    LoopDiagnosticJson TEXT NULL,
+                    TriggerTicketUpdatedAt TEXT NULL,
+                    TriggerSignalType TEXT NOT NULL DEFAULT 'column_scan',
+                    TriggerOwnerCommentId INTEGER NULL,
+                    TriggerOwnerCommentCreatedAt TEXT NULL,
+                    ConsumedTicketUpdatedAt TEXT NULL,
+                    ConsumedOwnerCommentId INTEGER NULL,
+                    ContextRejectionReason TEXT NULL,
+                    CapitalizationStatus INTEGER NOT NULL DEFAULT 0,
+                    CapitalizationError TEXT NULL,
+                    CapitalizedAt TEXT NULL
                 );
                 CREATE UNIQUE INDEX IF NOT EXISTS IX_ColumnExecutions_ActiveTicket
                     ON ColumnExecutions(TicketId)
@@ -79,6 +82,12 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN ConsumedTicketUpdatedAt TEXT NULL");
             await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN ConsumedOwnerCommentId INTEGER NULL");
             await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN ContextRejectionReason TEXT NULL");
+        });
+        await MigrationGate.RunOnceAsync(db, "column-executions-capitalization-v1", static async d =>
+        {
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN CapitalizationStatus INTEGER NOT NULL DEFAULT 0");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN CapitalizationError TEXT NULL");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN CapitalizedAt TEXT NULL");
         });
     }
 
@@ -338,6 +347,42 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         await db.SaveChangesAsync();
         execution.AgentCompleted = true;
         execution.AgentResult = result;
+    }
+
+    public async Task SetCapitalizationAsync(string projectSlug, ColumnExecution execution,
+        MemoryCapitalizationStatus status, string? error = null)
+    {
+        await using var db = projects.GetProjectDb(projectSlug);
+        await EnsureTableAsync(db);
+        var row = await db.ColumnExecutions.FindAsync(execution.Id)
+            ?? throw new InvalidOperationException($"L’exécution '{execution.Id}' n’existe plus.");
+        row.CapitalizationStatus = status;
+        row.CapitalizationError = error;
+        row.CapitalizedAt = status is MemoryCapitalizationStatus.Succeeded or MemoryCapitalizationStatus.NoChange
+            ? DateTime.UtcNow : null;
+        await db.SaveChangesAsync();
+        execution.CapitalizationStatus = row.CapitalizationStatus;
+        execution.CapitalizationError = row.CapitalizationError;
+        execution.CapitalizedAt = row.CapitalizedAt;
+    }
+
+    public async Task<ColumnExecution?> FindUpstreamExecutionAsync(
+        string projectSlug, int ticketId, int destinationColumnId, string excludingExecutionId)
+    {
+        await using var db = projects.GetProjectDb(projectSlug);
+        await EnsureTableAsync(db);
+        return await db.ColumnExecutions.AsNoTracking()
+            .Where(e => e.TicketId == ticketId && e.Id != excludingExecutionId
+                && e.Status == ColumnExecutionStatus.Completed && e.TargetColumnId == destinationColumnId)
+            .OrderByDescending(e => e.EndedAt).FirstOrDefaultAsync();
+    }
+
+    public async Task<int?> FindProcessorColumnIdAsync(string projectSlug, int processorId)
+    {
+        await using var db = projects.GetProjectDb(projectSlug);
+        await ColumnProcessorService.EnsureTableAsync(db);
+        return await db.ColumnProcessors.AsNoTracking().Where(p => p.Id == processorId)
+            .Select(p => (int?)p.ColumnId).FirstOrDefaultAsync();
     }
 
     public async Task RouteActionFailureAsync(
@@ -755,6 +800,9 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             execution.Attempt = Math.Max(0, execution.Attempt - 1);
             execution.AvailableAt = DateTime.UtcNow;
             execution.Error = "Exécution interrompue par un arrêt du moteur.";
+            if (execution.AgentCompleted
+                && execution.CapitalizationStatus is not (MemoryCapitalizationStatus.Succeeded or MemoryCapitalizationStatus.NoChange))
+                execution.CapitalizationStatus = MemoryCapitalizationStatus.RetryRequired;
         }
         await db.SaveChangesAsync();
     }
@@ -770,6 +818,9 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         execution.AvailableAt = DateTime.UtcNow;
         execution.EndedAt = null;
         execution.Error = null;
+        if (execution.AgentCompleted
+            && execution.CapitalizationStatus is not (MemoryCapitalizationStatus.Succeeded or MemoryCapitalizationStatus.NoChange))
+            execution.CapitalizationStatus = MemoryCapitalizationStatus.RetryRequired;
         await db.SaveChangesAsync();
         return true;
     }

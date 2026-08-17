@@ -51,6 +51,7 @@ builder.Services.AddSingleton<ProjectSkillService>();
 builder.Services.AddSingleton<ColumnProcessorService>();
 builder.Services.AddSingleton<ColumnScheduledTaskService>();
 builder.Services.AddSingleton<ColumnExecutionService>();
+builder.Services.AddSingleton<ColumnMemoryCapitalizationService>();
 builder.Services.AddSingleton<MemberService>();
 builder.Services.AddSingleton<ChatService>();
 builder.Services.AddSingleton<ApprovalRegistryService>();

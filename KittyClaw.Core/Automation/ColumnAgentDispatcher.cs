@@ -70,7 +70,7 @@ public sealed class ColumnAgentDispatcher(
         return new ColumnDispatchResult(run, result, null);
     }
 
-    private async Task<string> BuildProfileAsync(string projectSlug, ColumnProcessor processor)
+    internal async Task<string> BuildProfileAsync(string projectSlug, ColumnProcessor processor)
     {
         var text = new StringBuilder();
         text.AppendLine("# Column processor");
@@ -114,6 +114,7 @@ public sealed class ColumnAgentDispatcher(
         text.AppendLine("Your final response must be exactly one JSON object, with no Markdown:");
         text.AppendLine("{\"outcome\":\"configured-outcome\",\"skillsUsed\":[\"skill-slug\"],\"summary\":\"short result\"}");
         text.AppendLine("For a success outcome, include evidence.ticketUpdatedAt. For owner-feedback, include the exact ownerFeedbackCommentId, a new delivery comment, and evidence.deliverables entries with path, updatedAt after the feedback, and a non-empty verification statement.");
+        text.AppendLine("Also include `lessons` as an array of concrete reusable lessons. Use an empty array when this run produced no new lesson; do not repeat existing memory.");
         text.AppendLine("For outcome \"scheduled\", also include \"fireAt\" as an ISO-8601 UTC date and \"scheduleTarget\" as the exact destination column name used when the wake fires. Both fields are mandatory for scheduled and must be omitted for other outcomes such as \"needs_input\".");
         text.AppendLine("Use outcome \"wait_for_children\" only after creating at least one blocking sub-ticket.");
         return text.ToString();

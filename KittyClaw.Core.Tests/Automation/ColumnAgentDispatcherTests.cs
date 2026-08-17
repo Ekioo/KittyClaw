@@ -36,4 +36,17 @@ public sealed class ColumnAgentDispatcherTests
         Assert.Equal(new DateTime(2026, 8, 8, 8, 0, 0, DateTimeKind.Utc), result!.FireAt);
         Assert.Equal("À traiter", result.ScheduleTarget);
     }
+
+    [Fact]
+    public void Result_parser_preserves_explicit_reusable_lessons()
+    {
+        const string json = """
+            {"outcome":"completed","skillsUsed":[],"summary":"Done.","lessons":["Use a stable checkpoint before routing."]}
+            """;
+
+        var parsed = ColumnAgentDispatcher.TryParseResult(json, out var result, out var error);
+
+        Assert.True(parsed, error);
+        Assert.Equal(["Use a stable checkpoint before routing."], result!.Lessons);
+    }
 }

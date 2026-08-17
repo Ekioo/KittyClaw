@@ -110,8 +110,9 @@ public sealed class ColumnProcessingSuccessGuardTests : IDisposable
         var execution = (await executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow))!;
         var actions = new ColumnActionExecutor(projects, tickets, NullLogger<ColumnActionExecutor>.Instance);
         var dispatcher = new CompletedDispatcher();
+        var memory = new ColumnMemoryCapitalizationService(projects);
         var engine = new ColumnProcessingEngine(
-            projects, tickets, processors, executions, dispatcher, actions,
+            projects, tickets, processors, executions, dispatcher, actions, memory,
             NullLogger<ColumnProcessingEngine>.Instance);
         return new(projects, tickets, executions, project, source, processor, ticket, execution, engine, dispatcher);
     }

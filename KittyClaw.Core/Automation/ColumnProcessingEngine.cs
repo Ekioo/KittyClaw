@@ -19,6 +19,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
     private readonly ColumnExecutionService _executions;
     private readonly IColumnAgentDispatcher _dispatcher;
     private readonly ColumnActionExecutor _actions;
+    private readonly ColumnMemoryCapitalizationService _memory;
     private readonly ILogger<ColumnProcessingEngine> _logger;
     private readonly ConcurrentDictionary<string, byte> _pendingProjects = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<int, int>> _ownerFeedbackSignals = new(StringComparer.OrdinalIgnoreCase);
@@ -29,6 +30,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
     public ColumnProcessingEngine(
         ProjectService projects, TicketService tickets, ColumnProcessorService processors,
         ColumnExecutionService executions, IColumnAgentDispatcher dispatcher, ColumnActionExecutor actions,
+        ColumnMemoryCapitalizationService memory,
         ILogger<ColumnProcessingEngine> logger)
     {
         _projects = projects;
@@ -37,6 +39,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
         _executions = executions;
         _dispatcher = dispatcher;
         _actions = actions;
+        _memory = memory;
         _logger = logger;
         _tickets.TicketStatusChanged += OnTicketChanged;
         _tickets.TicketCreated += OnTicketCreated;
@@ -178,12 +181,51 @@ public sealed class ColumnProcessingEngine : BackgroundService
                         $"Skills obligatoires non exécutés : {string.Join(", ", missing)}.", activityAuthor);
                     return;
                 }
-                if (string.Equals(result.Outcome, "wait_for_children", StringComparison.OrdinalIgnoreCase))
+                await _executions.SaveAgentResultAsync(slug, execution, result);
+            }
+
+            if (execution.CapitalizationStatus is not (MemoryCapitalizationStatus.Succeeded or MemoryCapitalizationStatus.NoChange))
+            {
+                var capitalization = await _memory.CapitalizeAsync(
+                    slug, processor.ColumnId, execution.Id, result.Lessons, cancellationToken);
+                if (capitalization.Status == MemoryCapitalizationStatus.Failed)
                 {
-                    await _executions.CompleteAsync(slug, execution, processor, result, activityAuthor);
+                    await _executions.SetCapitalizationAsync(slug, execution,
+                        MemoryCapitalizationStatus.RetryRequired, capitalization.Error);
+                    await _executions.FailAttemptAsync(slug, execution, processor,
+                        $"Capitalisation de la mémoire en échec : {capitalization.Error}", activityAuthor);
                     return;
                 }
-                await _executions.SaveAgentResultAsync(slug, execution, result);
+                await _executions.SetCapitalizationAsync(slug, execution, capitalization.Status);
+
+                // A validation rejection teaches the processor that most recently routed the
+                // ticket into this column. The current validation processor still owns its own lessons.
+                if (string.Equals(result.Outcome, "changes_requested", StringComparison.OrdinalIgnoreCase))
+                {
+                    var upstream = await _executions.FindUpstreamExecutionAsync(
+                        slug, execution.TicketId, processor.ColumnId, execution.Id);
+                    if (upstream is not null)
+                    {
+                        var upstreamColumnId = await _executions.FindProcessorColumnIdAsync(
+                            slug, upstream.ProcessorId);
+                        if (upstreamColumnId is int attributedColumnId)
+                        {
+                            var feedback = result.Lessons is { Count: > 0 }
+                                ? result.Lessons
+                                : string.IsNullOrWhiteSpace(result.Summary) ? [] : [result.Summary];
+                            var attributed = await _memory.CapitalizeAsync(slug, attributedColumnId,
+                                $"{execution.Id}-feedback-{upstream.Id}", feedback, cancellationToken);
+                            if (attributed.Status == MemoryCapitalizationStatus.Failed)
+                            {
+                                await _executions.SetCapitalizationAsync(slug, execution,
+                                    MemoryCapitalizationStatus.RetryRequired, attributed.Error);
+                                await _executions.FailAttemptAsync(slug, execution, processor,
+                                    $"Attribution du retour aval en échec : {attributed.Error}", activityAuthor);
+                                return;
+                            }
+                        }
+                    }
+                }
             }
 
             var contextRejection = await _executions.ValidateSuccessContextAsync(

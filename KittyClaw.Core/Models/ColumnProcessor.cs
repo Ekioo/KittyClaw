@@ -147,6 +147,15 @@ public enum ColumnExecutionStatus
     Cancelled,
 }
 
+public enum MemoryCapitalizationStatus
+{
+    Pending,
+    Succeeded,
+    NoChange,
+    Failed,
+    RetryRequired,
+}
+
 public class ColumnExecution
 {
     public required string Id { get; set; }
@@ -176,6 +185,9 @@ public class ColumnExecution
     public DateTime? ConsumedTicketUpdatedAt { get; set; }
     public int? ConsumedOwnerCommentId { get; set; }
     public string? ContextRejectionReason { get; set; }
+    public MemoryCapitalizationStatus CapitalizationStatus { get; set; } = MemoryCapitalizationStatus.Pending;
+    public string? CapitalizationError { get; set; }
+    public DateTime? CapitalizedAt { get; set; }
 
     [NotMapped]
     public List<string> CompletedActionIds
@@ -201,7 +213,8 @@ public sealed record ColumnAgentResult(
     string? Summary = null,
     DateTime? FireAt = null,
     string? ScheduleTarget = null,
-    ColumnResultEvidence? Evidence = null);
+    ColumnResultEvidence? Evidence = null,
+    List<string>? Lessons = null);
 
 public sealed record ColumnResultEvidence(
     DateTime? TicketUpdatedAt = null,
