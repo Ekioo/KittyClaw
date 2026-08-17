@@ -20,13 +20,8 @@ public sealed class TicketWorktreeService(ProjectService projects, TicketService
         if (!project.WorktreesEnabled)
             return null;
 
-        var workspace = projects.ResolveWorkspacePath(project);
         var rootTicketId = await ResolveRootTicketIdAsync(projectSlug, ticketId);
-        var repositoryRoot = RunGit(workspace, ["rev-parse", "--show-toplevel"]).Output.Trim();
-        if (string.IsNullOrWhiteSpace(repositoryRoot))
-            throw new InvalidOperationException($"Git could not resolve the repository containing '{workspace}'.");
-
-        repositoryRoot = Path.GetFullPath(repositoryRoot);
+        var repositoryRoot = projects.ResolveRepositoryPath(project);
         var branch = $"ticket/{rootTicketId}";
         var repositoryName = Path.GetFileName(Path.TrimEndingDirectorySeparator(repositoryRoot));
         var parent = Directory.GetParent(repositoryRoot)?.FullName
@@ -147,9 +142,8 @@ public sealed class TicketWorktreeService(ProjectService projects, TicketService
             ?? throw new InvalidOperationException($"Project '{projectSlug}' does not exist.");
         if (!project.WorktreesEnabled) return null;
 
-        var workspace = projects.ResolveWorkspacePath(project);
         var rootTicketId = await ResolveRootTicketIdAsync(projectSlug, ticketId);
-        var repositoryRoot = Path.GetFullPath(RunGit(workspace, ["rev-parse", "--show-toplevel"]).Output.Trim());
+        var repositoryRoot = projects.ResolveRepositoryPath(project);
         var branch = $"ticket/{rootTicketId}";
         var repositoryName = Path.GetFileName(Path.TrimEndingDirectorySeparator(repositoryRoot));
         var parent = Directory.GetParent(repositoryRoot)?.FullName

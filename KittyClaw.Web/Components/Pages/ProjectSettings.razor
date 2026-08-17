@@ -46,6 +46,13 @@ else
                 <input type="checkbox" @bind="_worktreesEnabled" />
                 <span><strong>@L["WorktreeEnable"]</strong><small>@L["WorktreeEnableEffect"]</small></span>
             </label>
+            <label class="settings-label" style="margin-top:.8rem">@L["RepositoryPath"]</label>
+            <input class="settings-input" data-testid="repository-path" placeholder="Sources" @bind="_repositoryPath" @bind:event="oninput" />
+            <p class="settings-hint" style="margin:.35rem 0 .8rem">@L["RepositoryPathHint"]</p>
+            @if (!string.IsNullOrWhiteSpace(_project.ResolvedRepositoryPath))
+            {
+                <div class="settings-status" data-testid="resolved-repository-path">@L["ResolvedRepositoryPath"] <code>@_project.ResolvedRepositoryPath</code></div>
+            }
             <div class="settings-row" style="margin-top:.8rem">
                 <input class="settings-input" data-testid="integration-branch" placeholder="dev" @bind="_integrationBranch" @bind:event="oninput" />
                 <button class="settings-primary" data-testid="save-worktrees" @onclick="SaveWorktrees" disabled="@_savingWorktrees">@(_savingWorktrees ? "…" : L["Save"])</button>
@@ -374,6 +381,7 @@ else
     private (string text, string css)? _workspaceStatus;
     private bool _worktreesEnabled, _savingWorktrees;
     private string _integrationBranch = "";
+    private string _repositoryPath = "";
     private (string text, string css)? _worktreeStatus;
 
     private string _fallbackModel = "";
@@ -416,6 +424,7 @@ else
         _workspacePath = _project.WorkspacePath ?? "";
         _worktreesEnabled = _project.WorktreesEnabled;
         _integrationBranch = _project.IntegrationBranch ?? "";
+        _repositoryPath = _project.RepositoryPath ?? "";
         _localModelBaseUrl = _project.LocalModelBaseUrl ?? "";
         await ReloadAllAsync();
         // Load model catalogs first, then apply the saved fallback so the <select> has a
@@ -499,7 +508,7 @@ else
         _worktreeStatus = null;
         try
         {
-            var body = new { worktreesEnabled = _worktreesEnabled, integrationBranch = string.IsNullOrWhiteSpace(_integrationBranch) ? null : _integrationBranch.Trim() };
+            var body = new { worktreesEnabled = _worktreesEnabled, integrationBranch = string.IsNullOrWhiteSpace(_integrationBranch) ? null : _integrationBranch.Trim(), repositoryPath = _repositoryPath.Trim() };
             var resp = await NewHttp().PatchAsJsonAsync($"/api/projects/{Slug}", body);
             if (resp.IsSuccessStatusCode)
             {

@@ -1,0 +1,16 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "qa-repository-254", "workspacePath": "C:\\Sources\\KittyClaw" },
+    { "type": "api", "method": "PATCH", "path": "/api/projects/qa-repository-254", "body": { "repositoryPath": "Sources", "worktreesEnabled": true, "integrationBranch": "dev" } }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-repository-254/settings" },
+    { "type": "assertVisible", "selector": "[data-testid='worktree-settings']" },
+    { "type": "assertValue", "selector": "[data-testid='repository-path']", "expected": "C:\\Sources\\KittyClaw\\Sources" },
+    { "type": "assertText", "selector": "[data-testid='resolved-repository-path']", "expected": "Resolved repository: C:\\Sources\\KittyClaw\\Sources" },
+    { "type": "assertValue", "selector": "[data-testid='integration-branch']", "expected": "dev" },
+    { "type": "assertJson", "path": "/api/projects/qa-repository-254", "jsonPath": "resolvedRepositoryPath", "expected": "C:\\Sources\\KittyClaw\\Sources" },
+    { "type": "screenshot", "name": "nested-code-repository-settings", "description": "Control workspace and explicitly resolved nested code repository" }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

@@ -51,5 +51,8 @@
   "WorktreeSettingsHint": "Opt-in mode: isolates agents by root ticket and serializes their local integration.",
   "WorktreeEnable": "Enable worktrees for this project",
   "WorktreeEnableEffect": "Child tickets share their root ticket worktree; disabled projects keep the standard flow.",
-  "WorktreePrerequisites": "Prerequisites: workspace inside a Git repository, git worktree available, and an existing local integration branch. Integration uses rebase + fast-forward with no automatic push."
+  "WorktreePrerequisites": "Prerequisites: usable Git code repository, git worktree available, and an existing local integration branch. Integration uses rebase + fast-forward with no automatic push.",
+  "RepositoryPath": "Code repository",
+  "RepositoryPathHint": "Absolute path or path relative to the control workspace. Empty preserves the legacy workspace-based behavior.",
+  "ResolvedRepositoryPath": "Resolved repository:"
 }

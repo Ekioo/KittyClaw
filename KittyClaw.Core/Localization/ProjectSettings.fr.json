@@ -51,5 +51,8 @@
   "WorktreeSettingsHint": "Mode opt-in : isole les agents par ticket racine et sérialise leur intégration locale.",
   "WorktreeEnable": "Activer les worktrees pour ce projet",
   "WorktreeEnableEffect": "Les sous-tickets partagent le worktree de leur ticket racine ; les projets désactivés gardent le parcours standard.",
-  "WorktreePrerequisites": "Prérequis : dossier de travail dans un dépôt Git, commande git worktree disponible et branche d’intégration locale existante. La fusion effectue rebase + fast-forward, sans push automatique."
+  "WorktreePrerequisites": "Prérequis : dépôt de code Git utilisable, commande git worktree disponible et branche d’intégration locale existante. La fusion effectue rebase + fast-forward, sans push automatique.",
+  "RepositoryPath": "Dépôt de code",
+  "RepositoryPathHint": "Chemin absolu ou relatif à l’espace de contrôle. Vide conserve le comportement historique basé sur l’espace de contrôle.",
+  "ResolvedRepositoryPath": "Dépôt effectivement résolu :"
 }

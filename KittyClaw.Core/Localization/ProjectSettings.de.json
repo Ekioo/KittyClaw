@@ -51,5 +51,8 @@
   "WorktreeSettingsHint": "Optionaler Modus: isoliert Agenten nach Stammticket und serialisiert ihre lokale Integration.",
   "WorktreeEnable": "Worktrees für dieses Projekt aktivieren",
   "WorktreeEnableEffect": "Untertickets teilen den Worktree ihres Stammtickets; deaktivierte Projekte behalten den Standardablauf.",
-  "WorktreePrerequisites": "Voraussetzungen: Arbeitsbereich in einem Git-Repository, verfügbarer Befehl git worktree und vorhandener lokaler Integrations-Branch. Die Integration verwendet Rebase + Fast-Forward ohne automatischen Push."
+  "WorktreePrerequisites": "Voraussetzungen: nutzbares Git-Code-Repository, verfügbarer Befehl git worktree und vorhandener lokaler Integrations-Branch. Die Integration verwendet Rebase + Fast-Forward ohne automatischen Push.",
+  "RepositoryPath": "Code-Repository",
+  "RepositoryPathHint": "Absoluter Pfad oder Pfad relativ zum Steuerungs-Arbeitsbereich. Leer behält das bisherige arbeitsbereichsbasierte Verhalten bei.",
+  "ResolvedRepositoryPath": "Aufgelöstes Repository:"
 }

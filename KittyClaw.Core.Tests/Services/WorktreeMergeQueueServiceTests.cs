@@ -28,6 +28,22 @@ public sealed class WorktreeMergeQueueServiceTests
     }
 
     [Fact]
+    public async Task NestedConfiguredRepository_IntegratesOnlyIntoConfiguredRepository()
+    {
+        using var fixture = await Fixture.CreateAsync(nested: true);
+        var outerHead = Git(fixture.Workspace, true, "rev-parse", "HEAD").Output.Trim();
+        var ticket = await fixture.CreateCommittedTicketAsync("nested.txt", "nested");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+
+        var result = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, result!.Status);
+        Assert.True(File.Exists(Path.Combine(fixture.Repository, "nested.txt")));
+        Assert.False(File.Exists(Path.Combine(fixture.Workspace, "nested.txt")));
+        Assert.Equal(outerHead, Git(fixture.Workspace, true, "rev-parse", "HEAD").Output.Trim());
+    }
+
+    [Fact]
     public async Task EnqueueAndProcess_AreIdempotentAndOrdered()
     {
         using var fixture = await Fixture.CreateAsync();
@@ -113,6 +129,7 @@ public sealed class WorktreeMergeQueueServiceTests
     private sealed class Fixture : IDisposable
     {
         public TempDir Root { get; }
+        public string Workspace { get; }
         public string Repository { get; }
         public string Slug { get; }
         public ProjectService Projects { get; }
@@ -120,24 +137,28 @@ public sealed class WorktreeMergeQueueServiceTests
         public TicketWorktreeService Worktrees { get; }
         public WorktreeMergeQueueService Queue { get; }
 
-        private Fixture(TempDir root, string repository, string slug, ProjectService projects,
+        private Fixture(TempDir root, string workspace, string repository, string slug, ProjectService projects,
             TicketService tickets, TicketWorktreeService worktrees)
         {
-            Root = root; Repository = repository; Slug = slug; Projects = projects; Tickets = tickets; Worktrees = worktrees;
+            Root = root; Workspace = workspace; Repository = repository; Slug = slug; Projects = projects; Tickets = tickets; Worktrees = worktrees;
             Queue = new WorktreeMergeQueueService(projects, worktrees);
         }
 
-        public static async Task<Fixture> CreateAsync()
+        public static async Task<Fixture> CreateAsync(bool nested = false)
         {
             var root = new TempDir();
-            var repository = ProjectWorktreeSettingsTests.CreateRepository(root.Path, "integration");
+            var workspace = ProjectWorktreeSettingsTests.CreateRepository(root.Path, nested ? "outer" : "integration");
+            var repository = nested
+                ? ProjectWorktreeSettingsTests.CreateRepository(workspace, "integration")
+                : workspace;
             var projects = new ProjectService(Path.Combine(root.Path, "data"));
             var project = await projects.CreateProjectAsync("merge-queue");
-            await projects.UpdateProjectAsync(project.Slug, repository);
-            await projects.UpdateProjectAsync(project.Slug, null, worktreesEnabled: true, integrationBranch: "integration");
+            await projects.UpdateProjectAsync(project.Slug, workspace);
+            await projects.UpdateProjectAsync(project.Slug, null, worktreesEnabled: true, integrationBranch: "integration",
+                repositoryPath: nested ? Path.GetRelativePath(workspace, repository) : null);
             var tickets = new TicketService(projects, new MemberService(projects));
             var worktrees = new TicketWorktreeService(projects, tickets);
-            return new Fixture(root, repository, project.Slug, projects, tickets, worktrees);
+            return new Fixture(root, workspace, repository, project.Slug, projects, tickets, worktrees);
         }
 
         public async Task<int> CreateTicketAsync() => (await Tickets.CreateTicketAsync(Slug, "Merge candidate")).Id;

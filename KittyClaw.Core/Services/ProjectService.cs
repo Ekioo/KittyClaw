@@ -49,6 +49,8 @@ public partial class ProjectService
             catch { /* column already exists */ }
             try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN IntegrationBranch TEXT NULL"); }
             catch { /* column already exists */ }
+            try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN RepositoryPath TEXT NULL"); }
+            catch { /* column already exists */ }
             _dbInitialized = true;
         }
         finally
@@ -61,7 +63,9 @@ public partial class ProjectService
     {
         await EnsureRegistryInitializedAsync();
         await using var db = new RegistryDbContext(_registryPath);
-        return await db.Projects.OrderBy(p => p.Name).ToListAsync();
+        var projects = await db.Projects.OrderBy(p => p.Name).ToListAsync();
+        foreach (var project in projects) PopulateResolvedRepositoryPath(project);
+        return projects;
     }
 
     public async Task<Project> CreateProjectAsync(string name)
@@ -100,7 +104,9 @@ public partial class ProjectService
     {
         await EnsureRegistryInitializedAsync();
         await using var db = new RegistryDbContext(_registryPath);
-        return await db.Projects.FirstOrDefaultAsync(p => p.Slug == slug);
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Slug == slug);
+        if (project is not null) PopulateResolvedRepositoryPath(project);
+        return project;
     }
 
     public async Task<Project?> TogglePauseAsync(string slug)
@@ -163,7 +169,8 @@ public partial class ProjectService
         string? fallbackModel = null,
         bool updateFallback = false,
         bool? worktreesEnabled = null,
-        string? integrationBranch = null)
+        string? integrationBranch = null,
+        string? repositoryPath = null)
     {
         if (!string.IsNullOrWhiteSpace(workspacePath))
             ValidateWorkspacePath(workspacePath.Trim());
@@ -174,19 +181,22 @@ public partial class ProjectService
 
         // A worktree-only PATCH must not clear the workspace merely because WorkspacePath
         // was omitted from JSON. Preserve the historical clear behavior for ordinary patches.
-        var updatesWorktreeSettings = worktreesEnabled.HasValue || integrationBranch is not null;
+        var updatesWorktreeSettings = worktreesEnabled.HasValue || integrationBranch is not null || repositoryPath is not null;
         if (!updatesWorktreeSettings || workspacePath is not null)
             project.WorkspacePath = string.IsNullOrWhiteSpace(workspacePath) ? null : workspacePath.Trim();
 
         var normalizedBranch = integrationBranch?.Trim();
         var resultingBranch = integrationBranch is null ? project.IntegrationBranch : normalizedBranch;
         var resultingEnabled = worktreesEnabled ?? project.WorktreesEnabled;
+        if (repositoryPath is not null)
+            project.RepositoryPath = NormalizeRepositoryPath(project, repositoryPath);
         if (resultingEnabled)
         {
-            var workspace = string.IsNullOrWhiteSpace(workspacePath)
+            var repositoryCandidate = string.IsNullOrWhiteSpace(project.RepositoryPath)
                 ? ResolveWorkspacePath(project)
-                : workspacePath.Trim();
-            ValidateWorktreeConfiguration(workspace, resultingBranch);
+                : project.RepositoryPath;
+            ValidateWorktreeConfiguration(repositoryCandidate, resultingBranch,
+                explicitlyConfigured: !string.IsNullOrWhiteSpace(project.RepositoryPath));
         }
 
         if (integrationBranch is not null)
@@ -199,29 +209,45 @@ public partial class ProjectService
         }
         project.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
+        PopulateResolvedRepositoryPath(project);
         return project;
     }
 
-    private static void ValidateWorktreeConfiguration(string workspacePath, string? integrationBranch)
+    private string? NormalizeRepositoryPath(Project project, string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var trimmed = value.Trim();
+        var resolved = Path.IsPathFullyQualified(trimmed)
+            ? trimmed
+            : Path.Combine(ResolveWorkspacePath(project), trimmed);
+        return Path.TrimEndingDirectorySeparator(Path.GetFullPath(resolved));
+    }
+
+    private static void ValidateWorktreeConfiguration(string repositoryPath, string? integrationBranch, bool explicitlyConfigured)
     {
         if (string.IsNullOrWhiteSpace(integrationBranch))
             throw new InvalidOperationException("La branche d’intégration est requise pour activer les worktrees.");
-        if (!Directory.Exists(workspacePath))
-            throw new InvalidOperationException($"Le workspace '{workspacePath}' n’existe pas.");
+        if (!Directory.Exists(repositoryPath))
+            throw new InvalidOperationException($"Le dépôt de code '{repositoryPath}' n’existe pas.");
 
-        var repository = RunGit(workspacePath, ["rev-parse", "--is-inside-work-tree"]);
+        var repository = RunGit(repositoryPath, ["rev-parse", "--is-inside-work-tree"]);
         if (!repository.Success || !string.Equals(repository.Output.Trim(), "true", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"Le workspace '{workspacePath}' n’est pas un dépôt Git utilisable.");
+            throw new InvalidOperationException($"Le dépôt de code '{repositoryPath}' n’est pas un dépôt Git utilisable.");
 
-        var worktreeSupport = RunGit(workspacePath, ["worktree", "list", "--porcelain"]);
+        var topLevel = RunGit(repositoryPath, ["rev-parse", "--show-toplevel"]);
+        var resolvedRoot = topLevel.Success ? Path.TrimEndingDirectorySeparator(Path.GetFullPath(topLevel.Output.Trim())) : "";
+        if (explicitlyConfigured && !PathsEqual(repositoryPath, resolvedRoot))
+            throw new InvalidOperationException($"Le dépôt configuré '{repositoryPath}' n’est pas une racine Git. Git a résolu '{resolvedRoot}'. Configurez la racine exacte du dépôt de code.");
+
+        var worktreeSupport = RunGit(resolvedRoot, ["worktree", "list", "--porcelain"]);
         if (!worktreeSupport.Success)
             throw new InvalidOperationException("Cette version de Git ne prend pas en charge les worktrees.");
 
-        var validBranch = RunGit(workspacePath, ["check-ref-format", "--branch", integrationBranch]);
+        var validBranch = RunGit(resolvedRoot, ["check-ref-format", "--branch", integrationBranch]);
         if (!validBranch.Success)
             throw new InvalidOperationException($"La branche d’intégration '{integrationBranch}' est invalide.");
 
-        var branchExists = RunGit(workspacePath, ["show-ref", "--verify", "--quiet", $"refs/heads/{integrationBranch}"]);
+        var branchExists = RunGit(resolvedRoot, ["show-ref", "--verify", "--quiet", $"refs/heads/{integrationBranch}"]);
         if (!branchExists.Success)
             throw new InvalidOperationException($"La branche d’intégration '{integrationBranch}' n’existe pas dans le dépôt.");
     }
@@ -275,6 +301,26 @@ public partial class ProjectService
         string.IsNullOrWhiteSpace(project.WorkspacePath)
             ? Path.Combine(_dataDir, "projects", project.Slug)
             : project.WorkspacePath;
+
+    public string ResolveRepositoryPath(Project project)
+    {
+        var candidate = string.IsNullOrWhiteSpace(project.RepositoryPath)
+            ? ResolveWorkspacePath(project)
+            : project.RepositoryPath;
+        if (!Directory.Exists(candidate)) return Path.GetFullPath(candidate);
+        var result = RunGit(candidate, ["rev-parse", "--show-toplevel"]);
+        return result.Success && !string.IsNullOrWhiteSpace(result.Output)
+            ? Path.TrimEndingDirectorySeparator(Path.GetFullPath(result.Output.Trim()))
+            : Path.TrimEndingDirectorySeparator(Path.GetFullPath(candidate));
+    }
+
+    private void PopulateResolvedRepositoryPath(Project project) =>
+        project.ResolvedRepositoryPath = ResolveRepositoryPath(project);
+
+    private static bool PathsEqual(string left, string right) => string.Equals(
+        Path.TrimEndingDirectorySeparator(Path.GetFullPath(left)),
+        Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)),
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
     public async Task<bool> DeleteProjectAsync(string slug)
     {

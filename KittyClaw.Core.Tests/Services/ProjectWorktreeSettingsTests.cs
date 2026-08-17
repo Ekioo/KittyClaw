@@ -32,6 +32,46 @@ public sealed class ProjectWorktreeSettingsTests
         Assert.NotNull(project);
         Assert.False(project.WorktreesEnabled);
         Assert.Null(project.IntegrationBranch);
+        Assert.Null(project.RepositoryPath);
+    }
+
+    [Fact]
+    public async Task ExplicitNestedRepository_IsResolvedRelativeToWorkspaceAndPersistedAbsolutely()
+    {
+        using var temp = new TempDir();
+        var workspace = CreateRepository(temp.Path, "outer");
+        var nested = CreateRepository(workspace, "integration");
+        var projects = new ProjectService(Path.Combine(temp.Path, "data"));
+        var project = await projects.CreateProjectAsync("nested-repository");
+        await projects.UpdateProjectAsync(project.Slug, workspace);
+
+        var enabled = await projects.UpdateProjectAsync(project.Slug, null,
+            worktreesEnabled: true, integrationBranch: "integration",
+            repositoryPath: Path.GetRelativePath(workspace, nested));
+
+        Assert.Equal(Path.GetFullPath(nested), enabled!.RepositoryPath, ignoreCase: true);
+        Assert.Equal(Path.GetFullPath(nested), enabled.ResolvedRepositoryPath, ignoreCase: true);
+        Assert.Equal(Path.GetFullPath(nested), projects.ResolveRepositoryPath(enabled), ignoreCase: true);
+    }
+
+    [Fact]
+    public async Task ExplicitPathInsideRepository_IsRejectedInsteadOfSelectingParent()
+    {
+        using var temp = new TempDir();
+        var repository = CreateRepository(temp.Path, "integration");
+        var child = Path.Combine(repository, "child");
+        Directory.CreateDirectory(child);
+        var projects = new ProjectService(Path.Combine(temp.Path, "data"));
+        var project = await projects.CreateProjectAsync("wrong-root");
+        await projects.UpdateProjectAsync(project.Slug, repository);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => projects.UpdateProjectAsync(
+            project.Slug, null, worktreesEnabled: true, integrationBranch: "integration", repositoryPath: child));
+
+        Assert.Contains("racine Git", error.Message);
+        var loaded = await projects.GetProjectAsync(project.Slug);
+        Assert.False(loaded!.WorktreesEnabled);
+        Assert.Null(loaded.RepositoryPath);
     }
 
     [Fact]

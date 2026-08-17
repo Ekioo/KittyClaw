@@ -51,5 +51,8 @@
   "WorktreeSettingsHint": "Modalità opzionale: isola gli agenti per ticket radice e serializza la loro integrazione locale.",
   "WorktreeEnable": "Abilita i worktree per questo progetto",
   "WorktreeEnableEffect": "I sottoticket condividono il worktree del ticket radice; i progetti disabilitati mantengono il flusso standard.",
-  "WorktreePrerequisites": "Prerequisiti: area di lavoro in un repository Git, comando git worktree disponibile e branch di integrazione locale esistente. L'integrazione usa rebase + fast-forward senza push automatico."
+  "WorktreePrerequisites": "Prerequisiti: repository di codice Git utilizzabile, comando git worktree disponibile e branch di integrazione locale esistente. L'integrazione usa rebase + fast-forward senza push automatico.",
+  "RepositoryPath": "Repository del codice",
+  "RepositoryPathHint": "Percorso assoluto o relativo all'area di controllo. Vuoto mantiene il comportamento storico basato sull'area di controllo.",
+  "ResolvedRepositoryPath": "Repository risolto:"
 }

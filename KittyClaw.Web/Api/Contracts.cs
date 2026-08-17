@@ -67,7 +67,8 @@ public record UpdateProjectRequest(
     string? FallbackModel = null,
     bool UpdateFallbackModel = false,
     bool? WorktreesEnabled = null,
-    string? IntegrationBranch = null);
+    string? IntegrationBranch = null,
+    string? RepositoryPath = null);
 public record SaveLocalModelConfigRequest(string? LocalModelBaseUrl = null, string? LocalModelName = null);
 public record SteerRunRequest(string Text);
 public record BrowseFolderRequest(string? InitialPath = null);

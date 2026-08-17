@@ -25,16 +25,20 @@ public sealed class ProjectWorktreeSettingsHttpTests : IClassFixture<ProjectWork
         var create = await _client.PostAsJsonAsync("/api/projects", new CreateProjectRequest("api-worktrees"));
         create.EnsureSuccessStatusCode();
         var slug = (await create.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("slug").GetString();
-        (await _client.PatchAsJsonAsync($"/api/projects/{slug}", new { workspacePath = repository })).EnsureSuccessStatusCode();
+        var workspace = Path.Combine(_factory.DataDir, "control-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspace);
+        (await _client.PatchAsJsonAsync($"/api/projects/{slug}", new { workspacePath = workspace })).EnsureSuccessStatusCode();
 
         var patch = await _client.PatchAsJsonAsync($"/api/projects/{slug}",
-            new { worktreesEnabled = true, integrationBranch = "dev" });
+            new { worktreesEnabled = true, integrationBranch = "dev", repositoryPath = repository });
 
         patch.EnsureSuccessStatusCode();
         var body = await patch.Content.ReadFromJsonAsync<JsonElement>();
         Assert.True(body.GetProperty("worktreesEnabled").GetBoolean());
         Assert.Equal("dev", body.GetProperty("integrationBranch").GetString());
-        Assert.Equal(repository, body.GetProperty("workspacePath").GetString());
+        Assert.Equal(workspace, body.GetProperty("workspacePath").GetString());
+        Assert.Equal(repository, body.GetProperty("repositoryPath").GetString());
+        Assert.Equal(repository, body.GetProperty("resolvedRepositoryPath").GetString());
     }
 
     [Fact]

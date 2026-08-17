@@ -115,7 +115,7 @@ public sealed class WorktreeMergeQueueService(ProjectService projects, TicketWor
         await using var db = projects.GetProjectDb(slug);
         await EnsureTableAsync(db);
         var project = await projects.GetProjectAsync(slug) ?? throw new InvalidOperationException("Project disappeared.");
-        var repository = Path.GetFullPath(RunGit(projects.ResolveWorkspacePath(project), ["rev-parse", "--show-toplevel"]).Output.Trim());
+        var repository = projects.ResolveRepositoryPath(project);
         try
         {
             RequireClean(repository, "integration checkout");

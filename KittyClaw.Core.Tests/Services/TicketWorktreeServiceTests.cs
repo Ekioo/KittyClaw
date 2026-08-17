@@ -32,6 +32,22 @@ public sealed class TicketWorktreeServiceTests
     }
 
     [Fact]
+    public async Task NestedConfiguredRepository_CreatesWorktreeBesideNestedRepositoryOnly()
+    {
+        using var fixture = await Fixture.CreateAsync(nested: true);
+        var ticket = await fixture.Tickets.CreateTicketAsync(fixture.ProjectSlug, "Nested root");
+        var outerWorktreesBefore = RunGit(fixture.Workspace, "worktree", "list", "--porcelain");
+
+        var worktree = await fixture.Worktrees.ResolveAsync(fixture.ProjectSlug, ticket.Id, CancellationToken.None);
+
+        Assert.NotNull(worktree);
+        Assert.Equal(Path.Combine(fixture.Repository + ".worktrees", $"ticket-{ticket.Id}"), worktree.Path, ignoreCase: true);
+        Assert.Contains($"branch refs/heads/ticket/{ticket.Id}", RunGit(fixture.Repository, "worktree", "list", "--porcelain"));
+        Assert.Equal(outerWorktreesBefore, RunGit(fixture.Workspace, "worktree", "list", "--porcelain"));
+        Assert.NotEqual(0, RunGitExitCode(fixture.Workspace, "show-ref", "--verify", "--quiet", $"refs/heads/ticket/{ticket.Id}"));
+    }
+
+    [Fact]
     public async Task ParentAndChild_ShareWorktree_WhileRootsRemainDistinct()
     {
         using var fixture = await Fixture.CreateAsync();
@@ -164,31 +180,37 @@ public sealed class TicketWorktreeServiceTests
     {
         public TempDir Root { get; }
         public string Repository { get; }
+        public string Workspace { get; }
         public string ProjectSlug { get; }
         public TicketService Tickets { get; }
         public TicketWorktreeService Worktrees { get; }
 
-        private Fixture(TempDir root, string repository, string projectSlug, TicketService tickets,
+        private Fixture(TempDir root, string workspace, string repository, string projectSlug, TicketService tickets,
             TicketWorktreeService worktrees)
         {
             Root = root;
+            Workspace = workspace;
             Repository = repository;
             ProjectSlug = projectSlug;
             Tickets = tickets;
             Worktrees = worktrees;
         }
 
-        public static async Task<Fixture> CreateAsync(bool enable = true)
+        public static async Task<Fixture> CreateAsync(bool enable = true, bool nested = false)
         {
             var root = new TempDir();
-            var repository = ProjectWorktreeSettingsTests.CreateRepository(root.Path, "integration");
+            var workspace = ProjectWorktreeSettingsTests.CreateRepository(root.Path, nested ? "outer" : "integration");
+            var repository = nested
+                ? ProjectWorktreeSettingsTests.CreateRepository(workspace, "integration")
+                : workspace;
             var projects = new ProjectService(Path.Combine(root.Path, "data"));
             var project = await projects.CreateProjectAsync("worktree-resolution");
-            await projects.UpdateProjectAsync(project.Slug, repository);
+            await projects.UpdateProjectAsync(project.Slug, workspace);
             if (enable)
-                await projects.UpdateProjectAsync(project.Slug, null, worktreesEnabled: true, integrationBranch: "integration");
+                await projects.UpdateProjectAsync(project.Slug, null, worktreesEnabled: true, integrationBranch: "integration",
+                    repositoryPath: nested ? Path.GetRelativePath(workspace, repository) : null);
             var tickets = new TicketService(projects, new MemberService(projects));
-            return new Fixture(root, repository, project.Slug, tickets, new TicketWorktreeService(projects, tickets));
+            return new Fixture(root, workspace, repository, project.Slug, tickets, new TicketWorktreeService(projects, tickets));
         }
 
         public void Dispose() => Root.Dispose();
@@ -210,5 +232,14 @@ public sealed class TicketWorktreeServiceTests
         process.WaitForExit();
         Assert.True(process.ExitCode == 0, stderr);
         return stdout;
+    }
+
+    private static int RunGitExitCode(string workingDirectory, params string[] arguments)
+    {
+        var info = new ProcessStartInfo("git") { WorkingDirectory = workingDirectory, UseShellExecute = false };
+        foreach (var argument in arguments) info.ArgumentList.Add(argument);
+        using var process = Process.Start(info)!;
+        process.WaitForExit();
+        return process.ExitCode;
     }
 }
