@@ -473,11 +473,225 @@ public sealed class ColumnExecutionServiceTests : IDisposable
         var history = await _executions.ListAsync(project.Slug, ticket.Id);
 
         Assert.Null(blockedReview);
-        Assert.Equal(failure.Id, moved!.ColumnId);
+        Assert.Equal(review.Id, moved!.ColumnId);
         var protection = Assert.Single(history, execution => execution.Outcome == "routing_loop");
-        Assert.Equal(ColumnExecutionStatus.Completed, protection.Status);
-        Assert.Equal(failure.Id, protection.TargetColumnId);
+        Assert.Equal(ColumnExecutionStatus.Failed, protection.Status);
+        Assert.Null(protection.TargetColumnId);
         Assert.Equal(ColumnExecutionService.RoutingLoopError, protection.Error);
+        Assert.Contains("same_transition_and_progress_fingerprint", protection.LoopDiagnosticJson);
+        Assert.Contains(firstDraft!.Id, protection.LoopDiagnosticJson);
+        Assert.Contains(secondDraft!.Id, protection.LoopDiagnosticJson);
+    }
+
+    [Fact]
+    public async Task Ticket_217_regression_allows_repeated_transition_when_each_delivery_progresses()
+    {
+        var project = await _projects.CreateProjectAsync("Ticket 217 regression");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Delivery");
+        var correction = await _columns.CreateColumnAsync(project.Slug, "À corriger", pipelineId: pipeline.Id);
+        var validation = await _columns.CreateColumnAsync(project.Slug, "Validation", pipelineId: pipeline.Id);
+        var failure = await _columns.CreateColumnAsync(project.Slug, "Abandonné",
+            pipelineId: pipeline.Id, role: ColumnRole.Failure);
+        var implementer = await SaveProcessor(project.Slug, correction.Id, validation.Id,
+            technicalFailureColumnId: failure.Id);
+        var validator = await SaveProcessor(project.Slug, validation.Id, correction.Id,
+            technicalFailureColumnId: failure.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Documentation follow-up",
+            status: correction.Name, pipelineId: pipeline.Id, columnId: correction.Id);
+        var now = DateTime.UtcNow;
+
+        var firstFix = await _executions.ClaimNextAsync(project.Slug, implementer, now);
+        await _tickets.AddCommentAsync(project.Slug, ticket.Id, "Preuve: commit a1b2c3d", "programmer");
+        await _executions.CompleteAsync(project.Slug, firstFix!, implementer,
+            new ColumnAgentResult("completed", [], "Correction API livrée"), implementer.Name);
+        var firstValidation = await _executions.ClaimNextAsync(project.Slug, validator, now.AddMinutes(1));
+        await _executions.CompleteAsync(project.Slug, firstValidation!, validator,
+            new ColumnAgentResult("changes_requested", [], "Documentation de reprise absente"), validator.Name);
+        var secondFix = await _executions.ClaimNextAsync(project.Slug, implementer, now.AddMinutes(2));
+        await _tickets.AddCommentAsync(project.Slug, ticket.Id, "Preuve: commit c95499f", "programmer");
+        await _executions.CompleteAsync(project.Slug, secondFix!, implementer,
+            new ColumnAgentResult("completed", [], "Documentation de reprise ajoutée"), implementer.Name);
+
+        var nextValidation = await _executions.ClaimNextAsync(project.Slug, validator, now.AddMinutes(3));
+
+        Assert.NotNull(nextValidation);
+        var history = await _executions.ListAsync(project.Slug, ticket.Id);
+        Assert.DoesNotContain(history, execution => execution.Outcome == "routing_loop");
+        var persistedFixes = history.Where(execution => execution.ProcessorId == implementer.Id)
+            .OrderBy(execution => execution.ClaimedAt).ToList();
+        Assert.NotEqual(persistedFixes[0].ProgressFingerprint, persistedFixes[1].ProgressFingerprint);
+    }
+
+    [Fact]
+    public async Task Automatic_comments_and_cosmetic_text_changes_do_not_bypass_the_loop_guard()
+    {
+        var project = await _projects.CreateProjectAsync("Loop noise filtering");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var drafting = await _columns.CreateColumnAsync(project.Slug, "Drafting", pipelineId: pipeline.Id);
+        var review = await _columns.CreateColumnAsync(project.Slug, "Review", pipelineId: pipeline.Id);
+        var writer = await SaveProcessor(project.Slug, drafting.Id, review.Id);
+        var reviewer = await SaveProcessor(project.Slug, review.Id, drafting.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Noise", status: drafting.Name,
+            pipelineId: pipeline.Id, columnId: drafting.Id);
+        var now = DateTime.UtcNow;
+
+        var first = await _executions.ClaimNextAsync(project.Slug, writer, now);
+        await _tickets.AddCommentAsync(project.Slug, ticket.Id, "Automated heartbeat 1", "automation");
+        await _executions.CompleteAsync(project.Slug, first!, writer,
+            new ColumnAgentResult("completed", [], "Delivery complete!"), writer.Name);
+        var validation = await _executions.ClaimNextAsync(project.Slug, reviewer, now.AddMinutes(1));
+        await _executions.CompleteAsync(project.Slug, validation!, reviewer,
+            new ColumnAgentResult("changes_requested", [], "Retry"), reviewer.Name);
+        var second = await _executions.ClaimNextAsync(project.Slug, writer, now.AddMinutes(2));
+        await _tickets.AddCommentAsync(project.Slug, ticket.Id, "Automated heartbeat 2", "automation");
+        await _executions.CompleteAsync(project.Slug, second!, writer,
+            new ColumnAgentResult("completed", [], "DELIVERY, complete."), writer.Name);
+
+        Assert.Null(await _executions.ClaimNextAsync(project.Slug, reviewer, now.AddMinutes(3)));
+        var history = await _executions.ListAsync(project.Slug, ticket.Id);
+        var drafts = history.Where(execution => execution.ProcessorId == writer.Id)
+            .OrderBy(execution => execution.ClaimedAt).ToList();
+        Assert.Equal(drafts[0].ProgressFingerprint, drafts[1].ProgressFingerprint);
+        Assert.Single(history, execution => execution.Outcome == "routing_loop");
+        Assert.DoesNotContain("heartbeat", drafts[1].ProgressSignalsJson, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task New_validation_diagnostic_or_human_evidence_is_persisted_as_progress()
+    {
+        var project = await _projects.CreateProjectAsync("Diagnostic and evidence progress");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var correction = await _columns.CreateColumnAsync(project.Slug, "Correction", pipelineId: pipeline.Id);
+        var validation = await _columns.CreateColumnAsync(project.Slug, "Validation", pipelineId: pipeline.Id);
+        var implementer = await SaveProcessor(project.Slug, correction.Id, validation.Id);
+        var validator = await SaveProcessor(project.Slug, validation.Id, correction.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Evidence", status: correction.Name,
+            pipelineId: pipeline.Id, columnId: correction.Id);
+        var now = DateTime.UtcNow;
+
+        var fix1 = await _executions.ClaimNextAsync(project.Slug, implementer, now);
+        await _tickets.AddCommentAsync(project.Slug, ticket.Id, "Proof: API regression passes", "programmer");
+        await _executions.CompleteAsync(project.Slug, fix1!, implementer,
+            new ColumnAgentResult("completed", [], "Ready"), implementer.Name);
+        var qa1 = await _executions.ClaimNextAsync(project.Slug, validator, now.AddMinutes(1));
+        await _executions.CompleteAsync(project.Slug, qa1!, validator,
+            new ColumnAgentResult("changes_requested", [], "Missing restart assertion"), validator.Name);
+        var fix2 = await _executions.ClaimNextAsync(project.Slug, implementer, now.AddMinutes(2));
+        await _tickets.AddCommentAsync(project.Slug, ticket.Id, "Proof: restart regression passes", "programmer");
+        await _executions.CompleteAsync(project.Slug, fix2!, implementer,
+            new ColumnAgentResult("completed", [], "Ready"), implementer.Name);
+        var qa2 = await _executions.ClaimNextAsync(project.Slug, validator, now.AddMinutes(3));
+        await _executions.CompleteAsync(project.Slug, qa2!, validator,
+            new ColumnAgentResult("changes_requested", [], "Missing replay assertion"), validator.Name);
+
+        Assert.NotNull(await _executions.ClaimNextAsync(project.Slug, implementer, now.AddMinutes(4)));
+        var history = await _executions.ListAsync(project.Slug, ticket.Id);
+        var fixes = history.Where(e => e.ProcessorId == implementer.Id).OrderBy(e => e.ClaimedAt).ToList();
+        var validations = history.Where(e => e.ProcessorId == validator.Id).OrderBy(e => e.ClaimedAt).ToList();
+        Assert.NotEqual(fixes[0].ProgressFingerprint, fixes[1].ProgressFingerprint);
+        Assert.NotEqual(validations[0].ProgressFingerprint, validations[1].ProgressFingerprint);
+    }
+
+    [Fact]
+    public async Task Delivery_checkpoint_survives_restart_and_replay_is_idempotent()
+    {
+        var project = await _projects.CreateProjectAsync("Durable delivery checkpoint");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Source", pipelineId: pipeline.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Target", pipelineId: pipeline.Id);
+        var back = await SaveProcessor(project.Slug, target.Id, source.Id);
+        var forward = await SaveProcessor(project.Slug, source.Id, target.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Checkpoint", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var now = DateTime.UtcNow;
+
+        var first = await _executions.ClaimNextAsync(project.Slug, forward, now);
+        await _executions.CompleteActionAsync(project.Slug, first!, "publish-a");
+        await _executions.CompleteActionAsync(project.Slug, first!, "publish-a");
+        await _executions.CompleteAsync(project.Slug, first!, forward,
+            new ColumnAgentResult("completed", [], "Published"), forward.Name);
+        var return1 = await _executions.ClaimNextAsync(project.Slug, back, now.AddMinutes(1));
+        await _executions.CompleteAsync(project.Slug, return1!, back,
+            new ColumnAgentResult("completed", [], "Return"), back.Name);
+        var second = await _executions.ClaimNextAsync(project.Slug, forward, now.AddMinutes(2));
+        await _executions.CompleteActionAsync(project.Slug, second!, "publish-b");
+        await _executions.CompleteAsync(project.Slug, second!, forward,
+            new ColumnAgentResult("completed", [], "Published"), forward.Name);
+
+        var restarted = new ColumnExecutionService(_projects, _tickets);
+        Assert.NotNull(await restarted.ClaimNextAsync(project.Slug, back, now.AddMinutes(3)));
+        var persisted = await restarted.ListAsync(project.Slug, ticket.Id);
+        var forwards = persisted.Where(e => e.ProcessorId == forward.Id).OrderBy(e => e.ClaimedAt).ToList();
+        Assert.Equal(["publish-a"], forwards[0].CompletedActionIds);
+        Assert.NotEqual(forwards[0].ProgressFingerprint, forwards[1].ProgressFingerprint);
+        Assert.Equal("completed", forwards[1].AgentResult!.Outcome);
+    }
+
+    [Fact]
+    public async Task Retrying_a_synthetic_loop_execution_resumes_without_losing_business_result()
+    {
+        var project = await _projects.CreateProjectAsync("Loop recovery");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Source", pipelineId: pipeline.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Target", pipelineId: pipeline.Id);
+        var forward = await SaveProcessor(project.Slug, source.Id, target.Id);
+        var back = await SaveProcessor(project.Slug, target.Id, source.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Recover", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var now = DateTime.UtcNow;
+
+        var first = await _executions.ClaimNextAsync(project.Slug, forward, now);
+        await _executions.CompleteAsync(project.Slug, first!, forward,
+            new ColumnAgentResult("completed", [], "Stable result"), forward.Name);
+        var return1 = await _executions.ClaimNextAsync(project.Slug, back, now.AddMinutes(1));
+        await _executions.CompleteAsync(project.Slug, return1!, back,
+            new ColumnAgentResult("completed", [], "Return"), back.Name);
+        var second = await _executions.ClaimNextAsync(project.Slug, forward, now.AddMinutes(2));
+        await _executions.CompleteAsync(project.Slug, second!, forward,
+            new ColumnAgentResult("completed", [], "Stable result"), forward.Name);
+        Assert.Null(await _executions.ClaimNextAsync(project.Slug, back, now.AddMinutes(3)));
+        var protection = Assert.Single(await _executions.ListAsync(project.Slug, ticket.Id),
+            execution => execution.Outcome == "routing_loop");
+
+        Assert.True(await _executions.RetryAsync(project.Slug, protection.Id));
+        var resumed = await _executions.ClaimNextAsync(project.Slug, back, now.AddMinutes(4));
+        var persistedFirst = (await _executions.ListAsync(project.Slug, ticket.Id)).Single(e => e.Id == first!.Id);
+        Assert.Equal(protection.Id, resumed!.Id);
+        Assert.Equal("Stable result", persistedFirst.Summary);
+        Assert.Equal("completed", persistedFirst.AgentResult!.Outcome);
+    }
+
+    [Fact]
+    public async Task Progress_schema_is_added_to_historical_execution_table()
+    {
+        var project = await _projects.CreateProjectAsync("Legacy progress schema");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: pipeline.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Done", pipelineId: pipeline.Id);
+        var processor = await SaveProcessor(project.Slug, source.Id, target.Id);
+        await _tickets.CreateTicketAsync(project.Slug, "Legacy row", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        await using (var db = _projects.GetProjectDb(project.Slug))
+        {
+            await db.Database.ExecuteSqlRawAsync("DROP TABLE IF EXISTS ColumnExecutions");
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE ColumnExecutions (
+                    Id TEXT NOT NULL PRIMARY KEY, ProcessorId INTEGER NOT NULL, TicketId INTEGER NOT NULL,
+                    Status INTEGER NOT NULL, Attempt INTEGER NOT NULL DEFAULT 1, ClaimedAt TEXT NOT NULL,
+                    AvailableAt TEXT NULL, EndedAt TEXT NULL, RunId TEXT NULL, Outcome TEXT NULL,
+                    Summary TEXT NULL, Error TEXT NULL, TargetColumnId INTEGER NULL,
+                    CompletedActionIdsJson TEXT NOT NULL DEFAULT '[]', CurrentActionId TEXT NULL,
+                    AgentCompleted INTEGER NOT NULL DEFAULT 0, AgentResultJson TEXT NULL);
+                """);
+        }
+
+        Assert.NotNull(await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow));
+        await using var migrated = _projects.GetProjectDb(project.Slug);
+        var columns = await migrated.Database.SqlQueryRaw<string>(
+            "SELECT name AS Value FROM pragma_table_info('ColumnExecutions')").ToListAsync();
+        Assert.Contains("ProgressFingerprint", columns);
+        Assert.Contains("ProgressSignalsJson", columns);
+        Assert.Contains("LoopDiagnosticJson", columns);
     }
 
     private Task<ColumnProcessor> SaveProcessor(

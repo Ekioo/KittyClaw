@@ -1,6 +1,10 @@
 using KittyClaw.Core.Data;
 using KittyClaw.Core.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace KittyClaw.Core.Services;
 
@@ -9,7 +13,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
 {
     internal static readonly TimeSpan RoutingLoopWindow = TimeSpan.FromMinutes(10);
     internal const string RoutingLoopError =
-        "Protection anti-boucle : cette transition de colonnes a déjà été répétée dans les 10 dernières minutes.";
+        "Protection anti-boucle : cette transition a été répétée sans progrès observable dans les 10 dernières minutes.";
 
     private static async Task EnsureTableAsync(TodoDbContext db)
     {
@@ -32,7 +36,10 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                     CompletedActionIdsJson TEXT NOT NULL DEFAULT '[]',
                     CurrentActionId TEXT NULL,
                     AgentCompleted INTEGER NOT NULL DEFAULT 0,
-                    AgentResultJson TEXT NULL
+                    AgentResultJson TEXT NULL,
+                    ProgressFingerprint TEXT NULL,
+                    ProgressSignalsJson TEXT NOT NULL DEFAULT '[]',
+                    LoopDiagnosticJson TEXT NULL
                 );
                 CREATE UNIQUE INDEX IF NOT EXISTS IX_ColumnExecutions_ActiveTicket
                     ON ColumnExecutions(TicketId)
@@ -49,6 +56,12 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         });
         await MigrationGate.RunOnceAsync(db, "column-executions-routing-loop-v1", static d =>
             MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN TargetColumnId INTEGER NULL"));
+        await MigrationGate.RunOnceAsync(db, "column-executions-progress-v1", static async d =>
+        {
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN ProgressFingerprint TEXT NULL");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN ProgressSignalsJson TEXT NOT NULL DEFAULT '[]'");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN LoopDiagnosticJson TEXT NULL");
+        });
     }
 
     public async Task<ColumnExecution?> ClaimNextAsync(string projectSlug, ColumnProcessor processor, DateTime now)
@@ -154,52 +167,56 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         var incoming = incomingExecutions.FirstOrDefault();
         if (incoming is not null)
         {
-            var repeated = incomingExecutions.Count(e => e.ProcessorId == incoming.ProcessorId);
-            if (repeated > 1)
+            var comparable = incomingExecutions.Where(e => e.ProcessorId == incoming.ProcessorId)
+                .OrderByDescending(e => e.EndedAt).Take(2).ToList();
+            if (comparable.Count == 2
+                && !string.IsNullOrWhiteSpace(comparable[0].ProgressFingerprint)
+                && string.Equals(comparable[0].ProgressFingerprint, comparable[1].ProgressFingerprint,
+                    StringComparison.Ordinal))
             {
                 var sourceProcessor = await db.ColumnProcessors.AsNoTracking()
                     .FirstOrDefaultAsync(p => p.Id == incoming.ProcessorId);
                 var sourceColumn = sourceProcessor is null
                     ? null
                     : await db.BoardColumns.AsNoTracking().FirstOrDefaultAsync(c => c.Id == sourceProcessor.ColumnId);
-                var failureColumn = processor.TechnicalFailureColumnId is int failureId
-                    ? await db.BoardColumns.FindAsync(failureId)
-                    : null;
+                var diagnostic = new
+                {
+                    windowMinutes = RoutingLoopWindow.TotalMinutes,
+                    sourceColumnId = sourceProcessor?.ColumnId,
+                    targetColumnId = processor.ColumnId,
+                    comparedExecutionIds = comparable.Select(e => e.Id).ToArray(),
+                    fingerprint = comparable[0].ProgressFingerprint,
+                    signals = JsonSerializer.Deserialize<JsonElement>(comparable[0].ProgressSignalsJson),
+                    reason = "same_transition_and_progress_fingerprint"
+                };
                 var protectedExecution = new ColumnExecution
                 {
                     Id = Guid.NewGuid().ToString("N"),
                     ProcessorId = processor.Id,
                     TicketId = selected.Id,
-                    Status = failureColumn is null ? ColumnExecutionStatus.Failed : ColumnExecutionStatus.Completed,
+                    Status = ColumnExecutionStatus.Failed,
                     Attempt = 0,
                     ClaimedAt = now,
                     EndedAt = now,
                     Outcome = "routing_loop",
                     Error = RoutingLoopError,
-                    TargetColumnId = failureColumn?.Id,
+                    TargetColumnId = null,
+                    ProgressFingerprint = comparable[0].ProgressFingerprint,
+                    ProgressSignalsJson = comparable[0].ProgressSignalsJson,
+                    LoopDiagnosticJson = JsonSerializer.Serialize(diagnostic),
                 };
                 db.ColumnExecutions.Add(protectedExecution);
                 var transition = $"{sourceColumn?.Name ?? "colonne précédente"} → {selected.Status}";
                 var oldStatus = selected.Status;
-                if (failureColumn is not null)
-                {
-                    ColumnAssignmentPolicy.Apply(selected, sourceColumn, failureColumn);
-                    selected.PipelineId = failureColumn.PipelineId;
-                    selected.ColumnId = failureColumn.Id;
-                    selected.Status = failureColumn.Name;
-                    selected.UpdatedAt = now;
-                }
                 db.ActivityEntries.Add(new ActivityEntry
                 {
                     TicketId = selected.Id,
                     Author = processor.Name,
-                    Text = failureColumn is null
-                        ? $"protection anti-boucle : transition {transition} répétée ; ticket maintenu dans {oldStatus}, intervention manuelle requise"
-                        : $"protection anti-boucle : transition {transition} répétée ; {oldStatus} → {failureColumn.Name}",
+                    Text = $"protection anti-boucle : transition {transition} répétée sans progrès " +
+                        $"(fenêtre 10 min, exécutions {string.Join(", ", comparable.Select(e => e.Id))}, " +
+                        $"empreinte {comparable[0].ProgressFingerprint}); ticket maintenu dans {oldStatus}, reprise manuelle disponible",
                 });
                 await db.SaveChangesAsync();
-                if (failureColumn is not null)
-                    tickets.NotifyStatusChanged(projectSlug, selected.Id, oldStatus, failureColumn.Name);
                 return null;
             }
         }
@@ -439,6 +456,15 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         row.Summary = result.Summary;
         row.EndedAt = DateTime.UtcNow;
         row.TargetColumnId = target.Id;
+        var comments = await db.Comments.AsNoTracking()
+            .Where(comment => comment.TicketId == ticket.Id && comment.CreatedAt >= row.ClaimedAt)
+            .OrderBy(comment => comment.Id)
+            .Select(comment => new ProgressComment(comment.Author, comment.Content))
+            .ToListAsync();
+        row.AgentResult = result;
+        var progress = BuildProgress(result, row.CompletedActionIds, comments);
+        row.ProgressFingerprint = progress.Fingerprint;
+        row.ProgressSignalsJson = JsonSerializer.Serialize(progress.Signals);
         db.ActivityEntries.Add(new ActivityEntry
         {
             TicketId = ticket.Id,
@@ -448,6 +474,43 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         await db.SaveChangesAsync();
         tickets.NotifyStatusChanged(projectSlug, ticket.Id, oldStatus, target.Name);
     }
+
+    private static (string Fingerprint, string[] Signals) BuildProgress(
+        ColumnAgentResult result, IReadOnlyCollection<string> completedActionIds,
+        IReadOnlyCollection<ProgressComment> comments)
+    {
+        var signals = new List<string> { $"outcome:{NormalizeProgressText(result.Outcome)}" };
+        var normalizedSummary = NormalizeProgressText(result.Summary);
+        if (normalizedSummary.Length > 0) signals.Add($"summary:{normalizedSummary}");
+        signals.AddRange(completedActionIds.Select(NormalizeProgressText)
+            .Where(value => value.Length > 0)
+            .Select(value => $"checkpoint:action:{value}"));
+        signals.AddRange(comments.Where(IsRelevantProgressComment)
+            .Select(comment => NormalizeProgressText(comment.Content))
+            .Where(value => value.Length > 0)
+            .Select(value => $"comment:{value}"));
+        var canonical = string.Join("\n", signals.Distinct(StringComparer.Ordinal));
+        return (Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant(),
+            signals.Distinct(StringComparer.Ordinal).ToArray());
+    }
+
+    private static string NormalizeProgressText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "";
+        var normalized = value.Normalize(NormalizationForm.FormKC).Trim().ToLowerInvariant();
+        normalized = Regex.Replace(normalized, @"\b\d{4}-\d{2}-\d{2}[t ][0-9:.+\-z]+\b", "<timestamp>");
+        normalized = Regex.Replace(normalized, @"[^\p{L}\p{N}<>]+", " ");
+        return Regex.Replace(normalized, @"\s+", " ").Trim();
+    }
+
+    private static bool IsRelevantProgressComment(ProgressComment comment)
+    {
+        var author = NormalizeProgressText(comment.Author);
+        if (author.Length == 0) return false;
+        return author is not "automation" and not "system" and not "kittyclaw";
+    }
+
+    private sealed record ProgressComment(string Author, string Content);
 
     public async Task FailAttemptAsync(
         string projectSlug, ColumnExecution execution, ColumnProcessor processor,

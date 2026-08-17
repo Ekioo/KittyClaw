@@ -42,6 +42,20 @@ At host startup, interrupted executions are recovered for every project, includi
 
 A route cannot point back to its source column. Repeating work is expressed through the explicit retry policy, avoiding accidental processing loops.
 
+The cross-column loop guard uses a ten-minute window and compares the two most recent
+occurrences of the same source-to-target transition. Each completed execution persists a
+SHA-256 progress fingerprint built from its persisted structured agent result (outcome and
+summary), completed action checkpoint ids, and relevant ticket comments added during the
+execution (including delivery references, diagnostics, and evidence). Comments authored by
+`automation`, `system`, or `kittyclaw` are excluded. Unicode compatibility, whitespace,
+case, punctuation, and ISO timestamp-only differences are normalized, so automatic or
+cosmetic noise cannot reset the guard. Replaying an already completed action is idempotent
+because checkpoint ids are deduplicated. The guard fires only when both transition and
+fingerprint repeat. Its synthetic execution stores the compared execution ids, window,
+fingerprint, accepted signals, and decision reason in `LoopDiagnosticJson`. The ticket stays
+in its current business column with its latest checkpoint intact; retrying the failed
+synthetic execution provides an explicit recovery path instead of routing to terminal failure.
+
 Technical failures use exponential backoff up to `MaxAttempts`. Once exhausted, the ticket can be routed to a dedicated technical-failure column. A failed execution can also be retried or cancelled through the API.
 
 An agent outcome of `scheduled` must include `fireAt` and `scheduleTarget`. Its configured route must lead to a column with the `Waiting` role; validation uses that stable role rather than the column's editable display name. The wake target must name an existing column in the destination pipeline.

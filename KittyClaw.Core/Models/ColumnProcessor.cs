@@ -162,6 +162,9 @@ public class ColumnExecution
     public string? Summary { get; set; }
     public string? Error { get; set; }
     public int? TargetColumnId { get; set; }
+    public string? ProgressFingerprint { get; set; }
+    public string ProgressSignalsJson { get; set; } = "[]";
+    public string? LoopDiagnosticJson { get; set; }
     public string CompletedActionIdsJson { get; set; } = "[]";
     public string? CurrentActionId { get; set; }
     public bool AgentCompleted { get; set; }
