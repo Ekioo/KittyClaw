@@ -31,7 +31,7 @@ if (string.IsNullOrEmpty(builder.Configuration["urls"]))
 // Used by isolated test instances (KittyClaw.QaRunner) and anyone running
 // multiple parallel KittyClaw processes that must not share registry/projects.
 var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-var dataDir = Environment.GetEnvironmentVariable("KITTYCLAW_DATA_DIR")
+var dataDir = builder.Configuration["KITTYCLAW_DATA_DIR"]
     ?? Path.Combine(appData, "KittyClaw");
 var legacyDataDir = Path.Combine(appData, "TodoApp");
 if (!Directory.Exists(dataDir) && Directory.Exists(legacyDataDir))
@@ -125,7 +125,7 @@ if (OperatingSystem.IsWindows())
 // http://localhost:5230/mcp`. Same trust boundary as the REST API (unauthenticated,
 // localhost, self-hosted single machine). It is opt-in: set KITTYCLAW_MCP_ENABLED=1
 // to register the tools and route. See doc/mcp.md.
-var mcpEnabledFlag = Environment.GetEnvironmentVariable("KITTYCLAW_MCP_ENABLED");
+var mcpEnabledFlag = builder.Configuration["KITTYCLAW_MCP_ENABLED"];
 var mcpEnabled = mcpEnabledFlag == "1"
     || string.Equals(mcpEnabledFlag, "true", StringComparison.OrdinalIgnoreCase);
 if (mcpEnabled)

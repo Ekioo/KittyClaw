@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using KittyClaw.Web.Api;
 using ModelContextProtocol.Client;
@@ -199,26 +200,22 @@ public sealed class McpEndpointTests : IClassFixture<McpEndpointTests.ApiFactory
     public sealed class ApiFactory : WebApplicationFactory<CreateProjectRequest>
     {
         private readonly string _dataDir;
-        private readonly string? _previousDataDir;
-        private readonly string? _previousMcpEnabled;
 
         public ApiFactory()
         {
-            _previousDataDir = Environment.GetEnvironmentVariable("KITTYCLAW_DATA_DIR");
-            _previousMcpEnabled = Environment.GetEnvironmentVariable("KITTYCLAW_MCP_ENABLED");
             _dataDir = Path.Combine(Path.GetTempPath(), "kittyclaw-mcp-endpoint-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_dataDir);
             File.WriteAllText(Path.Combine(_dataDir, "settings.json"),
                 """{"OnboardingSeen":true,"Language":"en"}""");
-            Environment.SetEnvironmentVariable("KITTYCLAW_DATA_DIR", _dataDir);
-            Environment.SetEnvironmentVariable("KITTYCLAW_MCP_ENABLED", "1");
         }
+
+        protected override void ConfigureWebHost(IWebHostBuilder builder) => builder
+            .UseSetting("KITTYCLAW_DATA_DIR", _dataDir)
+            .UseSetting("KITTYCLAW_MCP_ENABLED", "1");
 
         protected override void Dispose(bool disposing)
         {
             base.Dispose(disposing);
-            Environment.SetEnvironmentVariable("KITTYCLAW_MCP_ENABLED", _previousMcpEnabled);
-            Environment.SetEnvironmentVariable("KITTYCLAW_DATA_DIR", _previousDataDir);
             try { Directory.Delete(_dataDir, recursive: true); } catch { }
         }
     }
@@ -254,26 +251,22 @@ public sealed class McpDisabledByDefaultTests : IDisposable
     private sealed class DisabledFactory : WebApplicationFactory<CreateProjectRequest>
     {
         private readonly string _dataDir;
-        private readonly string? _previousDataDir;
-        private readonly string? _previousMcpEnabled;
 
         public DisabledFactory()
         {
-            _previousDataDir = Environment.GetEnvironmentVariable("KITTYCLAW_DATA_DIR");
-            _previousMcpEnabled = Environment.GetEnvironmentVariable("KITTYCLAW_MCP_ENABLED");
             _dataDir = Path.Combine(Path.GetTempPath(), "kittyclaw-mcp-disabled-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_dataDir);
             File.WriteAllText(Path.Combine(_dataDir, "settings.json"),
                 """{"OnboardingSeen":true,"Language":"en"}""");
-            Environment.SetEnvironmentVariable("KITTYCLAW_DATA_DIR", _dataDir);
-            Environment.SetEnvironmentVariable("KITTYCLAW_MCP_ENABLED", null);
         }
+
+        protected override void ConfigureWebHost(IWebHostBuilder builder) => builder
+            .UseSetting("KITTYCLAW_DATA_DIR", _dataDir)
+            .UseSetting("KITTYCLAW_MCP_ENABLED", "0");
 
         protected override void Dispose(bool disposing)
         {
             base.Dispose(disposing);
-            Environment.SetEnvironmentVariable("KITTYCLAW_MCP_ENABLED", _previousMcpEnabled);
-            Environment.SetEnvironmentVariable("KITTYCLAW_DATA_DIR", _previousDataDir);
             try { Directory.Delete(_dataDir, recursive: true); } catch { }
         }
     }

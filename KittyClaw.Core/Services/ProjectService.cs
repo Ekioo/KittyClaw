@@ -91,8 +91,7 @@ public partial class ProjectService
         // Script actions need a real working directory even before the user assigns an
         // external workspace to a newly created project.
         Directory.CreateDirectory(ResolveWorkspacePath(project));
-        await using var projectDb = new TodoDbContext(projectDbPath);
-        await projectDb.Database.EnsureCreatedAsync();
+        await using var projectDb = GetProjectDb(slug);
 
         return project;
     }
@@ -308,19 +307,30 @@ public partial class ProjectService
         return Path.Combine(_dataDir, "projects", $"{slug}.db");
     }
 
-    private static readonly ConcurrentDictionary<string, bool> _schemaCreated = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, Lazy<bool>> _schemaCreated = new(StringComparer.OrdinalIgnoreCase);
 
     public TodoDbContext GetProjectDb(string slug)
     {
         var path = GetProjectDbPath(slug);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var db = new TodoDbContext(path);
-        // EnsureCreated is a full schema comparison on every call — run it once per db file.
-        // A concurrently deleted file is handled by the Invalidate call in DeleteProjectAsync.
-        if (_schemaCreated.TryAdd(path, true))
+        // Publish a completion gate, not merely an "initialization started" marker. A project
+        // becomes visible in the registry just before its database is created, so background
+        // services can reach this method concurrently with CreateProjectAsync.
+        var schema = _schemaCreated.GetOrAdd(path, static dbPath => new Lazy<bool>(() =>
         {
-            try { db.Database.EnsureCreated(); }
-            catch { _schemaCreated.TryRemove(path, out _); throw; }
+            using var initializer = new TodoDbContext(dbPath);
+            return initializer.Database.EnsureCreated();
+        }, LazyThreadSafetyMode.ExecutionAndPublication));
+        try
+        {
+            _ = schema.Value;
+        }
+        catch
+        {
+            _schemaCreated.TryRemove(new KeyValuePair<string, Lazy<bool>>(path, schema));
+            db.Dispose();
+            throw;
         }
         return db;
     }
