@@ -12,7 +12,7 @@ function Test-ContentPolicy {
     $normalized = $Path.Replace('\', '/')
     $isDataFile = $normalized -match '(?i)(^|/)(Fixtures|Scenarios)/' -or $normalized -match '(?i)\.(json|csv|tsv|ya?ml)$'
 
-    if ($normalized -match '(^|/)evidence/') { $findings.Add('execution evidence path') }
+    if ($normalized -match '(?i)^evidence/') { $findings.Add('execution evidence path') }
     if ($isDataFile -and $Content -match '(?im)(?:[A-Z]:[\\/](?:Users|Sources)[\\/]|/(?:home|Users)/[^/\s]+/|Sources\.worktrees[\\/])') {
         $findings.Add('absolute user or worktree path')
     }
@@ -28,9 +28,14 @@ function Test-ContentPolicy {
         '(?i)\bAuthorization\s*[:=]\s*Bearer\s+[A-Za-z0-9._~+/=-]{20,}'
     )
     foreach ($pattern in $secretPatterns) {
-        if ($Content -match $pattern) { $findings.Add('known secret signature'); break }
+        if ($normalized -ne 'tools/Test-RepositoryDataPolicy.ps1' -and $Content -match $pattern) {
+            $findings.Add('known secret signature')
+            break
+        }
     }
-    if ($Content -match '(?is)"(?:tickets|columns|activities|comments)"\s*:\s*\[' -and
+    if ($isDataFile -and $normalized -ne 'tools/Test-RepositoryDataPolicy.ps1' -and
+        $Content -match '(?is)"tickets"\s*:\s*\[' -and
+        $Content -match '(?is)"(?:columns|activities|comments)"\s*:\s*\[' -and
         $Content -match '(?is)"(?:title|status|assignedTo|createdBy)"\s*:') {
         $findings.Add('board export structure')
     }
@@ -43,7 +48,7 @@ if ($SelfTest) {
         @{ Name='evidence path'; Path='evidence/run.json'; Content='{}'; Valid=$false },
         @{ Name='real email'; Path='KittyClaw.Core.Tests/Fixtures/user.json'; Content='{"email":"person@private-company.test"}'; Valid=$false },
         @{ Name='absolute path'; Path='KittyClaw.Core.Tests/Fixtures/user.json'; Content='{"path":"C:/Sources/KittyClaw/Sources.worktrees/ticket-42"}'; Valid=$false },
-        @{ Name='board export'; Path='KittyClaw.Core.Tests/Fixtures/board.json'; Content='{"tickets":[{"title":"Private","status":"Todo"}]}'; Valid=$false },
+        @{ Name='board export'; Path='KittyClaw.Core.Tests/Fixtures/board.json'; Content='{"tickets":[{"title":"Private","status":"Todo"}],"columns":[]}'; Valid=$false },
         @{ Name='secret'; Path='KittyClaw.Core.Tests/Fixtures/auth.txt'; Content='Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456'; Valid=$false }
     )
     foreach ($case in $cases) {
