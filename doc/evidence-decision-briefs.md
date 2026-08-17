@@ -4,7 +4,7 @@
 Capture structured evidence from agent runs and turn it into a concise, traceable brief for a human decision. The brief distinguishes verified observations from agent claims, reports missing, stale, or contradictory evidence, and keeps acceptance, correction, and stop decisions auditable.
 
 ## Key components
-- `KittyClaw.Core/Evidence/TicketEvidence.cs` and `EvidenceStore.cs` — evidence schema and in-memory ticket evidence store.
+- `KittyClaw.Core/Evidence/TicketEvidence.cs` and `EvidenceStore.cs` — evidence schema and durable, project-scoped evidence store persisted on disk.
 - `KittyClaw.Core/Evidence/RunEvidenceCapture.cs` and `RunEvidenceAttacher.cs` — capture command, test, repository, and run observations and attach them to tickets.
 - `KittyClaw.Core/Evidence/ProvenanceRules.cs` — classifies evidence trust and preserves claim provenance.
 - `KittyClaw.Core/Evidence/DecisionBriefComposer.cs` and `TicketDecisionBrief.cs` — compose the canonical brief, findings, metrics, contributing run IDs, and requested decision.
