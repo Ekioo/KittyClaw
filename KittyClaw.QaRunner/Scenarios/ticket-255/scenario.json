@@ -1,0 +1,56 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "qa-ticket-255" },
+    {
+      "type": "createTicket",
+      "project": "qa-ticket-255",
+      "title": "Latest column remains visible",
+      "status": "Todo"
+    }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-ticket-255" },
+    { "type": "wait", "ms": 700 },
+    {
+      "type": "dragAndDrop",
+      "selector": "[data-column-status='Todo'] [data-ticket-id='{ticketId}']",
+      "target": "[data-column-status='InProgress']"
+    },
+    { "type": "wait", "ms": 700 },
+    { "type": "assertCount", "selector": "[data-column-status='Todo'] [data-ticket-id='{ticketId}']", "expected": "0" },
+    { "type": "assertCount", "selector": "[data-column-status='InProgress'] [data-ticket-id='{ticketId}']", "expected": "1" },
+    { "type": "assertCount", "selector": "[data-ticket-id='{ticketId}']", "expected": "1" },
+    {
+      "type": "screenshot",
+      "name": "ticket-255-project-board-ui-move",
+      "selector": ".board",
+      "description": "Project board after a real UI drag from Todo to InProgress: the ticket appears once in InProgress."
+    },
+    { "type": "setStatus", "project": "qa-ticket-255", "status": "Review" },
+    { "type": "setStatus", "project": "qa-ticket-255", "status": "Done" },
+    { "type": "wait", "ms": 1200 },
+    { "type": "assertCount", "selector": "[data-column-status='Todo'] [data-ticket-id='{ticketId}']", "expected": "0" },
+    { "type": "assertCount", "selector": "[data-column-status='InProgress'] [data-ticket-id='{ticketId}']", "expected": "0" },
+    { "type": "assertCount", "selector": "[data-column-status='Done'] [data-ticket-id='{ticketId}']", "expected": "1" },
+    { "type": "assertCount", "selector": "[data-ticket-id='{ticketId}']", "expected": "1" },
+    {
+      "type": "screenshot",
+      "name": "ticket-255-project-board-final-column",
+      "selector": "[data-column-status='Done']",
+      "description": "Focused project-board final column after rapid external moves: the ticket appears exactly once in Done."
+    },
+    { "type": "navigate", "url": "/" },
+    { "type": "wait", "ms": 700 },
+    { "type": "setStatus", "project": "qa-ticket-255", "status": "Review" },
+    { "type": "wait", "ms": 1200 },
+    { "type": "assertCount", "selector": "[data-project-slug='qa-ticket-255'][data-ticket-id='{ticketId}']", "expected": "1" },
+    { "type": "assertCount", "selector": "[data-column-status='Done'] [data-project-slug='qa-ticket-255'][data-ticket-id='{ticketId}']", "expected": "0" },
+    { "type": "assertCount", "selector": "[data-column-status='Review'] [data-project-slug='qa-ticket-255'][data-ticket-id='{ticketId}']", "expected": "1" },
+    {
+      "type": "screenshot",
+      "name": "ticket-255-unified-board-final-column",
+      "description": "Unified board after an external API move: the ticket appears once, only in Review."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

@@ -225,6 +225,11 @@ public sealed class ScenarioRunner
             case "click":
                 await page.ClickAsync(Required(Resolve(action.Selector), "click.selector"));
                 break;
+            case "dragAndDrop":
+                await page.DragAndDropAsync(
+                    Required(Resolve(action.Selector), "dragAndDrop.selector"),
+                    Required(Resolve(action.Target), "dragAndDrop.target"));
+                break;
             case "assertInteractionDuration":
                 {
                     var selector = Required(Resolve(action.Selector), "assertInteractionDuration.selector");
@@ -278,7 +283,14 @@ public sealed class ScenarioRunner
                 {
                     var name = Resolve(action.Name ?? $"screenshot-{result.Screenshots.Count + 1}");
                     var path = Path.Combine(_screenshotDir, $"{name}.png");
-                    await page.ScreenshotAsync(new() { Path = path, FullPage = true });
+                    if (string.IsNullOrWhiteSpace(action.Selector))
+                    {
+                        await page.ScreenshotAsync(new() { Path = path, FullPage = true });
+                    }
+                    else
+                    {
+                        await page.Locator(Resolve(action.Selector)).ScreenshotAsync(new() { Path = path });
+                    }
                     result.Screenshots.Add(new ScreenshotEntry
                     {
                         Name = name,

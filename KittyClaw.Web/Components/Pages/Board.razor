@@ -12,6 +12,7 @@
 @inject KittyClaw.Web.Services.BoardFilterState FilterState
 @inject KittyClaw.Web.Services.BoardSortState SortState
 @inject KittyClaw.Web.Services.BoardUpdateNotifier BoardUpdateNotifier
+@inject ILogger<Board> Logger
 @inject KittyClaw.Web.Services.AgentRunsState AgentRuns
 @inject ColumnService ColumnService
 @inject PipelineService PipelineService
@@ -104,6 +105,7 @@ else
                         @onclick="() => OpenCreateColumn(colIndex)">+</button>
             </div>
             <div @key="col.Id" class="column @(_draggedColumn?.Id == col.Id ? "column-dragging" : "") @ticketDropClass"
+                 data-column-status="@col.Name"
                  style="--col-color: @col.Color"
                  @ondragover="(e) => OnDragOverColumn(col.Name, e)"
                  @ondragover:preventDefault="@ticketDropAllowed"
@@ -530,6 +532,7 @@ else
     private Dictionary<string, int> _loadedPerColumn = new();
     private DateTime? _lastVisitedAt;
     private Dictionary<int, DateTime> _viewedAt = new();
+    private readonly LatestRefreshGuard _ticketRefreshGuard = new();
 
     private bool IsTicketUpdated(TicketSummary ticket)
     {
@@ -569,7 +572,9 @@ else
 
     private async Task RefreshTicketsAsync()
     {
-        _tickets = await TicketService.ListTicketsAsync(Slug);
+        await _ticketRefreshGuard.ApplyLatestAsync(
+            () => TicketService.ListTicketsAsync(Slug),
+            tickets => _tickets = tickets);
     }
 
     private async Task LoadSelectedPipelineColumnsAsync()
@@ -727,7 +732,7 @@ else
             _selectedPipelineId = PipelineId;
             await LoadSelectedPipelineColumnsAsync();
             ResetLoadedColumns();
-            _tickets = await TicketService.ListTicketsAsync(Slug);
+            await RefreshTicketsAsync();
             _allMembers = await MemberService.ListMembersAsync(Slug);
 
             // A legacy board deserves an explicit migration path, but opening a deep-linked
@@ -762,13 +767,20 @@ else
     private void OnProjectUpdatedExternal(string slug)
     {
         if (slug != Slug) return;
-        InvokeAsync(async () =>
+        _ = InvokeAsync(async () =>
         {
-            await LoadSelectedPipelineColumnsAsync();
-            ResetLoadedColumns();
-            _tickets = await TicketService.ListTicketsAsync(Slug);
-            _allMembers = await MemberService.ListMembersAsync(Slug);
-            StateHasChanged();
+            try
+            {
+                await LoadSelectedPipelineColumnsAsync();
+                ResetLoadedColumns();
+                await RefreshTicketsAsync();
+                _allMembers = await MemberService.ListMembersAsync(Slug);
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Unable to refresh board for project {ProjectSlug}", Slug);
+            }
         });
     }
 

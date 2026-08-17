@@ -176,11 +176,12 @@ These require Playwright (run inside `actions`, after setup).
 | `navigate`     | `url` (relative or absolute)             | Goes to the URL on the test instance.                                 |
 | `assertNavigationDuration` | `url`, `waitForSelector`, `maxMs` | Navigates, waits for visible content, and asserts elapsed time. |
 | `click`        | `selector`                               | CSS selector click.                                                   |
+| `dragAndDrop`  | `selector`, `target`                     | Drag the source element onto the target element.                       |
 | `assertInteractionDuration` | `selector`, `waitForSelector`, `maxMs` | Clicks, waits for the target to become visible, and asserts elapsed time. |
 | `fill`         | `selector`, `value`                      | Set input value.                                                      |
 | `selectOption` | `selector`, `value`                      | Select an option by value.                                            |
 | `wait`         | `ms`                                     | Pause N ms.                                                           |
-| `screenshot`   | `name`, optional `description`           | Full-page PNG. Uploaded post-run, URL placed in `result.screenshots`. |
+| `screenshot`   | `name`, optional `description`, `selector` | Full-page PNG, or a focused element PNG when `selector` is provided. Uploaded post-run. |
 | `assertCss`    | `selector`, `property`, `expected`       | Reads `getComputedStyle(...).getPropertyValue(prop)`.                 |
 | `assertText`   | `selector`, `expected`                   | Reads `textContent`.                                                  |
 | `assertVisible`| `selector`                               | Asserts element is visible.                                           |

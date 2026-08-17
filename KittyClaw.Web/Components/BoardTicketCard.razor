@@ -2,6 +2,7 @@
 @inject LocalizationService L
 
 <div class="ticket-card @(IsSelected ? "selected" : "") @(IsDragging ? "dragging" : "") @(IsCardTarget ? "drop-target" : "") @(IsUpdated ? "ticket-updated" : "") @(ColRole == ColumnRole.OwnerAction ? "ticket-owner-action" : "")"
+     data-ticket-id="@Ticket.Id"
      draggable="true"
      @ondragstart="OnDragStartHandler"
      @ondragend="OnDragEndHandler"

@@ -10,6 +10,7 @@
 @inject ColumnProcessorService ProcessorService
 @inject MemberService MemberService
 @inject KittyClaw.Web.Services.BoardUpdateNotifier BoardUpdateNotifier
+@inject ILogger<UnifiedBoard> Logger
 @inject KittyClaw.Web.Services.BoardSortState SortState
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
@@ -154,6 +155,7 @@ else
                             var isSourceLane = _draggedFromSlug == slug;
                             var isDropHover = isSourceLane && _dragOverStatus == col.Name;
                             <div @key="col.Id" class="column @(isDropHover ? "column-drop-hover" : "")"
+                                 data-column-status="@col.Name"
                                  style="--col-color: @col.Color"
                                  @oncontextmenu="e => OpenSortMenu(slug, col.Name, e)"
                                  @oncontextmenu:preventDefault
@@ -354,6 +356,7 @@ else
     private readonly Dictionary<string, bool> _collapsed = new(StringComparer.OrdinalIgnoreCase);
     private bool _prefsLoaded;
     private string _filterText = "";
+    private readonly Dictionary<string, LatestRefreshGuard> _laneRefreshGuards = new(StringComparer.OrdinalIgnoreCase);
 
     // Home display mode: "cards" (project grid) or "kanban" (unified swimlanes), persisted
     // per browser. Kanban is the default for a fresh browser.
@@ -477,6 +480,25 @@ else
             .Select(processor => processor.ColumnId)
             .ToHashSet();
         return new LaneData(project, pipelines, selectedPipelineId, columns, activeProcessorColumnIds, ticketsTask.Result, membersTask.Result);
+    }
+
+    private LatestRefreshGuard LaneRefreshGuard(string slug)
+    {
+        if (!_laneRefreshGuards.TryGetValue(slug, out var guard))
+            _laneRefreshGuards[slug] = guard = new LatestRefreshGuard();
+        return guard;
+    }
+
+    private async Task RefreshLaneAsync(Project project, int? selectedPipelineId)
+    {
+        await LaneRefreshGuard(project.Slug).ApplyLatestAsync(
+            () => LoadLaneAsync(project, selectedPipelineId),
+            lane =>
+            {
+                var currentIndex = _lanes?.FindIndex(current => current.Project.Slug == project.Slug) ?? -1;
+                if (currentIndex >= 0)
+                    _lanes![currentIndex] = lane;
+            });
     }
 
     private async Task SelectPipelineAsync(LaneData lane, int pipelineId)
@@ -685,7 +707,7 @@ else
             {
                 var index = _lanes.FindIndex(lane => lane.Project.Slug == slug);
                 if (index >= 0)
-                    _lanes[index] = await LoadLaneAsync(_lanes[index].Project, _lanes[index].SelectedPipelineId);
+                    await RefreshLaneAsync(_lanes[index].Project, _lanes[index].SelectedPipelineId);
             }
 
             _creatingTicket = false;
@@ -753,7 +775,7 @@ else
         var idx = _lanes.FindIndex(l => l.Project.Slug == _panelSlug);
         if (idx >= 0)
         {
-            _lanes[idx] = await LoadLaneAsync(_lanes[idx].Project, _lanes[idx].SelectedPipelineId);
+            await RefreshLaneAsync(_lanes[idx].Project, _lanes[idx].SelectedPipelineId);
             StateHasChanged();
         }
     }
@@ -827,15 +849,17 @@ else
         var idx = lanes.FindIndex(l => l.Project.Slug == slug);
         if (idx >= 0)
         {
-            lanes[idx] = await LoadLaneAsync(lanes[idx].Project, lanes[idx].SelectedPipelineId);
+            await RefreshLaneAsync(lanes[idx].Project, lanes[idx].SelectedPipelineId);
             StateHasChanged();
         }
     }
 
     private void OnProjectUpdatedExternal(string slug)
     {
-        InvokeAsync(async () =>
+        _ = InvokeAsync(async () =>
         {
+            try
+            {
             // Keep the lightweight project list (cards mode) in sync regardless of lanes.
             if (_projects is not null)
             {
@@ -871,8 +895,13 @@ else
                 return;
             }
 
-            _lanes[idx] = await LoadLaneAsync(refreshedProject, _lanes[idx].SelectedPipelineId);
+            await RefreshLaneAsync(refreshedProject, _lanes[idx].SelectedPipelineId);
             StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Unable to refresh unified board lane for project {ProjectSlug}", slug);
+            }
         });
     }
 
