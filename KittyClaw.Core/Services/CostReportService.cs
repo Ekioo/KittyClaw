@@ -95,6 +95,7 @@ public sealed class CostReportService(ProjectService projects, PipelineService p
             {
                 var directory = Path.Combine(projects.ResolveWorkspacePath(project), ".agents", "channel");
                 if (!Directory.Exists(directory)) continue;
+                var projectEntries = new List<CostLogEntry>();
                 foreach (var file in Directory.EnumerateFiles(directory, "cost-log*.jsonl").OrderBy(x => x, StringComparer.Ordinal))
                 foreach (var line in File.ReadLines(file))
                 {
@@ -103,13 +104,23 @@ public sealed class CostReportService(ProjectService projects, PipelineService p
                     if (entry is null || (entry.RunId is not null && !seenRuns.Add(entry.RunId))) continue;
                     var day = DateOnly.FromDateTime(entry.At.ToLocalTime());
                     if (day < filter.From || day > filter.To) continue;
+                    projectEntries.Add(entry);
+                }
+
+                var legacyTicketIds = projectEntries
+                    .Where(entry => entry.PipelineId is null && entry.TicketId is not null)
+                    .Select(entry => entry.TicketId!.Value)
+                    .Distinct()
+                    .ToList();
+                var ticketPipelines = await tickets.GetPipelineIdsAsync(project.Slug, legacyTicketIds);
+                foreach (var entry in projectEntries)
+                {
+                    var day = DateOnly.FromDateTime(entry.At.ToLocalTime());
                     var pipelineId = entry.PipelineId;
                     var pipelineUnknown = false;
                     if (pipelineId is null && entry.TicketId is int ticketId)
                     {
-                        var ticket = await tickets.GetTicketAsync(project.Slug, ticketId);
-                        pipelineId = ticket?.PipelineId;
-                        pipelineUnknown = ticket is null;
+                        pipelineUnknown = !ticketPipelines.TryGetValue(ticketId, out pipelineId);
                     }
                     var pipelineKey = pipelineUnknown
                         ? $"{project.Slug}:{UnknownPipelineSuffix}"
@@ -141,15 +152,17 @@ public sealed class CostReportService(ProjectService projects, PipelineService p
     {
         var directory = Path.Combine(projects.ResolveWorkspacePath(project), ".agents", "channel");
         if (!Directory.Exists(directory)) return false;
+        var legacyTicketIds = new HashSet<int>();
         foreach (var file in Directory.EnumerateFiles(directory, "cost-log*.jsonl"))
         foreach (var line in File.ReadLines(file))
         {
             CostLogEntry? entry;
             try { entry = JsonSerializer.Deserialize<CostLogEntry>(line); } catch { continue; }
-            if (entry is { PipelineId: null, TicketId: int ticketId }
-                && await tickets.GetTicketAsync(project.Slug, ticketId) is null)
-                return true;
+            if (entry is { PipelineId: null, TicketId: int ticketId })
+                legacyTicketIds.Add(ticketId);
         }
-        return false;
+        if (legacyTicketIds.Count == 0) return false;
+        var existing = await tickets.GetPipelineIdsAsync(project.Slug, legacyTicketIds);
+        return legacyTicketIds.Any(ticketId => !existing.ContainsKey(ticketId));
     }
 }

@@ -100,6 +100,28 @@ public sealed class CostReportServiceTests
     }
 
     [Fact]
+    public async Task RepeatedLegacyEntries_ResolveTicketPipelineInOneSetBasedLookup()
+    {
+        using var temp = new TempDir();
+        var projects = new ProjectService(temp.Path);
+        var project = await projects.CreateProjectAsync("Legacy costs");
+        var tickets = new TicketService(projects, new MemberService(projects));
+        var ticket = await tickets.CreateTicketAsync(project.Slug, "Legacy ticket");
+        var service = new CostReportService(projects, new PipelineService(projects), tickets);
+        var day = DateOnly.FromDateTime(DateTime.Now);
+        Write(projects.ResolveWorkspacePath(project), "cost-log.jsonl",
+            Enumerable.Range(0, 500)
+                .Select(index => Entry(day, 1m, project.Slug, pipeline: null,
+                    ticketId: ticket.Id, run: $"legacy-{index}"))
+                .ToArray());
+
+        var report = await service.GetReportAsync(
+            new(day, day, PipelineKey: $"{project.Slug}:{ticket.PipelineId}"));
+
+        Assert.Equal(500m, report.TotalUsd);
+    }
+
+    [Fact]
     public async Task DateRange_UsesInstanceLocalDayAtUtcBoundary()
     {
         using var temp = new TempDir();

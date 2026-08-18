@@ -329,6 +329,27 @@ public class TicketService
     }
 
     /// <summary>
+    /// Resolves only the pipeline metadata needed by legacy cost entries. Keeping this
+    /// lookup set-based avoids hydrating every ticket, comment, activity and dependency
+    /// while rendering the cost report.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<int, int?>> GetPipelineIdsAsync(
+        string projectSlug,
+        IReadOnlyCollection<int> ticketIds)
+    {
+        if (ticketIds.Count == 0)
+            return new Dictionary<int, int?>();
+
+        var distinctIds = ticketIds.Distinct().ToList();
+        await using var db = _projectService.GetProjectDb(projectSlug);
+        return await db.Tickets
+            .AsNoTracking()
+            .Where(ticket => distinctIds.Contains(ticket.Id))
+            .Select(ticket => new { ticket.Id, ticket.PipelineId })
+            .ToDictionaryAsync(ticket => ticket.Id, ticket => (int?)ticket.PipelineId);
+    }
+
+    /// <summary>
     /// Creates a directed "blocked-by" edge: <paramref name="ticketId"/> is blocked by
     /// <paramref name="blockedById"/>. Validates all rejection cases atomically.
     /// </summary>
