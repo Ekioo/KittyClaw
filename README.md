@@ -147,7 +147,6 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 - Ticket detail panel with comments and activity timeline
 - Live agent run drawer (SSE stream of provider output, steer + stop controls)
 - New-instruction chat drawer to send an ad-hoc prompt to an agent
-- Automations page: list, enable/disable, edit (triggers / conditions / actions), reload from disk, re-initialize agent template
 - Markdown rendering with `@mention`, `#id`, and `#{slug}:{id}` cross-project ticket reference support
 - Advanced search syntax: `#42`, `@owner`, `>date`, `priority:critical`, `label:bug`, `by:owner`
 - Sub-tickets with parent/child relationships and progress tracking
@@ -155,7 +154,7 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 - Column management directly from the board (insert, duplicate, reorder, configure, and mark read)
 - Label and member management
 - Image upload in descriptions and comments
-- Local model support ([Ollama](doc/local-models.md)): per-project base URL with model autodiscovery, per-member default model, per-action override in the Automation Editor
+- Local model support ([Ollama](doc/local-models.md)): per-project base URL with model autodiscovery, per-member default model, and per-action configuration in `.agents/automations.json`
 - Provider-aware dispatch through Claude Code, [OpenAI Codex](doc/codex-cli.md), [Grok Build](doc/grok-build.md), [Mistral Vibe](doc/mistral-vibe.md), or Ollama, with conversation handoff and unavailable-model fallback
 
 ## Dashboard

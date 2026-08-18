@@ -5,7 +5,7 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 
 ## Key components
 - `KittyClaw.Web/` — Blazor Server app (`@rendermode InteractiveServer`).
-- `KittyClaw.Web/wwwroot/css/` — application stylesheet, split into cohesive files loaded in order via `App.razor` (`base.css`, `shared.css`, `board.css`, `ticket-card.css`, `ticket-panel.css`, `agent-run.css`, `settings.css`, `automations.css`, `chat.css`, `dashboard.css`, `home.css`, `settings-editor.css`).
+- `KittyClaw.Web/wwwroot/css/` — application stylesheet, split into cohesive files loaded in order via `App.razor` (`base.css`, `shared.css`, `board.css`, `ticket-card.css`, `ticket-panel.css`, `agent-run.css`, `settings.css`, `chat.css`, `dashboard.css`, `home.css`, `settings-editor.css`).
 - `KittyClaw.Web/wwwroot/js/` — JS interop helpers.
 - `KittyClaw.Web/Services/BoardFilterState.cs` — per-circuit (scoped) service holding the board search filter text. Registered as `AddScoped` so each browser tab gets an independent instance; a Singleton registration would cause filter text typed in one tab to appear in all other open tabs.
 - `KittyClaw.Web/Services/BoardSortState.cs` — singleton service that holds per-column sort settings (mode + direction) keyed by `slug\0column`. Exposes `ApplySort` to reorder a ticket list by Title, Priority, Assignee, CreatedAt, or UpdatedAt with ascending/descending direction. Manual mode (default) leaves the original order unchanged.
@@ -33,7 +33,6 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 - Live agent run drawer (SSE stream of Claude Code output, steer + stop controls). Failed steer, stop, and retry requests leave the drawer open and display a concise French error so the action can be attempted again.
 - Animated spinner badge on project cards (`Home.razor`) when one or more agent runs are active for that project (sourced from `AgentRunsState`).
 - New-instruction chat drawer to send an ad-hoc prompt to an agent, with image paste support (paste screenshots or images directly into the textarea; thumbnails shown before send; up to 5 images per turn). Each conversation keeps its selected model across turns and drawer reopenings. New conversations use the last available model selected for the project in the same browser; resetting a conversation clears its server-side model binding. When the agent invokes `AskUserQuestion`, the chat drawer renders an interactive prompt widget — either multiple-choice buttons or a free-text textarea — and the user's answer is sent back via the `/steer` endpoint. Answered widgets are locked in place so history remains readable.
-- Automations page: list, enable/disable, edit (triggers / conditions / actions), reload from disk, re-initialize agent template.
 - Markdown rendering with `@mention`, `#id`, and `#{slug}:{id}` cross-project ticket references.
 - Advanced search syntax: `#42`, `@owner`, `>date`, `priority:critical`, `label:bug`, `by:owner`.
 - Sub-tickets with parent/child relationships and progress tracking.
@@ -52,4 +51,4 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 ## External dependencies
 - [Storage](./storage.md) — domain services for tickets, columns, members, labels.
 - [Agent dispatch](./agent-dispatch.md) — backs the run drawer and the new-instruction chat.
-- [Automation engine](./automation-engine.md) — backs the Automations page.
+- [Automation engine](./automation-engine.md) — remains available through its configuration file and API without a legacy editor in the Kanban UI.

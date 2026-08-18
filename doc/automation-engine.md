@@ -56,7 +56,7 @@ This is the legacy, backward-compatible automation system. New business-state wo
 ## Entry points
 - Hosted at app startup via DI in `KittyClaw.Web/Program.cs`.
 - Per-project configuration loaded from `<workspace>/.agents/automations.json` (seeded by the [project template](./project-template.md)).
-- Editable from the in-app **Automations** page.
+- Configuration remains available through `<workspace>/.agents/automations.json` and the REST API; the legacy in-app editor is no longer exposed.
 
 ## External dependencies
 - [Agent dispatch](./agent-dispatch.md) — the `runAgent` action launches the `claude` CLI through it.
