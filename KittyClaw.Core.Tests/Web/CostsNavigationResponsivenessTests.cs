@@ -27,11 +27,25 @@ public sealed class CostsNavigationResponsivenessTests
     }
 
     [Fact]
+    public void CostPage_OffersQuickDateRangesAndKeepsManualDatesCustom()
+    {
+        var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Costs.razor"));
+
+        Assert.Contains("DatePreset.CurrentMonth", source, StringComparison.Ordinal);
+        Assert.Contains("DatePreset.PreviousMonth", source, StringComparison.Ordinal);
+        Assert.Contains("DatePreset.LastThreeMonths", source, StringComparison.Ordinal);
+        Assert.Contains("DatePreset.CurrentYear", source, StringComparison.Ordinal);
+        Assert.Contains("_activePreset = null", source, StringComparison.Ordinal);
+        Assert.Contains("await Reload();", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CostPageStyles_ContainResponsiveLayoutAndBoundedOverflow()
     {
         var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "wwwroot", "css", "costs.css"));
 
         Assert.Contains(".cost-project-card-grid", source, StringComparison.Ordinal);
+        Assert.Contains(".cost-date-preset.is-active", source, StringComparison.Ordinal);
         Assert.Contains("@media (max-width: 560px)", source, StringComparison.Ordinal);
         Assert.Contains("prefers-reduced-motion: reduce", source, StringComparison.Ordinal);
     }

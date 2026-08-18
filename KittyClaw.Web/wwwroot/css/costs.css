@@ -52,7 +52,14 @@
 .cost-field input:focus,
 .cost-field select:focus,
 .cost-project-picker summary:focus-visible,
-.cost-project-option input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.cost-project-option input:focus-visible,
+.cost-date-preset:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+.cost-date-presets { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; margin-top: .85rem; padding-top: .85rem; border-top: 1px solid var(--border); }
+.cost-date-presets-label { margin-right: .2rem; color: var(--text-muted); font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.cost-date-preset { min-height: 32px; padding: .38rem .7rem; border: 1px solid var(--border-strong); border-radius: 999px; background: rgba(5, 5, 10, .28); color: var(--text-muted); font: inherit; font-size: .78rem; font-weight: 600; cursor: pointer; transition: border-color .15s ease, background .15s ease, color .15s ease, transform .15s ease; }
+.cost-date-preset:hover { border-color: #6d6da1; color: var(--text); transform: translateY(-1px); }
+.cost-date-preset.is-active { border-color: rgba(34, 197, 94, .7); background: rgba(34, 197, 94, .13); color: #86efac; box-shadow: inset 0 0 0 1px rgba(34, 197, 94, .08); }
 
 .cost-project-picker { position: relative; min-width: 0; }
 .cost-project-picker summary { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: .15rem .75rem; padding: .45rem 2.4rem .45rem .75rem; cursor: pointer; list-style: none; }
@@ -109,6 +116,9 @@
     .cost-project-card-grid,
     .cost-skeleton-projects { grid-template-columns: minmax(0, 1fr); }
     .cost-filter-card { padding: .8rem; }
+    .cost-date-presets { align-items: stretch; }
+    .cost-date-presets-label { flex-basis: 100%; }
+    .cost-date-preset { flex: 1 1 calc(50% - .45rem); }
     .cost-project-menu { width: 100%; }
     .cost-project-cost-card { min-height: 195px; }
 }
@@ -116,5 +126,6 @@
 @media (prefers-reduced-motion: reduce) {
     .cost-skeleton::after { animation: none; }
     .cost-picker-chevron,
-    .costs-back-link { transition: none; }
+    .costs-back-link,
+    .cost-date-preset { transition: none; }
 }

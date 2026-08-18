@@ -39,6 +39,14 @@
                 </fieldset>
             </details>
         </div>
+        <div class="cost-date-presets" role="group" aria-label="@L["QuickPeriod"]">
+            <span class="cost-date-presets-label">@L["QuickPeriod"]</span>
+            <button type="button" class="@PresetClass(DatePreset.Last30Days)" @onclick="() => ApplyDatePreset(DatePreset.Last30Days)">@L["Last30Days"]</button>
+            <button type="button" class="@PresetClass(DatePreset.CurrentMonth)" @onclick="() => ApplyDatePreset(DatePreset.CurrentMonth)">@L["CurrentMonth"]</button>
+            <button type="button" class="@PresetClass(DatePreset.PreviousMonth)" @onclick="() => ApplyDatePreset(DatePreset.PreviousMonth)">@L["PreviousMonth"]</button>
+            <button type="button" class="@PresetClass(DatePreset.LastThreeMonths)" @onclick="() => ApplyDatePreset(DatePreset.LastThreeMonths)">@L["LastThreeMonths"]</button>
+            <button type="button" class="@PresetClass(DatePreset.CurrentYear)" @onclick="() => ApplyDatePreset(DatePreset.CurrentYear)">@L["CurrentYear"]</button>
+        </div>
     </section>
 
     @if (_loading)
@@ -94,6 +102,7 @@
 @code {
     private DateOnly _to = DateOnly.FromDateTime(DateTime.Now);
     private DateOnly _from = DateOnly.FromDateTime(DateTime.Now).AddDays(-29);
+    private DatePreset? _activePreset = DatePreset.Last30Days;
     private string? _pipelineKey;
     private HashSet<string> _selectedProjects = [];
     private CostReportOptions? _options;
@@ -122,11 +131,30 @@
         finally { _loading = false; }
     }
 
-    private async Task OnFromChanged(ChangeEventArgs e) { if (DateOnly.TryParse(e.Value?.ToString(), out var value)) _from = value; await Reload(); }
-    private async Task OnToChanged(ChangeEventArgs e) { if (DateOnly.TryParse(e.Value?.ToString(), out var value)) _to = value; await Reload(); }
+    private async Task OnFromChanged(ChangeEventArgs e) { if (DateOnly.TryParse(e.Value?.ToString(), out var value)) { _from = value; _activePreset = null; } await Reload(); }
+    private async Task OnToChanged(ChangeEventArgs e) { if (DateOnly.TryParse(e.Value?.ToString(), out var value)) { _to = value; _activePreset = null; } await Reload(); }
     private async Task OnPipelineChanged(ChangeEventArgs e) { _pipelineKey = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value!.ToString(); await Reload(); }
     private async Task SelectAllProjects(ChangeEventArgs e) { _selectedProjects.Clear(); await Reload(); }
     private async Task ToggleProject(string slug, ChangeEventArgs e) { if ((bool?)e.Value == true) _selectedProjects.Add(slug); else _selectedProjects.Remove(slug); await Reload(); }
+    private string PresetClass(DatePreset preset) => $"cost-date-preset{(_activePreset == preset ? " is-active" : string.Empty)}";
+
+    private async Task ApplyDatePreset(DatePreset preset)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        var currentMonth = new DateOnly(today.Year, today.Month, 1);
+        (_from, _to) = preset switch
+        {
+            DatePreset.Last30Days => (today.AddDays(-29), today),
+            DatePreset.CurrentMonth => (currentMonth, today),
+            DatePreset.PreviousMonth => (currentMonth.AddMonths(-1), currentMonth.AddDays(-1)),
+            DatePreset.LastThreeMonths => (currentMonth.AddMonths(-2), today),
+            DatePreset.CurrentYear => (new DateOnly(today.Year, 1, 1), today),
+            _ => throw new ArgumentOutOfRangeException(nameof(preset), preset, null)
+        };
+        _activePreset = preset;
+        await Reload();
+    }
+
     private static string Usd(decimal value) => value.ToString("C", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
 
     private static IReadOnlyList<ProjectCostView> BuildProjectCosts(CostReport report) => report.Projects
@@ -139,4 +167,5 @@
         .ToArray();
 
     private sealed record ProjectCostView(string ProjectName, decimal UsdCost, bool Estimated, IReadOnlyList<CostBucket> Daily, decimal MaxDailyCost);
+    private enum DatePreset { Last30Days, CurrentMonth, PreviousMonth, LastThreeMonths, CurrentYear }
 }
