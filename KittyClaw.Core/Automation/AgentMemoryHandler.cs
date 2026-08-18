@@ -9,7 +9,10 @@ namespace KittyClaw.Core.Automation;
 /// Handles agent-memory automation actions: commitAgentMemory and consolidateAgentMemory.
 /// Owns the git semaphore used to serialize in-process git operations per repository.
 /// </summary>
-internal sealed class AgentMemoryHandler(
+public enum AdHocMemoryResult { NoChanges, Modified }
+internal enum CommitMemoryResult { NoChanges, Committed, Failed, Skipped }
+
+public sealed class AgentMemoryHandler(
     TicketService tickets,
     MemberService members,
     ProjectService projects,
@@ -22,7 +25,7 @@ internal sealed class AgentMemoryHandler(
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> _gitLocks =
         new(StringComparer.OrdinalIgnoreCase);
 
-    public async Task ExecuteCommitAgentMemoryAsync(
+    internal async Task<CommitMemoryResult> ExecuteCommitAgentMemoryAsync(
         ProjectRuntime rt, CommitAgentMemoryActionSpec spec, TriggerFiring? firing = null)
     {
         try
@@ -34,7 +37,7 @@ internal sealed class AgentMemoryHandler(
                 {
                     logger.LogInformation(
                         "commitAgentMemory: {{assignee}} placeholder but no firing ticket — skipping");
-                    return;
+                    return CommitMemoryResult.Skipped;
                 }
                 var t = await tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
                 if (string.IsNullOrEmpty(t?.AssignedTo))
@@ -42,7 +45,7 @@ internal sealed class AgentMemoryHandler(
                     logger.LogInformation(
                         "commitAgentMemory: {{assignee}} placeholder but ticket #{Id} has no assignee — skipping",
                         firing.TicketId);
-                    return;
+                    return CommitMemoryResult.Skipped;
                 }
                 agent = agent.Replace("{assignee}", t.AssignedTo);
             }
@@ -60,7 +63,7 @@ internal sealed class AgentMemoryHandler(
                 logger.LogInformation(
                     "commitAgentMemory: no memory found for {Agent} under {Path}",
                     agent, Path.GetDirectoryName(legacyAbs));
-                return;
+                return CommitMemoryResult.Skipped;
             }
 
             // Prefer a nested .agents/.git repo if present (decouples agent config from main project repo).
@@ -83,7 +86,7 @@ internal sealed class AgentMemoryHandler(
                 logger.LogDebug(
                     "commitAgentMemory: no git repo at {Path} or {Agents} — skipping",
                     workspace, agentsDir);
-                return;
+                return CommitMemoryResult.Skipped;
             }
 
             // Only pass paths that exist. Some Git versions reject the entire `git add` when one
@@ -105,7 +108,7 @@ internal sealed class AgentMemoryHandler(
                 if (diff.exitCode == 0 && string.IsNullOrWhiteSpace(status.stdout))
                 {
                     logger.LogDebug("commitAgentMemory: {Agent} memory is clean, nothing to commit", agent);
-                    return;
+                    return CommitMemoryResult.NoChanges;
                 }
 
                 var add = await RunGitAsync(gitCwd, $"add -- {pathArgs}");
@@ -113,7 +116,7 @@ internal sealed class AgentMemoryHandler(
                 {
                     logger.LogWarning(
                         "commitAgentMemory: git add failed for {Agent}: {Err}", agent, add.stderr);
-                    return;
+                    return CommitMemoryResult.Failed;
                 }
 
                 var ticketSuffix = firing?.TicketId is int tid ? $" (#{tid})" : "";
@@ -131,20 +134,22 @@ internal sealed class AgentMemoryHandler(
                 {
                     logger.LogWarning(
                         "commitAgentMemory: git commit failed for {Agent}: {Err}", agent, commit.stderr);
-                    return;
+                    return CommitMemoryResult.Failed;
                 }
 
                 logger.LogInformation("commitAgentMemory: committed {Agent} memory", agent);
+                return CommitMemoryResult.Committed;
             }
             finally { gitLock.Release(); }
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "commitAgentMemory: failed to commit memory for {Agent}", spec.Agent);
+            return CommitMemoryResult.Failed;
         }
     }
 
-    public async Task ExecuteConsolidateAgentMemoryAsync(
+    internal async Task ExecuteConsolidateAgentMemoryAsync(
         ProjectRuntime rt,
         ConsolidateAgentMemoryActionSpec spec,
         TriggerFiring? firing,
@@ -260,6 +265,68 @@ internal sealed class AgentMemoryHandler(
         {
             logger.LogWarning(ex, "consolidateAgentMemory: failed for {Agent}", spec.Agent);
         }
+    }
+
+    public async Task<AdHocMemoryResult> ConsolidateAdHocConversationAsync(
+        string projectSlug, string workspace, string agent, string transcript, CancellationToken ct)
+    {
+        var instructionPath = Path.Combine(workspace, ".agents", "memory-consolidation.md");
+        if (!File.Exists(instructionPath))
+            throw new InvalidOperationException($"Memory consolidation instructions not found: {instructionPath}");
+
+        var memoryDir = Path.Combine(workspace, ".agents", agent, "memory");
+        var legacyMemory = Path.Combine(workspace, ".agents", agent, "memory.md");
+        if (!Directory.Exists(memoryDir) && !File.Exists(legacyMemory))
+            throw new DirectoryNotFoundException($"No persistent memory exists for agent '{agent}'.");
+
+        var before = SnapshotMemory(memoryDir, legacyMemory);
+        var instructionContent = (await File.ReadAllTextAsync(instructionPath, ct)).Replace("{agentSlug}", agent);
+        var project = await projects.GetProjectAsync(projectSlug);
+        var member = await members.GetMemberBySlugAsync(projectSlug, agent);
+        var effectiveModel = ActionExecutor.FirstConfiguredModel(member?.DefaultModel,
+            project?.FallbackModel, project?.LocalModelName);
+        var routing = ModelRouting.Resolve(effectiveModel, project?.LocalModelBaseUrl);
+        if (routing.Error is not null) throw new InvalidOperationException(routing.Error);
+
+        const string scope = "consolidate-chat";
+        sessions.Clear(workspace, $"{scope}:{agent}", ticketId: null);
+        var run = await runner.RunAsync(new AgentRunContext
+        {
+            ProjectSlug = projectSlug,
+            WorkspacePath = workspace,
+            AgentName = agent,
+            SkillFile = $"{agent}/SKILL.md",
+            MaxTurns = 5,
+            ConcurrencyGroup = $"consolidate-chat-{agent}",
+            InlineSkillContent = instructionContent,
+            ExtraContext = "## Ad-hoc conversation segment\n\n" + transcript,
+            SessionScope = scope,
+            Target = routing.ToTarget(effectiveModel),
+            RetryOnResumeFailure = true,
+            MaxRunDuration = TimeSpan.FromMinutes(30),
+        }, ct);
+        if (run.Status != AgentRunStatus.Completed || (run.ExitCode ?? 0) != 0)
+            throw new InvalidOperationException($"Memory consolidation run {run.RunId} failed ({run.Status}, exit {run.ExitCode}).");
+
+        var after = SnapshotMemory(memoryDir, legacyMemory);
+        var rt = new ProjectRuntime(projectSlug) { Workspace = workspace };
+        var commit = await ExecuteCommitAgentMemoryAsync(rt, new CommitAgentMemoryActionSpec { Agent = agent });
+        if (commit == CommitMemoryResult.Failed ||
+            (!before.SequenceEqual(after) && commit != CommitMemoryResult.Committed))
+            throw new InvalidOperationException($"Failed to commit memory changes for agent '{agent}'.");
+        return commit == CommitMemoryResult.Committed
+            ? AdHocMemoryResult.Modified
+            : AdHocMemoryResult.NoChanges;
+    }
+
+    private static string[] SnapshotMemory(string memoryDir, string legacyMemory)
+    {
+        var files = new List<string>();
+        if (Directory.Exists(memoryDir)) files.AddRange(Directory.EnumerateFiles(memoryDir, "*", SearchOption.AllDirectories));
+        if (File.Exists(legacyMemory)) files.Add(legacyMemory);
+        return files.OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .Select(path => $"{path}:{Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path)))}")
+            .ToArray();
     }
 
     internal static string BuildEventsSummary(AgentRun? run)

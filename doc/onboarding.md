@@ -126,7 +126,7 @@ Legacy rules remain supported for compatibility but no longer have an in-app edi
 
 The **Dashboard** is a free-form canvas backed by `.dashboard/` files in the workspace. Its chat can create a tile from a plain-language description, and tiles can refresh from a script, a prompt, or a schedule. See [dashboard](./dashboard.md).
 
-On the full project board, **New instruction** opens a chat drawer. Choose an agent and send a one-off instruction; this is separate from the ticket-triggered automations above.
+On the full project board, **New instruction** opens a chat drawer. Choose an agent and send a one-off instruction; this is separate from the ticket-triggered automations above. When that conversation has no active run and receives no message for 15 minutes, the server automatically consolidates durable lessons into the selected agent's memory. Closing the drawer, switching conversations, or restarting KittyClaw does not lose the pending consolidation. A new message restarts the inactivity window; failed consolidation attempts are retried without replaying already processed segments. Set `KITTYCLAW_CHAT_MEMORY_IDLE_MINUTES` to change the delay.
 
 ## Next steps
 

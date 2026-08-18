@@ -79,6 +79,11 @@ builder.Services.AddSingleton(new RunConcurrencyGate(maxConcurrent));
 builder.Services.AddSingleton<TicketWorktreeService>();
 builder.Services.AddSingleton<WorktreeMergeQueueService>();
 builder.Services.AddSingleton<AgentRunner>();
+builder.Services.AddSingleton<AgentMemoryHandler>(sp => new AgentMemoryHandler(
+    sp.GetRequiredService<TicketService>(), sp.GetRequiredService<MemberService>(),
+    sp.GetRequiredService<ProjectService>(), sp.GetRequiredService<AgentRunner>(),
+    sp.GetRequiredService<SessionRegistry>(), sp.GetRequiredService<ILogger<AgentMemoryHandler>>()));
+builder.Services.AddHostedService<ChatMemoryConsolidationService>();
 builder.Services.AddSingleton<IColumnAgentDispatcher, ColumnAgentDispatcher>();
 builder.Services.AddSingleton<ColumnActionExecutor>();
 builder.Services.AddSingleton<CostTracker>();

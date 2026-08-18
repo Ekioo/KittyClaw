@@ -1,0 +1,98 @@
+using System.Text;
+using KittyClaw.Core.Automation;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
+namespace KittyClaw.Core.Services;
+
+public sealed class ChatMemoryConsolidationService(
+    ProjectService projects,
+    ChatService chats,
+    MemberService members,
+    AgentRunRegistry runs,
+    AgentMemoryHandler memory,
+    ILogger<ChatMemoryConsolidationService> logger) : BackgroundService
+{
+    public static readonly TimeSpan DefaultIdleDelay = TimeSpan.FromMinutes(15);
+    private readonly TimeSpan _idleDelay = ReadDuration("KITTYCLAW_CHAT_MEMORY_IDLE_MINUTES", DefaultIdleDelay);
+    private readonly TimeSpan _pollDelay = ReadDuration("KITTYCLAW_CHAT_MEMORY_POLL_SECONDS", TimeSpan.FromSeconds(30), seconds: true);
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        logger.LogInformation("Ad-hoc chat memory consolidation started (idle delay {Delay})", _idleDelay);
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try { await ProcessOnceAsync(DateTime.UtcNow, stoppingToken); }
+            catch (Exception ex) { logger.LogError(ex, "Ad-hoc chat memory consolidation cycle failed"); }
+            await Task.Delay(_pollDelay, stoppingToken);
+        }
+    }
+
+    public async Task ProcessOnceAsync(DateTime now, CancellationToken ct = default)
+    {
+        foreach (var project in await projects.ListProjectsAsync())
+        {
+            var workspace = projects.ResolveWorkspacePath(project);
+            foreach (var candidate in await chats.ListMemoryCandidatesAsync(project.Slug, now - _idleDelay, now))
+            {
+                if (runs.HasActiveInGroup(project.Slug, $"chat:{project.Slug}:{candidate.TargetSlug}")) continue;
+                var agent = ParseBaseAgent(candidate.TargetSlug);
+                var memoryDir = Path.Combine(workspace, ".agents", agent, "memory");
+                var legacyMemory = Path.Combine(workspace, ".agents", agent, "memory.md");
+                if (agent == "owner-chat" || (!Directory.Exists(memoryDir) && !File.Exists(legacyMemory)))
+                {
+                    await chats.RecordMemoryResultAsync(project.Slug, candidate.TargetSlug,
+                        candidate.LatestMessageId, "IgnoredNoMemory", 0, null, null);
+                    logger.LogInformation("Chat memory ignored for {Project}/{Target}: no persistent memory", project.Slug, candidate.TargetSlug);
+                    continue;
+                }
+                if (await members.GetMemberBySlugAsync(project.Slug, agent) is null)
+                {
+                    await chats.RecordMemoryResultAsync(project.Slug, candidate.TargetSlug,
+                        candidate.LatestMessageId, "IgnoredNoMember", 0, null, null);
+                    continue;
+                }
+
+                var segment = await chats.ListSegmentAsync(project.Slug, candidate.TargetSlug,
+                    candidate.LastConsolidatedMessageId, candidate.LatestMessageId);
+                try
+                {
+                    var result = await memory.ConsolidateAdHocConversationAsync(project.Slug, workspace,
+                        agent, FormatTranscript(segment), ct);
+                    await chats.RecordMemoryResultAsync(project.Slug, candidate.TargetSlug,
+                        candidate.LatestMessageId, result.ToString(), 0, null, null);
+                    logger.LogInformation("Chat memory {Result} for {Project}/{Target} through message {MessageId}",
+                        result, project.Slug, candidate.TargetSlug, candidate.LatestMessageId);
+                }
+                catch (Exception ex)
+                {
+                    var attempts = candidate.AttemptCount + 1;
+                    var retry = now + TimeSpan.FromMinutes(Math.Min(60, Math.Pow(2, Math.Min(attempts, 6))));
+                    await chats.RecordMemoryFailureAsync(project.Slug, candidate.TargetSlug,
+                        candidate.LastConsolidatedMessageId, attempts, ex.Message, retry);
+                    logger.LogWarning(ex, "Chat memory consolidation failed for {Project}/{Target}; retry at {Retry}",
+                        project.Slug, candidate.TargetSlug, retry);
+                }
+            }
+        }
+    }
+
+    private static string ParseBaseAgent(string target) => target.Split('#', 2)[0];
+
+    private static string FormatTranscript(IEnumerable<KittyClaw.Core.Models.ChatMessageRow> messages)
+    {
+        var sb = new StringBuilder();
+        foreach (var message in messages)
+            sb.AppendLine($"[{message.CreatedAt}] {message.Role}: {message.Text}");
+        return sb.ToString();
+    }
+
+    private static TimeSpan ReadDuration(string name, TimeSpan fallback, bool seconds = false)
+    {
+        var raw = Environment.GetEnvironmentVariable(name);
+        return double.TryParse(raw, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var value) && value >= 0
+            ? (seconds ? TimeSpan.FromSeconds(value) : TimeSpan.FromMinutes(value))
+            : fallback;
+    }
+}
