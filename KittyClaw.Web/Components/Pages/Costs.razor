@@ -6,41 +6,138 @@
 
 <PageTitle>@L["Costs"]</PageTitle>
 <main class="costs-page">
- <header class="page-header costs-header"><a href="/" class="back-link">&larr; @L["BackToProjects"]</a><h1>@L["Costs"]</h1></header>
- <section class="cost-filters" aria-label="@L["CostFilters"]">
-  <label>@L["FromDate"] <input class="cost-from" type="date" value="@_from.ToString("yyyy-MM-dd")" @onchange="OnFromChanged" /></label>
-  <label>@L["ToDate"] <input class="cost-to" type="date" value="@_to.ToString("yyyy-MM-dd")" @onchange="OnToChanged" /></label>
-  <label>@L["Pipeline"] <select class="cost-pipeline" value="@(_pipelineKey ?? "")" @onchange="OnPipelineChanged"><option value="">@L["AllPipelines"]</option>@foreach (var pipeline in _options?.Pipelines ?? []) { <option value="@pipeline.Key">@(pipeline.Key.EndsWith(":unknown", StringComparison.Ordinal) ? $"{pipeline.Name} / {L["UnknownPipeline"]}" : pipeline.Name)</option> }</select></label>
-  <fieldset class="cost-project-filter"><legend>@L["Projects"]</legend>
-   <label><input type="checkbox" checked="@(_selectedProjects.Count == 0)" @onchange="SelectAllProjects" /> @L["AllProjects"]</label>
-   @foreach (var project in _options?.Projects ?? []) { <label><input type="checkbox" checked="@_selectedProjects.Contains(project.Slug)" @onchange="e => ToggleProject(project.Slug, e)" /> @project.Name</label> }
-  </fieldset>
- </section>
- @if (_loading) { <p class="cost-state" role="status">@L["Loading"]</p> }
- else if (_error is not null) { <p class="cost-state cost-error" role="alert">@L["CostLoadError"]</p> }
- else if (_report is not null)
- {
-  <section class="cost-total-card @(_report.Estimated ? "cost-estimated" : "")"><span>@L["TotalCost"]</span><strong class="cost-total">@Usd(_report.TotalUsd)</strong>@if (_report.Estimated) { <span class="estimated-marker" title="@L["EstimatedHelp"]" tabindex="0">~ @L["Estimated"]</span> }</section>
-  @if (_report.Daily.Count == 0) { <div class="cost-state cost-empty"><h2>@L["NoCostData"]</h2><p>@L["NoCostDataHint"]</p></div> }
-  else
-  {
-   <section class="cost-chart-card"><h2>@L["DailyEvolution"]</h2><div class="cost-chart" role="img" aria-label="@L["CostChartLabel"]">
-    @foreach (var bucket in _report.Daily) { var height = _maxCost == 0 ? 0 : Math.Max(3, bucket.UsdCost / _maxCost * 100); <button class="cost-bar @(bucket.Estimated ? "cost-estimated" : "")" style="height:@height.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%" title="@($"{bucket.Day:d} — {bucket.ProjectName}: {Usd(bucket.UsdCost)}")"><span class="visually-hidden">@bucket.Day, @bucket.ProjectName, @Usd(bucket.UsdCost)</span></button> }
-   </div></section>
-   <section class="cost-breakdown"><h2>@L["ByProject"]</h2>@foreach (var project in _report.Projects) { <div class="cost-project-row @(project.Estimated ? "cost-estimated" : "")"><span>@project.ProjectName</span><strong>@Usd(project.UsdCost)</strong>@if(project.Estimated){<span title="@L["EstimatedHelp"]">~</span>}</div> }</section>
-  }
- }
+    <header class="costs-header">
+        <a href="/" class="costs-back-link"><span aria-hidden="true">&larr;</span> @L["BackToProjects"]</a>
+        <h1>@L["Costs"]</h1>
+    </header>
+
+    <section class="cost-filter-card" aria-label="@L["CostFilters"]">
+        <div class="cost-filter-grid">
+            <label class="cost-field"><span>@L["FromDate"]</span><input class="cost-from" type="date" value="@_from.ToString("yyyy-MM-dd")" @onchange="OnFromChanged" /></label>
+            <label class="cost-field"><span>@L["ToDate"]</span><input class="cost-to" type="date" value="@_to.ToString("yyyy-MM-dd")" @onchange="OnToChanged" /></label>
+            <label class="cost-field">
+                <span>@L["Pipeline"]</span>
+                <select class="cost-pipeline" value="@(_pipelineKey ?? "")" @onchange="OnPipelineChanged">
+                    <option value="">@L["AllPipelines"]</option>
+                    @foreach (var pipeline in _options?.Pipelines ?? [])
+                    {
+                        <option value="@pipeline.Key">@(pipeline.Key.EndsWith(":unknown", StringComparison.Ordinal) ? $"{pipeline.Name} / {L["UnknownPipeline"]}" : pipeline.Name)</option>
+                    }
+                </select>
+            </label>
+            <details class="cost-project-picker">
+                <summary><span class="cost-field-label">@L["Projects"]</span><strong>@ProjectSelectionLabel</strong><span class="cost-picker-chevron" aria-hidden="true"></span></summary>
+                <fieldset class="cost-project-menu">
+                    <legend class="visually-hidden">@L["Projects"]</legend>
+                    <label class="cost-project-option cost-project-all"><input type="checkbox" checked="@(_selectedProjects.Count == 0)" @onchange="SelectAllProjects" /><span>@L["AllProjects"]</span></label>
+                    <div class="cost-project-list">
+                        @foreach (var project in _options?.Projects ?? [])
+                        {
+                            <label class="cost-project-option"><input type="checkbox" checked="@_selectedProjects.Contains(project.Slug)" @onchange="e => ToggleProject(project.Slug, e)" /><span>@project.Name</span></label>
+                        }
+                    </div>
+                </fieldset>
+            </details>
+        </div>
+    </section>
+
+    @if (_loading)
+    {
+        <section class="cost-loading" role="status" aria-live="polite">
+            <span class="visually-hidden">@L["Loading"]</span>
+            <div class="cost-skeleton cost-skeleton-total"></div>
+            <div class="cost-skeleton-grid"><div class="cost-skeleton cost-skeleton-chart"></div><div class="cost-skeleton cost-skeleton-list"></div></div>
+        </section>
+    }
+    else if (_error is not null)
+    {
+        <p class="cost-state cost-error" role="alert">@L["CostLoadError"]</p>
+    }
+    else if (_report is not null)
+    {
+        <section class="cost-total-card @(_report.Estimated ? "cost-estimated" : "")">
+            <div><span class="cost-card-label">@L["TotalCost"]</span><strong class="cost-total">@Usd(_report.TotalUsd)</strong></div>
+            @if (_report.Estimated) { <span class="estimated-marker" title="@L["EstimatedHelp"]" tabindex="0">~ @L["Estimated"]</span> }
+        </section>
+
+        @if (_report.Daily.Count == 0)
+        {
+            <div class="cost-state cost-empty"><h2>@L["NoCostData"]</h2><p>@L["NoCostDataHint"]</p></div>
+        }
+        else
+        {
+            <div class="cost-report-grid">
+                <section class="cost-chart-card">
+                    <h2>@L["DailyEvolution"]</h2>
+                    <div class="cost-chart-scroll">
+                        <div class="cost-chart" role="img" aria-label="@L["CostChartLabel"]">
+                            @foreach (var day in DailyTotals)
+                            {
+                                var height = _maxDailyCost == 0 ? 0 : Math.Max(4, day.UsdCost / _maxDailyCost * 100);
+                                <div class="cost-bar-column">
+                                    <button class="cost-bar @(day.Estimated ? "cost-estimated" : "")" style="--bar-height:@height.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%" title="@($"{day.Day:d} — {Usd(day.UsdCost)}")">
+                                        <span class="cost-bar-fill"></span><span class="visually-hidden">@day.Day, @Usd(day.UsdCost)</span>
+                                    </button>
+                                    <time datetime="@day.Day.ToString("yyyy-MM-dd")">@day.Day.ToString("dd/MM")</time>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </section>
+                <section class="cost-breakdown">
+                    <h2>@L["ByProject"]</h2>
+                    <div class="cost-project-rows">
+                        @foreach (var project in _report.Projects)
+                        {
+                            <div class="cost-project-row @(project.Estimated ? "cost-estimated" : "")">
+                                <span>@project.ProjectName</span><strong>@Usd(project.UsdCost)</strong>
+                                @if (project.Estimated) { <span title="@L["EstimatedHelp"]">~</span> }
+                            </div>
+                        }
+                    </div>
+                </section>
+            </div>
+        }
+    }
 </main>
+
 @code {
- private DateOnly _to = DateOnly.FromDateTime(DateTime.Now); private DateOnly _from = DateOnly.FromDateTime(DateTime.Now).AddDays(-29);
- private string? _pipelineKey; private HashSet<string> _selectedProjects = []; private CostReportOptions? _options; private CostReport? _report; private bool _loading = true; private string? _error;
- private decimal _maxCost => _report?.Daily.Max(x => x.UsdCost) ?? 0;
- protected override async Task OnInitializedAsync() { try { _options = await CostReports.GetOptionsAsync(); await Reload(); } catch(Exception ex) { _error = ex.Message; _loading = false; } }
- private async Task Reload() { _loading = true; _error = null; try { _report = await CostReports.GetReportAsync(new(_from, _to, _selectedProjects, _pipelineKey)); } catch(Exception ex) { _error = ex.Message; } finally { _loading = false; } }
- private async Task OnFromChanged(ChangeEventArgs e) { if(DateOnly.TryParse(e.Value?.ToString(), out var value)) _from=value; await Reload(); }
- private async Task OnToChanged(ChangeEventArgs e) { if(DateOnly.TryParse(e.Value?.ToString(), out var value)) _to=value; await Reload(); }
- private async Task OnPipelineChanged(ChangeEventArgs e) { _pipelineKey=string.IsNullOrWhiteSpace(e.Value?.ToString())?null:e.Value!.ToString(); await Reload(); }
- private async Task SelectAllProjects(ChangeEventArgs e) { _selectedProjects.Clear(); await Reload(); }
- private async Task ToggleProject(string slug, ChangeEventArgs e) { if((bool?)e.Value == true) _selectedProjects.Add(slug); else _selectedProjects.Remove(slug); await Reload(); }
- private static string Usd(decimal value) => value.ToString("C", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+    private DateOnly _to = DateOnly.FromDateTime(DateTime.Now);
+    private DateOnly _from = DateOnly.FromDateTime(DateTime.Now).AddDays(-29);
+    private string? _pipelineKey;
+    private HashSet<string> _selectedProjects = [];
+    private CostReportOptions? _options;
+    private CostReport? _report;
+    private bool _loading = true;
+    private string? _error;
+
+    private IReadOnlyList<DailyCostTotal> DailyTotals => _report?.Daily
+        .GroupBy(bucket => bucket.Day)
+        .Select(group => new DailyCostTotal(group.Key, group.Sum(bucket => bucket.UsdCost), group.Any(bucket => bucket.Estimated)))
+        .OrderBy(day => day.Day)
+        .ToArray() ?? [];
+    private decimal _maxDailyCost => DailyTotals.Count == 0 ? 0 : DailyTotals.Max(day => day.UsdCost);
+    private string ProjectSelectionLabel => _selectedProjects.Count == 0 ? L["AllProjects"] : $"{_selectedProjects.Count} {L["Projects"]}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _options = await CostReports.GetOptionsAsync(); await Reload(); }
+        catch (Exception ex) { _error = ex.Message; _loading = false; }
+    }
+
+    private async Task Reload()
+    {
+        _loading = true; _error = null;
+        try { _report = await CostReports.GetReportAsync(new(_from, _to, _selectedProjects, _pipelineKey)); }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private async Task OnFromChanged(ChangeEventArgs e) { if (DateOnly.TryParse(e.Value?.ToString(), out var value)) _from = value; await Reload(); }
+    private async Task OnToChanged(ChangeEventArgs e) { if (DateOnly.TryParse(e.Value?.ToString(), out var value)) _to = value; await Reload(); }
+    private async Task OnPipelineChanged(ChangeEventArgs e) { _pipelineKey = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value!.ToString(); await Reload(); }
+    private async Task SelectAllProjects(ChangeEventArgs e) { _selectedProjects.Clear(); await Reload(); }
+    private async Task ToggleProject(string slug, ChangeEventArgs e) { if ((bool?)e.Value == true) _selectedProjects.Add(slug); else _selectedProjects.Remove(slug); await Reload(); }
+    private static string Usd(decimal value) => value.ToString("C", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+    private sealed record DailyCostTotal(DateOnly Day, decimal UsdCost, bool Estimated);
 }

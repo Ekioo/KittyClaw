@@ -1,0 +1,13 @@
+{
+  "setup": [],
+  "actions": [
+    { "type": "assertNavigationDuration", "url": "/costs", "waitForSelector": ".cost-filter-card", "maxMs": 3000 },
+    { "type": "assertVisible", "selector": ".cost-filter-grid" },
+    { "type": "assertVisible", "selector": ".cost-project-picker" },
+    { "type": "assertCount", "selector": ".cost-project-picker:not([open])", "expected": "1" },
+    { "type": "click", "selector": ".cost-project-picker summary" },
+    { "type": "assertVisible", "selector": ".cost-project-menu" },
+    { "type": "screenshot", "name": "ticket-268-costs-redesign", "description": "Redesigned costs page with compact filters and project picker" }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}
