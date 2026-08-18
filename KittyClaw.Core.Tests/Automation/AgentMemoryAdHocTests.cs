@@ -10,6 +10,35 @@ namespace KittyClaw.Core.Tests.Automation;
 public sealed class AgentMemoryAdHocTests
 {
     [Fact]
+    public async Task SequentialProcessor_WaitsForEachConsolidationBeforeStartingTheNext()
+    {
+        var firstStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var started = new List<int>();
+
+        var processing = ChatMemoryConsolidationService.ProcessSequentiallyAsync(
+            [1, 2],
+            async (item, ct) =>
+            {
+                started.Add(item);
+                if (item == 1)
+                {
+                    firstStarted.TrySetResult();
+                    await releaseFirst.Task.WaitAsync(ct);
+                }
+            },
+            CancellationToken.None);
+
+        await firstStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await Task.Delay(100);
+        Assert.Equal([1], started);
+
+        releaseFirst.TrySetResult();
+        await processing.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.Equal([1, 2], started);
+    }
+
+    [Fact]
     public async Task ServiceLoop_YieldsBeforeRunningTheFirstConsolidationCycle()
     {
         using var cancellation = new CancellationTokenSource();

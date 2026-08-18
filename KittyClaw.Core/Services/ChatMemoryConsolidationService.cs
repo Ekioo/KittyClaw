@@ -49,9 +49,10 @@ public sealed class ChatMemoryConsolidationService(
         foreach (var project in await projects.ListProjectsAsync())
         {
             var workspace = projects.ResolveWorkspacePath(project);
-            foreach (var candidate in await chats.ListMemoryCandidatesAsync(project.Slug, now - _idleDelay, now))
+            var candidates = await chats.ListMemoryCandidatesAsync(project.Slug, now - _idleDelay, now);
+            await ProcessSequentiallyAsync(candidates, async (candidate, candidateToken) =>
             {
-                if (runs.HasActiveInGroup(project.Slug, $"chat:{project.Slug}:{candidate.TargetSlug}")) continue;
+                if (runs.HasActiveInGroup(project.Slug, $"chat:{project.Slug}:{candidate.TargetSlug}")) return;
                 var agent = ParseBaseAgent(candidate.TargetSlug);
                 var memoryDir = Path.Combine(workspace, ".agents", agent, "memory");
                 var legacyMemory = Path.Combine(workspace, ".agents", agent, "memory.md");
@@ -60,13 +61,13 @@ public sealed class ChatMemoryConsolidationService(
                     await chats.RecordMemoryResultAsync(project.Slug, candidate.TargetSlug,
                         candidate.LatestMessageId, "IgnoredNoMemory", 0, null, null);
                     logger.LogInformation("Chat memory ignored for {Project}/{Target}: no persistent memory", project.Slug, candidate.TargetSlug);
-                    continue;
+                    return;
                 }
                 if (await members.GetMemberBySlugAsync(project.Slug, agent) is null)
                 {
                     await chats.RecordMemoryResultAsync(project.Slug, candidate.TargetSlug,
                         candidate.LatestMessageId, "IgnoredNoMember", 0, null, null);
-                    continue;
+                    return;
                 }
 
                 var segment = await chats.ListSegmentAsync(project.Slug, candidate.TargetSlug,
@@ -74,7 +75,7 @@ public sealed class ChatMemoryConsolidationService(
                 try
                 {
                     var result = await memory.ConsolidateAdHocConversationAsync(project.Slug, workspace,
-                        agent, FormatTranscript(segment), ct);
+                        agent, FormatTranscript(segment), candidateToken);
                     await chats.RecordMemoryResultAsync(project.Slug, candidate.TargetSlug,
                         candidate.LatestMessageId, result.ToString(), 0, null, null);
                     logger.LogInformation("Chat memory {Result} for {Project}/{Target} through message {MessageId}",
@@ -89,7 +90,22 @@ public sealed class ChatMemoryConsolidationService(
                     logger.LogWarning(ex, "Chat memory consolidation failed for {Project}/{Target}; retry at {Retry}",
                         project.Slug, candidate.TargetSlug, retry);
                 }
-            }
+            }, ct);
+        }
+    }
+
+    internal static async Task ProcessSequentiallyAsync<T>(
+        IEnumerable<T> items,
+        Func<T, CancellationToken, Task> process,
+        CancellationToken ct)
+    {
+        foreach (var item in items)
+        {
+            ct.ThrowIfCancellationRequested();
+            await process(item, ct);
+            // Keep the batch cooperative: one consolidation at a time, while returning
+            // execution to the host between items so HTTP work is not starved.
+            await Task.Yield();
         }
     }
 
