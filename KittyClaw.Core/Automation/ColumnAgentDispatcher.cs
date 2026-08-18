@@ -57,7 +57,7 @@ public sealed class ColumnAgentDispatcher(
             RetryOnResumeFailure = true,
             PresetRunId = execution.Id,
             MaxRunDuration = TimeSpan.FromMinutes(30),
-            ExtraContext = BuildTicketContext(ticket),
+            ExtraContext = BuildTicketContext(ticket, execution),
         };
 
         var run = await runner.RunAsync(context, cancellationToken);
@@ -113,6 +113,7 @@ public sealed class ColumnAgentDispatcher(
         text.AppendLine("## Result contract");
         text.AppendLine("Your final response must be exactly one JSON object, with no Markdown:");
         text.AppendLine("{\"outcome\":\"configured-outcome\",\"skillsUsed\":[\"skill-slug\"],\"summary\":\"short result\"}");
+        text.AppendLine("For a success outcome, include evidence.ticketUpdatedAt. For owner-feedback, include the exact ownerFeedbackCommentId, a new delivery comment, and evidence.deliverables entries with path, updatedAt after the feedback, and a non-empty verification statement.");
         text.AppendLine("For outcome \"scheduled\", also include \"fireAt\" as an ISO-8601 UTC date and \"scheduleTarget\" as the exact destination column name used when the wake fires. Both fields are mandatory for scheduled and must be omitted for other outcomes such as \"needs_input\".");
         text.AppendLine("Use outcome \"wait_for_children\" only after creating at least one blocking sub-ticket.");
         return text.ToString();
@@ -131,8 +132,11 @@ public sealed class ColumnAgentDispatcher(
         Read and update that exact file for durable processor lessons. You may read specialist memories for domain expertise, but never create or use `.agents/column-{{processor.ColumnId}}/memory.md`.
         """;
 
-    private static string BuildTicketContext(Ticket ticket) => $$"""
+    private static string BuildTicketContext(Ticket ticket, ColumnExecution execution) => $$"""
         Process ticket #{{ticket.Id}}.
+
+        Structured trigger context (authoritative):
+        {"ticketId":{{ticket.Id}},"ticketUpdatedAt":"{{execution.TriggerTicketUpdatedAt:O}}","triggerSignalType":"{{execution.TriggerSignalType}}","triggerOwnerCommentId":{{(execution.TriggerOwnerCommentId?.ToString() ?? "null")}},"triggerOwnerCommentCreatedAt":{{(execution.TriggerOwnerCommentCreatedAt is DateTime created ? $"\"{created:O}\"" : "null")}}}
 
         Title: {{ticket.Title}}
         Description:

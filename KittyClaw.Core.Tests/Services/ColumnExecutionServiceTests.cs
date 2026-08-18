@@ -694,6 +694,152 @@ public sealed class ColumnExecutionServiceTests : IDisposable
         Assert.Contains("LoopDiagnosticJson", columns);
     }
 
+    [Fact]
+    public async Task Success_is_rejected_atomically_when_ticket_changes_after_claim()
+    {
+        var project = await _projects.CreateProjectAsync("Stale success guard");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Delivery");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Work", pipelineId: pipeline.Id);
+        var success = await _columns.CreateColumnAsync(project.Slug, "Success", pipelineId: pipeline.Id, role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, success.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Concurrent edit", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+
+        await _tickets.UpdateTicketAsync(project.Slug, ticket.Id, description: "A newer requirement");
+        await _executions.CompleteAsync(project.Slug, execution!, processor,
+            new ColumnAgentResult("completed", [], "Old result"), processor.Name);
+
+        var unchanged = await _tickets.GetTicketAsync(project.Slug, ticket.Id);
+        var attempt = Assert.Single(await _executions.ListAsync(project.Slug, ticket.Id));
+        Assert.Equal(source.Id, unchanged!.ColumnId);
+        Assert.Equal(ColumnExecutionStatus.Retrying, attempt.Status);
+        Assert.Equal("stale_ticket_context", attempt.ContextRejectionReason);
+        Assert.DoesNotContain(unchanged.Activities, activity => activity.Text.Contains("terminé"));
+    }
+
+    [Fact]
+    public async Task Owner_feedback_success_requires_consumed_comment_and_new_delivery()
+    {
+        var project = await _projects.CreateProjectAsync("Owner feedback guard");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Delivery");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Review", pipelineId: pipeline.Id);
+        var success = await _columns.CreateColumnAsync(project.Slug, "Success", pipelineId: pipeline.Id, role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, success.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Feedback", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var feedback = await _tickets.AddCommentAsync(project.Slug, ticket.Id, "Rewrite the guide", "owner");
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow,
+            new Dictionary<int, int> { [ticket.Id] = feedback!.Id });
+
+        await _executions.CompleteAsync(project.Slug, execution!, processor,
+            new ColumnAgentResult("completed", [], "Old files still exist"), processor.Name);
+
+        var attempt = Assert.Single(await _executions.ListAsync(project.Slug, ticket.Id));
+        Assert.Equal(feedback!.Id, attempt.TriggerOwnerCommentId);
+        Assert.Equal("owner_feedback_not_consumed", attempt.ContextRejectionReason);
+        Assert.Equal(source.Id, (await _tickets.GetTicketAsync(project.Slug, ticket.Id))!.ColumnId);
+    }
+
+    [Fact]
+    public async Task Owner_feedback_success_accepts_exact_comment_with_new_delivery_evidence()
+    {
+        var project = await _projects.CreateProjectAsync("Consumed owner feedback");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Delivery");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Review", pipelineId: pipeline.Id);
+        var success = await _columns.CreateColumnAsync(project.Slug, "Success", pipelineId: pipeline.Id, role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, success.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Feedback", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var feedback = await _tickets.AddCommentAsync(project.Slug, ticket.Id, "Rewrite the guide", "owner");
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow,
+            new Dictionary<int, int> { [ticket.Id] = feedback!.Id });
+        var delivery = await _tickets.AddCommentAsync(project.Slug, ticket.Id, "Delivery: guide rewritten", "programmer");
+        var consumedVersion = (await _tickets.GetTicketAsync(project.Slug, ticket.Id))!.UpdatedAt;
+        var evidence = new ColumnResultEvidence(consumedVersion, feedback!.Id,
+            delivery!.Id, delivery.CreatedAt,
+            [new DeliverableEvidence("docs/guide.md", delivery.CreatedAt.AddTicks(1), "Guide requirements verified")]);
+
+        await _executions.CompleteAsync(project.Slug, execution!, processor,
+            new ColumnAgentResult("completed", [], "Fresh delivery", Evidence: evidence), processor.Name);
+
+        var completed = Assert.Single(await _executions.ListAsync(project.Slug, ticket.Id));
+        Assert.Equal(ColumnExecutionStatus.Completed, completed.Status);
+        Assert.Equal(feedback.Id, completed.ConsumedOwnerCommentId);
+        Assert.Equal(success.Id, (await _tickets.GetTicketAsync(project.Slug, ticket.Id))!.ColumnId);
+    }
+
+    [Fact]
+    public async Task Missing_ticket_refresh_rejects_success_without_partial_delivery_effects()
+    {
+        var project = await _projects.CreateProjectAsync("Unreadable refresh");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Delivery");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Work", pipelineId: pipeline.Id);
+        var success = await _columns.CreateColumnAsync(project.Slug, "Success", pipelineId: pipeline.Id, role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, success.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Old deliverables", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+        await using (var db = _projects.GetProjectDb(project.Slug))
+        {
+            db.Tickets.Remove((await db.Tickets.FindAsync(ticket.Id))!);
+            await db.SaveChangesAsync();
+        }
+
+        var rejection = await _executions.ValidateSuccessContextAsync(project.Slug, execution!, processor,
+            new ColumnAgentResult("completed", [], "Old files exist"));
+
+        Assert.Equal("ticket_refresh_failed", rejection);
+        var attempt = Assert.Single(await _executions.ListAsync(project.Slug, ticket.Id));
+        Assert.Equal("ticket_refresh_failed", attempt.ContextRejectionReason);
+        Assert.Empty(attempt.CompletedActionIds);
+    }
+
+    [Fact]
+    public async Task Owner_feedback_rejects_delivery_without_fresh_deliverable_evidence()
+    {
+        var project = await _projects.CreateProjectAsync("Stale deliverables");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Delivery");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Review", pipelineId: pipeline.Id);
+        var success = await _columns.CreateColumnAsync(project.Slug, "Success", pipelineId: pipeline.Id, role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, success.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Guide", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var feedback = await _tickets.AddCommentAsync(project.Slug, ticket.Id, "Rewrite", "owner");
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow,
+            new Dictionary<int, int> { [ticket.Id] = feedback!.Id });
+        var delivery = await _tickets.AddCommentAsync(project.Slug, ticket.Id, "Done", "programmer");
+        var version = (await _tickets.GetTicketAsync(project.Slug, ticket.Id))!.UpdatedAt;
+
+        await _executions.CompleteAsync(project.Slug, execution!, processor,
+            new ColumnAgentResult("completed", [], "Existence only", Evidence:
+                new ColumnResultEvidence(version, feedback.Id, delivery!.Id, delivery.CreatedAt)), processor.Name);
+
+        var attempt = Assert.Single(await _executions.ListAsync(project.Slug, ticket.Id));
+        Assert.Equal("stale_ticket_context", attempt.ContextRejectionReason);
+        Assert.Equal(source.Id, (await _tickets.GetTicketAsync(project.Slug, ticket.Id))!.ColumnId);
+    }
+
+    [Fact]
+    public async Task Column_scan_success_remains_compatible_with_custom_completed_route()
+    {
+        var project = await _projects.CreateProjectAsync("Legacy route");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Custom");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: pipeline.Id);
+        var success = await _columns.CreateColumnAsync(project.Slug, "Archived", pipelineId: pipeline.Id, role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, success.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Legacy", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+
+        await _executions.CompleteAsync(project.Slug, execution!, processor,
+            new ColumnAgentResult("completed", [], "Compatible"), processor.Name);
+
+        var completed = Assert.Single(await _executions.ListAsync(project.Slug, ticket.Id));
+        Assert.Equal("column_scan", completed.TriggerSignalType);
+        Assert.Equal(success.Id, (await _tickets.GetTicketAsync(project.Slug, ticket.Id))!.ColumnId);
+    }
+
     private Task<ColumnProcessor> SaveProcessor(
         string slug, int sourceId, int defaultTargetId,
         TicketSelectionOrder selectionOrder = TicketSelectionOrder.Position,

@@ -1,0 +1,71 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "qa-ticket-266" },
+    {
+      "type": "api",
+      "method": "PUT",
+      "path": "/api/projects/qa-ticket-266/columns/2/processor",
+      "body": {
+        "name": "Fresh context guard",
+        "mission": "Reject stale success. <!--scenario:ticket-266-stale-success-->",
+        "enabled": false,
+        "maxAttempts": 1,
+        "retryBackoffSeconds": 1,
+        "defaultTargetColumnId": 7,
+        "technicalFailureColumnId": 5,
+        "routes": [
+          { "outcome": "completed", "targetColumnId": 7 }
+        ]
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "qa-ticket-266",
+      "title": "Owner feedback must be consumed",
+      "status": "Backlog"
+    },
+    { "type": "setStatus", "project": "qa-ticket-266", "status": "Todo" },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/qa-ticket-266/tickets/{ticketId}/comments",
+      "body": { "content": "Rewrite the delivery after this feedback.", "author": "owner" },
+      "extract": { "ownerCommentId": "id" }
+    },
+    {
+      "type": "api",
+      "method": "PUT",
+      "path": "/api/projects/qa-ticket-266/columns/2/processor",
+      "body": {
+        "name": "Fresh context guard",
+        "mission": "Reject stale success. <!--scenario:ticket-266-stale-success-->",
+        "enabled": true,
+        "maxAttempts": 1,
+        "retryBackoffSeconds": 1,
+        "defaultTargetColumnId": 7,
+        "technicalFailureColumnId": 5,
+        "routes": [
+          { "outcome": "completed", "targetColumnId": 7 }
+        ]
+      }
+    }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-ticket-266" },
+    { "type": "wait", "ms": 5000 },
+    { "type": "assertJson", "path": "/api/projects/qa-ticket-266/tickets/{ticketId}", "jsonPath": "status", "expected": "Scheduled" },
+    { "type": "click", "selector": ".ticket-card .agent-log-btn" },
+    { "type": "wait", "ms": 1000 },
+    { "type": "assertVisible", "selector": ".fresh-context-details" },
+    { "type": "assertText", "selector": ".fresh-context-details span:nth-of-type(2)", "expected": "Trigger signal: owner-feedback" },
+    { "type": "assertText", "selector": ".fresh-context-details span:nth-of-type(4)", "expected": "Owner feedback: #{ownerCommentId}" },
+    { "type": "assertText", "selector": ".fresh-context-details span:nth-of-type(5)", "expected": "Refusal: owner_feedback_not_consumed" },
+    {
+      "type": "screenshot",
+      "name": "ticket-266-stale-success-refused",
+      "selector": ".agent-drawer",
+      "description": "Run drawer shows the trigger and consumed ticket versions, owner-feedback comment identity, and machine-readable refusal reason."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using KittyClaw.Core.Models;
 using KittyClaw.Core.Services;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -20,8 +21,10 @@ public sealed class ColumnProcessingEngine : BackgroundService
     private readonly ColumnActionExecutor _actions;
     private readonly ILogger<ColumnProcessingEngine> _logger;
     private readonly ConcurrentDictionary<string, byte> _pendingProjects = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<int, int>> _ownerFeedbackSignals = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Task> _activeProcessors = new();
     private readonly SemaphoreSlim _wake = new(0);
+    internal Func<Task>? BeforeFinalSuccessValidationAsync { get; set; }
 
     public ColumnProcessingEngine(
         ProjectService projects, TicketService tickets, ColumnProcessorService processors,
@@ -37,10 +40,17 @@ public sealed class ColumnProcessingEngine : BackgroundService
         _logger = logger;
         _tickets.TicketStatusChanged += OnTicketChanged;
         _tickets.TicketCreated += OnTicketCreated;
+        _tickets.TicketCommentAdded += OnTicketCommentAdded;
     }
 
     private void OnTicketChanged(string slug, int _, string __, string ___) => Signal(slug);
     private void OnTicketCreated(string slug, int _) => Signal(slug);
+    private void OnTicketCommentAdded(string slug, int ticketId, int commentId, string author, string _)
+    {
+        if (string.Equals(author, "owner", StringComparison.OrdinalIgnoreCase))
+            _ownerFeedbackSignals.GetOrAdd(slug, _ => new())[ticketId] = commentId;
+        Signal(slug);
+    }
 
     public void Signal(string projectSlug)
     {
@@ -86,8 +96,10 @@ public sealed class ColumnProcessingEngine : BackgroundService
         {
             var key = $"{slug}:{processor.Id}";
             if (_activeProcessors.TryGetValue(key, out var active) && !active.IsCompleted) continue;
-            var execution = await _executions.ClaimNextAsync(slug, processor, DateTime.UtcNow);
+            _ownerFeedbackSignals.TryGetValue(slug, out var feedbackSignals);
+            var execution = await _executions.ClaimNextAsync(slug, processor, DateTime.UtcNow, feedbackSignals);
             if (execution is null) continue;
+            feedbackSignals?.TryRemove(execution.TicketId, out _);
             var task = ProcessAsync(slug, processor, execution, stoppingToken);
             _activeProcessors[key] = task;
             _ = task.ContinueWith(completedTask =>
@@ -98,7 +110,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
         }
     }
 
-    private async Task ProcessAsync(
+    internal async Task ProcessAsync(
         string slug, ColumnProcessor processor, ColumnExecution execution,
         CancellationToken cancellationToken)
     {
@@ -135,7 +147,8 @@ public sealed class ColumnProcessingEngine : BackgroundService
                 return;
             }
 
-            if (!await ExecuteActionsAsync(
+            var hasSuccessRoute = await HasSuccessRouteAsync(slug, processor);
+            if (!hasSuccessRoute && !await ExecuteActionsAsync(
                     slug, processor, execution, ticket, processor.BeforeActions, null,
                     activityAuthor, cancellationToken))
                 return;
@@ -173,8 +186,39 @@ public sealed class ColumnProcessingEngine : BackgroundService
                 await _executions.SaveAgentResultAsync(slug, execution, result);
             }
 
+            var contextRejection = await _executions.ValidateSuccessContextAsync(
+                slug, execution, processor, result);
+            if (contextRejection is not null)
+            {
+                await _executions.FailAttemptAsync(slug, execution, processor,
+                    contextRejection, activityAuthor);
+                return;
+            }
+
             ticket = await _tickets.GetTicketAsync(slug, execution.TicketId)
                 ?? throw new InvalidOperationException($"Le ticket #{execution.TicketId} n’existe plus.");
+            if (hasSuccessRoute && await IsSuccessOutcomeAsync(slug, processor, result))
+            {
+                // Success-context validation and routing must win before any configured action
+                // can emit an irreversible side effect. CompleteAsync performs the final check
+                // and persists the transition atomically; rejected outcomes execute no action.
+                if (BeforeFinalSuccessValidationAsync is not null)
+                    await BeforeFinalSuccessValidationAsync();
+                await _executions.CompleteAsync(slug, execution, processor, result, activityAuthor);
+                var completed = (await _executions.ListAsync(slug, execution.TicketId))
+                    .FirstOrDefault(item => item.Id == execution.Id);
+                if (completed?.Status != ColumnExecutionStatus.Completed)
+                    return;
+                await ExecuteActionsAsync(
+                    slug, processor, execution, ticket,
+                    processor.BeforeActions.Concat(processor.AfterActions).ToList(), result,
+                    activityAuthor, cancellationToken);
+                return;
+            }
+            if (hasSuccessRoute && !await ExecuteActionsAsync(
+                    slug, processor, execution, ticket, processor.BeforeActions, null,
+                    activityAuthor, cancellationToken))
+                return;
             if (!await ExecuteActionsAsync(
                     slug, processor, execution, ticket, processor.AfterActions, result,
                     activityAuthor, cancellationToken))
@@ -187,6 +231,33 @@ public sealed class ColumnProcessingEngine : BackgroundService
             _logger.LogError(ex, "Column processor {ProcessorId} failed for ticket {TicketId}", processor.Id, execution.TicketId);
             await _executions.FailAttemptAsync(slug, execution, processor, ex.Message, processor.Name);
         }
+    }
+
+    private async Task<bool> HasSuccessRouteAsync(string slug, ColumnProcessor processor)
+    {
+        await using var db = _projects.GetProjectDb(slug);
+        await ColumnService.EnsureBoardColumnsTableAsync(db);
+        var targetIds = processor.Routes.Select(route => (int?)route.TargetColumnId)
+            .Append(processor.DefaultTargetColumnId)
+            .Where(id => id is not null)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+        return await db.BoardColumns.AnyAsync(column =>
+            targetIds.Contains(column.Id) && column.Role == ColumnRole.Success);
+    }
+
+    private async Task<bool> IsSuccessOutcomeAsync(
+        string slug, ColumnProcessor processor, ColumnAgentResult result)
+    {
+        var targetId = processor.Routes.FirstOrDefault(route =>
+            string.Equals(route.Outcome, result.Outcome, StringComparison.OrdinalIgnoreCase))?.TargetColumnId
+            ?? processor.DefaultTargetColumnId;
+        if (targetId is null) return false;
+        await using var db = _projects.GetProjectDb(slug);
+        await ColumnService.EnsureBoardColumnsTableAsync(db);
+        return await db.BoardColumns.AnyAsync(column =>
+            column.Id == targetId.Value && column.Role == ColumnRole.Success);
     }
 
     private async Task<bool> ExecuteActionsAsync(
@@ -227,6 +298,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
     {
         _tickets.TicketStatusChanged -= OnTicketChanged;
         _tickets.TicketCreated -= OnTicketCreated;
+        _tickets.TicketCommentAdded -= OnTicketCommentAdded;
         _wake.Dispose();
         base.Dispose();
     }

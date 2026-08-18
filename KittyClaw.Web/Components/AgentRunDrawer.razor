@@ -1,4 +1,6 @@
 @using KittyClaw.Core.Automation
+@using KittyClaw.Core.Models
+@using KittyClaw.Core.Services
 @using KittyClaw.Web.Services
 @using Markdig
 @inject AgentRunsState RunsState
@@ -6,6 +8,7 @@
 @inject NavigationManager Nav
 @inject LocalizationService L
 @inject ILogger<AgentRunDrawer> Logger
+@inject ColumnExecutionService ColumnExecutions
 @implements IAsyncDisposable
 
 @if (_run is not null)
@@ -53,6 +56,21 @@
         @if (!string.IsNullOrEmpty(_actionError))
         {
             <div class="agent-action-error" role="alert">@_actionError</div>
+        }
+
+        @if (_columnExecution is not null)
+        {
+            <div class="agent-action-error fresh-context-details" role="status">
+                <strong>Fresh ticket context</strong>
+                <span>Trigger version: @(_columnExecution.TriggerTicketUpdatedAt?.ToString("O") ?? "unavailable")</span>
+                <span>Trigger signal: @_columnExecution.TriggerSignalType</span>
+                <span>Consumed version: @(_columnExecution.ConsumedTicketUpdatedAt?.ToString("O") ?? "not consumed")</span>
+                <span>Owner feedback: @(_columnExecution.TriggerOwnerCommentId is int commentId ? $"#{commentId}" : "none")</span>
+                @if (!string.IsNullOrWhiteSpace(_columnExecution.ContextRejectionReason))
+                {
+                    <span>Refusal: @_columnExecution.ContextRejectionReason</span>
+                }
+            </div>
         }
 
         <div class="agent-drawer-console" @ref="_consoleRef">
@@ -190,6 +208,7 @@
     [Parameter] public EventCallback<string> OnRetried { get; set; }
 
     private AgentRun? _run;
+    private ColumnExecution? _columnExecution;
     private readonly List<StreamEvent> _events = new();
     private string _steerText = "";
     private bool _retrying;
@@ -227,6 +246,8 @@
         _events.Clear();
         _run = RunsState.Get(RunId);
         if (_run is null) return;
+        _columnExecution = (await ColumnExecutions.ListAsync(_run.ProjectSlug, _run.TicketId))
+            .FirstOrDefault(execution => execution.Id == RunId || execution.RunId == RunId);
 
         _events.AddRange(_run.SnapshotBuffer());
         _run.OnEvent += HandleEvent;

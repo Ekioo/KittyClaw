@@ -169,6 +169,13 @@ public class ColumnExecution
     public string? CurrentActionId { get; set; }
     public bool AgentCompleted { get; set; }
     public string? AgentResultJson { get; set; }
+    public DateTime? TriggerTicketUpdatedAt { get; set; }
+    public string TriggerSignalType { get; set; } = "column_scan";
+    public int? TriggerOwnerCommentId { get; set; }
+    public DateTime? TriggerOwnerCommentCreatedAt { get; set; }
+    public DateTime? ConsumedTicketUpdatedAt { get; set; }
+    public int? ConsumedOwnerCommentId { get; set; }
+    public string? ContextRejectionReason { get; set; }
 
     [NotMapped]
     public List<string> CompletedActionIds
@@ -193,4 +200,14 @@ public sealed record ColumnAgentResult(
     List<string> SkillsUsed,
     string? Summary = null,
     DateTime? FireAt = null,
-    string? ScheduleTarget = null);
+    string? ScheduleTarget = null,
+    ColumnResultEvidence? Evidence = null);
+
+public sealed record ColumnResultEvidence(
+    DateTime? TicketUpdatedAt = null,
+    int? OwnerFeedbackCommentId = null,
+    int? DeliveryCommentId = null,
+    DateTime? DeliveryProducedAt = null,
+    List<DeliverableEvidence>? Deliverables = null);
+
+public sealed record DeliverableEvidence(string Path, DateTime UpdatedAt, string? Verification = null);

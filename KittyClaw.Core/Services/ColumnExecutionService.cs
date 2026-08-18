@@ -11,6 +11,7 @@ namespace KittyClaw.Core.Services;
 /// <summary>Durable ticket claims and lifecycle for column processors.</summary>
 public sealed class ColumnExecutionService(ProjectService projects, TicketService tickets)
 {
+    internal Func<Task>? BeforeSuccessCompareAndSwapAsync { get; set; }
     internal static readonly TimeSpan RoutingLoopWindow = TimeSpan.FromMinutes(10);
     internal const string RoutingLoopError =
         "Protection anti-boucle : cette transition a été répétée sans progrès observable dans les 10 dernières minutes.";
@@ -40,6 +41,13 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                     ProgressFingerprint TEXT NULL,
                     ProgressSignalsJson TEXT NOT NULL DEFAULT '[]',
                     LoopDiagnosticJson TEXT NULL
+                    ,TriggerTicketUpdatedAt TEXT NULL
+                    ,TriggerSignalType TEXT NOT NULL DEFAULT 'column_scan'
+                    ,TriggerOwnerCommentId INTEGER NULL
+                    ,TriggerOwnerCommentCreatedAt TEXT NULL
+                    ,ConsumedTicketUpdatedAt TEXT NULL
+                    ,ConsumedOwnerCommentId INTEGER NULL
+                    ,ContextRejectionReason TEXT NULL
                 );
                 CREATE UNIQUE INDEX IF NOT EXISTS IX_ColumnExecutions_ActiveTicket
                     ON ColumnExecutions(TicketId)
@@ -62,9 +70,20 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN ProgressSignalsJson TEXT NOT NULL DEFAULT '[]'");
             await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN LoopDiagnosticJson TEXT NULL");
         });
+        await MigrationGate.RunOnceAsync(db, "column-executions-fresh-context-v1", static async d =>
+        {
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN TriggerTicketUpdatedAt TEXT NULL");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN TriggerSignalType TEXT NOT NULL DEFAULT 'column_scan'");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN TriggerOwnerCommentId INTEGER NULL");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN TriggerOwnerCommentCreatedAt TEXT NULL");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN ConsumedTicketUpdatedAt TEXT NULL");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN ConsumedOwnerCommentId INTEGER NULL");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN ContextRejectionReason TEXT NULL");
+        });
     }
 
-    public async Task<ColumnExecution?> ClaimNextAsync(string projectSlug, ColumnProcessor processor, DateTime now)
+    public async Task<ColumnExecution?> ClaimNextAsync(string projectSlug, ColumnProcessor processor, DateTime now,
+        IReadOnlyDictionary<int, int>? ownerFeedbackSignals = null)
     {
         await using var db = projects.GetProjectDb(projectSlug);
         await ColumnService.EnsureBoardColumnsTableAsync(db);
@@ -221,6 +240,10 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             }
         }
 
+        Comment? triggerOwnerComment = null;
+        if (ownerFeedbackSignals?.TryGetValue(selected.Id, out var ownerCommentId) == true)
+            triggerOwnerComment = await db.Comments.AsNoTracking().FirstOrDefaultAsync(comment =>
+                comment.Id == ownerCommentId && comment.TicketId == selected.Id && comment.Author == "owner");
         var execution = new ColumnExecution
         {
             Id = Guid.NewGuid().ToString("N"),
@@ -228,6 +251,10 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             TicketId = selected.Id,
             Status = ColumnExecutionStatus.Running,
             ClaimedAt = now,
+            TriggerTicketUpdatedAt = selected.UpdatedAt,
+            TriggerSignalType = triggerOwnerComment is null ? "column_scan" : "owner-feedback",
+            TriggerOwnerCommentId = triggerOwnerComment?.Id,
+            TriggerOwnerCommentCreatedAt = triggerOwnerComment?.CreatedAt,
         };
         db.ColumnExecutions.Add(execution);
         try { await db.SaveChangesAsync(); }
@@ -440,17 +467,68 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         }
         var ticket = await db.Tickets.FindAsync(execution.TicketId)
             ?? throw new InvalidOperationException($"Le ticket #{execution.TicketId} n’existe plus.");
-        var oldStatus = ticket.Status;
-        var source = await db.BoardColumns.FindAsync(processor.ColumnId);
-        ColumnAssignmentPolicy.Apply(ticket, source, target);
-        ticket.PipelineId = target.PipelineId;
-        ticket.ColumnId = target.Id;
-        ticket.Status = target.Name;
-        ticket.FireAt = isScheduled ? result.FireAt : null;
-        ticket.ScheduleTarget = isScheduled ? wakeTarget!.Name : null;
-        ticket.UpdatedAt = DateTime.UtcNow;
         var row = await db.ColumnExecutions.FindAsync(execution.Id);
         if (row is null) return;
+        var source = await db.BoardColumns.FindAsync(processor.ColumnId);
+        var oldStatus = ticket.Status;
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? successTransaction = null;
+        if (target.Role == ColumnRole.Success)
+        {
+            var rejection = await ValidateSuccessContextAsync(db, row, ticket, result);
+            if (rejection is not null)
+            {
+                row.ContextRejectionReason = rejection;
+                row.Error = rejection;
+                await db.SaveChangesAsync();
+                await FailAttemptAsync(projectSlug, execution, processor, rejection, author);
+                return;
+            }
+            row.ConsumedTicketUpdatedAt = ticket.UpdatedAt;
+            row.ConsumedOwnerCommentId = result.Evidence?.OwnerFeedbackCommentId;
+
+            if (BeforeSuccessCompareAndSwapAsync is not null)
+                await BeforeSuccessCompareAndSwapAsync();
+
+            successTransaction = await db.Database.BeginTransactionAsync();
+            var expectedUpdatedAt = ticket.UpdatedAt;
+            var completedAt = DateTime.UtcNow;
+            ColumnAssignmentPolicy.Apply(ticket, source, target);
+            var updated = await db.Tickets
+                .Where(item => item.Id == ticket.Id && item.UpdatedAt == expectedUpdatedAt)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(item => item.AssignedTo,
+                        ticket.AssignedTo)
+                    .SetProperty(item => item.PipelineId, target.PipelineId)
+                    .SetProperty(item => item.ColumnId, target.Id)
+                    .SetProperty(item => item.Status, target.Name)
+                    .SetProperty(item => item.FireAt, isScheduled ? result.FireAt : null)
+                    .SetProperty(item => item.ScheduleTarget, isScheduled ? wakeTarget!.Name : null)
+                    .SetProperty(item => item.UpdatedAt, completedAt));
+            if (updated == 0)
+            {
+                await successTransaction!.RollbackAsync();
+                await successTransaction.DisposeAsync();
+                successTransaction = null;
+                row.ContextRejectionReason = "stale_ticket_context";
+                row.Error = "stale_ticket_context";
+                await db.SaveChangesAsync();
+                await FailAttemptAsync(projectSlug, execution, processor,
+                    "stale_ticket_context", author);
+                return;
+            }
+
+            db.Entry(ticket).State = EntityState.Detached;
+        }
+        if (target.Role != ColumnRole.Success)
+        {
+            ColumnAssignmentPolicy.Apply(ticket, source, target);
+            ticket.PipelineId = target.PipelineId;
+            ticket.ColumnId = target.Id;
+            ticket.Status = target.Name;
+            ticket.FireAt = isScheduled ? result.FireAt : null;
+            ticket.ScheduleTarget = isScheduled ? wakeTarget!.Name : null;
+            ticket.UpdatedAt = DateTime.UtcNow;
+        }
         row.Status = ColumnExecutionStatus.Completed;
         row.Outcome = result.Outcome;
         row.Summary = result.Summary;
@@ -472,7 +550,90 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             Text = $"traitement de colonne terminé ({result.Outcome}) : {oldStatus} → {target.Name}",
         });
         await db.SaveChangesAsync();
+        if (successTransaction is not null)
+        {
+            await successTransaction.CommitAsync();
+            await successTransaction.DisposeAsync();
+        }
         tickets.NotifyStatusChanged(projectSlug, ticket.Id, oldStatus, target.Name);
+    }
+
+    public async Task<string?> ValidateSuccessContextAsync(
+        string projectSlug, ColumnExecution execution, ColumnProcessor processor, ColumnAgentResult result)
+    {
+        var targetId = processor.Routes.FirstOrDefault(r =>
+            string.Equals(r.Outcome, result.Outcome, StringComparison.OrdinalIgnoreCase))?.TargetColumnId
+            ?? processor.DefaultTargetColumnId;
+        if (targetId is null) return null;
+        await using var db = projects.GetProjectDb(projectSlug);
+        await ColumnService.EnsureBoardColumnsTableAsync(db);
+        await EnsureTableAsync(db);
+        var target = await db.BoardColumns.AsNoTracking().FirstOrDefaultAsync(column => column.Id == targetId);
+        if (target?.Role != ColumnRole.Success) return null;
+        var row = await db.ColumnExecutions.FindAsync(execution.Id);
+        var ticket = await db.Tickets.AsNoTracking().FirstOrDefaultAsync(item => item.Id == execution.TicketId);
+        if (row is null) return "ticket_refresh_failed";
+        if (ticket is null)
+        {
+            row.ContextRejectionReason = "ticket_refresh_failed";
+            row.Error = "ticket_refresh_failed";
+            await db.SaveChangesAsync();
+            execution.ContextRejectionReason = row.ContextRejectionReason;
+            return row.ContextRejectionReason;
+        }
+        var rejection = await ValidateSuccessContextAsync(db, row, ticket, result);
+        if (rejection is null)
+        {
+            row.ConsumedTicketUpdatedAt = ticket.UpdatedAt;
+            row.ConsumedOwnerCommentId = result.Evidence?.OwnerFeedbackCommentId;
+        }
+        else
+        {
+            row.ContextRejectionReason = rejection;
+            row.Error = rejection;
+        }
+        await db.SaveChangesAsync();
+        execution.ConsumedTicketUpdatedAt = row.ConsumedTicketUpdatedAt;
+        execution.ConsumedOwnerCommentId = row.ConsumedOwnerCommentId;
+        execution.ContextRejectionReason = row.ContextRejectionReason;
+        return rejection;
+    }
+
+    private static async Task<string?> ValidateSuccessContextAsync(
+        TodoDbContext db, ColumnExecution row, Ticket ticket, ColumnAgentResult result)
+    {
+        if (row.TriggerTicketUpdatedAt is null) return "ticket_refresh_failed";
+        if (result.Evidence?.TicketUpdatedAt is DateTime consumedVersion
+            && consumedVersion.ToUniversalTime() != ticket.UpdatedAt.ToUniversalTime())
+            return "stale_ticket_context";
+        if (row.TriggerOwnerCommentId is not int ownerCommentId)
+            return result.Evidence?.TicketUpdatedAt is DateTime
+                || ticket.UpdatedAt == row.TriggerTicketUpdatedAt
+                    ? null
+                    : "stale_ticket_context";
+        if (result.Evidence?.OwnerFeedbackCommentId != ownerCommentId)
+            return "owner_feedback_not_consumed";
+        if (result.Evidence.DeliveryCommentId is not int deliveryCommentId)
+            return "owner_feedback_not_consumed";
+        var delivery = await db.Comments.AsNoTracking().FirstOrDefaultAsync(comment =>
+            comment.Id == deliveryCommentId && comment.TicketId == ticket.Id && comment.Author != "owner");
+        if (delivery is null || delivery.CreatedAt <= row.TriggerOwnerCommentCreatedAt
+            || result.Evidence.DeliveryProducedAt is DateTime producedAt && producedAt < delivery.CreatedAt)
+            return "owner_feedback_not_consumed";
+        // A referenced delivery comment legitimately advances UpdatedAt. Any later mutation,
+        // especially newer owner feedback, must still invalidate the result.
+        if (Math.Abs((ticket.UpdatedAt - delivery.CreatedAt).TotalSeconds) >= 1)
+            return "stale_ticket_context";
+        var newerOwnerFeedback = await db.Comments.AsNoTracking().AnyAsync(comment =>
+            comment.TicketId == ticket.Id && comment.Author == "owner" && comment.CreatedAt > delivery.CreatedAt);
+        if (newerOwnerFeedback) return "stale_ticket_context";
+        if (result.Evidence.Deliverables is not { Count: > 0 }
+            || result.Evidence.Deliverables.Any(item =>
+                string.IsNullOrWhiteSpace(item.Path)
+                || string.IsNullOrWhiteSpace(item.Verification)
+                || item.UpdatedAt <= row.TriggerOwnerCommentCreatedAt))
+            return "stale_ticket_context";
+        return null;
     }
 
     private static (string Fingerprint, string[] Signals) BuildProgress(
