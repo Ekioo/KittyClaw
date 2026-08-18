@@ -1275,7 +1275,7 @@
     border-radius: 4px;
     margin-bottom: 4px;
 }
-.chat-paste-status, .chat-paste-hint {
+.chat-paste-status {
     color: var(--text-muted);
     font-size: 0.75rem;
 }

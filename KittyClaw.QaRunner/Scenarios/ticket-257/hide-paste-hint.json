@@ -1,0 +1,25 @@
+{
+  "environment": { "KITTYCLAW_ENABLE_QA_ENDPOINTS": "1" },
+  "setup": [
+    { "type": "createProject", "name": "qa-ticket-257-hide-hint" }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-ticket-257-hide-hint" },
+    { "type": "wait", "ms": 1000 },
+    { "type": "click", "selector": ".new-instruction-btn" },
+    { "type": "wait", "ms": 35000 },
+    { "type": "click", "selector": ".chat-target-item.claude-direct" },
+    { "type": "wait", "ms": 300 },
+    { "type": "assertCount", "selector": ".chat-paste-hint", "expected": "0" },
+    { "type": "assertVisible", "selector": ".chat-input-area textarea" },
+    { "type": "pasteText", "selector": ".chat-input-area textarea", "value": "Zone de saisie disponible" },
+    { "type": "assertValue", "selector": ".chat-input-area textarea", "expected": "Zone de saisie disponible" },
+    {
+      "type": "screenshot",
+      "name": "ticket-257-chat-composer-without-paste-hint",
+      "selector": ".chat-input-area",
+      "description": "La zone de saisie reste disponible sans la ligne d’aide permanente sur les formats d’image."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

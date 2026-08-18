@@ -10,6 +10,7 @@
     { "type": "wait", "ms": 1500 },
     { "type": "click", "selector": ".chat-target-item.claude-direct" },
     { "type": "wait", "ms": 300 },
+    { "type": "assertCount", "selector": ".chat-paste-hint", "expected": "0" },
     { "type": "pasteText", "selector": ".chat-input-area textarea", "value": "Texte seul" },
     { "type": "assertValue", "selector": ".chat-input-area textarea", "expected": "Texte seul" },
     { "type": "fill", "selector": ".chat-input-area textarea", "value": "" },

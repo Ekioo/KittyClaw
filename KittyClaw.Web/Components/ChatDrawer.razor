@@ -258,7 +258,6 @@
                       disabled="@_historyLoading"
                       placeholder="@(_historyLoading ? L["ChatLoadingConversation"] : _loading ? L["ChatInjectPlaceholder"] : L["ChatPlaceholder"])"
                       @onkeydown="OnKeyDown"></textarea>
-            <div class="chat-paste-hint">@L["ChatImageFormats"]</div>
             @if (_loading && !string.IsNullOrEmpty(_activeStreamId))
             {
                 <div class="chat-input-actions">

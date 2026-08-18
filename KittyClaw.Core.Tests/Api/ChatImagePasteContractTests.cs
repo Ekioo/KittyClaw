@@ -108,6 +108,7 @@ public class ChatImagePasteContractTests
         Assert.Contains("chatDrawerInstallPasteHandler", src);
         Assert.Contains("OnImagePasted", src);
         Assert.Contains("OnImagePasteError", src);
+        Assert.DoesNotContain("chat-paste-hint", src);
         // Per plan: image-only turn must be sendable (Send enabled when text empty but images attached).
         Assert.Matches(new Regex(@"_pendingImages[\s\S]{0,400}?Count\s*>\s*0|_pendingImages\.Count\s*>\s*0"), src);
     }
