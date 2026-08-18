@@ -136,6 +136,29 @@ public sealed class ProjectWorktreeSettingsTests
         Assert.Null(loaded.IntegrationBranch);
     }
 
+    [Fact]
+    public void RepositoryResolution_IsReusedDuringTheShortCacheWindow()
+    {
+        using var temp = new TempDir();
+        var repository = CreateRepository(temp.Path, "main");
+        var nestedWorkspace = Path.Combine(repository, "workspace");
+        Directory.CreateDirectory(nestedWorkspace);
+        var projects = new ProjectService(Path.Combine(temp.Path, "data"));
+        var project = new KittyClaw.Core.Models.Project
+        {
+            Name = "Cached repository",
+            Slug = "cached-repository",
+            WorkspacePath = nestedWorkspace,
+        };
+
+        var first = projects.ResolveRepositoryPath(project);
+        Directory.Move(Path.Combine(repository, ".git"), Path.Combine(repository, ".git-disabled"));
+        var second = projects.ResolveRepositoryPath(project);
+
+        Assert.Equal(repository, first, ignoreCase: true);
+        Assert.Equal(first, second, ignoreCase: true);
+    }
+
     internal static string CreateRepository(string root, string branch)
     {
         var repository = Path.Combine(root, "repository-" + Guid.NewGuid().ToString("N"));

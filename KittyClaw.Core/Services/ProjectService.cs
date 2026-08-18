@@ -13,7 +13,14 @@ public partial class ProjectService
     private readonly string _dataDir;
     private readonly string _registryPath;
     private readonly SemaphoreSlim _initLock = new(1, 1);
+    private static readonly TimeSpan RepositoryResolutionCacheDuration = TimeSpan.FromSeconds(30);
+    private readonly ConcurrentDictionary<string, RepositoryPathCacheEntry> _repositoryPathCache =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, object> _repositoryPathLocks =
+        new(StringComparer.OrdinalIgnoreCase);
     private bool _dbInitialized;
+
+    private sealed record RepositoryPathCacheEntry(string ResolvedPath, DateTime ExpiresAt);
 
     public string DataDir => _dataDir;
 
@@ -307,11 +314,28 @@ public partial class ProjectService
         var candidate = string.IsNullOrWhiteSpace(project.RepositoryPath)
             ? ResolveWorkspacePath(project)
             : project.RepositoryPath;
-        if (!Directory.Exists(candidate)) return Path.GetFullPath(candidate);
-        var result = RunGit(candidate, ["rev-parse", "--show-toplevel"]);
-        return result.Success && !string.IsNullOrWhiteSpace(result.Output)
-            ? Path.TrimEndingDirectorySeparator(Path.GetFullPath(result.Output.Trim()))
-            : Path.TrimEndingDirectorySeparator(Path.GetFullPath(candidate));
+        var normalizedCandidate = Path.TrimEndingDirectorySeparator(Path.GetFullPath(candidate));
+        if (!Directory.Exists(normalizedCandidate)) return normalizedCandidate;
+
+        var now = DateTime.UtcNow;
+        if (_repositoryPathCache.TryGetValue(normalizedCandidate, out var cached) && cached.ExpiresAt > now)
+            return cached.ResolvedPath;
+
+        var resolutionLock = _repositoryPathLocks.GetOrAdd(normalizedCandidate, static _ => new object());
+        lock (resolutionLock)
+        {
+            now = DateTime.UtcNow;
+            if (_repositoryPathCache.TryGetValue(normalizedCandidate, out cached) && cached.ExpiresAt > now)
+                return cached.ResolvedPath;
+
+            var result = RunGit(normalizedCandidate, ["rev-parse", "--show-toplevel"]);
+            var resolved = result.Success && !string.IsNullOrWhiteSpace(result.Output)
+                ? Path.TrimEndingDirectorySeparator(Path.GetFullPath(result.Output.Trim()))
+                : normalizedCandidate;
+            _repositoryPathCache[normalizedCandidate] =
+                new RepositoryPathCacheEntry(resolved, now + RepositoryResolutionCacheDuration);
+            return resolved;
+        }
     }
 
     private void PopulateResolvedRepositoryPath(Project project) =>

@@ -106,6 +106,15 @@ public class UnifiedBoardTests
     }
 
     [Fact]
+    public void UnifiedBoard_StreamsItsShellWhileAllProjectLanesLoad()
+    {
+        var src = LoadUnifiedBoard();
+
+        Assert.Contains("@attribute [StreamRendering]", src, StringComparison.Ordinal);
+        Assert.Contains("Task.WhenAll(laneTasks)", src, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void UnifiedBoard_MountsOnboardingGate()
     {
         Assert.Contains("<OnboardingGate />", LoadUnifiedBoard());
