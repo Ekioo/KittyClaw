@@ -9,6 +9,28 @@ namespace KittyClaw.Core.Tests.Automation;
 [Collection("MockClaude")]
 public sealed class AgentMemoryAdHocTests
 {
+    [Fact]
+    public async Task ServiceLoop_YieldsBeforeRunningTheFirstConsolidationCycle()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stopwatch = Stopwatch.StartNew();
+
+        var loop = ChatMemoryConsolidationService.RunLoopAsync(_ =>
+        {
+            entered.TrySetResult();
+            Thread.Sleep(500);
+            cancellation.Cancel();
+            return Task.CompletedTask;
+        }, TimeSpan.FromMinutes(1), cancellation.Token);
+
+        stopwatch.Stop();
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromMilliseconds(200),
+            $"The hosted service blocked startup for {stopwatch.Elapsed.TotalMilliseconds:N0} ms.");
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => loop);
+    }
+
     [Theory]
     [InlineData("default", AdHocMemoryResult.NoChanges)]
     [InlineData("memory-update", AdHocMemoryResult.Modified)]

@@ -17,14 +17,30 @@ public sealed class ChatMemoryConsolidationService(
     private readonly TimeSpan _idleDelay = ReadDuration("KITTYCLAW_CHAT_MEMORY_IDLE_MINUTES", DefaultIdleDelay);
     private readonly TimeSpan _pollDelay = ReadDuration("KITTYCLAW_CHAT_MEMORY_POLL_SECONDS", TimeSpan.FromSeconds(30), seconds: true);
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
+        RunLoopAsync(async ct =>
+        {
+            try { await ProcessOnceAsync(DateTime.UtcNow, ct); }
+            catch (Exception ex) { logger.LogError(ex, "Ad-hoc chat memory consolidation cycle failed"); }
+        }, _pollDelay, stoppingToken,
+        () => logger.LogInformation("Ad-hoc chat memory consolidation started (idle delay {Delay})", _idleDelay));
+
+    internal static async Task RunLoopAsync(
+        Func<CancellationToken, Task> processOnce,
+        TimeSpan pollDelay,
+        CancellationToken stoppingToken,
+        Action? onStarted = null)
     {
-        logger.LogInformation("Ad-hoc chat memory consolidation started (idle delay {Delay})", _idleDelay);
+        // BackgroundService.StartAsync invokes ExecuteAsync synchronously until its first
+        // incomplete await. SQLite's async APIs can complete synchronously, so a large first
+        // consolidation scan used to delay Kestrel binding for minutes during restart.
+        await Task.Yield();
+
+        onStarted?.Invoke();
         while (!stoppingToken.IsCancellationRequested)
         {
-            try { await ProcessOnceAsync(DateTime.UtcNow, stoppingToken); }
-            catch (Exception ex) { logger.LogError(ex, "Ad-hoc chat memory consolidation cycle failed"); }
-            await Task.Delay(_pollDelay, stoppingToken);
+            await processOnce(stoppingToken);
+            await Task.Delay(pollDelay, stoppingToken);
         }
     }
 
