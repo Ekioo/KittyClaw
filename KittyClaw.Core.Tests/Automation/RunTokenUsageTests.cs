@@ -135,9 +135,12 @@ public class RunTokenUsageTests : IDisposable
         run.EndedAt = run.StartedAt.AddSeconds(30);
         run.ExitCode = 0;
 
+        var reports = new CostReportService(projects, new PipelineService(projects), tickets);
         var recorder = new RunCostRecorder(new AgentRunRegistry(), new CostTracker(),
-            projects, tickets, NullLogger<RunCostRecorder>.Instance);
+            projects, tickets, NullLogger<RunCostRecorder>.Instance, reports);
         await recorder.RecordAsync(run);
+        using var refreshTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+        await reports.WaitForRefreshRequestAsync(refreshTimeout.Token);
 
         var logPath = Path.Combine(workspace, ".agents", "channel", "cost-log.jsonl");
         Assert.True(File.Exists(logPath));

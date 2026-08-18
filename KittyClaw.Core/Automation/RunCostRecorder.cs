@@ -16,16 +16,18 @@ public sealed class RunCostRecorder : IHostedService
     private readonly CostTracker _cost;
     private readonly ProjectService _projects;
     private readonly TicketService _tickets;
+    private readonly CostReportService? _reports;
     private readonly ILogger<RunCostRecorder> _logger;
 
     public RunCostRecorder(AgentRunRegistry runs, CostTracker cost, ProjectService projects,
-        TicketService tickets, ILogger<RunCostRecorder> logger)
+        TicketService tickets, ILogger<RunCostRecorder> logger, CostReportService? reports = null)
     {
         _runs = runs;
         _cost = cost;
         _projects = projects;
         _tickets = tickets;
         _logger = logger;
+        _reports = reports;
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
@@ -81,6 +83,8 @@ public sealed class RunCostRecorder : IHostedService
             if (run.TicketId is int ticketId)
                 await _tickets.AddAgentUsageAsync(run.ProjectSlug, ticketId,
                     run.TotalTokens, (double)(run.TotalCostUsd ?? 0m), run.CostIsEstimated);
+
+            _reports?.RequestRefresh();
         }
         catch (Exception ex)
         {
