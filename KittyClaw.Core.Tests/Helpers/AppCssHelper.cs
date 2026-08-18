@@ -14,7 +14,6 @@ internal static class AppCssHelper
         "css/ticket-panel.css",
         "css/agent-run.css",
         "css/settings.css",
-        "css/automations.css",
         "css/chat.css",
         "css/dashboard.css",
         "css/home.css",

@@ -128,8 +128,6 @@ else
                                 @onclick="() => TogglePause(lane)" @onclick:stopPropagation>
                             @(lane.Project.IsPaused ? "▶" : "⏸")
                         </button>
-                        <a class="lane-action" href="/board/@slug/automations"
-                           title="@L["Automations"]" @onclick:stopPropagation>@L["Automations"]</a>
                         <a class="lane-action" href="/board/@slug/settings"
                            title="@L["ProjectSettings"]" @onclick:stopPropagation>@L["ProjectSettings"]</a>
                     </div>

@@ -1,0 +1,27 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "qa-ticket-262" }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-ticket-262" },
+    { "type": "wait", "ms": 500 },
+    { "type": "assertCount", "selector": "a[href$='/automations']", "expected": "0" },
+    { "type": "screenshot", "name": "ticket-262-board-without-automations", "description": "Project board header exposes Workflows and Settings without the legacy Automations entry." },
+    { "type": "navigate", "url": "/board" },
+    { "type": "wait", "ms": 700 },
+    { "type": "assertVisible", "selector": ".board-lane a[href='/board/qa-ticket-262']" },
+    { "type": "assertCount", "selector": ".board-lane a[href='/board/qa-ticket-262/automations']", "expected": "0" },
+    { "type": "screenshot", "name": "ticket-262-unified-board-without-automations", "selector": ".board-lane", "description": "Unified-board project lane exposes board, dashboard, pause, and settings actions without the legacy Automations action." },
+    { "type": "navigate", "url": "/board/qa-ticket-262/dashboard" },
+    { "type": "wait", "ms": 500 },
+    { "type": "assertCount", "selector": "a[href$='/automations']", "expected": "0" },
+    { "type": "navigate", "url": "/board/qa-ticket-262/settings" },
+    { "type": "wait", "ms": 500 },
+    { "type": "assertCount", "selector": "a[href$='/automations']", "expected": "0" },
+    { "type": "navigate", "url": "/board/qa-ticket-262/automations" },
+    { "type": "wait", "ms": 500 },
+    { "type": "assertText", "selector": "h3", "expected": "Not Found" },
+    { "type": "assertCount", "selector": ".automations-container", "expected": "0" }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}
