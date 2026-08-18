@@ -93,9 +93,10 @@ public class BoardUnreadStateTests
         var css = KittyClaw.Core.Tests.Helpers.AppCssHelper.ReadAll();
 
         Assert.Contains("PipelineUnreadCount(pipeline.Id)", board);
-        Assert.Contains("ticket.PipelineId == pipelineId &&", board);
-        Assert.Contains("ticket.ParentId == _subKanbanParentId &&", board);
-        Assert.Contains("IsTicketUpdated(ticket)", board);
+        Assert.Contains("BoardUnreadState.CountPipelineUnread(", board);
+        Assert.Contains("FilterState.FilterText", board);
+        Assert.Contains("_subKanbanParentId", board);
+        Assert.Contains("GetPriorityLabel", board);
         Assert.Contains("pipeline-unread-badge", board);
         Assert.Contains("PipelineUnreadTickets", board);
         Assert.Contains(".pipeline-unread-badge", css);

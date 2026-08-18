@@ -1,0 +1,31 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "qa-ticket-261" },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-ticket-261/pipelines", "body": { "name": "Secondary" } },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-ticket-261/columns", "body": { "name": "Ready", "pipelineId": 2 }, "extract": { "secondaryColumn": "id" } },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-ticket-261/tickets", "body": { "title": "Release alpha", "createdBy": "qa-runner", "status": "Backlog", "pipelineId": 1, "columnId": 1 }, "extract": { "mainRelease": "id" } },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-ticket-261/tickets", "body": { "title": "Maintenance alpha", "createdBy": "qa-runner", "status": "Backlog", "pipelineId": 1, "columnId": 1 }, "extract": { "mainMaintenance": "id" } },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-ticket-261/tickets", "body": { "title": "Release beta", "createdBy": "qa-runner", "status": "Ready", "pipelineId": 2, "columnId": 8 }, "extract": { "secondaryRelease": "id" } },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-ticket-261/tickets", "body": { "title": "Maintenance beta", "createdBy": "qa-runner", "status": "Ready", "pipelineId": 2, "columnId": 8 }, "extract": { "secondaryMaintenance": "id" } }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-ticket-261" },
+    { "type": "setLocalStorage", "name": "board-last-visited-qa-ticket-261", "value": "2000-01-01T00:00:00.0000000Z" },
+    { "type": "navigate", "url": "/board/qa-ticket-261" },
+    { "type": "wait", "ms": 500 },
+    { "type": "assertText", "selector": ".pipeline-tab:nth-child(1)", "expected": "Main2" },
+    { "type": "assertText", "selector": ".pipeline-tab:nth-child(2)", "expected": "Secondary2" },
+    { "type": "screenshot", "name": "pipeline-badges-before-filter", "selector": ".pipeline-tabs", "description": "Both pipeline badges show two updated tickets before filtering." },
+    { "type": "fill", "selector": ".filter-input", "value": "Release" },
+    { "type": "wait", "ms": 250 },
+    { "type": "assertText", "selector": ".pipeline-tab:nth-child(1)", "expected": "Main1" },
+    { "type": "assertText", "selector": ".pipeline-tab:nth-child(2)", "expected": "Secondary1" },
+    { "type": "screenshot", "name": "pipeline-badges-filtered", "selector": ".pipeline-tabs", "description": "Both pipeline badges immediately shrink to one updated ticket matching the active filter." },
+    { "type": "click", "selector": ".filter-clear" },
+    { "type": "wait", "ms": 250 },
+    { "type": "assertValue", "selector": ".filter-input", "expected": "" },
+    { "type": "assertText", "selector": ".pipeline-tab:nth-child(1)", "expected": "Main2" },
+    { "type": "assertText", "selector": ".pipeline-tab:nth-child(2)", "expected": "Secondary2" }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

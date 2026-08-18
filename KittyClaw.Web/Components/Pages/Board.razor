@@ -541,9 +541,14 @@ else
     }
 
     private int PipelineUnreadCount(int pipelineId) =>
-        _tickets.Count(ticket => ticket.PipelineId == pipelineId &&
-                                 ticket.ParentId == _subKanbanParentId &&
-                                 IsTicketUpdated(ticket));
+        BoardUnreadState.CountPipelineUnread(
+            _tickets,
+            pipelineId,
+            _subKanbanParentId,
+            FilterState.FilterText,
+            _viewedAt,
+            _lastVisitedAt,
+            GetPriorityLabel);
 
     private IEnumerable<TicketSummary> TicketsInColumnContext(string status) =>
         _tickets.Where(ticket => ticket.PipelineId == _selectedPipelineId &&

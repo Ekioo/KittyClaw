@@ -271,6 +271,14 @@ public sealed class ScenarioRunner
             case "fill":
                 await page.FillAsync(Required(Resolve(action.Selector), "fill.selector"), Resolve(action.Value ?? ""));
                 break;
+            case "setLocalStorage":
+                await page.EvaluateAsync("([key, value]) => localStorage.setItem(key, value)",
+                    new[]
+                    {
+                        Required(Resolve(action.Name), "setLocalStorage.name"),
+                        Resolve(action.Value ?? "")
+                    });
+                break;
             case "pasteImage":
                 {
                     var selector = Required(Resolve(action.Selector), "pasteImage.selector");
