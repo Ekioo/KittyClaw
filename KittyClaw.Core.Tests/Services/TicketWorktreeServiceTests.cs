@@ -140,8 +140,8 @@ public sealed class TicketWorktreeServiceTests
         await File.WriteAllTextAsync(Path.Combine(scenarios, "worktree-delay.ndjson"), string.Join('\n',
         [
             "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"{{session_id}}\",\"model\":\"mock\"}",
-            "{\"_meta\":{\"delay_ms\":700}}",
-            "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":700,\"num_turns\":1}",
+            "{\"_meta\":{\"delay_ms\":3000}}",
+            "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":3000,\"num_turns\":1}",
         ]));
         TestSkillBuilder.Create(fixture.Repository, "worktree-agent", scenario: "worktree-delay");
         var runner = new AgentRunner(new SessionRegistry(), new AgentRunRegistry(), new RunConcurrencyGate(4),
@@ -153,7 +153,7 @@ public sealed class TicketWorktreeServiceTests
         await fixture.Worktrees.ResolveAsync(fixture.ProjectSlug, root.Id, CancellationToken.None);
         await fixture.Worktrees.ResolveAsync(fixture.ProjectSlug, other.Id, CancellationToken.None);
 
-        AgentRunContext Context(int ticketId) => new()
+        AgentRunContext Context(int ticketId, Action<StreamEvent>? onEvent = null) => new()
         {
             ProjectSlug = fixture.ProjectSlug,
             WorkspacePath = fixture.Repository,
@@ -162,23 +162,35 @@ public sealed class TicketWorktreeServiceTests
             TicketId = ticketId,
             MaxTurns = 1,
             Env = new Dictionary<string, string> { ["KITTYCLAW_MOCK_SCENARIOS_DIR"] = scenarios },
+            OnEventHook = onEvent,
         };
 
-        var stopwatch = Stopwatch.StartNew();
-        var runs = await Task.WhenAll(
-            runner.RunAsync(Context(root.Id), CancellationToken.None),
+        var rootLaunched = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var rootRun = runner.RunAsync(Context(root.Id, e =>
+        {
+            if (e.Kind == "launch") rootLaunched.TrySetResult();
+        }), CancellationToken.None);
+        await rootLaunched.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        var runs = await Task.WhenAll(rootRun,
             runner.RunAsync(Context(child.Id), CancellationToken.None),
             runner.RunAsync(Context(other.Id), CancellationToken.None));
-        stopwatch.Stop();
 
         Assert.All(runs, run => Assert.True(run.Status == AgentRunStatus.Completed,
             string.Join(" | ", run.SnapshotBuffer().Select(e => $"{e.Kind}: {e.Text}"))));
-        Assert.True(stopwatch.Elapsed >= TimeSpan.FromMilliseconds(1_250), $"Elapsed: {stopwatch.Elapsed}");
-        var launches = runs.Select(run => run.SnapshotBuffer().Single(e => e.Kind == "launch").At).ToArray();
-        Assert.True((launches[0] - launches[1]).Duration() >= TimeSpan.FromMilliseconds(600),
-            $"Same-root launch gap: {(launches[0] - launches[1]).Duration()}");
-        Assert.True(new[] { (launches[2] - launches[0]).Duration(), (launches[2] - launches[1]).Duration() }.Min()
-            < TimeSpan.FromMilliseconds(600), "The distinct root did not launch concurrently with either same-root run.");
+        var intervals = runs.Select(run =>
+        {
+            var events = run.SnapshotBuffer();
+            return (
+                Launch: events.Single(e => e.Kind == "launch").At,
+                Result: events.Single(e => e.Kind == "result").At);
+        }).ToArray();
+        var firstSameRoot = intervals[0].Launch <= intervals[1].Launch ? intervals[0] : intervals[1];
+        var secondSameRoot = intervals[0].Launch <= intervals[1].Launch ? intervals[1] : intervals[0];
+        Assert.True(firstSameRoot.Result <= secondSameRoot.Launch,
+            "The second same-root run launched before the first one completed.");
+        Assert.True(intervals[2].Launch < firstSameRoot.Result ||
+                    (intervals[2].Launch < secondSameRoot.Result && intervals[2].Result > secondSameRoot.Launch),
+            "The distinct-root run did not overlap either same-root execution.");
         Assert.Contains(runs.SelectMany(run => run.SnapshotBuffer()),
             e => e.Kind == "queued" && e.Text.Contains("Waiting for worktree"));
     }
