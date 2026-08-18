@@ -38,6 +38,15 @@ and ensures a partially configured workflow cannot strand a ticket with no avail
 5. selects an outcome route (switch-like rule) or the default route;
 6. moves the ticket atomically to the target column, possibly in another pipeline.
 
+Before a route with the `Success` role is applied, the execution must consume the current ticket
+version and, for an `owner-feedback` signal, the exact triggering owner comment plus fresh delivery
+evidence. The final transition uses a database compare-and-swap on `Tickets.UpdatedAt`, in the same
+transaction as the execution and activity records. A failed refresh, stale version, or unconsumed
+owner comment records `ticket_refresh_failed`, `stale_ticket_context`, or
+`owner_feedback_not_consumed`, then follows the configured technical retry/failure path without
+running configured actions or persisting partial success effects. Runs without owner feedback may
+consume an explicitly evidenced current ticket version, preserving legacy and custom outcome routes.
+
 At host startup, interrupted executions are recovered for every project, including projects that are paused. Recovery updates the durable execution state without dispatching new work; processing resumes only after the project is unpaused.
 
 A route cannot point back to its source column. Repeating work is expressed through the explicit retry policy, avoiding accidental processing loops.
