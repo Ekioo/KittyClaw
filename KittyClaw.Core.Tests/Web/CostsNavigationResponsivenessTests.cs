@@ -14,14 +14,16 @@ public sealed class CostsNavigationResponsivenessTests
     }
 
     [Fact]
-    public void CostPage_UsesCompactProjectPickerAndDailyAggregatedChart()
+    public void CostPage_UsesCompactProjectPickerAndProjectScopedCosts()
     {
         var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Costs.razor"));
 
         Assert.Contains("<details class=\"cost-project-picker\">", source, StringComparison.Ordinal);
-        Assert.Contains(".GroupBy(bucket => bucket.Day)", source, StringComparison.Ordinal);
-        Assert.Contains("@foreach (var day in DailyTotals)", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("@foreach (var bucket in _report.Daily)", source, StringComparison.Ordinal);
+        Assert.Contains("@foreach (var project in _projectCosts)", source, StringComparison.Ordinal);
+        Assert.Contains("bucket.ProjectSlug == project.ProjectSlug", source, StringComparison.Ordinal);
+        Assert.Contains("class=\"cost-project-total\"", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("class=\"cost-total-card", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("@Usd(_report.TotalUsd)", source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -29,9 +31,9 @@ public sealed class CostsNavigationResponsivenessTests
     {
         var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "wwwroot", "css", "costs.css"));
 
-        Assert.Contains(".cost-chart-scroll{min-width:0;overflow-x:auto", source, StringComparison.Ordinal);
-        Assert.Contains("@media(max-width:560px)", source, StringComparison.Ordinal);
-        Assert.Contains("prefers-reduced-motion:reduce", source, StringComparison.Ordinal);
+        Assert.Contains(".cost-project-card-grid", source, StringComparison.Ordinal);
+        Assert.Contains("@media (max-width: 560px)", source, StringComparison.Ordinal);
+        Assert.Contains("prefers-reduced-motion: reduce", source, StringComparison.Ordinal);
     }
 
     private static string RepoRoot()

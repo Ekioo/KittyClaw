@@ -1,0 +1,11 @@
+{
+  "setup": [],
+  "actions": [
+    { "type": "assertNavigationDuration", "url": "/costs", "waitForSelector": ".cost-filter-card", "maxMs": 3000 },
+    { "type": "assertVisible", "selector": ".cost-filter-grid" },
+    { "type": "assertCount", "selector": ".cost-total-card", "expected": "0" },
+    { "type": "assertVisible", "selector": ".cost-empty" },
+    { "type": "screenshot", "name": "ticket-269-costs-by-project", "description": "Costs page without a global total; project-scoped cards appear when cost data exists" }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

@@ -45,8 +45,9 @@
     {
         <section class="cost-loading" role="status" aria-live="polite">
             <span class="visually-hidden">@L["Loading"]</span>
-            <div class="cost-skeleton cost-skeleton-total"></div>
-            <div class="cost-skeleton-grid"><div class="cost-skeleton cost-skeleton-chart"></div><div class="cost-skeleton cost-skeleton-list"></div></div>
+            <div class="cost-skeleton-projects">
+                <div class="cost-skeleton"></div><div class="cost-skeleton"></div><div class="cost-skeleton"></div>
+            </div>
         </section>
     }
     else if (_error is not null)
@@ -55,48 +56,37 @@
     }
     else if (_report is not null)
     {
-        <section class="cost-total-card @(_report.Estimated ? "cost-estimated" : "")">
-            <div><span class="cost-card-label">@L["TotalCost"]</span><strong class="cost-total">@Usd(_report.TotalUsd)</strong></div>
-            @if (_report.Estimated) { <span class="estimated-marker" title="@L["EstimatedHelp"]" tabindex="0">~ @L["Estimated"]</span> }
-        </section>
-
         @if (_report.Daily.Count == 0)
         {
             <div class="cost-state cost-empty"><h2>@L["NoCostData"]</h2><p>@L["NoCostDataHint"]</p></div>
         }
         else
         {
-            <div class="cost-report-grid">
-                <section class="cost-chart-card">
-                    <h2>@L["DailyEvolution"]</h2>
-                    <div class="cost-chart-scroll">
-                        <div class="cost-chart" role="img" aria-label="@L["CostChartLabel"]">
-                            @foreach (var day in DailyTotals)
-                            {
-                                var height = _maxDailyCost == 0 ? 0 : Math.Max(4, day.UsdCost / _maxDailyCost * 100);
-                                <div class="cost-bar-column">
-                                    <button class="cost-bar @(day.Estimated ? "cost-estimated" : "")" style="--bar-height:@height.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%" title="@($"{day.Day:d} — {Usd(day.UsdCost)}")">
-                                        <span class="cost-bar-fill"></span><span class="visually-hidden">@day.Day, @Usd(day.UsdCost)</span>
-                                    </button>
-                                    <time datetime="@day.Day.ToString("yyyy-MM-dd")">@day.Day.ToString("dd/MM")</time>
-                                </div>
-                            }
-                        </div>
-                    </div>
-                </section>
-                <section class="cost-breakdown">
-                    <h2>@L["ByProject"]</h2>
-                    <div class="cost-project-rows">
-                        @foreach (var project in _report.Projects)
-                        {
-                            <div class="cost-project-row @(project.Estimated ? "cost-estimated" : "")">
-                                <span>@project.ProjectName</span><strong>@Usd(project.UsdCost)</strong>
-                                @if (project.Estimated) { <span title="@L["EstimatedHelp"]">~</span> }
+            <section class="cost-projects-section">
+                <h2>@L["ByProject"]</h2>
+                <div class="cost-project-card-grid">
+                    @foreach (var project in _projectCosts)
+                    {
+                        <article class="cost-project-cost-card">
+                            <header>
+                                <h3>@project.ProjectName</h3>
+                                @if (project.Estimated) { <span class="estimated-marker" title="@L["EstimatedHelp"]" tabindex="0">~ @L["Estimated"]</span> }
+                            </header>
+                            <strong class="cost-project-total">@Usd(project.UsdCost)</strong>
+                            <span class="cost-project-trend-label">@L["DailyEvolution"]</span>
+                            <div class="cost-project-trend" role="img" aria-label="@($"{L["DailyEvolution"]} — {project.ProjectName}")">
+                                @foreach (var day in project.Daily)
+                                {
+                                    var height = project.MaxDailyCost == 0 ? 0 : Math.Max(5, day.UsdCost / project.MaxDailyCost * 100);
+                                    <span class="cost-project-bar @(day.Estimated ? "cost-estimated" : "")" style="--bar-height:@height.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%" title="@($"{day.Day:d} — {Usd(day.UsdCost)}")">
+                                        <span class="visually-hidden">@day.Day, @Usd(day.UsdCost)</span>
+                                    </span>
+                                }
                             </div>
-                        }
-                    </div>
-                </section>
-            </div>
+                        </article>
+                    }
+                </div>
+            </section>
         }
     }
 </main>
@@ -108,15 +98,10 @@
     private HashSet<string> _selectedProjects = [];
     private CostReportOptions? _options;
     private CostReport? _report;
+    private IReadOnlyList<ProjectCostView> _projectCosts = [];
     private bool _loading = true;
     private string? _error;
 
-    private IReadOnlyList<DailyCostTotal> DailyTotals => _report?.Daily
-        .GroupBy(bucket => bucket.Day)
-        .Select(group => new DailyCostTotal(group.Key, group.Sum(bucket => bucket.UsdCost), group.Any(bucket => bucket.Estimated)))
-        .OrderBy(day => day.Day)
-        .ToArray() ?? [];
-    private decimal _maxDailyCost => DailyTotals.Count == 0 ? 0 : DailyTotals.Max(day => day.UsdCost);
     private string ProjectSelectionLabel => _selectedProjects.Count == 0 ? L["AllProjects"] : $"{_selectedProjects.Count} {L["Projects"]}";
 
     protected override async Task OnInitializedAsync()
@@ -128,7 +113,11 @@
     private async Task Reload()
     {
         _loading = true; _error = null;
-        try { _report = await CostReports.GetReportAsync(new(_from, _to, _selectedProjects, _pipelineKey)); }
+        try
+        {
+            _report = await CostReports.GetReportAsync(new(_from, _to, _selectedProjects, _pipelineKey));
+            _projectCosts = BuildProjectCosts(_report);
+        }
         catch (Exception ex) { _error = ex.Message; }
         finally { _loading = false; }
     }
@@ -139,5 +128,15 @@
     private async Task SelectAllProjects(ChangeEventArgs e) { _selectedProjects.Clear(); await Reload(); }
     private async Task ToggleProject(string slug, ChangeEventArgs e) { if ((bool?)e.Value == true) _selectedProjects.Add(slug); else _selectedProjects.Remove(slug); await Reload(); }
     private static string Usd(decimal value) => value.ToString("C", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
-    private sealed record DailyCostTotal(DateOnly Day, decimal UsdCost, bool Estimated);
+
+    private static IReadOnlyList<ProjectCostView> BuildProjectCosts(CostReport report) => report.Projects
+        .Select(project =>
+        {
+            var daily = report.Daily.Where(bucket => bucket.ProjectSlug == project.ProjectSlug).OrderBy(bucket => bucket.Day).ToArray();
+            var maxDailyCost = daily.Length == 0 ? 0 : daily.Max(bucket => bucket.UsdCost);
+            return new ProjectCostView(project.ProjectName, project.UsdCost, project.Estimated, daily, maxDailyCost);
+        })
+        .ToArray();
+
+    private sealed record ProjectCostView(string ProjectName, decimal UsdCost, bool Estimated, IReadOnlyList<CostBucket> Daily, decimal MaxDailyCost);
 }
