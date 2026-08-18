@@ -8,6 +8,29 @@ namespace KittyClaw.Core.Tests.Services;
 public sealed class CostReportServiceTests
 {
     [Fact]
+    public async Task ConcurrentIdenticalLoads_AreSerializedAndReuseTheSameResult()
+    {
+        using var temp = new TempDir();
+        var projects = new ProjectService(temp.Path);
+        var project = await projects.CreateProjectAsync("Concurrent costs");
+        var tickets = new TicketService(projects, new MemberService(projects));
+        var service = new CostReportService(projects, new PipelineService(projects), tickets);
+        var day = DateOnly.FromDateTime(DateTime.Now);
+        Write(projects.ResolveWorkspacePath(project), "cost-log.jsonl",
+            Entry(day, 3m, project.Slug, pipeline: 1, run: "concurrent"));
+
+        var optionLoads = await Task.WhenAll(
+            Enumerable.Range(0, 20).Select(_ => service.GetOptionsAsync()));
+        Assert.All(optionLoads, result => Assert.Same(optionLoads[0], result));
+
+        var filter = new CostReportFilter(day, day);
+        var reportLoads = await Task.WhenAll(
+            Enumerable.Range(0, 20).Select(_ => service.GetReportAsync(filter)));
+        Assert.All(reportLoads, result => Assert.Same(reportLoads[0], result));
+        Assert.Equal(3m, reportLoads[0].TotalUsd);
+    }
+
+    [Fact]
     public async Task AggregatesCurrentAndArchive_Inclusive_SkipsMalformedAndDuplicateRuns()
     {
         using var temp = new TempDir();

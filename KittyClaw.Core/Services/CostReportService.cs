@@ -15,8 +15,35 @@ public sealed record CostReportOptions(IReadOnlyList<CostProjectOption> Projects
 public sealed class CostReportService(ProjectService projects, PipelineService pipelines, TicketService tickets)
 {
     private const string UnknownPipelineSuffix = "unknown";
+    private static readonly TimeSpan OptionsCacheDuration = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan ReportCacheDuration = TimeSpan.FromSeconds(5);
+    private readonly SemaphoreSlim _loadGate = new(1, 1);
+    private CostReportOptions? _cachedOptions;
+    private DateTime _optionsExpiresAt;
+    private string? _cachedReportKey;
+    private CostReport? _cachedReport;
+    private DateTime _reportExpiresAt;
 
     public async Task<CostReportOptions> GetOptionsAsync()
+    {
+        await _loadGate.WaitAsync();
+        try
+        {
+            var now = DateTime.UtcNow;
+            if (_cachedOptions is not null && now < _optionsExpiresAt)
+                return _cachedOptions;
+
+            _cachedOptions = await LoadOptionsAsync();
+            _optionsExpiresAt = now + OptionsCacheDuration;
+            return _cachedOptions;
+        }
+        finally
+        {
+            _loadGate.Release();
+        }
+    }
+
+    private async Task<CostReportOptions> LoadOptionsAsync()
     {
         var all = await projects.ListProjectsAsync();
         var pipelineOptions = new List<CostPipelineOption>();
@@ -36,6 +63,27 @@ public sealed class CostReportService(ProjectService projects, PipelineService p
     }
 
     public async Task<CostReport> GetReportAsync(CostReportFilter filter)
+    {
+        var cacheKey = BuildReportCacheKey(filter);
+        await _loadGate.WaitAsync();
+        try
+        {
+            var now = DateTime.UtcNow;
+            if (_cachedReport is not null && cacheKey == _cachedReportKey && now < _reportExpiresAt)
+                return _cachedReport;
+
+            _cachedReport = await LoadReportAsync(filter);
+            _cachedReportKey = cacheKey;
+            _reportExpiresAt = now + ReportCacheDuration;
+            return _cachedReport;
+        }
+        finally
+        {
+            _loadGate.Release();
+        }
+    }
+
+    private async Task<CostReport> LoadReportAsync(CostReportFilter filter)
     {
         if (filter.To < filter.From) return new(0, false, [], []);
         var rows = new List<(DateOnly Day, string Slug, string Name, decimal Cost, bool Estimated)>();
@@ -79,6 +127,14 @@ public sealed class CostReportService(ProjectService projects, PipelineService p
             .Select(g => new CostProjectTotal(g.Key.Slug, g.Key.Name, g.Sum(x => x.Cost), g.Any(x => x.Estimated)))
             .OrderByDescending(x => x.UsdCost).ToList();
         return new(rows.Sum(x => x.Cost), rows.Any(x => x.Estimated), daily, totals);
+    }
+
+    private static string BuildReportCacheKey(CostReportFilter filter)
+    {
+        var projectsKey = filter.ProjectSlugs is null
+            ? string.Empty
+            : string.Join('\n', filter.ProjectSlugs.Order(StringComparer.Ordinal));
+        return $"{filter.From:O}|{filter.To:O}|{filter.PipelineKey}|{projectsKey}";
     }
 
     private async Task<bool> HasUnknownPipelineEntriesAsync(KittyClaw.Core.Models.Project project)
