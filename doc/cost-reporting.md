@@ -7,18 +7,20 @@ The global Costs page aggregates durable agent-cost records across registered pr
 ## Key components
 
 - `KittyClaw.Core/Automation/CostTracker.cs` — defines the backward-compatible durable cost-log record.
-- `KittyClaw.Core/Automation/RunCostRecorder.cs` — records project and pipeline snapshots when a run finishes.
-- `KittyClaw.Core/Services/CostReportService.cs` — reads current and rotated JSONL logs, ignores malformed records, deduplicates runs, resolves legacy pipeline attribution, and aggregates report data.
+- `KittyClaw.Core/Automation/RunCostRecorder.cs` — records project and pipeline data when a run finishes, then requests a coalesced snapshot refresh.
+- `KittyClaw.Core/Services/CostReportService.cs` — serves filter options and reports from a compact persistent snapshot and an in-memory filtered-report cache. Its sequential refresh pass reads current and rotated JSONL logs, ignores malformed records, deduplicates runs, and resolves legacy pipeline attribution outside the UI request path.
+- `KittyClaw.Core/Services/CostReportRefreshService.cs` — performs the initial asynchronous refresh, reacts to coalesced new-cost notifications, and provides a 15-minute fallback refresh.
 - `KittyClaw.Web/Components/Pages/Costs.razor` — renders totals, filters, daily chart, project breakdown, and loading, empty, estimated, and error states.
 
 ## Entry points
 
 - The main navigation opens the global `/costs` route without requiring a selected project.
-- The page loads filter options and report data directly through `CostReportService` and refreshes all displayed aggregates when filters change.
+- The page reads filter options and report data directly from the current `CostReportService` snapshot. Filter changes only aggregate the compact in-memory rows and never rescan historical logs.
 
 ## External dependencies
 
 - Registered project metadata and workspace resolution from `ProjectService`.
 - Pipeline and ticket services for current options and backward-compatible resolution of legacy records.
 - Durable current and rotated `cost-log*.jsonl` files under each project workspace's `.agents/channel/` directory.
+- The atomic `cost-report-snapshot.json` cache in the KittyClaw data directory, retained across process restarts.
 - Blazor Server for the interactive page and accessible daily bar visualization.
