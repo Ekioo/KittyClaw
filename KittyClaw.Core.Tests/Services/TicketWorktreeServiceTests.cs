@@ -146,6 +146,13 @@ public sealed class TicketWorktreeServiceTests
         TestSkillBuilder.Create(fixture.Repository, "worktree-agent", scenario: "worktree-delay");
         var runner = new AgentRunner(new SessionRegistry(), new AgentRunRegistry(), new RunConcurrencyGate(4),
             NullLogger<AgentRunner>.Instance, worktrees: fixture.Worktrees);
+
+        // Worktree provisioning has its own cross-root concurrency and timing concerns.
+        // Prepare both canonical worktrees so this test measures only the execution
+        // invariant: one root is serialized while a distinct root can run concurrently.
+        await fixture.Worktrees.ResolveAsync(fixture.ProjectSlug, root.Id, CancellationToken.None);
+        await fixture.Worktrees.ResolveAsync(fixture.ProjectSlug, other.Id, CancellationToken.None);
+
         AgentRunContext Context(int ticketId) => new()
         {
             ProjectSlug = fixture.ProjectSlug,
