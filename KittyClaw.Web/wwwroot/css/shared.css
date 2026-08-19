@@ -107,10 +107,21 @@
 }
 
 /* Project list */
-.project-list { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 1.5rem; }
+.project-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, 220px);
+    grid-auto-rows: 112px;
+    align-items: stretch;
+    justify-content: start;
+    gap: 0.75rem;
+    padding: 1.5rem;
+}
 .project-card-wrap {
     position: relative;
-    display: inline-flex;
+    display: block;
+    width: 220px;
+    height: 112px;
+    min-width: 0;
 }
 .project-card-wrap .project-pause-btn {
     position: absolute;
@@ -173,11 +184,16 @@
 .pause-btn { font-size: 0.82rem; }
 .pause-btn--paused { color: #f59e0b !important; }
 .project-card {
+    display: block;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 1.1rem 1.4rem;
-    min-width: 200px;
+    min-width: 0;
+    overflow: hidden;
     transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 .project-card:hover {
@@ -186,9 +202,18 @@
     box-shadow: 0 0 0 1px var(--accent-dim), 0 4px 20px rgba(0,0,0,0.3);
     text-decoration: none;
 }
-.project-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.65rem; margin-bottom: 0.2rem; }
+.project-card-heading { display: flex; align-items: center; justify-content: space-between; min-width: 0; gap: 0.65rem; margin-bottom: 0.2rem; }
 .project-card h3 { min-width: 0; overflow: hidden; color: var(--text); margin: 0; font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
-.project-card small { color: var(--text-muted); font-size: 0.78rem; }
+.project-card small { display: block; overflow: hidden; color: var(--text-muted); font-size: 0.78rem; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 560px) {
+    .project-list {
+        grid-template-columns: minmax(0, 1fr);
+        grid-auto-rows: 112px;
+        padding: 1rem 0.75rem;
+    }
+    .project-card-wrap { width: 100%; }
+}
 
 /* Context menu */
 .context-menu-backdrop { position: fixed; inset: 0; z-index: 999; }

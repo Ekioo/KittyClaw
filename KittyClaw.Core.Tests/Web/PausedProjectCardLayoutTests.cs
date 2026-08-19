@@ -34,6 +34,25 @@ public sealed class PausedProjectCardLayoutTests
         Assert.Contains("opacity: 1", action);
     }
 
+    [Fact]
+    public void ProjectList_UsesFixedDesktopTilesAndSingleColumnOnSmallScreens()
+    {
+        var css = AppCssHelper.ReadAll();
+        var list = Rule(css, @"(?m)^\.project-list");
+        var wrap = Rule(css, @"(?m)^\.project-card-wrap");
+        var card = Rule(css, @"(?m)^\.project-card");
+
+        Assert.Contains("display: grid", list);
+        Assert.Contains("grid-template-columns: repeat(auto-fill, 220px)", list);
+        Assert.Contains("grid-auto-rows: 112px", list);
+        Assert.Contains("width: 220px", wrap);
+        Assert.Contains("height: 112px", wrap);
+        Assert.Contains("width: 100%", card);
+        Assert.Contains("height: 100%", card);
+        Assert.Contains("@media (max-width: 560px)", css);
+        Assert.Contains("grid-template-columns: minmax(0, 1fr)", css);
+    }
+
     private static string Rule(string css, string selector)
     {
         var match = Regex.Match(css, selector + @"\s*\{(?<body>[\s\S]*?)\}");

@@ -1,0 +1,42 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "Bloomii" },
+    { "type": "createProject", "name": "Bsky Publisher" },
+    { "type": "createProject", "name": "Devto Publisher" },
+    { "type": "createProject", "name": "Eggs" },
+    { "type": "createProject", "name": "Ekioo" },
+    { "type": "createProject", "name": "Image Factory" },
+    { "type": "createProject", "name": "Kalceo" },
+    { "type": "createProject", "name": "Kinoboard" },
+    { "type": "createProject", "name": "KittyClaw" },
+    { "type": "createProject", "name": "KittyClaw Front" },
+    { "type": "createProject", "name": "Lain" },
+    { "type": "createProject", "name": "X Publisher" },
+    { "type": "createProject", "name": "YouTube Community Publisher" },
+    { "type": "createProject", "name": "AccountBuildUp With A Very Long Name" },
+    { "type": "createProject", "name": "BrewCo" },
+    { "type": "createProject", "name": "Florist OS" },
+    { "type": "createProject", "name": "Video Factory" },
+    { "type": "createProject", "name": "VizMail" },
+    { "type": "togglePause", "project": "accountbuildup-with-a-very-long-name" },
+    { "type": "togglePause", "project": "brewco" },
+    { "type": "togglePause", "project": "florist-os" },
+    { "type": "togglePause", "project": "video-factory" },
+    { "type": "togglePause", "project": "vizmail" }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/projects" },
+    { "type": "assertCount", "selector": ".project-card-wrap", "expected": "18" },
+    { "type": "assertCss", "selector": ".project-card-wrap >> nth=0", "property": "width", "expected": "220px" },
+    { "type": "assertCss", "selector": ".project-card-wrap >> nth=0", "property": "height", "expected": "112px" },
+    { "type": "assertCss", "selector": ".project-card-wrap.project-paused >> nth=0", "property": "width", "expected": "220px" },
+    { "type": "assertCss", "selector": ".project-card-wrap.project-paused >> nth=0", "property": "height", "expected": "112px" },
+    { "type": "assertVisible", "selector": ".project-card-wrap.project-paused .project-pause-btn-label >> nth=0" },
+    {
+      "type": "screenshot",
+      "name": "ticket-244-fixed-project-grid",
+      "description": "Eighteen active and paused projects align in a responsive grid of equal-size desktop tiles."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}
