@@ -8,6 +8,23 @@ namespace KittyClaw.Core.Tests.Services;
 public sealed class ProjectWorktreeSettingsTests
 {
     [Fact]
+    public async Task NewProject_DefaultsToWorktreesEnabled_AndCanBeDisabledExplicitly()
+    {
+        using var temp = new TempDir();
+        var projects = new ProjectService(temp.Path);
+
+        var project = await projects.CreateProjectAsync("new-default");
+
+        Assert.True(project.WorktreesEnabled);
+
+        await projects.UpdateProjectAsync(project.Slug, null, worktreesEnabled: false);
+        var loaded = await projects.GetProjectAsync(project.Slug);
+
+        Assert.NotNull(loaded);
+        Assert.False(loaded.WorktreesEnabled);
+    }
+
+    [Fact]
     public async Task ExistingRegistry_MigratesWithWorktreesDisabled()
     {
         using var temp = new TempDir();
@@ -63,6 +80,7 @@ public sealed class ProjectWorktreeSettingsTests
         Directory.CreateDirectory(child);
         var projects = new ProjectService(Path.Combine(temp.Path, "data"));
         var project = await projects.CreateProjectAsync("wrong-root");
+        await projects.UpdateProjectAsync(project.Slug, null, worktreesEnabled: false);
         await projects.UpdateProjectAsync(project.Slug, repository);
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => projects.UpdateProjectAsync(
@@ -106,6 +124,7 @@ public sealed class ProjectWorktreeSettingsTests
         Directory.CreateDirectory(workspace);
         var projects = new ProjectService(Path.Combine(temp.Path, "data"));
         var project = await projects.CreateProjectAsync("non-git");
+        await projects.UpdateProjectAsync(project.Slug, null, worktreesEnabled: false);
         await projects.UpdateProjectAsync(project.Slug, workspace);
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -125,6 +144,7 @@ public sealed class ProjectWorktreeSettingsTests
         var repository = CreateRepository(temp.Path, "main");
         var projects = new ProjectService(Path.Combine(temp.Path, "data"));
         var project = await projects.CreateProjectAsync("missing-branch");
+        await projects.UpdateProjectAsync(project.Slug, null, worktreesEnabled: false);
         await projects.UpdateProjectAsync(project.Slug, repository);
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>

@@ -19,6 +19,18 @@ public sealed class ProjectWorktreeSettingsHttpTests : IClassFixture<ProjectWork
     }
 
     [Fact]
+    public async Task Post_NewProjectDefaultsToWorktreesEnabled()
+    {
+        var create = await _client.PostAsJsonAsync(
+            "/api/projects",
+            new CreateProjectRequest("api-default-worktrees-" + Guid.NewGuid().ToString("N")));
+
+        create.EnsureSuccessStatusCode();
+        var body = await create.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(body.GetProperty("worktreesEnabled").GetBoolean());
+    }
+
+    [Fact]
     public async Task Patch_ExposesAndUpdatesWorktreeSettings()
     {
         var repository = ProjectWorktreeSettingsTests.CreateRepository(_factory.DataDir, "dev");

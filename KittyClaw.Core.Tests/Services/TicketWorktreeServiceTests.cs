@@ -228,6 +228,8 @@ public sealed class TicketWorktreeServiceTests
             if (enable)
                 await projects.UpdateProjectAsync(project.Slug, null, worktreesEnabled: true, integrationBranch: "integration",
                     repositoryPath: nested ? Path.GetRelativePath(workspace, repository) : null);
+            else
+                await projects.UpdateProjectAsync(project.Slug, null, worktreesEnabled: false);
             var tickets = new TicketService(projects, new MemberService(projects));
             return new Fixture(root, workspace, repository, project.Slug, tickets, new TicketWorktreeService(projects, tickets));
         }

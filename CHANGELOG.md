@@ -7,6 +7,7 @@ All notable changes to KittyClaw.
 ### Changed
 
 - The embedded MCP server is now enabled or disabled instantly from the global Settings page; `KITTYCLAW_MCP_ENABLED` and application restarts are no longer required.
+- New projects now enable per-ticket Git worktrees by default; existing migrated projects retain their previous disabled setting and projects can still opt out explicitly.
 
 ## [v0.16] — 2026-08-19
 

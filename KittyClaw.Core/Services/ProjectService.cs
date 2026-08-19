@@ -94,7 +94,7 @@ public partial class ProjectService
             slug = $"{slug}-{i}";
         }
 
-        var project = new Project { Name = name, Slug = slug };
+        var project = new Project { Name = name, Slug = slug, WorktreesEnabled = true };
         registry.Projects.Add(project);
         await registry.SaveChangesAsync();
 
@@ -199,7 +199,9 @@ public partial class ProjectService
         var resultingEnabled = worktreesEnabled ?? project.WorktreesEnabled;
         if (repositoryPath is not null)
             project.RepositoryPath = NormalizeRepositoryPath(project, repositoryPath);
-        if (resultingEnabled)
+        // A newly created project starts enabled before its workspace is selected. Validate
+        // only when worktree settings themselves change, not during ordinary onboarding updates.
+        if (updatesWorktreeSettings && resultingEnabled)
         {
             var repositoryCandidate = string.IsNullOrWhiteSpace(project.RepositoryPath)
                 ? ResolveWorkspacePath(project)

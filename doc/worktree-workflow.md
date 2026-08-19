@@ -1,10 +1,10 @@
-# Per-ticket worktree workflow (opt-in)
+# Per-ticket worktree workflow
 
 ## Status
 
-**Opt-in pattern.** Each project persists a `WorktreesEnabled` flag, an integration branch, and optionally a `RepositoryPath` distinct from its control `WorkspacePath`. The flag defaults to disabled for both new and migrated projects. When enabled, ticket-bound agent runs automatically use the canonical worktree of the root ticket. A freshly initialized KittyClaw project keeps all agents working in the single project workspace.
+Each project persists a `WorktreesEnabled` flag, an integration branch, and optionally a `RepositoryPath` distinct from its control `WorkspacePath`. New projects default to worktrees enabled; migrated projects keep the historical disabled value so an upgrade never changes their execution directory unexpectedly. Worktrees can still be disabled explicitly in project settings. When enabled and configured, ticket-bound agent runs automatically use the canonical worktree of the root ticket.
 
-Adopt this pattern only if you need filesystem isolation between concurrent agentic work on different tickets (e.g. several programmers in flight simultaneously, or a desire to keep `main` clean while work is in progress).
+Disable this pattern only when a project intentionally needs every agent to share one checkout. Worktrees require a usable Git repository and an existing local integration branch before ticket-bound execution begins.
 
 ## What ships in the product
 
