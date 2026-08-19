@@ -56,16 +56,24 @@ public sealed class RuntimeBoundaryGateServiceTests
     }
 
     [Fact]
-    public async Task OrdinaryTool_IsAllowedWithoutRegisteringAnyApprovalRequest()
+    public async Task TwentyOrdinaryRuns_StayBelowOneApprovalPerTwentyRuns()
     {
         using var harness = new GateHarness();
 
-        var verdict = await harness.Gate.EvaluateHookAsync("project", "run-1",
-            Payload("dotnet build KittyClaw.sln"), finalize: false);
+        var verdicts = new List<RuntimeBoundaryGateVerdict>();
+        for (var i = 0; i < 20; i++)
+        {
+            var runId = $"ordinary-run-{i}";
+            harness.RegisterRun(runId);
+            verdicts.Add(await harness.Gate.EvaluateHookAsync("project", runId,
+                Payload("dotnet build KittyClaw.sln"), finalize: false));
+        }
 
-        Assert.Equal("allow", verdict.Decision);
-        Assert.Empty(await harness.Registry.QueryRequestsAsync("project", new()));
-        Assert.Null(harness.Run.AwaitingApprovalRequestId);
+        Assert.All(verdicts, verdict => Assert.Equal("allow", verdict.Decision));
+        var requests = await harness.Registry.QueryRequestsAsync("project", new());
+        Assert.Empty(requests);
+        Assert.True(requests.Count / 20d < 1d / 20d,
+            $"Observed {requests.Count} approval requests across 20 ordinary runs.");
     }
 
     [Fact]
@@ -286,16 +294,8 @@ public sealed class RuntimeBoundaryGateServiceTests
             Projects = new ProjectService((temp ?? _ownedTemp!).Path);
             Registry = new ApprovalRegistryService(Projects);
             var runs = new AgentRunRegistry();
-            Run = runs.Register(new AgentRun
-            {
-                RunId = "run-1",
-                ProjectSlug = "project",
-                TicketId = 170,
-                AgentName = "programmer",
-                SkillFile = "programmer",
-                ConcurrencyGroup = "programmer",
-                StartedAt = DateTime.UtcNow,
-            });
+            Runs = runs;
+            Run = RegisterRun("run-1");
             Gate = new RuntimeBoundaryGateService(
                 new RuntimeBoundaryEnforcementService(Registry),
                 new ApprovalWorkflowService(Registry, runs),
@@ -305,8 +305,20 @@ public sealed class RuntimeBoundaryGateServiceTests
 
         public ProjectService Projects { get; }
         public ApprovalRegistryService Registry { get; }
+        private AgentRunRegistry Runs { get; }
         public AgentRun Run { get; }
         public RuntimeBoundaryGateService Gate { get; }
+
+        public AgentRun RegisterRun(string runId) => Runs.Register(new AgentRun
+        {
+            RunId = runId,
+            ProjectSlug = "project",
+            TicketId = 170,
+            AgentName = "programmer",
+            SkillFile = "programmer",
+            ConcurrencyGroup = "programmer",
+            StartedAt = DateTime.UtcNow,
+        });
 
         public void Dispose() => _ownedTemp?.Dispose();
     }

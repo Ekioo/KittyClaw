@@ -20,6 +20,7 @@ public sealed class RuntimeEnforcementIntegrationTests
     [InlineData(CliProvider.Codex)]
     [InlineData(CliProvider.Grok)]
     [InlineData(CliProvider.Mistral)]
+    [InlineData(CliProvider.DeepSeek)]
     public async Task EnforcedDispatch_FailsClosedOnObservationOnlyProviders(CliProvider provider)
     {
         using var tmp = new TempDir();
@@ -47,6 +48,65 @@ public sealed class RuntimeEnforcementIntegrationTests
         Assert.Contains("Fail-closed", error.Text);
         foreach (var boundary in Enum.GetValues<BoundaryActionClass>())
             Assert.Contains(boundary.ToString(), error.Text);
+    }
+
+    [Fact]
+    public async Task EnforcedOllamaDispatch_UsesClaudeHookAndBlocksProtectedEffectWithoutDecision()
+    {
+        using var harness = await EnforcementHarness.StartAsync("enforce-ollama");
+        harness.WriteScenario("ollama-protected-effect",
+            """{"type":"system","subtype":"init","session_id":"{{session_id}}","model":"mock"}""",
+            """{"_meta":{"hooked_effect":{"tool_name":"Bash","tool_input":{"command":"git push origin main"},"write_file":{"path":"ollama-effect.txt","content":"executed"}}}}""",
+            """{"type":"result","subtype":"success","is_error":false,"duration_ms":42,"num_turns":1}""");
+
+        var run = await harness.RunAsync("ollama-protected-effect", deadlineSeconds: 2,
+            new Dictionary<string, string>
+            {
+                ["ANTHROPIC_BASE_URL"] = "http://127.0.0.1:11434",
+                ["ANTHROPIC_AUTH_TOKEN"] = "ollama",
+            });
+
+        Assert.Equal(AgentRunStatus.Completed, run.Status);
+        Assert.False(File.Exists(Path.Combine(harness.Workspace, "ollama-effect.txt")));
+        var request = Assert.Single(await harness.Registry.QueryRequestsAsync(harness.Slug, new()));
+        Assert.Equal("PushOrPullRequest", request.ActionClass);
+        Assert.Empty(await harness.Registry.QueryReceiptsAsync(harness.Slug, request.RequestId));
+    }
+
+    [Fact]
+    public async Task ClaudeHook_MissingRequiredEnvironment_DeniesBeforeEffect()
+    {
+        var bundle = RuntimeEnforcementHooks.WriteClaudeHookBundle();
+        try
+        {
+            var settings = await File.ReadAllTextAsync(Path.Combine(bundle, RuntimeEnforcementHooks.SettingsFileName));
+            using var document = System.Text.Json.JsonDocument.Parse(settings);
+            var command = document.RootElement.GetProperty("hooks").GetProperty("PreToolUse")[0]
+                .GetProperty("hooks")[0].GetProperty("command").GetString()!;
+            var start = OperatingSystem.IsWindows()
+                ? new System.Diagnostics.ProcessStartInfo("powershell.exe", command["powershell.exe ".Length..])
+                : new System.Diagnostics.ProcessStartInfo("/bin/sh", command["/bin/sh ".Length..]);
+            start.RedirectStandardInput = true;
+            start.RedirectStandardOutput = true;
+            start.UseShellExecute = false;
+            start.Environment.Remove("KITTYCLAW_API_URL");
+            start.Environment.Remove("KITTYCLAW_PROJECT_SLUG");
+            start.Environment.Remove("KITTYCLAW_RUN_ID");
+
+            using var process = System.Diagnostics.Process.Start(start)!;
+            await process.StandardInput.WriteAsync("""{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git push origin main"}}""");
+            process.StandardInput.Close();
+            var output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync();
+
+            Assert.Equal(0, process.ExitCode);
+            Assert.Contains("\"permissionDecision\":\"deny\"", output);
+            Assert.Contains("environment variables are missing", output);
+        }
+        finally
+        {
+            Directory.Delete(bundle, recursive: true);
+        }
     }
 
     [Fact]
@@ -185,7 +245,8 @@ public sealed class RuntimeEnforcementIntegrationTests
             TestSkillBuilder.Create(Workspace, "test-agent", scenario: name);
         }
 
-        public Task<AgentRun> StartRunAsync(string scenario, int deadlineSeconds) =>
+        public Task<AgentRun> StartRunAsync(string scenario, int deadlineSeconds,
+            IReadOnlyDictionary<string, string>? extraEnvironment = null) =>
             _runner.RunAsync(new AgentRunContext
             {
                 ProjectSlug = Slug,
@@ -196,17 +257,26 @@ public sealed class RuntimeEnforcementIntegrationTests
                 TicketId = 170,
                 BoundaryEnforcement = BoundaryEnforcementMode.Enforce,
                 MaxRunDuration = TimeSpan.FromSeconds(120),
-                Env = new Dictionary<string, string>
+                Env = MergeEnvironment(new Dictionary<string, string>
                 {
                     ["KITTYCLAW_MOCK_SCENARIOS_DIR"] = _scenarioDir,
                     ["KITTYCLAW_API_URL"] = _app.Urls.First().TrimEnd('/'),
                     ["KITTYCLAW_ENFORCEMENT_POLL_SECONDS"] = "1",
                     ["KITTYCLAW_ENFORCEMENT_DEADLINE_SECONDS"] = deadlineSeconds.ToString(),
-                },
+                }, extraEnvironment),
             }, CancellationToken.None);
 
-        public async Task<AgentRun> RunAsync(string scenario, int deadlineSeconds) =>
-            await StartRunAsync(scenario, deadlineSeconds).WaitAsync(TimeSpan.FromSeconds(90));
+        public async Task<AgentRun> RunAsync(string scenario, int deadlineSeconds,
+            IReadOnlyDictionary<string, string>? extraEnvironment = null) =>
+            await StartRunAsync(scenario, deadlineSeconds, extraEnvironment).WaitAsync(TimeSpan.FromSeconds(90));
+
+        private static Dictionary<string, string> MergeEnvironment(Dictionary<string, string> environment,
+            IReadOnlyDictionary<string, string>? extraEnvironment)
+        {
+            if (extraEnvironment is not null)
+                foreach (var pair in extraEnvironment) environment[pair.Key] = pair.Value;
+            return environment;
+        }
 
         public async Task<ApprovalRequestRecord> WaitForPendingRequestAsync()
         {
