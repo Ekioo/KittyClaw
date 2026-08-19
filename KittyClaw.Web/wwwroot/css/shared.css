@@ -204,7 +204,8 @@
 }
 .project-card-heading { display: flex; align-items: center; justify-content: space-between; min-width: 0; gap: 0.65rem; margin-bottom: 0.2rem; }
 .project-card h3 { min-width: 0; overflow: hidden; color: var(--text); margin: 0; font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
-.project-card small { display: block; overflow: hidden; color: var(--text-muted); font-size: 0.78rem; text-overflow: ellipsis; white-space: nowrap; }
+.project-card-owner-actions { display: flex; align-items: center; gap: 0.35rem; margin-top: 0.65rem; color: var(--text-muted); font-size: 0.76rem; }
+.project-card-owner-actions--pending { color: #f59e0b; font-weight: 600; }
 
 @media (max-width: 560px) {
     .project-list {

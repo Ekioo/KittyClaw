@@ -53,6 +53,18 @@ public sealed class PausedProjectCardLayoutTests
         Assert.Contains("grid-template-columns: minmax(0, 1fr)", css);
     }
 
+    [Fact]
+    public void ProjectCard_ReplacesSlugWithLocalizedOwnerActionCount()
+    {
+        var source = LoadComponent();
+
+        Assert.DoesNotContain("<small>@project.Slug</small>", source);
+        Assert.Contains("project-card-owner-actions", source);
+        Assert.Contains("ProjectOwnerActionOne", source);
+        Assert.Contains("ProjectOwnerActionMany", source);
+        Assert.Contains("OwnerActionCounts", source);
+    }
+
     private static string Rule(string css, string selector)
     {
         var match = Regex.Match(css, selector + @"\s*\{(?<body>[\s\S]*?)\}");

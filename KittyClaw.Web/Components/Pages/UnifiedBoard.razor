@@ -82,7 +82,7 @@ else if (_projects.Count == 0)
 }
 else if (_viewMode == "cards")
 {
-    <ProjectCards Projects="CardProjects" OnTogglePause="TogglePauseProject" />
+    <ProjectCards Projects="CardProjects" OwnerActionCounts="_ownerActionCounts" OnTogglePause="TogglePauseProject" />
 }
 else if (_lanes is null)
 {
@@ -377,6 +377,7 @@ else
     // Cards mode only needs the project list — the full lanes (tickets, columns, members of
     // every project) are loaded lazily, the first time the kanban mode is actually shown.
     private List<Project>? _projects;
+    private readonly Dictionary<string, int> _ownerActionCounts = new(StringComparer.OrdinalIgnoreCase);
 
     private IReadOnlyList<Project> CardProjects =>
         (_projects ?? [])
@@ -421,9 +422,19 @@ else
         _viewMode = path.Equals("/projects", StringComparison.OrdinalIgnoreCase) ? "cards" : "kanban";
 
         _projects = await ProjectService.ListProjectsAsync();
+        if (_viewMode == "cards")
+            await RefreshOwnerActionCountsAsync(_projects);
         _prefsLoaded = true;
         if (_viewMode == "kanban")
             await EnsureLanesAsync();
+    }
+
+    private async Task RefreshOwnerActionCountsAsync(IEnumerable<Project> projects)
+    {
+        // Project databases are independent SQLite files. Read them sequentially to avoid a
+        // burst of migrations and disk contention when a portfolio contains many projects.
+        foreach (var project in projects)
+            _ownerActionCounts[project.Slug] = await TicketService.CountOwnerActionTicketsAsync(project.Slug);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -645,12 +656,15 @@ else
         // First switch to kanban in this session: the lanes were deliberately not loaded.
         if (mode == "kanban")
             await EnsureLanesAsync();
+        else
+            await RefreshOwnerActionCountsAsync(_projects ?? []);
     }
 
     private async Task OnProjectCreated(Project project)
     {
         if (_projects is not null && _projects.All(p => p.Slug != project.Slug))
             _projects.Add(project);
+        _ownerActionCounts[project.Slug] = 0;
         if (_lanes is not null && _lanes.All(l => l.Project.Slug != project.Slug))
         {
             _lanes.Add(await LoadLaneAsync(project));
@@ -868,6 +882,10 @@ else
                 if (updatedProject is null && pIdx >= 0) _projects.RemoveAt(pIdx);
                 else if (updatedProject is not null && pIdx >= 0) _projects[pIdx] = updatedProject;
                 else if (updatedProject is not null) _projects.Add(updatedProject);
+                if (updatedProject is null)
+                    _ownerActionCounts.Remove(slug);
+                else if (_viewMode == "cards")
+                    _ownerActionCounts[slug] = await TicketService.CountOwnerActionTicketsAsync(slug);
                 StateHasChanged();
             }
 

@@ -140,4 +140,30 @@ public sealed class TicketColumnValidationTests
 
         Assert.Equal("owner", ticket.AssignedTo);
     }
+
+    [Fact]
+    public async Task CountOwnerActionTicketsAsync_UsesColumnRoleAndTracksMoves()
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("owner-action-count");
+        var pipeline = await new PipelineService(projects).CreateAsync(project.Slug, "Review");
+        var columns = new ColumnService(projects);
+        var ready = await columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: pipeline.Id);
+        var decision = await columns.CreateColumnAsync(project.Slug, "Custom renamed handoff",
+            pipelineId: pipeline.Id, role: ColumnRole.OwnerAction);
+        var tickets = new TicketService(projects, new MemberService(projects));
+        var first = await tickets.CreateTicketAsync(project.Slug, "Choose A", status: decision.Name,
+            pipelineId: pipeline.Id, columnId: decision.Id);
+        await tickets.CreateTicketAsync(project.Slug, "Choose B", status: decision.Name,
+            pipelineId: pipeline.Id, columnId: decision.Id);
+        await tickets.CreateTicketAsync(project.Slug, "Ordinary work", status: ready.Name,
+            pipelineId: pipeline.Id, columnId: ready.Id);
+
+        Assert.Equal(2, await tickets.CountOwnerActionTicketsAsync(project.Slug));
+
+        await tickets.MoveTicketAsync(project.Slug, first.Id, ready.Name);
+
+        Assert.Equal(1, await tickets.CountOwnerActionTicketsAsync(project.Slug));
+    }
 }

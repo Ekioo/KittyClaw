@@ -279,6 +279,24 @@ public class TicketService
         }).ToList();
     }
 
+    /// <summary>
+    /// Counts tickets currently parked in a column that explicitly requires owner input.
+    /// Column roles are authoritative so renamed or translated columns remain accurate.
+    /// </summary>
+    public async Task<int> CountOwnerActionTicketsAsync(string projectSlug)
+    {
+        await using var db = _projectService.GetProjectDb(projectSlug);
+        await ColumnService.EnsureBoardColumnsTableAsync(db);
+        var ownerActionColumnIds = await db.BoardColumns
+            .Where(column => column.Role == ColumnRole.OwnerAction)
+            .Select(column => column.Id)
+            .ToListAsync();
+
+        if (ownerActionColumnIds.Count == 0) return 0;
+        return await db.Tickets.CountAsync(ticket =>
+            ticket.ColumnId.HasValue && ownerActionColumnIds.Contains(ticket.ColumnId.Value));
+    }
+
     public async Task<Ticket?> GetTicketAsync(string projectSlug, int ticketId)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);

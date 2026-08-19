@@ -24,7 +24,10 @@
                         <span class="project-paused-badge">⏸ @L["Paused"]</span>
                     }
                 </div>
-                <small>@project.Slug</small>
+                @{ var ownerActionCount = OwnerActionCount(project); }
+                <div class="project-card-owner-actions @(ownerActionCount > 0 ? "project-card-owner-actions--pending" : "")">
+                    <span aria-hidden="true">@(ownerActionCount > 0 ? "⚠" : "✓")</span><span>@L.Get(ownerActionCount == 1 ? "ProjectOwnerActionOne" : "ProjectOwnerActionMany", ownerActionCount)</span>
+                </div>
             </a>
             <button class="project-pause-btn" title="@(project.IsPaused ? L["Resume"] : L["Pause"])"
                     @onclick="() => OnTogglePause.InvokeAsync(project)" @onclick:stopPropagation>
@@ -57,7 +60,12 @@
 
 @code {
     [Parameter] public IReadOnlyList<Project> Projects { get; set; } = [];
+    [Parameter] public IReadOnlyDictionary<string, int> OwnerActionCounts { get; set; } =
+        new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
     [Parameter] public EventCallback<Project> OnTogglePause { get; set; }
+
+    private int OwnerActionCount(Project project) =>
+        OwnerActionCounts.TryGetValue(project.Slug, out var count) ? count : 0;
 
     private string _sortOrder = "name";
     private bool _sortMenuVisible;

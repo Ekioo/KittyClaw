@@ -246,6 +246,8 @@
   "ChatTechnicalDetails": "Detalles técnicos",
   "MarkColumnRead": "Marcar todo como leído",
   "OwnerActionRequired": "Acción requerida",
+  "ProjectOwnerActionOne": "{0} acción requerida",
+  "ProjectOwnerActionMany": "{0} acciones requeridas",
   "ColumnUserGuidance": "Instrucciones del ticket",
   "ColumnUserGuidanceHelp": "Instrucciones Markdown mostradas entre la descripción y la actividad cuando el ticket está en espera. Explique exactamente qué puede hacer el Owner para desbloquearlo. Déjelo vacío para que KittyClaw derive instrucciones seguras del pipeline.",
   "ColumnUserGuidancePlaceholder": "- Mover el ticket a Aprobado para validar\n- Moverlo a Rechazado y añadir un comentario para rechazar",

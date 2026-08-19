@@ -246,6 +246,8 @@
   "ChatTechnicalDetails": "Technische Details",
   "MarkColumnRead": "Alle als gelesen markieren",
   "OwnerActionRequired": "Aktion erforderlich",
+  "ProjectOwnerActionOne": "{0} erforderliche Aktion",
+  "ProjectOwnerActionMany": "{0} erforderliche Aktionen",
   "ColumnUserGuidance": "Ticket-Anweisungen",
   "ColumnUserGuidanceHelp": "Markdown-Anweisungen, die bei wartenden Tickets zwischen Beschreibung und Aktivität erscheinen. Beschreiben Sie genau, was der Owner zum Entsperren tun kann. Leer lassen, damit KittyClaw sichere Hinweise aus der Pipeline ableitet.",
   "ColumnUserGuidancePlaceholder": "- Ticket zur Bestätigung nach Genehmigt verschieben\n- Zum Ablehnen nach Abgelehnt verschieben und kommentieren",

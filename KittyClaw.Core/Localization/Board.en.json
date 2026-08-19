@@ -254,6 +254,8 @@
   "ChatTechnicalDetails": "Technical details",
   "MarkColumnRead": "Mark all as read",
   "OwnerActionRequired": "Action required",
+  "ProjectOwnerActionOne": "{0} action required",
+  "ProjectOwnerActionMany": "{0} actions required",
   "ColumnUserGuidance": "Ticket guidance",
   "ColumnUserGuidanceHelp": "Markdown instructions displayed between the ticket description and activity while it is waiting. Explain exactly what the Owner can do to unblock it. Leave empty to let KittyClaw derive safe guidance from the pipeline.",
   "ColumnUserGuidancePlaceholder": "- Move the ticket to Approved to validate\n- Move it to Rejected and add a comment to refuse",

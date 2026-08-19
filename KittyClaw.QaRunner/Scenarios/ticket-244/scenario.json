@@ -18,6 +18,14 @@
     { "type": "createProject", "name": "Florist OS" },
     { "type": "createProject", "name": "Video Factory" },
     { "type": "createProject", "name": "VizMail" },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/bloomii/columns",
+      "body": { "name": "Owner review", "color": "#f59e0b", "role": 4 }
+    },
+    { "type": "createTicket", "project": "bloomii", "title": "Approve campaign", "status": "Owner review" },
+    { "type": "createTicket", "project": "bloomii", "title": "Confirm budget", "status": "Owner review" },
     { "type": "togglePause", "project": "accountbuildup-with-a-very-long-name" },
     { "type": "togglePause", "project": "brewco" },
     { "type": "togglePause", "project": "florist-os" },
@@ -27,6 +35,8 @@
   "actions": [
     { "type": "navigate", "url": "/projects" },
     { "type": "assertCount", "selector": ".project-card-wrap", "expected": "18" },
+    { "type": "assertCount", "selector": ".project-card small", "expected": "0" },
+    { "type": "assertText", "selector": ".project-card-wrap >> nth=0 >> .project-card-owner-actions", "expected": "⚠2 actions required" },
     { "type": "assertCss", "selector": ".project-card-wrap >> nth=0", "property": "width", "expected": "220px" },
     { "type": "assertCss", "selector": ".project-card-wrap >> nth=0", "property": "height", "expected": "112px" },
     { "type": "assertCss", "selector": ".project-card-wrap.project-paused >> nth=0", "property": "width", "expected": "220px" },
@@ -35,7 +45,7 @@
     {
       "type": "screenshot",
       "name": "ticket-244-fixed-project-grid",
-      "description": "Eighteen active and paused projects align in a responsive grid of equal-size desktop tiles."
+      "description": "Eighteen fixed project tiles show owner-action counts instead of technical slugs."
     }
   ],
   "verdict": { "passOn": "all-asserts-pass" }
