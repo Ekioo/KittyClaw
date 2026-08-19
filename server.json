@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.ekioo/kittyclaw",
+  "name": "io.github.Ekioo/kittyclaw",
   "title": "KittyClaw",
   "description": "Drive KittyClaw, a self-hosted agent-fleet kanban, from any MCP client (embedded /mcp endpoint).",
   "repository": {
