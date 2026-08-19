@@ -42,6 +42,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "GET /api/projects/{slug}/pipelines",
         "POST /api/projects/{slug}/pipelines",
         "PATCH /api/projects/{slug}/pipelines/{pipelineId}",
+        "GET /api/projects/{slug}/pipelines/{pipelineId}/export",
         // Workflow migrations
         "POST /api/projects/{slug}/workflow-migrations/analyze",
         "POST /api/projects/{slug}/workflow-migrations/apply",

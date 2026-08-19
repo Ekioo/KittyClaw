@@ -5,6 +5,7 @@ namespace KittyClaw.Web.Api;
 public record CreateProjectRequest(string Name);
 public record CreatePipelineRequest(string Name);
 public record UpdatePipelineRequest(string? Name = null);
+public record PipelineExportBlockedResponse(string Error, IReadOnlyList<PipelineExportFinding> Findings);
 public record CreateProjectSkillRequest(string Name, string Instructions = "", string? Description = null);
 public record UpdateProjectSkillRequest(string? Name = null, string? Instructions = null, string? Description = null);
 public record SaveColumnProcessorRequest(

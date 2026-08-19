@@ -6,6 +6,7 @@ All notable changes to KittyClaw.
 
 ### Added
 
+- Pipeline export as a portable `.kittyclaw-pipeline` kit: `GET /api/projects/{slug}/pipelines/{pipelineId}/export` downloads a deterministic ZIP with a versioned manifest (metadata, provenance, compatibility, parameters, secrets, requirements, per-file SHA-256), a pipeline serialized on logical column keys without database identifiers, and the full folder of every referenced project skill. Export is refused with actionable findings while probable secrets, URL credentials, authentication headers, absolute/user paths or out-of-folder skill references remain; `{{input.NAME}}` and `{{secret.NAME}}` placeholders are the sanctioned representation.
 - Native DeepSeek V4 support through Claude Code and DeepSeek's Anthropic-compatible API, including project-vault credentials, model selection, provider-scoped sessions, cost estimates, localized settings, and documentation.
 
 ### Changed

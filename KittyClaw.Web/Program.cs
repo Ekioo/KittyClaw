@@ -52,6 +52,7 @@ builder.Services.AddSingleton<ColumnService>();
 builder.Services.AddSingleton<PipelineService>();
 builder.Services.AddSingleton<ProjectSkillService>();
 builder.Services.AddSingleton<ColumnProcessorService>();
+builder.Services.AddSingleton<PipelineExportService>();
 builder.Services.AddSingleton<ColumnScheduledTaskService>();
 builder.Services.AddSingleton<ColumnExecutionService>();
 builder.Services.AddSingleton<ColumnMemoryCapitalizationService>();
