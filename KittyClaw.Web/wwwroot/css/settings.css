@@ -92,6 +92,15 @@
 .settings-list .icon-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .settings-list .icon-btn.delete-icon:hover { border-color: #f06b6b; color: #f06b6b; }
 .settings-list .save-btn { border-color: #3ecf8e; color: #3ecf8e; }
+.secret-entry-row .settings-input:first-child { max-width: 15rem; }
+.secret-entry-row .settings-input:nth-child(2) { flex: 1; min-width: 15rem; }
+.secret-write-only { margin: .65rem 0 0; color: #a9b8cc; }
+.secret-list { margin-top: 1rem; }
+@media (max-width: 720px) {
+    .secret-entry-row { align-items: stretch; flex-direction: column; }
+    .secret-entry-row .settings-input:first-child,
+    .secret-entry-row .settings-input:nth-child(2) { max-width: none; min-width: 0; }
+}
 .color-swatch {
     display: inline-block; width: 16px; height: 16px;
     border-radius: 3px; vertical-align: middle;

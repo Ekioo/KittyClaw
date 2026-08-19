@@ -177,8 +177,9 @@ public sealed class AgentRunner
     private readonly BoundaryObservationService? _boundaryObserver;
     private readonly TicketWorktreeService? _worktrees;
     private readonly RtkIntegrationService? _rtk;
+    private readonly ProjectSecretVault? _projectSecrets;
 
-    public AgentRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<AgentRunner> logger, AppSettingsService? appSettings = null, BoundaryObservationService? boundaryObserver = null, TicketWorktreeService? worktrees = null, RtkIntegrationService? rtk = null)
+    public AgentRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<AgentRunner> logger, AppSettingsService? appSettings = null, BoundaryObservationService? boundaryObserver = null, TicketWorktreeService? worktrees = null, RtkIntegrationService? rtk = null, ProjectSecretVault? projectSecrets = null)
     {
         _sessions = sessions;
         _runs = runs;
@@ -188,6 +189,7 @@ public sealed class AgentRunner
         _boundaryObserver = boundaryObserver;
         _worktrees = worktrees;
         _rtk = rtk;
+        _projectSecrets = projectSecrets;
     }
 
     public async Task<AgentRun> RunAsync(AgentRunContext ctx, CancellationToken ct)
@@ -710,6 +712,14 @@ public sealed class AgentRunner
         var psi = ProcessLifecycleManager.BuildProcessStartInfo(
             ctx, invocation.Arguments, invocation.FileName);
         RtkIntegrationService.ApplyEnvironment(psi, rtkStatus);
+        var projectSecrets = _projectSecrets is null
+            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, string>(
+                await _projectSecrets.ReadForInjectionAsync(ctx.ProjectSlug, ct),
+                StringComparer.OrdinalIgnoreCase);
+        // Apply vault values last: automation/model configuration cannot shadow a protected secret.
+        foreach (var (name, value) in projectSecrets) psi.Environment[name] = value;
+        string Redact(string text) => SecretRedactor.Redact(text, projectSecrets.Values);
 
         AppendDebugLog(ctx, $"LAUNCHING {ctx.AgentName} {(isResume ? "(resume)" : "(new)")} ticket=#{ctx.TicketId} session={sessionId}");
         _logger.LogInformation("LAUNCH {Agent} {Mode} ticket=#{TicketId} session={SessionId} cmd={Bin} {Args}",
@@ -785,9 +795,9 @@ public sealed class AgentRunner
                 ? new CancellationTokenSource(maxDuration)
                 : new CancellationTokenSource();
             using var linkedWithTimeout = CancellationTokenSource.CreateLinkedTokenSource(linked.Token, timeoutCts.Token);
-            var stdoutTask = AgentStreamPump.PumpStdoutAsync(proc, run, backend, linkedWithTimeout.Token);
+            var stdoutTask = AgentStreamPump.PumpStdoutAsync(proc, run, backend, linkedWithTimeout.Token, Redact);
             var stderrTask = AgentStreamPump.PumpStderrAsync(
-                proc, run, backend, linkedWithTimeout.Token);
+                proc, run, backend, linkedWithTimeout.Token, Redact);
             var steerTask = AgentStreamPump.PumpSteeringAsync(proc, run, linkedWithTimeout.Token);
 
             using var killReg = linkedWithTimeout.Token.Register(() =>

@@ -13,7 +13,8 @@ internal static class AgentStreamPump
         => await PumpStdoutAsync(proc, run, AgentCliBackend.For(provider), ct);
 
     internal static async Task PumpStdoutAsync(
-        Process proc, AgentRun run, AgentCliBackend backend, CancellationToken ct)
+        Process proc, AgentRun run, AgentCliBackend backend, CancellationToken ct,
+        Func<string, string>? redact = null)
     {
         var reader = proc.StandardOutput;
         try
@@ -30,6 +31,7 @@ internal static class AgentStreamPump
                 }
                 if (line is null) break;
                 if (string.IsNullOrWhiteSpace(line)) continue;
+                line = redact?.Invoke(line) ?? line;
                 try { await run.WaitForApprovalResolutionAsync(ct); }
                 catch (OperationCanceledException) { break; }
                 try
@@ -153,7 +155,8 @@ internal static class AgentStreamPump
         => await PumpStderrAsync(proc, run, AgentCliBackend.For(CliProvider.Claude), ct);
 
     internal static async Task PumpStderrAsync(
-        Process proc, AgentRun run, AgentCliBackend backend, CancellationToken ct)
+        Process proc, AgentRun run, AgentCliBackend backend, CancellationToken ct,
+        Func<string, string>? redact = null)
     {
         var reader = proc.StandardError;
         try
@@ -170,6 +173,7 @@ internal static class AgentStreamPump
                 }
                 if (line is null) break;
                 if (string.IsNullOrWhiteSpace(line)) continue;
+                line = redact?.Invoke(line) ?? line;
                 run.Push(new StreamEvent(DateTime.UtcNow, backend.MapStderrKind(line), line));
             }
         }

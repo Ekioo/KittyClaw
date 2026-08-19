@@ -194,6 +194,57 @@ else
             }
         </section>
 
+        <section class="settings-section" data-testid="project-secrets">
+            <h2>@L["SecretsTitle"]</h2>
+            <p class="settings-hint">@L["SecretsHint"]</p>
+            <div class="settings-row secret-entry-row">
+                <input class="settings-input" data-testid="secret-name" autocomplete="off"
+                       placeholder="API_TOKEN" @bind="_secretName" @bind:event="oninput" />
+                <input class="settings-input" data-testid="secret-value" type="password" autocomplete="new-password"
+                       placeholder="@L["SecretValuePlaceholder"]" @bind="_secretValue" @bind:event="oninput" />
+                <button class="settings-primary" data-testid="save-secret" @onclick="SaveSecret"
+                        disabled="@(_savingSecret || string.IsNullOrWhiteSpace(_secretName) || string.IsNullOrEmpty(_secretValue))">
+                    @(_savingSecret ? "…" : L["SaveSecret"])
+                </button>
+            </div>
+            <p class="settings-hint secret-write-only">🔒 @L["SecretsWriteOnly"]</p>
+            @if (_secretStatus is not null)
+            {
+                <div class="settings-status @_secretStatus.Value.css" data-testid="secret-status">@_secretStatus.Value.text</div>
+            }
+            @if (_secrets.Count > 0)
+            {
+                <table class="settings-list secret-list" data-testid="secret-list">
+                    <thead><tr><th>@L["Name"]</th><th>@L["SecretUpdated"]</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var secret in _secrets)
+                        {
+                            <tr data-testid="secret-row">
+                                <td><code>@secret.Name</code></td>
+                                <td>@secret.UpdatedAt.ToLocalTime().ToString("g")</td>
+                                <td class="row-actions">
+                                    <button class="icon-btn" title="@L["ReplaceSecret"]" @onclick="() => SelectSecret(secret.Name)">✎</button>
+                                    @if (_deleteConfirmSecret == secret.Name)
+                                    {
+                                        <button class="icon-btn delete-icon" data-testid="confirm-delete-secret" @onclick="() => DeleteSecret(secret.Name)">✓</button>
+                                        <button class="icon-btn" @onclick="() => _deleteConfirmSecret = null">✕</button>
+                                    }
+                                    else
+                                    {
+                                        <button class="icon-btn delete-icon" title="@L["Delete"]" @onclick="() => _deleteConfirmSecret = secret.Name">🗑</button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <p class="settings-hint" data-testid="no-secrets">@L["NoSecrets"]</p>
+            }
+        </section>
+
         <section class="settings-section">
             <h2>@L["Members"]</h2>
             <p class="settings-hint">@L["MembersHint"]</p>
@@ -419,6 +470,12 @@ else
     private bool _rtkEnabled, _savingRtk;
     private RtkStatusDto? _rtkRuntimeStatus;
     private (string text, string css)? _rtkSaveStatus;
+    private List<ProjectSecretDto> _secrets = new();
+    private string _secretName = "";
+    private string _secretValue = "";
+    private string? _deleteConfirmSecret;
+    private bool _savingSecret;
+    private (string text, string css)? _secretStatus;
     private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
     private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_mistralModels).Concat(_discoveredModels).ToList();
 
@@ -453,6 +510,7 @@ else
         _rtkEnabled = _project.RtkEnabled;
         await ReloadAllAsync();
         await RefreshRtkStatus();
+        await ReloadSecrets();
         // Load model catalogs first, then apply the saved fallback so the <select> has a
         // matching <option> on first paint (avoids showing "Disabled" while value is set).
         if (!string.IsNullOrWhiteSpace(_localModelBaseUrl)) await DiscoverLocalModels();
@@ -636,6 +694,57 @@ else
     }
 
     private sealed record RtkStatusDto(bool Enabled, bool Available, string Mode, string? Version, string? Reason);
+
+    private sealed record ProjectSecretDto(string Name, DateTime UpdatedAt);
+
+    private async Task ReloadSecrets()
+    {
+        try { _secrets = await NewHttp().GetFromJsonAsync<List<ProjectSecretDto>>($"/api/projects/{Slug}/secrets") ?? new(); }
+        catch { _secrets = new(); }
+    }
+
+    private void SelectSecret(string name)
+    {
+        _secretName = name;
+        _secretValue = "";
+        _secretStatus = (L["EnterReplacement"], "");
+    }
+
+    private async Task SaveSecret()
+    {
+        if (string.IsNullOrWhiteSpace(_secretName) || string.IsNullOrEmpty(_secretValue)) return;
+        _savingSecret = true;
+        _secretStatus = null;
+        try
+        {
+            var name = _secretName.Trim();
+            var response = await NewHttp().PutAsJsonAsync(
+                $"/api/projects/{Slug}/secrets/{Uri.EscapeDataString(name)}", new { value = _secretValue });
+            if (!response.IsSuccessStatusCode)
+            {
+                var detail = await response.Content.ReadAsStringAsync();
+                try { detail = System.Text.Json.JsonDocument.Parse(detail).RootElement.GetProperty("error").GetString() ?? detail; } catch { }
+                _secretStatus = ($"{L["Error"]}: {detail}", "settings-status-err");
+                return;
+            }
+            _secretName = "";
+            _secretValue = "";
+            _secretStatus = (L["SecretSaved"], "settings-status-ok");
+            await ReloadSecrets();
+        }
+        catch (Exception ex) { _secretStatus = ($"{L["Error"]}: {ex.Message}", "settings-status-err"); }
+        finally { _savingSecret = false; }
+    }
+
+    private async Task DeleteSecret(string name)
+    {
+        _deleteConfirmSecret = null;
+        var response = await NewHttp().DeleteAsync($"/api/projects/{Slug}/secrets/{Uri.EscapeDataString(name)}");
+        _secretStatus = response.IsSuccessStatusCode
+            ? (L["SecretDeleted"], "settings-status-ok")
+            : ($"{L["Error"]}: {response.StatusCode}", "settings-status-err");
+        if (response.IsSuccessStatusCode) await ReloadSecrets();
+    }
 
     private async Task OnMemberKey(KeyboardEventArgs e) { if (e.Key == "Enter") await CreateMember(); }
 

@@ -29,14 +29,15 @@ public sealed class AutomationEngine : BackgroundService
         AgentRunner runner,
         CostTracker cost,
         LocalizationService loc,
-        ILogger<AutomationEngine> logger)
+        ILogger<AutomationEngine> logger,
+        ProjectSecretVault? projectSecrets = null)
     {
         _runs = runs;
         _logger = logger;
 
         _runtimeManager = new ProjectRuntimeManager(store, triggerState, logger);
         var runState = new RunStateManager(runs, cost, tickets, logger);
-        var executor = new ActionExecutor(tickets, members, labels, sessions, runs, runner, cost, loc, projects, runState, logger);
+        var executor = new ActionExecutor(tickets, members, labels, sessions, runs, runner, cost, loc, projects, runState, logger, projectSecrets);
         _triggerHandler = new TriggerHandler(projects, _runtimeManager, executor, tickets, members, sessions, runs, queue, loc, logger);
         _queueProcessor = new AutomationQueueProcessor(projects, tickets, queue, _runtimeManager, executor, logger);
         queue.WorkAvailable += WakeQueueConsumer;

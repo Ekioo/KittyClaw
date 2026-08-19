@@ -57,6 +57,9 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "PATCH /api/projects/{slug}/local-model",
         "GET /api/projects/{slug}/rtk",
         "PATCH /api/projects/{slug}/rtk",
+        "GET /api/projects/{slug}/secrets",
+        "PUT /api/projects/{slug}/secrets/{name}",
+        "DELETE /api/projects/{slug}/secrets/{name}",
         "GET /api/projects/{slug}/worktree-merges",
         "POST /api/projects/{slug}/worktree-merges",
         "POST /api/projects/{slug}/worktree-merges/process-next",
@@ -202,6 +205,9 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         ["PATCH /api/projects/{slug}/local-model"] = "Projects",
         ["GET /api/projects/{slug}/rtk"] = "Projects",
         ["PATCH /api/projects/{slug}/rtk"] = "Projects",
+        ["GET /api/projects/{slug}/secrets"] = "Project secrets",
+        ["PUT /api/projects/{slug}/secrets/{name}"] = "Project secrets",
+        ["DELETE /api/projects/{slug}/secrets/{name}"] = "Project secrets",
         ["GET /api/projects/{slug}/worktree-merges"] = "Worktree merges",
         ["POST /api/projects/{slug}/worktree-merges"] = "Worktree merges",
         ["POST /api/projects/{slug}/worktree-merges/process-next"] = "Worktree merges",
@@ -336,6 +342,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
             $"/api/projects/{slug}/runs",
             $"/api/projects/{slug}/chat/targets",
             $"/api/projects/{slug}/dashboard/tiles",
+            $"/api/projects/{slug}/secrets",
         })
         {
             var resp = await _client.GetAsync(path);

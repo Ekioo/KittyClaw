@@ -19,7 +19,8 @@ public sealed record ColumnActionResult(bool Succeeded, string? Error = null)
 public sealed class ColumnActionExecutor(
     ProjectService projects,
     TicketService tickets,
-    ILogger<ColumnActionExecutor> logger)
+    ILogger<ColumnActionExecutor> logger,
+    ProjectSecretVault? projectSecrets = null)
 {
     public Task<ColumnActionResult> ExecuteScheduledAsync(
         string projectSlug,
@@ -249,6 +250,12 @@ public sealed class ColumnActionExecutor(
             ["KITTYCLAW_TICKET_ID"] = ticket.Id.ToString(),
             ["KITTYCLAW_PROJECT_SLUG"] = projectSlug,
         };
+        var secrets = projectSecrets is null
+            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, string>(
+                await projectSecrets.ReadForInjectionAsync(projectSlug, cancellationToken),
+                StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, value) in secrets) env[name] = value;
         var result = await ProcessRunner.RunAsync(
             ShellResolver.ResolvePowerShell(),
             $"-NonInteractive -NoProfile {scriptArgument}{arguments}",
@@ -261,6 +268,7 @@ public sealed class ColumnActionExecutor(
         if (result.ExitCode != 0)
         {
             var detail = string.IsNullOrWhiteSpace(result.Stderr) ? result.Stdout : result.Stderr;
+            detail = SecretRedactor.Redact(detail, secrets.Values);
             detail = detail.Trim();
             if (detail.Length > 600) detail = detail[..600] + "…";
             return ColumnActionResult.Failure(

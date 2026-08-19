@@ -62,5 +62,16 @@
   "RtkInstall": "Installation guide",
   "RtkDisabled": "Disabled — agent behavior is unchanged.",
   "RtkUnavailable": "Enabled, but RTK is unavailable.",
-  "RtkAvailable": "Ready — RTK {0} detected in instruction mode."
+  "RtkAvailable": "Ready — RTK {0} detected in instruction mode.",
+  "SecretsTitle": "Project secrets",
+  "SecretsHint": "Encrypted credentials injected only into this project's agent and automation processes.",
+  "SecretsWriteOnly": "Saved values can never be displayed again. Enter a new value to replace a secret.",
+  "SecretValuePlaceholder": "Secret value",
+  "SaveSecret": "Save secret",
+  "SecretUpdated": "Last replaced",
+  "ReplaceSecret": "Replace secret",
+  "NoSecrets": "No saved secrets.",
+  "EnterReplacement": "Enter a new value to replace this secret.",
+  "SecretSaved": "Secret saved securely.",
+  "SecretDeleted": "Secret deleted."
 }

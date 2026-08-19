@@ -41,7 +41,9 @@ if (!Directory.Exists(dataDir) && Directory.Exists(legacyDataDir))
 var appSettings = new KittyClaw.Core.Services.AppSettingsService(dataDir);
 builder.Services.AddSingleton(appSettings);
 builder.Services.AddSingleton(new KittyClaw.Core.Services.LocalizationService(appSettings));
-builder.Services.AddSingleton(new ProjectService(dataDir));
+var projectSecretVault = new ProjectSecretVault(dataDir);
+builder.Services.AddSingleton(projectSecretVault);
+builder.Services.AddSingleton(new ProjectService(dataDir, projectSecretVault));
 builder.Services.AddSingleton<TicketService>();
 builder.Services.AddSingleton<TicketTransferService>();
 builder.Services.AddSingleton<LabelService>();

@@ -69,5 +69,40 @@ public sealed class ColumnActionExecutorTests : IDisposable
         Assert.Contains("HTTP(S)", http.Error);
     }
 
+    [Fact]
+    public async Task PowerShell_action_receives_project_secret_and_redacts_failure_output()
+    {
+        var project = await _projects.CreateProjectAsync("Secret action");
+        var column = (await new ColumnService(_projects).ListColumnsAsync(project.Slug))[0];
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Secret script", status: column.Name,
+            pipelineId: column.PipelineId, columnId: column.Id);
+        var vault = new ProjectSecretVault(_temp.Path, new TestSecretProtector());
+        const string secret = "powershell-secret-278";
+        await vault.SetAsync(project.Slug, "PROJECT_TOKEN", secret);
+        var executor = new ColumnActionExecutor(
+            _projects, _tickets, NullLogger<ColumnActionExecutor>.Instance, vault);
+        var processor = new ColumnProcessor { Id = 1, ColumnId = column.Id, Name = "Worker" };
+        var execution = new ColumnExecution
+        {
+            Id = "secret-run", ProcessorId = 1, TicketId = ticket.Id, Status = ColumnExecutionStatus.Running,
+        };
+
+        var success = await executor.ExecuteAsync(project.Slug, processor, execution, ticket,
+            new("script", new ExecutePowerShellActionSpec
+            {
+                Script = $"if ($env:PROJECT_TOKEN -ne '{secret}') {{ exit 9 }}",
+            }), null, CancellationToken.None);
+        var failure = await executor.ExecuteAsync(project.Slug, processor, execution, ticket,
+            new("script-failure", new ExecutePowerShellActionSpec
+            {
+                Script = "[Console]::Error.Write($env:PROJECT_TOKEN); exit 7",
+            }), null, CancellationToken.None);
+
+        Assert.True(success.Succeeded, success.Error);
+        Assert.False(failure.Succeeded);
+        Assert.DoesNotContain(secret, failure.Error);
+        Assert.Contains(SecretRedactor.Replacement, failure.Error);
+    }
+
     public void Dispose() => _temp.Dispose();
 }

@@ -42,6 +42,32 @@ internal static class ScenarioReplayer
                             await File.WriteAllTextAsync(fullPath, contentElement.GetString() ?? string.Empty);
                         }
                     }
+                    if (meta.TryGetProperty("write_env", out var writeEnv) &&
+                        writeEnv.TryGetProperty("path", out var envPathElement) &&
+                        writeEnv.TryGetProperty("name", out var envNameElement))
+                    {
+                        var relativePath = envPathElement.GetString();
+                        var environmentName = envNameElement.GetString();
+                        if (!string.IsNullOrWhiteSpace(relativePath) && !string.IsNullOrWhiteSpace(environmentName))
+                        {
+                            var fullPath = Path.GetFullPath(Path.Combine(workingDirectory, relativePath));
+                            var rootPath = Path.GetFullPath(workingDirectory) + Path.DirectorySeparatorChar;
+                            if (!fullPath.StartsWith(rootPath, StringComparison.OrdinalIgnoreCase))
+                                throw new InvalidOperationException("Mock scenario write_env must stay inside the working directory.");
+                            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+                            await File.WriteAllTextAsync(fullPath,
+                                Environment.GetEnvironmentVariable(environmentName) ?? string.Empty);
+                        }
+                    }
+                    if (meta.TryGetProperty("emit_env", out var emitEnvironment))
+                    {
+                        var environmentName = emitEnvironment.GetString();
+                        if (!string.IsNullOrWhiteSpace(environmentName))
+                        {
+                            await Console.Out.WriteLineAsync(Environment.GetEnvironmentVariable(environmentName) ?? string.Empty);
+                            await Console.Out.FlushAsync();
+                        }
+                    }
                     continue;
                 }
 

@@ -1,0 +1,32 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "qa-secret-vault" },
+    {
+      "type": "api",
+      "method": "PUT",
+      "path": "/api/projects/qa-secret-vault/secrets/API_TOKEN",
+      "body": { "value": "qa-never-render-this-secret-278" }
+    }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-secret-vault/settings" },
+    { "type": "assertVisible", "selector": "[data-testid='project-secrets']" },
+    { "type": "assertVisible", "selector": "[data-testid='secret-name']" },
+    { "type": "assertVisible", "selector": "[data-testid='secret-value'][type='password']" },
+    { "type": "assertCount", "selector": "[data-testid='secret-row']", "expected": "1" },
+    { "type": "assertText", "selector": "[data-testid='secret-row'] code", "expected": "API_TOKEN" },
+    { "type": "assertValue", "selector": "[data-testid='secret-value']", "expected": "" },
+    { "type": "assertCount", "selector": "text=qa-never-render-this-secret-278", "expected": "0" },
+    {
+      "type": "screenshot",
+      "name": "project-secret-vault",
+      "selector": "[data-testid='project-secrets']",
+      "description": "Write-only encrypted project secret management section"
+    },
+    { "type": "click", "selector": "[data-testid='secret-row'] .icon-btn:first-of-type" },
+    { "type": "assertValue", "selector": "[data-testid='secret-name']", "expected": "API_TOKEN" },
+    { "type": "assertValue", "selector": "[data-testid='secret-value']", "expected": "" },
+    { "type": "assertJson", "path": "/api/projects/qa-secret-vault/secrets", "jsonPath": "0.name", "expected": "API_TOKEN" }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

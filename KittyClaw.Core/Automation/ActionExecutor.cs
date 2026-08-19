@@ -47,7 +47,8 @@ internal sealed class ActionExecutor
         LocalizationService loc,
         ProjectService projects,
         RunStateManager runState,
-        ILogger logger)
+        ILogger logger,
+        ProjectSecretVault? projectSecrets = null)
     {
         _tickets = tickets;
         _members = members;
@@ -62,7 +63,7 @@ internal sealed class ActionExecutor
 
         _ticketMutation = new TicketMutationHandler(tickets, labels, members, loc, logger);
         _agentMemory = new AgentMemoryHandler(tickets, members, projects, runner, sessions, logger);
-        _network = new NetworkActionHandler(tickets, logger);
+        _network = new NetworkActionHandler(tickets, logger, projectSecrets);
     }
 
     // ── Condition evaluation ────────────────────────────────────────────────

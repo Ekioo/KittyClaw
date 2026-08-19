@@ -19,15 +19,17 @@ public partial class ProjectService
     private readonly ConcurrentDictionary<string, object> _repositoryPathLocks =
         new(StringComparer.OrdinalIgnoreCase);
     private bool _dbInitialized;
+    private readonly ProjectSecretVault? _secretVault;
 
     private sealed record RepositoryPathCacheEntry(string ResolvedPath, DateTime ExpiresAt);
 
     public string DataDir => _dataDir;
 
-    public ProjectService(string dataDir)
+    public ProjectService(string dataDir, ProjectSecretVault? secretVault = null)
     {
         _dataDir = dataDir;
         _registryPath = Path.Combine(dataDir, "registry.db");
+        _secretVault = secretVault;
         Directory.CreateDirectory(dataDir);
     }
 
@@ -380,6 +382,7 @@ public partial class ProjectService
         // A future project reusing this slug starts from a fresh file: forget the memoized
         // schema/migration state so it gets recreated and remigrated.
         _schemaCreated.TryRemove(dbPath, out _);
+        if (_secretVault is not null) await _secretVault.DeleteVaultAsync(slug);
         KittyClaw.Core.Data.MigrationGate.Invalidate(dbPath);
         return true;
     }

@@ -9,7 +9,8 @@ namespace KittyClaw.Core.Automation;
 /// </summary>
 internal sealed class NetworkActionHandler(
     TicketService tickets,
-    ILogger logger)
+    ILogger logger,
+    ProjectSecretVault? projectSecrets = null)
 {
     // Returns true when AbortOnFailure is set and the request failed.
     public async Task<bool> ExecuteHttpRequestAsync(
@@ -124,13 +125,22 @@ internal sealed class NetworkActionHandler(
                 : "";
 
             var pwshBin = ShellResolver.ResolvePowerShell();
+            var secrets = projectSecrets is null
+                ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, string>(
+                    await projectSecrets.ReadForInjectionAsync(slug, ct),
+                    StringComparer.OrdinalIgnoreCase);
+            var environment = new Dictionary<string, string>(spec.Env, StringComparer.OrdinalIgnoreCase);
+            foreach (var (name, value) in secrets) environment[name] = value;
             var res = await ProcessRunner.RunAsync(
                 pwshBin,
                 $"-NonInteractive -NoProfile {scriptArg}{extraArgs}",
                 workspacePath,
                 TimeSpan.FromSeconds(spec.TimeoutSeconds),
-                spec.Env,
+                environment,
                 ct);
+            var stdout = SecretRedactor.Redact(res.Stdout.Trim(), secrets.Values);
+            var stderr = SecretRedactor.Redact(res.Stderr.Trim(), secrets.Values);
 
             if (res.TimedOut)
             {
@@ -140,7 +150,7 @@ internal sealed class NetworkActionHandler(
             }
 
             logger.LogInformation("executePowerShell exited {Code}. stdout={Stdout} stderr={Stderr}",
-                res.ExitCode, res.Stdout.Trim(), res.Stderr.Trim());
+                res.ExitCode, stdout, stderr);
 
             if (res.ExitCode != 0)
             {

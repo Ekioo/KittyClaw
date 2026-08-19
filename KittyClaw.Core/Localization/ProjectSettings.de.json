@@ -62,5 +62,16 @@
   "RtkInstall": "Installationsanleitung",
   "RtkDisabled": "Deaktiviert — das Agentenverhalten bleibt unverändert.",
   "RtkUnavailable": "Aktiviert, aber RTK ist nicht verfügbar.",
-  "RtkAvailable": "Bereit — RTK {0} im Anweisungsmodus erkannt."
+  "RtkAvailable": "Bereit — RTK {0} im Anweisungsmodus erkannt.",
+  "SecretsTitle": "Projektgeheimnisse",
+  "SecretsHint": "Verschlüsselte Zugangsdaten, die nur in Agenten- und Automatisierungsprozesse dieses Projekts eingefügt werden.",
+  "SecretsWriteOnly": "Gespeicherte Werte können nie wieder angezeigt werden. Geben Sie zum Ersetzen einen neuen Wert ein.",
+  "SecretValuePlaceholder": "Geheimer Wert",
+  "SaveSecret": "Geheimnis speichern",
+  "SecretUpdated": "Zuletzt ersetzt",
+  "ReplaceSecret": "Geheimnis ersetzen",
+  "NoSecrets": "Keine Geheimnisse gespeichert.",
+  "EnterReplacement": "Geben Sie einen neuen Wert ein, um dieses Geheimnis zu ersetzen.",
+  "SecretSaved": "Geheimnis sicher gespeichert.",
+  "SecretDeleted": "Geheimnis gelöscht."
 }

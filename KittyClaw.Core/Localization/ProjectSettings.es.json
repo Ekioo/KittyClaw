@@ -62,5 +62,16 @@
   "RtkInstall": "Guía de instalación",
   "RtkDisabled": "Desactivado — el comportamiento de los agentes no cambia.",
   "RtkUnavailable": "Activado, pero RTK no está disponible.",
-  "RtkAvailable": "Listo — RTK {0} detectado en modo de instrucciones."
+  "RtkAvailable": "Listo — RTK {0} detectado en modo de instrucciones.",
+  "SecretsTitle": "Secretos del proyecto",
+  "SecretsHint": "Credenciales cifradas inyectadas solo en los procesos de agentes y automatizaciones de este proyecto.",
+  "SecretsWriteOnly": "Los valores guardados nunca se pueden volver a mostrar. Introduce un valor nuevo para reemplazar un secreto.",
+  "SecretValuePlaceholder": "Valor secreto",
+  "SaveSecret": "Guardar secreto",
+  "SecretUpdated": "Última sustitución",
+  "ReplaceSecret": "Reemplazar secreto",
+  "NoSecrets": "No hay secretos guardados.",
+  "EnterReplacement": "Introduce un valor nuevo para reemplazar este secreto.",
+  "SecretSaved": "Secreto guardado de forma segura.",
+  "SecretDeleted": "Secreto eliminado."
 }
