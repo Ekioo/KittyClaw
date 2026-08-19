@@ -18,6 +18,7 @@
   "Loading": "Carregando…",
   "CostLoadError": "Custos não puderam ser carregados.",
   "TotalCost": "Custo total",
+  "DisplayedTotal": "Total exibido",
   "Measured": "Medido",
   "Estimated": "Previsto",
   "EstimatedHelp": "Este valor inclui pelo menos um custo estimado do modelo.",

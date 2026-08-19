@@ -62,5 +62,16 @@
   "RtkInstall": "インストールガイド",
   "RtkDisabled": "無効 — エージェントの動作に変更なし。",
   "RtkUnavailable": "有効ですが、RTKは利用不可。",
-  "RtkAvailable": "準備完了 — RTK {0}が指示モードで検出されました。"
+  "RtkAvailable": "準備完了 — RTK {0}が指示モードで検出されました。",
+  "SecretsTitle": "プロジェクトのシークレット",
+  "SecretsHint": "このプロジェクトのエージェントおよび自動化プロセスにのみ注入される暗号化された認証情報です。",
+  "SecretsWriteOnly": "保存した値は再表示できません。シークレットを置き換えるには新しい値を入力してください。",
+  "SecretValuePlaceholder": "シークレット値",
+  "SaveSecret": "シークレットを保存",
+  "SecretUpdated": "最終置換日時",
+  "ReplaceSecret": "シークレットを置換",
+  "NoSecrets": "保存済みのシークレットはありません。",
+  "EnterReplacement": "このシークレットを置き換える新しい値を入力してください。",
+  "SecretSaved": "シークレットを安全に保存しました。",
+  "SecretDeleted": "シークレットを削除しました。"
 }

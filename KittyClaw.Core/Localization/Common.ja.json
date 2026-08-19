@@ -36,5 +36,13 @@
   "SessionInterrupted": "KittyClawが更新されたか、セッションが中断されました。",
   "SessionInterruptedHint": "メッセージが表示された場合はページを再読み込みしてください。自動回復します。",
   "ReloadPage": "ページを再読み込み",
-  "EstimatedCostTooltip": "公開トークンレートから推定；実際の請求金額は異なる可能性があります"
+  "EstimatedCostTooltip": "公開トークンレートから推定；実際の請求金額は異なる可能性があります",
+  "GlobalSettings": "設定",
+  "GlobalSettingsTitle": "グローバル設定",
+  "McpServerTitle": "MCPサーバー",
+  "McpServerHint": "MCPクライアントがローカルの /mcp エンドポイントを通じてこのKittyClawインスタンスを操作できるようにします。",
+  "McpEnable": "MCPサーバーを有効にする",
+  "McpEnableEffect": "/mcp をすぐに利用可能にします。無効にすると、新規および既存のクライアント要求を拒否します。",
+  "McpEnabledStatus": "MCPは{0}で有効です。",
+  "McpDisabledStatus": "MCPは無効です。クライアントは接続できません。"
 }

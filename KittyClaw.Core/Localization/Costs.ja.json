@@ -18,6 +18,7 @@
   "Loading": "読み込み中…",
   "CostLoadError": "コストを読み込めません。",
   "TotalCost": "合計コスト",
+  "DisplayedTotal": "表示中の合計",
   "Measured": "測定済み",
   "Estimated": "推定",
   "EstimatedHelp": "この金額には少なくとも1つの推定モデルコストが含まれています。",
