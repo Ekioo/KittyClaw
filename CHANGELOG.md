@@ -4,6 +4,10 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+### Added
+
+- Native DeepSeek V4 support through Claude Code and DeepSeek's Anthropic-compatible API, including project-vault credentials, model selection, provider-scoped sessions, cost estimates, localized settings, and documentation.
+
 ### Changed
 
 - The embedded MCP server is now enabled or disabled instantly from the global Settings page; `KITTYCLAW_MCP_ENABLED` and application restarts are no longer required.
