@@ -46,6 +46,22 @@ public class ChatDrawerModelPersistenceTests
         Assert.Contains("_mistralModels.Contains(model)", source);
     }
 
+    [Fact]
+    public void InterruptedConversation_IsAutomaticallyRestartedAndReattached()
+    {
+        var source = ChatDrawer();
+        var endpoint = File.ReadAllText(Path.Combine(
+            FindRepoRoot(), "KittyClaw.Web", "Api", "Endpoints.Chat.cs"));
+        var contracts = File.ReadAllText(Path.Combine(
+            FindRepoRoot(), "KittyClaw.Web", "Api", "Contracts.cs"));
+
+        Assert.Contains("resp?.Interrupted == true", source);
+        Assert.Contains("resumeInterrupted = true", source);
+        Assert.Contains("LastInterruptedForChatTarget(slug, target)", endpoint);
+        Assert.Contains("if (!req.ResumeInterrupted)", endpoint);
+        Assert.Contains("bool ResumeInterrupted = false", contracts);
+    }
+
     private static string FindRepoRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

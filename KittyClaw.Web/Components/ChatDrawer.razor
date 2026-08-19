@@ -536,7 +536,15 @@
             using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
             var resp = await http.GetFromJsonAsync<ActiveResponse>(
                 $"/api/projects/{ProjectSlug}/chat/active?target={Uri.EscapeDataString(target.Slug)}");
-            if (resp?.RunId is not string runId) return;
+            var runId = resp?.RunId;
+            if (runId is null && resp?.Interrupted == true)
+            {
+                var recovery = await http.PostAsJsonAsync($"/api/projects/{ProjectSlug}/chat/start",
+                    new { message = "", target = target.Slug, ticketId = TicketId, resumeInterrupted = true });
+                if (!recovery.IsSuccessStatusCode) return;
+                runId = (await recovery.Content.ReadFromJsonAsync<ChatStartResponse>())?.RunId;
+            }
+            if (runId is null) return;
 
             _activeRun = RunsState.Get(runId);
             _loading = true;
@@ -1017,7 +1025,7 @@
         KittyClaw.Web.Markdown.ChatMarkdownRenderer.Render(text);
 
     private sealed record ChatStartResponse(string RunId);
-    private sealed record ActiveResponse(string? RunId);
+    private sealed record ActiveResponse(string? RunId, bool Interrupted);
     private sealed record ChatModelResponse(string? Model);
     private sealed record TargetsResponse(string? LastTarget, List<ServerChatTarget> Targets);
     private sealed record ServerChatTarget(string Slug, string Name, string Kind);

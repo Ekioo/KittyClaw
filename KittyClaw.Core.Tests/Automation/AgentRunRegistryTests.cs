@@ -107,6 +107,48 @@ public class AgentRunRegistryTests
         Assert.NotNull(loaded.EndedAt);
     }
 
+    [Fact]
+    public void Constructor_ExposesPersistedRunningChatAsInterruptedForAutomaticRecovery()
+    {
+        using var tmp = new TempDir();
+        var store = new RunLogStore(tmp.Path);
+        var firstRegistry = new AgentRunRegistry(store);
+        var chatRun = new AgentRun
+        {
+            RunId = "chat-stale", ProjectSlug = "p", TicketId = 42,
+            AgentName = "owner-chat", SkillFile = "chat",
+            ConcurrencyGroup = "chat:p:owner-chat", StartedAt = DateTime.UtcNow,
+            ChatTarget = "owner-chat", SessionId = "session-123",
+        };
+
+        firstRegistry.Register(chatRun);
+        firstRegistry.Persist(chatRun);
+
+        var restartedRegistry = new AgentRunRegistry(store);
+        var interrupted = restartedRegistry.LastInterruptedForChatTarget("p", "owner-chat");
+
+        Assert.NotNull(interrupted);
+        Assert.Equal("chat-stale", interrupted!.RunId);
+        Assert.Equal("owner-chat", interrupted.ChatTarget);
+        Assert.Equal("session-123", interrupted.SessionId);
+        Assert.Equal(AgentRunStatus.Stopped, interrupted.Status);
+        Assert.Contains(interrupted.SnapshotBuffer(), e => e.Kind == "interrupted");
+        Assert.Equal(["chat-stale"], restartedRegistry.InterruptedChats().Select(r => r.RunId));
+
+        var recovered = new AgentRun
+        {
+            RunId = "chat-recovered", ProjectSlug = "p", TicketId = 42,
+            AgentName = "owner-chat", SkillFile = "chat",
+            ConcurrencyGroup = "chat:p:owner-chat", StartedAt = DateTime.UtcNow.AddSeconds(1),
+            ChatTarget = "owner-chat", SessionId = "session-123",
+        };
+        restartedRegistry.Register(recovered);
+        restartedRegistry.Complete(recovered.RunId, AgentRunStatus.Completed, 0);
+
+        Assert.Null(restartedRegistry.LastInterruptedForChatTarget("p", "owner-chat"));
+        Assert.Empty(restartedRegistry.InterruptedChats());
+    }
+
     private static AgentRun NewRun(string runId, string projectSlug, int? ticketId) => new()
     {
         RunId = runId,

@@ -44,7 +44,9 @@ public static partial class Endpoints
             var group = $"chat:{slug}:{target}";
             var active = reg.ActiveForProject(slug)
                 .FirstOrDefault(r => r.ConcurrencyGroup == group);
-            return Results.Ok(new { runId = active?.RunId });
+            var interrupted = active is null
+                && reg.LastInterruptedForChatTarget(slug, target) is not null;
+            return Results.Ok(new { runId = active?.RunId, interrupted });
         }).WithTags("Chat");
 
         api.MapGet("/projects/{slug}/chat/model", async (
@@ -84,6 +86,15 @@ public static partial class Endpoints
             if (project is null) return Results.NotFound();
 
             var target = string.IsNullOrWhiteSpace(req.Target) ? "owner-chat" : req.Target;
+            if (req.ResumeInterrupted)
+            {
+                var active = runReg.ActiveForProject(slug)
+                    .FirstOrDefault(r => r.ConcurrencyGroup == $"chat:{slug}:{target}");
+                if (active is not null)
+                    return Results.Ok(new { runId = active.RunId });
+                if (runReg.LastInterruptedForChatTarget(slug, target) is null)
+                    return Results.Conflict(new { error = "chat_not_interrupted" });
+            }
             var workspacePath = ps.ResolveWorkspacePath(project);
             var chatHistory = req.ForceNew
                 ? new List<KittyClaw.Core.Models.ChatMessageRow>()
@@ -173,7 +184,8 @@ public static partial class Endpoints
             if (imageError is not null)
                 return Results.BadRequest(new { error = "image_rejected", reason = imageError });
 
-            await cs.AppendAsync(slug, target, "user", req.Message);
+            if (!req.ResumeInterrupted)
+                await cs.AppendAsync(slug, target, "user", req.Message);
             sessions.SetLastChatProvider(workspacePath, target, providerName);
             if (!string.IsNullOrWhiteSpace(requestedModel))
                 sessions.SetLastChatModel(workspacePath, target, requestedModel);
@@ -216,6 +228,10 @@ public static partial class Endpoints
                     ticketContext = tb.ToString();
                 }
             }
+
+            var turnPrompt = req.ResumeInterrupted
+                ? "KittyClaw restarted while the previous task was still running. Resume the interrupted task from the existing session and continue from where you stopped. Do not repeat work that is already complete."
+                : req.Message;
 
             AgentRunContext ctx;
             if (target == "owner-chat")
@@ -261,7 +277,7 @@ public static partial class Endpoints
                     AgentName = "owner-chat",
                     SkillFile = "chat",
                     InlineSkillContent = ticketContext is null ? sb.ToString() : sb.ToString() + "\n" + ticketContext,
-                    ExtraContext = req.Message,
+                    ExtraContext = turnPrompt,
                     Target = dispatchTarget,
                     MaxTurns = 20,
                     ConcurrencyGroup = $"chat:{slug}:{target}",
@@ -324,7 +340,7 @@ public static partial class Endpoints
                     AgentName = baseAgent,
                     SkillFile = hasSkillFile ? $"{baseAgent}/SKILL.md" : "(inline)",
                     InlineSkillContent = inlineContent,
-                    ExtraContext = req.Message,
+                    ExtraContext = turnPrompt,
                     Target = dispatchTarget,
                     MaxTurns = 20,
                     ConcurrencyGroup = $"chat:{slug}:{target}",

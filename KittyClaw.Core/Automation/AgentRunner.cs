@@ -318,6 +318,7 @@ public sealed class AgentRunner
         run.SessionId = !backend.CallerChoosesNewSessionId && !isResume ? null : sessionId;
         if (ctx.PersistSession && (backend.CallerChoosesNewSessionId || isResume))
             _sessions.SetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId, sessionId);
+        _runs.Persist(run);
 
         // Global concurrency gate: cap simultaneous claude subprocesses across all projects
         // so the host doesn't OOM under heavy automation. Chats bypass entirely.

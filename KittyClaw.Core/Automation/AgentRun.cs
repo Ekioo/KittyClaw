@@ -202,6 +202,7 @@ public sealed class AgentRunSnapshot
     public DateTime? EndedAt { get; set; }
     public string? SessionId { get; set; }
     public string? Model { get; set; }
+    public string? ChatTarget { get; set; }
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public AgentRunStatus Status { get; set; }
     public int? ExitCode { get; set; }
@@ -246,6 +247,7 @@ public sealed class RunLogStore
             EndedAt = run.EndedAt,
             SessionId = run.SessionId,
             Model = run.Model,
+            ChatTarget = run.ChatTarget,
             Status = run.Status,
             ExitCode = run.ExitCode,
             InputTokens = run.InputTokens,
@@ -294,6 +296,7 @@ public sealed class RunLogStore
             };
             run.SessionId = snapshot.SessionId;
             run.Model = snapshot.Model;
+            run.ChatTarget = snapshot.ChatTarget;
             run.Status = snapshot.Status;
             run.EndedAt = snapshot.EndedAt;
             run.ExitCode = snapshot.ExitCode;
@@ -331,6 +334,11 @@ public sealed class AgentRunRegistry
             // never shows permanently-Running runs after a restart.
             if (run.Status == AgentRunStatus.Running)
             {
+                if (!string.IsNullOrWhiteSpace(run.ChatTarget))
+                {
+                    run.Push(new StreamEvent(DateTime.UtcNow, "interrupted",
+                        "KittyClaw restarted while this chat session was running."));
+                }
                 run.Status = AgentRunStatus.Stopped;
                 run.EndedAt = DateTime.UtcNow;
                 store.Save(run);
@@ -346,9 +354,12 @@ public sealed class AgentRunRegistry
             Unindex(previous);
         _runs[run.RunId] = run;
         Index(run);
+        _store?.Save(run);
         OnRunStarted?.Invoke(run);
         return run;
     }
+
+    public void Persist(AgentRun run) => _store?.Save(run);
 
     public void Complete(string runId, AgentRunStatus status, int? exitCode)
     {
@@ -399,6 +410,29 @@ public sealed class AgentRunRegistry
         _runs.Values
             .Where(r => r.ProjectSlug == projectSlug && r.ChatTarget == chatTarget && r.Status != AgentRunStatus.Running && r.EndedAt is not null)
             .MaxBy(r => r.EndedAt);
+
+    public AgentRun? LastInterruptedForChatTarget(string projectSlug, string chatTarget)
+    {
+        var latest = _runs.Values
+            .Where(r => r.ProjectSlug == projectSlug && r.ChatTarget == chatTarget)
+            .MaxBy(r => r.StartedAt);
+        return latest is not null
+            && latest.Status == AgentRunStatus.Stopped
+            && latest.SnapshotBuffer().Any(e => e.Kind == "interrupted")
+                ? latest
+                : null;
+    }
+
+    public IReadOnlyList<AgentRun> InterruptedChats() =>
+        _runs.Values
+            .Where(r => !string.IsNullOrWhiteSpace(r.ChatTarget))
+            .GroupBy(r => (r.ProjectSlug, r.ChatTarget))
+            .Select(group => group.MaxBy(r => r.StartedAt))
+            .Where(r => r is not null
+                && r.Status == AgentRunStatus.Stopped
+                && r.SnapshotBuffer().Any(e => e.Kind == "interrupted"))
+            .Cast<AgentRun>()
+            .ToList();
 
     /// <summary>Purge runs that ended more than N minutes ago.</summary>
     public void PurgeOld(TimeSpan age)

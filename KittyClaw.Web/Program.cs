@@ -75,6 +75,7 @@ builder.Services.AddSingleton<TriggerStateStore>();
 builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton(new RunLogStore(dataDir));
 builder.Services.AddSingleton<AgentRunRegistry>(sp => new AgentRunRegistry(sp.GetRequiredService<RunLogStore>()));
+builder.Services.AddHostedService<KittyClaw.Web.Services.InterruptedChatRecoveryService>();
 // Cap concurrent claude subprocesses across all projects (chats bypass). Override with the
 // KITTYCLAW_MAX_CONCURRENT_AGENTS env var if 3 is too tight or too loose for the host.
 var maxConcurrent = int.TryParse(Environment.GetEnvironmentVariable("KITTYCLAW_MAX_CONCURRENT_AGENTS"), out var mc) && mc > 0 ? mc : 3;
