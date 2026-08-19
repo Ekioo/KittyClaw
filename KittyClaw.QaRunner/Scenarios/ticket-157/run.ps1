@@ -1,8 +1,15 @@
 param(
-    [string]$TargetApi = $env:KITTYCLAW_API_URL
+    [string]$TargetApi
 )
 
 $ErrorActionPreference = 'Stop'
+if ([string]::IsNullOrWhiteSpace($TargetApi)) {
+    $TargetApi = if ([string]::IsNullOrWhiteSpace($env:KITTYCLAW_API_URL)) {
+        'http://localhost:5230'
+    } else {
+        $env:KITTYCLAW_API_URL
+    }
+}
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..\..')
 $scenarioPath = Join-Path $PSScriptRoot 'scenario.json'
 $mockExecutable = Join-Path $repoRoot 'KittyClaw.ClaudeMock\bin\Debug\net10.0\claude.exe'
@@ -31,9 +38,7 @@ try {
         '--ticket', '157',
         '--web-exe', $webExecutable
     )
-    if ($TargetApi) {
-        $arguments += @('--target-api', $TargetApi)
-    }
+    $arguments += @('--target-api', $TargetApi)
 
     & dotnet @arguments
     if ($LASTEXITCODE -ne 0) {

@@ -95,11 +95,17 @@ These run before Playwright starts. All of them are also valid inside `actions`.
 | `type`          | Fields                                | Effect                                                |
 |-----------------|---------------------------------------|-------------------------------------------------------|
 | `createProject` | `name`, optional `workspacePath`      | Creates a project on the test instance.               |
+| `createGitRepository` | optional `name` (variable), `value` (branch) | Creates an isolated committed Git repository and stores its path. |
+| `commitGitFile` | `workspacePath`, `target` (branch), `name` (file), `text` | Commits a deterministic fixture change in a registered worktree. |
 | `togglePause`   | `project`                             | Toggles `IsPaused` on a project.                      |
 | `api`           | see below                             | Generic HTTP call.                                    |
 | `createTicket`  | see below                             | Creates a ticket; stores id in `{ticketId}`.          |
 | `assignTicket`  | see below                             | Assigns a ticket to a member.                         |
 | `setStatus`     | see below                             | Moves a ticket to a column.                           |
+
+Git fixture repositories are created below the scenario's temporary screenshot directory and
+are removed with the rest of the isolated run. This keeps worktree scenarios independent from
+developer-machine paths and pre-existing repositories.
 
 ### API action (`type: "api"`)
 

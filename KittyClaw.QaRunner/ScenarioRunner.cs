@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Playwright;
@@ -63,17 +64,34 @@ public sealed class ScenarioRunner
     {
         switch (action.Type)
         {
+            case "createGitRepository":
+                {
+                    var variable = action.Name ?? "repositoryPath";
+                    var branch = Resolve(action.Value ?? "integration");
+                    var path = Path.Combine(_screenshotDir, "repositories", Guid.NewGuid().ToString("N"));
+                    CreateGitRepository(path, branch);
+                    _vars[variable] = path;
+                    break;
+                }
+            case "commitGitFile":
+                {
+                    var repository = Required(Resolve(action.WorkspacePath), "commitGitFile.workspacePath");
+                    var branch = Required(Resolve(action.Target), "commitGitFile.target");
+                    var file = Required(Resolve(action.Name), "commitGitFile.name");
+                    CommitGitFile(repository, branch, file, Resolve(action.Text ?? "fixture\n"));
+                    break;
+                }
             case "createProject":
                 {
                     var name = Resolve(action.Name ?? action.Project ?? "qa-test");
                     var resp = await _http.PostAsJsonAsync($"{_instanceApiUrl}/api/projects", new { name }, ct);
-                    resp.EnsureSuccessStatusCode();
+                    await EnsureSuccessAsync(resp, action, $"POST {_instanceApiUrl}/api/projects", ct);
                     if (!string.IsNullOrEmpty(action.WorkspacePath))
                     {
                         var slug = SlugOf(name);
                         var patch = await _http.PatchAsJsonAsync($"{_instanceApiUrl}/api/projects/{slug}",
                             new { workspacePath = Resolve(action.WorkspacePath) }, ct);
-                        patch.EnsureSuccessStatusCode();
+                        await EnsureSuccessAsync(patch, action, $"PATCH {_instanceApiUrl}/api/projects/{slug}", ct);
                     }
                     break;
                 }
@@ -81,7 +99,7 @@ public sealed class ScenarioRunner
                 {
                     var slug = SlugOf(Resolve(action.Project ?? "qa-test"));
                     var resp = await _http.PostAsync($"{_instanceApiUrl}/api/projects/{slug}/pause", null, ct);
-                    resp.EnsureSuccessStatusCode();
+                    await EnsureSuccessAsync(resp, action, $"POST {_instanceApiUrl}/api/projects/{slug}/pause", ct);
                     break;
                 }
             case "api":
@@ -110,7 +128,7 @@ public sealed class ScenarioRunner
                     if (action.Priority is not null) body["priority"] = Resolve(action.Priority);
                     if (action.AssignedTo is not null) body["assignedTo"] = Resolve(action.AssignedTo);
                     var resp = await _http.PostAsJsonAsync($"{_instanceApiUrl}/api/projects/{slug}/tickets", body, ct);
-                    resp.EnsureSuccessStatusCode();
+                    await EnsureSuccessAsync(resp, action, $"POST {_instanceApiUrl}/api/projects/{slug}/tickets", ct);
                     var json = await resp.Content.ReadFromJsonAsync<JsonElement>(ct);
                     _vars["ticketId"] = json.GetProperty("id").GetInt32().ToString();
                     ExtractVars(json, action.Extract);
@@ -123,7 +141,7 @@ public sealed class ScenarioRunner
                     var id = Resolve(action.Value ?? _vars.GetValueOrDefault("ticketId") ?? throw new InvalidOperationException("assignTicket: no ticket id — set 'value' or use after createTicket"));
                     var body = new { assignedTo = Resolve(action.AssignedTo ?? throw new InvalidOperationException("assignTicket: 'assignedTo' is required")), author = "qa-runner" };
                     var resp = await _http.PatchAsJsonAsync($"{_instanceApiUrl}/api/projects/{slug}/tickets/{id}", body, ct);
-                    resp.EnsureSuccessStatusCode();
+                    await EnsureSuccessAsync(resp, action, $"PATCH {_instanceApiUrl}/api/projects/{slug}/tickets/{id}", ct);
                     break;
                 }
             case "setStatus":
@@ -133,7 +151,7 @@ public sealed class ScenarioRunner
                     var id = Resolve(action.Value ?? _vars.GetValueOrDefault("ticketId") ?? throw new InvalidOperationException("setStatus: no ticket id — set 'value' or use after createTicket"));
                     var body = new { status = Resolve(action.Status ?? throw new InvalidOperationException("setStatus: 'status' is required")), author = "qa-runner" };
                     var resp = await _http.PatchAsJsonAsync($"{_instanceApiUrl}/api/projects/{slug}/tickets/{id}/status", body, ct);
-                    resp.EnsureSuccessStatusCode();
+                    await EnsureSuccessAsync(resp, action, $"PATCH {_instanceApiUrl}/api/projects/{slug}/tickets/{id}/status", ct);
                     break;
                 }
             case "createDependency":
@@ -194,11 +212,11 @@ public sealed class ScenarioRunner
                             request.Headers.TryAddWithoutValidation(kv.Key, Resolve(kv.Value));
                     if (action.Body.HasValue)
                     {
-                        var bodyStr = ResolveJson(action.Body.Value);
+                        var bodyStr = ResolveJson(action.Body.Value, _vars);
                         request.Content = new StringContent(bodyStr, Encoding.UTF8, "application/json");
                     }
                     var resp = await _http.SendAsync(request, ct);
-                    resp.EnsureSuccessStatusCode();
+                    await EnsureSuccessAsync(resp, action, $"{method} {url}", ct);
                     if (action.Extract?.Count > 0)
                     {
                         var json = await resp.Content.ReadFromJsonAsync<JsonElement>(ct);
@@ -461,13 +479,46 @@ public sealed class ScenarioRunner
         return s;
     }
 
-    private string ResolveJson(JsonElement element)
+    internal static string ResolveJson(JsonElement element, IReadOnlyDictionary<string, string> variables)
     {
-        // Resolve variables inside a JSON body by round-tripping through string.
-        var raw = element.GetRawText();
-        foreach (var kv in _vars)
-            raw = raw.Replace("{" + kv.Key + "}", kv.Value);
-        return raw;
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+            WriteResolvedJson(writer, element, variables);
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private static void WriteResolvedJson(
+        Utf8JsonWriter writer,
+        JsonElement element,
+        IReadOnlyDictionary<string, string> variables)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                writer.WriteStartObject();
+                foreach (var property in element.EnumerateObject())
+                {
+                    writer.WritePropertyName(property.Name);
+                    WriteResolvedJson(writer, property.Value, variables);
+                }
+                writer.WriteEndObject();
+                break;
+            case JsonValueKind.Array:
+                writer.WriteStartArray();
+                foreach (var child in element.EnumerateArray())
+                    WriteResolvedJson(writer, child, variables);
+                writer.WriteEndArray();
+                break;
+            case JsonValueKind.String:
+                var value = element.GetString() ?? "";
+                foreach (var variable in variables)
+                    value = value.Replace("{" + variable.Key + "}", variable.Value);
+                writer.WriteStringValue(value);
+                break;
+            default:
+                element.WriteTo(writer);
+                break;
+        }
     }
 
     private void ExtractVars(JsonElement json, Dictionary<string, string>? extract)
@@ -516,5 +567,82 @@ public sealed class ScenarioRunner
         foreach (var c in name.ToLowerInvariant())
             sb.Append(char.IsLetterOrDigit(c) ? c : '-');
         return sb.ToString().Trim('-');
+    }
+
+    private static async Task EnsureSuccessAsync(
+        HttpResponseMessage response,
+        ScenarioAction action,
+        string request,
+        CancellationToken ct)
+    {
+        if (response.IsSuccessStatusCode) return;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        throw new InvalidOperationException(
+            $"Scenario action '{action.Type}' failed: {request} returned {(int)response.StatusCode} {response.ReasonPhrase}. Response: {body}");
+    }
+
+    internal static void CreateGitRepository(string path, string branch)
+    {
+        Directory.CreateDirectory(path);
+        RunGit(path, "init", "-b", branch);
+        RunGit(path, "config", "user.email", "qa-runner@kittyclaw.local");
+        RunGit(path, "config", "user.name", "KittyClaw QA");
+        File.WriteAllText(Path.Combine(path, "README.md"), "# QA repository\n");
+        RunGit(path, "add", "README.md");
+        RunGit(path, "commit", "-m", "initial fixture");
+    }
+
+    internal static void CommitGitFile(string repository, string branch, string relativePath, string content)
+    {
+        var worktree = ResolveGitWorktree(repository, branch);
+        var fullPath = Path.GetFullPath(Path.Combine(worktree, relativePath));
+        if (!fullPath.StartsWith(Path.GetFullPath(worktree) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"commitGitFile path '{relativePath}' escapes worktree '{worktree}'.");
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+        File.WriteAllText(fullPath, content);
+        RunGit(worktree, "add", "--", relativePath);
+        RunGit(worktree, "commit", "-m", $"fixture: {relativePath.Replace('\\', '/')}");
+    }
+
+    private static string ResolveGitWorktree(string repository, string branch)
+    {
+        var output = RunGit(repository, "worktree", "list", "--porcelain");
+        string? current = null;
+        foreach (var line in output.Replace("\r", "").Split('\n'))
+        {
+            if (line.StartsWith("worktree ", StringComparison.Ordinal))
+                current = line[9..];
+            else if (current is not null
+                     && line.Equals($"branch refs/heads/{branch}", StringComparison.Ordinal))
+                return Path.GetFullPath(current);
+            else if (line.Length == 0)
+                current = null;
+        }
+        throw new InvalidOperationException($"No Git worktree for branch '{branch}' is registered in '{repository}'.");
+    }
+
+    private static string RunGit(string workingDirectory, params string[] arguments)
+    {
+        var start = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var argument in arguments) start.ArgumentList.Add(argument);
+        using var process = Process.Start(start)
+            ?? throw new InvalidOperationException("Git could not be started for the QA fixture.");
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        if (!process.WaitForExit(30_000))
+        {
+            process.Kill(entireProcessTree: true);
+            throw new InvalidOperationException($"Git fixture command timed out: git {string.Join(' ', arguments)}");
+        }
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"Git fixture command failed ({process.ExitCode}): git {string.Join(' ', arguments)}. {error.Trim()}");
+        return output;
     }
 }

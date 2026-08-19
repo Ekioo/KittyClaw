@@ -19,7 +19,9 @@ public class ScenarioParseTests
         var json = """
         {
           "setup": [
+            { "type": "createGitRepository", "name": "repositoryPath", "value": "integration" },
             { "type": "createProject", "name": "qa-test", "workspacePath": "D:/foo" },
+            { "type": "commitGitFile", "workspacePath": "{repositoryPath}", "target": "integration", "name": "fixture.txt", "text": "ready" },
             { "type": "togglePause", "project": "qa-test" }
           ],
           "actions": [
@@ -36,9 +38,12 @@ public class ScenarioParseTests
         var s = JsonSerializer.Deserialize<Scenario>(json, Opts);
 
         Assert.NotNull(s);
-        Assert.Equal(2, s!.Setup.Count);
-        Assert.Equal("createProject", s.Setup[0].Type);
-        Assert.Equal("D:/foo", s.Setup[0].WorkspacePath);
+        Assert.Equal(4, s!.Setup.Count);
+        Assert.Equal("createGitRepository", s.Setup[0].Type);
+        Assert.Equal("repositoryPath", s.Setup[0].Name);
+        Assert.Equal("createProject", s.Setup[1].Type);
+        Assert.Equal("D:/foo", s.Setup[1].WorkspacePath);
+        Assert.Equal("commitGitFile", s.Setup[2].Type);
         Assert.Equal(5, s.Actions.Count);
         Assert.Equal("/", s.Actions[0].Url);
         Assert.Equal("codex:gpt-5.6-sol", s.Actions[1].Value);
@@ -73,5 +78,19 @@ public class ScenarioParseTests
         Assert.False(back.Assertions[0].Passed);
         Assert.Single(back.Screenshots);
         Assert.Equal("/uploads/abc.png", back.Screenshots[0].UploadedUrl);
+    }
+
+    [Fact]
+    public void ResolveJson_EscapesWindowsPathsAndPreservesNonStringValues()
+    {
+        using var document = JsonDocument.Parse("""{"repositoryPath":"{path}","ticketId":42,"enabled":true}""");
+
+        var json = ScenarioRunner.ResolveJson(document.RootElement,
+            new Dictionary<string, string> { ["path"] = @"C:\Users\admin\repo" });
+        using var resolved = JsonDocument.Parse(json);
+
+        Assert.Equal(@"C:\Users\admin\repo", resolved.RootElement.GetProperty("repositoryPath").GetString());
+        Assert.Equal(42, resolved.RootElement.GetProperty("ticketId").GetInt32());
+        Assert.True(resolved.RootElement.GetProperty("enabled").GetBoolean());
     }
 }

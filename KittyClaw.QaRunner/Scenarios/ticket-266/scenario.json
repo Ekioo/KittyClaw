@@ -53,7 +53,7 @@
   "actions": [
     { "type": "navigate", "url": "/board/qa-ticket-266" },
     { "type": "wait", "ms": 5000 },
-    { "type": "assertJson", "path": "/api/projects/qa-ticket-266/tickets/{ticketId}", "jsonPath": "status", "expected": "Scheduled" },
+    { "type": "assertJson", "path": "/api/projects/qa-ticket-266/tickets/{ticketId}", "jsonPath": "status", "expected": "Todo" },
     { "type": "click", "selector": ".ticket-card .agent-log-btn" },
     { "type": "wait", "ms": 1000 },
     { "type": "assertVisible", "selector": ".fresh-context-details" },
@@ -64,7 +64,7 @@
       "type": "screenshot",
       "name": "ticket-266-stale-success-refused",
       "selector": ".agent-drawer",
-      "description": "Run drawer shows the trigger and consumed ticket versions, owner-feedback comment identity, and machine-readable refusal reason."
+      "description": "The ticket stays in its source column while the run drawer shows the owner-feedback identity and machine-readable refusal reason."
     }
   ],
   "verdict": { "passOn": "all-asserts-pass" }
