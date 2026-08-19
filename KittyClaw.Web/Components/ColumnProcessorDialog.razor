@@ -513,8 +513,8 @@
 
             await ScheduledTaskService.SaveColumnAsync(Slug, savedColumn.Id, _scheduledTasks);
 
-            await OnSaved.InvokeAsync();
             await CloseAsync();
+            await OnSaved.InvokeAsync();
         }
         catch (Exception ex)
         {

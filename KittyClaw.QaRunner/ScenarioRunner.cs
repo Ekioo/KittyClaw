@@ -251,6 +251,10 @@ public sealed class ScenarioRunner
             case "click":
                 await page.ClickAsync(Required(Resolve(action.Selector), "click.selector"));
                 break;
+            case "rightClick":
+                await page.ClickAsync(Required(Resolve(action.Selector), "rightClick.selector"),
+                    new() { Button = MouseButton.Right });
+                break;
             case "dragAndDrop":
                 await page.DragAndDropAsync(
                     Required(Resolve(action.Selector), "dragAndDrop.selector"),

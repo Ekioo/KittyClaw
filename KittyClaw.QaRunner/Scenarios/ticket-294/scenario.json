@@ -1,0 +1,46 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "qa-ticket-294" },
+    {
+      "type": "api",
+      "method": "GET",
+      "path": "/api/projects/qa-ticket-294/columns",
+      "extract": { "sourceColumnId": "0.id", "targetColumnId": "1.id" }
+    }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-ticket-294" },
+    { "type": "wait", "ms": 700 },
+    { "type": "rightClick", "selector": ".board > .column:nth-child(2) .column-header" },
+    { "type": "click", "selector": ".column-context-menu-configure" },
+    { "type": "wait", "ms": 500 },
+    { "type": "click", "selector": ".column-editor-tabs button:nth-child(2)" },
+    { "type": "click", "selector": ".column-empty-state .settings-primary" },
+    { "type": "click", "selector": ".processor-dialog-footer .settings-primary" },
+    { "type": "wait", "ms": 700 },
+    { "type": "assertCount", "selector": ".processor-dialog-overlay", "expected": "0" },
+    { "type": "rightClick", "selector": ".board > .column:nth-child(2) .column-header" },
+    { "type": "click", "selector": ".column-context-menu-configure" },
+    { "type": "wait", "ms": 500 },
+    { "type": "click", "selector": ".column-editor-tabs button:nth-child(5)" },
+    { "type": "click", "selector": ".processor-dialog-body > .processor-secondary-btn" },
+    { "type": "fill", "selector": ".route-row input", "value": "completed" },
+    { "type": "selectOption", "selector": ".route-row select", "value": "{targetColumnId}" },
+    { "type": "click", "selector": ".processor-dialog-footer .settings-primary" },
+    { "type": "wait", "ms": 800 },
+    { "type": "assertCount", "selector": ".processor-dialog-overlay", "expected": "0" },
+    { "type": "assertVisible", "selector": ".column" },
+    {
+      "type": "assertJson",
+      "path": "/api/projects/qa-ticket-294/columns/{sourceColumnId}/processor",
+      "jsonPath": "routes.0.outcome",
+      "expected": "completed"
+    },
+    {
+      "type": "screenshot",
+      "name": "ticket-294-dialog-closed-after-routing-save",
+      "description": "The column editor is closed after adding a routing rule to an existing column, and the board is visible again."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

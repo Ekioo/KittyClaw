@@ -183,6 +183,7 @@ These require Playwright (run inside `actions`, after setup).
 | `navigate`     | `url` (relative or absolute)             | Goes to the URL on the test instance.                                 |
 | `assertNavigationDuration` | `url`, `waitForSelector`, `maxMs` | Navigates, waits for visible content, and asserts elapsed time. |
 | `click`        | `selector`                               | CSS selector click.                                                   |
+| `rightClick`   | `selector`                               | Opens the element's context menu with the secondary mouse button.     |
 | `dragAndDrop`  | `selector`, `target`                     | Drag the source element onto the target element.                       |
 | `assertInteractionDuration` | `selector`, `waitForSelector`, `maxMs` | Clicks, waits for the target to become visible, and asserts elapsed time. |
 | `fill`         | `selector`, `value`                      | Set input value.                                                      |

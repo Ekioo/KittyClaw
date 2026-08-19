@@ -301,4 +301,23 @@ public sealed class ColumnProcessorDialogTests
         Assert.Contains("@_routes.Count", dialog);
         Assert.Contains(".column-editor-tab-count", css);
     }
+
+    [Fact]
+    public void Successful_save_closes_the_editor_before_refreshing_the_board()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "KittyClaw.Web", "Components", "ColumnProcessorDialog.razor"));
+        var saveStart = source.IndexOf("private async Task SaveAsync()", StringComparison.Ordinal);
+        var saveEnd = source.IndexOf("private async Task DeleteColumnAsync()", saveStart, StringComparison.Ordinal);
+
+        Assert.True(saveStart >= 0);
+        Assert.True(saveEnd > saveStart);
+
+        var save = source[saveStart..saveEnd];
+        var close = save.IndexOf("await CloseAsync();", StringComparison.Ordinal);
+        var refresh = save.IndexOf("await OnSaved.InvokeAsync();", StringComparison.Ordinal);
+
+        Assert.True(close >= 0);
+        Assert.True(refresh > close);
+    }
 }
