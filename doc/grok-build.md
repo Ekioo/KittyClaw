@@ -14,7 +14,7 @@ Set `KITTYCLAW_GROK_BIN` before starting KittyClaw to pin dispatch to a specific
 - `KittyClaw.Core/Automation/GrokCli.cs` — binary detection (search order: `KITTYCLAW_GROK_BIN`
   env var → sibling of the host exe → `tools/` → PATH probe, including `.cmd`/`.bat` shims on
   Windows) and model discovery: parses `grok models` output for `grok-*` ids, falling back to a
-  small static list. Both are cached for the process lifetime — installing grok requires an app
+  small static list (`grok-4.6`, then `grok-4.5`). Both are cached for the process lifetime — installing grok requires an app
   restart to be picked up.
 - `KittyClaw.Core/Automation/ModelRouting.cs` — the single routing decision used by every
   dispatch site (automation actions, chat, run retry, dashboard tiles): `claude-*` or null →

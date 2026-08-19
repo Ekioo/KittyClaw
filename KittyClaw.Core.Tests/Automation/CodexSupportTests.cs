@@ -57,6 +57,19 @@ public sealed class CodexSupportTests
     }
 
     [Fact]
+    public void ModelCatalog_ContainsCurrentSupportedFamiliesInDisplayOrder()
+    {
+        Assert.Equal(
+        [
+            "codex:gpt-5.6-sol",
+            "codex:gpt-5.6-terra",
+            "codex:gpt-5.6-luna",
+            "codex:gpt-5.5",
+            "codex:gpt-5.4",
+        ], CodexCli.Models);
+    }
+
+    [Fact]
     public void Routing_QualifiedCodexModel_UsesCodexAndRemovesQualifier()
     {
         using var codex = new FakeCodexInstall();

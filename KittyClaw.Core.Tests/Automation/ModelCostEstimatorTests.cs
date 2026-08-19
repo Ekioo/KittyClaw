@@ -8,6 +8,8 @@ public sealed class ModelCostEstimatorTests
     [InlineData("gpt-5.6-sol", 5, 30, 0.5, 6.25)]
     [InlineData("codex:gpt-5.6-terra", 2.5, 15, 0.25, 3.125)]
     [InlineData("gpt-5.6-luna", 1, 6, 0.1, 1.25)]
+    [InlineData("codex:gpt-5.5", 5, 30, 0.5, 6.25)]
+    [InlineData("gpt-5.4", 2.5, 15, 0.25, 3.125)]
     public void OpenAiRates_AreAppliedPerTokenClass(
         string model, double input, double output, double cacheRead, double cacheWrite)
     {

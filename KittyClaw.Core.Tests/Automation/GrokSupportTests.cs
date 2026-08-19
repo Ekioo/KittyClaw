@@ -202,17 +202,20 @@ public class GrokSupportTests
     [Fact]
     public void ParseModelList_RealGrokOutput_YieldsModelOnce()
     {
-        // Verbatim `grok models` output from grok 0.2.111.
+        // Verbatim `grok models` output from the locally installed Grok Build CLI.
         const string stdout = """
-            You are logged in with grok.com.
-
-            Default model: grok-4.5
+            Default model: grok-4.6
 
             Available models:
-              * grok-4.5 (default)
+              * grok-4.6 (default)
+              - grok-4.5
             """;
-        Assert.Equal(new[] { "grok-4.5" }, GrokCli.ParseModelList(stdout));
+        Assert.Equal(new[] { "grok-4.6", "grok-4.5" }, GrokCli.ParseModelList(stdout));
     }
+
+    [Fact]
+    public void FallbackCatalog_ContainsCurrentAndPreviousGrokBuildModels() =>
+        Assert.Equal(new[] { "grok-4.6", "grok-4.5" }, GrokCli.FallbackModels);
 
     [Fact]
     public void ParseModelList_EmptyOrGarbage_YieldsNothing()

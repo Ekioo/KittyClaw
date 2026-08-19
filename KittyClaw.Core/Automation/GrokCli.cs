@@ -29,9 +29,9 @@ public static class GrokCli
         model is not null && model.StartsWith("grok-", StringComparison.OrdinalIgnoreCase);
 
     // Shown when `grok models` cannot be run or its output yields nothing parseable.
-    // grok-4.5 is the recommended code/chat model per https://docs.x.ai/developers/models;
-    // the CLI's own discovery takes precedence whenever it works.
-    internal static readonly IReadOnlyList<string> FallbackModels = new[] { "grok-4.5" };
+    // Keep the fallback aligned with recent Grok Build releases. The CLI's own discovery
+    // takes precedence whenever it works, so older or account-specific ids remain available.
+    internal static readonly IReadOnlyList<string> FallbackModels = new[] { "grok-4.6", "grok-4.5" };
 
     private static Task<IReadOnlyList<string>>? _modelsTask;
 
