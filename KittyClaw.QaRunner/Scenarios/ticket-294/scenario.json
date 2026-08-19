@@ -40,6 +40,18 @@
       "type": "screenshot",
       "name": "ticket-294-dialog-closed-after-routing-save",
       "description": "The column editor is closed after adding a routing rule to an existing column, and the board is visible again."
+    },
+    { "type": "rightClick", "selector": ".board > .column:nth-child(2) .column-header" },
+    { "type": "click", "selector": ".column-context-menu-configure" },
+    { "type": "wait", "ms": 500 },
+    { "type": "click", "selector": ".column-editor-tabs button:nth-child(5)" },
+    { "type": "assertValue", "selector": ".route-row input", "expected": "completed" },
+    { "type": "assertValue", "selector": ".route-row select", "expected": "{targetColumnId}" },
+    {
+      "type": "screenshot",
+      "name": "ticket-294-rule-persisted-after-reopen",
+      "selector": ".processor-dialog-overlay",
+      "description": "The editor reopened on the routing tab shows the persisted 'completed' rule targeting the second column."
     }
   ],
   "verdict": { "passOn": "all-asserts-pass" }
