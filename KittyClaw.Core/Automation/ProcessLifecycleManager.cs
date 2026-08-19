@@ -72,7 +72,7 @@ internal static class ProcessLifecycleManager
     }
 
     internal static ProcessStartInfo BuildProcessStartInfo(
-        AgentRunContext ctx, IReadOnlyList<string> args, string? fileName = null)
+        AgentRunContext ctx, IReadOnlyList<string> args, string? fileName = null, string? runId = null)
     {
         var psi = new ProcessStartInfo
         {
@@ -110,6 +110,10 @@ internal static class ProcessLifecycleManager
         // Scoped to the subprocess only — the host user's own main-session memory is untouched.
         psi.Environment["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1";
         if (ctx.TicketId is int tid) psi.Environment["KITTYCLAW_TICKET_ID"] = tid.ToString();
+        // Project slug and run id let per-run hook scripts (boundary enforcement gate) correlate
+        // their callbacks with the exact run that spawned them.
+        psi.Environment["KITTYCLAW_PROJECT_SLUG"] = ctx.ProjectSlug;
+        if (runId is not null) psi.Environment["KITTYCLAW_RUN_ID"] = runId;
         // Tell skills which API URL to talk to. Skills resolve `${KITTYCLAW_API_URL:-http://localhost:5230}`
         // so they hit the *current* host instance even when running on a non-default port (e.g. an
         // isolated test instance spawned by KittyClaw.QaRunner).

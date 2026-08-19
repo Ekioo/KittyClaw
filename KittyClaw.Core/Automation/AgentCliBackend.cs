@@ -19,7 +19,8 @@ internal sealed record AgentCliInvocation(
     IReadOnlyList<string> Arguments,
     bool WritePromptToStdin,
     string? TemporaryFile = null,
-    IReadOnlyList<string>? LogArguments = null);
+    IReadOnlyList<string>? LogArguments = null,
+    string? TemporaryDirectory = null);
 
 /// <summary>
 /// Provider-specific command construction, session semantics and stream normalization.
@@ -85,8 +86,20 @@ internal abstract class AgentCliBackend
         if (isResume) { args.Add("--resume"); args.Add(sessionId); }
         else { args.Add("-n"); args.Add(sessionName); args.Add("--session-id"); args.Add(sessionId); }
         if (context.Target.Model is not null) { args.Add("--model"); args.Add(context.Target.Model); }
+
+        // Fail-closed enforcement: route every PreToolUse event through the KittyClaw
+        // approvals gate before the effect. Only Claude Code has this pre-effect hook;
+        // SpawnAndWaitAsync rejects Enforce dispatches for the other providers.
+        string? hookBundle = null;
+        if (context.BoundaryEnforcement == BoundaryEnforcementMode.Enforce)
+        {
+            hookBundle = RuntimeEnforcementHooks.WriteClaudeHookBundle();
+            args.Add("--settings");
+            args.Add(Path.Combine(hookBundle, RuntimeEnforcementHooks.SettingsFileName));
+        }
         return Task.FromResult(new AgentCliInvocation(
-            ProcessLifecycleManager.ClaudeBinary, args, WritePromptToStdin: true));
+            ProcessLifecycleManager.ClaudeBinary, args, WritePromptToStdin: true,
+            TemporaryDirectory: hookBundle));
     }
 
     private sealed class GrokBackend : AgentCliBackend

@@ -15,6 +15,21 @@ requests per twenty runs and the reviewed false-positive rate.
 
 ## Provider blind spots
 
+Observation is not enforcement. Protection is advertised only when a runtime adapter invokes the
+KittyClaw pre-effect runtime broker before the operation. That broker persists the matching
+approval receipt (and atomically consumes `allow once`) before invoking the effect. Registry or
+receipt failures return a fail-closed result without invoking it. Direct Claude Code, Codex, Grok
+Build, and Mistral JSONL stream events remain explicit observation-only exclusions because those
+events can arrive after execution started. Ollama inherits the Claude transport classification.
+
+| Boundary | Protected mechanism | Direct provider stream |
+|---|---|---|
+| Push / pull-request mutation | Pre-effect runtime broker | Excluded (observation only) |
+| Publish / deploy | Pre-effect runtime broker | Excluded (observation only) |
+| New outbound destination | Pre-effect runtime broker | Excluded (observation only) |
+| Secret access | Pre-effect runtime broker | Excluded (observation only) |
+| Destructive operation | Pre-effect runtime broker | Excluded (observation only) |
+
 - Claude Code: structured `tool_use` input is available, but effects performed inside an opaque
   custom tool cannot be classified unless its command, URL, or path is present in the input.
   Structured `tool_result` events correlate success or failure by tool-use identifier.

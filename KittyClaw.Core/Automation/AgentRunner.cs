@@ -20,6 +20,11 @@ public sealed class AgentRunContext
     public int MaxTurns { get; init; } = 200;
     public string ConcurrencyGroup { get; init; } = "";
 
+    /// <summary>Fail-closed boundary enforcement for this run. Enforce dispatches only on providers
+    /// whose adapter intercepts every protected boundary class before the effect (see
+    /// <see cref="RuntimeEnforcementCapabilities"/>); other providers fail closed before spawn.</summary>
+    public BoundaryEnforcementMode BoundaryEnforcement { get; init; } = BoundaryEnforcementMode.Observe;
+
     /// <summary>Atomic model/backend/environment selection. Keeping these values together prevents
     /// impossible combinations such as a Grok model with the Claude backend or leaked Ollama env.</summary>
     public AgentDispatchTarget Target { get; init; } = AgentDispatchTarget.ClaudeDefault;
@@ -82,6 +87,7 @@ public sealed class AgentRunContext
         TicketStatus = TicketStatus,
         MaxTurns = MaxTurns,
         ConcurrencyGroup = ConcurrencyGroup,
+        BoundaryEnforcement = BoundaryEnforcement,
         Target = Target,
         FallbackTarget = FallbackTarget,
         ExtraContext = steerText,
@@ -115,6 +121,7 @@ public sealed class AgentRunContext
         TicketStatus = TicketStatus,
         MaxTurns = MaxTurns,
         ConcurrencyGroup = ConcurrencyGroup,
+        BoundaryEnforcement = BoundaryEnforcement,
         Target = FallbackTarget ?? Target,
         FallbackTarget = null,
         ExtraContext = ExtraContext,
@@ -496,6 +503,7 @@ public sealed class AgentRunner
                     ExtraContext = null,
                     MaxTurns = ctx.MaxTurns,
                     ConcurrencyGroup = ctx.ConcurrencyGroup,
+                    BoundaryEnforcement = ctx.BoundaryEnforcement,
                     SessionScope = ctx.SessionScope,
                     TicketId = ctx.TicketId,
                     TicketTitle = ctx.TicketTitle,
@@ -697,6 +705,24 @@ public sealed class AgentRunner
         AgentRunContext ctx, AgentRun run, string skillContent,
         string sessionId, bool isResume, CancellationToken ct)
     {
+        // Fail-closed dispatch policy, derived from the same enforceability source as the UI
+        // claims: a provider without a pre-effect interception mechanism for every protected
+        // boundary class must never spawn in Enforce mode. Placed here (not in RunAsync) so the
+        // quota-fallback and chat-replay paths, which re-enter this method with a different
+        // provider, cannot bypass it.
+        if (ctx.BoundaryEnforcement == BoundaryEnforcementMode.Enforce)
+        {
+            var unenforceable = RuntimeEnforcementCapabilities.UnenforceableBoundaries(ctx.Target.Provider);
+            if (unenforceable.Count > 0)
+            {
+                run.Push(new StreamEvent(DateTime.UtcNow, "error",
+                    $"Fail-closed: boundary enforcement was requested, but provider '{ctx.Target.Provider}' cannot intercept " +
+                    $"{string.Join(", ", unenforceable)} before the effect (observation-only runtime). " +
+                    "Dispatch on a runtime with pre-effect hooks (claude) or disable enforcement for this run."));
+                return new SpawnResult(-1, 0, false, FallbackReason.None);
+            }
+        }
+
         var rtkStatus = _rtk is null ? null : await _rtk.GetStatusAsync(ctx.ProjectSlug, ct);
         if (rtkStatus is { Enabled: true })
         {
@@ -711,7 +737,7 @@ public sealed class AgentRunner
         var backend = AgentCliBackend.For(ctx.Target.Provider);
         var invocation = await backend.BuildInvocationAsync(ctx, prompt, sessionId, isResume, ct);
         var psi = ProcessLifecycleManager.BuildProcessStartInfo(
-            ctx, invocation.Arguments, invocation.FileName);
+            ctx, invocation.Arguments, invocation.FileName, run.RunId);
         RtkIntegrationService.ApplyEnvironment(psi, rtkStatus);
         var projectSecrets = _projectSecrets is null
             ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -740,6 +766,7 @@ public sealed class AgentRunner
         catch (Exception ex)
         {
             TryDeleteFile(invocation.TemporaryFile);
+            TryDeleteDirectory(invocation.TemporaryDirectory);
             run.Push(new StreamEvent(DateTime.UtcNow, "error", $"spawn failed: {ex.Message}"));
             return new SpawnResult(-1, 0, false, FallbackReason.None);
         }
@@ -944,6 +971,7 @@ public sealed class AgentRunner
         {
             job?.Dispose();
             TryDeleteFile(invocation.TemporaryFile);
+            TryDeleteDirectory(invocation.TemporaryDirectory);
         }
     }
 
@@ -972,6 +1000,13 @@ public sealed class AgentRunner
         if (path is null) return;
         try { File.Delete(path); }
         catch (Exception ex) { _logger.LogDebug(ex, "Failed to delete temporary runner file {FileName}", Path.GetFileName(path)); }
+    }
+
+    private void TryDeleteDirectory(string? path)
+    {
+        if (path is null) return;
+        try { Directory.Delete(path, recursive: true); }
+        catch (Exception ex) { _logger.LogDebug(ex, "Failed to delete temporary runner directory {Directory}", Path.GetFileName(path)); }
     }
 
     private void TryKillProcess(System.Diagnostics.Process proc, AgentRunContext ctx, AgentRun run, string operation)

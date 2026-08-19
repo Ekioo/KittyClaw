@@ -40,4 +40,8 @@ if (scenario is null)
     return 2;
 }
 
-return await ScenarioReplayer.ReplayAsync(scenario, sessionId, Directory.GetCurrentDirectory());
+// Real claude loads PreToolUse/PostToolUse hooks from --settings; the mock honors the same file so
+// hermetic tests can prove that a denied hook verdict prevents the protected effect.
+var hooks = HookSettings.Load(ArgParser.Get(args, "--settings"));
+
+return await ScenarioReplayer.ReplayAsync(scenario, sessionId, Directory.GetCurrentDirectory(), hooks);

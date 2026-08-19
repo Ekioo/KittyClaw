@@ -61,6 +61,8 @@ builder.Services.AddSingleton<MemberService>();
 builder.Services.AddSingleton<ChatService>();
 builder.Services.AddSingleton<ApprovalRegistryService>();
 builder.Services.AddSingleton<ApprovalWorkflowService>();
+builder.Services.AddSingleton<RuntimeBoundaryEnforcementService>();
+builder.Services.AddSingleton<RuntimeBoundaryGateService>();
 builder.Services.AddSingleton<BoundaryObservationService>();
 builder.Services.AddSingleton<DashboardService>();
 builder.Services.AddSingleton<AgentsTemplateService>();

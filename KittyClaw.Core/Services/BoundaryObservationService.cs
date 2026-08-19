@@ -154,6 +154,21 @@ public sealed partial class BoundaryObservationService(ProjectService projects, 
         catch (Exception ex) { logger.LogWarning(ex, "Could not record observed run {RunId}", run.RunId); }
     }
 
+    /// <summary>True when the destination is loopback/private or already recorded for the project.
+    /// Used by the runtime gate so only genuinely new outbound destinations require approval.</summary>
+    public bool IsKnownOrLocalDestination(string projectSlug, string host)
+    {
+        var normalized = NormalizeDestinationHost(host);
+        if (IsLocalDestination(normalized)) return true;
+        using var connection = Open(projectSlug);
+        EnsureSchema(connection);
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT 1 FROM KnownNetworkDestinations WHERE ProjectSlug=$project AND Host=$host";
+        Add(command, "$project", projectSlug);
+        Add(command, "$host", normalized);
+        return command.ExecuteScalar() is not null;
+    }
+
     internal static (BoundaryActionClass ActionClass, string ResourceKind, string ResourceDisplay)? Classify(string tool, string detail)
     {
         var command = ExtractCommand(detail);

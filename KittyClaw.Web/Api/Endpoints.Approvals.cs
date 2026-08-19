@@ -36,6 +36,24 @@ public static partial class Endpoints
         approvals.MapGet("/receipts", async (string slug, string? requestId, ApprovalRegistryService registry) =>
             Results.Ok(await registry.QueryReceiptsAsync(slug, requestId)))
             .Produces<IReadOnlyList<ApprovalReceiptRecord>>();
+
+        // Pre-effect hook callback: the provider-native hook posts its raw payload here BEFORE the
+        // tool effect runs and blocks on the verdict. Never throws — the gate answers deny on any
+        // internal failure so the boundary fails closed rather than open.
+        approvals.MapPost("/gate", async (string slug, string runId, bool? finalize, HttpRequest request,
+            RuntimeBoundaryGateService gate) =>
+        {
+            using var reader = new StreamReader(request.Body);
+            var payload = await reader.ReadToEndAsync();
+            return Results.Ok(await gate.EvaluateHookAsync(slug, runId, payload, finalize ?? false));
+        }).Produces<RuntimeBoundaryGateVerdict>();
+
+        // Enforceability source shared by UI claims and dispatch policy: which provider × boundary
+        // pairs are actually intercepted pre-effect, and why the others are excluded.
+        api.MapGet("/runtime-enforcement/capabilities",
+            () => Results.Ok(KittyClaw.Core.Automation.RuntimeEnforcementCapabilities.Catalogue))
+            .WithTags("Approvals")
+            .Produces<IReadOnlyList<KittyClaw.Core.Automation.RuntimeEnforcementCapability>>();
     }
 
     private static async Task<IResult> MapWrite<T>(Func<Task<T>> action)
