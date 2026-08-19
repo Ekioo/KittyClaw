@@ -45,8 +45,16 @@ public static class DecisionActionRouting
             ? null
             : columns.FirstOrDefault(column => column.Id == targetId);
 
+        var sourceOutcomeReturnsToOwner = sourceExecution?.Outcome is { Length: > 0 } outcome
+            && sourceProcessor.Routes.Any(route =>
+                route.TargetColumnId == currentColumn.Id
+                && route.Outcome.Equals(outcome, StringComparison.OrdinalIgnoreCase));
+        var resumeSourceProcessor = sourceOutcomeReturnsToOwner
+            ? Target(sourceProcessor.ColumnId)
+            : null;
+
         return new(
-            Route(ApprovedOutcome) ?? Target(sourceProcessor.DefaultTargetColumnId),
+            Route(ApprovedOutcome) ?? resumeSourceProcessor ?? Target(sourceProcessor.DefaultTargetColumnId),
             Route(ChangesRequestedOutcome),
             Route(AbandonedOutcome));
     }

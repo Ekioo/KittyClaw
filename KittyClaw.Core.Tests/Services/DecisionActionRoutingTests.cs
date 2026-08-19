@@ -9,6 +9,7 @@ public sealed class DecisionActionRoutingTests
     public void Resolve_UsesSourceProcessorRoutes_RegardlessOfColumnNamesOrOrder()
     {
         var correction = Column(3, "À corriger", 3);
+        var source = Column(5, "Validation et intégration", 4);
         var approved = Column(6, "Livré", 5, ColumnRole.Success);
         var stopped = Column(7, "Abandonné", 6, ColumnRole.Failure);
         var ownerAction = Column(17, "Informations du propriétaire", 7, ColumnRole.OwnerAction);
@@ -37,11 +38,46 @@ public sealed class DecisionActionRoutingTests
         };
 
         var targets = DecisionActionRouting.Resolve(
-            [correction, approved, stopped, ownerAction], [processor], [execution], ownerAction);
+            [correction, source, approved, stopped, ownerAction], [processor], [execution], ownerAction);
 
         Assert.Equal(approved.Id, targets.Accepted?.Id);
         Assert.Equal(correction.Id, targets.CorrectionRequested?.Id);
         Assert.Equal(stopped.Id, targets.Stopped?.Id);
+    }
+
+    [Fact]
+    public void Resolve_ResumesProcessorThatReturnedToOwner_InsteadOfSkippingToItsSuccessTarget()
+    {
+        var publication = Column(12, "Web publication", 5);
+        var ownerReview = Column(20, "Owner web review", 4, ColumnRole.OwnerAction);
+        var linkedInDraft = Column(13, "LinkedIn draft", 6);
+        var processor = new ColumnProcessor
+        {
+            Id = 4,
+            ColumnId = publication.Id,
+            Name = "Web publisher",
+            DefaultTargetColumnId = linkedInDraft.Id,
+            Routes =
+            [
+                new("published", linkedInDraft.Id),
+                new("needs_owner", ownerReview.Id),
+            ]
+        };
+        var execution = new ColumnExecution
+        {
+            Id = "publication-needs-owner",
+            ProcessorId = processor.Id,
+            TicketId = 254,
+            Status = ColumnExecutionStatus.Completed,
+            TargetColumnId = ownerReview.Id,
+            Outcome = "needs_owner",
+        };
+
+        var targets = DecisionActionRouting.Resolve(
+            [publication, ownerReview, linkedInDraft], [processor], [execution], ownerReview);
+
+        Assert.Equal(publication.Id, targets.Accepted?.Id);
+        Assert.NotEqual(linkedInDraft.Id, targets.Accepted?.Id);
     }
 
     [Fact]
