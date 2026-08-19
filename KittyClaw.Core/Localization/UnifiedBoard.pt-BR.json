@@ -1,0 +1,14 @@
+{
+  "UnifiedBoardTitle": "Todos os Painéis",
+  "AllBoardsNavLabel": "Todos os Painéis",
+  "UnifiedBoardLoading": "Carregando painéis…",
+  "UnifiedBoardNoProjects": "Ainda não há projetos.",
+  "UnifiedBoardNoMatches": "Nenhum ticket corresponde a esta pesquisa.",
+  "UnifiedBoardSearchPlaceholder": "Pesquisar em todos os projetos…",
+  "ClearSearch": "Limpar pesquisa",
+  "CreateProjectButton": "Criar um projeto",
+  "ProjectName": "Nome do projeto",
+  "UnifiedBoardCollapseLane": "Colapsar faixa",
+  "UnifiedBoardExpandLane": "Expandir faixa",
+  "UnifiedBoardCrossLaneBlocked": "Os tickets não podem ser movidos entre projetos."
+}

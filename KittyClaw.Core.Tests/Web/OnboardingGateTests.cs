@@ -41,7 +41,7 @@ public sealed class OnboardingGateTests
     [Fact]
     public void Onboarding_strings_are_consistent_across_supported_languages()
     {
-        string[] languages = ["en", "fr", "es", "de", "it"];
+        string[] languages = ["en", "fr", "es", "de", "it", "pt-BR", "ja"];
         var requiredKeys = new[]
         {
             "OnboardingClaudeGuidance", "OnboardingCodexGuidance", "OnboardingGrokGuidance",

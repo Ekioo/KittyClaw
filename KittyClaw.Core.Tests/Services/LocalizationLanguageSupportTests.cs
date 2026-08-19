@@ -6,7 +6,7 @@ namespace KittyClaw.Core.Tests.Services;
 
 public class LocalizationLanguageSupportTests
 {
-    private static readonly string[] SupportedLanguages = ["en", "fr", "es", "de", "it"];
+    private static readonly string[] SupportedLanguages = ["en", "fr", "es", "de", "it", "pt-BR", "ja"];
     private static readonly Regex PlaceholderPattern = new(@"\{\d+(?::[^}]*)?\}");
 
     private static string RepoRoot()
@@ -40,6 +40,8 @@ public class LocalizationLanguageSupportTests
     [InlineData("es", "Idioma")]
     [InlineData("de", "Sprache")]
     [InlineData("it", "Lingua")]
+    [InlineData("pt-BR", "Idioma")]
+    [InlineData("ja", "言語")]
     public void LocalizationService_LoadsNewLanguages(string language, string expected)
     {
         using var data = new TemporaryDirectory();

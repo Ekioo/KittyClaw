@@ -10,6 +10,8 @@ public class AgentLanguageInstructionTests
     [InlineData("es", "Spanish (es)")]
     [InlineData("de", "German (de)")]
     [InlineData("it", "Italian (it)")]
+    [InlineData("pt-BR", "Brazilian Portuguese (pt-BR)")]
+    [InlineData("ja", "Japanese (ja)")]
     public void Instruction_reflects_supported_UI_language(string language, string expected)
     {
         Assert.Contains(expected, AgentRunner.BuildLanguageInstruction(language));

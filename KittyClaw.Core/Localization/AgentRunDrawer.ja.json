@@ -1,0 +1,9 @@
+{
+  "StopAgent": "エージェント停止",
+  "Stop": "停止",
+  "Retry": "再試行",
+  "RetryAgent": "このエージェントを再度実行",
+  "WaitingForOutput": "出力を待機中…",
+  "SteerPlaceholder": "エージェントに指示を送る…",
+  "Send": "送信"
+}

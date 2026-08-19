@@ -1,0 +1,14 @@
+{
+  "UnifiedBoardTitle": "すべてのボード",
+  "AllBoardsNavLabel": "すべてのボード",
+  "UnifiedBoardLoading": "ボードを読み込んでいます…",
+  "UnifiedBoardNoProjects": "まだプロジェクトがありません。",
+  "UnifiedBoardNoMatches": "該当するチケットはありません。",
+  "UnifiedBoardSearchPlaceholder": "すべてのプロジェクトで検索…",
+  "ClearSearch": "検索クリア",
+  "CreateProjectButton": "プロジェクトを作成",
+  "ProjectName": "プロジェクト名",
+  "UnifiedBoardCollapseLane": "レーンを折りたたむ",
+  "UnifiedBoardExpandLane": "レーンを展開する",
+  "UnifiedBoardCrossLaneBlocked": "プロジェクト間でチケットは移動できません。"
+}

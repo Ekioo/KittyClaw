@@ -20,7 +20,8 @@ public class AppSettingsService
     internal static string ResolveDefaultLanguage(CultureInfo culture)
     {
         var language = culture.TwoLetterISOLanguageName.ToLowerInvariant();
-        return language is "en" or "fr" or "es" or "de" or "it" ? language : "en";
+        if (language == "pt") return "pt-BR";
+        return language is "en" or "fr" or "es" or "de" or "it" or "ja" ? language : "en";
     }
 
     public string Language

@@ -1078,6 +1078,8 @@ public sealed class AgentRunner
             "es" => ("es", "Spanish"),
             "de" => ("de", "German"),
             "it" => ("it", "Italian"),
+            "pt-br" => ("pt-BR", "Brazilian Portuguese"),
+            "ja" => ("ja", "Japanese"),
             _ => ("en", "English"),
         };
         return $"[Language: the KittyClaw UI language is {name} ({code}). Use {name} for persistent project artifacts and interactive replies unless the owner explicitly requests another language.]";

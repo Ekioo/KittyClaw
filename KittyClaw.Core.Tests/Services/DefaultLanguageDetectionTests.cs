@@ -21,9 +21,22 @@ public class DefaultLanguageDetectionTests
     {
         using var dir = new TempDir();
 
-        var settings = new AppSettingsService(dir.Path, CultureInfo.GetCultureInfo("ja-JP"));
+        var settings = new AppSettingsService(dir.Path, CultureInfo.GetCultureInfo("ko-KR"));
 
         Assert.Equal("en", settings.Language);
+    }
+
+    [Theory]
+    [InlineData("pt-BR", "pt-BR")]
+    [InlineData("pt-PT", "pt-BR")]
+    [InlineData("ja-JP", "ja")]
+    public void New_settings_map_new_operating_system_languages(string culture, string expected)
+    {
+        using var dir = new TempDir();
+
+        var settings = new AppSettingsService(dir.Path, CultureInfo.GetCultureInfo(culture));
+
+        Assert.Equal(expected, settings.Language);
     }
 
     [Fact]
