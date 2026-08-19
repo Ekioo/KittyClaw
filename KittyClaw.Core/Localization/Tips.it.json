@@ -23,5 +23,13 @@
   "Tip21": "Le skill del progetto descrivono procedure tecniche e operative riutilizzabili. Un processore può renderle disponibili, consigliate o obbligatorie per il suo agente generico.",
   "Tip22": "Ogni processore e attività pianificata può scegliere il modello. Le nuove istruzioni riutilizzano l'ultima scelta, mentre una conversazione conserva il modello iniziale.",
   "Tip23": "Il badge arancione di una pipeline conta i ticket visibili non letti. Fai clic destro su una colonna e scegli Segna tutto come letto per azzerarlo.",
-  "Tip24": "Un vecchio board basato sulle automazioni può essere migrato con il wizard. Controlla pipeline e colonne passo dopo passo prima di avviare la migrazione."
+  "Tip24": "Un vecchio board basato sulle automazioni può essere migrato con il wizard. Controlla pipeline e colonne passo dopo passo prima di avviare la migrazione.",
+  "Tip25": "La pagina Costi usa un report memorizzato nella cache. Parti da un intervallo rapido, poi filtra per progetto, pipeline o modello.",
+  "Tip26": "In Costi, il verde indica valori misurati, l'arancione tratteggiato le stime e il gradiente ciano-verde i risparmi RTK.",
+  "Tip27": "Attiva RTK nelle impostazioni del progetto per condensare l'output dei comandi prima che raggiunga l'agente. I risparmi stimati appariranno in Costi.",
+  "Tip28": "Un'approvazione di runtime mette in pausa l'agente prima di un'azione sensibile. Apri Approvazioni dalla board per consentire una volta, per il ticket o negare.",
+  "Tip29": "Attiva i worktree nelle impostazioni del progetto per isolare ogni implementazione. Il pannello del ticket mostra branch, cartella e stato dell'integrazione.",
+  "Tip30": "Collega i ticket con Bloccato da e Blocca. I processori attendono la risoluzione delle dipendenze prima di avviare il lavoro dipendente.",
+  "Tip31": "In una fase Azione Owner richiesta, il riepilogo decisionale raccoglie il contesto utile. Accetta, richiedi una correzione o interrompi senza rileggere tutta la cronologia.",
+  "Tip32": "Le tile della dashboard possono mostrare Markdown, KPI, grafici, tabelle, timeline o diagrammi Mermaid. Ogni tile ha il proprio intervallo di aggiornamento."
 }

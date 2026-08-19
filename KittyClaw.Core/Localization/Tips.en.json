@@ -23,5 +23,13 @@
   "Tip21": "Project skills describe reusable technical and operational procedures. A processor can make them available, recommended or required for its generic agent.",
   "Tip22": "Each processor and scheduled task can choose its model. New instructions reuse your last choice, while an existing conversation always keeps its original model.",
   "Tip23": "A pipeline's orange badge counts its visible unread tickets. Right-click a column and choose Mark all as read to reset its count.",
-  "Tip24": "A legacy automation board can be migrated with the wizard. Review its pipelines and columns step by step before launching the migration."
+  "Tip24": "A legacy automation board can be migrated with the wizard. Review its pipelines and columns step by step before launching the migration.",
+  "Tip25": "The Costs page uses a cached report. Start with a quick date range, then filter by project, pipeline or model.",
+  "Tip26": "On Costs, green means measured, striped orange means estimated, and the cyan-to-green gradient shows RTK savings.",
+  "Tip27": "Enable RTK in project settings to condense command output before it reaches the agent. Estimated savings then appear on Costs.",
+  "Tip28": "A runtime approval pauses the agent before a sensitive action. Open Approvals from the board to allow once, allow for the ticket or deny it.",
+  "Tip29": "Enable worktrees in project settings to isolate each implementation. The ticket panel shows its branch, folder and integration status.",
+  "Tip30": "Connect tickets with Blocked by and Blocks. Processors wait for dependencies to resolve before starting dependent work.",
+  "Tip31": "In an Owner action required stage, the decision brief gathers the useful context. Accept, request a correction or stop without rereading the full history.",
+  "Tip32": "Dashboard tiles can render Markdown, KPIs, charts, tables, timelines or Mermaid diagrams. Each tile has its own refresh interval."
 }

@@ -23,5 +23,13 @@
   "Tip21": "Projekt-Skills beschreiben wiederverwendbare technische und operative Abläufe. Ein Prozessor kann sie für seinen generischen Agenten verfügbar, empfohlen oder erforderlich machen.",
   "Tip22": "Jeder Prozessor und jede geplante Aufgabe kann ein Modell wählen. Neue Anweisungen verwenden die letzte Auswahl; bestehende Unterhaltungen behalten ihr ursprüngliches Modell.",
   "Tip23": "Die orange Markierung einer Pipeline zählt sichtbare ungelesene Tickets. Wählen Sie per Rechtsklick auf eine Spalte Alle als gelesen markieren, um den Zähler zurückzusetzen.",
-  "Tip24": "Ein altes Automatisierungs-Board kann mit dem Assistenten migriert werden. Prüfen Sie Pipelines und Spalten schrittweise, bevor Sie die Migration starten."
+  "Tip24": "Ein altes Automatisierungs-Board kann mit dem Assistenten migriert werden. Prüfen Sie Pipelines und Spalten schrittweise, bevor Sie die Migration starten.",
+  "Tip25": "Die Kostenseite verwendet einen zwischengespeicherten Bericht. Wählen Sie zuerst einen Schnellzeitraum und filtern Sie dann nach Projekt, Pipeline oder Modell.",
+  "Tip26": "Bei den Kosten steht Grün für gemessene Werte, gestreiftes Orange für Schätzungen und der Cyan-Grün-Verlauf für RTK-Einsparungen.",
+  "Tip27": "Aktivieren Sie RTK in den Projekteinstellungen, um Befehlsausgaben vor der Übergabe an den Agenten zu verdichten. Geschätzte Einsparungen erscheinen danach unter Kosten.",
+  "Tip28": "Eine Laufzeitfreigabe pausiert den Agenten vor einer sensiblen Aktion. Öffnen Sie Freigaben im Board, um einmalig, für das Ticket oder gar nicht zu erlauben.",
+  "Tip29": "Aktivieren Sie Worktrees in den Projekteinstellungen, um jede Umsetzung zu isolieren. Das Ticketfenster zeigt Branch, Ordner und Integrationsstatus.",
+  "Tip30": "Verknüpfen Sie Tickets mit Blockiert durch und Blockiert. Prozessoren warten auf gelöste Abhängigkeiten, bevor abhängige Arbeit beginnt.",
+  "Tip31": "In einer Owner-Aktion-erforderlich-Phase bündelt die Entscheidungsübersicht den wichtigen Kontext. Akzeptieren, Korrektur anfordern oder stoppen Sie ohne den gesamten Verlauf erneut zu lesen.",
+  "Tip32": "Dashboard-Kacheln können Markdown, KPIs, Diagramme, Tabellen, Zeitachsen oder Mermaid-Diagramme darstellen. Jede Kachel hat ein eigenes Aktualisierungsintervall."
 }

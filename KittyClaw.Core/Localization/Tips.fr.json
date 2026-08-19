@@ -23,5 +23,13 @@
   "Tip21": "Les skills du projet décrivent les procédures techniques et opérationnelles réutilisables. Un processeur peut les rendre disponibles, recommandés ou obligatoires pour son agent générique.",
   "Tip22": "Chaque processeur et chaque tâche planifiée peut choisir son modèle. Les nouvelles instructions réutilisent le dernier modèle choisi, et une conversation conserve toujours son modèle initial.",
   "Tip23": "La pastille orange d'un pipeline compte ses tickets visibles non lus. Clic droit sur une colonne, puis Tout marquer comme lu, pour remettre son compteur à zéro.",
-  "Tip24": "Un ancien board basé sur les automatisations peut être migré par le wizard. Validez les pipelines et leurs colonnes étape par étape avant de lancer la migration."
+  "Tip24": "Un ancien board basé sur les automatisations peut être migré par le wizard. Validez les pipelines et leurs colonnes étape par étape avant de lancer la migration.",
+  "Tip25": "La page Coûts s'appuie sur un rapport mis en cache. Utilisez ses raccourcis de période, puis filtrez par projet, pipeline ou modèle.",
+  "Tip26": "Dans Coûts, le vert correspond aux montants mesurés, l'orange hachuré aux estimations et le dégradé cyan-vert aux économies RTK.",
+  "Tip27": "Activez RTK dans les paramètres d'un projet pour condenser les sorties de commandes avant qu'elles atteignent l'agent. Les économies estimées apparaissent ensuite dans Coûts.",
+  "Tip28": "Une validation d'exécution met l'agent en pause avant une action sensible. Ouvrez Validations depuis le board pour autoriser une fois, autoriser le ticket ou refuser.",
+  "Tip29": "Activez les worktrees dans les paramètres du projet pour isoler chaque chantier. Le panneau du ticket montre sa branche, son dossier et l'état de son intégration.",
+  "Tip30": "Reliez les tickets avec Bloqué par et Bloque. Les processeurs attendent la résolution des dépendances avant de démarrer le travail dépendant.",
+  "Tip31": "Dans une étape Action du Owner requise, la synthèse de décision rassemble le contexte utile. Vous pouvez accepter, demander une correction ou arrêter sans relire tout l'historique.",
+  "Tip32": "Les tuiles du dashboard peuvent afficher du Markdown, des KPI, graphiques, tableaux, chronologies ou diagrammes Mermaid. Leur fréquence de rafraîchissement est configurable."
 }

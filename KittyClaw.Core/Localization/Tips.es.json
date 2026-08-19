@@ -23,5 +23,13 @@
   "Tip21": "Las skills del proyecto describen procedimientos técnicos y operativos reutilizables. Un procesador puede hacerlas disponibles, recomendadas u obligatorias para su agente genérico.",
   "Tip22": "Cada procesador y tarea programada puede elegir su modelo. Las instrucciones nuevas reutilizan la última elección y una conversación conserva siempre su modelo inicial.",
   "Tip23": "La insignia naranja de un pipeline cuenta sus tickets visibles no leídos. Haga clic derecho en una columna y elija Marcar todo como leído para reiniciarla.",
-  "Tip24": "Un tablero antiguo de automatizaciones se puede migrar con el asistente. Revise pipelines y columnas paso a paso antes de iniciar la migración."
+  "Tip24": "Un tablero antiguo de automatizaciones se puede migrar con el asistente. Revise pipelines y columnas paso a paso antes de iniciar la migración.",
+  "Tip25": "La página Costes usa un informe en caché. Empiece con un periodo rápido y después filtre por proyecto, pipeline o modelo.",
+  "Tip26": "En Costes, el verde indica valores medidos, el naranja rayado estimaciones y el degradado cian-verde ahorros de RTK.",
+  "Tip27": "Active RTK en la configuración del proyecto para condensar la salida de comandos antes de que llegue al agente. Los ahorros estimados aparecerán en Costes.",
+  "Tip28": "Una aprobación de ejecución pausa al agente antes de una acción sensible. Abra Aprobaciones desde el tablero para permitir una vez, permitir para el ticket o rechazar.",
+  "Tip29": "Active los worktrees en la configuración del proyecto para aislar cada implementación. El panel del ticket muestra su rama, carpeta y estado de integración.",
+  "Tip30": "Conecte tickets con Bloqueado por y Bloquea. Los procesadores esperan a que se resuelvan las dependencias antes de iniciar el trabajo dependiente.",
+  "Tip31": "En una etapa Acción del Owner requerida, el resumen de decisión reúne el contexto útil. Acepte, pida una corrección o detenga sin releer todo el historial.",
+  "Tip32": "Las tarjetas del dashboard pueden mostrar Markdown, KPI, gráficos, tablas, cronologías o diagramas Mermaid. Cada tarjeta tiene su propio intervalo de actualización."
 }

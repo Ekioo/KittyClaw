@@ -1,0 +1,36 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "Tips QA" }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/projects" },
+    { "type": "wait", "ms": 750 },
+    { "type": "click", "selector": ".tip-next-btn" },
+    { "type": "click", "selector": ".tip-next-btn" },
+    { "type": "click", "selector": ".tip-next-btn" },
+    { "type": "click", "selector": ".tip-next-btn" },
+    { "type": "click", "selector": ".tip-next-btn" },
+    { "type": "click", "selector": ".tip-next-btn" },
+    { "type": "click", "selector": ".tip-next-btn" },
+    { "type": "click", "selector": ".tip-next-btn" },
+    { "type": "click", "selector": ".tip-next-btn" },
+    { "type": "click", "selector": ".tip-next-btn" },
+    { "type": "click", "selector": ".tip-next-btn" },
+    { "type": "click", "selector": ".tip-next-btn" },
+    { "type": "click", "selector": ".tip-next-btn" },
+    { "type": "click", "selector": ".tip-next-btn" },
+    { "type": "click", "selector": ".tip-next-btn" },
+    { "type": "click", "selector": ".tip-next-btn" },
+    { "type": "click", "selector": ".tip-next-btn" },
+    { "type": "click", "selector": ".tip-next-btn" },
+    { "type": "assertText", "selector": ".tip-line >> nth=0", "expected": "The Costs page uses a cached report." },
+    { "type": "assertCount", "selector": ".tip-line", "expected": "2" },
+    {
+      "type": "screenshot",
+      "selector": ".tip-of-the-day",
+      "name": "ticket-246-new-cost-tip",
+      "description": "A newly added cost-report tip remains readable as two compact lines in the home footer."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

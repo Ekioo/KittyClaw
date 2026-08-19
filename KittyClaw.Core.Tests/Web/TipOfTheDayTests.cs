@@ -81,6 +81,13 @@ public class TipOfTheDayTests
         Assert.Contains("Project skills", english);
         Assert.Contains("migration", english, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("orange badge", english);
+        Assert.Contains("cached report", english);
+        Assert.Contains("RTK", english);
+        Assert.Contains("runtime approval", english);
+        Assert.Contains("worktrees", english);
+        Assert.Contains("dependencies", english);
+        Assert.Contains("decision brief", english);
+        Assert.Contains("Dashboard tiles", english);
     }
 
     [Fact]
