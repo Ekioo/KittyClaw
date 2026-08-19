@@ -1,0 +1,53 @@
+{
+  "environment": { "KITTYCLAW_ENABLE_QA_ENDPOINTS": "1" },
+  "setup": [
+    { "type": "createProject", "name": "qa-ticket-293" }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-ticket-293" },
+    { "type": "wait", "ms": 700 },
+    { "type": "click", "selector": ".new-instruction-btn" },
+    { "type": "wait", "ms": 700 },
+    { "type": "click", "selector": ".chat-target-item.claude-direct" },
+    { "type": "wait", "ms": 250 },
+    {
+      "type": "pasteImage",
+      "selector": ".chat-input-area textarea",
+      "property": "image/png",
+      "value": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nS8AAAAASUVORK5CYII="
+    },
+    {
+      "type": "pasteImage",
+      "selector": ".chat-input-area textarea",
+      "property": "image/png",
+      "text": "Compare ces deux captures",
+      "value": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    },
+    { "type": "wait", "ms": 300 },
+    { "type": "assertCount", "selector": ".chat-paste-preview img", "expected": "2" },
+    { "type": "click", "selector": ".chat-input-area > button" },
+    { "type": "wait", "ms": 900 },
+    { "type": "assertText", "selector": ".chat-message-user .chat-message-text", "expected": "Compare ces deux captures" },
+    { "type": "assertCount", "selector": ".chat-message-user .chat-message-image", "expected": "2" },
+    { "type": "assertCount", "selector": ".chat-paste-preview", "expected": "0" },
+    {
+      "type": "screenshot",
+      "name": "ticket-293-sent-image-history",
+      "selector": ".chat-drawer",
+      "description": "The sent user message retains both image previews above its text after the composer draft is cleared."
+    },
+    { "type": "navigate", "url": "/board/qa-ticket-293" },
+    { "type": "wait", "ms": 700 },
+    { "type": "click", "selector": ".new-instruction-btn" },
+    { "type": "wait", "ms": 900 },
+    { "type": "assertText", "selector": ".chat-message-user .chat-message-text", "expected": "Compare ces deux captures" },
+    { "type": "assertCount", "selector": ".chat-message-user .chat-message-image", "expected": "2" },
+    {
+      "type": "screenshot",
+      "name": "ticket-293-reloaded-image-history",
+      "selector": ".chat-drawer",
+      "description": "Both sent image previews are reconstructed from persisted chat history after a full page reload."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using KittyClaw.Core.Data;
 using KittyClaw.Core.Models;
+using System.Text.Json;
 
 namespace KittyClaw.Core.Services;
 
@@ -63,7 +64,8 @@ public sealed class ChatService
     }
 
     public async Task AppendAsync(string projectSlug, string targetSlug, string role, string text,
-                                   string? toolName = null, string? detail = null)
+                                   string? toolName = null, string? detail = null,
+                                   IReadOnlyList<ChatMessageImage>? images = null)
     {
         await using var db = _projects.GetProjectDb(projectSlug);
         await EnsureTableAsync(db);
@@ -74,9 +76,24 @@ public sealed class ChatService
             Text = text,
             ToolName = toolName,
             Detail = detail,
+            ImagesJson = images is { Count: > 0 } ? JsonSerializer.Serialize(images) : null,
             CreatedAt = DateTime.UtcNow.ToString("o"),
         });
         await db.SaveChangesAsync();
+    }
+
+    public static IReadOnlyList<ChatMessageImage> DeserializeImages(string? imagesJson)
+    {
+        if (string.IsNullOrWhiteSpace(imagesJson)) return [];
+        try
+        {
+            return JsonSerializer.Deserialize<List<ChatMessageImage>>(imagesJson) ?? [];
+        }
+        catch (JsonException)
+        {
+            // A malformed legacy row must not prevent the rest of the conversation loading.
+            return [];
+        }
     }
 
     public async Task ClearAsync(string projectSlug, string targetSlug)

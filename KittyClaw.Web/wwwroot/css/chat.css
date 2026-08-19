@@ -95,6 +95,27 @@
     word-break: break-word;
 }
 .chat-bubble.markdown-body { white-space: normal; }
+.chat-message-images {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+    margin-bottom: 0.55rem;
+}
+.chat-message-image {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    max-height: 220px;
+    object-fit: cover;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.18);
+}
+.chat-message-images .chat-message-image:only-child {
+    grid-column: 1 / -1;
+    object-fit: contain;
+}
+.chat-message-text { min-width: 0; }
 .chat-bubble.markdown-body p { margin: 0 0 0.5em; }
 .chat-bubble.markdown-body p:last-child { margin-bottom: 0; }
 .chat-bubble.markdown-body h1,.chat-bubble.markdown-body h2,.chat-bubble.markdown-body h3,

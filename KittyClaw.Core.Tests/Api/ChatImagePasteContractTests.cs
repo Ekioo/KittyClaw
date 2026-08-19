@@ -99,6 +99,24 @@ public class ChatImagePasteContractTests
         var src = Read("KittyClaw.Core/Services/ChatService.cs");
         // Plan: inline ALTER TABLE adds imagesJson column for history re-render.
         Assert.Matches(new Regex(@"ALTER\s+TABLE[\s\S]{0,200}?imagesJson", RegexOptions.IgnoreCase), src);
+        Assert.Contains("JsonSerializer.Serialize(images)", src);
+        Assert.Contains("DeserializeImages", src);
+    }
+
+    [Fact]
+    public void Sent_images_are_returned_by_history_and_rendered_in_the_message_bubble()
+    {
+        var contracts = Read("KittyClaw.Web/Api/Contracts.cs");
+        var endpoint = Read("KittyClaw.Web/Api/Endpoints.Chat.cs");
+        var drawer = Read("KittyClaw.Web/Components/ChatDrawer.razor");
+
+        Assert.Matches(new Regex(@"ChatMessageDto[\s\S]{0,300}?IReadOnlyList<\s*ChatImageDto\s*>\??\s+Images"), contracts);
+        Assert.Contains("ChatService.DeserializeImages(r.ImagesJson)", endpoint);
+        Assert.Contains("images: req.Images?", endpoint);
+        Assert.Contains("data-testid=\"chat-message-images\"", drawer);
+        Assert.Contains("data-testid=\"chat-message-image\"", drawer);
+        Assert.Contains("new ChatMessage(\"user\", text, sentImages)", drawer);
+        Assert.Contains("m.Images?", drawer);
     }
 
     [Fact]

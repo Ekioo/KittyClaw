@@ -201,7 +201,22 @@
                 else
                 {
                     <div class="chat-message chat-message-@msg.Role">
-                        <div class="chat-bubble markdown-body">@((MarkupString)RenderMarkdown(msg.Text))</div>
+                        <div class="chat-bubble markdown-body">
+                            @if (msg.Images.Count > 0)
+                            {
+                                <div class="chat-message-images" data-testid="chat-message-images">
+                                    @foreach (var image in msg.Images)
+                                    {
+                                        <img class="chat-message-image" data-testid="chat-message-image"
+                                             src="@image.DataUrl" alt="@image.Name" loading="lazy" />
+                                    }
+                                </div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(msg.Text))
+                            {
+                                <div class="chat-message-text">@((MarkupString)RenderMarkdown(msg.Text))</div>
+                            }
+                        </div>
                     </div>
                 }
             }
@@ -387,7 +402,11 @@
         finally { watchdog.Dispose(); }
     }
 
-    private record ChatMessage(string Role, string Text);
+    private sealed record MessageImage(string DataUrl, string Mime, string Name, long SizeBytes);
+    private record ChatMessage(string Role, string Text, IReadOnlyList<MessageImage>? MessageImages = null)
+    {
+        public IReadOnlyList<MessageImage> Images { get; } = MessageImages ?? [];
+    }
     private sealed record DiagnosticMessage(string DiagnosticRole, string Summary, string Detail)
         : ChatMessage(DiagnosticRole, Detail);
     private sealed record ToolCallMessage(string ToolName, string Preview, string Detail)
@@ -546,7 +565,8 @@
                     {
                         if (m.Role == "stderr") AddStderrMessage(m.Text);
                         else if (m.Role == "error") AddErrorMessage(m.Text);
-                        else _messages.Add(new ChatMessage(m.Role, m.Text));
+                        else _messages.Add(new ChatMessage(m.Role, m.Text, m.Images?
+                            .Select(i => new MessageImage(i.DataUrl, i.Mime, i.Name, i.SizeBytes)).ToList()));
                     }
                     latestMessageAt = m.CreatedAt;
                 }
@@ -754,7 +774,10 @@
 
         _hitMaxTurns = false;
         _streamingText = null;
-        var imagesPayload = _pendingImages.Select(p => new { dataUrl = p.DataUrl, mime = p.Mime, name = p.Name, sizeBytes = p.SizeBytes }).ToList();
+        var sentImages = _pendingImages
+            .Select(p => new MessageImage(p.DataUrl, p.Mime, p.Name, p.SizeBytes)).ToList();
+        var imagesPayload = sentImages
+            .Select(p => new { dataUrl = p.DataUrl, mime = p.Mime, name = p.Name, sizeBytes = p.SizeBytes }).ToList();
         _loading = true;
         StateHasChanged();
 
@@ -777,8 +800,7 @@
             var body = await resp.Content.ReadFromJsonAsync<ChatStartResponse>();
             if (body is null) { _loading = false; StateHasChanged(); return; }
 
-            if (!string.IsNullOrEmpty(text))
-                _messages.Add(new ChatMessage("user", text));
+            _messages.Add(new ChatMessage("user", text, sentImages));
             _inputText = "";
             _pendingImages.Clear();
             _pasteError = null;
@@ -1066,5 +1088,7 @@
     private sealed record ChatModelResponse(string? Model);
     private sealed record TargetsResponse(string? LastTarget, List<ServerChatTarget> Targets);
     private sealed record ServerChatTarget(string Slug, string Name, string Kind);
-    private sealed record ServerChatMessage(string Role, string Text, string? ToolName, string? Detail, string CreatedAt);
+    private sealed record ServerChatImage(string DataUrl, string Mime, string Name, long SizeBytes);
+    private sealed record ServerChatMessage(string Role, string Text, string? ToolName, string? Detail,
+        string CreatedAt, IReadOnlyList<ServerChatImage>? Images = null);
 }

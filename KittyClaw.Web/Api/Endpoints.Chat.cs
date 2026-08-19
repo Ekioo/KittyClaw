@@ -1,6 +1,7 @@
 using System.Text;
 using System.Collections.Concurrent;
 using KittyClaw.Core.Automation;
+using KittyClaw.Core.Models;
 using KittyClaw.Core.Services;
 
 namespace KittyClaw.Web.Api;
@@ -31,7 +32,11 @@ public static partial class Endpoints
         api.MapGet("/projects/{slug}/chat/messages", async (string slug, string target, ChatService cs) =>
         {
             var rows = await cs.ListAsync(slug, target);
-            var dtos = rows.Select(r => new ChatMessageDto(r.Role, r.Text, r.ToolName, r.Detail, r.CreatedAt)).ToList();
+            var dtos = rows.Select(r => new ChatMessageDto(
+                r.Role, r.Text, r.ToolName, r.Detail, r.CreatedAt,
+                ChatService.DeserializeImages(r.ImagesJson)
+                    .Select(i => new ChatImageDto(i.DataUrl, i.Mime, i.Name, i.SizeBytes))
+                    .ToList())).ToList();
             return Results.Ok(dtos);
         }).WithTags("Chat");
 
@@ -185,7 +190,9 @@ public static partial class Endpoints
                 return Results.BadRequest(new { error = "image_rejected", reason = imageError });
 
             if (!req.ResumeInterrupted)
-                await cs.AppendAsync(slug, target, "user", req.Message);
+                await cs.AppendAsync(slug, target, "user", req.Message, images: req.Images?
+                    .Select(i => new ChatMessageImage(i.DataUrl, i.Mime, i.Name, i.SizeBytes))
+                    .ToList());
             sessions.SetLastChatProvider(workspacePath, target, providerName);
             if (!string.IsNullOrWhiteSpace(requestedModel))
                 sessions.SetLastChatModel(workspacePath, target, requestedModel);

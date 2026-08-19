@@ -1,10 +1,48 @@
 using KittyClaw.Core.Services;
+using KittyClaw.Core.Models;
 using KittyClaw.Core.Tests.Helpers;
 
 namespace KittyClaw.Core.Tests.Services;
 
 public sealed class ChatServiceTests
 {
+    [Fact]
+    public async Task Images_ArePersistedInOrderAndSurviveServiceRestart()
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("chat-images");
+        var chats = new ChatService(projects);
+        var images = new[]
+        {
+            new ChatMessageImage("data:image/png;base64,first", "image/png", "first.png", 12),
+            new ChatMessageImage("data:image/webp;base64,second", "image/webp", "second.webp", 34),
+        };
+
+        await chats.AppendAsync(project.Slug, "owner-chat", "user", "Compare", images: images);
+
+        var restarted = new ChatService(new ProjectService(tmp.Path));
+        var row = Assert.Single(await restarted.ListAsync(project.Slug, "owner-chat"));
+        var restored = ChatService.DeserializeImages(row.ImagesJson);
+        Assert.Equal(images, restored);
+    }
+
+    [Fact]
+    public async Task MessagesWithoutImages_StayCompatibleAndMalformedLegacyJsonIsIgnored()
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("chat-no-images");
+        var chats = new ChatService(projects);
+
+        await chats.AppendAsync(project.Slug, "owner-chat", "user", "Text only");
+
+        var row = Assert.Single(await chats.ListAsync(project.Slug, "owner-chat"));
+        Assert.Null(row.ImagesJson);
+        Assert.Empty(ChatService.DeserializeImages(row.ImagesJson));
+        Assert.Empty(ChatService.DeserializeImages("not-json"));
+    }
+
     [Fact]
     public async Task AnyAsync_UsesConversationExistenceWithoutLoadingHistory()
     {
