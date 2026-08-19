@@ -28,6 +28,10 @@ These pieces are in the repo and available to every project:
 | 3    | Worktree has uncommitted changes — commit first, then retry |
 | 4    | Conflict rebasing the ticket branch onto `dev` — the worktree is left in rebase state so a follow-up agent can resolve it or run `git rebase --abort` |
 
+## Initializing a missing repository
+
+If the configured workspace exists but contains no Git metadata, project settings shows an **Initialize a Git repository** action (`data-testid="git-init"`). After confirmation it calls `POST /api/projects/{slug}/git/init`, backed by `KittyClaw.Core/Services/GitRepositoryInitializationService.cs`: the path comes exclusively from the project configuration, only `git init` is executed (no commit, no remote), existing files stay untracked, and existing repositories — including a parent repository detected via `rev-parse --show-toplevel` or a `.git` file — are rejected without modification. `GET /api/projects/{slug}/git` exposes the same detection as a `GitRepositoryStatus`. A first commit on the integration branch is still required before worktrees can be enabled.
+
 ## How to enable it for a project
 
 Open the project settings, enter the code repository (absolute or relative to the control workspace), enable **Git worktrees**, enter an existing local integration branch, and save. The form shows the effectively resolved repository and validates its exact Git root, worktree support, and branch before activation. The same settings remain available through `PATCH /api/projects/{slug}` with `repositoryPath`, `worktreesEnabled: true`, and `integrationBranch`.
