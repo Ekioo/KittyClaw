@@ -16,6 +16,7 @@ public sealed class ProjectCreationGitInitializationUiTests
         Assert.Contains("data-testid=\"create-project-git-init\"", source);
         Assert.Contains("_gitWorkspace?.CanInitialize == true", source);
         Assert.Contains("private bool _initializeGit = true", source);
+        Assert.Contains("inspectionVersion == _workspaceInspectionVersion", source);
         Assert.Contains("InitializeAsync(_newWorkspacePath.Trim(), overwrite, initializeGit)", source);
     }
 

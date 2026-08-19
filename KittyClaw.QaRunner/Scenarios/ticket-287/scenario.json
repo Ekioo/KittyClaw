@@ -28,7 +28,11 @@
       "name": "project-creation-existing-repository",
       "selector": ".modal-dialog",
       "description": "When the selected folder is already versioned, KittyClaw hides the initialization option and leaves the repository untouched."
-    }
+    },
+    { "type": "fill", "selector": "[data-testid=create-project-workspace]", "value": "{workspacePath}" },
+    { "type": "wait", "ms": 500 },
+    { "type": "assertVisible", "selector": "[data-testid=create-project-git-option]" },
+    { "type": "assertVisible", "selector": "[data-testid=create-project-git-init]:checked" }
   ],
   "verdict": { "passOn": "all-asserts-pass" }
 }
