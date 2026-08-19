@@ -20,6 +20,7 @@ For a high-level overview see the root [README.md](../README.md). For repo layou
 - [Pipeline kits](./pipeline-kits.md) — sanitized export plus write-free analysis and atomic installation of untrusted portable pipeline archives.
 - [Agent dispatch](./agent-dispatch.md) — running the `claude` CLI as a subprocess and streaming its output.
 - [Temporary approvals](./temporary-approvals.md) — traceable, expiring approval requests that pause and resume provider runs at the process boundary.
+- [Runtime boundary enforcement](./runtime-boundary-enforcement.md) — provider-native pre-effect enforcement, fail-closed dispatch, and explicit runtime exclusions.
 - [Project template](./project-template.md) — embedded `ProjectTemplate/` files copied into each workspace on Initialize.
 - [REST API](./rest-api.md) — OpenAPI-driven endpoints under `/api`, with auto-generated Markdown docs.
 - [MCP server](./mcp.md) — embedded Streamable-HTTP endpoint at `/mcp`; seven board tools for any MCP client.
