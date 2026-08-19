@@ -1,0 +1,45 @@
+{
+  "environment": {
+    "KITTYCLAW_RTK_BIN": "C:\\Sources\\KittyClaw\\Sources.worktrees\\ticket-290\\KittyClaw.QaRunner\\Scenarios\\ticket-290\\rtk-fake.cmd"
+  },
+  "setup": [
+    {
+      "type": "createProject",
+      "name": "RTK Stack QA",
+      "workspacePath": "C:\\Sources\\KittyClaw\\Sources.worktrees\\ticket-290\\KittyClaw.QaRunner\\Scenarios\\ticket-290\\workspace-priced"
+    },
+    {
+      "type": "createProject",
+      "name": "RTK Unpriced QA",
+      "workspacePath": "C:\\Sources\\KittyClaw\\Sources.worktrees\\ticket-290\\KittyClaw.QaRunner\\Scenarios\\ticket-290\\workspace-unpriced"
+    },
+    {
+      "type": "api",
+      "method": "PATCH",
+      "path": "/api/projects/rtk-stack-qa/rtk",
+      "body": { "enabled": true }
+    },
+    {
+      "type": "api",
+      "method": "PATCH",
+      "path": "/api/projects/rtk-unpriced-qa/rtk",
+      "body": { "enabled": true }
+    }
+  ],
+  "actions": [
+    { "type": "wait", "ms": 5000 },
+    { "type": "assertNavigationDuration", "url": "/costs", "waitForSelector": ".cost-filter-card", "maxMs": 5000 },
+    { "type": "assertVisible", "selector": ".cost-bar-measured" },
+    { "type": "assertVisible", "selector": ".cost-bar-estimated" },
+    { "type": "assertVisible", "selector": ".cost-bar-rtk" },
+    { "type": "assertVisible", "selector": ".cost-bar-rtk-unpriced" },
+    { "type": "assertVisible", "selector": ".cost-legend-rtk" },
+    { "type": "assertCount", "selector": ".cost-project-cost-card", "expected": "2" },
+    {
+      "type": "screenshot",
+      "name": "ticket-290-stacked-cost-bars",
+      "description": "Daily /costs bars stack measured, estimated and RTK savings segments; the unpriced project shows the token-only RTK marker."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

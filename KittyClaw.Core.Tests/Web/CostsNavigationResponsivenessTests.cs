@@ -74,6 +74,25 @@ public sealed class CostsNavigationResponsivenessTests
     }
 
     [Fact]
+    public void CostPage_StacksMeasuredEstimatedAndRtkSegmentsPerDay()
+    {
+        var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Costs.razor"));
+        var styles = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "wwwroot", "css", "costs.css"));
+
+        Assert.Contains("cost-bar-measured", source, StringComparison.Ordinal);
+        Assert.Contains("cost-bar-estimated", source, StringComparison.Ordinal);
+        Assert.Contains("cost-bar-rtk", source, StringComparison.Ordinal);
+        // Honest fallback: a day with saved tokens but no known model rate shows a marker, never a fabricated bar.
+        Assert.Contains("cost-bar-rtk-unpriced", source, StringComparison.Ordinal);
+        Assert.Contains("RtkNoUsdEstimate", source, StringComparison.Ordinal);
+        Assert.Contains("bucket.UsdCost + (bucket.RtkEstimatedUsd ?? 0)", source, StringComparison.Ordinal);
+        Assert.Contains(".cost-bar-measured", styles, StringComparison.Ordinal);
+        Assert.Contains(".cost-bar-estimated", styles, StringComparison.Ordinal);
+        Assert.Contains(".cost-bar-rtk", styles, StringComparison.Ordinal);
+        Assert.Contains(".cost-bar-rtk-unpriced", styles, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CostPage_OffersQuickDateRangesAndKeepsManualDatesCustom()
     {
         var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Costs.razor"));

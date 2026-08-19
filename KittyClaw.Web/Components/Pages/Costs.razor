@@ -125,9 +125,13 @@
                                 <div class="cost-project-trend" role="img" aria-label="@($"{L["DailyEvolution"]} — {project.ProjectName}")">
                                     @foreach (var day in project.Daily)
                                     {
-                                        var height = project.MaxDailyCost == 0 ? 0 : Math.Max(5, day.UsdCost / project.MaxDailyCost * 100);
-                                        <span class="cost-project-bar @(day.Estimated ? "cost-estimated" : "")" style="--bar-height:@height.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%" title="@($"{day.Day:d} — {Usd(day.UsdCost)}")">
-                                            <span class="visually-hidden">@day.Day, @Usd(day.UsdCost)</span>
+                                        var title = DayTitle(day);
+                                        <span class="cost-project-bar" style="@BarStyle(day, project.MaxDailyStackedUsd)" title="@title">
+                                            @if (day.MeasuredUsd > 0) { <i class="cost-bar-segment cost-bar-measured" aria-hidden="true"></i> }
+                                            @if (day.EstimatedUsd > 0) { <i class="cost-bar-segment cost-bar-estimated" aria-hidden="true"></i> }
+                                            @if (day.RtkEstimatedUsd is > 0) { <i class="cost-bar-segment cost-bar-rtk" aria-hidden="true"></i> }
+                                            else if (day.RtkSavedTokens > 0) { <i class="cost-bar-rtk-unpriced" aria-hidden="true"></i> }
+                                            <span class="visually-hidden">@title</span>
                                         </span>
                                     }
                                 </div>
@@ -220,17 +224,43 @@
 
     private static string UsdSavings(decimal value) => value is > 0 and < 0.01m ? "< $0.01" : Usd(value);
 
+    private string DayTitle(CostBucket day)
+    {
+        var parts = new List<string>();
+        if (day.MeasuredUsd > 0) parts.Add($"{L["Measured"]} {Usd(day.MeasuredUsd)}");
+        if (day.EstimatedUsd > 0) parts.Add($"{L["Estimated"]} ~ {Usd(day.EstimatedUsd)}");
+        if (day.RtkEstimatedUsd is decimal rtkUsd && rtkUsd > 0)
+            parts.Add($"{L["RtkSavings"]} ~ {UsdSavings(rtkUsd)}");
+        else if (day.RtkSavedTokens > 0)
+            parts.Add($"{L["RtkSavings"]} {Tokens(day.RtkSavedTokens)} {L["RtkSavedTokens"]} ({L["RtkNoUsdEstimate"]})");
+        if (parts.Count == 0) parts.Add(Usd(day.UsdCost));
+        return $"{day.Day:d} — {string.Join(" · ", parts)}";
+    }
+
+    private static string BarStyle(CostBucket day, decimal maxStackedUsd)
+    {
+        var measured = SegmentHeight(day.MeasuredUsd, maxStackedUsd);
+        var estimated = SegmentHeight(day.EstimatedUsd, maxStackedUsd);
+        var rtk = SegmentHeight(day.RtkEstimatedUsd ?? 0, maxStackedUsd);
+        return $"--measured:{Pct(measured)};--estimated:{Pct(estimated)};--rtk:{Pct(rtk)}";
+    }
+
+    private static decimal SegmentHeight(decimal value, decimal maxStackedUsd)
+        => value <= 0 || maxStackedUsd <= 0 ? 0 : Math.Max(5, value / maxStackedUsd * 100);
+
+    private static string Pct(decimal value) => $"{value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}%";
+
     private static IReadOnlyList<ProjectCostView> BuildProjectCosts(CostReport report) => report.Projects
         .Select(project =>
         {
             var daily = report.Daily.Where(bucket => bucket.ProjectSlug == project.ProjectSlug).OrderBy(bucket => bucket.Day).ToArray();
-            var maxDailyCost = daily.Length == 0 ? 0 : daily.Max(bucket => bucket.UsdCost);
+            var maxDailyStackedUsd = daily.Length == 0 ? 0 : daily.Max(bucket => bucket.UsdCost + (bucket.RtkEstimatedUsd ?? 0));
             return new ProjectCostView(
                 project.ProjectName,
                 project.UsdCost,
                 project.Estimated,
                 daily,
-                maxDailyCost,
+                maxDailyStackedUsd,
                 project.RtkSavedTokens,
                 project.RtkInputTokens,
                 project.RtkEstimatedUsd);
@@ -242,7 +272,7 @@
         decimal UsdCost,
         bool Estimated,
         IReadOnlyList<CostBucket> Daily,
-        decimal MaxDailyCost,
+        decimal MaxDailyStackedUsd,
         long RtkSavedTokens,
         long RtkInputTokens,
         decimal? RtkEstimatedUsd);

@@ -9,7 +9,16 @@ public sealed record CostReportFilter(DateOnly From, DateOnly To, IReadOnlySet<s
 public sealed record CostProjectOption(string Slug, string Name);
 public sealed record CostPipelineOption(string Key, string Name);
 public sealed record CostModelOption(string Key, string Name);
-public sealed record CostBucket(DateOnly Day, string ProjectSlug, string ProjectName, decimal UsdCost, bool Estimated);
+public sealed record CostBucket(
+    DateOnly Day,
+    string ProjectSlug,
+    string ProjectName,
+    decimal UsdCost,
+    bool Estimated,
+    decimal MeasuredUsd = 0,
+    decimal EstimatedUsd = 0,
+    long RtkSavedTokens = 0,
+    decimal? RtkEstimatedUsd = null);
 public sealed record CostProjectTotal(
     string ProjectSlug,
     string ProjectName,
@@ -37,7 +46,7 @@ internal sealed record CostReportSnapshot(
 /// </summary>
 public sealed class CostReportService
 {
-    private const int SnapshotVersion = 3;
+    private const int SnapshotVersion = 4;
     private const string UnknownPipelineSuffix = "unknown";
     private static readonly CostReportOptions EmptyOptions = new([], [], []);
     private static readonly CostReportSnapshot EmptySnapshot = new(SnapshotVersion, DateTime.MinValue, EmptyOptions, [], []);
@@ -208,8 +217,9 @@ public sealed class CostReportService
             await Task.Yield();
         }
 
+        // Estimated stays in the group key so daily reports can split measured from estimated cost.
         var compactRows = rows
-            .GroupBy(row => new { row.Day, row.ProjectSlug, row.ProjectName, row.PipelineKey, row.Model })
+            .GroupBy(row => new { row.Day, row.ProjectSlug, row.ProjectName, row.PipelineKey, row.Model, row.Estimated })
             .Select(group => new CostSnapshotRow(
                 group.Key.Day,
                 group.Key.ProjectSlug,
@@ -218,7 +228,7 @@ public sealed class CostReportService
                 group.Key.Model,
                 group.Sum(row => row.InputTokens),
                 group.Sum(row => row.UsdCost),
-                group.Any(row => row.Estimated)))
+                group.Key.Estimated))
             .OrderBy(row => row.Day)
             .ThenBy(row => row.ProjectName)
             .ToList();
@@ -271,9 +281,9 @@ public sealed class CostReportService
             && (filter.Model is null || string.Equals(filter.Model, row.Model, StringComparison.OrdinalIgnoreCase))).ToList();
         var daily = rows.GroupBy(row => new { row.Day, row.ProjectSlug, row.ProjectName })
             .Select(group => new CostBucket(group.Key.Day, group.Key.ProjectSlug, group.Key.ProjectName,
-                group.Sum(row => row.UsdCost), group.Any(row => row.Estimated)))
-            .OrderBy(bucket => bucket.Day)
-            .ThenBy(bucket => bucket.ProjectName)
+                group.Sum(row => row.UsdCost), group.Any(row => row.Estimated),
+                group.Where(row => !row.Estimated).Sum(row => row.UsdCost),
+                group.Where(row => row.Estimated).Sum(row => row.UsdCost)))
             .ToList();
         var totalsByProject = rows.GroupBy(row => new { row.ProjectSlug, row.ProjectName })
             .Select(group => new CostProjectTotal(group.Key.ProjectSlug, group.Key.ProjectName,
@@ -292,6 +302,8 @@ public sealed class CostReportService
                 totalsByProject.TryGetValue(group.Key.ProjectSlug, out var current);
                 var savedTokens = group.Sum(row => row.SavedTokens);
                 var inputTokens = group.Sum(row => row.InputTokens);
+                // One period-weighted rate per project keeps the daily segments summing to the card total.
+                var ratePerToken = EstimateRtkInputRatePerToken(rows, group.Key.ProjectSlug);
                 totalsByProject[group.Key.ProjectSlug] = new CostProjectTotal(
                     group.Key.ProjectSlug,
                     group.Key.ProjectName,
@@ -300,10 +312,25 @@ public sealed class CostReportService
                     savedTokens,
                     inputTokens,
                     group.Sum(row => row.Commands),
-                    EstimateRtkUsd(rows, group.Key.ProjectSlug, savedTokens));
+                    ratePerToken is decimal totalRate ? savedTokens * totalRate : null);
+
+                foreach (var saving in group)
+                {
+                    var dayUsd = ratePerToken is decimal rate ? saving.SavedTokens * rate : (decimal?)null;
+                    var index = daily.FindIndex(bucket => bucket.Day == saving.Day && bucket.ProjectSlug == saving.ProjectSlug);
+                    if (index >= 0)
+                        daily[index] = daily[index] with { RtkSavedTokens = saving.SavedTokens, RtkEstimatedUsd = dayUsd };
+                    else
+                        daily.Add(new CostBucket(saving.Day, saving.ProjectSlug, saving.ProjectName, 0, false, 0, 0,
+                            saving.SavedTokens, dayUsd));
+                }
             }
         }
 
+        daily = daily
+            .OrderBy(bucket => bucket.Day)
+            .ThenBy(bucket => bucket.ProjectName)
+            .ToList();
         var totals = totalsByProject.Values
             .OrderByDescending(total => total.UsdCost)
             .ThenByDescending(total => total.RtkSavedTokens)
@@ -311,7 +338,7 @@ public sealed class CostReportService
         return new(rows.Sum(row => row.UsdCost), rows.Any(row => row.Estimated), daily, totals);
     }
 
-    private static decimal? EstimateRtkUsd(IReadOnlyList<CostSnapshotRow> rows, string projectSlug, long savedTokens)
+    private static decimal? EstimateRtkInputRatePerToken(IReadOnlyList<CostSnapshotRow> rows, string projectSlug)
     {
         decimal weightedRates = 0;
         long pricedInputTokens = 0;
@@ -324,7 +351,7 @@ public sealed class CostReportService
 
         return pricedInputTokens == 0
             ? null
-            : savedTokens * (weightedRates / pricedInputTokens) / 1_000_000m;
+            : weightedRates / pricedInputTokens / 1_000_000m;
     }
 
     private static string BuildReportCacheKey(CostReportFilter filter)

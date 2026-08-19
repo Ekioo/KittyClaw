@@ -289,6 +289,121 @@ public sealed class CostReportServiceTests
         Assert.Empty(pipelineFiltered.Projects);
     }
 
+    [Fact]
+    public async Task DailyBuckets_SplitMeasuredAndEstimatedCostsOnTheSameDay()
+    {
+        using var temp = new TempDir();
+        var projects = new ProjectService(temp.Path);
+        var project = await projects.CreateProjectAsync("Stacked day");
+        var tickets = new TicketService(projects, new MemberService(projects));
+        var service = new CostReportService(projects, new PipelineService(projects), tickets);
+        var day = DateOnly.FromDateTime(DateTime.Now);
+        Write(projects.ResolveWorkspacePath(project), "cost-log.jsonl",
+            Entry(day, 2m, project.Slug, pipeline: 1, estimated: false, run: "measured"),
+            Entry(day, 1.25m, project.Slug, pipeline: 1, estimated: true, run: "estimated"));
+
+        await service.RefreshAsync();
+
+        var bucket = Assert.Single((await service.GetReportAsync(new(day, day))).Daily);
+        Assert.Equal(3.25m, bucket.UsdCost);
+        Assert.True(bucket.Estimated);
+        Assert.Equal(2m, bucket.MeasuredUsd);
+        Assert.Equal(1.25m, bucket.EstimatedUsd);
+    }
+
+    [Fact]
+    public async Task DailyBuckets_CarryRtkSavingsPerDayAndSumToTheProjectEstimate()
+    {
+        using var temp = new TempDir();
+        var projects = new ProjectService(temp.Path);
+        var project = await projects.CreateProjectAsync("Daily RTK");
+        await projects.SaveRtkEnabledAsync(project.Slug, true);
+        var tickets = new TicketService(projects, new MemberService(projects));
+        var day = DateOnly.FromDateTime(DateTime.Now);
+        var reader = new StubRtkSavingsReader(new Dictionary<string, IReadOnlyList<RtkDailySavings>>
+        {
+            [projects.ResolveWorkspacePath(project)] =
+            [
+                new(day.AddDays(-1), 400, 300, 2),
+                new(day, 2_000, 1_000, 4),
+            ],
+        });
+        var service = new CostReportService(projects, new PipelineService(projects), tickets, reader);
+        Write(projects.ResolveWorkspacePath(project), "cost-log.jsonl",
+            Entry(day, 1m, project.Slug, pipeline: 1, run: "priced", model: "gpt-5.6-sol", inputTokens: 2_000));
+
+        await service.RefreshAsync();
+
+        var report = await service.GetReportAsync(new(day.AddDays(-1), day));
+
+        Assert.Equal(2, report.Daily.Count);
+        var savingsOnly = report.Daily[0];
+        Assert.Equal(day.AddDays(-1), savingsOnly.Day);
+        Assert.Equal(0m, savingsOnly.UsdCost);
+        Assert.Equal(300, savingsOnly.RtkSavedTokens);
+        Assert.NotNull(savingsOnly.RtkEstimatedUsd);
+        var costDay = report.Daily[1];
+        Assert.Equal(1m, costDay.MeasuredUsd);
+        Assert.Equal(1_000, costDay.RtkSavedTokens);
+        Assert.Equal(
+            Assert.Single(report.Projects).RtkEstimatedUsd,
+            report.Daily.Sum(bucket => bucket.RtkEstimatedUsd));
+    }
+
+    [Fact]
+    public async Task DailyRtkSavings_WithoutPricedModel_KeepTokensButNoUsdEstimate()
+    {
+        using var temp = new TempDir();
+        var projects = new ProjectService(temp.Path);
+        var project = await projects.CreateProjectAsync("Unpriced RTK");
+        await projects.SaveRtkEnabledAsync(project.Slug, true);
+        var tickets = new TicketService(projects, new MemberService(projects));
+        var day = DateOnly.FromDateTime(DateTime.Now);
+        var reader = new StubRtkSavingsReader(new Dictionary<string, IReadOnlyList<RtkDailySavings>>
+        {
+            [projects.ResolveWorkspacePath(project)] = [new(day, 500, 200, 1)],
+        });
+        var service = new CostReportService(projects, new PipelineService(projects), tickets, reader);
+        Write(projects.ResolveWorkspacePath(project), "cost-log.jsonl",
+            Entry(day, 1m, project.Slug, pipeline: 1, run: "unpriced", model: "totally-unknown-model", inputTokens: 500));
+
+        await service.RefreshAsync();
+
+        var bucket = Assert.Single((await service.GetReportAsync(new(day, day))).Daily);
+        Assert.Equal(200, bucket.RtkSavedTokens);
+        Assert.Null(bucket.RtkEstimatedUsd);
+        Assert.Null(Assert.Single((await service.GetReportAsync(new(day, day))).Projects).RtkEstimatedUsd);
+    }
+
+    [Fact]
+    public async Task DailyRtkSavings_AreHiddenByPipelineAndModelFilters()
+    {
+        using var temp = new TempDir();
+        var projects = new ProjectService(temp.Path);
+        var project = await projects.CreateProjectAsync("Filtered daily RTK");
+        await projects.SaveRtkEnabledAsync(project.Slug, true);
+        var tickets = new TicketService(projects, new MemberService(projects));
+        var day = DateOnly.FromDateTime(DateTime.Now);
+        var reader = new StubRtkSavingsReader(new Dictionary<string, IReadOnlyList<RtkDailySavings>>
+        {
+            [projects.ResolveWorkspacePath(project)] = [new(day, 2_000, 1_000, 4)],
+        });
+        var service = new CostReportService(projects, new PipelineService(projects), tickets, reader);
+        Write(projects.ResolveWorkspacePath(project), "cost-log.jsonl",
+            Entry(day, 1m, project.Slug, pipeline: 1, run: "priced", model: "gpt-5.6-sol", inputTokens: 2_000));
+
+        await service.RefreshAsync();
+
+        var pipelineFiltered = await service.GetReportAsync(new(day, day, PipelineKey: $"{project.Slug}:1"));
+        var modelFiltered = await service.GetReportAsync(new(day, day, Model: "gpt-5.6-sol"));
+
+        Assert.All(pipelineFiltered.Daily.Concat(modelFiltered.Daily), bucket =>
+        {
+            Assert.Equal(0, bucket.RtkSavedTokens);
+            Assert.Null(bucket.RtkEstimatedUsd);
+        });
+    }
+
     private static string Entry(DateOnly day, decimal cost, string slug, int? pipeline, bool estimated = false, string run = "", int? ticketId = null, string model = "model", int inputTokens = 1)
         => JsonSerializer.Serialize(new CostLogEntry(day.ToDateTime(new TimeOnly(12, 0)), "agent", ticketId, model, inputTokens, 1, 0, 0, cost, 1, 0, estimated, slug, pipeline, run));
 

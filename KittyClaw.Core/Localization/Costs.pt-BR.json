@@ -32,5 +32,6 @@
   "RtkSavedTokens": "tokens economizados",
   "RtkEstimatedValue": "Valor estimado:",
   "RtkReduction": "redução",
-  "RtkSavingsHelp": "Estimativa com base no saldo de ganho RTK deste projeto. Um valor em dólares só é exibido quando a taxa do modelo usada durante o período for conhecida."
+  "RtkSavingsHelp": "Estimativa com base no saldo de ganho RTK deste projeto. Um valor em dólares só é exibido quando a taxa do modelo usada durante o período for conhecida.",
+  "RtkNoUsdEstimate": "valor em $ não estimável"
 }

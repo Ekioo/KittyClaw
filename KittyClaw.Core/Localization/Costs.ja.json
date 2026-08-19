@@ -32,5 +32,6 @@
   "RtkSavedTokens": "トークン保存済み",
   "RtkEstimatedValue": "推定値：",
   "RtkReduction": "削減",
-  "RtkSavingsHelp": "このプロジェクトのRTKゲインレジストリから推定します。期間中のモデルレートが分かっている場合にのみ金額が表示されます。"
+  "RtkSavingsHelp": "このプロジェクトのRTKゲインレジストリから推定します。期間中のモデルレートが分かっている場合にのみ金額が表示されます。",
+  "RtkNoUsdEstimate": "ドル換算は推定できません"
 }

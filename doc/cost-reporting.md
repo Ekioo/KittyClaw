@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The global Costs page aggregates durable agent-cost records across registered projects. It shows totals, daily project series, and project breakdowns for an inclusive date range, with optional project and pipeline filters while preserving historical project and pipeline attribution.
+The global Costs page aggregates durable agent-cost records across registered projects. It shows totals, daily project series, and project breakdowns for an inclusive date range, with optional project and pipeline filters while preserving historical project and pipeline attribution. Each project's daily chart stacks, per date, the measured cost, the estimated cost, and the estimated dollar value of RTK savings; a day whose RTK savings cannot be priced (no known model rate over the period) shows a token-only marker instead of a fabricated dollar segment.
 
 ## Key components
 
@@ -10,7 +10,7 @@ The global Costs page aggregates durable agent-cost records across registered pr
 - `KittyClaw.Core/Automation/RunCostRecorder.cs` — records project and pipeline data when a run finishes, then requests a coalesced snapshot refresh.
 - `KittyClaw.Core/Services/CostReportService.cs` — serves filter options and reports from a compact persistent snapshot and an in-memory filtered-report cache. Its sequential refresh pass reads current and rotated JSONL logs, ignores malformed records, deduplicates runs, and resolves legacy pipeline attribution outside the UI request path.
 - `KittyClaw.Core/Services/CostReportRefreshService.cs` — performs the initial asynchronous refresh, reacts to coalesced new-cost notifications, and provides a 15-minute fallback refresh.
-- `KittyClaw.Web/Components/Pages/Costs.razor` — renders totals, filters, daily chart, project breakdown, and loading, empty, estimated, and error states.
+- `KittyClaw.Web/Components/Pages/Costs.razor` — renders totals, filters, the stacked daily chart (measured, estimated, RTK savings segments), project breakdown, and loading, empty, estimated, and error states.
 
 ## Entry points
 
