@@ -1,6 +1,8 @@
 @page "/settings"
+@using KittyClaw.Core.Automation
 @using KittyClaw.Core.Services
 @inject AppSettingsService AppSettings
+@inject AgentCliReadinessService CliReadiness
 @inject LocalizationService L
 @rendermode InteractiveServer
 
@@ -12,6 +14,41 @@
 </div>
 
 <div class="settings-container">
+    <section class="settings-section" data-testid="agent-provider-settings">
+        <div class="provider-section-heading">
+            <div>
+                <h2>@L["AgentProvidersTitle"]</h2>
+                <p class="settings-hint">@L["AgentProvidersHint"]</p>
+            </div>
+            <button class="settings-browse" @onclick="RefreshProvidersAsync" disabled="@_checkingProviders">
+                @(_checkingProviders ? L["AgentProvidersChecking"] : L["AgentProvidersRefresh"])
+            </button>
+        </div>
+
+        <div class="provider-readiness-grid">
+            @foreach (var provider in ProviderCards)
+            {
+                <article class="provider-readiness-card @(provider.Detected ? "provider-ready" : "provider-missing")">
+                    <div class="provider-card-header">
+                        <strong>@provider.Name</strong>
+                        <span class="provider-status-pill @(provider.Detected ? "ready" : "missing")">
+                            @(provider.Detected ? L["ProviderDetected"] : L["ProviderNotDetected"])
+                        </span>
+                    </div>
+                    <p>@provider.Configuration</p>
+                    <code>@provider.Executable</code>
+                    @if (provider.UsesSharedCli)
+                    {
+                        <small>@L["ProviderSharedClaudeCli"]</small>
+                    }
+                    <a href="@provider.InstallUrl" target="_blank" rel="noopener">@L["ProviderInstallationGuide"] &nearr;</a>
+                </article>
+            }
+        </div>
+
+        <p class="provider-readiness-note">@L["AgentProvidersDetectionNote"]</p>
+    </section>
+
     <section class="settings-section" data-testid="mcp-global-settings">
         <h2>@L["McpServerTitle"]</h2>
         <p class="settings-hint">@L["McpServerHint"]</p>
@@ -37,8 +74,63 @@
 </div>
 
 @code {
+    private CliReadiness _readiness = new(false, false, false, false, false, false);
+    private bool _checkingProviders;
+    private bool _providerCheckStarted;
+
+    private IReadOnlyList<ProviderCardModel> ProviderCards =>
+    [
+        new("Claude Code", "claude", _readiness.Claude,
+            "https://docs.anthropic.com/en/docs/claude-code/setup", L["ProviderClaudeConfiguration"], false),
+        new("OpenAI Codex", "codex", _readiness.Codex,
+            "https://developers.openai.com/codex/cli/", L["ProviderCodexConfiguration"], false),
+        new("Grok Build", "grok", _readiness.Grok,
+            "https://docs.x.ai/docs/grok-code-fast-1", L["ProviderGrokConfiguration"], false),
+        new("Mistral Vibe", "vibe", _readiness.Mistral,
+            "https://docs.mistral.ai/vibe/code/cli/install-setup", L["ProviderMistralConfiguration"], false),
+        new("Ollama", "ollama", _readiness.Ollama,
+            "https://ollama.com/download", L["ProviderOllamaConfiguration"], false),
+        new("DeepSeek V4", "claude", _readiness.Claude,
+            "https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code/", L["ProviderDeepSeekConfiguration"], true),
+    ];
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_providerCheckStarted)
+        {
+            _providerCheckStarted = true;
+            _ = RefreshProvidersAsync();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task RefreshProvidersAsync()
+    {
+        if (_checkingProviders) return;
+        _checkingProviders = true;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            _readiness = await CliReadiness.ProbeAsync();
+        }
+        finally
+        {
+            _checkingProviders = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
     private void OnMcpChanged(ChangeEventArgs e)
     {
         AppSettings.McpEnabled = e.Value is true;
     }
+
+    private sealed record ProviderCardModel(
+        string Name,
+        string Executable,
+        bool Detected,
+        string InstallUrl,
+        string Configuration,
+        bool UsesSharedCli);
 }

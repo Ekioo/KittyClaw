@@ -47,6 +47,16 @@ public sealed class ModelCostEstimatorTests
         Assert.Equal((decimal)expected, cost);
     }
 
+    [Theory]
+    [InlineData("deepseek:deepseek-v4-pro[1m]", 5.365)]
+    [InlineData("deepseek:deepseek-v4-flash", 0.448)]
+    public void DeepSeekV4Models_UseOfficialRateCard(string model, double expected)
+    {
+        Assert.True(ModelCostEstimator.TryEstimate(
+            model, 1_000_000, 1_000_000, 1_000_000, 1_000_000, out var cost));
+        Assert.Equal((decimal)expected, cost);
+    }
+
     [Fact]
     public void UnknownModel_IsNotGuessed()
     {

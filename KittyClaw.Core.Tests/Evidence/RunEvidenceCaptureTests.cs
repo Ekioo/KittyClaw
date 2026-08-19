@@ -60,6 +60,7 @@ public sealed class RunEvidenceCaptureTests : IAsyncLifetime
     [InlineData(CliProvider.Codex, "codex")]
     [InlineData(CliProvider.Grok, "grok")]
     [InlineData(CliProvider.Mistral, "mistral")]
+    [InlineData(CliProvider.DeepSeek, "deepseek")]
     public void ProviderName_MapsAllKnownProviders(CliProvider provider, string expected) =>
         Assert.Equal(expected, RunEvidenceCapture.ProviderName(provider));
 

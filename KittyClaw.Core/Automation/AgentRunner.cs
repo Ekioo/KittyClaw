@@ -719,6 +719,11 @@ public sealed class AgentRunner
                 StringComparer.OrdinalIgnoreCase);
         // Apply vault values last: automation/model configuration cannot shadow a protected secret.
         foreach (var (name, value) in projectSecrets) psi.Environment[name] = value;
+        if (!ApplyProviderCredentials(psi, ctx.Target.Provider, projectSecrets, out var credentialError))
+        {
+            run.Push(new StreamEvent(DateTime.UtcNow, "error", credentialError!));
+            return new SpawnResult(-1, 0, false, FallbackReason.None);
+        }
         string Redact(string text) => SecretRedactor.Redact(text, projectSecrets.Values);
 
         AppendDebugLog(ctx, $"LAUNCHING {ctx.AgentName} {(isResume ? "(resume)" : "(new)")} ticket=#{ctx.TicketId} session={sessionId}");
@@ -939,6 +944,26 @@ public sealed class AgentRunner
             job?.Dispose();
             TryDeleteFile(invocation.TemporaryFile);
         }
+    }
+
+    internal static bool ApplyProviderCredentials(
+        System.Diagnostics.ProcessStartInfo startInfo,
+        CliProvider provider,
+        IReadOnlyDictionary<string, string> projectSecrets,
+        out string? error)
+    {
+        error = null;
+        if (provider != CliProvider.DeepSeek) return true;
+
+        if (!projectSecrets.TryGetValue(DeepSeekModelCatalog.ApiKeySecretName, out var apiKey)
+            || string.IsNullOrWhiteSpace(apiKey))
+        {
+            error = $"DeepSeek requires a project vault secret named {DeepSeekModelCatalog.ApiKeySecretName}.";
+            return false;
+        }
+
+        startInfo.Environment["ANTHROPIC_AUTH_TOKEN"] = apiKey;
+        return true;
     }
 
     private void TryDeleteFile(string? path)

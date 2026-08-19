@@ -65,6 +65,7 @@
   "RtkAvailable": "準備完了 — RTK {0}が指示モードで検出されました。",
   "SecretsTitle": "プロジェクトのシークレット",
   "SecretsHint": "このプロジェクトのエージェントおよび自動化プロセスにのみ注入される暗号化された認証情報です。",
+  "DeepSeekVaultHint": "DeepSeekモデルを使用するには、APIキーをDEEPSEEK_API_KEYという名前でここに保存してください。",
   "SecretsWriteOnly": "保存した値は再表示できません。シークレットを置き換えるには新しい値を入力してください。",
   "SecretValuePlaceholder": "シークレット値",
   "SaveSecret": "シークレットを保存",

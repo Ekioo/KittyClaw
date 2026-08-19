@@ -65,6 +65,7 @@
   "RtkAvailable": "Prêt — RTK {0} détecté en mode instructions.",
   "SecretsTitle": "Secrets du projet",
   "SecretsHint": "Identifiants chiffrés injectés uniquement dans les processus agents et automatisations de ce projet.",
+  "DeepSeekVaultHint": "Pour utiliser les modèles DeepSeek, enregistrez ici la clé API sous le nom DEEPSEEK_API_KEY.",
   "SecretsWriteOnly": "Une valeur enregistrée ne peut jamais être réaffichée. Saisissez une nouvelle valeur pour la remplacer.",
   "SecretValuePlaceholder": "Valeur secrète",
   "SaveSecret": "Enregistrer le secret",

@@ -26,6 +26,8 @@ public static class ModelCostEstimator
             normalized = normalized["codex:".Length..];
         if (normalized.StartsWith("mistral:", StringComparison.OrdinalIgnoreCase))
             normalized = normalized["mistral:".Length..];
+        if (normalized.StartsWith("deepseek:", StringComparison.OrdinalIgnoreCase))
+            normalized = normalized["deepseek:".Length..];
 
         Rates? rates = normalized.ToLowerInvariant() switch
         {
@@ -38,6 +40,8 @@ public static class ModelCostEstimator
             "grok-build-0.1" => new(1m, 2m, 0.2m, 1m),
             "mistral-medium-3.5" or "mistral-vibe-cli-latest" => new(1.5m, 7.5m, 0.15m, 1.5m),
             "devstral-small" or "devstral-small-latest" => new(0.1m, 0.3m, 0.01m, 0.1m),
+            "deepseek-v4-pro" or "deepseek-v4-pro[1m]" => new(1.74m, 3.48m, 0.145m, 0m),
+            "deepseek-v4-flash" => new(0.14m, 0.28m, 0.028m, 0m),
             _ => null,
         };
         if (rates is null) return false;

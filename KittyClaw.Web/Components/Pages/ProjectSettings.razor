@@ -93,7 +93,7 @@ else
                 <select class="settings-input" style="max-width:340px"
                         value="@_fallbackModel"
                         @onchange="OnFallbackModelChanged"
-                        @key="@($"fallback-select-{_grokModels.Count}-{_mistralModels.Count}-{_discoveredModels.Count}-{_fallbackModel}")">
+                        @key="@($"fallback-select-{_grokModels.Count}-{_mistralModels.Count}-{_deepSeekModels.Count}-{_discoveredModels.Count}-{_fallbackModel}")">
                     <option value="">@L["FallbackDisabled"]</option>
                     <optgroup label="Claude">
                         @foreach (var model in ClaudeModels)
@@ -123,6 +123,15 @@ else
                     {
                         <optgroup label="Mistral Vibe">
                             @foreach (var model in _mistralModels)
+                            {
+                                <option value="@model">@model</option>
+                            }
+                        </optgroup>
+                    }
+                    @if (_deepSeekModels.Count > 0)
+                    {
+                        <optgroup label="DeepSeek">
+                            @foreach (var model in _deepSeekModels)
                             {
                                 <option value="@model">@model</option>
                             }
@@ -197,6 +206,7 @@ else
         <section class="settings-section" data-testid="project-secrets">
             <h2>@L["SecretsTitle"]</h2>
             <p class="settings-hint">@L["SecretsHint"]</p>
+            <p class="settings-hint" data-testid="deepseek-secret-hint">@L["DeepSeekVaultHint"]</p>
             <div class="settings-row secret-entry-row">
                 <input class="settings-input" data-testid="secret-name" autocomplete="off"
                        placeholder="API_TOKEN" @bind="_secretName" @bind:event="oninput" />
@@ -298,6 +308,15 @@ else
                                         {
                                             <optgroup label="Mistral Vibe">
                                                 @foreach (var model in _mistralModels)
+                                                {
+                                                    <option value="@model">@model</option>
+                                                }
+                                            </optgroup>
+                                        }
+                                        @if (_deepSeekModels.Count > 0)
+                                        {
+                                            <optgroup label="DeepSeek">
+                                                @foreach (var model in _deepSeekModels)
                                                 {
                                                     <option value="@model">@model</option>
                                                 }
@@ -466,6 +485,7 @@ else
     private List<string> _grokModels = new();
     private List<string> _codexModels = new();
     private List<string> _mistralModels = new();
+    private List<string> _deepSeekModels = new();
     private string? _localModelsError;
     private bool _rtkEnabled, _savingRtk;
     private RtkStatusDto? _rtkRuntimeStatus;
@@ -477,7 +497,7 @@ else
     private bool _savingSecret;
     private (string text, string css)? _secretStatus;
     private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
-    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_mistralModels).Concat(_discoveredModels).ToList();
+    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_mistralModels).Concat(_deepSeekModels).Concat(_discoveredModels).ToList();
 
     private List<Member> _members = new();
     private int? _editingMemberId;
@@ -520,6 +540,8 @@ else
         catch { _codexModels = new(); }
         try { _mistralModels = (await KittyClaw.Core.Automation.MistralCli.ListModelsAsync()).ToList(); }
         catch { _mistralModels = new(); }
+        try { _deepSeekModels = (await KittyClaw.Core.Automation.DeepSeekModelCatalog.ListModelsAsync()).ToList(); }
+        catch { _deepSeekModels = new(); }
         _fallbackModel = _project.FallbackModel ?? "";
     }
 

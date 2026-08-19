@@ -43,6 +43,7 @@ internal abstract class AgentCliBackend
         CliProvider.Grok => GrokBackend.Instance,
         CliProvider.Codex => CodexBackend.Instance,
         CliProvider.Mistral => MistralBackend.Instance,
+        CliProvider.DeepSeek => DeepSeekBackend.Instance,
         _ => ClaudeBackend.Instance,
     };
 
@@ -54,22 +55,38 @@ internal abstract class AgentCliBackend
 
         internal override Task<AgentCliInvocation> BuildInvocationAsync(
             AgentRunContext context, string prompt, string sessionId, bool isResume,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken) =>
+            BuildClaudeCompatibleInvocation(context, sessionId, isResume);
+    }
+
+    private sealed class DeepSeekBackend : AgentCliBackend
+    {
+        internal static readonly DeepSeekBackend Instance = new();
+        internal override CliProvider Provider => CliProvider.DeepSeek;
+        internal override string SessionPrefix => "deepseek:";
+
+        internal override Task<AgentCliInvocation> BuildInvocationAsync(
+            AgentRunContext context, string prompt, string sessionId, bool isResume,
+            CancellationToken cancellationToken) =>
+            BuildClaudeCompatibleInvocation(context, sessionId, isResume);
+    }
+
+    private static Task<AgentCliInvocation> BuildClaudeCompatibleInvocation(
+        AgentRunContext context, string sessionId, bool isResume)
+    {
+        var sessionName = context.TicketId is not null
+            ? $"{context.AgentName} #{context.TicketId}"
+            : context.AgentName;
+        var args = new List<string>
         {
-            var sessionName = context.TicketId is not null
-                ? $"{context.AgentName} #{context.TicketId}"
-                : context.AgentName;
-            var args = new List<string>
-            {
-                "--print", "--verbose", "--output-format", "stream-json",
-                "--dangerously-skip-permissions", "--max-turns", context.MaxTurns.ToString(),
-            };
-            if (isResume) { args.Add("--resume"); args.Add(sessionId); }
-            else { args.Add("-n"); args.Add(sessionName); args.Add("--session-id"); args.Add(sessionId); }
-            if (context.Target.Model is not null) { args.Add("--model"); args.Add(context.Target.Model); }
-            return Task.FromResult(new AgentCliInvocation(
-                ProcessLifecycleManager.ClaudeBinary, args, WritePromptToStdin: true));
-        }
+            "--print", "--verbose", "--output-format", "stream-json",
+            "--dangerously-skip-permissions", "--max-turns", context.MaxTurns.ToString(),
+        };
+        if (isResume) { args.Add("--resume"); args.Add(sessionId); }
+        else { args.Add("-n"); args.Add(sessionName); args.Add("--session-id"); args.Add(sessionId); }
+        if (context.Target.Model is not null) { args.Add("--model"); args.Add(context.Target.Model); }
+        return Task.FromResult(new AgentCliInvocation(
+            ProcessLifecycleManager.ClaudeBinary, args, WritePromptToStdin: true));
     }
 
     private sealed class GrokBackend : AgentCliBackend

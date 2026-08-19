@@ -27,7 +27,7 @@ definition under `.agents/processors/column-<id>/memory/MEMORY.md`.
 - **.NET 10** / **Blazor Server** (interactive SSR)
 - **SQLite** via Entity Framework Core (one DB per project)
 - **OpenAPI** with auto-generated Markdown docs
-- Agent execution: at least one supported CLI — **[Claude Code CLI](https://docs.claude.com/en/docs/claude-code/overview)**, **[OpenAI Codex CLI](doc/codex-cli.md)**, **[Grok Build](doc/grok-build.md)**, or **[Mistral Vibe](doc/mistral-vibe.md)**. **[Ollama](https://ollama.com)** is also supported for local models through Claude Code CLI ([local-model setup](doc/local-models.md)).
+- Agent execution: at least one supported CLI — **[Claude Code CLI](https://docs.claude.com/en/docs/claude-code/overview)**, **[OpenAI Codex CLI](doc/codex-cli.md)**, **[Grok Build](doc/grok-build.md)**, or **[Mistral Vibe](doc/mistral-vibe.md)**. **[Ollama](https://ollama.com)** and **[DeepSeek V4](doc/deepseek.md)** are supported through Claude Code. See the consolidated **[agent-provider installation guide](doc/agent-providers.md)**.
 - Optional for repository initialization, Git-aware automations, and agent commits: **[Git](https://git-scm.com/downloads)**
 
 ## Getting Started
@@ -35,7 +35,7 @@ definition under `.agents/processors/column-<id>/memory/MEMORY.md`.
 ### Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- At least one agent CLI on your `PATH`: Claude Code (`claude`), OpenAI Codex (`codex`), Grok Build (`grok`), or Mistral Vibe (`vibe`). Local-model execution requires both Claude Code CLI and a reachable Ollama server.
+- At least one agent CLI on your `PATH`: Claude Code (`claude`), OpenAI Codex (`codex`), Grok Build (`grok`), or Mistral Vibe (`vibe`). Local-model and DeepSeek execution use Claude Code as their transport; DeepSeek additionally requires `DEEPSEEK_API_KEY` in the project's secure vault.
 - Optional: [Git](https://git-scm.com/downloads) (`git` on your `PATH`) for repository initialization, Git-aware automations, and agent commits
 - Optional: [Rust Token Killer (RTK)](https://github.com/rtk-ai/rtk) (`rtk` on your `PATH`) for explicit per-project shell-output optimization. KittyClaw never installs or configures it automatically and forces its telemetry off for opted-in runs.
 

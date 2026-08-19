@@ -81,6 +81,7 @@ internal static class ProcessLifecycleManager
                 CliProvider.Grok => GrokCli.Binary ?? "grok",
                 CliProvider.Codex => CodexCli.Binary ?? "codex",
                 CliProvider.Mistral => MistralCli.Binary ?? "vibe",
+                CliProvider.DeepSeek => ClaudeBinary,
                 _ => ClaudeBinary,
             }),
             WorkingDirectory = ctx.ExecutionWorkspacePath ?? ctx.WorkspacePath,

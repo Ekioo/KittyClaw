@@ -11,6 +11,8 @@ public enum CliProvider
     Codex,
     /// <summary>Mistral Vibe CLI (`vibe`) — used for explicitly qualified mistral:* models.</summary>
     Mistral,
+    /// <summary>DeepSeek's Anthropic-compatible API, executed through the Claude Code CLI.</summary>
+    DeepSeek,
 }
 
 /// <summary>
@@ -51,6 +53,22 @@ public static class ModelRouting
 
         if (model.StartsWith("claude:", StringComparison.OrdinalIgnoreCase))
             return new Resolution(CliProvider.Claude, null, null, model["claude:".Length..]);
+
+        if (DeepSeekModelCatalog.IsDeepSeekModel(model))
+        {
+            var cliModel = DeepSeekModelCatalog.ToCliModel(model);
+            return new Resolution(CliProvider.DeepSeek, new Dictionary<string, string>
+            {
+                ["ANTHROPIC_BASE_URL"] = "https://api.deepseek.com/anthropic",
+                ["ANTHROPIC_MODEL"] = cliModel,
+                ["ANTHROPIC_DEFAULT_OPUS_MODEL"] = "deepseek-v4-pro[1m]",
+                ["ANTHROPIC_DEFAULT_SONNET_MODEL"] = "deepseek-v4-pro[1m]",
+                ["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = "deepseek-v4-flash",
+                ["CLAUDE_CODE_SUBAGENT_MODEL"] = "deepseek-v4-flash",
+                ["CLAUDE_CODE_EFFORT_LEVEL"] = "max",
+                ["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] = "786432",
+            }, null, cliModel);
+        }
 
         if (CodexCli.IsCodexModel(model))
         {

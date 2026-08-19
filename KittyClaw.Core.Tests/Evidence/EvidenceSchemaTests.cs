@@ -273,6 +273,7 @@ public class EvidenceSchemaTests
     [InlineData("codex", true)]
     [InlineData("grok", true)]
     [InlineData("mistral", true)]
+    [InlineData("deepseek", true)]
     [InlineData("unknown", true)]
     [InlineData("CLAUDE", true)]
     [InlineData("openai", false)]

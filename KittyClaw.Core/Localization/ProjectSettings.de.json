@@ -65,6 +65,7 @@
   "RtkAvailable": "Bereit — RTK {0} im Anweisungsmodus erkannt.",
   "SecretsTitle": "Projektgeheimnisse",
   "SecretsHint": "Verschlüsselte Zugangsdaten, die nur in Agenten- und Automatisierungsprozesse dieses Projekts eingefügt werden.",
+  "DeepSeekVaultHint": "Um DeepSeek-Modelle zu verwenden, speichern Sie den API-Schlüssel hier unter dem Namen DEEPSEEK_API_KEY.",
   "SecretsWriteOnly": "Gespeicherte Werte können nie wieder angezeigt werden. Geben Sie zum Ersetzen einen neuen Wert ein.",
   "SecretValuePlaceholder": "Geheimer Wert",
   "SaveSecret": "Geheimnis speichern",

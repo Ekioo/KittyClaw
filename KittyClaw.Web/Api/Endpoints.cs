@@ -32,6 +32,7 @@ public static partial class Endpoints
         MapGrok(api);
         MapCodex(api);
         MapMistral(api);
+        MapDeepSeek(api);
         MapApprovals(api);
         MapBoundaryObservations(api);
     }

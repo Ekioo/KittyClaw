@@ -40,5 +40,20 @@
   "McpEnable": "MCP-Server aktivieren",
   "McpEnableEffect": "Macht /mcp sofort verfügbar. Die Deaktivierung weist neue und bestehende Client-Anfragen ab.",
   "McpEnabledStatus": "MCP ist unter {0} aktiv.",
-  "McpDisabledStatus": "MCP ist deaktiviert. Clients können keine Verbindung herstellen."
+  "McpDisabledStatus": "MCP ist deaktiviert. Clients können keine Verbindung herstellen.",
+  "AgentProvidersTitle": "Agent-Anbieter",
+  "AgentProvidersHint": "Prüfen Sie die von KittyClaw nutzbaren CLIs und öffnen Sie deren Installations- und Konfigurationsanleitungen.",
+  "AgentProvidersRefresh": "Erneut prüfen",
+  "AgentProvidersChecking": "Prüfung…",
+  "ProviderDetected": "CLI erkannt",
+  "ProviderNotDetected": "Installation erforderlich",
+  "ProviderInstallationGuide": "Installationsanleitung",
+  "ProviderClaudeConfiguration": "Installieren Sie Claude Code und melden Sie sich bei Anthropic an. Es dient auch als Transport für DeepSeek und Ollama.",
+  "ProviderCodexConfiguration": "Installieren Sie Codex CLI und authentifizieren Sie es mit Ihrem OpenAI-Konto oder einem API-Schlüssel.",
+  "ProviderGrokConfiguration": "Installieren und authentifizieren Sie Grok Build, bevor Sie ein Grok-Modell auswählen.",
+  "ProviderMistralConfiguration": "Installieren Sie Mistral Vibe und konfigurieren Sie die Zugangsdaten, bevor Sie ein Mistral-Modell auswählen.",
+  "ProviderOllamaConfiguration": "Installieren und starten Sie Ollama. Adresse und lokale Modelle werden anschließend pro Projekt konfiguriert.",
+  "ProviderDeepSeekConfiguration": "DeepSeek V4 verwendet Claude Code über die Anthropic-kompatible API. Speichern Sie DEEPSEEK_API_KEY im Vault jedes Projekts.",
+  "ProviderSharedClaudeCli": "Gemeinsamer Transport: Die Erkennung bestätigt Claude Code; der DeepSeek-Schlüssel bleibt projektspezifisch.",
+  "AgentProvidersDetectionNote": "Die Erkennung prüft das CLI, ohne Zugangsdaten zu lesen oder anzuzeigen. Projektspezifische Geheimnisse bleiben im Vault."
 }

@@ -51,6 +51,35 @@
 .settings-status-ok { background: #3ecf8e22; color: #3ecf8e; }
 .settings-status-warn { background: #f5b94222; color: #f5b942; }
 .settings-status-err { background: #f06b6b22; color: #f06b6b; }
+.provider-section-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
+.provider-section-heading .settings-hint { margin-bottom: 0; }
+.provider-readiness-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(245px, 1fr));
+    gap: 0.8rem;
+    margin-top: 1rem;
+}
+.provider-readiness-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    min-height: 165px;
+    padding: 0.9rem;
+    border: 1px solid var(--border, #333);
+    border-radius: 8px;
+    background: #11141b;
+}
+.provider-readiness-card.provider-ready { border-color: #3ecf8e66; }
+.provider-card-header { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; }
+.provider-status-pill { border-radius: 999px; padding: 0.18rem 0.48rem; font-size: 0.72rem; white-space: nowrap; }
+.provider-status-pill.ready { color: #3ecf8e; background: #3ecf8e22; }
+.provider-status-pill.missing { color: #f5b942; background: #f5b94222; }
+.provider-readiness-card p { color: var(--muted, #8a99b0); font-size: 0.83rem; line-height: 1.4; margin: 0; flex: 1; }
+.provider-readiness-card code { align-self: flex-start; color: #c8d0e0; background: #090b10; padding: 0.18rem 0.38rem; border-radius: 4px; }
+.provider-readiness-card small { color: #f5b942; line-height: 1.35; }
+.provider-readiness-card a { color: var(--accent, #3ecf8e); font-size: 0.82rem; text-decoration: none; }
+.provider-readiness-card a:hover { text-decoration: underline; }
+.provider-readiness-note { color: var(--muted, #8a99b0); font-size: 0.78rem; margin: 0.9rem 0 0; }
 .settings-warning { background: #f59e4222; color: #f59e42; padding: 0.6rem; border-radius: 4px; }
 .settings-members { width: 100%; border-collapse: collapse; }
 .settings-members th, .settings-members td {
@@ -97,6 +126,8 @@
 .secret-write-only { margin: .65rem 0 0; color: #a9b8cc; }
 .secret-list { margin-top: 1rem; }
 @media (max-width: 720px) {
+    .provider-section-heading { flex-direction: column; }
+    .provider-section-heading .settings-browse { width: 100%; }
     .secret-entry-row { align-items: stretch; flex-direction: column; }
     .secret-entry-row .settings-input:first-child,
     .secret-entry-row .settings-input:nth-child(2) { max-width: none; min-width: 0; }

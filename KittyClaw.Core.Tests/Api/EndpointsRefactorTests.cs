@@ -123,6 +123,8 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "GET /api/codex-models",
         // Mistral
         "GET /api/mistral-models",
+        // DeepSeek
+        "GET /api/deepseek-models",
         // Approval registry
         "GET /api/projects/{slug}/approvals/requests",
         "POST /api/projects/{slug}/approvals/requests",
@@ -257,6 +259,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         ["GET /api/grok-models"] = "Grok",
         ["GET /api/codex-models"] = "Codex",
         ["GET /api/mistral-models"] = "Mistral",
+        ["GET /api/deepseek-models"] = "DeepSeek",
         ["POST /api/projects/{slug}/workflow-migrations/analyze"] = "Workflow migrations",
         ["POST /api/projects/{slug}/workflow-migrations/apply"] = "Workflow migrations",
         ["POST /api/projects/{slug}/workflow-migrations/refine"] = "Workflow migrations",
@@ -489,6 +492,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
             "Endpoints.Images.cs",
             "Endpoints.Dashboard.cs",
             "Endpoints.Ollama.cs",
+            "Endpoints.DeepSeek.cs",
         };
         var missing = expected.Where(f => !File.Exists(Path.Combine(apiDir, f))).ToList();
         Assert.True(missing.Count == 0,

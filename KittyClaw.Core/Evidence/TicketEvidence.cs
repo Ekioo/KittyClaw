@@ -51,7 +51,7 @@ public enum FileChangeKind { Added, Modified, Deleted, Renamed }
 /// - <see cref="Trust"/> = <see cref="EvidenceTrust.Missing"/> when the item was expected but
 ///   not captured; consumers must surface this explicitly rather than silently omitting the item.
 /// - <see cref="Provider"/> MUST be a lowercase CLI provider name ("claude", "codex", "grok",
-///   "mistral") or "unknown"; never embed a model name here.
+///   "mistral", "deepseek") or "unknown"; never embed a model name here.
 /// - <see cref="RunId"/> links the item back to the AgentRun that produced it, enabling
 ///   multi-run evidence merging without losing origin identity.
 /// </summary>

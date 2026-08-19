@@ -44,5 +44,20 @@
   "McpEnable": "MCPサーバーを有効にする",
   "McpEnableEffect": "/mcp をすぐに利用可能にします。無効にすると、新規および既存のクライアント要求を拒否します。",
   "McpEnabledStatus": "MCPは{0}で有効です。",
-  "McpDisabledStatus": "MCPは無効です。クライアントは接続できません。"
+  "McpDisabledStatus": "MCPは無効です。クライアントは接続できません。",
+  "AgentProvidersTitle": "エージェントプロバイダー",
+  "AgentProvidersHint": "KittyClawで利用できるCLIを確認し、インストールと設定の手順を開きます。",
+  "AgentProvidersRefresh": "再確認",
+  "AgentProvidersChecking": "確認中…",
+  "ProviderDetected": "CLI検出済み",
+  "ProviderNotDetected": "インストールが必要",
+  "ProviderInstallationGuide": "インストールガイド",
+  "ProviderClaudeConfiguration": "Claude CodeをインストールしてAnthropicにログインします。DeepSeekとOllamaの実行にも使用されます。",
+  "ProviderCodexConfiguration": "Codex CLIをインストールし、OpenAIアカウントまたはAPIキーで認証します。",
+  "ProviderGrokConfiguration": "Grokモデルを選択する前にGrok Buildをインストールして認証します。",
+  "ProviderMistralConfiguration": "Mistralモデルを選択する前にMistral Vibeをインストールして認証情報を設定します。",
+  "ProviderOllamaConfiguration": "Ollamaをインストールして起動します。アドレスとローカルモデルはプロジェクトごとに設定します。",
+  "ProviderDeepSeekConfiguration": "DeepSeek V4はAnthropic互換API経由でClaude Codeを使用します。各プロジェクトのvaultにDEEPSEEK_API_KEYを保存してください。",
+  "ProviderSharedClaudeCli": "共有トランスポート：検出はClaude Codeを確認します。DeepSeekキーはプロジェクトごとに保持されます。",
+  "AgentProvidersDetectionNote": "認証情報を読み取ったり表示したりせずにCLIの存在を確認します。プロジェクト固有の秘密はvaultに保持されます。"
 }

@@ -4,7 +4,7 @@ This guide starts after installation and walks through a first project, from cre
 
 ## First launch
 
-Open **http://localhost:5230**. On the first visit, KittyClaw checks Git and every supported agent provider: Claude Code, OpenAI Codex CLI, Grok Build, Mistral Vibe, and Ollama.
+Open **http://localhost:5230**. On the first visit, KittyClaw checks Git and every supported agent provider: Claude Code, OpenAI Codex CLI, Grok Build, Mistral Vibe, and Ollama. The same checks remain available under **Global settings → Agent providers**, together with installation links. DeepSeek V4 appears there as a Claude Code transport and requires a project-vault key.
 
 You can continue when an optional provider is missing, and the board remains usable. Onboarding considers the agent requirement satisfied when at least one of Claude Code, OpenAI Codex CLI, Grok Build, or Mistral Vibe is available. Git is also required for template-driven version-control actions. Ollama is detected and its endpoint and models are configured per project after creation, but local Ollama models currently use Claude Code as their transport, so Ollama alone does not satisfy the agent requirement.
 
@@ -116,7 +116,7 @@ Move the ticket to **Done** only when you accept the result. In the default temp
 
 Runs that fail because of quota or spending limits are parked in **Blocked** to prevent a retry loop. Once the provider is usable again, move the ticket back to **Todo**.
 
-The default provider is Claude Code. KittyClaw can also route explicitly selected models through Grok Build or OpenAI Codex CLI, and can route local models through Ollama. Each provider must be installed or configured before its models can run; see [Grok Build](./grok-build.md), [OpenAI Codex CLI](./codex-cli.md), and [local models](./local-models.md).
+The default provider is Claude Code. KittyClaw can also route explicitly selected models through Grok Build, OpenAI Codex CLI, Mistral Vibe, DeepSeek V4, or local Ollama models. Each provider must be installed or configured before its models can run; see the [agent-provider installation guide](./agent-providers.md).
 
 ## Legacy automations
 

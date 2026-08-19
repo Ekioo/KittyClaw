@@ -13,7 +13,7 @@ public static class ProvenanceRules
 
     private static readonly HashSet<string> s_knownProviders = new(StringComparer.OrdinalIgnoreCase)
     {
-        "claude", "codex", "grok", "mistral", "unknown",
+        "claude", "codex", "grok", "mistral", "deepseek", "unknown",
     };
 
     /// <summary>True when the source string qualifies as an observable (Verified-grade) artifact.</summary>

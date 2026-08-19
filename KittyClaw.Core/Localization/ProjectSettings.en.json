@@ -65,6 +65,7 @@
   "RtkAvailable": "Ready — RTK {0} detected in instruction mode.",
   "SecretsTitle": "Project secrets",
   "SecretsHint": "Encrypted credentials injected only into this project's agent and automation processes.",
+  "DeepSeekVaultHint": "To use DeepSeek models, save the API key here with the name DEEPSEEK_API_KEY.",
   "SecretsWriteOnly": "Saved values can never be displayed again. Enter a new value to replace a secret.",
   "SecretValuePlaceholder": "Secret value",
   "SaveSecret": "Save secret",

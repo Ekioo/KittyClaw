@@ -19,6 +19,7 @@ public static class RunEvidenceCapture
         CliProvider.Codex => "codex",
         CliProvider.Grok => "grok",
         CliProvider.Mistral => "mistral",
+        CliProvider.DeepSeek => "deepseek",
         _ => "unknown",
     };
 
