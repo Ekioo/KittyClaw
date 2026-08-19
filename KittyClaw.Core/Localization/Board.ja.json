@@ -254,6 +254,8 @@
   "ChatTechnicalDetails": "詳細情報",
   "MarkColumnRead": "すべてを既読にする",
   "OwnerActionRequired": "アクションが必要です",
+  "ProjectOwnerActionOne": "必要なアクション {0} 件",
+  "ProjectOwnerActionMany": "必要なアクション {0} 件",
   "ColumnUserGuidance": "チケットの案内",
   "ColumnUserGuidanceHelp": "チケットが待ち状態中、所有者がブロック解除できる操作を説明します。空白にすると、KittyClaw はパイプラインから安全な案内を推測します。",
   "ColumnUserGuidancePlaceholder": "- 承認列にチケットを移動して確認\n- 却下列に移動し、却下理由を追加するコメントを付けて却下",

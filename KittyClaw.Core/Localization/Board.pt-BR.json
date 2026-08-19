@@ -254,6 +254,8 @@
   "ChatTechnicalDetails": "Detalhes técnicos",
   "MarkColumnRead": "Marcar tudo como lido",
   "OwnerActionRequired": "Ação necessária",
+  "ProjectOwnerActionOne": "{0} ação necessária",
+  "ProjectOwnerActionMany": "{0} ações necessárias",
   "ColumnUserGuidance": "Guia do bilhete",
   "ColumnUserGuidanceHelp": "Instruções em Markdown exibidas entre a descrição do bilhete e a atividade enquanto ele está pendente. Explicite exatamente o que o proprietário pode fazer para desbloqueá-lo. Deixe em branco para que o KittyClaw derive orientações seguras com base no pipeline.",
   "ColumnUserGuidancePlaceholder": "- Mover o bilhete para Aprovado para validar\n- Mover para Rejeitado e adicionar um comentário para recusar",
