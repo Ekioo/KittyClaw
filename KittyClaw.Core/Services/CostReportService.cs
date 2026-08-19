@@ -10,12 +10,26 @@ public sealed record CostProjectOption(string Slug, string Name);
 public sealed record CostPipelineOption(string Key, string Name);
 public sealed record CostModelOption(string Key, string Name);
 public sealed record CostBucket(DateOnly Day, string ProjectSlug, string ProjectName, decimal UsdCost, bool Estimated);
-public sealed record CostProjectTotal(string ProjectSlug, string ProjectName, decimal UsdCost, bool Estimated);
+public sealed record CostProjectTotal(
+    string ProjectSlug,
+    string ProjectName,
+    decimal UsdCost,
+    bool Estimated,
+    long RtkSavedTokens = 0,
+    long RtkInputTokens = 0,
+    int RtkCommands = 0,
+    decimal? RtkEstimatedUsd = null);
 public sealed record CostReport(decimal TotalUsd, bool Estimated, IReadOnlyList<CostBucket> Daily, IReadOnlyList<CostProjectTotal> Projects);
 public sealed record CostReportOptions(IReadOnlyList<CostProjectOption> Projects, IReadOnlyList<CostPipelineOption> Pipelines, IReadOnlyList<CostModelOption> Models);
 
-internal sealed record CostSnapshotRow(DateOnly Day, string ProjectSlug, string ProjectName, string? PipelineKey, string Model, decimal UsdCost, bool Estimated);
-internal sealed record CostReportSnapshot(int Version, DateTime GeneratedAt, CostReportOptions Options, IReadOnlyList<CostSnapshotRow> Rows);
+internal sealed record CostSnapshotRow(DateOnly Day, string ProjectSlug, string ProjectName, string? PipelineKey, string Model, long InputTokens, decimal UsdCost, bool Estimated);
+internal sealed record RtkSavingsSnapshotRow(DateOnly Day, string ProjectSlug, string ProjectName, long InputTokens, long SavedTokens, int Commands);
+internal sealed record CostReportSnapshot(
+    int Version,
+    DateTime GeneratedAt,
+    CostReportOptions Options,
+    IReadOnlyList<CostSnapshotRow> Rows,
+    IReadOnlyList<RtkSavingsSnapshotRow> RtkSavings);
 
 /// <summary>
 /// Serves cost reports from a compact, durable snapshot. Historical JSONL files are only
@@ -23,13 +37,14 @@ internal sealed record CostReportSnapshot(int Version, DateTime GeneratedAt, Cos
 /// </summary>
 public sealed class CostReportService
 {
-    private const int SnapshotVersion = 2;
+    private const int SnapshotVersion = 3;
     private const string UnknownPipelineSuffix = "unknown";
     private static readonly CostReportOptions EmptyOptions = new([], [], []);
-    private static readonly CostReportSnapshot EmptySnapshot = new(SnapshotVersion, DateTime.MinValue, EmptyOptions, []);
+    private static readonly CostReportSnapshot EmptySnapshot = new(SnapshotVersion, DateTime.MinValue, EmptyOptions, [], []);
     private readonly ProjectService _projects;
     private readonly PipelineService _pipelines;
     private readonly TicketService _tickets;
+    private readonly IRtkSavingsReader? _rtkSavings;
     private readonly string _snapshotPath;
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private readonly Channel<bool> _refreshRequests = Channel.CreateBounded<bool>(new BoundedChannelOptions(1)
@@ -42,10 +57,18 @@ public sealed class CostReportService
     private CostReportSnapshot _snapshot;
 
     public CostReportService(ProjectService projects, PipelineService pipelines, TicketService tickets)
+        : this(projects, pipelines, tickets, null) { }
+
+    public CostReportService(
+        ProjectService projects,
+        PipelineService pipelines,
+        TicketService tickets,
+        IRtkSavingsReader? rtkSavings)
     {
         _projects = projects;
         _pipelines = pipelines;
         _tickets = tickets;
+        _rtkSavings = rtkSavings;
         _snapshotPath = Path.Combine(projects.DataDir, "cost-report-snapshot.json");
         _snapshot = LoadPersistedSnapshot() ?? EmptySnapshot;
     }
@@ -102,6 +125,7 @@ public sealed class CostReportService
     {
         var allProjects = await _projects.ListProjectsAsync();
         var rows = new List<CostSnapshotRow>();
+        var rtkRows = new List<RtkSavingsSnapshotRow>();
         var pipelineOptions = new List<CostPipelineOption>();
         var seenRuns = new HashSet<string>(StringComparer.Ordinal);
 
@@ -113,8 +137,19 @@ public sealed class CostReportService
                 foreach (var pipeline in await _pipelines.ListAsync(project.Slug))
                     pipelineOptions.Add(new($"{project.Slug}:{pipeline.Id}", $"{project.Name} / {pipeline.Name}"));
 
-                var directory = Path.Combine(_projects.ResolveWorkspacePath(project), ".agents", "channel");
-                if (!Directory.Exists(directory)) continue;
+                var workspace = _projects.ResolveWorkspacePath(project);
+                if (project.RtkEnabled && _rtkSavings is not null)
+                {
+                    foreach (var saving in await _rtkSavings.ReadDailyAsync(workspace, cancellationToken))
+                        rtkRows.Add(new(saving.Day, project.Slug, project.Name, saving.InputTokens, saving.SavedTokens, saving.Commands));
+                }
+
+                var directory = Path.Combine(workspace, ".agents", "channel");
+                if (!Directory.Exists(directory))
+                {
+                    await Task.Yield();
+                    continue;
+                }
 
                 var entries = new List<CostLogEntry>();
                 foreach (var file in Directory.EnumerateFiles(directory, "cost-log*.jsonl").OrderBy(x => x, StringComparer.Ordinal))
@@ -152,6 +187,7 @@ public sealed class CostReportService
                         project.Name,
                         pipelineKey,
                         string.IsNullOrWhiteSpace(entry.Model) ? "default" : entry.Model,
+                        entry.InputTokens,
                         entry.UsdCost,
                         entry.CostEstimated));
                 }
@@ -180,6 +216,7 @@ public sealed class CostReportService
                 group.Key.ProjectName,
                 group.Key.PipelineKey,
                 group.Key.Model,
+                group.Sum(row => row.InputTokens),
                 group.Sum(row => row.UsdCost),
                 group.Any(row => row.Estimated)))
             .OrderBy(row => row.Day)
@@ -194,7 +231,19 @@ public sealed class CostReportService
                 .Order(StringComparer.OrdinalIgnoreCase)
                 .Select(model => new CostModelOption(model, model))
                 .ToList());
-        return new(SnapshotVersion, DateTime.UtcNow, options, compactRows);
+        var compactRtkRows = rtkRows
+            .GroupBy(row => new { row.Day, row.ProjectSlug, row.ProjectName })
+            .Select(group => new RtkSavingsSnapshotRow(
+                group.Key.Day,
+                group.Key.ProjectSlug,
+                group.Key.ProjectName,
+                group.Sum(row => row.InputTokens),
+                group.Sum(row => row.SavedTokens),
+                group.Sum(row => row.Commands)))
+            .OrderBy(row => row.Day)
+            .ThenBy(row => row.ProjectName)
+            .ToList();
+        return new(SnapshotVersion, DateTime.UtcNow, options, compactRows, compactRtkRows);
     }
 
     private async Task PersistSnapshotAsync(CostReportSnapshot snapshot, CancellationToken cancellationToken)
@@ -226,12 +275,56 @@ public sealed class CostReportService
             .OrderBy(bucket => bucket.Day)
             .ThenBy(bucket => bucket.ProjectName)
             .ToList();
-        var totals = rows.GroupBy(row => new { row.ProjectSlug, row.ProjectName })
+        var totalsByProject = rows.GroupBy(row => new { row.ProjectSlug, row.ProjectName })
             .Select(group => new CostProjectTotal(group.Key.ProjectSlug, group.Key.ProjectName,
                 group.Sum(row => row.UsdCost), group.Any(row => row.Estimated)))
+            .ToDictionary(total => total.ProjectSlug, StringComparer.Ordinal);
+
+        // RTK does not associate a gain entry with a KittyClaw pipeline or model. Hiding
+        // savings under those filters prevents a project-wide estimate from looking scoped.
+        if (filter.PipelineKey is null && filter.Model is null)
+        {
+            var savings = snapshot.RtkSavings.Where(row =>
+                row.Day >= filter.From && row.Day <= filter.To
+                && (filter.ProjectSlugs is not { Count: > 0 } || filter.ProjectSlugs.Contains(row.ProjectSlug)));
+            foreach (var group in savings.GroupBy(row => new { row.ProjectSlug, row.ProjectName }))
+            {
+                totalsByProject.TryGetValue(group.Key.ProjectSlug, out var current);
+                var savedTokens = group.Sum(row => row.SavedTokens);
+                var inputTokens = group.Sum(row => row.InputTokens);
+                totalsByProject[group.Key.ProjectSlug] = new CostProjectTotal(
+                    group.Key.ProjectSlug,
+                    group.Key.ProjectName,
+                    current?.UsdCost ?? 0,
+                    current?.Estimated ?? false,
+                    savedTokens,
+                    inputTokens,
+                    group.Sum(row => row.Commands),
+                    EstimateRtkUsd(rows, group.Key.ProjectSlug, savedTokens));
+            }
+        }
+
+        var totals = totalsByProject.Values
             .OrderByDescending(total => total.UsdCost)
+            .ThenByDescending(total => total.RtkSavedTokens)
             .ToList();
         return new(rows.Sum(row => row.UsdCost), rows.Any(row => row.Estimated), daily, totals);
+    }
+
+    private static decimal? EstimateRtkUsd(IReadOnlyList<CostSnapshotRow> rows, string projectSlug, long savedTokens)
+    {
+        decimal weightedRates = 0;
+        long pricedInputTokens = 0;
+        foreach (var row in rows.Where(row => row.ProjectSlug == projectSlug && row.InputTokens > 0))
+        {
+            if (!ModelCostEstimator.TryEstimate(row.Model, 1_000_000, 0, 0, 0, out var inputRate)) continue;
+            weightedRates += inputRate * row.InputTokens;
+            pricedInputTokens += row.InputTokens;
+        }
+
+        return pricedInputTokens == 0
+            ? null
+            : savedTokens * (weightedRates / pricedInputTokens) / 1_000_000m;
     }
 
     private static string BuildReportCacheKey(CostReportFilter filter)

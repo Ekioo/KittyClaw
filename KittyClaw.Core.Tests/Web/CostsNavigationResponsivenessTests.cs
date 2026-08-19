@@ -54,6 +54,19 @@ public sealed class CostsNavigationResponsivenessTests
     }
 
     [Fact]
+    public void CostPage_ShowsProjectScopedRtkSavingsWithAnExplicitEstimateLegend()
+    {
+        var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Costs.razor"));
+        var styles = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "wwwroot", "css", "costs.css"));
+
+        Assert.Contains("project.RtkSavedTokens > 0", source, StringComparison.Ordinal);
+        Assert.Contains("class=\"cost-project-rtk\"", source, StringComparison.Ordinal);
+        Assert.Contains("RtkSavingsHelp", source, StringComparison.Ordinal);
+        Assert.Contains("cost-legend-rtk", styles, StringComparison.Ordinal);
+        Assert.Contains("_report.Projects.Count == 0", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CostPage_OffersQuickDateRangesAndKeepsManualDatesCustom()
     {
         var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Costs.razor"));
@@ -75,6 +88,15 @@ public sealed class CostsNavigationResponsivenessTests
         Assert.Contains(".cost-date-preset.is-active", source, StringComparison.Ordinal);
         Assert.Contains("@media (max-width: 560px)", source, StringComparison.Ordinal);
         Assert.Contains("prefers-reduced-motion: reduce", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EnablingRtk_RequestsAnAsynchronousCostSnapshotRefresh()
+    {
+        var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Api", "Endpoints.Projects.cs"));
+
+        Assert.Contains("CostReportService costReports", source, StringComparison.Ordinal);
+        Assert.Contains("costReports.RequestRefresh();", source, StringComparison.Ordinal);
     }
 
     private static string RepoRoot()

@@ -83,6 +83,7 @@
 .cost-legend-swatch { width: 18px; height: 8px; border-radius: 3px; }
 .cost-legend-measured { background: linear-gradient(180deg, var(--accent-hover), var(--accent)); }
 .cost-legend-estimated { background: repeating-linear-gradient(45deg, #d97706, #d97706 4px, #fbbf24 4px, #fbbf24 8px); }
+.cost-legend-rtk { background: linear-gradient(90deg, #22d3ee, #22c55e); }
 .cost-project-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
 .cost-project-cost-card { position: relative; overflow: hidden; min-width: 0; min-height: 210px; padding: 1.2rem; border-radius: 16px; }
 .cost-project-cost-card::after { content: ""; position: absolute; width: 150px; height: 150px; right: -65px; top: -80px; border-radius: 50%; background: radial-gradient(circle, rgba(34, 197, 94, .13), transparent 70%); pointer-events: none; }
@@ -90,6 +91,12 @@
 .cost-project-cost-card h3 { min-width: 0; overflow: hidden; color: var(--text-muted); font-size: .9rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .estimated-marker { flex: 0 0 auto; color: #fbbf24; font-size: .72rem; }
 .cost-project-total { position: relative; z-index: 1; display: block; margin-top: .55rem; font-size: clamp(1.65rem, 3vw, 2.25rem); line-height: 1; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.cost-project-rtk { position: relative; z-index: 1; display: flex; align-items: center; gap: .65rem; margin-top: .9rem; padding: .65rem .75rem; border: 1px solid rgba(34, 211, 238, .2); border-radius: 10px; background: linear-gradient(100deg, rgba(34, 211, 238, .09), rgba(34, 197, 94, .08)); }
+.cost-project-rtk:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.cost-project-rtk-badge { flex: 0 0 auto; padding: .22rem .42rem; border-radius: 6px; background: linear-gradient(135deg, #22d3ee, #22c55e); color: #04110d; font-size: .68rem; font-weight: 900; letter-spacing: .06em; }
+.cost-project-rtk > div { display: grid; min-width: 0; gap: .12rem; }
+.cost-project-rtk strong { color: #a7f3d0; font-size: .82rem; line-height: 1.2; }
+.cost-project-rtk div > span { color: var(--text-muted); font-size: .7rem; }
 .cost-project-trend-label { display: block; margin-top: 1.25rem; font-size: .65rem; }
 .cost-project-trend { display: flex; align-items: flex-end; gap: 3px; height: 58px; margin-top: .55rem; padding-top: .25rem; border-bottom: 1px solid var(--border-strong); overflow: hidden; }
 .cost-project-bar { flex: 1 1 6px; min-width: 3px; max-width: 14px; height: var(--bar-height); min-height: 3px; border-radius: 3px 3px 1px 1px; background: linear-gradient(180deg, var(--accent-hover), var(--accent)); box-shadow: 0 0 12px rgba(34, 197, 94, .12); }

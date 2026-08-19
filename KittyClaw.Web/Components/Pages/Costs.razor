@@ -74,7 +74,7 @@
     }
     else if (_report is not null)
     {
-        @if (_report.Daily.Count == 0)
+        @if (_report.Projects.Count == 0)
         {
             <div class="cost-state cost-empty"><h2>@L["NoCostData"]</h2><p>@L["NoCostDataHint"]</p></div>
         }
@@ -86,6 +86,7 @@
                     <div class="cost-legend" role="list" aria-label="@L["CostLegend"]">
                         <span role="listitem"><i class="cost-legend-swatch cost-legend-measured" aria-hidden="true"></i>@L["Measured"]</span>
                         <span role="listitem"><i class="cost-legend-swatch cost-legend-estimated" aria-hidden="true"></i>@L["Estimated"]</span>
+                        <span role="listitem"><i class="cost-legend-swatch cost-legend-rtk" aria-hidden="true"></i>@L["RtkSavings"]</span>
                     </div>
                 </header>
                 <div class="cost-project-card-grid">
@@ -97,16 +98,29 @@
                                 @if (project.Estimated) { <span class="estimated-marker" title="@L["EstimatedHelp"]" tabindex="0">~ @L["Estimated"]</span> }
                             </header>
                             <strong class="cost-project-total">@Usd(project.UsdCost)</strong>
-                            <span class="cost-project-trend-label">@L["DailyEvolution"]</span>
-                            <div class="cost-project-trend" role="img" aria-label="@($"{L["DailyEvolution"]} — {project.ProjectName}")">
-                                @foreach (var day in project.Daily)
-                                {
-                                    var height = project.MaxDailyCost == 0 ? 0 : Math.Max(5, day.UsdCost / project.MaxDailyCost * 100);
-                                    <span class="cost-project-bar @(day.Estimated ? "cost-estimated" : "")" style="--bar-height:@height.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%" title="@($"{day.Day:d} — {Usd(day.UsdCost)}")">
-                                        <span class="visually-hidden">@day.Day, @Usd(day.UsdCost)</span>
-                                    </span>
-                                }
-                            </div>
+                            @if (project.RtkSavedTokens > 0)
+                            {
+                                <div class="cost-project-rtk" title="@L["RtkSavingsHelp"]" tabindex="0">
+                                    <span class="cost-project-rtk-badge">RTK</span>
+                                    <div>
+                                        <strong>~ @Tokens(project.RtkSavedTokens) @L["RtkSavedTokens"]</strong>
+                                        <span>@RtkDetail(project)</span>
+                                    </div>
+                                </div>
+                            }
+                            @if (project.Daily.Count > 0)
+                            {
+                                <span class="cost-project-trend-label">@L["DailyEvolution"]</span>
+                                <div class="cost-project-trend" role="img" aria-label="@($"{L["DailyEvolution"]} — {project.ProjectName}")">
+                                    @foreach (var day in project.Daily)
+                                    {
+                                        var height = project.MaxDailyCost == 0 ? 0 : Math.Max(5, day.UsdCost / project.MaxDailyCost * 100);
+                                        <span class="cost-project-bar @(day.Estimated ? "cost-estimated" : "")" style="--bar-height:@height.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%" title="@($"{day.Day:d} — {Usd(day.UsdCost)}")">
+                                            <span class="visually-hidden">@day.Day, @Usd(day.UsdCost)</span>
+                                        </span>
+                                    }
+                                </div>
+                            }
                         </article>
                     }
                 </div>
@@ -176,16 +190,48 @@
     }
 
     private static string Usd(decimal value) => value.ToString("C", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+    private static string Tokens(long value) => value.ToString("N0");
+
+    private string RtkDetail(ProjectCostView project)
+    {
+        var rate = project.RtkInputTokens <= 0
+            ? null
+            : (decimal?)Math.Min(100, project.RtkSavedTokens * 100m / project.RtkInputTokens);
+        var parts = new List<string>();
+        if (project.RtkEstimatedUsd is decimal usd)
+            parts.Add($"{L["RtkEstimatedValue"]} {UsdSavings(usd)}");
+        if (rate is decimal percentage)
+            parts.Add($"{percentage:0.#}% {L["RtkReduction"]}");
+        return string.Join(" · ", parts);
+    }
+
+    private static string UsdSavings(decimal value) => value is > 0 and < 0.01m ? "< $0.01" : Usd(value);
 
     private static IReadOnlyList<ProjectCostView> BuildProjectCosts(CostReport report) => report.Projects
         .Select(project =>
         {
             var daily = report.Daily.Where(bucket => bucket.ProjectSlug == project.ProjectSlug).OrderBy(bucket => bucket.Day).ToArray();
             var maxDailyCost = daily.Length == 0 ? 0 : daily.Max(bucket => bucket.UsdCost);
-            return new ProjectCostView(project.ProjectName, project.UsdCost, project.Estimated, daily, maxDailyCost);
+            return new ProjectCostView(
+                project.ProjectName,
+                project.UsdCost,
+                project.Estimated,
+                daily,
+                maxDailyCost,
+                project.RtkSavedTokens,
+                project.RtkInputTokens,
+                project.RtkEstimatedUsd);
         })
         .ToArray();
 
-    private sealed record ProjectCostView(string ProjectName, decimal UsdCost, bool Estimated, IReadOnlyList<CostBucket> Daily, decimal MaxDailyCost);
+    private sealed record ProjectCostView(
+        string ProjectName,
+        decimal UsdCost,
+        bool Estimated,
+        IReadOnlyList<CostBucket> Daily,
+        decimal MaxDailyCost,
+        long RtkSavedTokens,
+        long RtkInputTokens,
+        decimal? RtkEstimatedUsd);
     private enum DatePreset { Last30Days, CurrentMonth, PreviousMonth, LastThreeMonths, CurrentYear }
 }

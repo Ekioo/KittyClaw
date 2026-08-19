@@ -64,10 +64,16 @@ public static partial class Endpoints
             return status is null ? Results.NotFound() : Results.Ok(status);
         }).WithTags("Projects");
 
-        api.MapPatch("/projects/{slug}/rtk", async (string slug, SaveRtkConfigRequest req, ProjectService ps, RtkIntegrationService rtk) =>
+        api.MapPatch("/projects/{slug}/rtk", async (
+            string slug,
+            SaveRtkConfigRequest req,
+            ProjectService ps,
+            RtkIntegrationService rtk,
+            CostReportService costReports) =>
         {
             var project = await ps.SaveRtkEnabledAsync(slug, req.Enabled);
             if (project is null) return Results.NotFound();
+            costReports.RequestRefresh();
             return Results.Ok(await rtk.GetStatusAsync(slug));
         }).WithTags("Projects");
     }

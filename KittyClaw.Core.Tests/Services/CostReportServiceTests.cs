@@ -221,13 +221,88 @@ public sealed class CostReportServiceTests
         Assert.Equal(7m, (await restarted.GetReportAsync(new(day, day))).TotalUsd);
     }
 
-    private static string Entry(DateOnly day, decimal cost, string slug, int? pipeline, bool estimated = false, string run = "", int? ticketId = null, string model = "model")
-        => JsonSerializer.Serialize(new CostLogEntry(day.ToDateTime(new TimeOnly(12, 0)), "agent", ticketId, model, 1, 1, 0, 0, cost, 1, 0, estimated, slug, pipeline, run));
+    [Fact]
+    public async Task RtkSavings_AreProjectScopedDateFilteredAndCanEstimateInputValue()
+    {
+        using var temp = new TempDir();
+        var projects = new ProjectService(temp.Path);
+        var alpha = await projects.CreateProjectAsync("Alpha RTK");
+        var beta = await projects.CreateProjectAsync("Beta RTK");
+        await projects.SaveRtkEnabledAsync(alpha.Slug, true);
+        await projects.SaveRtkEnabledAsync(beta.Slug, true);
+        var tickets = new TicketService(projects, new MemberService(projects));
+        var day = DateOnly.FromDateTime(DateTime.Now);
+        var reader = new StubRtkSavingsReader(new Dictionary<string, IReadOnlyList<RtkDailySavings>>
+        {
+            [projects.ResolveWorkspacePath(alpha)] =
+            [
+                new(day.AddDays(-1), 400, 100, 2),
+                new(day, 2_000, 1_000, 4),
+            ],
+            [projects.ResolveWorkspacePath(beta)] = [new(day, 100, 25, 1)],
+        });
+        var service = new CostReportService(projects, new PipelineService(projects), tickets, reader);
+        Write(projects.ResolveWorkspacePath(alpha), "cost-log.jsonl",
+            Entry(day, 1m, alpha.Slug, pipeline: 1, run: "priced", model: "gpt-5.6-sol", inputTokens: 2_000));
+
+        await service.RefreshAsync();
+
+        var report = await service.GetReportAsync(new(day, day, new HashSet<string> { alpha.Slug }));
+
+        var project = Assert.Single(report.Projects);
+        Assert.Equal(alpha.Slug, project.ProjectSlug);
+        Assert.Equal(1_000, project.RtkSavedTokens);
+        Assert.Equal(2_000, project.RtkInputTokens);
+        Assert.Equal(4, project.RtkCommands);
+        Assert.Equal(0.005m, project.RtkEstimatedUsd);
+
+        var restarted = new CostReportService(projects, new PipelineService(projects), tickets);
+        var cached = Assert.Single((await restarted.GetReportAsync(
+            new(day, day, new HashSet<string> { alpha.Slug }))).Projects);
+        Assert.Equal(1_000, cached.RtkSavedTokens);
+        Assert.Equal(0.005m, cached.RtkEstimatedUsd);
+    }
+
+    [Fact]
+    public async Task RtkSavings_IncludeProjectsWithoutCostButAreHiddenByUnattributableFilters()
+    {
+        using var temp = new TempDir();
+        var projects = new ProjectService(temp.Path);
+        var project = await projects.CreateProjectAsync("Savings only");
+        await projects.SaveRtkEnabledAsync(project.Slug, true);
+        var tickets = new TicketService(projects, new MemberService(projects));
+        var day = DateOnly.FromDateTime(DateTime.Now);
+        var reader = new StubRtkSavingsReader(new Dictionary<string, IReadOnlyList<RtkDailySavings>>
+        {
+            [projects.ResolveWorkspacePath(project)] = [new(day, 50, 30, 1)],
+        });
+        var service = new CostReportService(projects, new PipelineService(projects), tickets, reader);
+
+        await service.RefreshAsync();
+
+        var all = await service.GetReportAsync(new(day, day));
+        var modelFiltered = await service.GetReportAsync(new(day, day, Model: "gpt-5.6-sol"));
+        var pipelineFiltered = await service.GetReportAsync(new(day, day, PipelineKey: $"{project.Slug}:1"));
+
+        Assert.Equal(30, Assert.Single(all.Projects).RtkSavedTokens);
+        Assert.Empty(modelFiltered.Projects);
+        Assert.Empty(pipelineFiltered.Projects);
+    }
+
+    private static string Entry(DateOnly day, decimal cost, string slug, int? pipeline, bool estimated = false, string run = "", int? ticketId = null, string model = "model", int inputTokens = 1)
+        => JsonSerializer.Serialize(new CostLogEntry(day.ToDateTime(new TimeOnly(12, 0)), "agent", ticketId, model, inputTokens, 1, 0, 0, cost, 1, 0, estimated, slug, pipeline, run));
 
     private static void Write(string workspace, string file, params string[] lines)
     {
         var directory = Path.Combine(workspace, ".agents", "channel");
         Directory.CreateDirectory(directory);
         File.WriteAllLines(Path.Combine(directory, file), lines);
+    }
+
+    private sealed class StubRtkSavingsReader(IReadOnlyDictionary<string, IReadOnlyList<RtkDailySavings>> rows)
+        : IRtkSavingsReader
+    {
+        public Task<IReadOnlyList<RtkDailySavings>> ReadDailyAsync(string workspacePath, CancellationToken cancellationToken = default)
+            => Task.FromResult(rows.TryGetValue(workspacePath, out var result) ? result : (IReadOnlyList<RtkDailySavings>)[]);
     }
 }

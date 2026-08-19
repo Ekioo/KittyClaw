@@ -1,0 +1,31 @@
+{
+  "environment": {
+    "KITTYCLAW_RTK_BIN": "C:\\Users\\admin\\.local\\bin\\rtk.exe"
+  },
+  "setup": [
+    {
+      "type": "createProject",
+      "name": "RTK Savings QA",
+      "workspacePath": "C:\\Sources\\KittyClaw\\Sources"
+    },
+    {
+      "type": "api",
+      "method": "PATCH",
+      "path": "/api/projects/rtk-savings-qa/rtk",
+      "body": { "enabled": true }
+    }
+  ],
+  "actions": [
+    { "type": "wait", "ms": 3500 },
+    { "type": "assertNavigationDuration", "url": "/costs", "waitForSelector": ".cost-filter-card", "maxMs": 3000 },
+    { "type": "assertVisible", "selector": ".cost-project-rtk" },
+    { "type": "assertText", "selector": ".cost-project-cost-card h3", "expected": "RTK Savings QA" },
+    { "type": "assertVisible", "selector": ".cost-legend-rtk" },
+    {
+      "type": "screenshot",
+      "name": "ticket-240-rtk-project-savings",
+      "description": "The cost page shows cached RTK token savings on the matching project card with an explicit RTK legend."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}
