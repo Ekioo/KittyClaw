@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using KittyClaw.Core.Services;
 
@@ -80,6 +81,7 @@ public sealed class AgentRunContext
     {
         ProjectSlug = ProjectSlug,
         WorkspacePath = WorkspacePath,
+        ExecutionWorkspacePath = ExecutionWorkspacePath,
         AgentName = AgentName,
         SkillFile = SkillFile,
         TicketId = TicketId,
@@ -114,6 +116,7 @@ public sealed class AgentRunContext
     {
         ProjectSlug = ProjectSlug,
         WorkspacePath = WorkspacePath,
+        ExecutionWorkspacePath = ExecutionWorkspacePath,
         AgentName = AgentName,
         SkillFile = SkillFile,
         TicketId = TicketId,
@@ -224,6 +227,8 @@ public sealed class AgentRunner
         _runs.Register(run);
 
         SemaphoreSlim? worktreeExecutionGate = null;
+        string? primaryRepositoryPath = null;
+        string? primaryRepositoryState = null;
         try
         {
             if (_worktrees is not null && ctx.TicketId is int ticketId)
@@ -232,6 +237,8 @@ public sealed class AgentRunner
                 if (worktree is not null)
                 {
                     ctx.ExecutionWorkspacePath = worktree.Path;
+                    primaryRepositoryPath = worktree.RepositoryPath;
+                    primaryRepositoryState = await CaptureRepositoryStateAsync(primaryRepositoryPath, ct);
                     run.Push(new StreamEvent(DateTime.UtcNow, "worktree",
                         $"Using worktree {worktree.Path} on branch {worktree.Branch} for root ticket #{worktree.RootTicketId}"));
                 }
@@ -248,6 +255,9 @@ public sealed class AgentRunner
             _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
             return run;
         }
+
+        run.WorkingDirectory = ctx.ExecutionWorkspacePath ?? ctx.WorkspacePath;
+        _runs.Persist(run);
 
         var provider = ctx.Target.Provider;
         run.CliVersion = await CliVersionProbe.ProbeAsync(provider,
@@ -485,7 +495,19 @@ public sealed class AgentRunner
             if (attempt.FallbackReason == FallbackReason.Quota && attempt.Exit != 0)
                 run.HitQuota = true;
 
-            _runs.Complete(run.RunId, attempt.Exit == 0 ? AgentRunStatus.Completed : AgentRunStatus.Failed, attempt.Exit);
+            if (primaryRepositoryPath is not null
+                && !string.Equals(primaryRepositoryState,
+                    await CaptureRepositoryStateAsync(primaryRepositoryPath, CancellationToken.None),
+                    StringComparison.Ordinal))
+            {
+                run.Push(new StreamEvent(DateTime.UtcNow, "error",
+                    $"Worktree boundary violation: the primary repository '{primaryRepositoryPath}' changed during the ticket run."));
+                _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
+            }
+            else
+            {
+                _runs.Complete(run.RunId, attempt.Exit == 0 ? AgentRunStatus.Completed : AgentRunStatus.Failed, attempt.Exit);
+            }
             AppendDebugLog(ctx, $"FINISHED {ctx.AgentName} run={run.RunId} exit={attempt.Exit}");
 
             // Auto-continue: when a chat run ends with undelivered steer messages, fire a
@@ -551,6 +573,40 @@ public sealed class AgentRunner
             CleanupImageTempFiles(ctx);
             worktreeExecutionGate?.Release();
         }
+    }
+
+    private static async Task<string> CaptureRepositoryStateAsync(
+        string repositoryPath, CancellationToken cancellationToken)
+    {
+        // Session/debug state is intentionally written by the orchestrator, not by the agent
+        // subprocess. Exclude that control-plane directory while guarding published source files.
+        var status = await ProcessRunner.RunAsync("git",
+            "status --porcelain=v1 --untracked-files=all -- . \":(exclude).agents/channel/**\"",
+            repositoryPath, TimeSpan.FromSeconds(30), ct: cancellationToken);
+        var diff = await ProcessRunner.RunAsync("git",
+            "diff --binary HEAD -- . \":(exclude).agents/channel/**\"",
+            repositoryPath, TimeSpan.FromSeconds(30), ct: cancellationToken);
+        var untracked = await ProcessRunner.RunAsync("git",
+            "ls-files -z --others --exclude-standard -- . \":(exclude).agents/channel/**\"",
+            repositoryPath, TimeSpan.FromSeconds(30), ct: cancellationToken);
+        if (!status.Success || !diff.Success || !untracked.Success)
+        {
+            var error = string.Join(" ", new[] { status.Stderr, diff.Stderr, untracked.Stderr }
+                .Where(value => !string.IsNullOrWhiteSpace(value))).Trim();
+            throw new InvalidOperationException($"Cannot inspect primary repository '{repositoryPath}': {error}");
+        }
+
+        var fingerprint = new StringBuilder()
+            .Append(status.Stdout.Replace("\r\n", "\n", StringComparison.Ordinal))
+            .Append('\0')
+            .Append(diff.Stdout.Replace("\r\n", "\n", StringComparison.Ordinal));
+        foreach (var relativePath in untracked.Stdout.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var file = Path.GetFullPath(Path.Combine(repositoryPath, relativePath));
+            fingerprint.Append('\0').Append(relativePath).Append(':')
+                .Append(Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(file, cancellationToken))));
+        }
+        return fingerprint.ToString();
     }
 
     internal static bool ShouldRetryExpiredResume(

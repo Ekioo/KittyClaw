@@ -17,6 +17,7 @@ public sealed class AgentRun
     public required string SkillFile { get; init; }
     public required string ConcurrencyGroup { get; init; }
     public required DateTime StartedAt { get; init; }
+    public string? WorkingDirectory { get; set; }
     public string? SessionId { get; set; }
     public string? Model { get; set; }
     public string? ChatTarget { get; set; }
@@ -199,6 +200,7 @@ public sealed class AgentRunSnapshot
     public string SkillFile { get; set; } = "";
     public string ConcurrencyGroup { get; set; } = "";
     public DateTime StartedAt { get; set; }
+    public string? WorkingDirectory { get; set; }
     public DateTime? EndedAt { get; set; }
     public string? SessionId { get; set; }
     public string? Model { get; set; }
@@ -244,6 +246,7 @@ public sealed class RunLogStore
             SkillFile = run.SkillFile,
             ConcurrencyGroup = run.ConcurrencyGroup,
             StartedAt = run.StartedAt,
+            WorkingDirectory = run.WorkingDirectory,
             EndedAt = run.EndedAt,
             SessionId = run.SessionId,
             Model = run.Model,
@@ -293,6 +296,7 @@ public sealed class RunLogStore
                 SkillFile = snapshot.SkillFile,
                 ConcurrencyGroup = snapshot.ConcurrencyGroup,
                 StartedAt = snapshot.StartedAt,
+                WorkingDirectory = snapshot.WorkingDirectory,
             };
             run.SessionId = snapshot.SessionId;
             run.Model = snapshot.Model;

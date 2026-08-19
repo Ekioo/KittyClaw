@@ -4,7 +4,7 @@ using KittyClaw.Core.Models;
 
 namespace KittyClaw.Core.Services;
 
-public sealed record TicketWorktree(string Path, string Branch, int RootTicketId);
+public sealed record TicketWorktree(string Path, string Branch, int RootTicketId, string RepositoryPath);
 public sealed record TicketWorktreeState(string Path, string Branch, int RootTicketId, bool Exists, bool IsDirty, string? Error);
 
 /// <summary>Resolves and creates the canonical Git worktree used by a ticket family.</summary>
@@ -39,7 +39,7 @@ public sealed class TicketWorktreeService(ProjectService projects, TicketService
                 if (!string.Equals(existing, $"refs/heads/{branch}", StringComparison.Ordinal))
                     throw new InvalidOperationException($"Worktree '{path}' is registered on '{existing}', expected 'refs/heads/{branch}'.");
                 VerifyWorktree(path, branch);
-                return new TicketWorktree(path, branch, rootTicketId);
+                return new TicketWorktree(path, branch, rootTicketId, repositoryRoot);
             }
 
             if (Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any())
@@ -53,7 +53,7 @@ public sealed class TicketWorktreeService(ProjectService projects, TicketService
                 RunGit(repositoryRoot, ["worktree", "add", "-b", branch, path, project.IntegrationBranch!]);
 
             VerifyWorktree(path, branch);
-            return new TicketWorktree(path, branch, rootTicketId);
+            return new TicketWorktree(path, branch, rootTicketId, repositoryRoot);
         }
         finally
         {

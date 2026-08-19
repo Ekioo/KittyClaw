@@ -129,6 +129,68 @@ public sealed class TicketWorktreeServiceTests
     }
 
     [Fact]
+    public async Task TicketRun_WritesOnlyInsideCanonicalWorktree_AndPublishesWorkingDirectory()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.Tickets.CreateTicketAsync(fixture.ProjectSlug, "KittyClaw-Front 254 regression");
+        var scenarios = Path.Combine(fixture.Root.Path, "scenarios");
+        Directory.CreateDirectory(scenarios);
+        await File.WriteAllTextAsync(Path.Combine(scenarios, "worktree-write.ndjson"), string.Join('\n',
+        [
+            "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"{{session_id}}\",\"model\":\"mock\"}",
+            "{\"_meta\":{\"write_file\":{\"path\":\"delivery/final.txt\",\"content\":\"audited\"}}}",
+            "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":1,\"num_turns\":1}",
+        ]));
+        TestSkillBuilder.Create(fixture.Repository, "worktree-writer", scenario: "worktree-write");
+        var primaryStateBefore = RunGit(fixture.Repository, "status", "--porcelain=v1", "--untracked-files=all",
+            "--", ".", ":(exclude).agents/channel/**");
+        var runData = Path.Combine(fixture.Root.Path, "run-data");
+        var runRegistry = new AgentRunRegistry(new RunLogStore(runData));
+        var runner = new AgentRunner(new SessionRegistry(), runRegistry, new RunConcurrencyGate(1),
+            NullLogger<AgentRunner>.Instance, worktrees: fixture.Worktrees);
+
+        var run = await runner.RunAsync(new AgentRunContext
+        {
+            ProjectSlug = fixture.ProjectSlug,
+            WorkspacePath = fixture.Repository,
+            AgentName = "worktree-writer",
+            SkillFile = "worktree-writer/SKILL.md",
+            TicketId = ticket.Id,
+            MaxTurns = 1,
+            Env = new Dictionary<string, string> { ["KITTYCLAW_MOCK_SCENARIOS_DIR"] = scenarios },
+        }, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(30));
+
+        var worktree = await fixture.Worktrees.ResolveAsync(fixture.ProjectSlug, ticket.Id, CancellationToken.None);
+        Assert.Equal(AgentRunStatus.Completed, run.Status);
+        Assert.Equal(Path.GetFullPath(worktree!.Path), Path.GetFullPath(run.WorkingDirectory!), ignoreCase: true);
+        Assert.Equal("audited", await File.ReadAllTextAsync(Path.Combine(worktree.Path, "delivery", "final.txt")));
+        Assert.False(File.Exists(Path.Combine(fixture.Repository, "delivery", "final.txt")));
+        Assert.Equal(primaryStateBefore,
+            RunGit(fixture.Repository, "status", "--porcelain=v1", "--untracked-files=all",
+                "--", ".", ":(exclude).agents/channel/**"));
+        Assert.Contains(run.SnapshotBuffer(), e => e.Kind == "worktree" && e.Text.Contains(worktree.Path));
+        Assert.Equal(run.WorkingDirectory,
+            new AgentRunRegistry(new RunLogStore(runData)).Get(run.RunId)!.WorkingDirectory);
+    }
+
+    [Fact]
+    public void InternalRetries_PreserveResolvedWorktree()
+    {
+        var context = new AgentRunContext
+        {
+            ProjectSlug = "project",
+            WorkspacePath = "primary",
+            ExecutionWorkspacePath = "ticket-worktree",
+            AgentName = "agent",
+            SkillFile = "agent/SKILL.md",
+            FallbackTarget = AgentDispatchTarget.ClaudeDefault with { Model = "fallback" },
+        };
+
+        Assert.Equal("ticket-worktree", context.WithFallback().ExecutionWorkspacePath);
+        Assert.Equal("ticket-worktree", context.WithChatReplay("continue").ExecutionWorkspacePath);
+    }
+
+    [Fact]
     public async Task RunsForSameRoot_AreSerialized_WhileDifferentRootsRunConcurrently()
     {
         using var fixture = await Fixture.CreateAsync();
