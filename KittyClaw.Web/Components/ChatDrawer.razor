@@ -238,46 +238,53 @@
             </div>
         }
 
-        <div class="chat-input-area @(_loading ? "chat-input-area-thinking" : "")">
-            @if (!string.IsNullOrEmpty(_pasteError))
+        <div class="chat-composer">
+            @if (!string.IsNullOrEmpty(_pasteError) || _pasteLoading || _pendingImages.Count > 0)
             {
-                <div class="chat-paste-error" role="alert">@_pasteError</div>
-            }
-            @if (_pasteLoading)
-            {
-                <div class="chat-paste-status" role="status">@L["ChatImageLoading"]</div>
-            }
-            @if (_pendingImages.Count > 0)
-            {
-                <div class="chat-paste-previews">
-                    @for (var i = 0; i < _pendingImages.Count; i++)
+                <div class="chat-paste-tray" aria-live="polite">
+                    @if (!string.IsNullOrEmpty(_pasteError))
                     {
-                        var idx = i;
-                        var img = _pendingImages[i];
-                        <div class="chat-paste-preview">
-                            <img src="@img.DataUrl" alt="@img.Name" />
-                            <button type="button" class="chat-paste-remove" @onclick="() => RemoveImage(idx)" title="@L.Get("ChatImageRemove", img.Name)" aria-label="@L.Get("ChatImageRemove", img.Name)">×</button>
+                        <div class="chat-paste-error" role="alert">@_pasteError</div>
+                    }
+                    @if (_pasteLoading)
+                    {
+                        <div class="chat-paste-status" role="status">@L["ChatImageLoading"]</div>
+                    }
+                    @if (_pendingImages.Count > 0)
+                    {
+                        <div class="chat-paste-previews">
+                            @for (var i = 0; i < _pendingImages.Count; i++)
+                            {
+                                var idx = i;
+                                var img = _pendingImages[i];
+                                <div class="chat-paste-preview">
+                                    <img src="@img.DataUrl" alt="@img.Name" />
+                                    <button type="button" class="chat-paste-remove" @onclick="() => RemoveImage(idx)" title="@L.Get("ChatImageRemove", img.Name)" aria-label="@L.Get("ChatImageRemove", img.Name)">×</button>
+                                </div>
+                            }
                         </div>
                     }
                 </div>
             }
-            <textarea @ref="_inputRef"
-                      value="@_inputText"
-                      @oninput="OnInput"
-                      disabled="@_historyLoading"
-                      placeholder="@(_historyLoading ? L["ChatLoadingConversation"] : _loading ? L["ChatInjectPlaceholder"] : L["ChatPlaceholder"])"
-                      @onkeydown="OnKeyDown"></textarea>
-            @if (_loading && !string.IsNullOrEmpty(_activeStreamId))
-            {
-                <div class="chat-input-actions">
-                    <button class="chat-inject-btn" @onclick="Inject" disabled="@string.IsNullOrWhiteSpace(_inputText)" title="@L["ChatInject"]">↩ @L["ChatInject"]</button>
-                    <button class="chat-stop-btn" @onclick="StopActiveRun" title="@L["Stop"]">⏹ @L["Stop"]</button>
-                </div>
-            }
-            else
-            {
-                <button @onclick="Send" disabled="@(_historyLoading || (string.IsNullOrWhiteSpace(_inputText) && _pendingImages.Count == 0) || _loading || _pasteLoading || !string.IsNullOrEmpty(_pasteError))">@L["Send"]</button>
-            }
+            <div class="chat-input-area @(_loading ? "chat-input-area-thinking" : "")">
+                <textarea @ref="_inputRef"
+                          value="@_inputText"
+                          @oninput="OnInput"
+                          disabled="@_historyLoading"
+                          placeholder="@(_historyLoading ? L["ChatLoadingConversation"] : _loading ? L["ChatInjectPlaceholder"] : L["ChatPlaceholder"])"
+                          @onkeydown="OnKeyDown"></textarea>
+                @if (_loading && !string.IsNullOrEmpty(_activeStreamId))
+                {
+                    <div class="chat-input-actions">
+                        <button class="chat-inject-btn" @onclick="Inject" disabled="@string.IsNullOrWhiteSpace(_inputText)" title="@L["ChatInject"]">↩ @L["ChatInject"]</button>
+                        <button class="chat-stop-btn" @onclick="StopActiveRun" title="@L["Stop"]">⏹ @L["Stop"]</button>
+                    </div>
+                }
+                else
+                {
+                    <button @onclick="Send" disabled="@(_historyLoading || (string.IsNullOrWhiteSpace(_inputText) && _pendingImages.Count == 0) || _loading || _pasteLoading || !string.IsNullOrEmpty(_pasteError))">@L["Send"]</button>
+                }
+            </div>
         </div>
     }
 </div>
@@ -337,20 +344,47 @@
     private readonly List<PendingImage> _pendingImages = [];
     private string? _pasteError;
     private bool _pasteLoading;
+    private CancellationTokenSource? _pasteWatchdog;
 
     [JSInvokable]
     public Task OnImagePasteStarted(int count)
     {
         _pasteLoading = count > 0;
         _pasteError = null;
+        _pasteWatchdog?.Cancel();
+        _pasteWatchdog?.Dispose();
+        _pasteWatchdog = count > 0 ? new CancellationTokenSource() : null;
+        if (_pasteWatchdog is not null)
+            _ = EndStalledPasteAsync(_pasteWatchdog);
         return InvokeAsync(StateHasChanged);
     }
 
     [JSInvokable]
     public Task OnImagePasteCompleted()
     {
+        _pasteWatchdog?.Cancel();
+        _pasteWatchdog?.Dispose();
+        _pasteWatchdog = null;
         _pasteLoading = false;
         return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task EndStalledPasteAsync(CancellationTokenSource watchdog)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(10), watchdog.Token);
+            await InvokeAsync(() =>
+            {
+                if (!ReferenceEquals(_pasteWatchdog, watchdog)) return;
+                _pasteLoading = false;
+                _pasteError ??= L["ChatImageReadFailed"];
+                _pasteWatchdog = null;
+                StateHasChanged();
+            });
+        }
+        catch (OperationCanceledException) { }
+        finally { watchdog.Dispose(); }
     }
 
     private record ChatMessage(string Role, string Text);
@@ -1012,6 +1046,9 @@
 
     public async ValueTask DisposeAsync()
     {
+        _pasteWatchdog?.Cancel();
+        _pasteWatchdog?.Dispose();
+        _pasteWatchdog = null;
         await StopStream();
         _dotnetRef?.Dispose();
         if (_sseModule is not null)

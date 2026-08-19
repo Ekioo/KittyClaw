@@ -59,7 +59,7 @@
     {
       "type": "screenshot",
       "name": "ticket-257-pasted-image-preview",
-      "selector": ".chat-input-area",
+      "selector": ".chat-composer",
       "description": "Nouvelle instruction affiche la capture collée, son aperçu et l’action de retrait accessible."
     },
     { "type": "api", "method": "POST", "path": "/api/projects/qa-ticket-257/qa/chat/fail-next-start" },

@@ -160,7 +160,14 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.Services.AddOpenApi();
 
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents()
+    .AddHubOptions(options =>
+    {
+        // Pasted chat images travel JS -> .NET as base64 data URLs (client cap: 5 MB per
+        // image, ~6.7 MB once base64-encoded). The SignalR default (32 KB) closes the
+        // circuit on any real screenshot, leaving image preparation stuck with no preview.
+        options.MaximumReceiveMessageSize = 10 * 1024 * 1024;
+    });
 
 var app = builder.Build();
 

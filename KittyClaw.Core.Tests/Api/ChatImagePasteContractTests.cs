@@ -129,6 +129,32 @@ public class ChatImagePasteContractTests
         Assert.Contains("getData('text/plain')", src);
         Assert.Contains("OnImagePasteStarted", src);
         Assert.Contains("OnImagePasteCompleted", src);
+        Assert.Contains("el.__pasteDotnetRef = dotnetRef", src);
+        Assert.Contains("await bridge.invokeMethodAsync('OnImagePasteStarted'", src);
+        Assert.Contains("await bridge.invokeMethodAsync('OnImagePasteCompleted'", src);
+    }
+
+    [Fact]
+    public void ChatDrawer_js_snapshots_clipboard_files_synchronously_before_any_await()
+    {
+        var src = Read("KittyClaw.Web/wwwroot/js/chat-drawer.js");
+        // Browsers neuter DataTransferItems once the paste handler returns, so getAsFile()
+        // must run before the async pipeline starts — otherwise real pastes lose every image.
+        var getAsFile = src.IndexOf("getAsFile()", StringComparison.Ordinal);
+        var asyncStart = src.IndexOf("(async function", StringComparison.Ordinal);
+        Assert.True(getAsFile >= 0 && asyncStart > getAsFile,
+            "getAsFile() must be called synchronously in the paste handler, before the async block");
+        Assert.DoesNotContain("getAsFile", src[asyncStart..]);
+    }
+
+    [Fact]
+    public void Blazor_hub_accepts_base64_image_payloads_larger_than_the_32kb_default()
+    {
+        var src = Read("KittyClaw.Web/Program.cs");
+        // A 5 MB image becomes a ~6.7 MB base64 data URL crossing JS -> .NET interop; the
+        // SignalR default of 32 KB kills the circuit and leaves paste preparation stuck.
+        Assert.Contains("AddHubOptions", src);
+        Assert.Matches(new Regex(@"MaximumReceiveMessageSize\s*=\s*10\s*\*\s*1024\s*\*\s*1024"), src);
     }
 
     [Fact]
@@ -141,6 +167,20 @@ public class ChatImagePasteContractTests
         Assert.Contains("role=\"alert\"", src);
         Assert.Contains("ChatImageRemove", src);
         Assert.Contains("_pasteLoading", src);
+        Assert.Contains("EndStalledPasteAsync", src);
+        Assert.Contains("TimeSpan.FromSeconds(10)", src);
+    }
+
+    [Fact]
+    public void ChatDrawer_places_paste_state_and_previews_above_the_prompt_box()
+    {
+        var src = Read("KittyClaw.Web/Components/ChatDrawer.razor");
+        var composer = src.IndexOf("class=\"chat-composer\"", StringComparison.Ordinal);
+        var tray = src.IndexOf("class=\"chat-paste-tray\"", composer, StringComparison.Ordinal);
+        var prompt = src.IndexOf("class=\"chat-input-area", composer, StringComparison.Ordinal);
+
+        Assert.True(composer >= 0 && tray > composer && prompt > tray);
+        Assert.Contains("aria-live=\"polite\"", src);
     }
 
     [Fact]
@@ -149,5 +189,7 @@ public class ChatImagePasteContractTests
         var src = KittyClaw.Core.Tests.Helpers.AppCssHelper.ReadAll();
         Assert.Contains(".chat-paste-preview", src);
         Assert.Contains(".chat-paste-error", src);
+        Assert.Contains(".chat-paste-tray", src);
+        Assert.Contains(".chat-composer", src);
     }
 }

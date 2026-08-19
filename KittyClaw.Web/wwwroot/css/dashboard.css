@@ -1237,7 +1237,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    padding: 4px 0 6px;
+    padding: 0;
 }
 .chat-paste-preview {
     position: relative;
@@ -1273,7 +1273,7 @@
     padding: 4px 6px;
     background: rgba(229, 115, 115, 0.08);
     border-radius: 4px;
-    margin-bottom: 4px;
+    margin: 0;
 }
 .chat-paste-status {
     color: var(--text-muted);

@@ -294,8 +294,21 @@
     background: #0d1017;
     border: 1px solid var(--border, #333);
     border-radius: 8px;
-    margin: 0.6rem 1rem;
+    margin: 0;
     transition: border-color 120ms ease;
+}
+.chat-composer {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0.6rem 1rem;
+}
+.chat-paste-tray {
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid var(--border, #333);
+    border-radius: 8px;
+    background: #111620;
 }
 .chat-input-area:focus-within { border-color: var(--accent); }
 .chat-input-area textarea {
