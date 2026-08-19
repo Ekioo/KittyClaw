@@ -10,6 +10,8 @@
   "WorkspaceMissing": "Questa cartella non esiste.",
   "CreateFolder": "Crea cartella",
   "FolderCreated": "Cartella creata.",
+  "CreateGitRepository": "Inizializza un repository Git locale",
+  "CreateGitRepositoryHint": "Crea solo i metadati Git in questa cartella. Nessun file viene aggiunto o sottoposto a commit.",
   "OnboardingTitle": "Benvenuti a KittyClaw",
   "OnboardingIntro1": "KittyClaw è un kanban che orchestra progetti di agenti. Ogni colonna è una fase, i ticket fluiscono tra le fasi e gli agenti LLM (programmatore, groomer, produttore, QA, committer, code-janitor, valutatore) li raccolgono ed elaborano automaticamente in base ai trigger configurati.",
   "OnboardingIntro2": "Crea un progetto, scegli una cartella di lavoro e il provider di agenti adatto: Claude Code, OpenAI Codex, Grok Build o Ollama.",

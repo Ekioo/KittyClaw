@@ -64,6 +64,7 @@
 .git-initialize-card .settings-primary { flex: none; }
 .git-initialize-confirm { margin: -0.25rem 0 0.9rem; padding: 0.85rem; border: 1px solid var(--border-strong); border-radius: 8px; background: #11141b; }
 .git-initialize-confirm .settings-row { justify-content: flex-end; margin-top: 0.75rem; }
+.creation-git-option { margin-top: 0.85rem; border-color: #3ecf8e55; background: #3ecf8e0d; }
 .provider-section-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
 .provider-section-heading .settings-hint { margin-bottom: 0; }
 .provider-readiness-grid {

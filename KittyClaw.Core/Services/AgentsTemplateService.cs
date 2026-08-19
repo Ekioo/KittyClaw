@@ -66,7 +66,10 @@ public sealed class AgentsTemplateService
         return conflicts;
     }
 
-    public async Task<InitializeResult> InitializeAsync(string workspacePath, bool overwriteConflicts)
+    public async Task<InitializeResult> InitializeAsync(
+        string workspacePath,
+        bool overwriteConflicts,
+        bool initializeGit = true)
     {
         var written = new List<string>();
         var skipped = new List<string>();
@@ -106,28 +109,49 @@ public sealed class AgentsTemplateService
         }
 
         var gitInitResult = GitInitResult.NotAttempted;
-        var gitDir = Path.Combine(workspacePath, ".git");
-        if (!Directory.Exists(gitDir) && !File.Exists(gitDir))
+        if (initializeGit)
         {
-            if (!await IsGitAvailableAsync())
-            {
-                gitInitResult = GitInitResult.GitMissing;
-            }
-            else
+            var gitStatus = await InspectGitWorkspaceAsync(workspacePath);
+            if (gitStatus.Kind == GitWorkspaceKind.Eligible)
             {
                 var (ok, _) = await RunProcessAsync("git", "init", workspacePath);
                 gitInitResult = ok ? GitInitResult.Created : GitInitResult.Failed;
             }
-        }
-        else
-        {
-            gitInitResult = GitInitResult.AlreadyExists;
+            else if (gitStatus.Kind == GitWorkspaceKind.GitUnavailable)
+            {
+                gitInitResult = GitInitResult.GitMissing;
+            }
+            else if (gitStatus.Kind is GitWorkspaceKind.Repository or GitWorkspaceKind.MetadataPresent)
+            {
+                gitInitResult = GitInitResult.AlreadyExists;
+            }
         }
 
         return new InitializeResult(written, skipped, gitInitResult);
     }
 
     public Task<bool> IsGitAvailableAsync() => IsCommandAvailableAsync("git", "--version");
+
+    public static async Task<GitWorkspaceInspection> InspectGitWorkspaceAsync(string workspacePath)
+    {
+        var fullPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(workspacePath));
+        if (!Directory.Exists(fullPath))
+            return new(GitWorkspaceKind.DirectoryMissing, fullPath, null);
+
+        var metadata = Path.Combine(fullPath, ".git");
+        var hasMetadata = Directory.Exists(metadata) || File.Exists(metadata);
+        if (!await IsCommandAvailableAsync("git", "--version"))
+            return new(hasMetadata ? GitWorkspaceKind.MetadataPresent : GitWorkspaceKind.GitUnavailable, fullPath, null);
+
+        var (insideRepository, output) = await RunProcessAsync("git", "rev-parse --show-toplevel", fullPath);
+        if (insideRepository && !string.IsNullOrWhiteSpace(output))
+        {
+            var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(output.Trim()));
+            return new(GitWorkspaceKind.Repository, fullPath, root);
+        }
+
+        return new(hasMetadata ? GitWorkspaceKind.MetadataPresent : GitWorkspaceKind.Eligible, fullPath, null);
+    }
 
     public Task<bool> IsClaudeAvailableAsync() => IsCommandAvailableAsync("claude", "--version");
 
@@ -164,6 +188,13 @@ public sealed class AgentsTemplateService
     }
 
     public enum GitInitResult { NotAttempted, AlreadyExists, Created, GitMissing, Failed }
+
+    public enum GitWorkspaceKind { DirectoryMissing, Eligible, Repository, MetadataPresent, GitUnavailable }
+
+    public sealed record GitWorkspaceInspection(GitWorkspaceKind Kind, string WorkspacePath, string? RepositoryRoot)
+    {
+        public bool CanInitialize => Kind == GitWorkspaceKind.Eligible;
+    }
 
     public sealed record InitializeResult(List<string> Written, List<string> Skipped, GitInitResult GitInit);
 }

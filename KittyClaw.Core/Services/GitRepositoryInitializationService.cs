@@ -20,18 +20,16 @@ public sealed class GitRepositoryInitializationService(ProjectService projects)
         var workspace = Path.TrimEndingDirectorySeparator(
             Path.GetFullPath(projects.ResolveWorkspacePath(project)));
         var workspaceConfigured = !string.IsNullOrWhiteSpace(project.WorkspacePath);
-        var workspaceExists = Directory.Exists(workspace);
-        var gitAvailable = RunGit(null, ["--version"]).Success;
-        if (!workspaceConfigured || !workspaceExists || !gitAvailable)
-            return new(workspace, workspaceConfigured, workspaceExists, gitAvailable, false, false, null, null);
+        var inspection = await AgentsTemplateService.InspectGitWorkspaceAsync(workspace);
+        var workspaceExists = inspection.Kind != AgentsTemplateService.GitWorkspaceKind.DirectoryMissing;
+        var gitAvailable = inspection.Kind != AgentsTemplateService.GitWorkspaceKind.GitUnavailable;
+        var hasGitMetadata = inspection.Kind == AgentsTemplateService.GitWorkspaceKind.MetadataPresent
+            || (inspection.Kind == AgentsTemplateService.GitWorkspaceKind.Repository && HasGitMetadata(workspace));
+        var isRepository = inspection.Kind == AgentsTemplateService.GitWorkspaceKind.Repository;
+        if (!workspaceConfigured || !workspaceExists || !gitAvailable || !isRepository)
+            return new(workspace, workspaceConfigured, workspaceExists, gitAvailable, hasGitMetadata, false, null, null);
 
-        var hasGitMetadata = HasGitMetadata(workspace);
-
-        var topLevel = RunGit(workspace, ["rev-parse", "--show-toplevel"]);
-        if (!topLevel.Success || string.IsNullOrWhiteSpace(topLevel.Output))
-            return new(workspace, true, true, true, hasGitMetadata, false, null, null);
-
-        var repositoryRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(topLevel.Output.Trim()));
+        var repositoryRoot = inspection.RepositoryRoot!;
         var branch = RunGit(workspace, ["branch", "--show-current"]);
         return new(workspace, true, true, true, hasGitMetadata, true, repositoryRoot,
             branch.Success ? NullIfEmpty(branch.Output) : null);
@@ -48,17 +46,16 @@ public sealed class GitRepositoryInitializationService(ProjectService projects)
             Path.GetFullPath(projects.ResolveWorkspacePath(project)));
         if (!Directory.Exists(workspace))
             throw new InvalidOperationException($"Le dossier de travail '{workspace}' n’existe pas.");
-        if (!RunGit(null, ["--version"]).Success)
-            throw new InvalidOperationException("Git n’est pas installé ou n’est pas disponible dans le PATH.");
-
         var gate = PathLocks.GetOrAdd(workspace, static _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync();
         try
         {
-            if (HasGitMetadata(workspace))
+            var inspection = await AgentsTemplateService.InspectGitWorkspaceAsync(workspace);
+            if (inspection.Kind == AgentsTemplateService.GitWorkspaceKind.GitUnavailable)
+                throw new InvalidOperationException("Git n’est pas installé ou n’est pas disponible dans le PATH.");
+            if (inspection.Kind == AgentsTemplateService.GitWorkspaceKind.MetadataPresent)
                 throw new GitRepositoryAlreadyExistsException("Ce dossier de travail contient déjà des métadonnées Git. Aucun changement n’a été effectué.");
-            var existing = RunGit(workspace, ["rev-parse", "--show-toplevel"]);
-            if (existing.Success)
+            if (inspection.Kind == AgentsTemplateService.GitWorkspaceKind.Repository)
                 throw new GitRepositoryAlreadyExistsException("Ce dossier de travail appartient déjà à un dépôt Git. Aucun changement n’a été effectué.");
 
             var branch = string.IsNullOrWhiteSpace(project.IntegrationBranch)

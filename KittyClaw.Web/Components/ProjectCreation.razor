@@ -14,7 +14,7 @@
 
 @* Project creation, extracted from Home.razor so every host page shares one flow that
    cannot diverge. A single button opens the modal; the name lives inside the modal. *@
-<button class="header-action-btn settings-primary" @onclick="OpenCreation">+ @L["CreateProjectButton"]</button>
+<button class="header-action-btn settings-primary" data-testid="create-project-open" @onclick="OpenCreation">+ @L["CreateProjectButton"]</button>
 
 @if (_open)
 {
@@ -27,13 +27,14 @@
             <label class="settings-label">@L["ProjectName"] *</label>
             <div class="settings-row">
                 <input class="settings-input" placeholder="@L["NewProjectPlaceholder"]"
+                       data-testid="create-project-name"
                        @bind="_newProjectName" @bind:event="oninput" @onkeydown="HandleKeyDown" />
             </div>
 
             <label class="settings-label">@L["WorkspacePath"] *</label>
             <p class="settings-hint">@L["WorkspaceHint"]</p>
             <div class="settings-row">
-                <input class="settings-input" placeholder="@L["WorkspacePlaceholder"]" @bind="_newWorkspacePath" @bind:event="oninput" @bind:after="OnWorkspaceChanged" />
+                <input class="settings-input" data-testid="create-project-workspace" placeholder="@L["WorkspacePlaceholder"]" @bind="_newWorkspacePath" @bind:event="oninput" @bind:after="OnWorkspaceChanged" />
                 <button class="settings-browse" type="button" @onclick="OpenFolderPicker">
                     📁 @L["Browse"]
                 </button>
@@ -47,6 +48,17 @@
                         @(_creatingFolder ? "…" : L["CreateFolder"])
                     </button>
                 </div>
+            }
+
+            @if (_gitWorkspace?.CanInitialize == true)
+            {
+                <label class="settings-option creation-git-option" data-testid="create-project-git-option">
+                    <input type="checkbox" data-testid="create-project-git-init" @bind="_initializeGit" />
+                    <span>
+                        <strong>@L["CreateGitRepository"]</strong>
+                        <small>@L["CreateGitRepositoryHint"]</small>
+                    </span>
+                </label>
             }
 
             @if (_creationStatus is not null)
@@ -75,7 +87,7 @@
 
             <div class="modal-actions">
                 <button class="header-action-btn" @onclick="CancelCreation" disabled="@_initializing">@L["Cancel"]</button>
-                <button class="header-action-btn settings-primary" @onclick="StartInitialize" disabled="@(_initializing || _initConflicts is not null || string.IsNullOrWhiteSpace(_newProjectName) || string.IsNullOrWhiteSpace(_newWorkspacePath) || _workspaceExists != true)">
+                <button class="header-action-btn settings-primary" data-testid="create-project-initialize" @onclick="StartInitialize" disabled="@(_initializing || _initConflicts is not null || string.IsNullOrWhiteSpace(_newProjectName) || string.IsNullOrWhiteSpace(_newWorkspacePath) || _workspaceExists != true)">
                     @(_initializing ? "…" : L["Initialize"])
                 </button>
             </div>
@@ -114,6 +126,8 @@
     private IDisposable? _escPending;
     private bool _workspaceWasEmpty;
     private Project? _createdProject;
+    private AgentsTemplateService.GitWorkspaceInspection? _gitWorkspace;
+    private bool _initializeGit = true;
 
     protected override Task OnAfterRenderAsync(bool firstRender)
     {
@@ -132,6 +146,8 @@
         _workspaceExists = null;
         _creationStatus = null;
         _initConflicts = null;
+        _gitWorkspace = null;
+        _initializeGit = true;
     }
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
@@ -139,13 +155,17 @@
         if (e.Key == "Enter") await StartInitialize();
     }
 
-    private void OnWorkspaceChanged()
+    private async Task OnWorkspaceChanged()
     {
         var path = _newWorkspacePath.Trim();
         _workspaceExists = string.IsNullOrEmpty(path) ? null : Directory.Exists(path);
+        _initializeGit = true;
+        _gitWorkspace = _workspaceExists == true
+            ? await AgentsTemplateService.InspectGitWorkspaceAsync(path)
+            : null;
     }
 
-    private void CreateWorkspaceFolder()
+    private async Task CreateWorkspaceFolder()
     {
         if (string.IsNullOrWhiteSpace(_newWorkspacePath)) return;
         _creatingFolder = true;
@@ -155,6 +175,7 @@
             Directory.CreateDirectory(_newWorkspacePath.Trim());
             _workspaceExists = true;
             _creationStatus = (L["FolderCreated"], "settings-status-ok");
+            await OnWorkspaceChanged();
         }
         catch (Exception ex)
         {
@@ -169,11 +190,11 @@
         _folderPickerOpen = true;
     }
 
-    private void SelectWorkspaceFolder(string path)
+    private async Task SelectWorkspaceFolder(string path)
     {
         _newWorkspacePath = path;
         _folderPickerOpen = false;
-        OnWorkspaceChanged();
+        await OnWorkspaceChanged();
     }
 
     private void CloseFolderPicker() => _folderPickerOpen = false;
@@ -188,7 +209,8 @@
         {
             var workspace = _newWorkspacePath.Trim();
             _workspaceWasEmpty = !Directory.EnumerateFileSystemEntries(workspace).Any();
-            if (!await AgentsTemplate.IsGitAvailableAsync())
+            await OnWorkspaceChanged();
+            if (_gitWorkspace?.Kind == AgentsTemplateService.GitWorkspaceKind.GitUnavailable)
             {
                 _creationStatus = (L["GitMissingWarning"], "settings-status-err");
             }
@@ -217,7 +239,8 @@
             ProjectService.ValidateWorkspacePath(_newWorkspacePath.Trim());
             var project = await ProjectService.CreateProjectAsync(_newProjectName.Trim());
             await ProjectService.UpdateProjectAsync(project.Slug, _newWorkspacePath.Trim());
-            await AgentsTemplate.InitializeAsync(_newWorkspacePath.Trim(), overwrite);
+            var initializeGit = _gitWorkspace?.CanInitialize == true && _initializeGit;
+            await AgentsTemplate.InitializeAsync(_newWorkspacePath.Trim(), overwrite, initializeGit);
             await EnsureAgentMembersAsync(project.Slug);
             await AutomationEngine.ReloadProjectAsync(project.Slug);
 

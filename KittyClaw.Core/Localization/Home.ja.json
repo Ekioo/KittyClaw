@@ -10,6 +10,8 @@
   "WorkspaceMissing": "このフォルダは存在しません。",
   "CreateFolder": "フォルダを作成",
   "FolderCreated": "フォルダが作成されました。",
+  "CreateGitRepository": "ローカル Git リポジトリを初期化",
+  "CreateGitRepositoryHint": "このフォルダに Git メタデータのみを作成します。ファイルの追加やコミットは行いません。",
   "OnboardingTitle": "KittyClawへようこそ",
   "OnboardingIntro1": "KittyClawはエージェント型プロジェクトを運用するカンバンです。各列が工程を表し、チケットが工程間を移動します。設定したトリガーに基づいて、LLMエージェント（プログラマー、グルーマー、プロデューサー、QA、コミッター、コード管理、評価）が自動的に処理します。",
   "OnboardingIntro2": "新しいプロジェクトを作成し、ワークスペースフォルダを指定して、適切なアジェンティックプロバイダーを選択してください：Claude Code, OpenAI Codex, Grok Build, Ollama。",

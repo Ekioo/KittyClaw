@@ -1,0 +1,34 @@
+{
+  "setup": [
+    { "type": "createWorkspaceDirectory", "name": "workspacePath" },
+    { "type": "createGitRepository", "name": "repositoryPath", "value": "main" }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/" },
+    { "type": "wait", "ms": 500 },
+    { "type": "click", "selector": "[data-testid=create-project-open]" },
+    { "type": "fill", "selector": "[data-testid=create-project-name]", "value": "Git Creation QA" },
+    { "type": "fill", "selector": "[data-testid=create-project-workspace]", "value": "{workspacePath}" },
+    { "type": "wait", "ms": 500 },
+    { "type": "assertVisible", "selector": "[data-testid=create-project-git-option]" },
+    { "type": "assertVisible", "selector": "[data-testid=create-project-git-init]:checked" },
+    {
+      "type": "screenshot",
+      "name": "project-creation-git-option",
+      "selector": ".modal-dialog",
+      "description": "Project creation proposes a clearly separated, enabled-by-default option to initialize Git for an eligible folder."
+    },
+    { "type": "click", "selector": "[data-testid=create-project-git-init]" },
+    { "type": "assertCount", "selector": "[data-testid=create-project-git-init]:checked", "expected": "0" },
+    { "type": "fill", "selector": "[data-testid=create-project-workspace]", "value": "{repositoryPath}" },
+    { "type": "wait", "ms": 500 },
+    { "type": "assertCount", "selector": "[data-testid=create-project-git-option]", "expected": "0" },
+    {
+      "type": "screenshot",
+      "name": "project-creation-existing-repository",
+      "selector": ".modal-dialog",
+      "description": "When the selected folder is already versioned, KittyClaw hides the initialization option and leaves the repository untouched."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}
