@@ -16,6 +16,7 @@ public static partial class Endpoints
                 return Results.Ok(await vault.ListAsync(slug, ct));
             }
             catch (PlatformNotSupportedException ex) { return Results.Problem(ex.Message, statusCode: 503); }
+            catch (ProjectSecretProtectionUnavailableException ex) { return Results.Problem(ex.Message, statusCode: 503); }
             catch (CryptographicException) { return VaultUnavailable(); }
             catch (InvalidDataException) { return VaultUnavailable(); }
         }).WithTags("Project secrets");
@@ -34,6 +35,7 @@ public static partial class Endpoints
             }
             catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
             catch (PlatformNotSupportedException ex) { return Results.Problem(ex.Message, statusCode: 503); }
+            catch (ProjectSecretProtectionUnavailableException ex) { return Results.Problem(ex.Message, statusCode: 503); }
             catch (CryptographicException) { return VaultUnavailable(); }
             catch (InvalidDataException) { return VaultUnavailable(); }
         }).WithTags("Project secrets");
@@ -48,6 +50,7 @@ public static partial class Endpoints
             }
             catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
             catch (PlatformNotSupportedException ex) { return Results.Problem(ex.Message, statusCode: 503); }
+            catch (ProjectSecretProtectionUnavailableException ex) { return Results.Problem(ex.Message, statusCode: 503); }
             catch (CryptographicException) { return VaultUnavailable(); }
             catch (InvalidDataException) { return VaultUnavailable(); }
         }).WithTags("Project secrets");

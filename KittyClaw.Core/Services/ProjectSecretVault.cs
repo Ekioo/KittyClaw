@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -8,41 +7,19 @@ namespace KittyClaw.Core.Services;
 
 public sealed record ProjectSecretMetadata(string Name, DateTime UpdatedAt);
 
-public interface IProjectSecretProtector
-{
-    byte[] Protect(byte[] plaintext);
-    byte[] Unprotect(byte[] ciphertext);
-}
-
-public sealed class WindowsProjectSecretProtector : IProjectSecretProtector
-{
-    private static readonly byte[] Entropy = SHA256.HashData(
-        Encoding.UTF8.GetBytes("KittyClaw.ProjectSecrets.v1"));
-
-    public byte[] Protect(byte[] plaintext)
-    {
-        if (!OperatingSystem.IsWindows())
-            throw new PlatformNotSupportedException(
-                "Project secrets require Windows account protection; plaintext fallback is disabled.");
-        return ProtectedData.Protect(plaintext, Entropy, DataProtectionScope.CurrentUser);
-    }
-
-    public byte[] Unprotect(byte[] ciphertext)
-    {
-        if (!OperatingSystem.IsWindows())
-            throw new PlatformNotSupportedException(
-                "Project secrets require Windows account protection; plaintext fallback is disabled.");
-        return ProtectedData.Unprotect(ciphertext, Entropy, DataProtectionScope.CurrentUser);
-    }
-}
-
 /// <summary>
 /// Write-only project secret storage. The encrypted vault lives under KittyClaw's data directory,
-/// never in the project workspace, and can only be decrypted by the Windows account that wrote it.
+/// never in the project workspace, and can only be decrypted through the platform-native protection
+/// (Windows DPAPI, macOS Keychain, Linux Secret Service) of the account that wrote it.
 /// </summary>
 public sealed partial class ProjectSecretVault
 {
     private const int CurrentVersion = 1;
+    // On-disk envelope: magic (4) | format version (1) | protector id (1) | protector payload.
+    // Vaults written by the #278 release are raw Windows DPAPI blobs without this header.
+    private static ReadOnlySpan<byte> EnvelopeMagic => "KCSV"u8;
+    private const byte EnvelopeFormatVersion = 2;
+    private const int EnvelopeHeaderLength = 6;
     private readonly string _vaultDirectory;
     private readonly IProjectSecretProtector _protector;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new(StringComparer.OrdinalIgnoreCase);
@@ -50,7 +27,7 @@ public sealed partial class ProjectSecretVault
     public ProjectSecretVault(string dataDirectory, IProjectSecretProtector? protector = null)
     {
         _vaultDirectory = Path.Combine(dataDirectory, "secrets");
-        _protector = protector ?? new WindowsProjectSecretProtector();
+        _protector = protector ?? ProjectSecretProtectors.CreateForCurrentPlatform();
     }
 
     public string VaultDirectory => _vaultDirectory;
@@ -120,8 +97,8 @@ public sealed partial class ProjectSecretVault
     {
         var path = GetVaultPath(projectSlug);
         if (!File.Exists(path)) return new VaultDocument();
-        var ciphertext = await File.ReadAllBytesAsync(path, ct);
-        var plaintext = _protector.Unprotect(ciphertext);
+        var fileBytes = await File.ReadAllBytesAsync(path, ct);
+        var plaintext = UnprotectFile(fileBytes);
         try
         {
             var document = JsonSerializer.Deserialize<VaultDocument>(plaintext)
@@ -143,7 +120,12 @@ public sealed partial class ProjectSecretVault
         var plaintext = JsonSerializer.SerializeToUtf8Bytes(document);
         try
         {
-            var ciphertext = _protector.Protect(plaintext);
+            var payload = _protector.Protect(plaintext);
+            var ciphertext = new byte[EnvelopeHeaderLength + payload.Length];
+            EnvelopeMagic.CopyTo(ciphertext);
+            ciphertext[4] = EnvelopeFormatVersion;
+            ciphertext[5] = _protector.ProtectorId;
+            payload.CopyTo(ciphertext, EnvelopeHeaderLength);
             var path = GetVaultPath(projectSlug);
             var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try
@@ -161,6 +143,41 @@ public sealed partial class ProjectSecretVault
             CryptographicOperations.ZeroMemory(plaintext);
         }
     }
+
+    private byte[] UnprotectFile(byte[] fileBytes)
+    {
+        if (fileBytes.Length >= EnvelopeHeaderLength && fileBytes.AsSpan(0, EnvelopeMagic.Length).SequenceEqual(EnvelopeMagic))
+        {
+            var formatVersion = fileBytes[4];
+            if (formatVersion != EnvelopeFormatVersion)
+                throw new InvalidDataException(
+                    $"Unsupported project secret vault format version {formatVersion}; " +
+                    "this vault was written by a newer KittyClaw release.");
+            var protectorId = fileBytes[5];
+            if (protectorId != _protector.ProtectorId)
+                throw new ProjectSecretProtectionUnavailableException(
+                    $"This vault is protected with {DescribeProtector(protectorId)}, but this platform uses " +
+                    $"{_protector.DisplayName}. Vault files are bound to the machine and account that wrote " +
+                    "them; delete the vault and re-enter the secrets on this machine.");
+            return _protector.Unprotect(fileBytes[EnvelopeHeaderLength..]);
+        }
+
+        // Headerless file: legacy #278 vault, always a raw Windows DPAPI blob.
+        if (_protector.ProtectorId != ProjectSecretProtectorIds.WindowsDpapi)
+            throw new ProjectSecretProtectionUnavailableException(
+                "This vault was created by an earlier KittyClaw release on Windows (DPAPI) and cannot be " +
+                $"opened with {_protector.DisplayName}. Open it on the original Windows account, or delete " +
+                "the vault and re-enter the secrets on this machine.");
+        return _protector.Unprotect(fileBytes);
+    }
+
+    private static string DescribeProtector(byte protectorId) => protectorId switch
+    {
+        ProjectSecretProtectorIds.WindowsDpapi => "Windows DPAPI (current user)",
+        ProjectSecretProtectorIds.MacOsKeychain => "the macOS Keychain",
+        ProjectSecretProtectorIds.LinuxSecretService => "the Linux Secret Service",
+        _ => $"an unknown protection mechanism (id {protectorId})",
+    };
 
     private string GetVaultPath(string projectSlug)
     {

@@ -23,6 +23,7 @@ For a high-level overview see the root [README.md](../README.md). For repo layou
 - [REST API](./rest-api.md) — OpenAPI-driven endpoints under `/api`, with auto-generated Markdown docs.
 - [MCP server](./mcp.md) — embedded Streamable-HTTP endpoint at `/mcp`; seven board tools for any MCP client.
 - [Storage](./storage.md) — SQLite registry, per-project DBs, run logs, and workspace-side agent state.
+- [Project secrets vault](./project-secrets.md) — per-project write-only secrets, native encryption on Windows/macOS/Linux, subprocess-only injection, fail-closed behavior.
 - [Kanban UI](./kanban-ui.md) — Blazor Server board, ticket panel, agent run drawer.
 - [Evidence decision briefs](./evidence-decision-briefs.md) — traceable run evidence, recovery guidance, and human accept/correct/stop decisions in owner-action columns.
 - [Ticket scheduling](./ticket-scheduling.md) — park tickets until a future time, then promote them into the workflow.

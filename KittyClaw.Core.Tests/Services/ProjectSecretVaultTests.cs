@@ -7,17 +7,16 @@ namespace KittyClaw.Core.Tests.Services;
 public sealed class ProjectSecretVaultTests
 {
     [Fact]
-    public async Task Default_protector_is_DPAPI_on_Windows_and_has_no_cross_platform_fallback()
+    public async Task Default_protector_is_native_per_platform_and_DPAPI_round_trips_on_Windows()
     {
         using var temp = new TempDir();
         var vault = new ProjectSecretVault(temp.Path);
         if (!OperatingSystem.IsWindows())
         {
-            await Assert.ThrowsAsync<PlatformNotSupportedException>(() =>
-                vault.SetAsync("alpha", "TOKEN", "never-plaintext"));
-            Assert.Empty(Directory.Exists(vault.VaultDirectory)
-                ? Directory.GetFiles(vault.VaultDirectory)
-                : []);
+            // On macOS/Linux the default protector goes through the native key store
+            // (Keychain / Secret Service); selection and fail-closed behavior are
+            // covered by ProjectSecretProtectionTests with fake key stores.
+            Assert.IsNotType<WindowsProjectSecretProtector>(ProjectSecretProtectors.CreateForCurrentPlatform());
             return;
         }
 
