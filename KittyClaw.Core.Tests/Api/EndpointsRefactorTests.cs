@@ -43,6 +43,8 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "POST /api/projects/{slug}/pipelines",
         "PATCH /api/projects/{slug}/pipelines/{pipelineId}",
         "GET /api/projects/{slug}/pipelines/{pipelineId}/export",
+        "POST /api/projects/{slug}/pipeline-kits/analyze",
+        "POST /api/projects/{slug}/pipeline-kits/confirm",
         // Workflow migrations
         "POST /api/projects/{slug}/workflow-migrations/analyze",
         "POST /api/projects/{slug}/workflow-migrations/apply",
@@ -196,6 +198,8 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
 
     private static readonly Dictionary<string, string> ExpectedTags = new(StringComparer.Ordinal)
     {
+        ["POST /api/projects/{slug}/pipeline-kits/analyze"] = "Pipelines",
+        ["POST /api/projects/{slug}/pipeline-kits/confirm"] = "Pipelines",
         ["GET /api/projects/{slug}/columns"] = "Columns",
         ["POST /api/projects/{slug}/columns"] = "Columns",
         ["PATCH /api/projects/{slug}/columns/{columnId}"] = "Columns",

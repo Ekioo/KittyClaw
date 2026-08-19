@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using KittyClaw.Web.Api;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -87,6 +88,104 @@ public sealed class PipelineExportHttpTests : IClassFixture<PipelineExportHttpTe
         var response = await _client.GetAsync($"/api/projects/{slug}/pipelines/999999/export");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Analyze_is_write_free_and_confirm_installs_the_reviewed_kit()
+    {
+        var (sourceSlug, pipelineId, source, target) = await CreatePipelineAsync("Import source");
+        await SaveProcessorAsync(sourceSlug, source, target, "Publish to {{input.CHANNEL}}.");
+        var kit = await _client.GetByteArrayAsync($"/api/projects/{sourceSlug}/pipelines/{pipelineId}/export");
+        var targetCreate = await _client.PostAsJsonAsync("/api/projects", new CreateProjectRequest("Import target"));
+        var targetSlug = (await targetCreate.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("slug").GetString()!;
+        var beforePipelines = await _client.GetFromJsonAsync<JsonElement[]>($"/api/projects/{targetSlug}/pipelines");
+
+        using var analyzeBody = new ByteArrayContent(kit);
+        analyzeBody.Headers.ContentType = new("application/zip");
+        var analyze = await _client.PostAsync($"/api/projects/{targetSlug}/pipeline-kits/analyze", analyzeBody);
+
+        Assert.Equal(HttpStatusCode.OK, analyze.StatusCode);
+        var preview = await analyze.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(preview.GetProperty("installable").GetBoolean());
+        Assert.Equal(2, preview.GetProperty("creation").GetProperty("columnsToCreate").GetInt32());
+        Assert.Equal(beforePipelines!.Length,
+            (await _client.GetFromJsonAsync<JsonElement[]>($"/api/projects/{targetSlug}/pipelines"))!.Length);
+
+        using var form = new MultipartFormDataContent();
+        form.Add(new ByteArrayContent(kit), "kit", "kit.kittyclaw-pipeline");
+        form.Add(new StringContent("""{"parameters":{"CHANNEL":"stable"}}""", Encoding.UTF8, "application/json"), "confirmation");
+        var confirm = await _client.PostAsync($"/api/projects/{targetSlug}/pipeline-kits/confirm", form);
+
+        Assert.Equal(HttpStatusCode.Created, confirm.StatusCode);
+        var installed = await confirm.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(installed.GetProperty("enabled").GetBoolean());
+        Assert.Equal(beforePipelines.Length + 1,
+            (await _client.GetFromJsonAsync<JsonElement[]>($"/api/projects/{targetSlug}/pipelines"))!.Length);
+    }
+
+    [Fact]
+    public async Task Tampered_kit_is_rejected_without_creating_a_pipeline()
+    {
+        var (sourceSlug, pipelineId, source, target) = await CreatePipelineAsync("Tamper source");
+        await SaveProcessorAsync(sourceSlug, source, target, "Safe prompt.");
+        var kit = await _client.GetByteArrayAsync($"/api/projects/{sourceSlug}/pipelines/{pipelineId}/export");
+        var tampered = RewriteEntry(kit, "pipeline.json", bytes => [.. bytes, (byte)' ']);
+        var targetCreate = await _client.PostAsJsonAsync("/api/projects", new CreateProjectRequest("Tamper target"));
+        var targetSlug = (await targetCreate.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("slug").GetString()!;
+        var beforeCount = (await _client.GetFromJsonAsync<JsonElement[]>($"/api/projects/{targetSlug}/pipelines"))!.Length;
+
+        using var form = new MultipartFormDataContent();
+        form.Add(new ByteArrayContent(tampered), "kit", "tampered.kittyclaw-pipeline");
+        form.Add(new StringContent("{}"), "confirmation");
+        var response = await _client.PostAsync($"/api/projects/{targetSlug}/pipeline-kits/confirm", form);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Contains("hash-mismatch", await response.Content.ReadAsStringAsync());
+        Assert.Equal(beforeCount,
+            (await _client.GetFromJsonAsync<JsonElement[]>($"/api/projects/{targetSlug}/pipelines"))!.Length);
+    }
+
+    [Fact]
+    public async Task Duplicate_submission_never_creates_a_second_pipeline()
+    {
+        var (sourceSlug, pipelineId, source, target) = await CreatePipelineAsync("Double source");
+        await SaveProcessorAsync(sourceSlug, source, target, "Safe prompt.");
+        var kit = await _client.GetByteArrayAsync($"/api/projects/{sourceSlug}/pipelines/{pipelineId}/export");
+        var targetCreate = await _client.PostAsJsonAsync("/api/projects", new CreateProjectRequest("Double target"));
+        var targetSlug = (await targetCreate.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("slug").GetString()!;
+        var beforeCount = (await _client.GetFromJsonAsync<JsonElement[]>($"/api/projects/{targetSlug}/pipelines"))!.Length;
+
+        async Task<HttpResponseMessage> Confirm()
+        {
+            var form = new MultipartFormDataContent();
+            form.Add(new ByteArrayContent(kit), "kit", "kit.kittyclaw-pipeline");
+            form.Add(new StringContent("{}"), "confirmation");
+            return await _client.PostAsync($"/api/projects/{targetSlug}/pipeline-kits/confirm", form);
+        }
+        Assert.Equal(HttpStatusCode.Created, (await Confirm()).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Confirm()).StatusCode);
+        Assert.Equal(beforeCount + 1,
+            (await _client.GetFromJsonAsync<JsonElement[]>($"/api/projects/{targetSlug}/pipelines"))!.Length);
+    }
+
+    private static byte[] RewriteEntry(byte[] archive, string name, Func<byte[], byte[]> transform)
+    {
+        using var source = new ZipArchive(new MemoryStream(archive), ZipArchiveMode.Read);
+        using var output = new MemoryStream();
+        using (var target = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var entry in source.Entries)
+            {
+                using var input = entry.Open();
+                using var buffer = new MemoryStream();
+                input.CopyTo(buffer);
+                var bytes = entry.FullName == name ? transform(buffer.ToArray()) : buffer.ToArray();
+                var copy = target.CreateEntry(entry.FullName, CompressionLevel.NoCompression);
+                using var destination = copy.Open();
+                destination.Write(bytes);
+            }
+        }
+        return output.ToArray();
     }
 
     public sealed class ApiFactory : WebApplicationFactory<CreateProjectRequest>
