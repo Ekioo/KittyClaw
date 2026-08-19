@@ -4,9 +4,48 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.16] — 2026-08-19
+
+Durable worktree delivery, fast per-project cost reporting, safer agent context, and a fully replayable post-v0.14 verification campaign.
+
+### Highlights
+
+Ticket families can now execute in canonical Git worktrees and enter a durable, serialized integration queue. Successful changes are rebased and fast-forwarded into the configured integration branch, while conflicts remain visible and resumable from the ticket instead of being hidden in an agent log.
+
+The Costs page now opens from a durable snapshot and reports each project separately. Project selection controls the available pipelines, quick date ranges and model filters make investigation immediate, and the legend distinguishes measured and estimated usage.
+
+Reliability work extends from startup to final delivery: memory consolidation is asynchronous and cooperative, stale agent success cannot overwrite newer owner feedback, board refreshes reject old responses, and every feature shipped since v0.14 has been replayed through an isolated sequential QA campaign.
+
 ### Added
 
 - Embedded MCP server (Streamable HTTP) at `/mcp` via the official `ModelContextProtocol.AspNetCore` SDK: seven v1 tools (`list_projects`, `list_tickets`, `get_ticket`, `create_ticket`, `comment_ticket`, `move_ticket`, `board_overview`) proxying the existing board services, so any MCP client (e.g. `claude mcp add --transport http kittyclaw http://localhost:5230/mcp`) can drive the board. The server is disabled by default; enable it with `KITTYCLAW_MCP_ENABLED=1`, then remove the variable or set it to `0` and restart KittyClaw to disable it. Registry metadata in `server.json`; docs in `doc/mcp.md`.
+- Canonical per-ticket-family Git worktrees, separate control-workspace and code-repository settings, and a durable per-project merge queue with conflict diagnosis and safe resume actions.
+- A global Costs entry point backed by durable report snapshots, per-project cards, project-aware pipeline choices, model filtering, quick date ranges, daily trends, and measured-versus-estimated legends.
+- Clipboard image paste support for chat instructions, including PNG, JPEG, GIF, and WebP validation without a permanent prompt-area hint.
+- Inactive ad-hoc conversation memory consolidation with explicit manual triggering and bounded cooperative batches.
+
+### Changed
+
+- The unified home, boards, and Costs page stream and coalesce data so navigation remains responsive under active runs and large historical datasets.
+- Legacy automation configuration pages are removed from the main interface while existing automation files and background compatibility remain intact.
+- Project and pipeline unread badges now count only tickets visible in their corresponding scope.
+- Approval screens and runtime-approval actions are fully localized alongside the refined Costs interface.
+
+### Fixed
+
+- Successful processor outcomes are rejected when they do not consume the current ticket version or the exact triggering owner-feedback comment; rejected work stays in its source column and follows the configured technical retry path.
+- Scheduled and latest-board refreshes no longer strand overdue tickets or replace newer UI state with stale responses.
+- Routing-loop protection distinguishes real progress from timestamp, punctuation, case, or other cosmetic changes.
+- Startup no longer waits for the historical memory scan, and consolidation batches yield between sessions instead of monopolizing the host.
+- Cost snapshots avoid repeated full-history scans, coalesce concurrent loads, and batch legacy ticket lookups.
+- Missing assignee definitions are reported as actionable warnings instead of silent skips.
+- Post-v0.14 QA scenarios now create isolated Git repositories, escape Windows paths safely in JSON bodies, report failing HTTP actions with their response, and run all 18 UI/API journeys deterministically.
+
+### Security
+
+- Repository data-policy checks are scoped to controlled paths, private evidence is excluded from history, and purged sensitive blobs are blocked from remaining reachable through branch ancestry.
+
+---
 
 ## [v0.15.1] — 2026-08-11
 
