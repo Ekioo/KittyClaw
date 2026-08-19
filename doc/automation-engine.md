@@ -15,7 +15,7 @@ This is the legacy, backward-compatible automation system. New business-state wo
 - `KittyClaw.Core/Automation/ProjectRuntimeManager.cs` — per-project runtime dictionary and signal fan-out.
 - `KittyClaw.Core/Automation/ProjectRuntime.cs` — data class holding per-project run state.
 - `KittyClaw.Core/Automation/AutomationConfig.cs` — JSON-deserialized automation definitions (triggers, conditions, actions).
-- `KittyClaw.Core/Automation/AutomationStore.cs` — loads/persists `automations.json` from each workspace's `.agents/` folder. Saves are merge-safe (ticket #115): under a per-project IO lock the file is re-read before writing, and any automation present on disk but missing from the payload is preserved unless the caller proves it edited the latest version by passing back the `fileStamp` (SHA-256 of the file) obtained at load. Divergences are logged as warnings. Unknown JSON fields round-trip via `[JsonExtensionData]`, so hand-added keys (e.g. custom pins) survive a UI save. Writes are atomic (temp file + rename).
+- `KittyClaw.Core/Automation/AutomationStore.cs` — loads/persists `automations.json` from each workspace's `.agents/` folder. Internal saves are merge-safe (ticket #115), while the public API exposes only targeted disable and delete operations. Every mutation re-reads the file under a per-project IO lock and writes atomically (temp file + rename), so unrelated definitions and unknown JSON fields are preserved.
 - `KittyClaw.Core/Automation/Triggers/` — trigger implementations.
 - `KittyClaw.Core/Automation/GitRepositoryWatcher.cs` — backs the `gitCommit` trigger.
 - `KittyClaw.Core/Automation/RunConcurrencyGate.cs` — serializes runs sharing a `concurrencyGroup`.
@@ -56,7 +56,7 @@ This is the legacy, backward-compatible automation system. New business-state wo
 ## Entry points
 - Hosted at app startup via DI in `KittyClaw.Web/Program.cs`.
 - Per-project configuration loaded from `<workspace>/.agents/automations.json` (seeded by the [project template](./project-template.md)).
-- Configuration remains available through `<workspace>/.agents/automations.json` and the REST API; the legacy in-app editor is no longer exposed.
+- Configuration is authored directly in the trusted `<workspace>/.agents/automations.json` file. The REST API is deliberately limited to consultation, targeted disabling, and targeted deletion; it cannot create or arbitrarily edit definitions.
 
 ## External dependencies
 - [Agent dispatch](./agent-dispatch.md) — the `runAgent` action launches the `claude` CLI through it.

@@ -283,13 +283,13 @@ public static class OpenApiMarkdownGenerator
     {
         sb.AppendLine("---");
         sb.AppendLine();
-        sb.AppendLine("## Guide: Creating automations");
+        sb.AppendLine("## Guide: Managing legacy automations");
         sb.AppendLine();
         sb.AppendLine("Automations let you trigger actions automatically (launch a Claude agent, move a ticket) in response to events on the board.");
         sb.AppendLine();
         sb.AppendLine("### `automations.json` file");
         sb.AppendLine();
-        sb.AppendLine("Automations are declared in `{WorkspacePath}/.agents/automations.json`. The file can also be edited via `PUT /api/projects/{slug}/automations`.");
+        sb.AppendLine("Automations are declared in `{WorkspacePath}/.agents/automations.json`. The public API can inspect, disable, or delete existing definitions, but cannot create or arbitrarily edit them.");
         sb.AppendLine();
         sb.AppendLine("General structure:");
         sb.AppendLine();
@@ -382,11 +382,12 @@ public static class OpenApiMarkdownGenerator
         sb.AppendLine();
         sb.AppendLine("### Life cycle");
         sb.AppendLine();
-        sb.AppendLine("1. **Create**: write `automations.json` or call `PUT /api/projects/{slug}/automations`. The PUT is merge-safe: pass the `fileStamp` returned by the GET as the `baseStamp` query parameter — if the file changed on disk in between, automations missing from your payload are preserved instead of erased (they are listed in the response's `preservedIds`). Without `baseStamp`, the save can only add or update automations, never remove them.");
-        sb.AppendLine("2. **Reload**: `POST /api/projects/{slug}/automations/reload` to force a reload.");
-        sb.AppendLine("3. **Execute**: the engine evaluates triggers continuously.");
-        sb.AppendLine("4. **Watch**: `GET /api/projects/{slug}/runs` lists active runs. `GET /api/projects/{slug}/runs/{runId}/stream` for the real-time SSE stream.");
-        sb.AppendLine("5. **Steer**: `POST /api/projects/{slug}/runs/{runId}/steer` to send a message to a running agent. `POST /api/projects/{slug}/runs/{runId}/stop` to stop it.");
+        sb.AppendLine("1. **Inspect**: `GET /api/projects/{slug}/automations` returns the existing definitions.");
+        sb.AppendLine("2. **Disable**: `POST /api/projects/{slug}/automations/{automationId}/disable` changes only the targeted definition's enabled flag.");
+        sb.AppendLine("3. **Delete**: `DELETE /api/projects/{slug}/automations/{automationId}` explicitly removes only the targeted definition.");
+        sb.AppendLine("4. **Execute**: the engine evaluates triggers continuously.");
+        sb.AppendLine("5. **Watch**: `GET /api/projects/{slug}/runs` lists active runs. `GET /api/projects/{slug}/runs/{runId}/stream` for the real-time SSE stream.");
+        sb.AppendLine("6. **Steer**: `POST /api/projects/{slug}/runs/{runId}/steer` to send a message to a running agent. `POST /api/projects/{slug}/runs/{runId}/stop` to stop it.");
         sb.AppendLine();
         sb.AppendLine("### Complete example");
         sb.AppendLine();

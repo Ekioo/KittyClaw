@@ -134,8 +134,8 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "PUT /api/projects/{slug}/boundary-observations/{observationId}/review",
         // Automations
         "GET /api/projects/{slug}/automations",
-        "PUT /api/projects/{slug}/automations",
-        "POST /api/projects/{slug}/automations/reload",
+        "POST /api/projects/{slug}/automations/{automationId}/disable",
+        "DELETE /api/projects/{slug}/automations/{automationId}",
         "GET /api/projects/{slug}/tickets/{ticketId}/automation-queue",
         // Engine
         "GET /api/engine/health",
@@ -256,8 +256,8 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         ["POST /api/projects/{slug}/workflow-migrations/refine"] = "Workflow migrations",
         ["GET /api/projects/{slug}/workflow-migrations/jobs/{jobId}"] = "Workflow migrations",
         ["GET /api/projects/{slug}/automations"] = "Automations",
-        ["PUT /api/projects/{slug}/automations"] = "Automations",
-        ["POST /api/projects/{slug}/automations/reload"] = "Automations",
+        ["POST /api/projects/{slug}/automations/{automationId}/disable"] = "Automations",
+        ["DELETE /api/projects/{slug}/automations/{automationId}"] = "Automations",
         ["GET /api/projects/{slug}/tickets/{ticketId}/automation-queue"] = "Automations",
         ["GET /api/engine/health"] = "Engine",
         ["GET /api/projects/{slug}/runs"] = "Runs",
@@ -345,36 +345,110 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
     }
 
     [Fact]
-    public async Task AutomationReload_InvalidFile_ReturnsBadRequestInsteadOfSilentSuccess()
+    public async Task Automations_CanBeReadDisabledAndDeletedWithoutChangingOtherDefinitions()
     {
-        var slug = await CreateProjectAsync("ReloadFailureQA");
-        var agentsDir = Path.Combine(_factory.DataDir, "projects", slug, ".agents");
-        Directory.CreateDirectory(agentsDir);
-        var path = Path.Combine(agentsDir, "automations.json");
-        var valid = new AutomationConfig
+        var (slug, path) = await CreateAutomationProjectAsync("RestrictedAutomationQA");
+        var config = new AutomationConfig
         {
             Automations =
             {
                 new KittyClaw.Core.Automation.Automation
                 {
-                    Id = "valid",
-                    Name = "valid",
+                    Id = "target",
+                    Name = "Target",
                     Trigger = new IntervalTriggerSpec { Seconds = 3600 },
+                },
+                new KittyClaw.Core.Automation.Automation
+                {
+                    Id = "preserved",
+                    Name = "Preserved",
+                    Trigger = new IntervalTriggerSpec { Seconds = 7200 },
                 },
             },
         };
-        await File.WriteAllTextAsync(path, JsonSerializer.Serialize(valid, AutomationStore.JsonOptions));
+        await File.WriteAllTextAsync(path, JsonSerializer.Serialize(config, AutomationStore.JsonOptions));
 
-        var first = await _client.PostAsync($"/api/projects/{slug}/automations/reload", null);
-        Assert.Equal(System.Net.HttpStatusCode.NoContent, first.StatusCode);
+        var read = await _client.GetAsync($"/api/projects/{slug}/automations");
+        read.EnsureSuccessStatusCode();
 
-        await File.WriteAllTextAsync(path, "{ invalid json");
-        var failed = await _client.PostAsync($"/api/projects/{slug}/automations/reload", null);
+        var disabled = await _client.PostAsync($"/api/projects/{slug}/automations/target/disable", null);
+        disabled.EnsureSuccessStatusCode();
+        var afterDisable = JsonSerializer.Deserialize<AutomationConfig>(await File.ReadAllTextAsync(path), AutomationStore.JsonOptions)!;
+        var disabledTarget = afterDisable.Automations.Single(a => a.Id == "target");
+        Assert.False(disabledTarget.Enabled);
+        Assert.Equal("Target", disabledTarget.Name);
+        Assert.Equal(3600, Assert.IsType<IntervalTriggerSpec>(disabledTarget.Trigger).Seconds);
+        Assert.True(afterDisable.Automations.Single(a => a.Id == "preserved").Enabled);
 
-        Assert.Equal(System.Net.HttpStatusCode.BadRequest, failed.StatusCode);
-        var payload = JsonDocument.Parse(await failed.Content.ReadAsStringAsync());
-        Assert.True(payload.RootElement.GetProperty("previousRuntimeRetained").GetBoolean());
-        Assert.False(string.IsNullOrWhiteSpace(payload.RootElement.GetProperty("error").GetString()));
+        var deleted = await _client.DeleteAsync($"/api/projects/{slug}/automations/target");
+        Assert.Equal(System.Net.HttpStatusCode.NoContent, deleted.StatusCode);
+        var afterDelete = JsonSerializer.Deserialize<AutomationConfig>(await File.ReadAllTextAsync(path), AutomationStore.JsonOptions)!;
+        Assert.DoesNotContain(afterDelete.Automations, a => a.Id == "target");
+        Assert.Contains(afterDelete.Automations, a => a.Id == "preserved");
+    }
+
+    [Fact]
+    public async Task AutomationCreationAndArbitraryEditingRoutes_AreNotExposed()
+    {
+        var (slug, path) = await CreateAutomationProjectAsync("NoAutomationUpsertQA");
+        var original = new AutomationConfig
+        {
+            Automations = { new KittyClaw.Core.Automation.Automation { Id = "existing", Trigger = new IntervalTriggerSpec { Seconds = 3600 } } },
+        };
+        await File.WriteAllTextAsync(path, JsonSerializer.Serialize(original, AutomationStore.JsonOptions));
+        var before = await File.ReadAllBytesAsync(path);
+
+        using var payload = JsonContent.Create(new AutomationConfig());
+        var response = await _client.PutAsync($"/api/projects/{slug}/automations", payload);
+
+        Assert.Equal(System.Net.HttpStatusCode.MethodNotAllowed, response.StatusCode);
+        Assert.Equal(before, await File.ReadAllBytesAsync(path));
+    }
+
+    [Fact]
+    public async Task AutomationMutation_UnknownIdReturnsNotFoundWithoutChangingFile()
+    {
+        var (slug, path) = await CreateAutomationProjectAsync("UnknownAutomationQA");
+        var original = new AutomationConfig
+        {
+            Automations = { new KittyClaw.Core.Automation.Automation { Id = "existing", Trigger = new IntervalTriggerSpec { Seconds = 3600 } } },
+        };
+        await File.WriteAllTextAsync(path, JsonSerializer.Serialize(original, AutomationStore.JsonOptions));
+        var before = await File.ReadAllBytesAsync(path);
+
+        var disable = await _client.PostAsync($"/api/projects/{slug}/automations/missing/disable", null);
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, disable.StatusCode);
+        Assert.Equal(before, await File.ReadAllBytesAsync(path));
+
+        var delete = await _client.DeleteAsync($"/api/projects/{slug}/automations/missing");
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, delete.StatusCode);
+        Assert.Equal(before, await File.ReadAllBytesAsync(path));
+    }
+
+    [Fact]
+    public async Task AutomationMutations_ConcurrentRequestsPreserveUntargetedDefinitions()
+    {
+        var (slug, path) = await CreateAutomationProjectAsync("ConcurrentAutomationQA");
+        var config = new AutomationConfig
+        {
+            Automations =
+            {
+                new KittyClaw.Core.Automation.Automation { Id = "disable", Trigger = new IntervalTriggerSpec { Seconds = 3600 } },
+                new KittyClaw.Core.Automation.Automation { Id = "delete", Trigger = new IntervalTriggerSpec { Seconds = 3600 } },
+                new KittyClaw.Core.Automation.Automation { Id = "keep", Trigger = new IntervalTriggerSpec { Seconds = 3600 } },
+            },
+        };
+        await File.WriteAllTextAsync(path, JsonSerializer.Serialize(config, AutomationStore.JsonOptions));
+
+        var responses = await Task.WhenAll(
+            _client.PostAsync($"/api/projects/{slug}/automations/disable/disable", null),
+            _client.DeleteAsync($"/api/projects/{slug}/automations/delete"));
+        Assert.All(responses, response => Assert.True(response.IsSuccessStatusCode));
+
+        var result = JsonSerializer.Deserialize<AutomationConfig>(await File.ReadAllTextAsync(path), AutomationStore.JsonOptions)!;
+        Assert.False(result.Automations.Single(a => a.Id == "disable").Enabled);
+        Assert.DoesNotContain(result.Automations, a => a.Id == "delete");
+        Assert.True(result.Automations.Single(a => a.Id == "keep").Enabled);
     }
 
     // ---------- Case 4: structural — Endpoints.cs is split into per-domain partial files ----------
@@ -461,6 +535,14 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         resp.EnsureSuccessStatusCode();
         var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
         return doc.RootElement.GetProperty("slug").GetString()!;
+    }
+
+    private async Task<(string Slug, string ConfigPath)> CreateAutomationProjectAsync(string name)
+    {
+        var slug = await CreateProjectAsync(name + Guid.NewGuid().ToString("N"));
+        var agentsDir = Path.Combine(_factory.DataDir, "projects", slug, ".agents");
+        Directory.CreateDirectory(agentsDir);
+        return (slug, Path.Combine(agentsDir, "automations.json"));
     }
 
     private static string LocateRepoFile(string relative)

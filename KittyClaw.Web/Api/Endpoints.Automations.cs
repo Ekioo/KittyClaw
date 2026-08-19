@@ -29,39 +29,60 @@ public static partial class Endpoints
             }
         }).WithTags("Automations");
 
-        // baseStamp: fileStamp returned by the GET. When it matches the current file, the save is
-        // applied verbatim (deletions honored). When it is stale or omitted, automations present on
-        // disk but missing from the payload are preserved instead of being silently erased (#115).
-        api.MapPut("/projects/{slug}/automations", async Task<IResult> (string slug, AutomationConfig config, string? baseStamp, AutomationStore store, AutomationEngine engine) =>
+        api.MapPost("/projects/{slug}/automations/{automationId}/disable", async Task<IResult> (
+            string slug, string automationId, AutomationStore store, AutomationEngine engine) =>
         {
-            var result = await store.SaveAsync(slug, config, string.IsNullOrEmpty(baseStamp) ? null : baseStamp);
-            var reload = await engine.ReloadProjectAsync(slug);
-            if (!reload.Success)
-                return Results.BadRequest(new
-                {
-                    error = $"La configuration a été enregistrée, mais le moteur l'a rejetée : {reload.Error}",
-                    previousRuntimeRetained = true,
-                    fileStamp = result.FileStamp,
-                });
-            return Results.Ok(new
+            try
             {
-                config = result.Config,
-                fileStamp = result.FileStamp,
-                preservedIds = result.PreservedIds,
-                diverged = result.Diverged,
-            });
+                var result = await store.DisableAsync(slug, automationId);
+                if (!result.Found)
+                    return Results.NotFound(new { error = $"Automation '{automationId}' not found." });
+                var reload = await engine.ReloadProjectAsync(slug);
+                if (!reload.Success)
+                    return Results.BadRequest(new
+                    {
+                        error = $"The automation was disabled, but the engine rejected the configuration: {reload.Error}",
+                        previousRuntimeRetained = true,
+                        fileStamp = result.FileStamp,
+                    });
+                return Results.Ok(new { automationId, enabled = false, fileStamp = result.FileStamp });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.NotFound(new { error = ex.Message });
+            }
+            catch (InvalidDataException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message, previousRuntimeRetained = true });
+            }
         }).WithTags("Automations");
 
-        api.MapPost("/projects/{slug}/automations/reload", async Task<IResult> (string slug, AutomationEngine engine) =>
+        api.MapDelete("/projects/{slug}/automations/{automationId}", async Task<IResult> (
+            string slug, string automationId, AutomationStore store, AutomationEngine engine) =>
         {
-            var reload = await engine.ReloadProjectAsync(slug);
-            return reload.Success
-                ? Results.NoContent()
-                : Results.BadRequest(new
-                {
-                    error = $"Le moteur a rejeté la configuration : {reload.Error}",
-                    previousRuntimeRetained = true,
-                });
+            try
+            {
+                var result = await store.DeleteAsync(slug, automationId);
+                if (!result.Found)
+                    return Results.NotFound(new { error = $"Automation '{automationId}' not found." });
+                var reload = await engine.ReloadProjectAsync(slug);
+                if (!reload.Success)
+                    return Results.BadRequest(new
+                    {
+                        error = $"The automation was deleted, but the engine rejected the configuration: {reload.Error}",
+                        previousRuntimeRetained = true,
+                        fileStamp = result.FileStamp,
+                    });
+                return Results.NoContent();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.NotFound(new { error = ex.Message });
+            }
+            catch (InvalidDataException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message, previousRuntimeRetained = true });
+            }
         }).WithTags("Automations");
     }
 }

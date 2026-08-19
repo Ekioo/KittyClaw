@@ -77,7 +77,7 @@ Routing is also the source of truth for allowed manual moves. A processor with d
 
 Creating a member alone only adds an assignable board identity. A runnable custom agent also needs `<workspace>/.agents/<member-slug>/SKILL.md`, and automatic dispatch needs a `runAgent` rule that targets the same slug. Asking for the new rule to stay disabled lets you inspect it before the first run.
 
-Review the member and default model in **Settings → Members**, then review and enable the rule in `<workspace>/.agents/automations.json` or through the automation API. If the skill file is missing, a run fails instead of launching an unconfigured agent. See [project template](./project-template.md) for the workspace layout and [automation engine](./automation-engine.md) for rule configuration.
+Review the member and default model in **Settings → Members**, then review and enable the rule directly in the trusted `<workspace>/.agents/automations.json` file. The REST API cannot create, edit, or re-enable a rule. If the skill file is missing, a run fails instead of launching an unconfigured agent. See [project template](./project-template.md) for the workspace layout and [automation engine](./automation-engine.md) for rule configuration.
 
 ### Add a useful dashboard tile
 
@@ -120,7 +120,7 @@ The default provider is Claude Code. KittyClaw can also route explicitly selecte
 
 ## Legacy automations
 
-Legacy rules remain supported for compatibility but no longer have an in-app editor. Manage rules in `<workspace>/.agents/automations.json` or through the automation API. Prefer pipeline and column processors for new business workflows, and read [automation engine](./automation-engine.md) before changing existing legacy rules.
+Legacy rules remain supported for compatibility but no longer have an in-app editor. Author and edit rules in the trusted `<workspace>/.agents/automations.json` file. The REST API can only inspect, disable, or delete existing rules. Prefer pipeline and column processors for new business workflows, and read [automation engine](./automation-engine.md) before changing existing legacy rules.
 
 ## Dashboard and ad-hoc instructions
 

@@ -6,9 +6,10 @@ using AutomationRule = KittyClaw.Core.Automation.Automation;
 namespace KittyClaw.Core.Tests.Automation;
 
 /// <summary>
-/// Non-regression tests for ticket #114: POST /automations/reload must keep every scheduled
-/// (cron/interval) task registered and firing — the historical bug silently unregistered them
-/// until the next full restart (3-day outage on bloomii).
+/// Non-regression tests for ticket #114: an internal project reload must keep every scheduled
+/// (cron/interval) task registered and firing. The historical bug silently unregistered them
+/// until the next full restart (3-day outage on bloomii). Reload remains an engine operation;
+/// it is no longer exposed as a public automation-management endpoint.
 /// </summary>
 public class AutomationReloadTests
 {

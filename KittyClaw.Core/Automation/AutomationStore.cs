@@ -38,6 +38,8 @@ public sealed class AutomationStore : IDisposable
     /// missing from the saved payload, and whether the file had diverged from the caller's base.</summary>
     public sealed record SaveResult(AutomationConfig Config, string FileStamp, IReadOnlyList<string> PreservedIds, bool Diverged);
 
+    public sealed record TargetedMutationResult(bool Found, AutomationConfig Config, string FileStamp);
+
     public async Task<(AutomationConfig Config, string WorkspacePath, string ConfigPath)> LoadAsync(string slug)
     {
         var (config, workspace, configPath, _) = await LoadWithStampAsync(slug);
@@ -155,6 +157,66 @@ public sealed class AutomationStore : IDisposable
                 entry.LastLoaded = config;
             }
             return new SaveResult(config, ComputeStamp(bytes), preserved, diverged);
+        }
+        finally
+        {
+            entry.IoLock.Release();
+        }
+    }
+
+    public Task<TargetedMutationResult> DisableAsync(string slug, string automationId) =>
+        MutateAsync(slug, automationId, automation => automation.Enabled = false, remove: false);
+
+    public Task<TargetedMutationResult> DeleteAsync(string slug, string automationId) =>
+        MutateAsync(slug, automationId, _ => { }, remove: true);
+
+    private async Task<TargetedMutationResult> MutateAsync(
+        string slug, string automationId, Action<Automation> mutate, bool remove)
+    {
+        var (_, _, configPath, _) = await LoadWithStampAsync(slug);
+        var entry = _cache[slug];
+        await entry.IoLock.WaitAsync();
+        try
+        {
+            var (config, stamp) = await ReadDiskAsync(configPath, slug);
+            config ??= new AutomationConfig();
+            var automation = config.Automations.FirstOrDefault(a =>
+                string.Equals(a.Id, automationId, StringComparison.OrdinalIgnoreCase));
+            if (automation is null)
+                return new TargetedMutationResult(false, config, stamp);
+
+            if (remove)
+                config.Automations.Remove(automation);
+            else
+                mutate(automation);
+
+            var bytes = JsonSerializer.SerializeToUtf8Bytes(config, Json);
+            entry.SuppressWatcher = true;
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+                var tmpPath = configPath + ".tmp";
+                await File.WriteAllBytesAsync(tmpPath, bytes);
+                for (var attempt = 0; ; attempt++)
+                {
+                    try
+                    {
+                        File.Move(tmpPath, configPath, overwrite: true);
+                        break;
+                    }
+                    catch (Exception ex) when (attempt < 10 && ex is IOException or UnauthorizedAccessException)
+                    {
+                        await Task.Delay(25);
+                    }
+                }
+            }
+            finally
+            {
+                entry.SuppressWatcher = false;
+                entry.LastLoaded = config;
+            }
+
+            return new TargetedMutationResult(true, config, ComputeStamp(bytes));
         }
         finally
         {
