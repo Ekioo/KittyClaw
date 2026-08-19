@@ -138,6 +138,8 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "GET /api/projects/{slug}/approvals/receipts",
         "POST /api/projects/{slug}/approvals/receipts",
         "POST /api/projects/{slug}/approvals/consume-once",
+        "POST /api/projects/{slug}/approvals/gate",
+        "GET /api/runtime-enforcement/capabilities",
         // Observation-only boundary detection
         "GET /api/projects/{slug}/boundary-observations",
         "GET /api/projects/{slug}/boundary-observations/metrics",
@@ -262,6 +264,8 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         ["GET /api/projects/{slug}/approvals/receipts"] = "Approvals",
         ["POST /api/projects/{slug}/approvals/receipts"] = "Approvals",
         ["POST /api/projects/{slug}/approvals/consume-once"] = "Approvals",
+        ["POST /api/projects/{slug}/approvals/gate"] = "Approvals",
+        ["GET /api/runtime-enforcement/capabilities"] = "Approvals",
         ["GET /api/projects/{slug}/boundary-observations"] = "Boundary observations",
         ["GET /api/projects/{slug}/boundary-observations/metrics"] = "Boundary observations",
         ["PUT /api/projects/{slug}/boundary-observations/{observationId}/review"] = "Boundary observations",

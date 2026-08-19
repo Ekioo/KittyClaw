@@ -23,6 +23,7 @@ public sealed class RtkIntegrationTests
         var status = await service.GetStatusAsync(project.Slug);
         var prompt = RtkIntegrationService.AppendInstructions("original", status);
         var startInfo = new ProcessStartInfo("provider-cli");
+        startInfo.Environment.Remove("RTK_TELEMETRY_DISABLED");
         RtkIntegrationService.ApplyEnvironment(startInfo, status);
 
         Assert.NotNull(status);
