@@ -74,7 +74,9 @@ $tracked = & git -C $repo ls-files
 foreach ($relative in $tracked) {
     $full = Join-Path $repo $relative
     if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { continue }
-    $info = Get-Item -LiteralPath $full
+    # PowerShell treats dotfiles as hidden on Unix. -Force keeps tracked files such as
+    # .gitignore visible to the policy scanner on every CI operating system.
+    $info = Get-Item -LiteralPath $full -Force
     if ($info.Length -gt 2MB) { continue }
     try { $content = [System.IO.File]::ReadAllText($full) } catch { continue }
     foreach ($finding in (Test-ContentPolicy $relative $content)) {
