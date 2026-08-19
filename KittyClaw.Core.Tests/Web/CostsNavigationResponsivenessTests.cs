@@ -1,3 +1,5 @@
+using KittyClaw.Web.Components.Pages;
+
 namespace KittyClaw.Core.Tests.Web;
 
 public sealed class CostsNavigationResponsivenessTests
@@ -22,8 +24,13 @@ public sealed class CostsNavigationResponsivenessTests
         Assert.Contains("@foreach (var project in _projectCosts)", source, StringComparison.Ordinal);
         Assert.Contains("bucket.ProjectSlug == project.ProjectSlug", source, StringComparison.Ordinal);
         Assert.Contains("class=\"cost-project-total\"", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("class=\"cost-total-card", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("@Usd(_report.TotalUsd)", source, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"cost-visible-total\"", source, StringComparison.Ordinal);
+        Assert.Contains("CostDisplayTotal.Sum(_projectCosts.Select(project => project.UsdCost))", source, StringComparison.Ordinal);
+        Assert.Contains("_projectCosts.Any(project => project.Estimated)", source, StringComparison.Ordinal);
+        Assert.True(
+            source.IndexOf("data-testid=\"cost-visible-total\"", StringComparison.Ordinal)
+            < source.IndexOf("@if (_report.Projects.Count == 0)", StringComparison.Ordinal),
+            "The displayed total must render for both non-empty and empty report states.");
     }
 
     [Fact]
@@ -85,9 +92,24 @@ public sealed class CostsNavigationResponsivenessTests
         var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "wwwroot", "css", "costs.css"));
 
         Assert.Contains(".cost-project-card-grid", source, StringComparison.Ordinal);
+        Assert.Contains(".cost-visible-total", source, StringComparison.Ordinal);
         Assert.Contains(".cost-date-preset.is-active", source, StringComparison.Ordinal);
         Assert.Contains("@media (max-width: 560px)", source, StringComparison.Ordinal);
         Assert.Contains("prefers-reduced-motion: reduce", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DisplayedTotal_SumsTheRoundedAmountsShownOnProjectCards()
+    {
+        var total = CostDisplayTotal.Sum([0.034m, 0.034m]);
+
+        Assert.Equal(0.06m, total);
+    }
+
+    [Fact]
+    public void DisplayedTotal_IsZeroWhenNoProjectCardIsVisible()
+    {
+        Assert.Equal(0m, CostDisplayTotal.Sum([]));
     }
 
     [Fact]

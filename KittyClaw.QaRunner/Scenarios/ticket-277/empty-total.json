@@ -1,0 +1,51 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "Visible Total" },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/visible-total/members",
+      "body": { "name": "programmer" }
+    },
+    {
+      "type": "createTicket",
+      "project": "visible-total",
+      "title": "Generate a visible cost",
+      "status": "InProgress",
+      "priority": "Required",
+      "assignedTo": "programmer"
+    },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/visible-total/chat/start",
+      "body": {
+        "target": "programmer#ticket-{ticketId}",
+        "message": "Generate deterministic cost evidence.",
+        "model": "claude-sonnet-4-6",
+        "forceNew": true
+      },
+      "extract": { "runId": "runId" }
+    },
+    { "type": "waitForRun", "project": "visible-total", "ms": 30000 }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/costs" },
+    { "type": "wait", "ms": 1500 },
+    { "type": "assertCount", "selector": ".cost-project-cost-card", "expected": "1" },
+    { "type": "assertVisible", "selector": "[data-testid='cost-visible-total']" },
+    { "type": "fill", "selector": ".cost-from", "value": "2099-01-01" },
+    { "type": "click", "selector": "h1" },
+    { "type": "wait", "ms": 1500 },
+    { "type": "assertVisible", "selector": ".cost-empty" },
+    { "type": "assertCount", "selector": "[data-testid='cost-visible-total']", "expected": "1" },
+    { "type": "assertText", "selector": "[data-testid='cost-visible-total'] strong", "expected": "$0.00" },
+    { "type": "assertCount", "selector": "[data-testid='cost-visible-total'] .estimated-marker", "expected": "0" },
+    {
+      "type": "screenshot",
+      "name": "ticket-277-empty-visible-total",
+      "description": "After filtering a non-empty cost report to zero visible projects, the displayed total remains visible at zero without an estimated marker."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

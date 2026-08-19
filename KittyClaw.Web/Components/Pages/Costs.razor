@@ -74,6 +74,15 @@
     }
     else if (_report is not null)
     {
+        <div class="cost-visible-total" data-testid="cost-visible-total" aria-live="polite">
+            <span>@L["DisplayedTotal"]</span>
+            <strong>@Usd(VisibleTotalUsd)</strong>
+            @if (VisibleTotalEstimated)
+            {
+                <span class="estimated-marker" title="@L["EstimatedHelp"]" tabindex="0">~ @L["Estimated"]</span>
+            }
+        </div>
+
         @if (_report.Projects.Count == 0)
         {
             <div class="cost-state cost-empty"><h2>@L["NoCostData"]</h2><p>@L["NoCostDataHint"]</p></div>
@@ -82,7 +91,9 @@
         {
             <section class="cost-projects-section">
                 <header class="cost-projects-header">
-                    <h2>@L["ByProject"]</h2>
+                    <div class="cost-projects-heading">
+                        <h2>@L["ByProject"]</h2>
+                    </div>
                     <div class="cost-legend" role="list" aria-label="@L["CostLegend"]">
                         <span role="listitem"><i class="cost-legend-swatch cost-legend-measured" aria-hidden="true"></i>@L["Measured"]</span>
                         <span role="listitem"><i class="cost-legend-swatch cost-legend-estimated" aria-hidden="true"></i>@L["Estimated"]</span>
@@ -144,6 +155,8 @@
 
     private string ProjectSelectionLabel => _selectedProjects.Count == 0 ? L["AllProjects"] : $"{_selectedProjects.Count} {L["Projects"]}";
     private IReadOnlyList<CostPipelineOption> AvailablePipelines => CostPipelineFilter.Filter(_options?.Pipelines, _selectedProjects);
+    private decimal VisibleTotalUsd => CostDisplayTotal.Sum(_projectCosts.Select(project => project.UsdCost));
+    private bool VisibleTotalEstimated => _projectCosts.Any(project => project.Estimated);
 
     protected override async Task OnInitializedAsync()
     {

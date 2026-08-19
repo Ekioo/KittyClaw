@@ -77,7 +77,11 @@
 
 .cost-projects-section { margin-top: 1.35rem; }
 .cost-projects-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 0 .15rem .85rem; }
+.cost-projects-heading { display: flex; align-items: center; gap: 1rem; min-width: 0; }
 .cost-projects-header h2 { margin: 0; color: var(--text-muted); font-size: .8rem; letter-spacing: .05em; text-transform: uppercase; }
+.cost-visible-total { display: flex; align-items: baseline; gap: .45rem; min-width: 0; padding-left: 1rem; border-left: 1px solid var(--border-strong); }
+.cost-visible-total > span:first-child { color: var(--text-muted); font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.cost-visible-total strong { color: var(--text); font-size: 1.15rem; font-variant-numeric: tabular-nums; letter-spacing: -.02em; white-space: nowrap; }
 .cost-legend { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .5rem 1rem; color: var(--text-muted); font-size: .75rem; }
 .cost-legend span { display: inline-flex; align-items: center; gap: .4rem; }
 .cost-legend-swatch { width: 18px; height: 8px; border-radius: 3px; }
@@ -134,6 +138,8 @@
     .cost-date-preset { flex: 1 1 calc(50% - .45rem); }
     .cost-project-menu { width: 100%; }
     .cost-projects-header { align-items: flex-start; flex-direction: column; }
+    .cost-projects-heading { align-items: flex-start; flex-direction: column; gap: .5rem; }
+    .cost-visible-total { padding-left: 0; border-left: 0; }
     .cost-legend { justify-content: flex-start; }
     .cost-project-cost-card { min-height: 195px; }
 }
