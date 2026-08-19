@@ -190,7 +190,8 @@ public sealed class PipelineExportServiceTests : IDisposable
     [Fact]
     public async Task Probable_secret_in_prompt_blocks_export_with_masked_occurrence()
     {
-        const string secret = "sk-live-abcdefgh12345678xyz";
+        // Concatenated so the synthetic token never appears verbatim in the repository.
+        const string secret = "sk-" + "live-abcdefgh12345678xyz";
         var fixture = await CreateEditorialFixtureAsync(prompt: $"Call the API with key {secret}.");
 
         var blocked = await Assert.ThrowsAsync<PipelineExportBlockedException>(
@@ -255,7 +256,7 @@ public sealed class PipelineExportServiceTests : IDisposable
         var fixture = await CreateEditorialFixtureAsync();
         var skillFolder = Path.Combine(fixture.Workspace, ".agents", "skills", fixture.Skill.Slug);
         await File.WriteAllTextAsync(Path.Combine(skillFolder, "deploy.ps1"),
-            "$env:API_KEY = \"sk-test-abcdef1234567890abcdef\"\nWrite-Output done\n");
+            "$env:API_KEY = \"sk-" + "test-abcdef1234567890abcdef\"\nWrite-Output done\n");
         await File.WriteAllTextAsync(Path.Combine(skillFolder, "notes.txt"),
             "Jeton hérité : eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5NXgL0n3I9PlFUP0THsR8U\n");
 

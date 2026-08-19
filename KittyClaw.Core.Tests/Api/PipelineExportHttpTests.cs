@@ -66,7 +66,8 @@ public sealed class PipelineExportHttpTests : IClassFixture<PipelineExportHttpTe
     public async Task Blocked_export_returns_409_with_findings_and_never_the_raw_value()
     {
         var (slug, pipelineId, source, target) = await CreatePipelineAsync("Export http blocked");
-        const string secret = "sk-live-abcdefgh12345678xyz";
+        // Concatenated so the synthetic token never appears verbatim in the repository.
+        const string secret = "sk-" + "live-abcdefgh12345678xyz";
         await SaveProcessorAsync(slug, source, target, $"Use key {secret} to publish.");
 
         var response = await _client.GetAsync($"/api/projects/{slug}/pipelines/{pipelineId}/export");
