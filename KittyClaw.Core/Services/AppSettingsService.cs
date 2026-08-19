@@ -38,6 +38,17 @@ public class AppSettingsService
 
     public event Action? OnLanguageChanged;
 
+    public bool McpEnabled
+    {
+        get => _data.McpEnabled;
+        set
+        {
+            if (_data.McpEnabled == value) return;
+            _data.McpEnabled = value;
+            Save();
+        }
+    }
+
     public bool OnboardingSeen
     {
         get => _data.OnboardingSeen;
@@ -118,6 +129,7 @@ public class AppSettingsService
     private class AppSettingsData
     {
         public string Language { get; set; } = "";
+        public bool McpEnabled { get; set; }
         public bool OnboardingSeen { get; set; } = false;
         public string? UpdateDismissedVersion { get; set; }
         public DateTime? UpdateCheckLastRun { get; set; }

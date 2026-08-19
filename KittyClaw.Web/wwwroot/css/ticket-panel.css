@@ -517,7 +517,7 @@ select:focus-visible,
 }
 .settings-option input[type="checkbox"] {
     margin-top: 0.15rem;
-    flex-shrink: 0;
+    flex: 0 0 1rem;
     accent-color: var(--accent);
     width: 1rem;
     height: 1rem;

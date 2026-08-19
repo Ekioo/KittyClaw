@@ -1,0 +1,44 @@
+@page "/settings"
+@using KittyClaw.Core.Services
+@inject AppSettingsService AppSettings
+@inject LocalizationService L
+@rendermode InteractiveServer
+
+<PageTitle>@L["GlobalSettingsTitle"] — KittyClaw</PageTitle>
+
+<div class="page-header">
+    <a class="back-link" href="/">&larr; @L["Board"]</a>
+    <h1>@L["GlobalSettingsTitle"]</h1>
+</div>
+
+<div class="settings-container">
+    <section class="settings-section" data-testid="mcp-global-settings">
+        <h2>@L["McpServerTitle"]</h2>
+        <p class="settings-hint">@L["McpServerHint"]</p>
+
+        <label class="settings-option">
+            <input type="checkbox"
+                   data-testid="mcp-enabled"
+                   checked="@AppSettings.McpEnabled"
+                   @onchange="OnMcpChanged" />
+            <span>
+                <strong>@L["McpEnable"]</strong>
+                <small>@L["McpEnableEffect"]</small>
+            </span>
+        </label>
+
+        <div class="settings-status @(AppSettings.McpEnabled ? "settings-status-ok" : "")"
+             data-testid="mcp-status">
+            @(AppSettings.McpEnabled
+                ? L.Get("McpEnabledStatus", "/mcp")
+                : L["McpDisabledStatus"])
+        </div>
+    </section>
+</div>
+
+@code {
+    private void OnMcpChanged(ChangeEventArgs e)
+    {
+        AppSettings.McpEnabled = e.Value is true;
+    }
+}

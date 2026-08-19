@@ -4,6 +4,10 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+### Changed
+
+- The embedded MCP server is now enabled or disabled instantly from the global Settings page; `KITTYCLAW_MCP_ENABLED` and application restarts are no longer required.
+
 ## [v0.16] — 2026-08-19
 
 Durable worktree delivery, fast per-project cost reporting, safer agent context, and a fully replayable post-v0.14 verification campaign.

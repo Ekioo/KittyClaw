@@ -129,29 +129,21 @@ if (!builder.Environment.IsDevelopment())
 if (OperatingSystem.IsWindows())
     builder.Services.AddSingleton<KittyClaw.Core.Platform.IFolderPicker, KittyClaw.Core.Platform.WindowsFolderPicker>();
 
-// Embedded MCP server (Streamable HTTP) at /mcp — 7 tools proxying the board services, so
-// any MCP client can drive the board: `claude mcp add --transport http kittyclaw
-// http://localhost:5230/mcp`. Same trust boundary as the REST API (unauthenticated,
-// localhost, self-hosted single machine). It is opt-in: set KITTYCLAW_MCP_ENABLED=1
-// to register the tools and route. See doc/mcp.md.
-var mcpEnabledFlag = builder.Configuration["KITTYCLAW_MCP_ENABLED"];
-var mcpEnabled = mcpEnabledFlag == "1"
-    || string.Equals(mcpEnabledFlag, "true", StringComparison.OrdinalIgnoreCase);
-if (mcpEnabled)
+// Embedded MCP server (Streamable HTTP) at /mcp — 7 tools proxying the board services.
+// The transport is registered once, while access is gated dynamically below by the global
+// persisted setting. This lets the UI enable or disable MCP immediately without a restart.
+builder.Services.AddMcpServer(options => options.ServerInfo = new()
 {
-    builder.Services.AddMcpServer(options => options.ServerInfo = new()
-    {
-        Name = "kittyclaw",
-        Title = "KittyClaw",
-        Version = KittyClaw.Web.Services.VersionFormatter.Format(
-            typeof(Program).Assembly
-                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-                ?.InformationalVersion),
-        WebsiteUrl = "https://kittyclaw.dev",
-    })
-        .WithHttpTransport()
-        .WithTools<KittyClaw.Web.Api.McpTools>(KittyClaw.Web.Api.McpTools.SerializerOptions);
-}
+    Name = "kittyclaw",
+    Title = "KittyClaw",
+    Version = KittyClaw.Web.Services.VersionFormatter.Format(
+        typeof(Program).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion),
+    WebsiteUrl = "https://kittyclaw.dev",
+})
+    .WithHttpTransport()
+    .WithTools<KittyClaw.Web.Api.McpTools>(KittyClaw.Web.Api.McpTools.SerializerOptions);
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -175,6 +167,19 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+
+// Keep the MCP endpoint absent from the caller's perspective while disabled. The setting is
+// read for every request so changing it from the global UI takes effect without restarting.
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/mcp") && !appSettings.McpEnabled)
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+
+    await next();
+});
 
 // Serve uploaded images
 var uploadsDir = Path.Combine(dataDir, "uploads");
@@ -214,11 +219,8 @@ app.Use(async (context, next) =>
 app.MapOpenApi();
 app.MapTodoApi();
 
-if (mcpEnabled)
-{
-    // MCP speaks JSON-RPC, not REST — keep it out of the OpenAPI/api-docs surface.
-    app.MapMcp("/mcp").ExcludeFromDescription();
-}
+// MCP speaks JSON-RPC, not REST — keep it out of the OpenAPI/api-docs surface.
+app.MapMcp("/mcp").ExcludeFromDescription();
 
 if (app.Environment.IsDevelopment())
 {

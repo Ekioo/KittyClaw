@@ -6,6 +6,21 @@ namespace KittyClaw.Core.Tests.Services;
 public class AppSettingsUpdateFieldsTests
 {
     [Fact]
+    public void Mcp_is_disabled_by_default_and_round_trips_across_reload()
+    {
+        using var dir = new TempDir();
+
+        var first = new AppSettingsService(dir.Path);
+        Assert.False(first.McpEnabled);
+
+        first.McpEnabled = true;
+        Assert.True(new AppSettingsService(dir.Path).McpEnabled);
+
+        first.McpEnabled = false;
+        Assert.False(new AppSettingsService(dir.Path).McpEnabled);
+    }
+
+    [Fact]
     public void UpdateDismissedVersion_and_UpdateCheckLastRun_round_trip_across_reload()
     {
         using var dir = new TempDir();

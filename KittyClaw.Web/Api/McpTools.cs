@@ -14,7 +14,7 @@ namespace KittyClaw.Web.Api;
 /// REST API uses, so any MCP client (Claude Code, etc.) can drive the board. Deliberately
 /// scoped: no runs, automations or dashboards until the channel proves itself (ticket #217).
 /// Trust boundary is unchanged — the endpoint binds like the REST API (unauthenticated,
-/// localhost, self-hosted single machine). Enable with KITTYCLAW_MCP_ENABLED=1.
+/// localhost, self-hosted single machine). Enable it from KittyClaw's global settings.
 /// </summary>
 [McpServerToolType]
 public sealed class McpTools(

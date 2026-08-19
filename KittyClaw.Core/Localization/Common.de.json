@@ -32,5 +32,13 @@
   "SessionInterrupted": "KittyClaw wurde aktualisiert oder die Sitzung wurde unterbrochen.",
   "SessionInterruptedHint": "Die Seite stellt sich nach Möglichkeit automatisch wieder her. Laden Sie sie neu, wenn diese Meldung sichtbar bleibt.",
   "ReloadPage": "Seite neu laden",
-  "EstimatedCostTooltip": "Schätzung anhand öffentlicher Tokenpreise; die tatsächliche Abrechnung kann abweichen"
+  "EstimatedCostTooltip": "Schätzung anhand öffentlicher Tokenpreise; die tatsächliche Abrechnung kann abweichen",
+  "GlobalSettings": "Einstellungen",
+  "GlobalSettingsTitle": "Globale Einstellungen",
+  "McpServerTitle": "MCP-Server",
+  "McpServerHint": "Erlaubt MCP-Clients den Zugriff auf diese KittyClaw-Instanz über den lokalen Endpunkt /mcp.",
+  "McpEnable": "MCP-Server aktivieren",
+  "McpEnableEffect": "Macht /mcp sofort verfügbar. Die Deaktivierung weist neue und bestehende Client-Anfragen ab.",
+  "McpEnabledStatus": "MCP ist unter {0} aktiv.",
+  "McpDisabledStatus": "MCP ist deaktiviert. Clients können keine Verbindung herstellen."
 }

@@ -32,5 +32,13 @@
   "SessionInterrupted": "KittyClaw was updated or the session was interrupted.",
   "SessionInterruptedHint": "The page will recover automatically when possible. Reload it if this message remains visible.",
   "ReloadPage": "Reload page",
-  "EstimatedCostTooltip": "Estimated from public token rates; actual billing may differ"
+  "EstimatedCostTooltip": "Estimated from public token rates; actual billing may differ",
+  "GlobalSettings": "Settings",
+  "GlobalSettingsTitle": "Global settings",
+  "McpServerTitle": "MCP server",
+  "McpServerHint": "Allow MCP clients to work with this KittyClaw instance through the local /mcp endpoint.",
+  "McpEnable": "Enable the MCP server",
+  "McpEnableEffect": "Makes /mcp available immediately. Turn it off at any time to reject new and existing client requests.",
+  "McpEnabledStatus": "MCP is active at {0}.",
+  "McpDisabledStatus": "MCP is disabled. Clients cannot connect."
 }

@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using KittyClaw.Core.Services;
 using KittyClaw.Web.Api;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
@@ -13,7 +15,7 @@ namespace KittyClaw.Core.Tests.Api;
 /// End-to-end coverage of the embedded MCP endpoint (ticket #217): a real MCP client
 /// speaking Streamable HTTP against the full app pipeline, exactly like
 /// `claude mcp add --transport http kittyclaw http://localhost:5230/mcp` would.
-/// Also covers the opt-in KITTYCLAW_MCP_ENABLED feature flag.
+/// Also covers the persisted global opt-in setting.
 /// </summary>
 [Collection("MCP endpoint environment")]
 public sealed class McpEndpointTests : IClassFixture<McpEndpointTests.ApiFactory>, IAsyncLifetime
@@ -65,7 +67,7 @@ public sealed class McpEndpointTests : IClassFixture<McpEndpointTests.ApiFactory
     [Fact]
     public async Task InitializeProbe_Succeeds()
     {
-        // Same raw probe the KITTYCLAW_MCP_DISABLED test uses — proving here that it
+        // Same raw probe the disabled-setting test uses — proving here that it
         // returns 200 when the endpoint is up makes its failure there meaningful.
         using var response = await McpInitializeProbe.SendAsync(_http);
 
@@ -206,12 +208,11 @@ public sealed class McpEndpointTests : IClassFixture<McpEndpointTests.ApiFactory
             _dataDir = Path.Combine(Path.GetTempPath(), "kittyclaw-mcp-endpoint-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_dataDir);
             File.WriteAllText(Path.Combine(_dataDir, "settings.json"),
-                """{"OnboardingSeen":true,"Language":"en"}""");
+                """{"OnboardingSeen":true,"Language":"en","McpEnabled":true}""");
         }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder) => builder
-            .UseSetting("KITTYCLAW_DATA_DIR", _dataDir)
-            .UseSetting("KITTYCLAW_MCP_ENABLED", "1");
+            .UseSetting("KITTYCLAW_DATA_DIR", _dataDir);
 
         protected override void Dispose(bool disposing)
         {
@@ -242,8 +243,7 @@ internal static class McpInitializeProbe
 }
 
 /// <summary>
-/// The default configuration must omit the endpoint entirely — no MCP route, no tools.
-/// Separate class: the flag is read once at startup, so it needs its own host.
+/// The default global setting keeps the endpoint unavailable while leaving REST untouched.
 /// </summary>
 [Collection("MCP endpoint environment")]
 public sealed class McpDisabledByDefaultTests : IDisposable
@@ -261,8 +261,7 @@ public sealed class McpDisabledByDefaultTests : IDisposable
         }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder) => builder
-            .UseSetting("KITTYCLAW_DATA_DIR", _dataDir)
-            .UseSetting("KITTYCLAW_MCP_ENABLED", "0");
+            .UseSetting("KITTYCLAW_DATA_DIR", _dataDir);
 
         protected override void Dispose(bool disposing)
         {
@@ -276,16 +275,34 @@ public sealed class McpDisabledByDefaultTests : IDisposable
     public void Dispose() => _factory.Dispose();
 
     [Fact]
-    public async Task DisabledFlag_RemovesTheMcpEndpoint_ButKeepsTheRestApi()
+    public async Task DisabledSetting_HidesTheMcpEndpoint_ButKeepsTheRestApi()
     {
         using var client = _factory.CreateClient();
 
         using var mcpResponse = await McpInitializeProbe.SendAsync(client);
         Assert.False(mcpResponse.IsSuccessStatusCode,
-            $"MCP initialize succeeded ({(int)mcpResponse.StatusCode}) without KITTYCLAW_MCP_ENABLED=1");
+            $"MCP initialize succeeded ({(int)mcpResponse.StatusCode}) while the global setting was disabled");
 
         var rest = await client.GetAsync("/api/projects");
         Assert.Equal(HttpStatusCode.OK, rest.StatusCode);
+    }
+
+    [Fact]
+    public async Task GlobalSetting_TogglesTheEndpointWithoutRestarting()
+    {
+        using var client = _factory.CreateClient();
+        var settings = _factory.Services.GetRequiredService<AppSettingsService>();
+
+        using (var disabled = await McpInitializeProbe.SendAsync(client))
+            Assert.False(disabled.IsSuccessStatusCode);
+
+        settings.McpEnabled = true;
+        using (var enabled = await McpInitializeProbe.SendAsync(client))
+            Assert.Equal(HttpStatusCode.OK, enabled.StatusCode);
+
+        settings.McpEnabled = false;
+        using var disabledAgain = await McpInitializeProbe.SendAsync(client);
+        Assert.False(disabledAgain.IsSuccessStatusCode);
     }
 }
 

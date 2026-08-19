@@ -6,8 +6,7 @@ Exposes the board over the [Model Context Protocol](https://modelcontextprotocol
 ## Connecting
 
 ```bash
-export KITTYCLAW_MCP_ENABLED=1
-# Start KittyClaw on its normal effective application URL, then:
+# In KittyClaw, open Settings and enable the MCP server, then:
 claude mcp add --transport http kittyclaw http://localhost:5230/mcp
 ```
 
@@ -15,7 +14,8 @@ That's it — the seven tools below appear in the client's tool list.
 
 ## Key components
 - `KittyClaw.Web/Api/McpTools.cs` — the v1 tool surface: seven thin proxies over the same services the REST API uses (`ProjectService`, `TicketService`, `ColumnService`, `MemberService`). Mutating tools notify `BoardUpdateNotifier` so the UI refreshes live, exactly like their REST counterparts.
-- `KittyClaw.Web/Program.cs` — registers the server (`AddMcpServer().WithHttpTransport().WithTools<McpTools>()`) and maps `/mcp`, both behind the feature flag.
+- `KittyClaw.Web/Program.cs` — registers the server (`AddMcpServer().WithHttpTransport().WithTools<McpTools>()`), maps `/mcp`, and dynamically gates requests through the persisted global setting.
+- `KittyClaw.Web/Components/Pages/GlobalSettings.razor` — exposes the one-click global switch.
 - Official C# SDK: [`ModelContextProtocol.AspNetCore`](https://www.nuget.org/packages/ModelContextProtocol.AspNetCore) 2.1.0 — the SDK handles the protocol (Streamable HTTP transport, sessions, JSON-RPC, tool schemas); KittyClaw only supplies handlers.
 - `server.json` (repo root) — registry metadata for [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io), published with `mcp-publisher`.
 
@@ -39,8 +39,8 @@ The v1 surface is deliberately frozen at these seven tools (ticket #217): no del
 - Unknown project slugs return a real tool error pointing at `list_projects` (the REST layer would silently show an empty board).
 - Service validation errors (unknown column, empty comment, blocked-ticket saturation) surface verbatim as MCP tool errors.
 
-## Feature flag
-The endpoint is absent by default. Set `KITTYCLAW_MCP_ENABLED=1` (or `true`) before starting the app to register `/mcp` and its tools. Remove the variable or set it to any other value, then restart, to remove both the route and tool registration. The REST API is unaffected.
+## Global setting
+The endpoint is unavailable by default. Open **Settings** from KittyClaw's home page and switch **Enable the MCP server** on. The persisted setting takes effect immediately: no environment variable or application restart is required. Switching it off rejects new requests and requests from already connected clients. The REST API is unaffected.
 
 The connection URL always uses KittyClaw's effective application URL plus `/mcp`; no separate process, supervisor, or port is involved.
 
