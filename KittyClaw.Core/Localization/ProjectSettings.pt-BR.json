@@ -74,5 +74,15 @@
   "NoSecrets": "Nenhum segredo salvo.",
   "EnterReplacement": "Insira um novo valor para substituir este segredo.",
   "SecretSaved": "Segredo salvo com segurança.",
-  "SecretDeleted": "Segredo excluído."
+  "SecretDeleted": "Segredo excluído.",
+  "GitUnavailable": "O Git não está instalado ou não está disponível no PATH.",
+  "GitWorkspaceMissing": "A pasta de trabalho configurada ainda não existe.",
+  "GitMetadataDetected": "Já existem metadados Git, mas o repositório não está utilizável. Verifique o arquivo ou a pasta .git.",
+  "GitRepositoryReady": "Repositório Git pronto:",
+  "GitRepositoryMissing": "Nenhum repositório Git detectado",
+  "GitRepositoryMissingHint": "Inicialize um repositório local sem adicionar ou modificar os arquivos existentes.",
+  "GitInitialize": "Inicializar um repositório Git",
+  "GitInitializeConfirm": "O KittyClaw executará git init nesta pasta de trabalho. Nenhum arquivo existente será adicionado ou modificado.",
+  "GitInitializing": "Inicializando…",
+  "GitInitialized": "O repositório Git local está inicializado. Nenhum arquivo existente foi adicionado ou modificado."
 }

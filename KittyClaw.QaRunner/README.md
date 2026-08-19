@@ -95,6 +95,7 @@ These run before Playwright starts. All of them are also valid inside `actions`.
 | `type`          | Fields                                | Effect                                                |
 |-----------------|---------------------------------------|-------------------------------------------------------|
 | `createProject` | `name`, optional `workspacePath`      | Creates a project on the test instance.               |
+| `createWorkspaceDirectory` | optional `name` (variable) | Creates an isolated empty workspace and stores its path. |
 | `createGitRepository` | optional `name` (variable), `value` (branch) | Creates an isolated committed Git repository and stores its path. |
 | `commitGitFile` | `workspacePath`, `target` (branch), `name` (file), `text` | Commits a deterministic fixture change in a registered worktree. |
 | `togglePause`   | `project`                             | Toggles `IsPaused` on a project.                      |

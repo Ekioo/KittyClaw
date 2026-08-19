@@ -44,6 +44,61 @@ else
         <section class="settings-section" data-testid="worktree-settings">
             <h2>@L["WorktreeSettings"]</h2>
             <p class="settings-hint">@L["WorktreeSettingsHint"]</p>
+            @if (_gitStatus is not null)
+            {
+                @if (!_gitStatus.WorkspaceConfigured)
+                {
+                }
+                else if (!_gitStatus.GitAvailable)
+                {
+                    <div class="settings-status settings-status-warn" data-testid="git-unavailable">@L["GitUnavailable"]</div>
+                }
+                else if (!_gitStatus.WorkspaceExists)
+                {
+                    <div class="settings-status settings-status-warn" data-testid="git-workspace-missing">@L["GitWorkspaceMissing"]</div>
+                }
+                else if (_gitStatus.IsRepository)
+                {
+                    <div class="settings-status settings-status-ok git-repository-status" data-testid="git-repository-ready">
+                        <span>@L["GitRepositoryReady"]</span>
+                        <code>@_gitStatus.RepositoryRoot</code>
+                    </div>
+                }
+                else if (_gitStatus.GitMetadataPresent)
+                {
+                    <div class="settings-status settings-status-warn" data-testid="git-metadata-detected">@L["GitMetadataDetected"]</div>
+                }
+                else
+                {
+                    <div class="git-initialize-card" data-testid="git-initialize-card">
+                        <div>
+                            <strong>@L["GitRepositoryMissing"]</strong>
+                            <p>@L["GitRepositoryMissingHint"]</p>
+                        </div>
+                        @if (!_confirmGitInitialization)
+                        {
+                            <button class="settings-primary" type="button" data-testid="git-init"
+                                    @onclick="() => _confirmGitInitialization = true">@L["GitInitialize"]</button>
+                        }
+                    </div>
+                    @if (_confirmGitInitialization)
+                    {
+                        <div class="git-initialize-confirm" data-testid="git-initialize-confirm">
+                            <p>@L["GitInitializeConfirm"]</p>
+                            <div class="settings-row">
+                                <button class="settings-browse" type="button" @onclick="() => _confirmGitInitialization = false" disabled="@_initializingGit">@L["Cancel"]</button>
+                                <button class="settings-primary" type="button" data-testid="git-init-confirm" @onclick="InitializeGit" disabled="@_initializingGit">
+                                    @(_initializingGit ? L["GitInitializing"] : L["Confirm"])
+                                </button>
+                            </div>
+                        </div>
+                    }
+                }
+            }
+            @if (_gitInitializationStatus is not null)
+            {
+                <div class="settings-status @_gitInitializationStatus.Value.css" data-testid="git-initialize-status">@_gitInitializationStatus.Value.text</div>
+            }
             <label class="settings-option">
                 <input type="checkbox" @bind="_worktreesEnabled" />
                 <span><strong>@L["WorktreeEnable"]</strong><small>@L["WorktreeEnableEffect"]</small></span>
@@ -474,6 +529,9 @@ else
     private string _integrationBranch = "";
     private string _repositoryPath = "";
     private (string text, string css)? _worktreeStatus;
+    private GitRepositoryStatusDto? _gitStatus;
+    private bool _confirmGitInitialization, _initializingGit;
+    private (string text, string css)? _gitInitializationStatus;
 
     private string _fallbackModel = "";
     private bool _savingFallback;
@@ -529,6 +587,7 @@ else
         _localModelBaseUrl = _project.LocalModelBaseUrl ?? "";
         _rtkEnabled = _project.RtkEnabled;
         await ReloadAllAsync();
+        await RefreshGitStatus();
         await RefreshRtkStatus();
         await ReloadSecrets();
         // Load model catalogs first, then apply the saved fallback so the <select> has a
@@ -591,6 +650,8 @@ else
             {
                 _workspaceStatus = (L["Saved"], "settings-status-ok");
                 _project = await ProjectService.GetProjectAsync(Slug);
+                _confirmGitInitialization = false;
+                await RefreshGitStatus();
             }
             else
             {
@@ -606,6 +667,42 @@ else
             }
         }
         finally { _savingWorkspace = false; }
+    }
+
+    private async Task RefreshGitStatus()
+    {
+        try { _gitStatus = await NewHttp().GetFromJsonAsync<GitRepositoryStatusDto>($"/api/projects/{Slug}/git"); }
+        catch { _gitStatus = null; }
+    }
+
+    private async Task InitializeGit()
+    {
+        _initializingGit = true;
+        _gitInitializationStatus = null;
+        try
+        {
+            var response = await NewHttp().PostAsync($"/api/projects/{Slug}/git/init", null);
+            if (!response.IsSuccessStatusCode)
+            {
+                var detail = await response.Content.ReadAsStringAsync();
+                try { detail = System.Text.Json.JsonDocument.Parse(detail).RootElement.GetProperty("error").GetString() ?? detail; } catch { }
+                _gitInitializationStatus = ($"{L["Error"]}: {detail}", "settings-status-err");
+                return;
+            }
+
+            var initialized = await response.Content.ReadFromJsonAsync<GitInitializationResultDto>();
+            _repositoryPath = initialized?.RepositoryRoot ?? _repositoryPath;
+            if (string.IsNullOrWhiteSpace(_integrationBranch))
+                _integrationBranch = initialized?.IntegrationBranch ?? "main";
+            _confirmGitInitialization = false;
+            _gitInitializationStatus = (L["GitInitialized"], "settings-status-ok");
+            await RefreshGitStatus();
+        }
+        catch (Exception ex)
+        {
+            _gitInitializationStatus = ($"{L["Error"]}: {ex.Message}", "settings-status-err");
+        }
+        finally { _initializingGit = false; }
     }
 
     private async Task SaveWorktrees()
@@ -716,6 +813,18 @@ else
     }
 
     private sealed record RtkStatusDto(bool Enabled, bool Available, string Mode, string? Version, string? Reason);
+
+    private sealed record GitRepositoryStatusDto(
+        string WorkspacePath,
+        bool WorkspaceConfigured,
+        bool WorkspaceExists,
+        bool GitAvailable,
+        bool GitMetadataPresent,
+        bool IsRepository,
+        string? RepositoryRoot,
+        string? CurrentBranch);
+
+    private sealed record GitInitializationResultDto(string RepositoryRoot, string IntegrationBranch, string Message);
 
     private sealed record ProjectSecretDto(string Name, DateTime UpdatedAt);
 

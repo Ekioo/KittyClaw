@@ -74,5 +74,15 @@
   "NoSecrets": "保存済みのシークレットはありません。",
   "EnterReplacement": "このシークレットを置き換える新しい値を入力してください。",
   "SecretSaved": "シークレットを安全に保存しました。",
-  "SecretDeleted": "シークレットを削除しました。"
+  "SecretDeleted": "シークレットを削除しました。",
+  "GitUnavailable": "Git がインストールされていないか、PATH から利用できません。",
+  "GitWorkspaceMissing": "設定されたワークスペースフォルダーはまだ存在しません。",
+  "GitMetadataDetected": "Git メタデータは存在しますが、リポジトリを利用できません。.git ファイルまたはフォルダーを確認してください。",
+  "GitRepositoryReady": "Git リポジトリの準備完了：",
+  "GitRepositoryMissing": "Git リポジトリが検出されませんでした",
+  "GitRepositoryMissingHint": "既存ファイルを追加または変更せずに、ローカルリポジトリを初期化します。",
+  "GitInitialize": "Git リポジトリを初期化",
+  "GitInitializeConfirm": "KittyClaw はこのワークスペースで git init を実行します。既存ファイルは追加も変更もされません。",
+  "GitInitializing": "初期化中…",
+  "GitInitialized": "ローカル Git リポジトリを初期化しました。既存ファイルは追加も変更もされていません。"
 }

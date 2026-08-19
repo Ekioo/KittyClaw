@@ -74,5 +74,15 @@
   "NoSecrets": "Aucun secret enregistré.",
   "EnterReplacement": "Saisissez une nouvelle valeur pour remplacer ce secret.",
   "SecretSaved": "Secret enregistré de façon sécurisée.",
-  "SecretDeleted": "Secret supprimé."
+  "SecretDeleted": "Secret supprimé.",
+  "GitUnavailable": "Git n’est pas installé ou n’est pas disponible dans le PATH.",
+  "GitWorkspaceMissing": "Le dossier de travail configuré n’existe pas encore.",
+  "GitMetadataDetected": "Des métadonnées Git sont déjà présentes, mais le dépôt n’est pas utilisable. Vérifiez le fichier ou dossier .git.",
+  "GitRepositoryReady": "Dépôt Git prêt :",
+  "GitRepositoryMissing": "Aucun dépôt Git détecté",
+  "GitRepositoryMissingHint": "Initialisez un dépôt local sans ajouter ni modifier les fichiers existants.",
+  "GitInitialize": "Initialiser un dépôt Git",
+  "GitInitializeConfirm": "KittyClaw va exécuter git init dans ce dossier de travail. Aucun fichier existant ne sera ajouté ni modifié.",
+  "GitInitializing": "Initialisation…",
+  "GitInitialized": "Le dépôt Git local est initialisé. Aucun fichier existant n’a été ajouté ni modifié."
 }

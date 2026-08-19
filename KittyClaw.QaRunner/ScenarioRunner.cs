@@ -64,6 +64,14 @@ public sealed class ScenarioRunner
     {
         switch (action.Type)
         {
+            case "createWorkspaceDirectory":
+                {
+                    var variable = action.Name ?? "workspacePath";
+                    var path = Path.Combine(_screenshotDir, "workspaces", Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(path);
+                    _vars[variable] = path;
+                    break;
+                }
             case "createGitRepository":
                 {
                     var variable = action.Name ?? "repositoryPath";

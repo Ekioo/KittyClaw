@@ -44,6 +44,7 @@ builder.Services.AddSingleton(new KittyClaw.Core.Services.LocalizationService(ap
 var projectSecretVault = new ProjectSecretVault(dataDir);
 builder.Services.AddSingleton(projectSecretVault);
 builder.Services.AddSingleton(new ProjectService(dataDir, projectSecretVault));
+builder.Services.AddSingleton<GitRepositoryInitializationService>();
 builder.Services.AddSingleton<TicketService>();
 builder.Services.AddSingleton<TicketTransferService>();
 builder.Services.AddSingleton<LabelService>();

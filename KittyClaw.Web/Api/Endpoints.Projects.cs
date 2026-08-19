@@ -76,5 +76,33 @@ public static partial class Endpoints
             costReports.RequestRefresh();
             return Results.Ok(await rtk.GetStatusAsync(slug));
         }).WithTags("Projects");
+
+        api.MapGet("/projects/{slug}/git", async (
+            string slug,
+            GitRepositoryInitializationService git) =>
+        {
+            var status = await git.GetStatusAsync(slug);
+            return status is null ? Results.NotFound() : Results.Ok(status);
+        }).WithTags("Projects");
+
+        api.MapPost("/projects/{slug}/git/init", async (
+            string slug,
+            GitRepositoryInitializationService git) =>
+        {
+            try
+            {
+                var result = await git.InitializeAsync(slug);
+                return result is null ? Results.NotFound() : Results.Ok(result);
+            }
+            catch (GitRepositoryAlreadyExistsException ex)
+            {
+                return Results.Conflict(new { error = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).WithTags("Projects")
+        .ProducesProblem(StatusCodes.Status409Conflict);
     }
 }

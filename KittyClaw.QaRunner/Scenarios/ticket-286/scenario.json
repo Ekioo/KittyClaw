@@ -1,0 +1,32 @@
+{
+  "setup": [
+    { "type": "createWorkspaceDirectory", "name": "workspacePath" },
+    { "type": "createProject", "name": "Git Init QA", "workspacePath": "{workspacePath}" }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/git-init-qa/settings" },
+    { "type": "assertVisible", "selector": "[data-testid=git-init]" },
+    {
+      "type": "screenshot",
+      "name": "git-init-available",
+      "selector": "[data-testid=worktree-settings]",
+      "description": "Project settings offer local Git initialization only for an existing non-repository workspace."
+    },
+    { "type": "wait", "ms": 500 },
+    { "type": "click", "selector": "[data-testid=git-init]" },
+    { "type": "wait", "ms": 150 },
+    { "type": "assertVisible", "selector": "[data-testid=git-initialize-confirm]" },
+    { "type": "click", "selector": "[data-testid=git-init-confirm]" },
+    { "type": "wait", "ms": 800 },
+    { "type": "assertVisible", "selector": "[data-testid=git-repository-ready]" },
+    { "type": "assertCount", "selector": "[data-testid=git-init]", "expected": "0" },
+    { "type": "assertJson", "path": "/api/projects/git-init-qa/git", "jsonPath": "isRepository", "expected": "true" },
+    {
+      "type": "screenshot",
+      "name": "git-init-complete",
+      "selector": "[data-testid=worktree-settings]",
+      "description": "After confirmation, the repository is detected and the initialization action disappears without a page reload."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

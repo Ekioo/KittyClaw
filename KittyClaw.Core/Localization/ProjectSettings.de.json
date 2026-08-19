@@ -74,5 +74,15 @@
   "NoSecrets": "Keine Geheimnisse gespeichert.",
   "EnterReplacement": "Geben Sie einen neuen Wert ein, um dieses Geheimnis zu ersetzen.",
   "SecretSaved": "Geheimnis sicher gespeichert.",
-  "SecretDeleted": "Geheimnis gelöscht."
+  "SecretDeleted": "Geheimnis gelöscht.",
+  "GitUnavailable": "Git ist nicht installiert oder nicht im PATH verfügbar.",
+  "GitWorkspaceMissing": "Der konfigurierte Arbeitsordner existiert noch nicht.",
+  "GitMetadataDetected": "Git-Metadaten sind bereits vorhanden, aber das Repository ist nicht nutzbar. Prüfen Sie die .git-Datei oder den Ordner.",
+  "GitRepositoryReady": "Git-Repository bereit:",
+  "GitRepositoryMissing": "Kein Git-Repository erkannt",
+  "GitRepositoryMissingHint": "Initialisieren Sie ein lokales Repository, ohne vorhandene Dateien hinzuzufügen oder zu ändern.",
+  "GitInitialize": "Git-Repository initialisieren",
+  "GitInitializeConfirm": "KittyClaw führt git init in diesem Arbeitsordner aus. Keine vorhandene Datei wird hinzugefügt oder geändert.",
+  "GitInitializing": "Initialisierung…",
+  "GitInitialized": "Das lokale Git-Repository ist initialisiert. Keine vorhandene Datei wurde hinzugefügt oder geändert."
 }
