@@ -23,5 +23,13 @@
   "Tip21": "Habilidades de projeto descrevem procedimentos técnicos e operacionais reutilizáveis. Um processador pode torná-las disponíveis, recomendadas ou necessárias para seu agente genérico.",
   "Tip22": "Cada processador e tarefa agendada pode escolher seu modelo. Novas instruções reutilizam sua última escolha, enquanto uma conversa existente sempre mantém seu modelo original.",
   "Tip23": "O selo laranja de um pipeline conta seus tickets não lidos visíveis. Clique com o botão direito em uma coluna e escolha Marcar todos como lidos para zerar sua contagem.",
-  "Tip24": "Um quadro de automação legado pode ser migrado com o assistente. Revise seus pipelines e colunas passo a passo antes de iniciar a migração."
+  "Tip24": "Um quadro de automação legado pode ser migrado com o assistente. Revise seus pipelines e colunas passo a passo antes de iniciar a migração.",
+  "Tip25": "A página Custos usa um relatório em cache. Comece com um intervalo curto e depois filtre por projeto, pipeline ou modelo.",
+  "Tip26": "Em Custos, verde significa medido, laranja listrado significa estimado e o gradiente de ciano para verde mostra a economia gerada pelo RTK.",
+  "Tip27": "Ative o RTK nas configurações do projeto para condensar a saída dos comandos antes que ela chegue ao agente. A economia estimada aparecerá em Custos.",
+  "Tip28": "Uma aprovação em tempo de execução pausa o agente antes de uma ação sensível. Abra Aprovações no quadro para permitir uma vez, permitir no ticket ou negar.",
+  "Tip29": "Ative worktrees nas configurações do projeto para isolar cada implementação. O painel do ticket mostra a branch, a pasta e o status de integração.",
+  "Tip30": "Conecte tickets com Bloqueado por e Bloqueia. Os processadores aguardam a resolução das dependências antes de iniciar o trabalho dependente.",
+  "Tip31": "Em uma etapa que exige ação do proprietário, o resumo de decisão reúne o contexto útil. Aceite, solicite uma correção ou interrompa sem reler todo o histórico.",
+  "Tip32": "Os blocos do dashboard podem exibir Markdown, KPIs, gráficos, tabelas, linhas do tempo ou diagramas Mermaid. Cada bloco tem seu próprio intervalo de atualização."
 }
