@@ -1,0 +1,86 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "Alpha Legend" },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/alpha-legend/members",
+      "body": { "name": "programmer" }
+    },
+    {
+      "type": "createTicket",
+      "project": "alpha-legend",
+      "title": "Ship the sonnet feature",
+      "status": "InProgress",
+      "priority": "Required",
+      "assignedTo": "programmer"
+    },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/alpha-legend/chat/start",
+      "body": {
+        "target": "programmer#ticket-{ticketId}",
+        "message": "Implement the sonnet feature.",
+        "model": "claude-sonnet-4-6",
+        "forceNew": true
+      },
+      "extract": { "runId": "runId" }
+    },
+    { "type": "waitForRun", "project": "alpha-legend", "ms": 30000 },
+    { "type": "createProject", "name": "Beta Legend" },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/beta-legend/members",
+      "body": { "name": "programmer" }
+    },
+    {
+      "type": "createTicket",
+      "project": "beta-legend",
+      "title": "Ship the opus feature",
+      "status": "InProgress",
+      "priority": "Required",
+      "assignedTo": "programmer"
+    },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/beta-legend/chat/start",
+      "body": {
+        "target": "programmer#ticket-{ticketId}",
+        "message": "Implement the opus feature.",
+        "model": "claude-opus-4-6",
+        "forceNew": true
+      },
+      "extract": { "runId": "runId" }
+    },
+    { "type": "waitForRun", "project": "beta-legend", "ms": 30000 }
+  ],
+  "actions": [
+    { "type": "wait", "ms": 2500 },
+    { "type": "navigate", "url": "/costs" },
+    { "type": "wait", "ms": 1500 },
+    { "type": "assertVisible", "selector": "select.cost-model" },
+    { "type": "assertCount", "selector": "select.cost-model option", "expected": "3" },
+    { "type": "assertVisible", "selector": ".cost-legend" },
+    { "type": "assertCount", "selector": ".cost-legend .cost-legend-measured", "expected": "1" },
+    { "type": "assertCount", "selector": ".cost-legend .cost-legend-estimated", "expected": "1" },
+    { "type": "assertCount", "selector": ".cost-project-cost-card", "expected": "2" },
+    {
+      "type": "screenshot",
+      "name": "cost-legend-and-model-filter",
+      "description": "Costs page shows the measured/estimated legend and a Model filter defaulting to All models."
+    },
+    { "type": "selectOption", "selector": "select.cost-model", "value": "claude-opus-4-6" },
+    { "type": "wait", "ms": 1500 },
+    { "type": "assertCount", "selector": ".cost-project-cost-card", "expected": "1" },
+    { "type": "assertText", "selector": ".cost-project-cost-card h3", "expected": "Beta Legend" },
+    {
+      "type": "screenshot",
+      "name": "cost-model-filter-applied",
+      "description": "Selecting a model keeps only the projects that used it, combined with the date filter."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

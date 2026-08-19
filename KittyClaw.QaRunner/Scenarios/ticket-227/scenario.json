@@ -1,0 +1,15 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "Alpha Costs" },
+    { "type": "createProject", "name": "Beta Costs" }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/costs" },
+    { "type": "assertVisible", "selector": ".cost-project-picker" },
+    { "type": "assertVisible", "selector": ".cost-pipeline" },
+    { "type": "assertCount", "selector": ".cost-filter-grid > .cost-project-picker:nth-child(3)", "expected": "1" },
+    { "type": "assertCount", "selector": ".cost-filter-grid > .cost-field:nth-child(4) .cost-pipeline", "expected": "1" },
+    { "type": "screenshot", "name": "cost-project-before-pipeline", "description": "Costs filters show Projects before Pipeline." }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

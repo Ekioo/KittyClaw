@@ -27,6 +27,33 @@ public sealed class CostsNavigationResponsivenessTests
     }
 
     [Fact]
+    public void CostPage_PlacesProjectsBeforePipelineAndUsesProjectScopedPipelineOptions()
+    {
+        var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Costs.razor"));
+
+        var projectsIndex = source.IndexOf("<details class=\"cost-project-picker\">", StringComparison.Ordinal);
+        var pipelineIndex = source.IndexOf("<select class=\"cost-pipeline\"", StringComparison.Ordinal);
+
+        Assert.True(projectsIndex >= 0 && projectsIndex < pipelineIndex);
+        Assert.Contains("@foreach (var pipeline in AvailablePipelines)", source, StringComparison.Ordinal);
+        Assert.Contains("ValidatePipelineSelection(); await Reload();", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CostPage_OffersModelFilterAndExplainsChartEncoding()
+    {
+        var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Costs.razor"));
+        var styles = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "wwwroot", "css", "costs.css"));
+
+        Assert.Contains("class=\"cost-model\"", source, StringComparison.Ordinal);
+        Assert.Contains("@foreach (var model in _options?.Models ?? [])", source, StringComparison.Ordinal);
+        Assert.Contains("OnModelChanged", source, StringComparison.Ordinal);
+        Assert.Contains("class=\"cost-legend\"", source, StringComparison.Ordinal);
+        Assert.Contains("cost-legend-measured", styles, StringComparison.Ordinal);
+        Assert.Contains("cost-legend-estimated", styles, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CostPage_OffersQuickDateRangesAndKeepsManualDatesCustom()
     {
         var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Costs.razor"));

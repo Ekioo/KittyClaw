@@ -85,6 +85,53 @@ public sealed class CostReportServiceTests
     }
 
     [Fact]
+    public async Task ModelFilter_UsesRecordedModels_AndCombinesWithProjectFilter()
+    {
+        using var temp = new TempDir();
+        var projects = new ProjectService(temp.Path);
+        var alpha = await projects.CreateProjectAsync("Alpha models");
+        var beta = await projects.CreateProjectAsync("Beta models");
+        var tickets = new TicketService(projects, new MemberService(projects));
+        var service = new CostReportService(projects, new PipelineService(projects), tickets);
+        var day = DateOnly.FromDateTime(DateTime.Now);
+        Write(projects.ResolveWorkspacePath(alpha), "cost-log.jsonl",
+            Entry(day, 2m, alpha.Slug, pipeline: 1, run: "alpha-sonnet", model: "claude-sonnet-5"),
+            Entry(day, 3m, alpha.Slug, pipeline: 1, run: "alpha-codex", model: "gpt-5.6"));
+        Write(projects.ResolveWorkspacePath(beta), "cost-log.jsonl",
+            Entry(day, 5m, beta.Slug, pipeline: 1, run: "beta-sonnet", model: "claude-sonnet-5"));
+
+        await service.RefreshAsync();
+
+        var options = await service.GetOptionsAsync();
+        var filtered = await service.GetReportAsync(new(day, day, new HashSet<string> { alpha.Slug }, Model: "claude-sonnet-5"));
+
+        Assert.Equal(["claude-sonnet-5", "gpt-5.6"], options.Models.Select(option => option.Key));
+        Assert.Equal(2m, filtered.TotalUsd);
+        Assert.Single(filtered.Projects);
+        Assert.Equal(alpha.Slug, filtered.Projects[0].ProjectSlug);
+    }
+
+    [Fact]
+    public async Task ModelFilter_WithUnknownModel_ReturnsEmptyReport()
+    {
+        using var temp = new TempDir();
+        var projects = new ProjectService(temp.Path);
+        var project = await projects.CreateProjectAsync("Unknown model filter");
+        var tickets = new TicketService(projects, new MemberService(projects));
+        var service = new CostReportService(projects, new PipelineService(projects), tickets);
+        var day = DateOnly.FromDateTime(DateTime.Now);
+        Write(projects.ResolveWorkspacePath(project), "cost-log.jsonl",
+            Entry(day, 2m, project.Slug, pipeline: 1, run: "known", model: "gpt-5.6"));
+
+        await service.RefreshAsync();
+
+        var filtered = await service.GetReportAsync(new(day, day, Model: "missing-model"));
+
+        Assert.Equal(0m, filtered.TotalUsd);
+        Assert.Empty(filtered.Projects);
+    }
+
+    [Fact]
     public async Task UnknownPipeline_FilterIncludesOrphanedLegacyTicket_ButExcludesTicketlessRun()
     {
         using var temp = new TempDir();
@@ -174,8 +221,8 @@ public sealed class CostReportServiceTests
         Assert.Equal(7m, (await restarted.GetReportAsync(new(day, day))).TotalUsd);
     }
 
-    private static string Entry(DateOnly day, decimal cost, string slug, int? pipeline, bool estimated = false, string run = "", int? ticketId = null)
-        => JsonSerializer.Serialize(new CostLogEntry(day.ToDateTime(new TimeOnly(12, 0)), "agent", ticketId, "model", 1, 1, 0, 0, cost, 1, 0, estimated, slug, pipeline, run));
+    private static string Entry(DateOnly day, decimal cost, string slug, int? pipeline, bool estimated = false, string run = "", int? ticketId = null, string model = "model")
+        => JsonSerializer.Serialize(new CostLogEntry(day.ToDateTime(new TimeOnly(12, 0)), "agent", ticketId, model, 1, 1, 0, 0, cost, 1, 0, estimated, slug, pipeline, run));
 
     private static void Write(string workspace, string file, params string[] lines)
     {

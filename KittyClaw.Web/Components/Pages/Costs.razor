@@ -15,16 +15,6 @@
         <div class="cost-filter-grid">
             <label class="cost-field"><span>@L["FromDate"]</span><input class="cost-from" type="date" value="@_from.ToString("yyyy-MM-dd")" @onchange="OnFromChanged" /></label>
             <label class="cost-field"><span>@L["ToDate"]</span><input class="cost-to" type="date" value="@_to.ToString("yyyy-MM-dd")" @onchange="OnToChanged" /></label>
-            <label class="cost-field">
-                <span>@L["Pipeline"]</span>
-                <select class="cost-pipeline" value="@(_pipelineKey ?? "")" @onchange="OnPipelineChanged">
-                    <option value="">@L["AllPipelines"]</option>
-                    @foreach (var pipeline in _options?.Pipelines ?? [])
-                    {
-                        <option value="@pipeline.Key">@(pipeline.Key.EndsWith(":unknown", StringComparison.Ordinal) ? $"{pipeline.Name} / {L["UnknownPipeline"]}" : pipeline.Name)</option>
-                    }
-                </select>
-            </label>
             <details class="cost-project-picker">
                 <summary><span class="cost-field-label">@L["Projects"]</span><strong>@ProjectSelectionLabel</strong><span class="cost-picker-chevron" aria-hidden="true"></span></summary>
                 <fieldset class="cost-project-menu">
@@ -38,6 +28,26 @@
                     </div>
                 </fieldset>
             </details>
+            <label class="cost-field">
+                <span>@L["Pipeline"]</span>
+                <select class="cost-pipeline" value="@(_pipelineKey ?? "")" @onchange="OnPipelineChanged">
+                    <option value="">@L["AllPipelines"]</option>
+                    @foreach (var pipeline in AvailablePipelines)
+                    {
+                        <option value="@pipeline.Key">@(pipeline.Key.EndsWith(":unknown", StringComparison.Ordinal) ? $"{pipeline.Name} / {L["UnknownPipeline"]}" : pipeline.Name)</option>
+                    }
+                </select>
+            </label>
+            <label class="cost-field">
+                <span>@L["Model"]</span>
+                <select class="cost-model" value="@(_model ?? "")" @onchange="OnModelChanged">
+                    <option value="">@L["AllModels"]</option>
+                    @foreach (var model in _options?.Models ?? [])
+                    {
+                        <option value="@model.Key">@model.Name</option>
+                    }
+                </select>
+            </label>
         </div>
         <div class="cost-date-presets" role="group" aria-label="@L["QuickPeriod"]">
             <span class="cost-date-presets-label">@L["QuickPeriod"]</span>
@@ -71,7 +81,13 @@
         else
         {
             <section class="cost-projects-section">
-                <h2>@L["ByProject"]</h2>
+                <header class="cost-projects-header">
+                    <h2>@L["ByProject"]</h2>
+                    <div class="cost-legend" role="list" aria-label="@L["CostLegend"]">
+                        <span role="listitem"><i class="cost-legend-swatch cost-legend-measured" aria-hidden="true"></i>@L["Measured"]</span>
+                        <span role="listitem"><i class="cost-legend-swatch cost-legend-estimated" aria-hidden="true"></i>@L["Estimated"]</span>
+                    </div>
+                </header>
                 <div class="cost-project-card-grid">
                     @foreach (var project in _projectCosts)
                     {
@@ -104,6 +120,7 @@
     private DateOnly _from = DateOnly.FromDateTime(DateTime.Now).AddDays(-29);
     private DatePreset? _activePreset = DatePreset.Last30Days;
     private string? _pipelineKey;
+    private string? _model;
     private HashSet<string> _selectedProjects = [];
     private CostReportOptions? _options;
     private CostReport? _report;
@@ -112,6 +129,7 @@
     private string? _error;
 
     private string ProjectSelectionLabel => _selectedProjects.Count == 0 ? L["AllProjects"] : $"{_selectedProjects.Count} {L["Projects"]}";
+    private IReadOnlyList<CostPipelineOption> AvailablePipelines => CostPipelineFilter.Filter(_options?.Pipelines, _selectedProjects);
 
     protected override async Task OnInitializedAsync()
     {
@@ -124,7 +142,7 @@
         _loading = true; _error = null;
         try
         {
-            _report = await CostReports.GetReportAsync(new(_from, _to, _selectedProjects, _pipelineKey));
+            _report = await CostReports.GetReportAsync(new(_from, _to, _selectedProjects, _pipelineKey, _model));
             _projectCosts = BuildProjectCosts(_report);
         }
         catch (Exception ex) { _error = ex.Message; }
@@ -134,8 +152,10 @@
     private async Task OnFromChanged(ChangeEventArgs e) { if (DateOnly.TryParse(e.Value?.ToString(), out var value)) { _from = value; _activePreset = null; } await Reload(); }
     private async Task OnToChanged(ChangeEventArgs e) { if (DateOnly.TryParse(e.Value?.ToString(), out var value)) { _to = value; _activePreset = null; } await Reload(); }
     private async Task OnPipelineChanged(ChangeEventArgs e) { _pipelineKey = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value!.ToString(); await Reload(); }
-    private async Task SelectAllProjects(ChangeEventArgs e) { _selectedProjects.Clear(); await Reload(); }
-    private async Task ToggleProject(string slug, ChangeEventArgs e) { if ((bool?)e.Value == true) _selectedProjects.Add(slug); else _selectedProjects.Remove(slug); await Reload(); }
+    private async Task OnModelChanged(ChangeEventArgs e) { _model = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value!.ToString(); await Reload(); }
+    private async Task SelectAllProjects(ChangeEventArgs e) { _selectedProjects.Clear(); ValidatePipelineSelection(); await Reload(); }
+    private async Task ToggleProject(string slug, ChangeEventArgs e) { if ((bool?)e.Value == true) _selectedProjects.Add(slug); else _selectedProjects.Remove(slug); ValidatePipelineSelection(); await Reload(); }
+    private void ValidatePipelineSelection() => _pipelineKey = CostPipelineFilter.KeepValidSelection(_pipelineKey, AvailablePipelines);
     private string PresetClass(DatePreset preset) => $"cost-date-preset{(_activePreset == preset ? " is-active" : string.Empty)}";
 
     private async Task ApplyDatePreset(DatePreset preset)

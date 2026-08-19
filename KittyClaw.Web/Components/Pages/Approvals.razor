@@ -3,23 +3,24 @@
 @inject ProjectService ProjectService
 @inject ApprovalRegistryService Registry
 @inject ApprovalWorkflowService Workflow
+@inject LocalizationService L
 @rendermode InteractiveServer
 
-<PageTitle>Runtime approvals</PageTitle>
+<PageTitle>@L["RuntimeApprovalsTitle"]</PageTitle>
 
 <div class="page-header">
-    <a class="back-link" href="/board/@Slug">&larr; Board</a>
-    <h1>Runtime approvals</h1>
-    <button class="header-action-btn" @onclick="LoadAsync">Refresh</button>
+    <a class="back-link" href="/board/@Slug">&larr; @L["ApprovalBackToBoard"]</a>
+    <h1>@L["RuntimeApprovalsTitle"]</h1>
+    <button class="header-action-btn" @onclick="LoadAsync">@L["Refresh"]</button>
 </div>
 
 @if (_loading)
 {
-    <p>Loading approvals…</p>
+    <p>@L["ApprovalLoading"]</p>
 }
 else if (_requests.Count == 0)
 {
-    <div class="approval-empty">No approval requests have been recorded.</div>
+    <div class="approval-empty">@L["ApprovalEmpty"]</div>
 }
 else
 {
@@ -34,34 +35,34 @@ else
                     <span>@request.ObservedAt.ToLocalTime().ToString("g")</span>
                 </header>
                 <dl class="approval-grid">
-                    <dt>Action</dt><dd>@request.ActionClass</dd>
-                    <dt>Destination / resource</dt><dd>@request.ResourceDisplay <code>@request.ResourceCanonicalId</code></dd>
-                    <dt>Reason</dt><dd>@request.Reason</dd>
-                    <dt>Scope</dt><dd>@(request.ScopeRequested ?? "single effect")</dd>
-                    <dt>Duration</dt><dd>@Duration(request)</dd>
-                    <dt>Provider</dt><dd>@request.ProviderName @request.ProviderCliVersion · @request.EnforcementProfile</dd>
-                    <dt>Run</dt><dd><code>@request.RunId</code></dd>
-                    <dt>Ticket</dt><dd><a href="/board/@Slug/ticket/@request.TicketId">#@request.TicketId</a></dd>
+                    <dt>@L["ApprovalAction"]</dt><dd>@request.ActionClass</dd>
+                    <dt>@L["ApprovalDestinationResource"]</dt><dd>@request.ResourceDisplay <code>@request.ResourceCanonicalId</code></dd>
+                    <dt>@L["ApprovalReason"]</dt><dd>@request.Reason</dd>
+                    <dt>@L["ApprovalScope"]</dt><dd>@(request.ScopeRequested ?? L["ApprovalSingleEffect"])</dd>
+                    <dt>@L["ApprovalDuration"]</dt><dd>@Duration(request)</dd>
+                    <dt>@L["ApprovalProvider"]</dt><dd>@request.ProviderName @request.ProviderCliVersion · @request.EnforcementProfile</dd>
+                    <dt>@L["ApprovalRun"]</dt><dd><code>@request.RunId</code></dd>
+                    <dt>@L["ApprovalTicket"]</dt><dd><a href="/board/@Slug/ticket/@request.TicketId">#@request.TicketId</a></dd>
                 </dl>
                 @if (request.State == "pending")
                 {
                     <div class="approval-actions">
-                        <button class="approval-allow" @onclick="() => DecideAsync(request, ApprovalDecisionKind.AllowOnce)">Allow once</button>
-                        <button class="approval-ticket" @onclick="() => DecideAsync(request, ApprovalDecisionKind.AllowForTicket)">Allow for this ticket</button>
-                        <button class="approval-deny" @onclick="() => DecideAsync(request, ApprovalDecisionKind.Deny)">Deny</button>
+                        <button class="approval-allow" @onclick="() => DecideAsync(request, ApprovalDecisionKind.AllowOnce)">@L["ApprovalAllowOnce"]</button>
+                        <button class="approval-ticket" @onclick="() => DecideAsync(request, ApprovalDecisionKind.AllowForTicket)">@L["ApprovalAllowForTicket"]</button>
+                        <button class="approval-deny" @onclick="() => DecideAsync(request, ApprovalDecisionKind.Deny)">@L["ApprovalDeny"]</button>
                     </div>
                 }
                 @if (decisions.Count > 0 || receipts.Count > 0)
                 {
                     <details class="approval-audit">
-                        <summary>Audit history (@(decisions.Count + receipts.Count))</summary>
+                        <summary>@L.Get("ApprovalAuditHistory", decisions.Count + receipts.Count)</summary>
                         @foreach (var decision in decisions)
                         {
-                            <p><strong>@decision.Kind</strong> by @decision.Actor · @decision.CreatedAt.ToLocalTime().ToString("g") · scope @decision.Scope · expires @decision.ExpiresAt.ToLocalTime().ToString("g")</p>
+                            <p><strong>@decision.Kind</strong> @L.Get("ApprovalDecisionAudit", decision.Actor, decision.CreatedAt.ToLocalTime().ToString("g"), decision.Scope, decision.ExpiresAt.ToLocalTime().ToString("g"))</p>
                         }
                         @foreach (var receipt in receipts)
                         {
-                            <p><strong>@receipt.Outcome</strong> · @receipt.EnforcementPointId · @receipt.EndedAt.ToLocalTime().ToString("g") · integrity <code>@receipt.IntegrityHash[..12]</code></p>
+                            <p><strong>@receipt.Outcome</strong> @L.Get("ApprovalReceiptAudit", receipt.EnforcementPointId, receipt.EndedAt.ToLocalTime().ToString("g")) <code>@receipt.IntegrityHash[..12]</code></p>
                         }
                     </details>
                 }
@@ -93,7 +94,9 @@ else
 
     private List<ApprovalDecisionRecord> Decisions(string id) => _decisions.Where(d => d.RequestId == id).OrderByDescending(d => d.CreatedAt).ToList();
     private List<ApprovalReceiptRecord> Receipts(string id) => _receipts.Where(r => r.RequestId == id).OrderByDescending(r => r.EndedAt).ToList();
-    private static string Duration(ApprovalRequestRecord r) => r.DurationRequestedSeconds is int seconds ? TimeSpan.FromSeconds(seconds).ToString() : $"until {r.ExpiresAt.ToLocalTime():g}";
+    private string Duration(ApprovalRequestRecord r) => r.DurationRequestedSeconds is int seconds
+        ? TimeSpan.FromSeconds(seconds).ToString()
+        : L.Get("ApprovalUntil", r.ExpiresAt.ToLocalTime().ToString("g"));
 
     private async Task DecideAsync(ApprovalRequestRecord request, ApprovalDecisionKind kind)
     {

@@ -207,6 +207,14 @@ Each tile lives in its own folder under `.dashboard/` in the project workspace:
 
 Tiles can be created from the dashboard's AI chat panel by describing what you want — the agent picks a template, writes `tile.yaml`, generates the refresh script, and produces the initial `output.json`.
 
+## Cost reporting
+
+The **Costs** page provides a cached, per-project view of agent usage, so opening the report is immediate even with a long run history. Date presets make common periods quick to select, while project, pipeline, and model filters can be combined; pipeline choices automatically follow the selected projects. A visible legend distinguishes measured costs from estimated costs in the daily charts.
+
+<p align="center">
+  <img src="docs/assets/costs.png" alt="KittyClaw Costs page with date, project, pipeline, and model filters, per-project cost cards, and measured-versus-estimated legend" width="1000" />
+</p>
+
 ## Automation model
 
 - **Triggers**: `interval`, `ticketInColumn`, `statusChange`, `subTicketStatus`, `ticketCommentAdded`, `gitCommit`, `boardIdle`, `agentInactivity`.

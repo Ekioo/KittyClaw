@@ -5,15 +5,16 @@ using KittyClaw.Core.Automation;
 
 namespace KittyClaw.Core.Services;
 
-public sealed record CostReportFilter(DateOnly From, DateOnly To, IReadOnlySet<string>? ProjectSlugs = null, string? PipelineKey = null);
+public sealed record CostReportFilter(DateOnly From, DateOnly To, IReadOnlySet<string>? ProjectSlugs = null, string? PipelineKey = null, string? Model = null);
 public sealed record CostProjectOption(string Slug, string Name);
 public sealed record CostPipelineOption(string Key, string Name);
+public sealed record CostModelOption(string Key, string Name);
 public sealed record CostBucket(DateOnly Day, string ProjectSlug, string ProjectName, decimal UsdCost, bool Estimated);
 public sealed record CostProjectTotal(string ProjectSlug, string ProjectName, decimal UsdCost, bool Estimated);
 public sealed record CostReport(decimal TotalUsd, bool Estimated, IReadOnlyList<CostBucket> Daily, IReadOnlyList<CostProjectTotal> Projects);
-public sealed record CostReportOptions(IReadOnlyList<CostProjectOption> Projects, IReadOnlyList<CostPipelineOption> Pipelines);
+public sealed record CostReportOptions(IReadOnlyList<CostProjectOption> Projects, IReadOnlyList<CostPipelineOption> Pipelines, IReadOnlyList<CostModelOption> Models);
 
-internal sealed record CostSnapshotRow(DateOnly Day, string ProjectSlug, string ProjectName, string? PipelineKey, decimal UsdCost, bool Estimated);
+internal sealed record CostSnapshotRow(DateOnly Day, string ProjectSlug, string ProjectName, string? PipelineKey, string Model, decimal UsdCost, bool Estimated);
 internal sealed record CostReportSnapshot(int Version, DateTime GeneratedAt, CostReportOptions Options, IReadOnlyList<CostSnapshotRow> Rows);
 
 /// <summary>
@@ -22,9 +23,9 @@ internal sealed record CostReportSnapshot(int Version, DateTime GeneratedAt, Cos
 /// </summary>
 public sealed class CostReportService
 {
-    private const int SnapshotVersion = 1;
+    private const int SnapshotVersion = 2;
     private const string UnknownPipelineSuffix = "unknown";
-    private static readonly CostReportOptions EmptyOptions = new([], []);
+    private static readonly CostReportOptions EmptyOptions = new([], [], []);
     private static readonly CostReportSnapshot EmptySnapshot = new(SnapshotVersion, DateTime.MinValue, EmptyOptions, []);
     private readonly ProjectService _projects;
     private readonly PipelineService _pipelines;
@@ -150,6 +151,7 @@ public sealed class CostReportService
                         entry.ProjectSlug ?? project.Slug,
                         project.Name,
                         pipelineKey,
+                        string.IsNullOrWhiteSpace(entry.Model) ? "default" : entry.Model,
                         entry.UsdCost,
                         entry.CostEstimated));
                 }
@@ -171,12 +173,13 @@ public sealed class CostReportService
         }
 
         var compactRows = rows
-            .GroupBy(row => new { row.Day, row.ProjectSlug, row.ProjectName, row.PipelineKey })
+            .GroupBy(row => new { row.Day, row.ProjectSlug, row.ProjectName, row.PipelineKey, row.Model })
             .Select(group => new CostSnapshotRow(
                 group.Key.Day,
                 group.Key.ProjectSlug,
                 group.Key.ProjectName,
                 group.Key.PipelineKey,
+                group.Key.Model,
                 group.Sum(row => row.UsdCost),
                 group.Any(row => row.Estimated)))
             .OrderBy(row => row.Day)
@@ -185,7 +188,12 @@ public sealed class CostReportService
 
         var options = new CostReportOptions(
             allProjects.Select(project => new CostProjectOption(project.Slug, project.Name)).ToList(),
-            pipelineOptions.OrderBy(option => option.Name).ToList());
+            pipelineOptions.OrderBy(option => option.Name).ToList(),
+            compactRows.Select(row => row.Model)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .Select(model => new CostModelOption(model, model))
+                .ToList());
         return new(SnapshotVersion, DateTime.UtcNow, options, compactRows);
     }
 
@@ -210,7 +218,8 @@ public sealed class CostReportService
         var rows = snapshot.Rows.Where(row =>
             row.Day >= filter.From && row.Day <= filter.To
             && (filter.ProjectSlugs is not { Count: > 0 } || filter.ProjectSlugs.Contains(row.ProjectSlug))
-            && (filter.PipelineKey is null || filter.PipelineKey == row.PipelineKey)).ToList();
+            && (filter.PipelineKey is null || filter.PipelineKey == row.PipelineKey)
+            && (filter.Model is null || string.Equals(filter.Model, row.Model, StringComparison.OrdinalIgnoreCase))).ToList();
         var daily = rows.GroupBy(row => new { row.Day, row.ProjectSlug, row.ProjectName })
             .Select(group => new CostBucket(group.Key.Day, group.Key.ProjectSlug, group.Key.ProjectName,
                 group.Sum(row => row.UsdCost), group.Any(row => row.Estimated)))
@@ -230,6 +239,6 @@ public sealed class CostReportService
         var projectsKey = filter.ProjectSlugs is null
             ? string.Empty
             : string.Join('\n', filter.ProjectSlugs.Order(StringComparer.Ordinal));
-        return $"{filter.From:O}|{filter.To:O}|{filter.PipelineKey}|{projectsKey}";
+        return $"{filter.From:O}|{filter.To:O}|{filter.PipelineKey}|{filter.Model}|{projectsKey}";
     }
 }
