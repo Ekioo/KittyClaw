@@ -70,6 +70,7 @@ public record UpdateProjectRequest(
     string? IntegrationBranch = null,
     string? RepositoryPath = null);
 public record SaveLocalModelConfigRequest(string? LocalModelBaseUrl = null, string? LocalModelName = null);
+public record SaveRtkConfigRequest(bool Enabled);
 public record SteerRunRequest(string Text);
 public record BrowseFolderRequest(string? InitialPath = null);
 public record ChatImageDto(string DataUrl, string Mime, string Name, long SizeBytes);

@@ -14,6 +14,7 @@ public class Project
     public string? FallbackModel { get; set; }
     public string? LocalModelBaseUrl { get; set; }
     public string? LocalModelName { get; set; }
+    public bool RtkEnabled { get; set; }
     public bool WorktreesEnabled { get; set; }
     public string? IntegrationBranch { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

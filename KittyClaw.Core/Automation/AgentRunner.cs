@@ -176,8 +176,9 @@ public sealed class AgentRunner
     private readonly AppSettingsService? _appSettings;
     private readonly BoundaryObservationService? _boundaryObserver;
     private readonly TicketWorktreeService? _worktrees;
+    private readonly RtkIntegrationService? _rtk;
 
-    public AgentRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<AgentRunner> logger, AppSettingsService? appSettings = null, BoundaryObservationService? boundaryObserver = null, TicketWorktreeService? worktrees = null)
+    public AgentRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<AgentRunner> logger, AppSettingsService? appSettings = null, BoundaryObservationService? boundaryObserver = null, TicketWorktreeService? worktrees = null, RtkIntegrationService? rtk = null)
     {
         _sessions = sessions;
         _runs = runs;
@@ -186,6 +187,7 @@ public sealed class AgentRunner
         _appSettings = appSettings;
         _boundaryObserver = boundaryObserver;
         _worktrees = worktrees;
+        _rtk = rtk;
     }
 
     public async Task<AgentRun> RunAsync(AgentRunContext ctx, CancellationToken ct)
@@ -692,11 +694,22 @@ public sealed class AgentRunner
         AgentRunContext ctx, AgentRun run, string skillContent,
         string sessionId, bool isResume, CancellationToken ct)
     {
+        var rtkStatus = _rtk is null ? null : await _rtk.GetStatusAsync(ctx.ProjectSlug, ct);
+        if (rtkStatus is { Enabled: true })
+        {
+            var detail = rtkStatus.Available
+                ? $"RTK {rtkStatus.Version} available in instruction mode; telemetry disabled"
+                : $"RTK unavailable; continuing without optimization ({rtkStatus.Reason})";
+            run.Push(new StreamEvent(DateTime.UtcNow, "external_tool", detail));
+        }
+
         var prompt = await BuildPromptAsync(ctx, skillContent, isResume, ct, _appSettings?.Language ?? "en");
+        prompt = RtkIntegrationService.AppendInstructions(prompt, rtkStatus);
         var backend = AgentCliBackend.For(ctx.Target.Provider);
         var invocation = await backend.BuildInvocationAsync(ctx, prompt, sessionId, isResume, ct);
         var psi = ProcessLifecycleManager.BuildProcessStartInfo(
             ctx, invocation.Arguments, invocation.FileName);
+        RtkIntegrationService.ApplyEnvironment(psi, rtkStatus);
 
         AppendDebugLog(ctx, $"LAUNCHING {ctx.AgentName} {(isResume ? "(resume)" : "(new)")} ticket=#{ctx.TicketId} session={sessionId}");
         _logger.LogInformation("LAUNCH {Agent} {Mode} ticket=#{TicketId} session={SessionId} cmd={Bin} {Args}",

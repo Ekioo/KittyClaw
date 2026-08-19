@@ -79,6 +79,7 @@ builder.Services.AddSingleton(new RunConcurrencyGate(maxConcurrent));
 builder.Services.AddSingleton<TicketWorktreeService>();
 builder.Services.AddSingleton<WorktreeMergeQueueService>();
 builder.Services.AddSingleton<AgentRunner>();
+builder.Services.AddSingleton<RtkIntegrationService>();
 builder.Services.AddSingleton<AgentMemoryHandler>(sp => new AgentMemoryHandler(
     sp.GetRequiredService<TicketService>(), sp.GetRequiredService<MemberService>(),
     sp.GetRequiredService<ProjectService>(), sp.GetRequiredService<AgentRunner>(),

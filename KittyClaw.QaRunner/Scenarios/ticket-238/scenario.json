@@ -1,0 +1,29 @@
+{
+  "environment": {
+    "KITTYCLAW_RTK_BIN": "missing-rtk-for-isolated-qa"
+  },
+  "setup": [
+    { "type": "createProject", "name": "RTK QA" },
+    {
+      "type": "api",
+      "method": "PATCH",
+      "path": "/api/projects/rtk-qa/rtk",
+      "body": { "enabled": true }
+    }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/rtk-qa/settings" },
+    { "type": "assertVisible", "selector": "[data-testid=rtk-settings]" },
+    { "type": "assertVisible", "selector": "[data-testid=rtk-enabled]:checked" },
+    { "type": "assertVisible", "selector": "[data-testid=rtk-runtime-status].settings-status-warn" },
+    { "type": "assertJson", "path": "/api/projects/rtk-qa/rtk", "jsonPath": "enabled", "expected": "true" },
+    { "type": "assertJson", "path": "/api/projects/rtk-qa/rtk", "jsonPath": "mode", "expected": "unavailable" },
+    {
+      "type": "screenshot",
+      "name": "rtk-project-opt-in-unavailable",
+      "selector": "[data-testid=rtk-settings]",
+      "description": "Project settings show the explicit RTK opt-in and a truthful non-blocking unavailable state."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

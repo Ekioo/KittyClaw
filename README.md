@@ -37,6 +37,7 @@ definition under `.agents/processors/column-<id>/memory/MEMORY.md`.
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - At least one agent CLI on your `PATH`: Claude Code (`claude`), OpenAI Codex (`codex`), Grok Build (`grok`), or Mistral Vibe (`vibe`). Local-model execution requires both Claude Code CLI and a reachable Ollama server.
 - Optional: [Git](https://git-scm.com/downloads) (`git` on your `PATH`) for repository initialization, Git-aware automations, and agent commits
+- Optional: [Rust Token Killer (RTK)](https://github.com/rtk-ai/rtk) (`rtk` on your `PATH`) for explicit per-project shell-output optimization. KittyClaw never installs or configures it automatically and forces its telemetry off for opted-in runs.
 
 On first launch, the onboarding popup checks Git and every supported provider CLI using the same resolved executable paths as dispatch: Claude Code (`claude` / `KITTYCLAW_CLAUDE_BIN`), OpenAI Codex (`codex` / `KITTYCLAW_CODEX_BIN`), Grok Build (`grok`, `~/.grok/bin`, or `KITTYCLAW_GROK_BIN`), and Mistral Vibe (`vibe` / `KITTYCLAW_MISTRAL_BIN`). It also reports optional Ollama availability. Any one agent provider is sufficient, failed or timed-out probes remain non-blocking, and Git-dependent features still require Git.
 
@@ -156,6 +157,7 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 - Image upload in descriptions and comments
 - Local model support ([Ollama](doc/local-models.md)): per-project base URL with model autodiscovery, per-member default model, and per-action configuration in `.agents/automations.json`
 - Provider-aware dispatch through Claude Code, [OpenAI Codex](doc/codex-cli.md), [Grok Build](doc/grok-build.md), [Mistral Vibe](doc/mistral-vibe.md), or Ollama, with conversation handoff and unavailable-model fallback
+- Optional per-project RTK guidance for compact shell output, with bounded detection, telemetry forced off, and unchanged raw-command fallback
 
 ## Dashboard
 

@@ -1,4 +1,5 @@
 using KittyClaw.Core.Services;
+using KittyClaw.Core.Automation;
 
 namespace KittyClaw.Web.Api;
 
@@ -55,6 +56,19 @@ public static partial class Endpoints
         {
             var project = await ps.SaveLocalModelConfigAsync(slug, req.LocalModelBaseUrl, req.LocalModelName);
             return project is null ? Results.NotFound() : Results.Ok(project);
+        }).WithTags("Projects");
+
+        api.MapGet("/projects/{slug}/rtk", async (string slug, RtkIntegrationService rtk) =>
+        {
+            var status = await rtk.GetStatusAsync(slug);
+            return status is null ? Results.NotFound() : Results.Ok(status);
+        }).WithTags("Projects");
+
+        api.MapPatch("/projects/{slug}/rtk", async (string slug, SaveRtkConfigRequest req, ProjectService ps, RtkIntegrationService rtk) =>
+        {
+            var project = await ps.SaveRtkEnabledAsync(slug, req.Enabled);
+            if (project is null) return Results.NotFound();
+            return Results.Ok(await rtk.GetStatusAsync(slug));
         }).WithTags("Projects");
     }
 }

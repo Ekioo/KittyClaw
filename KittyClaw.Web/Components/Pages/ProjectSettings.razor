@@ -169,6 +169,29 @@ else
             }
         </section>
 
+        <section class="settings-section" data-testid="rtk-settings">
+            <h2>@L["RtkTitle"]</h2>
+            <p class="settings-hint">@L["RtkHint"]</p>
+            <label class="settings-option">
+                <input type="checkbox" data-testid="rtk-enabled" @bind="_rtkEnabled" />
+                <span><strong>@L["RtkEnable"]</strong><small>@L["RtkEnableEffect"]</small></span>
+            </label>
+            <div class="settings-row" style="margin-top:.8rem">
+                <button class="settings-primary" data-testid="save-rtk" @onclick="SaveRtk" disabled="@_savingRtk">@(_savingRtk ? "…" : L["Save"])</button>
+                <a class="settings-browse" href="https://github.com/rtk-ai/rtk" target="_blank" rel="noopener noreferrer">@L["RtkInstall"] ↗</a>
+            </div>
+            @if (_rtkRuntimeStatus is not null)
+            {
+                <div class="settings-status @(_rtkRuntimeStatus.Available ? "settings-status-ok" : _rtkRuntimeStatus.Enabled ? "settings-status-warn" : "")" data-testid="rtk-runtime-status">
+                    @RtkStatusText(_rtkRuntimeStatus)
+                </div>
+            }
+            @if (_rtkSaveStatus is not null)
+            {
+                <div class="settings-status @_rtkSaveStatus.Value.css" data-testid="rtk-save-status">@_rtkSaveStatus.Value.text</div>
+            }
+        </section>
+
         <section class="settings-section">
             <h2>@L["Members"]</h2>
             <p class="settings-hint">@L["MembersHint"]</p>
@@ -391,6 +414,9 @@ else
     private List<string> _codexModels = new();
     private List<string> _mistralModels = new();
     private string? _localModelsError;
+    private bool _rtkEnabled, _savingRtk;
+    private RtkStatusDto? _rtkRuntimeStatus;
+    private (string text, string css)? _rtkSaveStatus;
     private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
     private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_mistralModels).Concat(_discoveredModels).ToList();
 
@@ -422,7 +448,9 @@ else
         _integrationBranch = _project.IntegrationBranch ?? "";
         _repositoryPath = _project.RepositoryPath ?? "";
         _localModelBaseUrl = _project.LocalModelBaseUrl ?? "";
+        _rtkEnabled = _project.RtkEnabled;
         await ReloadAllAsync();
+        await RefreshRtkStatus();
         // Load model catalogs first, then apply the saved fallback so the <select> has a
         // matching <option> on first paint (avoids showing "Disabled" while value is set).
         if (!string.IsNullOrWhiteSpace(_localModelBaseUrl)) await DiscoverLocalModels();
@@ -568,6 +596,44 @@ else
         }
         finally { _discoveringLocal = false; }
     }
+
+    private async Task SaveRtk()
+    {
+        _savingRtk = true;
+        _rtkSaveStatus = null;
+        try
+        {
+            var response = await NewHttp().PatchAsJsonAsync($"/api/projects/{Slug}/rtk", new { enabled = _rtkEnabled });
+            if (!response.IsSuccessStatusCode)
+            {
+                _rtkSaveStatus = ($"{L["Error"]}: {response.StatusCode}", "settings-status-err");
+                return;
+            }
+            _rtkRuntimeStatus = await response.Content.ReadFromJsonAsync<RtkStatusDto>();
+            _project = await ProjectService.GetProjectAsync(Slug);
+            _rtkSaveStatus = (L["Saved"], "settings-status-ok");
+        }
+        catch (Exception ex)
+        {
+            _rtkSaveStatus = ($"{L["Error"]}: {ex.Message}", "settings-status-err");
+        }
+        finally { _savingRtk = false; }
+    }
+
+    private async Task RefreshRtkStatus()
+    {
+        try { _rtkRuntimeStatus = await NewHttp().GetFromJsonAsync<RtkStatusDto>($"/api/projects/{Slug}/rtk"); }
+        catch { _rtkRuntimeStatus = null; }
+    }
+
+    private string RtkStatusText(RtkStatusDto status)
+    {
+        if (!status.Enabled) return L["RtkDisabled"];
+        if (!status.Available) return $"{L["RtkUnavailable"]} {status.Reason}";
+        return string.Format(L["RtkAvailable"], status.Version ?? "?");
+    }
+
+    private sealed record RtkStatusDto(bool Enabled, bool Available, string Mode, string? Version, string? Reason);
 
     private async Task OnMemberKey(KeyboardEventArgs e) { if (e.Key == "Enter") await CreateMember(); }
 

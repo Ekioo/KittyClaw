@@ -52,6 +52,8 @@ public partial class ProjectService
             catch { /* column already exists */ }
             try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN LocalModelName TEXT NULL"); }
             catch { /* column already exists */ }
+            try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN RtkEnabled INTEGER NOT NULL DEFAULT 0"); }
+            catch { /* column already exists */ }
             try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN WorktreesEnabled INTEGER NOT NULL DEFAULT 0"); }
             catch { /* column already exists */ }
             try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN IntegrationBranch TEXT NULL"); }
@@ -299,6 +301,18 @@ public partial class ProjectService
         if (project is null) return null;
         project.LocalModelBaseUrl = string.IsNullOrWhiteSpace(baseUrl) ? null : baseUrl.Trim();
         project.LocalModelName = string.IsNullOrWhiteSpace(modelName) ? null : modelName.Trim();
+        project.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return project;
+    }
+
+    public async Task<Project?> SaveRtkEnabledAsync(string slug, bool enabled)
+    {
+        await EnsureRegistryInitializedAsync();
+        await using var db = new RegistryDbContext(_registryPath);
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Slug == slug);
+        if (project is null) return null;
+        project.RtkEnabled = enabled;
         project.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
         return project;

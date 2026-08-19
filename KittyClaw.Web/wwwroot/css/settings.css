@@ -49,6 +49,7 @@
 .settings-browse:disabled { opacity: 0.4; cursor: not-allowed; }
 .settings-status { margin-top: 0.6rem; padding: 0.4rem 0.7rem; border-radius: 4px; font-size: 0.9rem; }
 .settings-status-ok { background: #3ecf8e22; color: #3ecf8e; }
+.settings-status-warn { background: #f5b94222; color: #f5b942; }
 .settings-status-err { background: #f06b6b22; color: #f06b6b; }
 .settings-warning { background: #f59e4222; color: #f59e42; padding: 0.6rem; border-radius: 4px; }
 .settings-members { width: 100%; border-collapse: collapse; }

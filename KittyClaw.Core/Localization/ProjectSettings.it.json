@@ -54,5 +54,13 @@
   "WorktreePrerequisites": "Prerequisiti: repository di codice Git utilizzabile, comando git worktree disponibile e branch di integrazione locale esistente. L'integrazione usa rebase + fast-forward senza push automatico.",
   "RepositoryPath": "Repository del codice",
   "RepositoryPathHint": "Percorso assoluto o relativo all'area di controllo. Vuoto mantiene il comportamento storico basato sull'area di controllo.",
-  "ResolvedRepositoryPath": "Repository risolto:"
+  "ResolvedRepositoryPath": "Repository risolto:",
+  "RtkTitle": "Ottimizzazione output RTK",
+  "RtkHint": "Guida Rust Token Killer facoltativa e limitata al progetto. KittyClaw non installa RTK e non ne modifica hook o configurazione.",
+  "RtkEnable": "Abilita RTK per questo progetto",
+  "RtkEnableEffect": "Quando il binario locale è disponibile, gli agenti ricevono indicazioni sicure e la telemetria viene disattivata. RTK assente non blocca mai un’esecuzione.",
+  "RtkInstall": "Guida all’installazione",
+  "RtkDisabled": "Disabilitato — il comportamento degli agenti non cambia.",
+  "RtkUnavailable": "Abilitato, ma RTK non è disponibile.",
+  "RtkAvailable": "Pronto — RTK {0} rilevato in modalità istruzioni."
 }
