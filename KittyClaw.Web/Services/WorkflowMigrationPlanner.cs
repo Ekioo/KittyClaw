@@ -213,9 +213,17 @@ public sealed class WorkflowMigrationPlanner(
         try
         {
             Validate(plan);
+            var existingPipelines = isProjectOnboarding ? [] : (await pipelines.ListAsync(slug)).ToList();
+            var existingColumns = new List<BoardColumn>();
+            foreach (var pipeline in existingPipelines)
+                existingColumns.AddRange(await columns.ListColumnsAsync(slug, pipeline.Id));
+            var existingAutomationConfig = isProjectOnboarding
+                ? new AutomationConfig()
+                : (await automations.LoadAsync(slug)).Config;
+            var extendExistingWorkflow = existingPipelines.Count > 0;
             List<CompletedTicketSnapshot> completedTickets = isProjectOnboarding
                 ? []
-                : CaptureCompletedTickets(await ListAllColumnsAsync(slug), await tickets.ListTicketsAsync(slug));
+                : CaptureCompletedTickets(existingColumns, await tickets.ListTicketsAsync(slug));
             var project = await projects.GetProjectAsync(slug)
                 ?? throw new InvalidOperationException($"Project '{slug}' was not found.");
             var workspace = projects.ResolveWorkspacePath(project);
@@ -241,7 +249,8 @@ public sealed class WorkflowMigrationPlanner(
                 AgentName = "workflow-migration-applier",
                 SkillFile = "(inline)",
                 InlineSkillContent = ApplicationInstructions,
-                ExtraContext = BuildApplicationPrompt(plan, isProjectOnboarding),
+                ExtraContext = BuildApplicationPrompt(plan, isProjectOnboarding,
+                    existingPipelines, existingColumns, existingAutomationConfig),
                 Target = target,
                 MaxTurns = 100,
                 MaxRunDuration = TimeSpan.FromMinutes(30),
@@ -290,6 +299,9 @@ public sealed class WorkflowMigrationPlanner(
             {
                 var (legacyConfig, _, _) = await automations.LoadAsync(slug);
                 EnsureNoLegacyAutomations(legacyConfig);
+                if (extendExistingWorkflow)
+                    EnsureExistingWorkflowWasExtended(existingPipelines, existingColumns,
+                        await pipelines.ListAsync(slug), await ListAllColumnsAsync(slug));
             }
 
             _jobs[jobId] = _jobs[jobId] with
@@ -490,7 +502,11 @@ public sealed class WorkflowMigrationPlanner(
                 actions = automation.Actions.Select(SummarizeAction),
             }),
         };
-        return $"Analyse this current project snapshot and propose the migration plan. Write every user-facing value in language '{language}'.\n\n" +
+        var migrationMode = pipelineRows.Count > 0 && automationConfig.Automations.Count > 0
+            ? "completeExistingPipelines"
+            : "designWorkflow";
+        return $"Analyse this current project snapshot and propose the migration plan. Write every user-facing value in language '{language}'.\n" +
+               $"Migration mode: {migrationMode}. When the mode is completeExistingPipelines, preserve every existing pipeline and column; propose only the missing processors, action chains, routes, skills, schedules, guidance, or strictly necessary columns that complete them. Never propose replacement pipelines or a regenerated workflow.\n\n" +
                JsonSerializer.Serialize(snapshot, Json);
     }
 
@@ -623,7 +639,110 @@ public sealed class WorkflowMigrationPlanner(
     private static string Truncate(string value, int length) =>
         value.Length <= length ? value : value[..length] + "…";
 
-    internal static string BuildApplicationPrompt(WorkflowMigrationPlan plan, bool isProjectOnboarding) => $"""
+    internal static void EnsureExistingWorkflowWasExtended(
+        IReadOnlyCollection<Pipeline> originalPipelines,
+        IReadOnlyCollection<BoardColumn> originalColumns,
+        IReadOnlyCollection<Pipeline> currentPipelines,
+        IReadOnlyCollection<BoardColumn> currentColumns)
+    {
+        var originalPipelineIds = originalPipelines.Select(pipeline => pipeline.Id).ToHashSet();
+        var currentPipelineIds = currentPipelines.Select(pipeline => pipeline.Id).ToHashSet();
+        if (!originalPipelineIds.SetEquals(currentPipelineIds))
+            throw new WorkflowMigrationPlanningException(
+                "existing-workflow-replaced",
+                "Migration replaced the existing pipeline set instead of extending it. Existing pipelines must keep their stable identifiers.");
+
+        var currentPipelinesById = currentPipelines.ToDictionary(pipeline => pipeline.Id);
+        var changedPipeline = originalPipelines.FirstOrDefault(original =>
+        {
+            var current = currentPipelinesById[original.Id];
+            return current.Name != original.Name
+                || current.Slug != original.Slug
+                || current.SortOrder != original.SortOrder
+                || current.IsDefault != original.IsDefault;
+        });
+        if (changedPipeline is not null)
+            throw new WorkflowMigrationPlanningException(
+                "existing-workflow-replaced",
+                $"Migration changed existing pipeline '{changedPipeline.Name}' (#{changedPipeline.Id}) instead of extending it in place.");
+
+        var currentColumnsById = currentColumns.ToDictionary(column => column.Id);
+        var changedColumn = originalColumns.FirstOrDefault(original =>
+            !currentColumnsById.TryGetValue(original.Id, out var current)
+            || current.PipelineId != original.PipelineId
+            || current.Name != original.Name
+            || current.SortOrder != original.SortOrder
+            || current.Role != original.Role
+            || current.Color != original.Color);
+        if (changedColumn is not null)
+            throw new WorkflowMigrationPlanningException(
+                "existing-workflow-replaced",
+                $"Migration removed or recreated existing column '{changedColumn.Name}' (#{changedColumn.Id}) instead of extending its pipeline.");
+    }
+
+    internal static string BuildApplicationPrompt(WorkflowMigrationPlan plan, bool isProjectOnboarding,
+        IReadOnlyCollection<Pipeline>? existingPipelines = null,
+        IReadOnlyCollection<BoardColumn>? existingColumns = null,
+        AutomationConfig? legacyConfig = null)
+    {
+        existingPipelines ??= [];
+        existingColumns ??= [];
+        legacyConfig ??= new AutomationConfig();
+        var extendExistingWorkflow = !isProjectOnboarding
+            && existingPipelines.Count > 0;
+        var existingWorkflow = new
+        {
+            pipelines = existingPipelines.Select(pipeline => new
+            {
+                pipeline.Id,
+                pipeline.Name,
+                pipeline.Slug,
+                pipeline.SortOrder,
+                pipeline.IsDefault,
+            }),
+            columns = existingColumns.Select(column => new
+            {
+                column.Id,
+                column.PipelineId,
+                column.Name,
+                column.Role,
+                column.SortOrder,
+            }),
+            legacyAutomations = legacyConfig.Automations.Select(automation => new
+            {
+                automation.Id,
+                automation.Name,
+                automation.Enabled,
+                trigger = SummarizeTrigger(automation.Trigger),
+                conditions = automation.Conditions.Select(SummarizeCondition),
+                actions = automation.Actions.Select(SummarizeAction),
+            }),
+        };
+        var extensionContract = extendExistingWorkflow
+            ? $"""
+
+        EXISTING WORKFLOW EXTENSION MODE IS ACTIVE.
+        The following workflow structure already exists and is authoritative:
+        {JsonSerializer.Serialize(existingWorkflow, Json)}
+
+        Do not create a replacement pipeline and do not delete, recreate, rename, or reorder any
+        existing pipeline. Preserve every existing pipeline ID. Preserve every existing column ID
+        in its current pipeline; add a column only when no existing column can safely host the
+        required behavior. Complete the workflow by adding or updating only missing processors,
+        action chains, routes, skills, schedules, and user guidance on the existing structure.
+        Treat the approved plan as intent, not permission to regenerate the structure above.
+
+        Migrate legacy automations sequentially. For each automation: inspect its complete trigger,
+        conditions, and actions; configure an equivalent action in the most appropriate existing
+        pipeline/column; verify that replacement and its routing; then delete only that automation
+        definition. Never clear the legacy file in bulk before every replacement is verified. If
+        one automation cannot be represented safely, stop and leave that definition in place so
+        the migration fails visibly. Inspect current processors, routes, skills, and schedules
+        before writing, and reuse equivalent configuration so rerunning the migration is idempotent.
+        """
+            : "";
+
+        return $"""
         {(isProjectOnboarding ? "Configure the new project's workflow that the owner has just reviewed and explicitly approved in the visual onboarding wizard." : "Apply the workflow migration that the owner has just reviewed and explicitly approved in the visual migration wizard.")}
 
         Approved plan:
@@ -633,8 +752,11 @@ public sealed class WorkflowMigrationPlanner(
 
         You are already running inside the confirmed application job. Never call any /workflow-migrations/analyze, /workflow-migrations/refine, or /workflow-migrations/apply endpoint. Apply the plan directly through the granular pipeline, column, ticket, processor, skill, scheduled-task and automation APIs.
 
+        {extensionContract}
+
         {(isProjectOnboarding ? "Replace the placeholder default workflow with the approved organization. Inspect the workspace again when useful, but do not invent operational requirements that contradict the approved plan." : "Convert or explicitly retire every legacy automation behavior. Translate interval triggers into scheduled tasks that create or process tickets through a column; absorb status-change work into the responsible processor stage; replace owner-comment relaunches with an explicit OwnerAction hand-off and resubmission; and fold repository-event duties into the responsible delivery processor or a scheduled ticket when exact event semantics are unnecessary. Do not leave any legacy automation definition, enabled or disabled: remove each definition only after its replacement or intentional retirement is configured and verified. If any behavior cannot be represented safely, fail the migration instead of silently preserving it.")} Verify that all tickets remain accessible, that processors and schedules reload successfully, and summarize every applied change and remaining risk when finished.
         """;
+    }
 
     private sealed class WorkflowMigrationPlanningException(string code, string message) : InvalidOperationException(message)
     {
@@ -681,8 +803,9 @@ public sealed class WorkflowMigrationPlanner(
         file-backed workflow, processor, prompt, memory and skill configuration. Keep the existing
         board usable throughout the migration. You are already the application job: never invoke
         any workflow-migrations endpoint or launch another migration agent. Use only the granular
-        project APIs. Convert or explicitly retire every legacy behavior, verify the replacement,
-        then remove the legacy automation definition. A successful migration must leave zero legacy
+        project APIs. When pipelines already exist, extend them in place and preserve their stable
+        IDs; never regenerate the workflow. Convert legacy behaviors sequentially, verify each
+        replacement, then remove only that legacy automation definition. A successful migration must leave zero legacy
         automations, including disabled definitions. If that cannot be achieved safely, report failure
         instead of claiming completion. Verify API reloads, ticket accessibility, routing and scheduled
         work before reporting completion. End with a concise user-facing summary of changes and risks.

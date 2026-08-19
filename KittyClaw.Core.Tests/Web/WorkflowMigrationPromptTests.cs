@@ -35,6 +35,36 @@ public sealed class WorkflowMigrationPromptTests
         Assert.Contains("legacyAutomations", prompt);
     }
 
+    [Fact]
+    public void Migration_analysis_with_existing_pipeline_requests_additive_completion()
+    {
+        var pipeline = new Pipeline { Id = 42, Name = "Delivery", Slug = "delivery", IsDefault = true };
+        var columns = new[]
+        {
+            new BoardColumn { Id = 7, PipelineId = 42, Name = "Ready", SortOrder = 0 },
+            new BoardColumn { Id = 8, PipelineId = 42, Name = "Done", SortOrder = 1, Role = ColumnRole.Success },
+        };
+        var config = new AutomationConfig
+        {
+            Automations =
+            [
+                new KittyClaw.Core.Automation.Automation
+                {
+                    Id = "legacy-dispatch",
+                    Trigger = new TicketInColumnTriggerSpec { Columns = ["Ready"] },
+                    Actions = [new RunAgentActionSpec { Agent = "programmer" }],
+                },
+            ],
+        };
+
+        var prompt = WorkflowMigrationPlanner.BuildAnalysisPrompt([pipeline], columns, [], config, "en");
+
+        Assert.Contains("Migration mode: completeExistingPipelines", prompt);
+        Assert.Contains("preserve every existing pipeline and column", prompt);
+        Assert.Contains("Never propose replacement pipelines or a regenerated workflow", prompt);
+        Assert.Contains("legacy-dispatch", prompt);
+    }
+
     private static string RepoRoot()
     {
         var directory = Directory.GetCurrentDirectory();
@@ -195,6 +225,175 @@ public sealed class WorkflowMigrationPromptTests
         Assert.Contains("must remain in a terminal (Success or Failure) column", prompt);
         Assert.Contains("Never call any /workflow-migrations/analyze", prompt);
         Assert.Contains("Apply the plan directly through the granular pipeline", prompt);
+    }
+
+    [Fact]
+    public void Approved_application_extends_existing_pipelines_and_migrates_automations_sequentially()
+    {
+        var pipeline = new Pipeline { Id = 42, Name = "Delivery", Slug = "delivery", IsDefault = true };
+        var column = new BoardColumn { Id = 7, PipelineId = 42, Name = "Ready", SortOrder = 0 };
+        var config = new AutomationConfig
+        {
+            Automations =
+            [
+                new KittyClaw.Core.Automation.Automation
+                {
+                    Id = "legacy-dispatch",
+                    Trigger = new TicketInColumnTriggerSpec { Columns = ["Ready"] },
+                    Actions = [new RunAgentActionSpec { Agent = "programmer" }],
+                },
+            ],
+        };
+
+        var prompt = WorkflowMigrationPlanner.BuildApplicationPrompt(
+            new WorkflowMigrationPlan
+            {
+                Pipelines =
+                [
+                    new WorkflowMigrationPipeline
+                    {
+                        Name = "Delivery",
+                        Columns = [new WorkflowMigrationColumn { Name = "Ready" }],
+                    },
+                ],
+            },
+            isProjectOnboarding: false,
+            [pipeline],
+            [column],
+            config);
+
+        Assert.Contains("EXISTING WORKFLOW EXTENSION MODE IS ACTIVE", prompt);
+        Assert.Contains("Preserve every existing pipeline ID", prompt);
+        Assert.Contains("Preserve every existing column ID", prompt);
+        Assert.Contains("Migrate legacy automations sequentially", prompt);
+        Assert.Contains("then delete only that automation", prompt);
+        Assert.Contains("rerunning the migration is idempotent", prompt);
+        Assert.Contains("stop and leave that definition in place", prompt);
+        Assert.Contains("legacy-dispatch", prompt);
+        Assert.Contains("\"id\": 42", prompt);
+        Assert.Contains("\"id\": 7", prompt);
+    }
+
+    [Fact]
+    public void Second_application_with_no_legacy_automations_still_preserves_existing_workflow()
+    {
+        var pipeline = new Pipeline { Id = 42, Name = "Delivery", Slug = "delivery", IsDefault = true };
+        var column = new BoardColumn { Id = 7, PipelineId = 42, Name = "Ready", SortOrder = 0 };
+        var prompt = WorkflowMigrationPlanner.BuildApplicationPrompt(
+            new WorkflowMigrationPlan
+            {
+                Pipelines =
+                [
+                    new WorkflowMigrationPipeline
+                    {
+                        Name = "Delivery",
+                        Columns = [new WorkflowMigrationColumn { Name = "Ready" }],
+                    },
+                ],
+            },
+            isProjectOnboarding: false,
+            [pipeline],
+            [column],
+            new AutomationConfig());
+
+        Assert.Contains("EXISTING WORKFLOW EXTENSION MODE IS ACTIVE", prompt);
+        Assert.Contains("Preserve every existing pipeline ID", prompt);
+        Assert.Contains("\"legacyAutomations\": []", prompt);
+
+        var regeneratedPipeline = new Pipeline
+        {
+            Id = 99, Name = "Delivery", Slug = "delivery", IsDefault = true,
+        };
+        var error = Assert.ThrowsAny<InvalidOperationException>(() =>
+            WorkflowMigrationPlanner.EnsureExistingWorkflowWasExtended(
+                [pipeline], [column], [regeneratedPipeline], []));
+
+        Assert.Contains("instead of extending it", error.Message);
+    }
+
+    [Fact]
+    public void Existing_workflow_guard_accepts_added_columns_without_replacing_original_structure()
+    {
+        var originalPipelines = new[]
+        {
+            new Pipeline { Id = 42, Name = "Delivery", Slug = "delivery" },
+        };
+        var originalColumns = new[]
+        {
+            new BoardColumn { Id = 7, PipelineId = 42, Name = "Ready" },
+        };
+        var currentPipelines = new[]
+        {
+            new Pipeline { Id = 42, Name = "Delivery", Slug = "delivery" },
+        };
+        var currentColumns = new[]
+        {
+            new BoardColumn { Id = 7, PipelineId = 42, Name = "Ready" },
+            new BoardColumn { Id = 8, PipelineId = 42, Name = "Owner review", Role = ColumnRole.OwnerAction },
+        };
+
+        WorkflowMigrationPlanner.EnsureExistingWorkflowWasExtended(
+            originalPipelines, originalColumns, currentPipelines, currentColumns);
+    }
+
+    [Fact]
+    public void Existing_workflow_guard_rejects_regenerated_pipelines()
+    {
+        var originalPipelines = new[]
+        {
+            new Pipeline { Id = 42, Name = "Delivery", Slug = "delivery" },
+        };
+        var originalColumns = new[]
+        {
+            new BoardColumn { Id = 7, PipelineId = 42, Name = "Ready" },
+        };
+        var regeneratedPipelines = new[]
+        {
+            new Pipeline { Id = 99, Name = "Delivery", Slug = "delivery" },
+        };
+        var regeneratedColumns = new[]
+        {
+            new BoardColumn { Id = 70, PipelineId = 99, Name = "Ready" },
+        };
+
+        var error = Assert.ThrowsAny<InvalidOperationException>(() =>
+            WorkflowMigrationPlanner.EnsureExistingWorkflowWasExtended(
+                originalPipelines, originalColumns, regeneratedPipelines, regeneratedColumns));
+
+        Assert.Contains("instead of extending it", error.Message);
+    }
+
+    [Fact]
+    public void Existing_workflow_guard_rejects_rewritten_pipeline_metadata()
+    {
+        var original = new Pipeline
+        {
+            Id = 42, Name = "Delivery", Slug = "delivery", SortOrder = 1, IsDefault = true,
+        };
+        var rewritten = new Pipeline
+        {
+            Id = 42, Name = "New delivery", Slug = "delivery", SortOrder = 1, IsDefault = true,
+        };
+
+        var error = Assert.ThrowsAny<InvalidOperationException>(() =>
+            WorkflowMigrationPlanner.EnsureExistingWorkflowWasExtended(
+                [original], [], [rewritten], []));
+
+        Assert.Contains("changed existing pipeline", error.Message);
+    }
+
+    [Fact]
+    public void Existing_workflow_guard_rejects_recreated_original_columns()
+    {
+        var pipeline = new Pipeline { Id = 42, Name = "Delivery", Slug = "delivery" };
+        var originalColumn = new BoardColumn { Id = 7, PipelineId = 42, Name = "Ready" };
+        var recreatedColumn = new BoardColumn { Id = 70, PipelineId = 42, Name = "Ready" };
+
+        var error = Assert.ThrowsAny<InvalidOperationException>(() =>
+            WorkflowMigrationPlanner.EnsureExistingWorkflowWasExtended(
+                [pipeline], [originalColumn], [pipeline], [recreatedColumn]));
+
+        Assert.Contains("removed or recreated existing column", error.Message);
     }
 
     [Fact]
