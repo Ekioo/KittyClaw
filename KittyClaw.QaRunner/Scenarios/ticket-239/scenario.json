@@ -1,0 +1,17 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "Active Studio" },
+    { "type": "createProject", "name": "Paused Studio" },
+    { "type": "togglePause", "project": "paused-studio" }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/projects" },
+    { "type": "assertCount", "selector": ".project-card-wrap", "expected": "2" },
+    { "type": "assertVisible", "selector": ".project-paused .project-paused-badge" },
+    { "type": "assertVisible", "selector": ".project-paused .project-pause-btn-label" },
+    { "type": "assertCss", "selector": ".project-paused .project-card", "property": "opacity", "expected": "1" },
+    { "type": "assertCss", "selector": ".project-paused .project-pause-btn", "property": "bottom", "expected": "10.4px" },
+    { "type": "screenshot", "name": "ticket-239-paused-project-card", "description": "Readable paused project card with aligned status and explicit resume action" }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

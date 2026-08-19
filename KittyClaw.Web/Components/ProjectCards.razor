@@ -17,18 +17,19 @@
                 <span class="project-card-agent-badge" title="Agent running"></span>
             }
             <a class="project-card" href="/board/@project.Slug">
-                <h3>
-                    @project.Name
+                <div class="project-card-heading">
+                    <h3>@project.Name</h3>
                     @if (project.IsPaused)
                     {
                         <span class="project-paused-badge">⏸ @L["Paused"]</span>
                     }
-                </h3>
+                </div>
                 <small>@project.Slug</small>
             </a>
             <button class="project-pause-btn" title="@(project.IsPaused ? L["Resume"] : L["Pause"])"
                     @onclick="() => OnTogglePause.InvokeAsync(project)" @onclick:stopPropagation>
-                @(project.IsPaused ? "▶" : "⏸")
+                <span aria-hidden="true">@(project.IsPaused ? "▶" : "⏸")</span>
+                <span class="project-pause-btn-label">@(project.IsPaused ? L["Resume"] : L["Pause"])</span>
             </button>
         </div>
     }
