@@ -90,6 +90,8 @@ public sealed class CostsNavigationResponsivenessTests
         Assert.Contains(".cost-bar-estimated", styles, StringComparison.Ordinal);
         Assert.Contains(".cost-bar-rtk", styles, StringComparison.Ordinal);
         Assert.Contains(".cost-bar-rtk-unpriced", styles, StringComparison.Ordinal);
+        Assert.Contains(".cost-legend-rtk { background: linear-gradient(90deg, #c084fc, #7c3aed); }", styles, StringComparison.Ordinal);
+        Assert.Contains(".cost-bar-rtk { height: var(--rtk, 0%); background: linear-gradient(180deg, #c084fc, #7c3aed); }", styles, StringComparison.Ordinal);
     }
 
     [Fact]
