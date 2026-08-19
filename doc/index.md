@@ -17,6 +17,7 @@ For a high-level overview see the root [README.md](../README.md). For repo layou
 - [DeepSeek V4](./deepseek.md) — project-vault authentication and dispatch through DeepSeek's Anthropic-compatible API.
 - [Automation engine](./automation-engine.md) — triggers, conditions, and actions that dispatch agents.
 - [Pipeline and column processing](./column-workflows.md) — stable multi-pipeline workflows, generic column agents, routing, retries, project skills, and child-ticket completion.
+- [Pipeline kits](./pipeline-kits.md) — sanitized export plus write-free analysis and atomic installation of untrusted portable pipeline archives.
 - [Agent dispatch](./agent-dispatch.md) — running the `claude` CLI as a subprocess and streaming its output.
 - [Temporary approvals](./temporary-approvals.md) — traceable, expiring approval requests that pause and resume provider runs at the process boundary.
 - [Project template](./project-template.md) — embedded `ProjectTemplate/` files copied into each workspace on Initialize.
