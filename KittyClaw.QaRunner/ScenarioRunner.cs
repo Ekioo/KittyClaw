@@ -365,9 +365,6 @@ public sealed class ScenarioRunner
                         Actual = actual, Passed = expected == actual });
                     break;
                 }
-            case "setViewport":
-                await page.SetViewportSizeAsync(action.MaxMs ?? 640, action.Ms ?? 800);
-                break;
             case "setInputFile":
                 {
                     var selector = Required(Resolve(action.Selector), "setInputFile.selector");

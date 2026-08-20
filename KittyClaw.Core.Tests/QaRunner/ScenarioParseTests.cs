@@ -13,6 +13,17 @@ public class ScenarioParseTests
 {
     private static readonly JsonSerializerOptions Opts = new() { PropertyNameCaseInsensitive = true };
 
+    private static string RepositoryRoot()
+    {
+        for (var current = new DirectoryInfo(AppContext.BaseDirectory); current is not null; current = current.Parent)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "KittyClaw.slnx")))
+                return current.FullName;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate the KittyClaw repository root.");
+    }
+
     [Fact]
     public void Scenario_Deserialises_FromSampleJson()
     {
@@ -54,6 +65,19 @@ public class ScenarioParseTests
         Assert.Equal(390, s.Actions[5].Width);
         Assert.Equal(844, s.Actions[5].Height);
         Assert.Equal("all-asserts-pass", s.Verdict.PassOn);
+    }
+
+    [Fact]
+    public void ScenarioRunner_DefinesSetViewportExactlyOnce()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepositoryRoot(),
+            "KittyClaw.QaRunner",
+            "ScenarioRunner.cs"));
+
+        Assert.Equal(1, source.Split("case \"setViewport\":", StringSplitOptions.None).Length - 1);
+        Assert.Contains("action.Width", source, StringComparison.Ordinal);
+        Assert.Contains("action.Height", source, StringComparison.Ordinal);
     }
 
     [Fact]
