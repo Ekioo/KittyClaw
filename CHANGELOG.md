@@ -4,16 +4,59 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.17] — 2026-08-20
+
+Secure project secrets, portable pipeline kits, DeepSeek V4, configurable MCP, and stronger runtime delivery controls.
+
+### Highlights
+
+Projects can now keep credentials in an encrypted vault and inject them only into the agent processes that need them. Pipelines can be exported as sanitized, self-contained `.kittyclaw-pipeline` kits with their processor skills, then inspected and imported atomically into another project.
+
+DeepSeek V4 joins the supported providers through Claude Code and DeepSeek's Anthropic-compatible API. Global settings now report provider readiness, MCP can be enabled without an environment variable or restart, and RTK optimization is available per project with visible cost savings.
+
+Delivery safety is reinforced end to end: native runtime approvals protect sensitive commands, ticket worktrees are enabled for new projects, owner comments steer active sessions immediately, interrupted chats resume after restart, and legacy automation migrations extend existing pipelines instead of regenerating them.
+
 ### Added
 
-- Pipeline export as a portable `.kittyclaw-pipeline` kit: `GET /api/projects/{slug}/pipelines/{pipelineId}/export` downloads a deterministic ZIP with a versioned manifest (metadata, provenance, compatibility, parameters, secrets, requirements, per-file SHA-256), a pipeline serialized on logical column keys without database identifiers, and the full folder of every referenced project skill. Export is refused with actionable findings while probable secrets, URL credentials, authentication headers, absolute/user paths or out-of-folder skill references remain; `{{input.NAME}}` and `{{secret.NAME}}` placeholders are the sanctioned representation.
-- Native DeepSeek V4 support through Claude Code and DeepSeek's Anthropic-compatible API, including project-vault credentials, model selection, provider-scoped sessions, cost estimates, localized settings, and documentation.
+- Encrypted project-scoped secret vaults with write-only UI handling, structured values, cross-platform protection, agent-process injection, and compatibility tests.
+- Portable `.kittyclaw-pipeline` export and atomic import with bundled processor skills, versioned manifests, compatibility metadata, parameters, secret placeholders, integrity hashes, and pre-import safety inspection.
+- DeepSeek V4 provider support through Claude Code and DeepSeek's Anthropic-compatible API, including vault credentials, model routing, session isolation, cost estimates, readiness checks, settings, and documentation.
+- Safe project-scoped RTK optimization, measured savings ingestion, and measured/estimated/saved stacked cost reporting.
+- Native runtime approval enforcement through provider hooks, persisted observations and receipts, resumable processors, and a complete mock-backed QA matrix.
+- Brazilian Portuguese and Japanese localizations across the board, workflows, settings, costs, approvals, dashboard, tips, and editors.
+- One-click local Git repository initialization from project settings and optional initialization during project creation.
+- Live dashboard tile freshness indicators showing elapsed time and the next scheduled refresh.
+- Immediate forwarding of new owner comments to every active run for the same ticket without agent-comment feedback loops.
 
 ### Changed
 
-- The embedded MCP server is now enabled or disabled instantly from the global Settings page; `KITTYCLAW_MCP_ENABLED` and application restarts are no longer required.
-- New projects now enable per-ticket Git worktrees by default; existing migrated projects retain their previous disabled setting and projects can still opt out explicitly.
-- The Costs page now shows the combined cost of the project cards visible under the active date, project, pipeline, and model filters.
+- The embedded MCP server is enabled or disabled instantly from global settings; `KITTYCLAW_MCP_ENABLED` and application restarts are no longer required.
+- New projects enable per-ticket Git worktrees by default while migrated projects retain their existing choice.
+- Legacy automation migration removes remaining automation definitions and extends existing pipelines with equivalent actions instead of recreating those pipelines.
+- Automation management APIs are restricted to inspection, disabling, and deletion.
+- Project cards use a fixed grid, remove redundant slugs, improve paused-state layout, and show tickets waiting for owner action.
+- The Costs page shows a visible-items total, project RTK savings, and stacked measured, estimated, and saved values.
+- Supported model catalogs, provider readiness guidance, onboarding documentation, tips, and plain-language ticket-writing instructions are expanded.
+- Column processors capitalize reusable lessons after execution, and pipeline/workflow documentation now describes the secure kit lifecycle and runtime boundaries.
+
+### Fixed
+
+- Interrupted New Instruction sessions resume automatically after KittyClaw restarts.
+- Pasted images no longer remain stuck in preparation; previews sit above the prompt and remain visible after the message is sent.
+- Saving a column after adding a routing rule closes the editor and preserves the rule after reopening.
+- Routine CLI stderr diagnostics remain available in run logs without appearing as alarming chat warnings; real terminal errors stay visible.
+- Parent tickets resume after child completion, invalid scheduled-task projects no longer block healthy projects, and retry capacity cannot starve work in other projects.
+- Stale Git workspace inspections are ignored and ticket worktree boundaries are enforced before delivery.
+- The MCP registry server name, translated tips, provider model catalogs, and cross-platform secret-vault compatibility are aligned with runtime behavior.
+
+### Security
+
+- Secrets are encrypted at rest, cannot be read back through the UI, and are injected only into processes for their owning project.
+- Pipeline export rejects probable credentials, authentication headers, absolute paths, and unsafe skill references; import treats kits as untrusted and commits changes atomically only after validation.
+- Sensitive runtime operations require explicit approvals enforced through native provider hooks.
+- Repository policy tests prevent synthetic export secrets and private evidence from entering published history.
+
+---
 
 ## [v0.16] — 2026-08-19
 
