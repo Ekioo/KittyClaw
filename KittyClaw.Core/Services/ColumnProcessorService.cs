@@ -5,6 +5,7 @@ using KittyClaw.Core.Automation;
 using KittyClaw.Core.Data;
 using KittyClaw.Core.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace KittyClaw.Core.Services;
 
@@ -14,7 +15,8 @@ namespace KittyClaw.Core.Services;
 /// </summary>
 public sealed class ColumnProcessorService(
     ProjectService projects,
-    ProjectSkillService skills)
+    ProjectSkillService skills,
+    ILogger<ColumnProcessorService>? logger = null)
 {
     private const int DefinitionVersion = 2;
     private const int OldestSupportedDefinitionVersion = 1;
@@ -300,8 +302,25 @@ public sealed class ColumnProcessorService(
                 throw new InvalidOperationException($"La définition '{path}' doit se trouver dans '{expectedDirectory}'.");
             if (!definedColumns.Add(columnId))
                 throw new InvalidOperationException($"Plusieurs processor.json ciblent {ColumnReference(columnId)}.");
-            var normalized = await ValidateAndNormalizeAsync(projectSlug, db, definition, columnId);
-            await UpsertProjectionAsync(db, normalized, columnId);
+            try
+            {
+                var normalized = await ValidateAndNormalizeAsync(projectSlug, db, definition, columnId);
+                await UpsertProjectionAsync(db, normalized, columnId);
+            }
+            catch (InvalidOperationException error)
+            {
+                // A versioned definition must remain available for repair, but one invalid file
+                // must not make the whole project board or processing loop unavailable.
+                logger?.LogWarning(error,
+                    "Processor definition {ProcessorPath} is invalid for project {ProjectSlug}; disabling its runtime projection",
+                    path, projectSlug);
+                var projection = existing.FirstOrDefault(processor => processor.ColumnId == columnId);
+                if (projection is not null)
+                {
+                    projection.Enabled = false;
+                    projection.UpdatedAt = DateTime.UtcNow;
+                }
+            }
         }
 
         foreach (var processor in existing.Where(p => !definedColumns.Contains(p.ColumnId)))

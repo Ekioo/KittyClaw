@@ -238,6 +238,26 @@ public sealed class ProjectSkillAndProcessorTests : IDisposable
     }
 
     [Fact]
+    public async Task Processor_listing_disables_invalid_projection_without_hiding_the_project_board()
+    {
+        var project = await _projects.CreateProjectAsync("Stale processor skill");
+        var column = (await _columns.ListColumnsAsync(project.Slug)).First();
+        var skill = await _skills.CreateAsync(project.Slug, "Workflow routing", "Route tickets safely.");
+        await _processors.SaveAsync(project.Slug, column.Id, "Worker", "Do the work.", null, true, 20,
+            availableSkills: [skill.Slug], recommendedSkills: [], requiredSkills: []);
+        var definitionPath = await _processors.GetDefinitionPathAsync(project.Slug, column.Id);
+        var originalDefinition = await File.ReadAllTextAsync(definitionPath);
+        Assert.True(await _skills.DeleteAsync(project.Slug, skill.Slug));
+
+        var processor = Assert.Single(await _processors.ListAsync(project.Slug));
+        var enabled = await _processors.ListEnabledAsync(project.Slug);
+
+        Assert.False(processor.Enabled);
+        Assert.Empty(enabled);
+        Assert.Equal(originalDefinition, await File.ReadAllTextAsync(definitionPath));
+    }
+
+    [Fact]
     public async Task Processor_listing_includes_disabled_processors_for_configuration_views()
     {
         var project = await _projects.CreateProjectAsync("Processor listing");
