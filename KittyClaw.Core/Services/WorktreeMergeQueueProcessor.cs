@@ -22,7 +22,6 @@ public sealed class WorktreeMergeQueueProcessor(
             foreach (var project in await projects.ListProjectsAsync())
             {
                 if (stoppingToken.IsCancellationRequested) return;
-                if (!project.WorktreesEnabled) continue;
                 try
                 {
                     await queue.RecoverTerminalWorktreesAsync(project.Slug, stoppingToken);

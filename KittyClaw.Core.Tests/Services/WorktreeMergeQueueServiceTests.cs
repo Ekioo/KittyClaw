@@ -197,6 +197,46 @@ public sealed class WorktreeMergeQueueServiceTests
     }
 
     [Fact]
+    public async Task RecoveryAfterWorktreesAreDisabled_FinalizesSafeTerminalWorktree()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("terminal.txt", "terminal");
+        await fixture.Tickets.MoveTicketAsync(fixture.Slug, ticket, "Done", "test");
+        await fixture.Projects.UpdateProjectAsync(fixture.Slug, null, worktreesEnabled: false);
+
+        var recovered = await fixture.Queue.RecoverTerminalWorktreesAsync(fixture.Slug, CancellationToken.None);
+        var completed = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(1, recovered);
+        Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
+        Assert.True(File.Exists(Path.Combine(fixture.Repository, "terminal.txt")));
+        Assert.False(Directory.Exists(completed.WorktreePath));
+    }
+
+    [Fact]
+    public async Task RecoveryAfterWorktreesAreDisabled_PreservesUnsafeTerminalAndIgnoresNonTerminalWorktree()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var terminalTicket = await fixture.CreateCommittedTicketAsync("terminal.txt", "terminal");
+        var terminalWorktree = (await fixture.Worktrees.InspectAsync(fixture.Slug, terminalTicket))!;
+        await File.WriteAllTextAsync(Path.Combine(terminalWorktree.Path, "keep.txt"), "unexpected");
+        await fixture.Tickets.MoveTicketAsync(fixture.Slug, terminalTicket, "Done", "test");
+        var nonTerminalTicket = await fixture.CreateCommittedTicketAsync("active.txt", "active");
+        var nonTerminalWorktree = (await fixture.Worktrees.InspectAsync(fixture.Slug, nonTerminalTicket))!;
+        await fixture.Projects.UpdateProjectAsync(fixture.Slug, null, worktreesEnabled: false);
+
+        var recovered = await fixture.Queue.RecoverTerminalWorktreesAsync(fixture.Slug, CancellationToken.None);
+        var review = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(1, recovered);
+        Assert.Equal(WorktreeMergeStatus.NeedsReview, review!.Status);
+        Assert.True(File.Exists(Path.Combine(terminalWorktree.Path, "keep.txt")));
+        Assert.True(Directory.Exists(terminalWorktree.Path));
+        Assert.True(Directory.Exists(nonTerminalWorktree.Path));
+        Assert.DoesNotContain(await fixture.Queue.ListAsync(fixture.Slug), row => row.RootTicketId == nonTerminalTicket);
+    }
+
+    [Fact]
     public async Task Recovery_WaitsUntilProcessorReleasesTheTicketWorktree()
     {
         using var fixture = await Fixture.CreateAsync();

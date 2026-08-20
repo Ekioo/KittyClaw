@@ -83,7 +83,6 @@ public sealed class TicketWorktreeService(ProjectService projects, TicketService
     {
         var project = await projects.GetProjectAsync(projectSlug)
             ?? throw new InvalidOperationException($"Project '{projectSlug}' does not exist.");
-        if (!project.WorktreesEnabled) return [];
         var repositoryRoot = projects.ResolveRepositoryPath(project);
         var output = RunGit(repositoryRoot, ["worktree", "list", "--porcelain"]).Output;
         var result = new List<TicketWorktree>();
@@ -178,7 +177,6 @@ public sealed class TicketWorktreeService(ProjectService projects, TicketService
     {
         var project = await projects.GetProjectAsync(projectSlug)
             ?? throw new InvalidOperationException($"Project '{projectSlug}' does not exist.");
-        if (!project.WorktreesEnabled) return null;
 
         var rootTicketId = await ResolveRootTicketIdAsync(projectSlug, ticketId);
         var repositoryRoot = projects.ResolveRepositoryPath(project);

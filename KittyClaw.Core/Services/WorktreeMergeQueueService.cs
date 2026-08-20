@@ -92,18 +92,35 @@ public sealed partial class WorktreeMergeQueueService(
     }
 
     public async Task<WorktreeMergeRequest> EnqueueAsync(string projectSlug, int ticketId, CancellationToken ct)
+        => await EnqueueAsync(projectSlug, ticketId, allowDisabledProject: false, ct);
+
+    private async Task<WorktreeMergeRequest> EnqueueAsync(
+        string projectSlug, int ticketId, bool allowDisabledProject, CancellationToken ct)
     {
         var project = await projects.GetProjectAsync(projectSlug)
             ?? throw new InvalidOperationException($"Project '{projectSlug}' does not exist.");
-        if (!project.WorktreesEnabled || string.IsNullOrWhiteSpace(project.IntegrationBranch))
+        if ((!project.WorktreesEnabled && !allowDisabledProject) || string.IsNullOrWhiteSpace(project.IntegrationBranch))
             throw new InvalidOperationException("Worktree integration is not enabled for this project.");
         await using var db = projects.GetProjectDb(projectSlug);
         await EnsureTableAsync(db);
         var rootTicketId = await worktrees.ResolveRootTicketIdAsync(projectSlug, ticketId);
         var existing = await ReadByRootAsync(db, rootTicketId);
         if (existing is not null) return existing;
-        var worktree = await worktrees.ResolveAsync(projectSlug, ticketId, ct)
-            ?? throw new InvalidOperationException("The ticket has no canonical worktree.");
+        TicketWorktree? worktree;
+        if (allowDisabledProject)
+        {
+            var registered = await worktrees.InspectAsync(projectSlug, ticketId);
+            worktree = registered is { Exists: true }
+                ? new TicketWorktree(registered.Path, registered.Branch, registered.RootTicketId,
+                    projects.ResolveRepositoryPath(project))
+                : null;
+        }
+        else
+        {
+            worktree = await worktrees.ResolveAsync(projectSlug, ticketId, ct);
+        }
+        if (worktree is null)
+            throw new InvalidOperationException("The ticket has no canonical worktree.");
         var now = DateTime.UtcNow;
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO WorktreeMergeQueue
@@ -123,7 +140,7 @@ public sealed partial class WorktreeMergeQueueService(
     public async Task<int> RecoverTerminalWorktreesAsync(string projectSlug, CancellationToken ct)
     {
         var project = await projects.GetProjectAsync(projectSlug);
-        if (project is null || !project.WorktreesEnabled || string.IsNullOrWhiteSpace(project.IntegrationBranch))
+        if (project is null || string.IsNullOrWhiteSpace(project.IntegrationBranch))
             return 0;
 
         var terminalRoots = (await worktrees.ListTerminalRootTicketsAsync(projectSlug))
@@ -136,7 +153,7 @@ public sealed partial class WorktreeMergeQueueService(
             if (await IsBusyAsync(projectSlug, ticketId)) continue;
             var state = await worktrees.InspectAsync(projectSlug, ticketId);
             if (state is not { Exists: true }) continue;
-            await EnqueueAsync(projectSlug, ticketId, ct);
+            await EnqueueAsync(projectSlug, ticketId, allowDisabledProject: true, ct);
             recovered++;
         }
         return recovered;
