@@ -23,14 +23,22 @@ public sealed class ColumnScheduledTaskEngine(
     {
         foreach (var project in await projects.ListProjectsAsync())
         {
-            var recovered = await schedules.RecoverAsync(project.Slug);
-            if (project.IsPaused)
+            try
             {
-                if (recovered.Count > 0) _pausedRecoveries[project.Slug] = recovered;
-                continue;
+                var recovered = await schedules.RecoverAsync(project.Slug);
+                if (project.IsPaused)
+                {
+                    if (recovered.Count > 0) _pausedRecoveries[project.Slug] = recovered;
+                    continue;
+                }
+                foreach (var item in recovered)
+                    Start(project.Slug, item.Task, item.Run, stoppingToken);
             }
-            foreach (var item in recovered)
-                Start(project.Slug, item.Task, item.Run, stoppingToken);
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Scheduled column task recovery failed for project {Project}; continuing with other projects", project.Slug);
+            }
         }
 
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
@@ -40,11 +48,19 @@ public sealed class ColumnScheduledTaskEngine(
             {
                 foreach (var project in (await projects.ListProjectsAsync()).Where(project => !project.IsPaused))
                 {
-                    if (_pausedRecoveries.TryRemove(project.Slug, out var recovered))
-                        foreach (var item in recovered)
+                    try
+                    {
+                        if (_pausedRecoveries.TryRemove(project.Slug, out var recovered))
+                            foreach (var item in recovered)
+                                Start(project.Slug, item.Task, item.Run, stoppingToken);
+                        foreach (var item in await schedules.ClaimDueAsync(project.Slug, DateTime.UtcNow))
                             Start(project.Slug, item.Task, item.Run, stoppingToken);
-                    foreach (var item in await schedules.ClaimDueAsync(project.Slug, DateTime.UtcNow))
-                        Start(project.Slug, item.Task, item.Run, stoppingToken);
+                    }
+                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Scheduled column task synchronization failed for project {Project}; continuing with other projects", project.Slug);
+                    }
                 }
                 await timer.WaitForNextTickAsync(stoppingToken);
             }

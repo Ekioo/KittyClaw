@@ -2,6 +2,7 @@ using KittyClaw.Core.Automation;
 using KittyClaw.Core.Models;
 using KittyClaw.Core.Services;
 using KittyClaw.Core.Tests.Helpers;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace KittyClaw.Core.Tests.Automation;
@@ -108,6 +109,74 @@ public sealed class PausedProjectRestartRecoveryTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task Invalid_schedule_in_one_project_does_not_stop_startup_recovery_for_other_projects()
+    {
+        var projects = new ProjectService(_temp.Path);
+        var invalidProject = await projects.CreateProjectAsync("Invalid scheduled project");
+        var validProject = await projects.CreateProjectAsync("Valid scheduled project");
+        var invalidColumn = (await new ColumnService(projects).ListColumnsAsync(invalidProject.Slug))[0];
+        var validColumn = (await new ColumnService(projects).ListColumnsAsync(validProject.Slug))[0];
+        var schedules = new ColumnScheduledTaskService(projects);
+
+        var invalidPath = await schedules.GetDefinitionPathAsync(invalidProject.Slug, invalidColumn.Id);
+        Directory.CreateDirectory(Path.GetDirectoryName(invalidPath)!);
+        await File.WriteAllTextAsync(invalidPath, $$"""
+            {
+              "version": 1,
+              "column": "column-{{invalidColumn.Id}}",
+              "tasks": [{
+                "id": "invalid-agent-task",
+                "name": "Invalid agent task",
+                "cron": "* * * * *",
+                "timeZoneId": "UTC",
+                "actions": [{
+                  "id": "agent",
+                  "action": { "type": "runAgent", "agent": "programmer" }
+                }]
+              }]
+            }
+            """);
+
+        await schedules.SaveColumnAsync(validProject.Slug, validColumn.Id,
+        [
+            new ColumnScheduledTask
+            {
+                Id = "valid-task",
+                ColumnId = validColumn.Id,
+                Name = "Valid task",
+                Cron = "* * * * *",
+                TimeZoneId = TimeZoneInfo.Utc.Id,
+                Actions =
+                [
+                    new ColumnProcessorAction("create", new CreateTicketActionSpec
+                    {
+                        Title = "Valid project still recovered",
+                        Status = validColumn.Name,
+                    }),
+                ],
+            },
+        ]);
+
+        var tickets = new TicketService(projects, new MemberService(projects));
+        var actions = new ColumnActionExecutor(projects, tickets, NullLogger<ColumnActionExecutor>.Instance);
+        var logger = new CapturingLogger<ColumnScheduledTaskEngine>();
+        using var engine = new ColumnScheduledTaskEngine(projects, tickets, schedules, actions, logger);
+
+        await engine.StartAsync(CancellationToken.None);
+        try
+        {
+            await Task.Delay(200);
+            Assert.False(engine.ExecuteTask?.IsCompleted ?? true);
+            Assert.Contains(logger.Errors, message => message.Contains(invalidProject.Slug, StringComparison.Ordinal));
+            Assert.Single(await schedules.ListAsync(validProject.Slug, validColumn.Id));
+        }
+        finally
+        {
+            await engine.StopAsync(CancellationToken.None);
+        }
+    }
+
     private static async Task<bool> WaitForAsync(Func<Task<bool>> condition, TimeSpan? timeout = null)
     {
         var until = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(3));
@@ -127,5 +196,18 @@ public sealed class PausedProjectRestartRecoveryTests : IDisposable
             string projectSlug, ColumnProcessor processor, ColumnExecution execution,
             Ticket ticket, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("A paused project must not dispatch during startup recovery.");
+    }
+
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        public List<string> Errors { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel >= LogLevel.Error) Errors.Add(formatter(state, exception));
+        }
     }
 }
