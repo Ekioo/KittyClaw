@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using KittyClaw.Core.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace KittyClaw.Core.Services;
 
@@ -75,6 +76,43 @@ public sealed class TicketWorktreeService(ProjectService projects, TicketService
                 return currentId;
             currentId = parentId;
         }
+    }
+
+    /// <summary>Lists registered ticket worktrees without creating or changing them.</summary>
+    public async Task<IReadOnlyList<TicketWorktree>> ListRegisteredAsync(string projectSlug)
+    {
+        var project = await projects.GetProjectAsync(projectSlug)
+            ?? throw new InvalidOperationException($"Project '{projectSlug}' does not exist.");
+        if (!project.WorktreesEnabled) return [];
+        var repositoryRoot = projects.ResolveRepositoryPath(project);
+        var output = RunGit(repositoryRoot, ["worktree", "list", "--porcelain"]).Output;
+        var result = new List<TicketWorktree>();
+        string? currentPath = null;
+        foreach (var line in output.Replace("\r", "").Split('\n'))
+        {
+            if (line.StartsWith("worktree ", StringComparison.Ordinal))
+            {
+                currentPath = Path.GetFullPath(line[9..]);
+                continue;
+            }
+            if (currentPath is null || !line.StartsWith("branch refs/heads/ticket/", StringComparison.Ordinal))
+                continue;
+            var suffix = line[25..];
+            if (int.TryParse(suffix, out var rootTicketId))
+                result.Add(new(currentPath, $"ticket/{rootTicketId}", rootTicketId, repositoryRoot));
+        }
+        return result;
+    }
+
+    public async Task<IReadOnlyList<int>> ListTerminalRootTicketsAsync(string projectSlug)
+    {
+        await using var db = projects.GetProjectDb(projectSlug);
+        return await (from ticket in db.Tickets
+            join column in db.BoardColumns on ticket.ColumnId equals column.Id
+            where ticket.ParentId == null
+                && (column.Role == ColumnRole.Success || column.Role == ColumnRole.Failure)
+            select ticket.Id)
+            .ToListAsync();
     }
 
     private static string? FindRegisteredWorktree(string repositoryRoot, string desiredPath)

@@ -23,7 +23,11 @@ public sealed class WorktreeMergeQueueProcessor(
             {
                 if (stoppingToken.IsCancellationRequested) return;
                 if (!project.WorktreesEnabled) continue;
-                try { await queue.ProcessNextAsync(project.Slug, stoppingToken); }
+                try
+                {
+                    await queue.RecoverTerminalWorktreesAsync(project.Slug, stoppingToken);
+                    await queue.ProcessNextAsync(project.Slug, stoppingToken);
+                }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
                 catch (Exception ex)
                 {

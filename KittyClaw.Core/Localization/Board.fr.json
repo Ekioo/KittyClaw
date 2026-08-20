@@ -315,6 +315,8 @@
   "WorktreeProcessing": "Fusion en cours",
   "WorktreeConflict": "Conflit",
   "WorktreeFailed": "Échec",
+  "WorktreeNeedsReview": "Vérification requise",
+  "WorktreeNeedsReviewGuidance": "Des fichiers non fusionnés ont été conservés. Consultez le diagnostic, corrigez ou validez leur contenu, puis reprenez la fusion.",
   "WorktreeBlockedByExternalChanges": "Intégration suspendue",
   "WorktreeBlockedByExternalChangesGuidance": "Le checkout de la branche cible contient des modifications locales. Les runs isolés continuent, mais l’intégration attend que ces changements externes soient traités.",
   "WorktreeCompleted": "Intégré",

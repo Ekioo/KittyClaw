@@ -307,6 +307,8 @@
   "WorktreeProcessing": "Integración en curso",
   "WorktreeConflict": "Conflicto",
   "WorktreeFailed": "Fallido",
+  "WorktreeNeedsReview": "Revisión necesaria",
+  "WorktreeNeedsReviewGuidance": "Se conservaron archivos sin integrar. Revise el diagnóstico, corrija o valide su contenido y reanude la integración.",
   "WorktreeBlockedByExternalChanges": "Integración en pausa",
   "WorktreeBlockedByExternalChangesGuidance": "El checkout de la rama de destino contiene cambios locales. Las ejecuciones aisladas continúan, pero la integración espera a que se resuelvan.",
   "WorktreeCompleted": "Integrado",

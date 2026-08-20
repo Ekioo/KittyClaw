@@ -80,7 +80,9 @@
                 {
                     <div class="worktree-error">@_mergeRequest.Error</div>
                 }
-                @if (_mergeRequest?.Status is WorktreeMergeStatus.Conflict or WorktreeMergeStatus.Failed or WorktreeMergeStatus.BlockedByExternalChanges)
+                @if (_mergeRequest?.Status is WorktreeMergeStatus.Conflict or WorktreeMergeStatus.Failed
+                    or WorktreeMergeStatus.BlockedByExternalChanges or WorktreeMergeStatus.NeedsReview
+                    or WorktreeMergeStatus.CommitPending or WorktreeMergeStatus.ValidationRequired)
                 {
                     <button class="worktree-action" @onclick="ResumeMergeAsync" disabled="@_worktreeActionBusy">@L["WorktreeResume"]</button>
                 }
@@ -682,6 +684,7 @@
         WorktreeMergeStatus.Processing => L["WorktreeProcessing"],
         WorktreeMergeStatus.Conflict => L["WorktreeConflict"],
         WorktreeMergeStatus.Failed => L["WorktreeFailed"],
+        WorktreeMergeStatus.NeedsReview or WorktreeMergeStatus.CommitPending or WorktreeMergeStatus.ValidationRequired => L["WorktreeNeedsReview"],
         WorktreeMergeStatus.BlockedByExternalChanges => L["WorktreeBlockedByExternalChanges"],
         WorktreeMergeStatus.Completed => L["WorktreeCompleted"],
         _ when _worktreeState?.IsDirty == true => L["WorktreeDirty"],
@@ -692,7 +695,8 @@
     private string WorktreeTone() => _mergeRequest?.Status switch
     {
         WorktreeMergeStatus.Completed => "success",
-        WorktreeMergeStatus.Conflict or WorktreeMergeStatus.Failed => "danger",
+        WorktreeMergeStatus.Conflict or WorktreeMergeStatus.Failed or WorktreeMergeStatus.NeedsReview
+            or WorktreeMergeStatus.CommitPending or WorktreeMergeStatus.ValidationRequired => "danger",
         WorktreeMergeStatus.Pending or WorktreeMergeStatus.Processing or WorktreeMergeStatus.BlockedByExternalChanges => "waiting",
         _ when _worktreeState?.IsDirty == true => "danger",
         _ => "neutral"
@@ -704,6 +708,7 @@
         WorktreeMergeStatus.Processing => L["WorktreeProcessingGuidance"],
         WorktreeMergeStatus.Conflict => L["WorktreeConflictGuidance"],
         WorktreeMergeStatus.Failed => L["WorktreeFailedGuidance"],
+        WorktreeMergeStatus.NeedsReview or WorktreeMergeStatus.CommitPending or WorktreeMergeStatus.ValidationRequired => L["WorktreeNeedsReviewGuidance"],
         WorktreeMergeStatus.BlockedByExternalChanges => L["WorktreeBlockedByExternalChangesGuidance"],
         WorktreeMergeStatus.Completed => L["WorktreeCompletedGuidance"],
         _ when _worktreeState?.IsDirty == true => L["WorktreeDirtyGuidance"],

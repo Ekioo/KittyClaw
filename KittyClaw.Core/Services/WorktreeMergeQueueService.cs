@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
+using KittyClaw.Core.Automation;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using KittyClaw.Core.Data;
@@ -34,7 +36,11 @@ public sealed record WorktreeMergeAlertSummary(
     int ActiveCount, WorktreeMergeStatus MostSevereStatus, DateTime OldestUpdatedAt);
 
 /// <summary>Durable, per-project serialized integration queue for canonical ticket worktrees.</summary>
-public sealed class WorktreeMergeQueueService(ProjectService projects, TicketWorktreeService worktrees)
+public sealed partial class WorktreeMergeQueueService(
+    ProjectService projects,
+    TicketWorktreeService worktrees,
+    WorktreeFinalizationCoordinator? finalization = null,
+    AgentRunRegistry? runs = null)
 {
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> ProjectGates =
         new(StringComparer.OrdinalIgnoreCase);
@@ -107,6 +113,33 @@ public sealed class WorktreeMergeQueueService(ProjectService projects, TicketWor
                 {(int)WorktreeMergeJobKind.Ticket}, {(int)WorktreeMergeCheckpoint.Waiting})
             """);
         return (await ReadByRootAsync(db, worktree.RootTicketId))!;
+    }
+
+    /// <summary>
+    /// Discovers canonical worktrees left behind for root tickets that are already terminal.
+    /// Inspection is deliberately non-creating: recovery must never manufacture a worktree for
+    /// an old completed ticket merely because its queue row is absent.
+    /// </summary>
+    public async Task<int> RecoverTerminalWorktreesAsync(string projectSlug, CancellationToken ct)
+    {
+        var project = await projects.GetProjectAsync(projectSlug);
+        if (project is null || !project.WorktreesEnabled || string.IsNullOrWhiteSpace(project.IntegrationBranch))
+            return 0;
+
+        var terminalRoots = (await worktrees.ListTerminalRootTicketsAsync(projectSlug))
+            .Distinct()
+            .ToList();
+        var recovered = 0;
+        foreach (var ticketId in terminalRoots)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (await IsBusyAsync(projectSlug, ticketId)) continue;
+            var state = await worktrees.InspectAsync(projectSlug, ticketId);
+            if (state is not { Exists: true }) continue;
+            await EnqueueAsync(projectSlug, ticketId, ct);
+            recovered++;
+        }
+        return recovered;
     }
 
     public async Task<WorktreeMergeRequest> PrepareMaintenanceAsync(
@@ -213,6 +246,9 @@ public sealed class WorktreeMergeQueueService(ProjectService projects, TicketWor
             var request = await ReadNextAsync(db, WorktreeMergeStatus.Pending)
                 ?? await ReadNextAsync(db, WorktreeMergeStatus.BlockedByExternalChanges);
             if (request is null) return null;
+            if (request.JobKind == WorktreeMergeJobKind.Ticket
+                && await IsBusyAsync(projectSlug, request.RootTicketId))
+                return null;
             await SetStateAsync(db, request.Id, WorktreeMergeStatus.Processing, WorktreeMergeCheckpoint.Preparation);
             return await IntegrateAsync(projectSlug, request, continueRebase: false, ct);
         }
@@ -259,7 +295,12 @@ public sealed class WorktreeMergeQueueService(ProjectService projects, TicketWor
             await using var db = projects.GetProjectDb(projectSlug);
             await EnsureTableAsync(db);
             var request = await ReadByIdAsync(db, requestId);
-            if (request is null || request.Status is not (WorktreeMergeStatus.Conflict or WorktreeMergeStatus.Failed or WorktreeMergeStatus.BlockedByExternalChanges))
+            if (request is null || request.Status is not (WorktreeMergeStatus.Conflict or WorktreeMergeStatus.Failed
+                or WorktreeMergeStatus.BlockedByExternalChanges or WorktreeMergeStatus.NeedsReview
+                or WorktreeMergeStatus.CommitPending or WorktreeMergeStatus.ValidationRequired))
+                return null;
+            if (request.JobKind == WorktreeMergeJobKind.Ticket
+                && await IsBusyAsync(projectSlug, request.RootTicketId))
                 return null;
             await SetStateAsync(db, request.Id, WorktreeMergeStatus.Processing, request.Checkpoint);
             return await IntegrateAsync(projectSlug, request, continueRebase: request.Status == WorktreeMergeStatus.Conflict, ct);
@@ -282,6 +323,27 @@ public sealed class WorktreeMergeQueueService(ProjectService projects, TicketWor
             if (!string.Equals(checkedOut, request.TargetBranch, StringComparison.Ordinal))
                 throw new InvalidOperationException($"Integration checkout is on '{checkedOut}', expected '{request.TargetBranch}'.");
 
+            if (request.JobKind == WorktreeMergeJobKind.Ticket && Directory.Exists(request.WorktreePath))
+            {
+                var preparation = PrepareTicketWorktree(request);
+                if (preparation.Error is not null)
+                    return await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
+                        preparation.Error, null);
+                if (preparation.HasChanges)
+                {
+                    RunGit(request.WorktreePath, ["add", "-A"]);
+                    var commit = RunGit(request.WorktreePath,
+                        ["commit", "-m", $"Finalize ticket #{request.RootTicketId} worktree"], false);
+                    if (commit.ExitCode != 0)
+                        return await MarkAsync(db, request.Id, WorktreeMergeStatus.CommitPending,
+                            $"Validated changes could not be committed: {commit.Error.Trim()}", null);
+                    if (!IsClean(request.WorktreePath))
+                        return await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
+                            "The finalization commit did not capture the complete worktree; cleanup was stopped.", null);
+                    request = request with { SourceCommit = null };
+                }
+            }
+
             var alreadyIntegrated = !string.IsNullOrWhiteSpace(request.SourceCommit)
                 && RunGit(repository, ["merge-base", "--is-ancestor", request.SourceCommit!, request.TargetBranch], false).ExitCode == 0;
             if (!alreadyIntegrated)
@@ -299,20 +361,6 @@ public sealed class WorktreeMergeQueueService(ProjectService projects, TicketWor
                 }
                 else
                 {
-                    var dirty = RunGit(request.WorktreePath, ["status", "--porcelain"]).Output;
-                    if (!string.IsNullOrWhiteSpace(dirty))
-                    {
-                        var hasUnexpected = dirty.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
-                            .Any(line => line.StartsWith("??", StringComparison.Ordinal) || line.Length < 2 || line[1] != ' ');
-                        await SetStateAsync(db, request.Id,
-                            hasUnexpected ? WorktreeMergeStatus.NeedsReview : WorktreeMergeStatus.CommitPending,
-                            hasUnexpected ? WorktreeMergeCheckpoint.Validation : WorktreeMergeCheckpoint.Commit);
-                        return await MarkAsync(db, request.Id,
-                            hasUnexpected ? WorktreeMergeStatus.NeedsReview : WorktreeMergeStatus.CommitPending,
-                            hasUnexpected
-                                ? "The worktree contains unvalidated or untracked files; nothing was cleaned."
-                                : "Validated staged changes still require a commit before integration.", null);
-                    }
                     var sourceCommit = RunGit(request.WorktreePath, ["rev-parse", "HEAD"]).Output.Trim();
                     await SetSourceCommitAsync(db, request.Id, sourceCommit);
                     request = request with { SourceCommit = sourceCommit };
@@ -333,8 +381,10 @@ public sealed class WorktreeMergeQueueService(ProjectService projects, TicketWor
             }
 
             var integrated = request.SourceCommit ?? RunGit(repository, ["rev-parse", request.TargetBranch]).Output.Trim();
-            RunGit(repository, ["worktree", "remove", request.WorktreePath]);
-            RunGit(repository, ["branch", "-d", request.SourceBranch]);
+            if (Directory.Exists(request.WorktreePath))
+                RunGit(repository, ["worktree", "remove", request.WorktreePath]);
+            if (RunGit(repository, ["show-ref", "--verify", "--quiet", $"refs/heads/{request.SourceBranch}"], false).ExitCode == 0)
+                RunGit(repository, ["branch", "-d", request.SourceBranch]);
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Completed},
                     Checkpoint = {(int)WorktreeMergeCheckpoint.Merge}, IntegratedCommit = {integrated},
@@ -348,6 +398,108 @@ public sealed class WorktreeMergeQueueService(ProjectService projects, TicketWor
             return await MarkAsync(db, request.Id, WorktreeMergeStatus.Failed, ex.Message, null);
         }
     }
+
+    private async Task<bool> IsBusyAsync(string projectSlug, int rootTicketId)
+    {
+        if (finalization?.IsBusy(projectSlug, rootTicketId) == true) return true;
+        if (runs is null) return false;
+        foreach (var run in runs.ActiveForProject(projectSlug))
+        {
+            if (run.TicketId is not int ticketId) continue;
+            try
+            {
+                if (await worktrees.ResolveRootTicketIdAsync(projectSlug, ticketId) == rootTicketId)
+                    return true;
+            }
+            catch (InvalidOperationException) { }
+        }
+        return false;
+    }
+
+    private static WorktreePreparation PrepareTicketWorktree(WorktreeMergeRequest request)
+    {
+        var status = RunGit(request.WorktreePath, ["status", "--porcelain", "-z", "--untracked-files=all"]).Output;
+        var blocked = new List<string>();
+        var hasChanges = false;
+        foreach (var entry in status.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (entry.Length < 4) continue;
+            var path = entry[3..].Replace('\\', '/');
+            if (IsSensitive(path))
+            {
+                blocked.Add(path + " (local-only or potentially sensitive path)");
+                continue;
+            }
+            var fullPath = Path.GetFullPath(Path.Combine(request.WorktreePath, path));
+            if (!fullPath.StartsWith(Path.GetFullPath(request.WorktreePath) + Path.DirectorySeparatorChar,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                blocked.Add(path + " (outside worktree)");
+                continue;
+            }
+            if (entry.StartsWith("??", StringComparison.Ordinal) && IsRecognizedTemporary(path))
+            {
+                if (File.Exists(fullPath)) File.Delete(fullPath);
+                continue;
+            }
+            if (entry.StartsWith("??", StringComparison.Ordinal) && !IsDurableMemory(path))
+            {
+                blocked.Add(path + " (unexpected untracked path)");
+                continue;
+            }
+            if (ContainsProbableSecret(fullPath))
+            {
+                blocked.Add(path + " (possible secret content)");
+                continue;
+            }
+            hasChanges = true;
+        }
+        return blocked.Count == 0
+            ? new(hasChanges, null)
+            : new(hasChanges, "Unexpected or potentially sensitive files were preserved and require review: " + string.Join(", ", blocked));
+    }
+
+    private static bool IsDurableMemory(string path)
+    {
+        var segments = path.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return segments.Length >= 4
+            && segments[0].Equals(".agents", StringComparison.OrdinalIgnoreCase)
+            && segments.Skip(1).Take(segments.Length - 2)
+                .Any(segment => segment.Equals("memory", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsRecognizedTemporary(string path)
+    {
+        var name = Path.GetFileName(path);
+        return name.Equals(".DS_Store", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("Thumbs.db", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".swp", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSensitive(string path)
+    {
+        var name = Path.GetFileName(path);
+        var normalized = '/' + path.Replace('\\', '/').Trim('/') + '/';
+        return LocalOnlyPathRegex().IsMatch(normalized)
+            || name.StartsWith(".env", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("credential", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("secret", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".pem", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".key", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ContainsProbableSecret(string path) => File.Exists(path)
+        && new FileInfo(path).Length <= 1024 * 1024
+        && SecretContentRegex().IsMatch(File.ReadAllText(path));
+
+    [GeneratedRegex(@"/(transcripts?|prompts?|sessions?|traces?|secrets?)/|/(\.env|credentials?[^/]*)/|\.(pem|key)/$", RegexOptions.IgnoreCase)]
+    private static partial Regex LocalOnlyPathRegex();
+
+    [GeneratedRegex("(?i)(api[_-]?key|access[_-]?token|client[_-]?secret|password|private[_-]?key)\\s*[:=]\\s*['\\\"]?[A-Za-z0-9_\\-/+=]{8,}")]
+    private static partial Regex SecretContentRegex();
+
+    private sealed record WorktreePreparation(bool HasChanges, string? Error);
 
     private static void RequireClean(string path, string label)
     {

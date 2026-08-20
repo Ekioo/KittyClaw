@@ -20,6 +20,9 @@ public sealed class ColumnProcessingEngine : BackgroundService
     private readonly IColumnAgentDispatcher _dispatcher;
     private readonly ColumnActionExecutor _actions;
     private readonly ColumnMemoryCapitalizationService _memory;
+    private readonly TicketWorktreeService? _worktrees;
+    private readonly WorktreeFinalizationCoordinator? _finalization;
+    private readonly WorktreeMergeQueueService? _mergeQueue;
     private readonly ILogger<ColumnProcessingEngine> _logger;
     private readonly ConcurrentDictionary<string, byte> _pendingProjects = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<int, int>> _ownerFeedbackSignals = new(StringComparer.OrdinalIgnoreCase);
@@ -32,7 +35,10 @@ public sealed class ColumnProcessingEngine : BackgroundService
         ProjectService projects, TicketService tickets, ColumnProcessorService processors,
         ColumnExecutionService executions, IColumnAgentDispatcher dispatcher, ColumnActionExecutor actions,
         ColumnMemoryCapitalizationService memory,
-        ILogger<ColumnProcessingEngine> logger)
+        ILogger<ColumnProcessingEngine> logger,
+        TicketWorktreeService? worktrees = null,
+        WorktreeFinalizationCoordinator? finalization = null,
+        WorktreeMergeQueueService? mergeQueue = null)
     {
         _projects = projects;
         _tickets = tickets;
@@ -42,6 +48,9 @@ public sealed class ColumnProcessingEngine : BackgroundService
         _actions = actions;
         _memory = memory;
         _logger = logger;
+        _worktrees = worktrees;
+        _finalization = finalization;
+        _mergeQueue = mergeQueue;
         _tickets.TicketStatusChanged += OnTicketChanged;
         _tickets.TicketCreated += OnTicketCreated;
         _tickets.TicketCommentAdded += OnTicketCommentAdded;
@@ -126,8 +135,15 @@ public sealed class ColumnProcessingEngine : BackgroundService
         string slug, ColumnProcessor processor, ColumnExecution execution,
         CancellationToken cancellationToken)
     {
+        IDisposable? finalizationLease = null;
+        int? rootTicketId = null;
         try
         {
+            if (_worktrees is not null && _finalization is not null)
+            {
+                rootTicketId = await _worktrees.ResolveRootTicketIdAsync(slug, execution.TicketId);
+                finalizationLease = _finalization.Enter(slug, rootTicketId.Value);
+            }
             // Activity authors are user-facing. Keep the stable column id in run names,
             // concurrency groups and logs, but attribute board history to the processor's
             // configured display name instead of leaking an implementation id such as column-11.
@@ -281,6 +297,19 @@ public sealed class ColumnProcessingEngine : BackgroundService
         {
             _logger.LogError(ex, "Column processor {ProcessorId} failed for ticket {TicketId}", processor.Id, execution.TicketId);
             await _executions.FailAttemptAsync(slug, execution, processor, ex.Message, processor.Name);
+        }
+        finally
+        {
+            finalizationLease?.Dispose();
+            if (rootTicketId is not null && _mergeQueue is not null)
+            {
+                try { await _mergeQueue.RecoverTerminalWorktreesAsync(slug, CancellationToken.None); }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Unable to queue terminal worktree finalization for ticket {TicketId}", execution.TicketId);
+                }
+            }
         }
     }
 

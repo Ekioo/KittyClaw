@@ -315,6 +315,8 @@
   "WorktreeProcessing": "Integration in progress",
   "WorktreeConflict": "Conflict",
   "WorktreeFailed": "Failed",
+  "WorktreeNeedsReview": "Review required",
+  "WorktreeNeedsReviewGuidance": "Unmerged files were preserved. Review the diagnostic, fix or validate their content, then resume integration.",
   "WorktreeBlockedByExternalChanges": "Integration paused",
   "WorktreeBlockedByExternalChangesGuidance": "The target branch checkout has local changes. Isolated runs continue, but integration waits until those external changes are resolved.",
   "WorktreeCompleted": "Integrated",
