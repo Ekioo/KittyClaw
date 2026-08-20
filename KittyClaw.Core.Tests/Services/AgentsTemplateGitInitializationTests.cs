@@ -7,6 +7,22 @@ namespace KittyClaw.Core.Tests.Services;
 public sealed class AgentsTemplateGitInitializationTests
 {
     [Fact]
+    public async Task Initialize_WritesPlainLanguageTicketGuidanceToPreamble()
+    {
+        using var temp = new TempDir();
+        var workspace = Path.Combine(temp.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        var service = new AgentsTemplateService();
+
+        await service.InitializeAsync(workspace, overwriteConflicts: false, initializeGit: false);
+
+        var preamble = await File.ReadAllTextAsync(Path.Combine(workspace, ".agents", "preamble.md"));
+        Assert.Contains("Write ticket descriptions and ticket comments in clear, simple language.", preamble);
+        Assert.Contains("Use short, direct sentences and common words.", preamble);
+        Assert.Contains("Briefly explain any technical term that is necessary.", preamble);
+    }
+
+    [Fact]
     public async Task Initialize_WhenGitOptionIsDisabled_DoesNotCreateRepository()
     {
         using var temp = new TempDir();

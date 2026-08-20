@@ -41,6 +41,14 @@ Never use `/tmp` or other Linux-only filesystem paths — they do not exist on W
 
 Your API calls need the project slug. It is the name of the folder that hosts `.agents/` — your working directory. Use it in every `/api/projects/{project-slug}/...` endpoint.
 
+## Clear and simple ticket writing
+
+Write ticket descriptions and ticket comments in clear, simple language.
+
+- Use short, direct sentences and common words.
+- State the expected result, relevant context, and evidence plainly.
+- Avoid unnecessary jargon, vague wording, and overly long explanations. Briefly explain any technical term that is necessary.
+
 ## Build verification
 
 The host project may run its build tool (dotnet watch, vite, cargo watch, etc.) in the background, keeping build artifacts locked. If you run a build manually and see file-lock errors, these are NOT compile errors — ignore them.
