@@ -299,6 +299,71 @@ public sealed class WorktreeMergeQueueServiceTests
         Assert.Equal(WorktreeMergeStatus.Completed, result!.Status);
     }
 
+    [Fact]
+    public async Task MaintenanceResume_UsesCommitCreatedAfterTheRequestWasPrepared()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var worktreePath = Path.Combine(fixture.Root.Path, "maintenance-worktree");
+        Git(fixture.Repository, true, "worktree", "add", "-b", "maintenance/test", worktreePath, "integration");
+        var request = await fixture.Queue.PrepareMaintenanceAsync(
+            fixture.Slug, worktreePath, "maintenance/test", CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(worktreePath, "maintenance.txt"), "late commit");
+        Git(worktreePath, true, "add", "maintenance.txt");
+        Git(worktreePath, true, "commit", "-m", "late maintenance commit");
+        var actualHead = Git(worktreePath, true, "rev-parse", "HEAD").Output.Trim();
+        fixture.Queue.ReleaseMaintenanceWrite(request.Id);
+
+        var completed = await fixture.Queue.ResumeAsync(fixture.Slug, request.Id, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
+        Assert.Equal(actualHead, completed.IntegratedCommit);
+        Assert.Equal("late commit", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "maintenance.txt")));
+    }
+
+    [Fact]
+    public async Task TargetAdvanceBetweenRebaseAndFastForward_IsRebasedAgainWithinTheSameAttempt()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("candidate.txt", "candidate");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        var advanced = false;
+        var queue = new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees, beforeFastForward: (repository, _) =>
+        {
+            if (advanced) return;
+            advanced = true;
+            File.WriteAllText(Path.Combine(repository, "concurrent.txt"), "target advance");
+            Git(repository, true, "add", "concurrent.txt");
+            Git(repository, true, "commit", "-m", "advance target during integration");
+        });
+
+        var completed = await queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.True(advanced);
+        Assert.Equal(request.Id, completed!.Id);
+        Assert.Equal(WorktreeMergeStatus.Completed, completed.Status);
+        Assert.True(File.Exists(Path.Combine(fixture.Repository, "candidate.txt")));
+        Assert.True(File.Exists(Path.Combine(fixture.Repository, "concurrent.txt")));
+    }
+
+    [Fact]
+    public async Task ResumeAfterPartialCleanup_CompletesWhenCommitIsIntegratedAndOnlyEmptyFolderRemains()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("integrated.txt", "integrated");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        var first = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        Assert.Equal(WorktreeMergeStatus.Completed, first!.Status);
+        Directory.CreateDirectory(request.WorktreePath);
+        await using (var db = fixture.Projects.GetProjectDb(fixture.Slug))
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET Status = 3, Error = 'simulated partial cleanup' WHERE Id = {request.Id}");
+
+        var resumed = await fixture.Queue.ResumeAsync(fixture.Slug, request.Id, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, resumed!.Status);
+        Assert.False(Directory.Exists(request.WorktreePath));
+        Assert.NotEqual(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet", $"refs/heads/{request.SourceBranch}").ExitCode);
+    }
+
     [Theory]
     [InlineData(WorktreeMergeCheckpoint.Preparation)]
     [InlineData(WorktreeMergeCheckpoint.Writing)]

@@ -40,8 +40,10 @@ public sealed partial class WorktreeMergeQueueService(
     ProjectService projects,
     TicketWorktreeService worktrees,
     WorktreeFinalizationCoordinator? finalization = null,
-    AgentRunRegistry? runs = null)
+    AgentRunRegistry? runs = null,
+    Action<string, string>? beforeFastForward = null)
 {
+    private const int MaxTargetAdvanceRetries = 3;
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> ProjectGates =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<long, byte> _activeMaintenanceWrites = new();
@@ -340,7 +342,8 @@ public sealed partial class WorktreeMergeQueueService(
             if (!string.Equals(checkedOut, request.TargetBranch, StringComparison.Ordinal))
                 throw new InvalidOperationException($"Integration checkout is on '{checkedOut}', expected '{request.TargetBranch}'.");
 
-            if (request.JobKind == WorktreeMergeJobKind.Ticket && Directory.Exists(request.WorktreePath))
+            var worktreeIsRegistered = IsRegisteredWorktree(repository, request.WorktreePath);
+            if (request.JobKind == WorktreeMergeJobKind.Ticket && worktreeIsRegistered)
             {
                 var preparation = PrepareTicketWorktree(request);
                 if (preparation.Error is not null)
@@ -361,10 +364,21 @@ public sealed partial class WorktreeMergeQueueService(
                 }
             }
 
+            var sourceHead = ResolveSourceHead(repository, request.SourceBranch);
+            if (sourceHead is not null && !string.Equals(sourceHead, request.SourceCommit, StringComparison.Ordinal))
+            {
+                await SetSourceCommitAsync(db, request.Id, sourceHead);
+                request = request with { SourceCommit = sourceHead };
+            }
+
             var alreadyIntegrated = !string.IsNullOrWhiteSpace(request.SourceCommit)
-                && RunGit(repository, ["merge-base", "--is-ancestor", request.SourceCommit!, request.TargetBranch], false).ExitCode == 0;
+                && IsAncestor(repository, request.SourceCommit!, request.TargetBranch);
             if (!alreadyIntegrated)
             {
+                if (!worktreeIsRegistered)
+                    return await MarkAsync(db, request.Id, WorktreeMergeStatus.Failed,
+                        "The source worktree is no longer registered and its last known commit is not integrated; cleanup was stopped.", null);
+
                 if (continueRebase)
                 {
                     await SetStateAsync(db, request.Id, WorktreeMergeStatus.Processing, WorktreeMergeCheckpoint.Rebase);
@@ -388,20 +402,51 @@ public sealed partial class WorktreeMergeQueueService(
                 }
 
                 var rebasedCommit = RunGit(request.WorktreePath, ["rev-parse", "HEAD"]).Output.Trim();
-                await SetStateAsync(db, request.Id, WorktreeMergeStatus.Processing, WorktreeMergeCheckpoint.Merge);
-                var ff = RunGit(repository, ["merge", "--ff-only", request.SourceBranch], false);
-                if (ff.ExitCode != 0) throw new InvalidOperationException(ff.Error.Trim());
-                if (RunGit(repository, ["merge-base", "--is-ancestor", rebasedCommit, request.TargetBranch], false).ExitCode != 0)
+                for (var attempt = 0; ; attempt++)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    await SetStateAsync(db, request.Id, WorktreeMergeStatus.Processing, WorktreeMergeCheckpoint.Merge);
+                    var targetBeforeMerge = RunGit(repository, ["rev-parse", request.TargetBranch]).Output.Trim();
+                    beforeFastForward?.Invoke(repository, request.TargetBranch);
+                    var ff = RunGit(repository, ["merge", "--ff-only", request.SourceBranch], false);
+                    if (ff.ExitCode == 0)
+                        break;
+
+                    var targetAfterFailure = RunGit(repository, ["rev-parse", request.TargetBranch]).Output.Trim();
+                    if (attempt >= MaxTargetAdvanceRetries - 1
+                        || string.Equals(targetBeforeMerge, targetAfterFailure, StringComparison.Ordinal))
+                        throw new InvalidOperationException(ff.Error.Trim());
+
+                    await SetStateAsync(db, request.Id, WorktreeMergeStatus.Processing, WorktreeMergeCheckpoint.Rebase);
+                    var retryRebase = RunGit(request.WorktreePath, ["rebase", request.TargetBranch], false);
+                    if (retryRebase.ExitCode != 0)
+                        return await MarkGitFailureAsync(db, request, retryRebase);
+                    rebasedCommit = RunGit(request.WorktreePath, ["rev-parse", "HEAD"]).Output.Trim();
+                }
+                if (!IsAncestor(repository, rebasedCommit, request.TargetBranch))
                     throw new InvalidOperationException($"Commit {rebasedCommit} is not reachable from {request.TargetBranch}.");
                 await SetSourceCommitAsync(db, request.Id, rebasedCommit);
                 request = request with { SourceCommit = rebasedCommit };
             }
 
             var integrated = request.SourceCommit ?? RunGit(repository, ["rev-parse", request.TargetBranch]).Output.Trim();
-            if (Directory.Exists(request.WorktreePath))
-                RunGit(repository, ["worktree", "remove", request.WorktreePath]);
+            if (!IsAncestor(repository, integrated, request.TargetBranch))
+                throw new InvalidOperationException($"Commit {integrated} is not reachable from {request.TargetBranch}; cleanup was stopped.");
+            if (IsRegisteredWorktree(repository, request.WorktreePath))
+            {
+                if (!IsClean(request.WorktreePath))
+                    throw new InvalidOperationException("The source worktree has local changes; cleanup was stopped.");
+                var removed = RunGit(repository, ["worktree", "remove", request.WorktreePath], false);
+                if (removed.ExitCode != 0 && IsRegisteredWorktree(repository, request.WorktreePath))
+                    throw new InvalidOperationException($"The source worktree could not be detached: {removed.Error.Trim()}");
+            }
             if (RunGit(repository, ["show-ref", "--verify", "--quiet", $"refs/heads/{request.SourceBranch}"], false).ExitCode == 0)
-                RunGit(repository, ["branch", "-d", request.SourceBranch]);
+            {
+                var deleted = RunGit(repository, ["branch", "-d", request.SourceBranch], false);
+                if (deleted.ExitCode != 0 && ResolveSourceHead(repository, request.SourceBranch) is not null)
+                    throw new InvalidOperationException($"The integrated source branch could not be deleted: {deleted.Error.Trim()}");
+            }
+            RemoveEmptyResidualDirectory(request.WorktreePath);
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Completed},
                     Checkpoint = {(int)WorktreeMergeCheckpoint.Merge}, IntegratedCommit = {integrated},
@@ -414,6 +459,36 @@ public sealed partial class WorktreeMergeQueueService(
         {
             return await MarkAsync(db, request.Id, WorktreeMergeStatus.Failed, ex.Message, null);
         }
+    }
+
+    private static bool IsAncestor(string repository, string commit, string target) =>
+        RunGit(repository, ["merge-base", "--is-ancestor", commit, target], false).ExitCode == 0;
+
+    private static string? ResolveSourceHead(string repository, string sourceBranch)
+    {
+        var result = RunGit(repository, ["rev-parse", "--verify", $"refs/heads/{sourceBranch}"], false);
+        return result.ExitCode == 0 ? result.Output.Trim() : null;
+    }
+
+    private static bool IsRegisteredWorktree(string repository, string worktreePath)
+    {
+        var result = RunGit(repository, ["worktree", "list", "--porcelain"], false);
+        if (result.ExitCode != 0) return false;
+        var expected = Path.GetFullPath(worktreePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return result.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Where(line => line.StartsWith("worktree ", StringComparison.Ordinal))
+            .Select(line => Path.GetFullPath(line[9..].Trim()).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+            .Any(path => string.Equals(path, expected, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static void RemoveEmptyResidualDirectory(string path)
+    {
+        if (!Directory.Exists(path)) return;
+        if (Directory.EnumerateFileSystemEntries(path).Any())
+            throw new InvalidOperationException("The detached worktree directory still contains files; it was preserved for review.");
+        try { Directory.Delete(path); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     private async Task<bool> IsBusyAsync(string projectSlug, int rootTicketId)
