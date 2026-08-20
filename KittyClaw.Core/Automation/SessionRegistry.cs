@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace KittyClaw.Core.Automation;
 
@@ -17,9 +19,60 @@ public sealed class SessionRegistry
 {
     private const int WriteAttempts = 6;
     private readonly object _fileLock = new();
+    private readonly string? _runtimeRoot;
 
-    private static string StatePath(string workspacePath) =>
-        Path.Combine(workspacePath, ".agents", "channel", "dispatch-state.json");
+    public SessionRegistry(string? dataDir = null)
+    {
+        _runtimeRoot = string.IsNullOrWhiteSpace(dataDir)
+            ? null
+            : Path.Combine(Path.GetFullPath(dataDir), "runtime", "projects");
+    }
+
+    internal string ChannelFilePath(string workspacePath, string fileName, bool migrateLegacy = true)
+    {
+        if (Path.GetFileName(fileName) != fileName)
+            throw new ArgumentException("A channel file name cannot contain a path.", nameof(fileName));
+        var legacy = Path.Combine(workspacePath, ".agents", "channel", fileName);
+        if (_runtimeRoot is null) return legacy;
+
+        var normalized = Path.GetFullPath(workspacePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .ToUpperInvariant();
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized))).ToLowerInvariant()[..16];
+        var leaf = Path.GetFileName(normalized).ToLowerInvariant();
+        var directory = Path.Combine(_runtimeRoot, $"{leaf}-{hash}", "channel");
+        var destination = Path.Combine(directory, fileName);
+        if (migrateLegacy && !File.Exists(destination) && File.Exists(legacy))
+        {
+            Directory.CreateDirectory(directory);
+            File.Copy(legacy, destination, overwrite: false);
+        }
+        return destination;
+    }
+
+    internal IReadOnlyList<string> ChannelFiles(string workspacePath, string pattern)
+    {
+        if (_runtimeRoot is null)
+        {
+            var legacyDirectory = Path.Combine(workspacePath, ".agents", "channel");
+            return Directory.Exists(legacyDirectory)
+                ? Directory.EnumerateFiles(legacyDirectory, pattern).ToList()
+                : [];
+        }
+
+        var legacyDirectoryPath = Path.Combine(workspacePath, ".agents", "channel");
+        if (Directory.Exists(legacyDirectoryPath))
+        {
+            foreach (var legacy in Directory.EnumerateFiles(legacyDirectoryPath, pattern))
+                _ = ChannelFilePath(workspacePath, Path.GetFileName(legacy));
+        }
+        var runtimeDirectory = Path.GetDirectoryName(ChannelFilePath(workspacePath, ".probe", migrateLegacy: false))!;
+        return Directory.Exists(runtimeDirectory)
+            ? Directory.EnumerateFiles(runtimeDirectory, pattern).ToList()
+            : [];
+    }
+
+    private string StatePath(string workspacePath) =>
+        ChannelFilePath(workspacePath, "dispatch-state.json");
 
     public JsonObject Load(string workspacePath)
     {
@@ -48,7 +101,7 @@ public sealed class SessionRegistry
         }
     }
 
-    private static JsonObject LoadUnlocked(string workspacePath)
+    private JsonObject LoadUnlocked(string workspacePath)
     {
         var path = StatePath(workspacePath);
         if (!File.Exists(path)) return new JsonObject();
@@ -58,7 +111,7 @@ public sealed class SessionRegistry
             : (JsonNode.Parse(text) as JsonObject) ?? new JsonObject();
     }
 
-    private static void SaveUnlocked(string workspacePath, JsonObject state)
+    private void SaveUnlocked(string workspacePath, JsonObject state)
     {
         var path = StatePath(workspacePath);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);

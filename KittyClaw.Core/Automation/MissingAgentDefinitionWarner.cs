@@ -14,8 +14,11 @@ namespace KittyClaw.Core.Automation;
 /// one-time activity on the ticket so the gap is visible from the board UI.
 /// </summary>
 internal sealed class MissingAgentDefinitionWarner(
-    TicketService tickets, LocalizationService loc, ILogger logger)
+    TicketService tickets, LocalizationService loc, SessionRegistry sessions, ILogger logger)
 {
+    internal MissingAgentDefinitionWarner(TicketService tickets, LocalizationService loc, ILogger logger)
+        : this(tickets, loc, new SessionRegistry(), logger) { }
+
     internal static readonly TimeSpan WarnInterval = TimeSpan.FromHours(1);
 
     // Keyed by "{project}|{ticketId}|{agent}"; value = last time a SKIPPED line was written.
@@ -74,13 +77,13 @@ internal sealed class MissingAgentDefinitionWarner(
         catch { return false; }
     }
 
-    private static void AppendDebugLog(string workspace, string line)
+    private void AppendDebugLog(string workspace, string line)
     {
         try
         {
-            var dir = Path.Combine(workspace, ".agents", "channel");
-            Directory.CreateDirectory(dir);
-            File.AppendAllText(Path.Combine(dir, "debug.log"), $"[{DateTime.UtcNow:o}] {line}\n");
+            var path = sessions.ChannelFilePath(workspace, "debug.log");
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.AppendAllText(path, $"[{DateTime.UtcNow:o}] {line}\n");
         }
         catch { /* best-effort debug log — disk errors must not break the tick */ }
     }

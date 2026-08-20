@@ -50,7 +50,7 @@ internal sealed class TriggerHandler
         _runs = runs;
         _queue = queue;
         _logger = logger;
-        _missingAgentWarner = new MissingAgentDefinitionWarner(tickets, loc, logger);
+        _missingAgentWarner = new MissingAgentDefinitionWarner(tickets, loc, sessions, logger);
         // Ticket mutations arrive synchronously from TicketService. Marking the project dirty
         // here lets the same engine tick refresh occurrence state before evaluating its regular
         // poll triggers, without rereading every ticket in every project once per second.
