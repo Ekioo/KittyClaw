@@ -80,7 +80,7 @@
                 {
                     <div class="worktree-error">@_mergeRequest.Error</div>
                 }
-                @if (_mergeRequest?.Status is WorktreeMergeStatus.Conflict or WorktreeMergeStatus.Failed)
+                @if (_mergeRequest?.Status is WorktreeMergeStatus.Conflict or WorktreeMergeStatus.Failed or WorktreeMergeStatus.BlockedByExternalChanges)
                 {
                     <button class="worktree-action" @onclick="ResumeMergeAsync" disabled="@_worktreeActionBusy">@L["WorktreeResume"]</button>
                 }
@@ -682,6 +682,7 @@
         WorktreeMergeStatus.Processing => L["WorktreeProcessing"],
         WorktreeMergeStatus.Conflict => L["WorktreeConflict"],
         WorktreeMergeStatus.Failed => L["WorktreeFailed"],
+        WorktreeMergeStatus.BlockedByExternalChanges => L["WorktreeBlockedByExternalChanges"],
         WorktreeMergeStatus.Completed => L["WorktreeCompleted"],
         _ when _worktreeState?.IsDirty == true => L["WorktreeDirty"],
         _ when _worktreeState?.Exists == true => L["WorktreeReady"],
@@ -692,7 +693,7 @@
     {
         WorktreeMergeStatus.Completed => "success",
         WorktreeMergeStatus.Conflict or WorktreeMergeStatus.Failed => "danger",
-        WorktreeMergeStatus.Pending or WorktreeMergeStatus.Processing => "waiting",
+        WorktreeMergeStatus.Pending or WorktreeMergeStatus.Processing or WorktreeMergeStatus.BlockedByExternalChanges => "waiting",
         _ when _worktreeState?.IsDirty == true => "danger",
         _ => "neutral"
     };
@@ -703,6 +704,7 @@
         WorktreeMergeStatus.Processing => L["WorktreeProcessingGuidance"],
         WorktreeMergeStatus.Conflict => L["WorktreeConflictGuidance"],
         WorktreeMergeStatus.Failed => L["WorktreeFailedGuidance"],
+        WorktreeMergeStatus.BlockedByExternalChanges => L["WorktreeBlockedByExternalChangesGuidance"],
         WorktreeMergeStatus.Completed => L["WorktreeCompletedGuidance"],
         _ when _worktreeState?.IsDirty == true => L["WorktreeDirtyGuidance"],
         _ when _worktreeState?.Exists == true => L["WorktreeReadyGuidance"],

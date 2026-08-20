@@ -578,14 +578,9 @@ public sealed class AgentRunner
     private static async Task<string> CaptureRepositoryStateAsync(
         string repositoryPath, CancellationToken cancellationToken)
     {
-        // Session/debug state and consolidated agent memory are intentionally written by the
-        // orchestrator, not by the ticket subprocess. Exclude those control-plane paths so a
-        // background consolidation pass cannot invalidate an otherwise isolated worktree run.
-        // All project source and agent definitions remain protected by the fingerprint.
-        const string exclusions =
-            "\":(exclude).agents/channel/**\" " +
-            "\":(exclude).agents/**/memory/**\" " +
-            "\":(exclude).agents/*/memory.md\"";
+        // Session/debug channel state is local control-plane data. Versioned memories are routed
+        // through durable worktrees and therefore remain inside the primary-checkout fingerprint.
+        const string exclusions = "\":(exclude).agents/channel/**\"";
         var status = await ProcessRunner.RunAsync("git",
             $"status --porcelain=v1 --untracked-files=all -- . {exclusions}",
             repositoryPath, TimeSpan.FromSeconds(30), ct: cancellationToken);

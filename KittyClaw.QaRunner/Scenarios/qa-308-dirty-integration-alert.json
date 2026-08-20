@@ -1,0 +1,30 @@
+{
+  "setup": [
+    { "type": "createGitRepository", "name": "repositoryPath", "value": "integration" },
+    { "type": "createProject", "name": "Blocked integration", "workspacePath": "{repositoryPath}" },
+    {
+      "type": "api",
+      "method": "PATCH",
+      "path": "/api/projects/blocked-integration",
+      "body": { "worktreesEnabled": true, "integrationBranch": "integration" }
+    },
+    { "type": "createTicket", "project": "blocked-integration", "title": "Ready to integrate", "status": "Todo" },
+    { "type": "writeWorkspaceFile", "workspacePath": "{repositoryPath}", "name": "external-local-change.txt", "text": "owner change" },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/blocked-integration/worktree-merges",
+      "body": { "ticketId": "{ticketId}" }
+    },
+    { "type": "commitGitFile", "workspacePath": "{repositoryPath}", "target": "ticket/{ticketId}", "name": "feature.txt", "text": "ready" },
+    { "type": "togglePause", "project": "blocked-integration" }
+  ],
+  "actions": [
+    { "type": "wait", "ms": 12000 },
+    { "type": "navigate", "url": "/projects" },
+    { "type": "assertVisible", "selector": ".project-paused .project-card-integration-alert--warning" },
+    { "type": "assertCss", "selector": ".project-paused .project-card-integration-alert--warning", "property": "color", "expected": "rgb(251, 191, 36)" },
+    { "type": "screenshot", "name": "qa-308-paused-project-blocked-integration", "description": "A paused project tile keeps the blocked integration alert visible without exposing file contents.", "selector": ".project-paused" }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

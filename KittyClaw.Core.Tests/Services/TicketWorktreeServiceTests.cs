@@ -174,7 +174,7 @@ public sealed class TicketWorktreeServiceTests
     }
 
     [Fact]
-    public async Task TicketRun_IgnoresOrchestratorMemoryConsolidationInPrimaryRepository()
+    public async Task TicketRun_DetectsMemoryWriteInPrimaryRepository()
     {
         using var fixture = await Fixture.CreateAsync();
         var ticket = await fixture.Tickets.CreateTicketAsync(fixture.ProjectSlug, "Memory consolidation overlap");
@@ -213,8 +213,8 @@ public sealed class TicketWorktreeServiceTests
         await File.WriteAllTextAsync(memoryFile, "after");
         var run = await running.WaitAsync(TimeSpan.FromSeconds(30));
 
-        Assert.Equal(AgentRunStatus.Completed, run.Status);
-        Assert.DoesNotContain(run.SnapshotBuffer(), e => e.Text.Contains("Worktree boundary violation"));
+        Assert.Equal(AgentRunStatus.Failed, run.Status);
+        Assert.Contains(run.SnapshotBuffer(), e => e.Text.Contains("Worktree boundary violation"));
     }
 
     [Fact]

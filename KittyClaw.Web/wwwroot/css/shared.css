@@ -110,7 +110,7 @@
 .project-list {
     display: grid;
     grid-template-columns: repeat(auto-fill, 220px);
-    grid-auto-rows: 112px;
+    grid-auto-rows: 140px;
     align-items: stretch;
     justify-content: start;
     gap: 0.75rem;
@@ -120,7 +120,7 @@
     position: relative;
     display: block;
     width: 220px;
-    height: 112px;
+    height: 140px;
     min-width: 0;
 }
 .project-card-wrap .project-pause-btn {
@@ -206,11 +206,14 @@
 .project-card h3 { min-width: 0; overflow: hidden; color: var(--text); margin: 0; font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
 .project-card-owner-actions { display: flex; align-items: center; gap: 0.35rem; margin-top: 0.65rem; color: var(--text-muted); font-size: 0.76rem; }
 .project-card-owner-actions--pending { color: #f59e0b; font-weight: 600; }
+.project-card-integration-alert { display: flex; align-items: flex-start; gap: 0.35rem; margin-top: 0.45rem; overflow: hidden; font-size: 0.72rem; font-weight: 650; line-height: 1.25; white-space: normal; }
+.project-card-integration-alert--warning { color: #fbbf24; }
+.project-card-integration-alert--danger { color: #fb7185; }
 
 @media (max-width: 560px) {
     .project-list {
         grid-template-columns: minmax(0, 1fr);
-        grid-auto-rows: 112px;
+        grid-auto-rows: 140px;
         padding: 1rem 0.75rem;
     }
     .project-card-wrap { width: 100%; }

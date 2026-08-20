@@ -87,13 +87,16 @@ builder.Services.AddHostedService<KittyClaw.Web.Services.InterruptedChatRecovery
 var maxConcurrent = int.TryParse(Environment.GetEnvironmentVariable("KITTYCLAW_MAX_CONCURRENT_AGENTS"), out var mc) && mc > 0 ? mc : 3;
 builder.Services.AddSingleton(new RunConcurrencyGate(maxConcurrent));
 builder.Services.AddSingleton<TicketWorktreeService>();
+builder.Services.AddSingleton<DurableWriteRouter>();
 builder.Services.AddSingleton<WorktreeMergeQueueService>();
+builder.Services.AddHostedService<WorktreeMergeQueueProcessor>();
 builder.Services.AddSingleton<AgentRunner>();
 builder.Services.AddSingleton<RtkIntegrationService>();
 builder.Services.AddSingleton<AgentMemoryHandler>(sp => new AgentMemoryHandler(
     sp.GetRequiredService<TicketService>(), sp.GetRequiredService<MemberService>(),
     sp.GetRequiredService<ProjectService>(), sp.GetRequiredService<AgentRunner>(),
-    sp.GetRequiredService<SessionRegistry>(), sp.GetRequiredService<ILogger<AgentMemoryHandler>>()));
+    sp.GetRequiredService<SessionRegistry>(), sp.GetRequiredService<ILogger<AgentMemoryHandler>>(),
+    sp.GetRequiredService<DurableWriteRouter>()));
 builder.Services.AddHostedService<ChatMemoryConsolidationService>();
 builder.Services.AddSingleton<IColumnAgentDispatcher, ColumnAgentDispatcher>();
 builder.Services.AddSingleton<ColumnActionExecutor>();

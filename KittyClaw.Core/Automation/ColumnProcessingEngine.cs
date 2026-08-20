@@ -196,7 +196,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
             if (execution.CapitalizationStatus is not (MemoryCapitalizationStatus.Succeeded or MemoryCapitalizationStatus.NoChange))
             {
                 var capitalization = await _memory.CapitalizeAsync(
-                    slug, processor.ColumnId, execution.Id, result.Lessons, cancellationToken);
+                    slug, processor.ColumnId, execution.Id, result.Lessons, cancellationToken, execution.TicketId);
                 if (capitalization.Status == MemoryCapitalizationStatus.Failed)
                 {
                     await _executions.SetCapitalizationAsync(slug, execution,
@@ -223,7 +223,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
                                 ? result.Lessons
                                 : string.IsNullOrWhiteSpace(result.Summary) ? [] : [result.Summary];
                             var attributed = await _memory.CapitalizeAsync(slug, attributedColumnId,
-                                $"{execution.Id}-feedback-{upstream.Id}", feedback, cancellationToken);
+                                $"{execution.Id}-feedback-{upstream.Id}", feedback, cancellationToken, execution.TicketId);
                             if (attributed.Status == MemoryCapitalizationStatus.Failed)
                             {
                                 await _executions.SetCapitalizationAsync(slug, execution,

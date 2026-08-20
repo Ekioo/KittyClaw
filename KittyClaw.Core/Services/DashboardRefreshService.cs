@@ -20,6 +20,7 @@ public sealed class DashboardRefreshService : BackgroundService
     private readonly DashboardTileGate _gate;
     private readonly DashboardScriptRunner _scriptRunner;
     private readonly ILogger<DashboardRefreshService> _logger;
+    private readonly DurableWriteRouter? _durableWrites;
 
     // key = "{projectSlug}:{tileSlug}", value = last refresh UTC
     private readonly ConcurrentDictionary<string, DateTime> _lastRefreshed = new();
@@ -30,7 +31,8 @@ public sealed class DashboardRefreshService : BackgroundService
         AgentRunner runner,
         DashboardTileGate gate,
         DashboardScriptRunner scriptRunner,
-        ILogger<DashboardRefreshService> logger)
+        ILogger<DashboardRefreshService> logger,
+        DurableWriteRouter? durableWrites = null)
     {
         _projects = projects;
         _dashboard = dashboard;
@@ -38,6 +40,7 @@ public sealed class DashboardRefreshService : BackgroundService
         _gate = gate;
         _scriptRunner = scriptRunner;
         _logger = logger;
+        _durableWrites = durableWrites;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -65,10 +68,20 @@ public sealed class DashboardRefreshService : BackgroundService
                 if (ct.IsCancellationRequested) return;
                 var workspace = _projects.ResolveWorkspacePath(project);
                 if (!Directory.Exists(workspace)) continue;
-                await _dashboard.MigrateAsync(project.Slug, workspace,
+                DurableWriteRoute? route = null;
+                var migrationWorkspace = workspace;
+                if (project.WorktreesEnabled && _durableWrites is not null)
+                {
+                    route = await _durableWrites.ResolveAsync(project.Slug, null, [".dashboard"], ct);
+                    migrationWorkspace = route.RootPath;
+                }
+                await _dashboard.MigrateAsync(project.Slug, migrationWorkspace,
                     msg => _logger.LogInformation("{Msg}", msg));
+                if (route is not null && _durableWrites is not null)
+                    await _durableWrites.CommitAndQueueAsync(project.Slug, route,
+                        "chore(dashboard): migrate dashboard metadata", ct);
                 if (project.IsPaused) continue;
-                await LoadAndCatchUpAsync(project.Slug, workspace, ct);
+                await LoadAndCatchUpAsync(project.Slug, migrationWorkspace, ct);
             }
         }
         catch (Exception ex)
@@ -172,6 +185,18 @@ public sealed class DashboardRefreshService : BackgroundService
 
             await _gate.RunAsync(projectSlug, tileSlug, manual: false, async gct =>
             {
+                DurableWriteRoute? route = null;
+                var executionWorkspace = workspace;
+                var project = await _projects.GetProjectAsync(projectSlug);
+                if (project?.WorktreesEnabled == true && _durableWrites is not null)
+                {
+                    route = await _durableWrites.ResolveAsync(projectSlug, null,
+                        [Path.Combine(".dashboard", tileSlug)], gct);
+                    executionWorkspace = route.RootPath;
+                    sidecar = await _dashboard.ReadSidecarAsync(executionWorkspace, tileSlug) ?? sidecar;
+                    (scriptPath, scriptConfigError) = _dashboard.FindScript(executionWorkspace, tileSlug);
+                    hasScript = scriptPath is not null;
+                }
                 if (scriptConfigError is not null)
                 {
                     _logger.LogWarning("Dashboard tile {Project}/{Tile}: {Error}",
@@ -187,25 +212,33 @@ public sealed class DashboardRefreshService : BackgroundService
                             projectSlug, tileSlug, scriptPath);
                         return;
                     }
-                    var result = await _scriptRunner.RunAsync(scriptPath!, workspace, gct);
+                    var result = await _scriptRunner.RunAsync(scriptPath!, executionWorkspace, gct);
                     if (!result.IsSuccess)
                     {
                         _logger.LogWarning("Dashboard script failed for {Project}/{Tile}: {Error}",
                             projectSlug, tileSlug, result.ConfigError ?? result.Stderr);
                         return;
                     }
-                    await _dashboard.WriteOutputAsync(workspace, tileSlug, result.Stdout, sidecar.Template);
+                    await _dashboard.WriteOutputAsync(executionWorkspace, tileSlug, result.Stdout, sidecar.Template);
                     _logger.LogInformation("Dashboard script {Project}/{Tile} wrote {Chars} chars",
                         projectSlug, tileSlug, result.Stdout.Length);
                 }
 
                 if (hasPrompt)
                 {
-                    var newBody = await RunPromptAsync(projectSlug, workspace, tileSlug, sidecar, gct);
+                    var newBody = await RunPromptAsync(projectSlug, executionWorkspace, tileSlug, sidecar, gct);
                     if (newBody is null) return;
-                    await _dashboard.WriteOutputAsync(workspace, tileSlug, newBody, sidecar.Template);
+                    await _dashboard.WriteOutputAsync(executionWorkspace, tileSlug, newBody, sidecar.Template);
                     _logger.LogInformation("Dashboard tile {Project}/{Tile} updated ({Chars} chars)",
                         projectSlug, tileSlug, newBody.Length);
+                }
+                if (route is not null && _durableWrites is not null)
+                {
+                    var validation = await _durableWrites.CommitAndQueueAsync(projectSlug, route,
+                        $"chore(dashboard): refresh {tileSlug}", gct);
+                    if (validation.Status != DurableWriteValidationStatus.Ready)
+                        _logger.LogWarning("Dashboard output {Project}/{Tile} requires review before integration",
+                            projectSlug, tileSlug);
                 }
             }, ct);
         }
@@ -302,6 +335,17 @@ public sealed class DashboardRefreshService : BackgroundService
 
         await _gate.RunAsync(projectSlug, tileSlug, manual: true, async gct =>
         {
+            DurableWriteRoute? route = null;
+            var executionWorkspace = workspace;
+            if (project.WorktreesEnabled && _durableWrites is not null)
+            {
+                route = await _durableWrites.ResolveAsync(projectSlug, null,
+                    [Path.Combine(".dashboard", tileSlug)], gct);
+                executionWorkspace = route.RootPath;
+                sidecar = await _dashboard.ReadSidecarAsync(executionWorkspace, tileSlug) ?? sidecar;
+                (scriptPath, scriptConfigError) = _dashboard.FindScript(executionWorkspace, tileSlug);
+                hasScript = scriptPath is not null;
+            }
             if (scriptConfigError is not null)
             {
                 _logger.LogWarning("Dashboard tile {Project}/{Tile}: {Error}", projectSlug, tileSlug, scriptConfigError);
@@ -309,20 +353,28 @@ public sealed class DashboardRefreshService : BackgroundService
             }
             if (hasScript)
             {
-                var result = await _scriptRunner.RunAsync(scriptPath!, workspace, gct);
+                var result = await _scriptRunner.RunAsync(scriptPath!, executionWorkspace, gct);
                 if (!result.IsSuccess)
                 {
                     _logger.LogWarning("Dashboard manual script failed {Project}/{Tile}: {Error}",
                         projectSlug, tileSlug, result.ConfigError ?? result.Stderr);
                     return;
                 }
-                await _dashboard.WriteOutputAsync(workspace, tileSlug, result.Stdout, sidecar.Template);
+                await _dashboard.WriteOutputAsync(executionWorkspace, tileSlug, result.Stdout, sidecar.Template);
             }
             if (hasPrompt)
             {
-                var body = await RunPromptAsync(projectSlug, workspace, tileSlug, sidecar, gct);
+                var body = await RunPromptAsync(projectSlug, executionWorkspace, tileSlug, sidecar, gct);
                 if (body is not null)
-                    await _dashboard.WriteOutputAsync(workspace, tileSlug, body, sidecar.Template);
+                    await _dashboard.WriteOutputAsync(executionWorkspace, tileSlug, body, sidecar.Template);
+            }
+            if (route is not null && _durableWrites is not null)
+            {
+                var validation = await _durableWrites.CommitAndQueueAsync(projectSlug, route,
+                    $"chore(dashboard): refresh {tileSlug}", gct);
+                if (validation.Status != DurableWriteValidationStatus.Ready)
+                    _logger.LogWarning("Dashboard output {Project}/{Tile} requires review before integration",
+                        projectSlug, tileSlug);
             }
         }, ct);
     }

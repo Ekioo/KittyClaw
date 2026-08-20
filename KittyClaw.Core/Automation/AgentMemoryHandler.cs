@@ -18,7 +18,8 @@ public sealed class AgentMemoryHandler(
     ProjectService projects,
     AgentRunner runner,
     SessionRegistry sessions,
-    ILogger logger)
+    ILogger logger,
+    DurableWriteRouter? durableWrites = null)
 {
     // Serializes in-process git operations per repository. Keyed by the git cwd so one
     // repo's slow/hung git (bounded by ProcessRunner's timeout) can't stall other projects.
@@ -51,6 +52,14 @@ public sealed class AgentMemoryHandler(
             }
 
             var workspace = rt.Workspace!;
+            DurableWriteRoute? route = null;
+            var project = await projects.GetProjectAsync(rt.Slug);
+            if (project?.WorktreesEnabled == true && durableWrites is not null)
+            {
+                route = await durableWrites.ResolveAsync(rt.Slug, firing?.TicketId,
+                    [Path.Combine(".agents", agent, "memory"), Path.Combine(".agents", agent, "memory.md")]);
+                workspace = route.RootPath;
+            }
             // Memory lives either in the new per-topic layout (.agents/{agent}/memory/) or, until an
             // agent has consolidated, in the legacy flat file (.agents/{agent}/memory.md). Commit
             // whichever exist — both, during the migration window.
@@ -108,6 +117,9 @@ public sealed class AgentMemoryHandler(
                 if (diff.exitCode == 0 && string.IsNullOrWhiteSpace(status.stdout))
                 {
                     logger.LogDebug("commitAgentMemory: {Agent} memory is clean, nothing to commit", agent);
+                    if (route?.Kind == DurableWriteKind.Maintenance && durableWrites is not null)
+                        await durableWrites.CommitAndQueueAsync(rt.Slug, route,
+                            $"chore(memory): {agent}");
                     return CommitMemoryResult.NoChanges;
                 }
 
@@ -138,6 +150,12 @@ public sealed class AgentMemoryHandler(
                 }
 
                 logger.LogInformation("commitAgentMemory: committed {Agent} memory", agent);
+                if (route?.Kind == DurableWriteKind.Maintenance && durableWrites is not null)
+                {
+                    var validation = await durableWrites.CommitAndQueueAsync(rt.Slug, route, msg);
+                    if (validation.Status != DurableWriteValidationStatus.Ready)
+                        return CommitMemoryResult.Failed;
+                }
                 return CommitMemoryResult.Committed;
             }
             finally { gitLock.Release(); }
@@ -186,8 +204,14 @@ public sealed class AgentMemoryHandler(
                 return;
             }
 
+            var executionWorkspace = rt.Workspace!;
+            var project = await projects.GetProjectAsync(rt.Slug);
+            if (project?.WorktreesEnabled == true && durableWrites is not null)
+                executionWorkspace = (await durableWrites.ResolveAsync(rt.Slug, firing?.TicketId,
+                    [Path.Combine(".agents", agent, "memory"), Path.Combine(".agents", agent, "memory.md")], ct)).RootPath;
+
             var instructionPath = Path.Combine(
-                rt.Workspace!,
+                executionWorkspace,
                 spec.InstructionFile.Replace('/', Path.DirectorySeparatorChar));
 
             if (!File.Exists(instructionPath))
@@ -202,9 +226,8 @@ public sealed class AgentMemoryHandler(
             var eventsSummary = BuildEventsSummary(parentRun);
 
             const string scope = "consolidate";
-            sessions.Clear(rt.Workspace!, $"{scope}:{agent}", ticketId: null);
+            sessions.Clear(executionWorkspace, $"{scope}:{agent}", ticketId: null);
 
-            var project = await projects.GetProjectAsync(rt.Slug);
             var member = await members.GetMemberBySlugAsync(rt.Slug, agent);
             var memberModel = string.IsNullOrWhiteSpace(member?.DefaultModel) ? null : member.DefaultModel;
             var projectFallback = string.IsNullOrWhiteSpace(project?.FallbackModel) ? null : project.FallbackModel;
@@ -236,7 +259,7 @@ public sealed class AgentMemoryHandler(
             var runCtx = new AgentRunContext
             {
                 ProjectSlug = rt.Slug,
-                WorkspacePath = rt.Workspace!,
+                WorkspacePath = executionWorkspace,
                 AgentName = agent,
                 SkillFile = $"{agent}/SKILL.md",
                 MaxTurns = spec.MaxTurns,
@@ -255,7 +278,9 @@ public sealed class AgentMemoryHandler(
             var run = await runner.RunAsync(runCtx, ct);
 
             var memoryPaths = $"\".agents/{agent}/memory\" \".agents/{agent}/memory.md\"";
-            var diff = await RunGitAsync(rt.Workspace!, $"diff --shortstat HEAD -- {memoryPaths}");
+            var routedRuntime = new ProjectRuntime(rt.Slug) { Workspace = executionWorkspace };
+            await ExecuteCommitAgentMemoryAsync(routedRuntime, new CommitAgentMemoryActionSpec { Agent = agent }, firing);
+            var diff = await RunGitAsync(executionWorkspace, $"diff --shortstat HEAD -- {memoryPaths}");
             var diffSummary = diff.stdout.Trim();
             logger.LogInformation("consolidate {Agent}: run {Status} (exit {Exit}){Diff}",
                 agent, run.Status, run.ExitCode,

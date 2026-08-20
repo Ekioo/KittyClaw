@@ -2,6 +2,7 @@
 @inject LocalizationService L
 @inject IJSRuntime JS
 @inject KittyClaw.Web.Services.AgentRunsState RunsState
+@inject KittyClaw.Core.Services.WorktreeMergeQueueService WorktreeMergeQueueService
 @rendermode InteractiveServer
 @implements IDisposable
 
@@ -28,6 +29,14 @@
                 <div class="project-card-owner-actions @(ownerActionCount > 0 ? "project-card-owner-actions--pending" : "")">
                     <span aria-hidden="true">@(ownerActionCount > 0 ? "⚠" : "✓")</span><span>@L.Get(ownerActionCount == 1 ? "ProjectOwnerActionOne" : "ProjectOwnerActionMany", ownerActionCount)</span>
                 </div>
+                @if (IntegrationAlert(project) is { } integration)
+                {
+                    <div class="project-card-integration-alert @IntegrationAlertClass(integration)"
+                         title="@IntegrationAlertTitle(integration)">
+                        <span aria-hidden="true">⚠</span>
+                        <span>@IntegrationAlertText(integration)</span>
+                    </div>
+                }
             </a>
             <button class="project-pause-btn" title="@(project.IsPaused ? L["Resume"] : L["Pause"])"
                     @onclick="() => OnTogglePause.InvokeAsync(project)" @onclick:stopPropagation>
@@ -71,6 +80,10 @@
     private bool _sortMenuVisible;
     private double _sortMenuX, _sortMenuY;
     private bool _sortLoaded;
+    private readonly Dictionary<string, KittyClaw.Core.Services.WorktreeMergeAlertSummary?> _integrationAlerts =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly CancellationTokenSource _alertRefreshCancellation = new();
+    private bool _refreshingAlerts;
 
     // Paused projects sink to the bottom, mirroring the kanban view's lane ordering.
     private IEnumerable<Project> Sorted =>
@@ -83,7 +96,72 @@
         _ => (IComparable)p.Name
     };
 
-    protected override void OnInitialized() => RunsState.OnChange += OnRunsChanged;
+    protected override void OnInitialized()
+    {
+        RunsState.OnChange += OnRunsChanged;
+        _ = RefreshIntegrationAlertsLoopAsync(_alertRefreshCancellation.Token);
+    }
+
+    protected override Task OnParametersSetAsync() => RefreshIntegrationAlertsAsync();
+
+    private async Task RefreshIntegrationAlertsAsync()
+    {
+        if (_refreshingAlerts) return;
+        _refreshingAlerts = true;
+        try
+        {
+            foreach (var project in Projects)
+            {
+                try { _integrationAlerts[project.Slug] = await WorktreeMergeQueueService.GetAlertSummaryAsync(project.Slug); }
+                catch { _integrationAlerts[project.Slug] = null; }
+            }
+        }
+        finally { _refreshingAlerts = false; }
+    }
+
+    private async Task RefreshIntegrationAlertsLoopAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
+                await InvokeAsync(async () =>
+                {
+                    await RefreshIntegrationAlertsAsync();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private KittyClaw.Core.Services.WorktreeMergeAlertSummary? IntegrationAlert(Project project) =>
+        _integrationAlerts.TryGetValue(project.Slug, out var alert) ? alert : null;
+
+    private static string IntegrationAlertClass(KittyClaw.Core.Services.WorktreeMergeAlertSummary alert) =>
+        alert.MostSevereStatus is KittyClaw.Core.Services.WorktreeMergeStatus.Conflict
+            or KittyClaw.Core.Services.WorktreeMergeStatus.Failed
+            or KittyClaw.Core.Services.WorktreeMergeStatus.NeedsReview
+            ? "project-card-integration-alert--danger"
+            : "project-card-integration-alert--warning";
+
+    private string IntegrationAlertText(KittyClaw.Core.Services.WorktreeMergeAlertSummary alert) =>
+        alert.MostSevereStatus == KittyClaw.Core.Services.WorktreeMergeStatus.BlockedByExternalChanges
+            ? L["ProjectIntegrationBlockedByLocalChanges"]
+            : L.Get(alert.ActiveCount == 1 ? "ProjectIntegrationPendingOne" : "ProjectIntegrationPendingMany", alert.ActiveCount);
+
+    private string IntegrationAlertTitle(KittyClaw.Core.Services.WorktreeMergeAlertSummary alert) =>
+        $"{IntegrationAlertText(alert)} · {L.Get("ProjectIntegrationWaitingSince", RelativeAge(alert.OldestUpdatedAt))}";
+
+    private static string RelativeAge(DateTime since)
+    {
+        var age = DateTime.UtcNow - since.ToUniversalTime();
+        if (age.TotalMinutes < 1) return "< 1 min";
+        if (age.TotalHours < 1) return $"{(int)age.TotalMinutes} min";
+        if (age.TotalDays < 1) return $"{(int)age.TotalHours} h";
+        return $"{(int)age.TotalDays} d";
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -117,5 +195,10 @@
 
     private void OnRunsChanged() => InvokeAsync(StateHasChanged);
 
-    public void Dispose() => RunsState.OnChange -= OnRunsChanged;
+    public void Dispose()
+    {
+        _alertRefreshCancellation.Cancel();
+        _alertRefreshCancellation.Dispose();
+        RunsState.OnChange -= OnRunsChanged;
+    }
 }

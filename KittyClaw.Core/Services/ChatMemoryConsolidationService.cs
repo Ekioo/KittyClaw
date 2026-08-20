@@ -11,7 +11,8 @@ public sealed class ChatMemoryConsolidationService(
     MemberService members,
     AgentRunRegistry runs,
     AgentMemoryHandler memory,
-    ILogger<ChatMemoryConsolidationService> logger) : BackgroundService
+    ILogger<ChatMemoryConsolidationService> logger,
+    DurableWriteRouter? durableWrites = null) : BackgroundService
 {
     public static readonly TimeSpan DefaultIdleDelay = TimeSpan.FromMinutes(15);
     private readonly TimeSpan _idleDelay = ReadDuration("KITTYCLAW_CHAT_MEMORY_IDLE_MINUTES", DefaultIdleDelay);
@@ -74,8 +75,24 @@ public sealed class ChatMemoryConsolidationService(
                     candidate.LastConsolidatedMessageId, candidate.LatestMessageId);
                 try
                 {
-                    var result = await memory.ConsolidateAdHocConversationAsync(project.Slug, workspace,
+                    DurableWriteRoute? route = null;
+                    var writeWorkspace = workspace;
+                    if (project.WorktreesEnabled && durableWrites is not null)
+                    {
+                        route = await durableWrites.ResolveAsync(project.Slug, null,
+                            [Path.Combine(".agents", agent, "memory")], candidateToken);
+                        writeWorkspace = route.RootPath;
+                    }
+                    var result = await memory.ConsolidateAdHocConversationAsync(project.Slug, writeWorkspace,
                         agent, FormatTranscript(segment), candidateToken);
+                    if (route is not null && durableWrites is not null)
+                    {
+                        var validation = await durableWrites.CommitAndQueueAsync(project.Slug, route,
+                            $"chore(memory): consolidate {agent} chat memory", candidateToken);
+                        if (validation.Status != DurableWriteValidationStatus.Ready)
+                            throw new InvalidOperationException(validation.Error ??
+                                "Consolidated memory requires review before integration.");
+                    }
                     await chats.RecordMemoryResultAsync(project.Slug, candidate.TargetSlug,
                         candidate.LatestMessageId, result.ToString(), 0, null, null);
                     logger.LogInformation("Chat memory {Result} for {Project}/{Target} through message {MessageId}",

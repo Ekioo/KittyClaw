@@ -65,7 +65,7 @@ public sealed class WorktreeMergeQueueServiceTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task DirtyCheckoutOrWorktree_FailsWithoutRemovingChanges(bool dirtyCheckout)
+    public async Task DirtyCheckoutOrWorktree_IsPreservedAndClassified(bool dirtyCheckout)
     {
         using var fixture = await Fixture.CreateAsync();
         var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
@@ -75,10 +75,51 @@ public sealed class WorktreeMergeQueueServiceTests
 
         var result = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
-        Assert.Equal(WorktreeMergeStatus.Failed, result!.Status);
-        Assert.Contains("uncommitted changes", result.Error);
+        Assert.Equal(dirtyCheckout ? WorktreeMergeStatus.BlockedByExternalChanges : WorktreeMergeStatus.NeedsReview, result!.Status);
+        Assert.Contains(dirtyCheckout ? "local changes" : "unvalidated", result.Error);
         Assert.True(File.Exists(Path.Combine(dirtyPath, "keep.txt")));
         Assert.True(Directory.Exists(request.WorktreePath));
+    }
+
+    [Fact]
+    public async Task DirtyTargetCheckout_BecomesVisibleAndResumesAfterExternalChangesAreResolved()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        var external = Path.Combine(fixture.Repository, "external.txt");
+        await File.WriteAllTextAsync(external, "external");
+
+        var blocked = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        var summary = await fixture.Queue.GetAlertSummaryAsync(fixture.Slug);
+
+        Assert.Equal(WorktreeMergeStatus.BlockedByExternalChanges, blocked!.Status);
+        Assert.Equal(1, summary!.ActiveCount);
+        Assert.Equal(WorktreeMergeStatus.BlockedByExternalChanges, summary.MostSevereStatus);
+        File.Delete(external);
+
+        var completed = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(request.Id, completed!.Id);
+        Assert.Equal(WorktreeMergeStatus.Completed, completed.Status);
+    }
+
+    [Fact]
+    public async Task StagedTicketWrite_IsCommitPendingAndPreserved()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("committed.txt", "committed");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        var staged = Path.Combine(request.WorktreePath, "staged.txt");
+        await File.WriteAllTextAsync(staged, "preserve");
+        Git(request.WorktreePath, true, "add", "staged.txt");
+
+        var result = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.CommitPending, result!.Status);
+        Assert.Equal(WorktreeMergeCheckpoint.Commit, result.Checkpoint);
+        Assert.True(File.Exists(staged));
+        Assert.Equal("staged.txt", Git(request.WorktreePath, true, "diff", "--cached", "--name-only").Output.Trim());
     }
 
     [Fact]
@@ -124,6 +165,48 @@ public sealed class WorktreeMergeQueueServiceTests
         var result = await restarted.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
         Assert.Equal(WorktreeMergeStatus.Completed, result!.Status);
+    }
+
+    [Theory]
+    [InlineData(WorktreeMergeCheckpoint.Preparation)]
+    [InlineData(WorktreeMergeCheckpoint.Writing)]
+    [InlineData(WorktreeMergeCheckpoint.Validation)]
+    [InlineData(WorktreeMergeCheckpoint.Commit)]
+    [InlineData(WorktreeMergeCheckpoint.Waiting)]
+    [InlineData(WorktreeMergeCheckpoint.Rebase)]
+    [InlineData(WorktreeMergeCheckpoint.Merge)]
+    public async Task ProcessingCheckpoint_IsRecoveredIdempotentlyAfterRestart(WorktreeMergeCheckpoint checkpoint)
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync($"{checkpoint}.txt", checkpoint.ToString());
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        await using (var db = fixture.Projects.GetProjectDb(fixture.Slug))
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET Status = 1, Checkpoint = {(int)checkpoint} WHERE Id = {request.Id}");
+
+        var restarted = new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees);
+        var result = await restarted.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, result!.Status);
+        Assert.Equal(WorktreeMergeCheckpoint.Merge, result.Checkpoint);
+        Assert.NotNull(result.LocalIntegratedAt);
+        Assert.Null(result.RemotePublishedAt);
+        Assert.Null(await restarted.ProcessNextAsync(fixture.Slug, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task RemotePublication_IsRecordedSeparatelyFromLocalIntegration()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("publish.txt", "publish");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        var integrated = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.NotNull(integrated!.LocalIntegratedAt);
+        Assert.Null(integrated.RemotePublishedAt);
+        await fixture.Queue.MarkPublishedAsync(fixture.Slug, request.Id);
+
+        var published = Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+        Assert.NotNull(published.RemotePublishedAt);
     }
 
     private sealed class Fixture : IDisposable

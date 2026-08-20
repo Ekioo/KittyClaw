@@ -44,9 +44,9 @@ public sealed class PausedProjectCardLayoutTests
 
         Assert.Contains("display: grid", list);
         Assert.Contains("grid-template-columns: repeat(auto-fill, 220px)", list);
-        Assert.Contains("grid-auto-rows: 112px", list);
+        Assert.Contains("grid-auto-rows: 140px", list);
         Assert.Contains("width: 220px", wrap);
-        Assert.Contains("height: 112px", wrap);
+        Assert.Contains("height: 140px", wrap);
         Assert.Contains("width: 100%", card);
         Assert.Contains("height: 100%", card);
         Assert.Contains("@media (max-width: 560px)", css);
@@ -63,6 +63,19 @@ public sealed class PausedProjectCardLayoutTests
         Assert.Contains("ProjectOwnerActionOne", source);
         Assert.Contains("ProjectOwnerActionMany", source);
         Assert.Contains("OwnerActionCounts", source);
+    }
+
+    [Fact]
+    public void ProjectCard_ShowsPersistentIntegrationAlertsEvenWhenPaused()
+    {
+        var source = LoadComponent();
+        var css = AppCssHelper.ReadAll();
+
+        Assert.Contains("project-card-integration-alert", source);
+        Assert.Contains("ProjectIntegrationBlockedByLocalChanges", source);
+        Assert.Contains("GetAlertSummaryAsync", source);
+        Assert.Contains(".project-card-integration-alert--warning", css);
+        Assert.Contains(".project-card-integration-alert--danger", css);
     }
 
     private static string Rule(string css, string selector)

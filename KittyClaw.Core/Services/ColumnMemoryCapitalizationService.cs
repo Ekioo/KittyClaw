@@ -7,14 +7,14 @@ public sealed record MemoryCapitalizationResult(
     MemoryCapitalizationStatus Status, int Added, string? Error = null);
 
 /// <summary>Native, idempotent persistence of reusable lessons owned by a column processor.</summary>
-public class ColumnMemoryCapitalizationService(ProjectService projects)
+public class ColumnMemoryCapitalizationService(ProjectService projects, DurableWriteRouter? durableWrites = null)
 {
     internal const int MaximumLessons = 50;
     private static readonly SemaphoreSlim WriteLock = new(1, 1);
 
     public async Task<MemoryCapitalizationResult> CapitalizeAsync(
         string projectSlug, int columnId, string checkpointId, IEnumerable<string>? lessons,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, int? ticketId = null)
     {
         var normalized = (lessons ?? [])
             .Select(Normalize).Where(x => x.Length >= 12)
@@ -24,7 +24,15 @@ public class ColumnMemoryCapitalizationService(ProjectService projects)
 
         var project = await projects.GetProjectAsync(projectSlug);
         if (project is null) return new(MemoryCapitalizationStatus.Failed, 0, $"Project '{projectSlug}' not found.");
-        var memoryDir = Path.Combine(projects.ResolveWorkspacePath(project), ".agents", "processors",
+        var relativeMemoryDir = Path.Combine(".agents", "processors", $"column-{columnId}", "memory");
+        var root = projects.ResolveWorkspacePath(project);
+        DurableWriteRoute? route = null;
+        if (durableWrites is not null && project.WorktreesEnabled)
+        {
+            route = await durableWrites.ResolveAsync(projectSlug, ticketId, [relativeMemoryDir], cancellationToken);
+            root = route.RootPath;
+        }
+        var memoryDir = Path.Combine(root, ".agents", "processors",
             $"column-{columnId}", "memory");
         var topicPath = Path.Combine(memoryDir, "pipeline-lessons.md");
         var indexPath = Path.Combine(memoryDir, "MEMORY.md");
@@ -57,6 +65,14 @@ public class ColumnMemoryCapitalizationService(ProjectService projects)
                 topic.AppendLine($"<!-- checkpoint:{entry.Checkpoint} -->\n- {entry.Text}\n");
             await WriteAtomicallyAsync(topicPath, topic.ToString(), cancellationToken);
             await WriteIndexAsync(indexPath, entries, cancellationToken);
+            if (route?.Kind == DurableWriteKind.Maintenance && durableWrites is not null)
+            {
+                var validation = await durableWrites.CommitAndQueueAsync(projectSlug, route,
+                    $"chore(memory): capitalize column {columnId} lessons", cancellationToken);
+                if (validation.Status != DurableWriteValidationStatus.Ready)
+                    return new(MemoryCapitalizationStatus.Failed, 0,
+                        validation.Error ?? "Durable memory changes require review before integration.");
+            }
             return new(MemoryCapitalizationStatus.Succeeded, added.Count);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
