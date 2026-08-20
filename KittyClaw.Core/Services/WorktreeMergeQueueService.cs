@@ -38,6 +38,7 @@ public sealed class WorktreeMergeQueueService(ProjectService projects, TicketWor
 {
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> ProjectGates =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<long, byte> _activeMaintenanceWrites = new();
 
     private static async Task EnsureTableAsync(TodoDbContext db)
     {
@@ -120,16 +121,23 @@ public sealed class WorktreeMergeQueueService(ProjectService projects, TicketWor
         await EnsureTableAsync(db);
         const int maintenanceRoot = int.MinValue;
         var existing = await ReadByRootAsync(db, maintenanceRoot);
-        if (existing is not null && existing.Status != WorktreeMergeStatus.Completed) return existing;
+        if (existing is not null && existing.Status != WorktreeMergeStatus.Completed)
+        {
+            _activeMaintenanceWrites.TryAdd(existing.Id, 0);
+            return existing;
+        }
         var now = DateTime.UtcNow;
+        var baselineCommit = RunGit(worktreePath, ["rev-parse", "HEAD"]).Output.Trim();
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO WorktreeMergeQueue
-                (TicketId, RootTicketId, WorktreePath, SourceBranch, TargetBranch, Status, CreatedAt, UpdatedAt, JobKind, Checkpoint)
+                (TicketId, RootTicketId, WorktreePath, SourceBranch, TargetBranch, Status, CreatedAt, UpdatedAt, SourceCommit, JobKind, Checkpoint)
             VALUES ({0}, {maintenanceRoot}, {worktreePath}, {sourceBranch}, {project.IntegrationBranch},
-                {(int)WorktreeMergeStatus.CommitPending}, {now}, {now},
+                {(int)WorktreeMergeStatus.CommitPending}, {now}, {now}, {baselineCommit},
                 {(int)WorktreeMergeJobKind.Maintenance}, {(int)WorktreeMergeCheckpoint.Writing})
             """);
-        return (await ReadByRootAsync(db, maintenanceRoot))!;
+        var created = (await ReadByRootAsync(db, maintenanceRoot))!;
+        _activeMaintenanceWrites.TryAdd(created.Id, 0);
+        return created;
     }
 
     public async Task MarkMaintenanceReadyAsync(string projectSlug, long requestId, string sourceCommit)
@@ -142,6 +150,8 @@ public sealed class WorktreeMergeQueueService(ProjectService projects, TicketWor
             WHERE Id = {requestId} AND TicketId = 0
             """);
     }
+
+    public void ReleaseMaintenanceWrite(long requestId) => _activeMaintenanceWrites.TryRemove(requestId, out _);
 
     public async Task MarkReviewRequiredAsync(string projectSlug, long requestId, string error)
     {
@@ -199,6 +209,7 @@ public sealed class WorktreeMergeQueueService(ProjectService projects, TicketWor
             await EnsureTableAsync(db);
             // A host may stop after claiming. Replaying the same row is safe because integration is verified by ancestry.
             await db.Database.ExecuteSqlRawAsync("UPDATE WorktreeMergeQueue SET Status = 0, Error = 'Recovered after interruption' WHERE Status = 1");
+            await ReconcileInterruptedMaintenanceAsync(db);
             var request = await ReadNextAsync(db, WorktreeMergeStatus.Pending)
                 ?? await ReadNextAsync(db, WorktreeMergeStatus.BlockedByExternalChanges);
             if (request is null) return null;
@@ -206,6 +217,37 @@ public sealed class WorktreeMergeQueueService(ProjectService projects, TicketWor
             return await IntegrateAsync(projectSlug, request, continueRebase: false, ct);
         }
         finally { gate.Release(); }
+    }
+
+    private async Task ReconcileInterruptedMaintenanceAsync(TodoDbContext db)
+    {
+        var interrupted = (await ListMaintenanceWritesAwaitingCommitAsync(db))
+            .Where(row => !_activeMaintenanceWrites.ContainsKey(row.Id));
+        foreach (var request in interrupted)
+        {
+            var dirty = RunGit(request.WorktreePath, ["status", "--porcelain"]).Output;
+            if (!string.IsNullOrWhiteSpace(dirty))
+            {
+                await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
+                    "Maintenance writing was interrupted with preserved uncommitted changes; review and commit them before resuming.", null);
+                continue;
+            }
+
+            var head = RunGit(request.WorktreePath, ["rev-parse", "HEAD"]).Output.Trim();
+            if (string.Equals(head, request.SourceCommit, StringComparison.Ordinal))
+            {
+                await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
+                    "Maintenance writing was interrupted before a new commit was created; the worktree was preserved.", null);
+                continue;
+            }
+
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Pending},
+                    Checkpoint = {(int)WorktreeMergeCheckpoint.Waiting}, SourceCommit = {head},
+                    Error = 'Recovered committed maintenance write after interruption', UpdatedAt = {DateTime.UtcNow}
+                WHERE Id = {request.Id}
+                """);
+        }
     }
 
     public async Task<WorktreeMergeRequest?> ResumeAsync(string projectSlug, long requestId, CancellationToken ct)
@@ -361,6 +403,22 @@ public sealed class WorktreeMergeQueueService(ProjectService projects, TicketWor
         ReadSingleAsync(db, "SELECT * FROM WorktreeMergeQueue WHERE Id = $id", ("$id", id));
     private static Task<WorktreeMergeRequest?> ReadByRootAsync(TodoDbContext db, int root) =>
         ReadSingleAsync(db, "SELECT * FROM WorktreeMergeQueue WHERE RootTicketId = $root ORDER BY Id DESC LIMIT 1", ("$root", root));
+
+    private static async Task<List<WorktreeMergeRequest>> ListMaintenanceWritesAwaitingCommitAsync(TodoDbContext db)
+    {
+        var connection = (SqliteConnection)db.Database.GetDbConnection();
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT * FROM WorktreeMergeQueue
+            WHERE JobKind = $kind AND Status IN ($commitPending, $validationRequired)
+            ORDER BY Id
+            """;
+        command.Parameters.AddWithValue("$kind", (int)WorktreeMergeJobKind.Maintenance);
+        command.Parameters.AddWithValue("$commitPending", (int)WorktreeMergeStatus.CommitPending);
+        command.Parameters.AddWithValue("$validationRequired", (int)WorktreeMergeStatus.ValidationRequired);
+        return await ReadAllAsync(command);
+    }
 
     private static async Task<WorktreeMergeRequest?> ReadSingleAsync(TodoDbContext db, string sql, (string, object) parameter)
     {

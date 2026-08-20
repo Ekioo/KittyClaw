@@ -193,6 +193,32 @@ public sealed class WorktreeMergeQueueServiceTests
         Assert.Null(await restarted.ProcessNextAsync(fixture.Slug, CancellationToken.None));
     }
 
+    [Theory]
+    [InlineData(WorktreeMergeCheckpoint.Rebase)]
+    [InlineData(WorktreeMergeCheckpoint.Merge)]
+    public async Task CompletedGitSideEffect_IsReconciledAfterRestart(WorktreeMergeCheckpoint checkpoint)
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync($"{checkpoint}.txt", checkpoint.ToString());
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "target-advance.txt"), "advance");
+        Git(fixture.Repository, true, "add", "target-advance.txt");
+        Git(fixture.Repository, true, "commit", "-m", "advance integration target");
+        Git(request.WorktreePath, true, "rebase", "integration");
+        if (checkpoint == WorktreeMergeCheckpoint.Merge)
+            Git(fixture.Repository, true, "merge", "--ff-only", request.SourceBranch);
+        await using (var db = fixture.Projects.GetProjectDb(fixture.Slug))
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET Status = 1, Checkpoint = {(int)checkpoint} WHERE Id = {request.Id}");
+
+        var restarted = new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees);
+        var result = await restarted.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, result!.Status);
+        Assert.Equal(0, Git(fixture.Repository, false, "merge-base", "--is-ancestor", result.IntegratedCommit!, "integration").ExitCode);
+        Assert.False(Directory.Exists(request.WorktreePath));
+        Assert.Null(await restarted.ProcessNextAsync(fixture.Slug, CancellationToken.None));
+    }
+
     [Fact]
     public async Task RemotePublication_IsRecordedSeparatelyFromLocalIntegration()
     {

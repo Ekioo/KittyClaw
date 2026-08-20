@@ -114,18 +114,79 @@ public sealed class DurableWriteRouterTests
         Assert.Null(await fixture.Queue.GetAlertSummaryAsync(fixture.Slug));
     }
 
+    [Fact]
+    public async Task CommittedMaintenanceWrite_IsReconciledWhenHostStopsBeforeQueueStateUpdate()
+    {
+        using var fixture = await Fixture.CreateAsync(withQueue: true);
+        var route = await fixture.Router.ResolveAsync(fixture.Slug, null, [".agents/programmer/memory"]);
+        var memory = Path.Combine(route.RootPath, ".agents", "programmer", "memory", "MEMORY.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(memory)!);
+        await File.WriteAllTextAsync(memory, "# Committed before interruption\n");
+        Git(route.RootPath, "add", ".agents/programmer/memory/MEMORY.md");
+        Git(route.RootPath, "commit", "-m", "chore(memory): interrupted durable write");
+
+        var restarted = new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees);
+        var integrated = await restarted.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        Assert.Equal(WorktreeMergeCheckpoint.Merge, integrated.Checkpoint);
+        Assert.True(File.Exists(Path.Combine(fixture.Repository, ".agents", "programmer", "memory", "MEMORY.md")));
+        Assert.Null(await restarted.ProcessNextAsync(fixture.Slug, CancellationToken.None));
+        fixture.Queue!.ReleaseMaintenanceWrite(route.QueueRequestId!.Value);
+    }
+
+    [Fact]
+    public async Task ActiveMaintenanceWrite_IsNotMistakenForAnInterruptedWrite()
+    {
+        using var fixture = await Fixture.CreateAsync(withQueue: true);
+        var route = await fixture.Router.ResolveAsync(fixture.Slug, null, [".agents/programmer/memory"]);
+        var memory = Path.Combine(route.RootPath, ".agents", "programmer", "memory", "MEMORY.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(memory)!);
+        await File.WriteAllTextAsync(memory, "# Still being written\n");
+
+        Assert.Null(await fixture.Queue!.ProcessNextAsync(fixture.Slug, CancellationToken.None));
+        var request = Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+        Assert.Equal(WorktreeMergeStatus.CommitPending, request.Status);
+        Assert.True(File.Exists(memory));
+
+        fixture.Queue.ReleaseMaintenanceWrite(route.QueueRequestId!.Value);
+    }
+
+    [Fact]
+    public async Task UncommittedMaintenanceWrite_IsPreservedAndReportedAfterRestart()
+    {
+        using var fixture = await Fixture.CreateAsync(withQueue: true);
+        var route = await fixture.Router.ResolveAsync(fixture.Slug, null, [".agents/programmer/memory"]);
+        var memory = Path.Combine(route.RootPath, ".agents", "programmer", "memory", "MEMORY.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(memory)!);
+        await File.WriteAllTextAsync(memory, "# Preserved after interruption\n");
+
+        var restarted = new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees);
+        Assert.Null(await restarted.ProcessNextAsync(fixture.Slug, CancellationToken.None));
+
+        var request = Assert.Single(await restarted.ListAsync(fixture.Slug));
+        Assert.Equal(WorktreeMergeStatus.NeedsReview, request.Status);
+        Assert.Contains("preserved uncommitted changes", request.Error, StringComparison.Ordinal);
+        Assert.True(File.Exists(memory));
+        Assert.NotNull(await restarted.GetAlertSummaryAsync(fixture.Slug));
+        fixture.Queue!.ReleaseMaintenanceWrite(route.QueueRequestId!.Value);
+    }
+
     private sealed class Fixture : IDisposable
     {
         private readonly TempDir _root;
         public string Repository { get; }
         public string Slug { get; }
         public TicketService Tickets { get; }
+        public ProjectService Projects { get; }
+        public TicketWorktreeService Worktrees { get; }
         public DurableWriteRouter Router { get; }
         public WorktreeMergeQueueService? Queue { get; }
 
-        private Fixture(TempDir root, string repository, string slug, TicketService tickets,
-            DurableWriteRouter router, WorktreeMergeQueueService? queue)
-            => (_root, Repository, Slug, Tickets, Router, Queue) = (root, repository, slug, tickets, router, queue);
+        private Fixture(TempDir root, string repository, string slug, ProjectService projects,
+            TicketService tickets, TicketWorktreeService worktrees, DurableWriteRouter router, WorktreeMergeQueueService? queue)
+            => (_root, Repository, Slug, Projects, Tickets, Worktrees, Router, Queue) =
+                (root, repository, slug, projects, tickets, worktrees, router, queue);
 
         public static async Task<Fixture> CreateAsync(bool withQueue = false)
         {
@@ -138,7 +199,7 @@ public sealed class DurableWriteRouterTests
             var tickets = new TicketService(projects, new MemberService(projects));
             var worktrees = new TicketWorktreeService(projects, tickets);
             var queue = withQueue ? new WorktreeMergeQueueService(projects, worktrees) : null;
-            return new Fixture(root, repository, project.Slug, tickets,
+            return new Fixture(root, repository, project.Slug, projects, tickets, worktrees,
                 new DurableWriteRouter(projects, worktrees, queue), queue);
         }
         public void Dispose() => _root.Dispose();

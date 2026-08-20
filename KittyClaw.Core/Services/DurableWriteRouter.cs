@@ -112,6 +112,8 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
         }
         finally
         {
+            if (route.QueueRequestId is long requestId)
+                mergeQueue?.ReleaseMaintenanceWrite(requestId);
             route.ReleaseMaintenanceLease();
         }
     }
