@@ -91,7 +91,11 @@ fingerprint, accepted signals, and decision reason in `LoopDiagnosticJson`. The 
 in its current business column with its latest checkpoint intact; retrying the failed
 synthetic execution provides an explicit recovery path instead of routing to terminal failure.
 
-Technical failures use exponential backoff up to `MaxAttempts`. Once exhausted, the ticket can be routed to a dedicated technical-failure column. A failed execution can also be retried or cancelled through the API.
+Technical failures use exponential backoff up to `MaxAttempts`. Before a delayed retry is claimed,
+the engine atomically revalidates the ticket's triggering column and recorded ticket version. A stale
+retry becomes terminal `Cancelled` with `stale_trigger_context`, without dispatching an agent or
+scheduling another attempt. Once valid retries are exhausted, the ticket can be routed to a dedicated
+technical-failure column. A failed execution can also be retried or cancelled through the API.
 
 An agent outcome of `scheduled` must include `fireAt` and `scheduleTarget`. Its configured route must lead to a column with the `Waiting` role; validation uses that stable role rather than the column's editable display name. The wake target must name an existing column in the destination pipeline.
 
