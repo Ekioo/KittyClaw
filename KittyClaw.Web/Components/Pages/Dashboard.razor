@@ -75,6 +75,11 @@ else
                              title="@L["DragToReorder"]">
                             <span class="dashboard-tile-drag-handle">&#8942;&#8942;</span>
                             <span class="dashboard-tile-title">@TileTitle(t.Slug)</span>
+                            @if (TileRefreshTimingText(t.Slug) is { } refreshTiming)
+                            {
+                                <span class="dashboard-tile-refresh-timing"
+                                      title="@TileRefreshTimingTitle(t.Slug)">@refreshTiming</span>
+                            }
                             @{
                                 var gateSnapshot = TileGate.Snapshot();
                                 var tileQueued = gateSnapshot.Queued.Any(q => q.Slug == Slug && q.TileSlug == t.Slug);
@@ -348,6 +353,10 @@ else
     private List<string> _availableSlugs = [];
     private Dictionary<string, string?> _contentCache = new();
     private Dictionary<string, TileSidecar?> _sidecars = new();
+    private readonly Dictionary<string, DateTime?> _lastRefreshedAt = new();
+    private DateTime _clockUtc = DateTime.UtcNow;
+    private readonly CancellationTokenSource _refreshTimingCts = new();
+    private Task? _refreshTimingLoop;
 
     private DashboardTileLayout? _resizingTile;
     private DotNetObjectReference<Dashboard>? _dotNetRef;
@@ -429,6 +438,68 @@ else
         return string.IsNullOrWhiteSpace(sidecarTitle) ? tileSlug : sidecarTitle;
     }
 
+    private string? TileRefreshTimingText(string tileSlug)
+    {
+        var timing = GetTileRefreshTiming(tileSlug);
+        if (timing.SinceLastRefresh is null && timing.UntilNextRefresh is null) return null;
+
+        var last = timing.SinceLastRefresh is null
+            ? "↺ —"
+            : $"↺ {FormatCompactDuration(timing.SinceLastRefresh.Value, roundUp: false)}";
+        if (timing.UntilNextRefresh is null) return last;
+        var next = timing.IsDue
+            ? "↻ 0s"
+            : $"↻ {FormatCompactDuration(timing.UntilNextRefresh.Value, roundUp: true)}";
+        return $"{last} · {next}";
+    }
+
+    private string TileRefreshTimingTitle(string tileSlug)
+    {
+        var timing = GetTileRefreshTiming(tileSlug);
+        var parts = new List<string>(2)
+        {
+            timing.SinceLastRefresh is null
+                ? L["TileRefreshNever"]
+                : string.Format(L["TileRefreshAgo"], FormatCompactDuration(timing.SinceLastRefresh.Value, roundUp: false)),
+        };
+        if (timing.UntilNextRefresh is not null)
+        {
+            parts.Add(timing.IsDue
+                ? L["TileRefreshDue"]
+                : string.Format(L["TileRefreshNext"], FormatCompactDuration(timing.UntilNextRefresh.Value, roundUp: true)));
+        }
+        return string.Join(" · ", parts);
+    }
+
+    private DashboardRefreshTimingState GetTileRefreshTiming(string tileSlug)
+    {
+        _sidecars.TryGetValue(tileSlug, out var sidecar);
+        _lastRefreshedAt.TryGetValue(tileSlug, out var lastRefreshedAt);
+        return DashboardRefreshTiming.Calculate(_clockUtc, lastRefreshedAt, sidecar);
+    }
+
+    private static string FormatCompactDuration(TimeSpan duration, bool roundUp)
+    {
+        duration = duration < TimeSpan.Zero ? TimeSpan.Zero : duration;
+        if (duration.TotalMinutes < 1)
+        {
+            var seconds = roundUp ? Math.Ceiling(duration.TotalSeconds) : Math.Floor(duration.TotalSeconds);
+            return $"{Math.Max(0, seconds):0}s";
+        }
+        if (duration.TotalHours < 1)
+        {
+            var minutes = roundUp ? Math.Ceiling(duration.TotalMinutes) : Math.Floor(duration.TotalMinutes);
+            return $"{Math.Max(1, minutes):0}m";
+        }
+        if (duration.TotalDays < 1)
+        {
+            var hours = roundUp ? Math.Ceiling(duration.TotalHours) : Math.Floor(duration.TotalHours);
+            return $"{Math.Max(1, hours):0}h";
+        }
+        var days = roundUp ? Math.Ceiling(duration.TotalDays) : Math.Floor(duration.TotalDays);
+        return $"{Math.Max(1, days):0}d";
+    }
+
     protected override async Task OnInitializedAsync()
     {
         _project = await ProjectService.GetProjectAsync(Slug);
@@ -440,6 +511,7 @@ else
         await LoadOllamaModelsAsync();
 
         await LoadAllContentAsync();
+        _refreshTimingLoop = RunRefreshTimingLoopAsync(_refreshTimingCts.Token);
         AutoStartEmptyTiles();
 
         RunsState.OnChange += OnRunsStateChanged;
@@ -459,8 +531,14 @@ else
     {
         RunsState.OnChange -= OnRunsStateChanged;
         TileGate.StateChanged -= OnTileGateStateChanged;
+        _refreshTimingCts.Cancel();
+        if (_refreshTimingLoop is not null)
+        {
+            try { await _refreshTimingLoop; }
+            catch (OperationCanceledException) { }
+        }
+        _refreshTimingCts.Dispose();
         _dotNetRef?.Dispose();
-        await Task.CompletedTask;
     }
 
     private void OnRunsStateChanged() => InvokeAsync(StateHasChanged);
@@ -488,6 +566,7 @@ else
         {
             if (!_sidecars.ContainsKey(tile.Slug))
                 _sidecars[tile.Slug] = await DashboardService.ReadSidecarAsync(_workspace, tile.Slug);
+            _lastRefreshedAt[tile.Slug] = await DashboardService.GetLastRefreshedAtAsync(Slug, tile.Slug);
 
             if (_sidecars[tile.Slug]?.Template == TileTemplate.Image)
             {
@@ -496,6 +575,25 @@ else
             }
             if (!_contentCache.ContainsKey(tile.Slug))
                 _contentCache[tile.Slug] = await DashboardService.ReadOutputAsync(_workspace, tile.Slug);
+        }
+    }
+
+    private async Task RunRefreshTimingLoopAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        var ticks = 0;
+        while (await timer.WaitForNextTickAsync(cancellationToken))
+        {
+            await InvokeAsync(async () =>
+            {
+                _clockUtc = DateTime.UtcNow;
+                if (++ticks % 30 == 0)
+                {
+                    foreach (var tile in _tiles)
+                        _lastRefreshedAt[tile.Slug] = await DashboardService.GetLastRefreshedAtAsync(Slug, tile.Slug);
+                }
+                StateHasChanged();
+            });
         }
     }
 
@@ -877,6 +975,9 @@ else
             {
                 var runId = Guid.NewGuid().ToString("N");
                 _refreshRunIds[tileSlug] = runId;
+                var refreshedAt = DateTime.UtcNow;
+                _lastRefreshedAt[tileSlug] = refreshedAt;
+                await DashboardService.SetLastRefreshedAtAsync(Slug, tileSlug, refreshedAt);
                 await InvokeAsync(StateHasChanged);
 
                 try
