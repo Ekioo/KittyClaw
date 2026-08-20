@@ -29,6 +29,11 @@ else
             <button class="settings-primary" @onclick="() => _showMigrationWizard = true">@L["WorkflowMigrate"]</button>
         </section>
 
+        <section class="settings-section workflow-migration-card">
+            <div><h2>@L["PipelineKitTitle"]</h2><p class="settings-hint">@L["PipelineKitManageHint"]</p></div>
+            <button class="settings-primary" data-testid="open-pipeline-kits" @onclick="() => _showPipelineKit = true">@L["PipelineKitOpen"]</button>
+        </section>
+
         @if (!string.IsNullOrWhiteSpace(_message))
         {
             <div class="settings-status @(_isError ? "settings-status-err" : "settings-status-ok")">@_message</div>
@@ -40,7 +45,7 @@ else
             <div class="workflow-pills">
                 @foreach (var pipeline in _pipelines)
                 {
-                    <button class="pipeline-tab @(pipeline.Id == _selectedPipelineId ? "pipeline-tab--active" : "")"
+                    <button class="pipeline-tab @(pipeline.Id == _selectedPipelineId ? "pipeline-tab--active" : "")" data-pipeline-id="@pipeline.Id"
                             @onclick="() => SelectPipelineAsync(pipeline.Id)">@pipeline.Name</button>
                 }
             </div>
@@ -86,6 +91,11 @@ else
     <WorkflowMigrationWizard ProjectSlug="@Slug" OnClose="() => _showMigrationWizard = false" />
 }
 
+@if (_showPipelineKit)
+{
+    <PipelineKitDialog ProjectSlug="@Slug" PipelineId="@_selectedPipelineId" OnClose="() => _showPipelineKit = false" OnImported="PipelineImportedAsync" />
+}
+
 @code {
     [Parameter] public string Slug { get; set; } = "";
 
@@ -102,6 +112,7 @@ else
     private string? _message;
     private bool _isError;
     private bool _showMigrationWizard;
+    private bool _showPipelineKit;
 
     private string _newSkillName = "";
     private string _newSkillDescription = "";
@@ -174,6 +185,12 @@ else
     {
         try { await action(); _message = success; _isError = false; }
         catch (Exception ex) { _message = ex.Message; _isError = true; }
+    }
+
+    private async Task PipelineImportedAsync(PipelineImportResult result)
+    {
+        _pipelines = await PipelineService.ListAsync(Slug);
+        await SelectPipelineAsync(result.PipelineId);
     }
 
 }

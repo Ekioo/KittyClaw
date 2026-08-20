@@ -96,6 +96,7 @@ These run before Playwright starts. All of them are also valid inside `actions`.
 |-----------------|---------------------------------------|-------------------------------------------------------|
 | `createProject` | `name`, optional `workspacePath`      | Creates a project on the test instance.               |
 | `createWorkspaceDirectory` | optional `name` (variable) | Creates an isolated empty workspace and stores its path. |
+| `writeWorkspaceFile` | `workspacePath`, `name` (relative file), `text` | Writes a fixture file inside an isolated workspace. |
 | `createGitRepository` | optional `name` (variable), `value` (branch) | Creates an isolated committed Git repository and stores its path. |
 | `commitGitFile` | `workspacePath`, `target` (branch), `name` (file), `text` | Commits a deterministic fixture change in a registered worktree. |
 | `togglePause`   | `project`                             | Toggles `IsPaused` on a project.                      |
@@ -183,13 +184,17 @@ These require Playwright (run inside `actions`, after setup).
 | `navigate`     | `url` (relative or absolute)             | Goes to the URL on the test instance.                                 |
 | `assertNavigationDuration` | `url`, `waitForSelector`, `maxMs` | Navigates, waits for visible content, and asserts elapsed time. |
 | `click`        | `selector`                               | CSS selector click.                                                   |
+| `doubleClick`  | `selector`                               | Dispatches a real browser double-click.                               |
+| `download`     | `selector`, optional `expected` filename | Clicks and asserts that a browser download starts.                     |
 | `rightClick`   | `selector`                               | Opens the element's context menu with the secondary mouse button.     |
 | `dragAndDrop`  | `selector`, `target`                     | Drag the source element onto the target element.                       |
 | `assertInteractionDuration` | `selector`, `waitForSelector`, `maxMs` | Clicks, waits for the target to become visible, and asserts elapsed time. |
 | `fill`         | `selector`, `value`                      | Set input value.                                                      |
+| `scrollIntoView` | `selector`                             | Scrolls the matching element into the visible viewport.               |
 | `setLocalStorage` | `name`, `value`                       | Set one local-storage entry before a reload or navigation assertion.  |
 | `pasteImage`   | `selector`, `value` (base64), optional `property` (MIME), `text` | Dispatch a real clipboard paste containing an image and optional mixed plain text. |
 | `pasteText`    | `selector`, `value`                     | Dispatch a plain-text clipboard paste and emulate the browser's default insertion. |
+| `setInputFile` | `selector`, `value` (base64), optional `name`, `property` (MIME) | Select an in-memory file. Pair with `apiBinary` setup to reuse a downloaded fixture. |
 | `selectOption` | `selector`, `value`                      | Select an option by value.                                            |
 | `wait`         | `ms`                                     | Pause N ms.                                                           |
 | `screenshot`   | `name`, optional `description`, `selector` | Full-page PNG, or a focused element PNG when `selector` is provided. Uploaded post-run. |
@@ -198,6 +203,8 @@ These require Playwright (run inside `actions`, after setup).
 | `assertVisible`| `selector`                               | Asserts element is visible.                                           |
 | `assertCount`  | `selector`, `expected`                   | Asserts the exact number of matching elements.                        |
 | `assertValue`  | `selector`, `expected`                   | Asserts the current value of an input or select.                       |
+| `assertFocused`| `selector`                               | Asserts that the matching element owns keyboard focus.                 |
+| `assertAttribute`| `selector`, `property`, `expected`     | Asserts one DOM attribute exactly.                                    |
 | `assertJson`   | `path`, `jsonPath`, `expected`           | GET `path`, extract `jsonPath` (dotted), assert equals `expected`.    |
 
 #### `assertJson`

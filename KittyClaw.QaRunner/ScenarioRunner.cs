@@ -64,12 +64,30 @@ public sealed class ScenarioRunner
     {
         switch (action.Type)
         {
+            case "apiBinary":
+                {
+                    var path = Required(Resolve(action.Path), "apiBinary.path");
+                    var name = Required(action.Name, "apiBinary.name");
+                    var bytes = await _http.GetByteArrayAsync(Combine(_instanceApiUrl, path), ct);
+                    _vars[name] = Convert.ToBase64String(bytes);
+                    break;
+                }
             case "createWorkspaceDirectory":
                 {
                     var variable = action.Name ?? "workspacePath";
                     var path = Path.Combine(_screenshotDir, "workspaces", Guid.NewGuid().ToString("N"));
                     Directory.CreateDirectory(path);
                     _vars[variable] = path;
+                    break;
+                }
+            case "writeWorkspaceFile":
+                {
+                    var workspace = Path.GetFullPath(Required(Resolve(action.WorkspacePath), "writeWorkspaceFile.workspacePath"));
+                    var target = Path.GetFullPath(Path.Combine(workspace, Required(Resolve(action.Name), "writeWorkspaceFile.name")));
+                    if (!target.StartsWith(workspace + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("writeWorkspaceFile.name must stay inside workspacePath");
+                    Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                    await File.WriteAllTextAsync(target, Resolve(action.Text ?? ""), ct);
                     break;
                 }
             case "createGitRepository":
@@ -251,6 +269,18 @@ public sealed class ScenarioRunner
             case "click":
                 await page.ClickAsync(Required(Resolve(action.Selector), "click.selector"));
                 break;
+            case "doubleClick":
+                await page.DblClickAsync(Required(Resolve(action.Selector), "doubleClick.selector"));
+                break;
+            case "download":
+                {
+                    var selector = Required(Resolve(action.Selector), "download.selector");
+                    var download = await page.RunAndWaitForDownloadAsync(() => page.ClickAsync(selector));
+                    var expected = Resolve(action.Expected);
+                    result.Assertions.Add(new AssertionEntry { Selector = selector, Property = "download-filename", Expected = expected,
+                        Actual = download.SuggestedFilename, Passed = string.IsNullOrEmpty(expected) || expected == download.SuggestedFilename });
+                    break;
+                }
             case "rightClick":
                 await page.ClickAsync(Required(Resolve(action.Selector), "rightClick.selector"),
                     new() { Button = MouseButton.Right });
@@ -301,6 +331,46 @@ public sealed class ScenarioRunner
             case "fill":
                 await page.FillAsync(Required(Resolve(action.Selector), "fill.selector"), Resolve(action.Value ?? ""));
                 break;
+            case "press":
+                await page.Locator(Required(Resolve(action.Selector), "press.selector"))
+                    .PressAsync(Required(Resolve(action.Property), "press.property"));
+                break;
+            case "scrollIntoView":
+                await page.Locator(Required(Resolve(action.Selector), "scrollIntoView.selector")).ScrollIntoViewIfNeededAsync();
+                break;
+            case "assertFocused":
+                {
+                    var selector = Required(Resolve(action.Selector), "assertFocused.selector");
+                    var focused = await page.Locator(selector).EvaluateAsync<bool>("el => el === document.activeElement");
+                    result.Assertions.Add(new AssertionEntry { Selector = selector, Property = "focused", Expected = "true",
+                        Actual = focused.ToString().ToLowerInvariant(), Passed = focused });
+                    break;
+                }
+            case "assertAttribute":
+                {
+                    var selector = Required(Resolve(action.Selector), "assertAttribute.selector");
+                    var property = Required(Resolve(action.Property), "assertAttribute.property");
+                    var actual = await page.Locator(selector).GetAttributeAsync(property);
+                    var expected = Resolve(action.Expected);
+                    result.Assertions.Add(new AssertionEntry { Selector = selector, Property = property, Expected = expected,
+                        Actual = actual, Passed = expected == actual });
+                    break;
+                }
+            case "setViewport":
+                await page.SetViewportSizeAsync(action.MaxMs ?? 640, action.Ms ?? 800);
+                break;
+            case "setInputFile":
+                {
+                    var selector = Required(Resolve(action.Selector), "setInputFile.selector");
+                    var bytes = Convert.FromBase64String(Required(Resolve(action.Value), "setInputFile.value"));
+                    await page.Locator(selector).SetInputFilesAsync(new FilePayload
+                    {
+                        Name = Resolve(action.Name ?? "kit.kittyclaw-pipeline"),
+                        MimeType = Resolve(action.Property ?? "application/zip"),
+                        Buffer = bytes,
+                    });
+                    break;
+                }
             case "setLocalStorage":
                 await page.EvaluateAsync("([key, value]) => localStorage.setItem(key, value)",
                     new[]
@@ -549,6 +619,8 @@ public sealed class ScenarioRunner
         JsonElement current = json;
         foreach (var part in parts)
         {
+            if (current.ValueKind == JsonValueKind.Array && part == "length")
+                return current.GetArrayLength().ToString();
             if (current.ValueKind == JsonValueKind.Object && current.TryGetProperty(part, out var property))
                 current = property;
             else if (current.ValueKind == JsonValueKind.Array && int.TryParse(part, out var index)
