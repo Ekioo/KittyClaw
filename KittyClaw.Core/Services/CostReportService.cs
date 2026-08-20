@@ -54,6 +54,7 @@ public sealed class CostReportService
     private readonly PipelineService _pipelines;
     private readonly TicketService _tickets;
     private readonly IRtkSavingsReader? _rtkSavings;
+    private readonly CostTracker? _costTracker;
     private readonly string _snapshotPath;
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private readonly Channel<bool> _refreshRequests = Channel.CreateBounded<bool>(new BoundedChannelOptions(1)
@@ -66,18 +67,27 @@ public sealed class CostReportService
     private CostReportSnapshot _snapshot;
 
     public CostReportService(ProjectService projects, PipelineService pipelines, TicketService tickets)
-        : this(projects, pipelines, tickets, null) { }
+        : this(projects, pipelines, tickets, null, null) { }
 
     public CostReportService(
         ProjectService projects,
         PipelineService pipelines,
         TicketService tickets,
         IRtkSavingsReader? rtkSavings)
+        : this(projects, pipelines, tickets, rtkSavings, null) { }
+
+    public CostReportService(
+        ProjectService projects,
+        PipelineService pipelines,
+        TicketService tickets,
+        IRtkSavingsReader? rtkSavings,
+        CostTracker? costTracker)
     {
         _projects = projects;
         _pipelines = pipelines;
         _tickets = tickets;
         _rtkSavings = rtkSavings;
+        _costTracker = costTracker;
         _snapshotPath = Path.Combine(projects.DataDir, "cost-report-snapshot.json");
         _snapshot = LoadPersistedSnapshot() ?? EmptySnapshot;
     }
@@ -153,15 +163,18 @@ public sealed class CostReportService
                         rtkRows.Add(new(saving.Day, project.Slug, project.Name, saving.InputTokens, saving.SavedTokens, saving.Commands));
                 }
 
-                var directory = Path.Combine(workspace, ".agents", "channel");
-                if (!Directory.Exists(directory))
+                var costFiles = _costTracker?.LogFiles(workspace)
+                    ?? (Directory.Exists(Path.Combine(workspace, ".agents", "channel"))
+                        ? Directory.EnumerateFiles(Path.Combine(workspace, ".agents", "channel"), "cost-log*.jsonl").ToList()
+                        : []);
+                if (costFiles.Count == 0)
                 {
                     await Task.Yield();
                     continue;
                 }
 
                 var entries = new List<CostLogEntry>();
-                foreach (var file in Directory.EnumerateFiles(directory, "cost-log*.jsonl").OrderBy(x => x, StringComparer.Ordinal))
+                foreach (var file in costFiles.OrderBy(x => x, StringComparer.Ordinal))
                 foreach (var line in File.ReadLines(file))
                 {
                     cancellationToken.ThrowIfCancellationRequested();

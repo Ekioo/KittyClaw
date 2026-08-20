@@ -1338,13 +1338,13 @@ public sealed class AgentRunner
         return typePrefix.Append(body).ToString();
     }
 
-    private static void AppendDebugLog(AgentRunContext ctx, string line)
+    private void AppendDebugLog(AgentRunContext ctx, string line)
     {
         try
         {
-            var dir = Path.Combine(ctx.WorkspacePath, ".agents", "channel");
-            Directory.CreateDirectory(dir);
-            File.AppendAllText(Path.Combine(dir, "debug.log"),
+            var path = _sessions.ChannelFilePath(ctx.WorkspacePath, "debug.log");
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.AppendAllText(path,
                 $"[{DateTime.UtcNow:o}] {line}\n");
         }
         catch { /* best-effort debug log — disk errors must not crash the run */ }

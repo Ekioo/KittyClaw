@@ -77,7 +77,7 @@ builder.Services.AddScoped<KittyClaw.Web.Services.EscapeKeyStack>();
 builder.Services.AddSingleton<AutomationStore>();
 builder.Services.AddSingleton<AutomationQueueStore>();
 builder.Services.AddSingleton<TriggerStateStore>();
-builder.Services.AddSingleton<SessionRegistry>();
+builder.Services.AddSingleton(new SessionRegistry(dataDir));
 builder.Services.AddSingleton(new RunLogStore(dataDir));
 builder.Services.AddSingleton<AgentRunRegistry>(sp => new AgentRunRegistry(sp.GetRequiredService<RunLogStore>()));
 builder.Services.AddHostedService<TicketCommentSteeringService>();

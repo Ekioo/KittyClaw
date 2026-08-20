@@ -9,6 +9,9 @@ namespace KittyClaw.Core.Automation;
 public sealed class CostTracker
 {
     private readonly object _lock = new();
+    private readonly SessionRegistry? _sessions;
+
+    public CostTracker(SessionRegistry? sessions = null) => _sessions = sessions;
 
     public bool IsBudgetExceeded(string workspacePath, decimal dailyBudgetUsd)
     {
@@ -30,8 +33,15 @@ public sealed class CostTracker
         }
     }
 
-    private static string CurrentLogPath(string workspacePath) =>
-        Path.Combine(workspacePath, ".agents", "channel", "cost-log.jsonl");
+    internal string CurrentLogPath(string workspacePath) =>
+        _sessions?.ChannelFilePath(workspacePath, "cost-log.jsonl")
+        ?? Path.Combine(workspacePath, ".agents", "channel", "cost-log.jsonl");
+
+    internal IReadOnlyList<string> LogFiles(string workspacePath) =>
+        _sessions?.ChannelFiles(workspacePath, "cost-log*.jsonl")
+        ?? (Directory.Exists(Path.Combine(workspacePath, ".agents", "channel"))
+            ? Directory.EnumerateFiles(Path.Combine(workspacePath, ".agents", "channel"), "cost-log*.jsonl").ToList()
+            : []);
 
     private static void RotateIfNeeded(string path)
     {
@@ -49,7 +59,7 @@ public sealed class CostTracker
         }
     }
 
-    private static decimal SumUsdForDay(string workspacePath, DateTime day)
+    private decimal SumUsdForDay(string workspacePath, DateTime day)
     {
         var path = CurrentLogPath(workspacePath);
         if (!File.Exists(path)) return 0m;
