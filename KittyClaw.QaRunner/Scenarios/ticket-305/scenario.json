@@ -1,0 +1,43 @@
+{
+  "environment": {
+    "KITTYCLAW_ENABLE_QA_ENDPOINTS": "1",
+    "KITTYCLAW_MOCK_SCENARIO": "chat-benign-stderr"
+  },
+  "setup": [
+    { "type": "createProject", "name": "qa-ticket-305" },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/qa-ticket-305/chat/start",
+      "body": {
+        "target": "owner-chat",
+        "message": "Vérifie l'affichage.",
+        "model": "claude-sonnet-4-6",
+        "forceNew": true
+      },
+      "extract": { "runId": "runId" }
+    },
+    { "type": "waitForRun", "project": "qa-ticket-305", "ms": 30000 }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-ticket-305" },
+    { "type": "wait", "ms": 1000 },
+    { "type": "click", "selector": ".new-instruction-btn" },
+    { "type": "wait", "ms": 1000 },
+    { "type": "assertCount", "selector": ".chat-message-diagnostic", "expected": "0" },
+    {
+      "type": "assertJson",
+      "path": "/api/projects/qa-ticket-305/runs/{runId}",
+      "jsonPath": "events.length",
+      "expected": "6"
+    },
+    { "type": "assertVisible", "selector": ".chat-message-assistant:has-text(\"diagnostics internes du CLI\")" },
+    {
+      "type": "screenshot",
+      "name": "ticket-305-clean-chat",
+      "selector": ".chat-drawer",
+      "description": "La conversation reste lisible malgré un diagnostic stderr bénin conservé dans les journaux techniques."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

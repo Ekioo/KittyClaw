@@ -58,6 +58,11 @@ internal static class ScenarioReplayer
                             await Console.Out.FlushAsync();
                         }
                     }
+                    if (meta.TryGetProperty("stderr", out var stderr))
+                    {
+                        await Console.Error.WriteLineAsync(stderr.GetString() ?? string.Empty);
+                        await Console.Error.FlushAsync();
+                    }
                     if (meta.TryGetProperty("hooked_effect", out var hookedEffect))
                         await ReplayHookedEffectAsync(hookedEffect, sessionId, workingDirectory, hooks,
                             ++hookedToolCounter);

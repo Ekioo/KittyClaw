@@ -72,15 +72,16 @@ public class RunDrawerEventPresentationTests
     }
 
     [Fact]
-    public void Chat_drawer_sanitizes_and_groups_stderr_events()
+    public void Chat_drawer_keeps_stderr_out_of_the_conversation()
     {
         var source = File.ReadAllText(Path.Combine(
             RepoRoot(), "KittyClaw.Web", "Components", "ChatDrawer.razor"));
 
-        Assert.Contains("RunDrawerEventPresentation.Sanitize(text)", source);
-        Assert.Contains("previous.Role == role", source);
-        Assert.Contains("AddDiagnosticMessage(\"stderr\", text);", source);
-        Assert.Contains("AddStderrMessage(m.Text)", source);
+        Assert.Contains("if (m.Role == \"stderr\") continue;", source);
+        Assert.Contains("else if (kind == \"stderr\")", source);
+        Assert.Contains("Keep technical CLI diagnostics in the run log", source);
+        Assert.DoesNotContain("AddDiagnosticMessage(\"stderr\", text);", source);
+        Assert.DoesNotContain("AddStderrMessage", source);
     }
 
     [Fact]
@@ -89,10 +90,12 @@ public class RunDrawerEventPresentationTests
         var source = File.ReadAllText(Path.Combine(
             RepoRoot(), "KittyClaw.Web", "Components", "ChatDrawer.razor"));
 
-        Assert.Contains("else if (m.Role == \"error\") AddErrorMessage(m.Text);", source);
+        Assert.Contains("if (m.Role == \"error\") AddErrorMessage(m.Text);", source);
         Assert.Contains("else if (kind == \"error\")", source);
         Assert.Contains("AddErrorMessage(text);", source);
         Assert.Contains("AddDiagnosticMessage(\"error\", text);", source);
+        Assert.Contains("RunDrawerEventPresentation.Sanitize(text)", source);
+        Assert.Contains("previous.Role == role", source);
     }
 
     [Fact]

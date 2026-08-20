@@ -563,8 +563,10 @@
                     }
                     else
                     {
-                        if (m.Role == "stderr") AddStderrMessage(m.Text);
-                        else if (m.Role == "error") AddErrorMessage(m.Text);
+                        // Stderr is retained in the run log, but it is often routine CLI diagnostics
+                        // and must not look like a failure in the user conversation.
+                        if (m.Role == "stderr") continue;
+                        if (m.Role == "error") AddErrorMessage(m.Text);
                         else _messages.Add(new ChatMessage(m.Role, m.Text, m.Images?
                             .Select(i => new MessageImage(i.DataUrl, i.Mime, i.Name, i.SizeBytes)).ToList()));
                     }
@@ -863,11 +865,9 @@
         }
         else if (kind == "stderr")
         {
-            // Suppress the non-actionable connectors warning that Claude CLI emits
-            // whenever ANTHROPIC_AUTH_TOKEN/API_KEY is set (always true for Ollama).
-            if (text.Contains("claude.ai connectors are disabled", StringComparison.OrdinalIgnoreCase))
-                return Task.CompletedTask;
-            AddStderrMessage(text);
+            // Keep technical CLI diagnostics in the run log. A terminal failure is emitted
+            // separately as an "error" event and remains visible in the conversation.
+            return Task.CompletedTask;
         }
         else if (kind == "content_block_delta")
         {
@@ -906,11 +906,6 @@
     private static string GetToolPreview(string toolName, string? detail) =>
         SharedRenderHelpers.GetToolPreview(toolName, detail);
 
-    private void AddStderrMessage(string text)
-    {
-        AddDiagnosticMessage("stderr", text);
-    }
-
     private void AddErrorMessage(string text)
     {
         AddDiagnosticMessage("error", text);
@@ -933,7 +928,7 @@
             text.Contains("rejected: blocked", StringComparison.OrdinalIgnoreCase))
             return L["ChatCommandBlocked"];
 
-        return role == "stderr" ? L["ChatCommandWarning"] : L["ChatCommandFailed"];
+        return L["ChatCommandFailed"];
     }
 
     private static (string Prompt, string[] Options) ParseAskUserQuestionDetail(string? detail)

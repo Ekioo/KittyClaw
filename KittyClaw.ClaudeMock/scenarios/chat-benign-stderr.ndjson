@@ -1,0 +1,5 @@
+{"type":"system","subtype":"init","session_id":"{{session_id}}","model":"mock"}
+{"_meta":{"stderr":"2026-08-19T23:14:15Z ERROR codex_models_manager::cache: failed to load models cache: missing field `base_instructions`"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"La reponse reste disponible sans exposer les diagnostics internes du CLI."}]}}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":42,"num_turns":1,"total_cost_usd":0.001,"usage":{"input_tokens":10,"output_tokens":20}}
+{"_meta":{"exit":0}}
