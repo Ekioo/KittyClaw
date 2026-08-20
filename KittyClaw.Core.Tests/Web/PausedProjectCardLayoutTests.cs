@@ -54,6 +54,18 @@ public sealed class PausedProjectCardLayoutTests
     }
 
     [Fact]
+    public void ProjectCard_BoundsLongTitlesWithEllipsis()
+    {
+        var css = AppCssHelper.ReadAll();
+        var title = Rule(css, @"(?m)^\.project-card h3");
+
+        Assert.Contains("overflow: hidden", title);
+        Assert.Contains("text-overflow: ellipsis", title);
+        Assert.Contains("white-space: nowrap", title);
+        Assert.Contains("min-width: 0", title);
+    }
+
+    [Fact]
     public void ProjectCard_ReplacesSlugWithLocalizedOwnerActionCount()
     {
         var source = LoadComponent();

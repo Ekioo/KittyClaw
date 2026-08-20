@@ -29,7 +29,8 @@ public class ScenarioParseTests
             { "type": "selectOption", "selector": ".model", "value": "codex:gpt-5.6-sol" },
             { "type": "screenshot", "name": "home", "description": "Home" },
             { "type": "assertValue", "selector": ".model", "expected": "codex:gpt-5.6-sol" },
-            { "type": "assertCss", "selector": ".x", "property": "color", "expected": "rgb(245,158,11)" }
+            { "type": "assertCss", "selector": ".x", "property": "color", "expected": "rgb(245,158,11)" },
+            { "type": "setViewport", "width": 390, "height": 844 }
           ],
           "verdict": { "passOn": "all-asserts-pass" }
         }
@@ -44,12 +45,14 @@ public class ScenarioParseTests
         Assert.Equal("createProject", s.Setup[1].Type);
         Assert.Equal("D:/foo", s.Setup[1].WorkspacePath);
         Assert.Equal("commitGitFile", s.Setup[2].Type);
-        Assert.Equal(5, s.Actions.Count);
+        Assert.Equal(6, s.Actions.Count);
         Assert.Equal("/", s.Actions[0].Url);
         Assert.Equal("codex:gpt-5.6-sol", s.Actions[1].Value);
         Assert.Equal("home", s.Actions[2].Name);
         Assert.Equal("codex:gpt-5.6-sol", s.Actions[3].Expected);
         Assert.Equal("rgb(245,158,11)", s.Actions[4].Expected);
+        Assert.Equal(390, s.Actions[5].Width);
+        Assert.Equal(844, s.Actions[5].Height);
         Assert.Equal("all-asserts-pass", s.Verdict.PassOn);
     }
 

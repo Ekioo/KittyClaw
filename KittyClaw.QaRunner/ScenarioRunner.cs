@@ -432,6 +432,11 @@ public sealed class ScenarioRunner
             case "wait":
                 await page.WaitForTimeoutAsync(action.Ms ?? 500);
                 break;
+            case "setViewport":
+                await page.SetViewportSizeAsync(
+                    action.Width ?? throw new InvalidOperationException("setViewport: 'width' is required"),
+                    action.Height ?? throw new InvalidOperationException("setViewport: 'height' is required"));
+                break;
             case "screenshot":
                 {
                     var name = Resolve(action.Name ?? $"screenshot-{result.Screenshots.Count + 1}");

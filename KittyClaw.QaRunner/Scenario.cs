@@ -35,6 +35,10 @@ public sealed class ScenarioAction
     public int? MaxMs { get; set; }
     public string? WaitForSelector { get; set; }
 
+    // setViewport fields
+    public int? Width { get; set; }
+    public int? Height { get; set; }
+
     // Generic api action fields
     public string? Method { get; set; }
     public string? Path { get; set; }

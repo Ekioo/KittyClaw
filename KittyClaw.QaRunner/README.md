@@ -198,6 +198,7 @@ These require Playwright (run inside `actions`, after setup).
 | `setInputFile` | `selector`, `value` (base64), optional `name`, `property` (MIME) | Select an in-memory file. Pair with `apiBinary` setup to reuse a downloaded fixture. |
 | `selectOption` | `selector`, `value`                      | Select an option by value.                                            |
 | `wait`         | `ms`                                     | Pause N ms.                                                           |
+| `setViewport`  | `width`, `height`                        | Resize the browser viewport (e.g. to assert a mobile layout). Persists for subsequent actions. |
 | `screenshot`   | `name`, optional `description`, `selector` | Full-page PNG, or a focused element PNG when `selector` is provided. Uploaded post-run. |
 | `assertCss`    | `selector`, `property`, `expected`       | Reads `getComputedStyle(...).getPropertyValue(prop)`.                 |
 | `assertText`   | `selector`, `expected`                   | Reads `textContent`.                                                  |
