@@ -69,6 +69,7 @@ All string fields in every action support `{varName}` placeholders. Variables ar
 - Previous `api` / shortcut results captured via `extract`.
 
 Variables are resolved just before each action executes, so a later action can reference values captured by an earlier one.
+The built-in `{scenarioDirectory}` variable resolves to the absolute directory containing the loaded scenario. Use it for portable fixture paths instead of committing developer-machine or worktree paths. It is also expanded in scenario environment-variable values before the isolated web process starts.
 
 ## Scenario format
 

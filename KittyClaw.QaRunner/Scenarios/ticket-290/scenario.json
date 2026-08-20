@@ -1,17 +1,17 @@
 {
   "environment": {
-    "KITTYCLAW_RTK_BIN": "C:\\Sources\\KittyClaw\\Sources.worktrees\\ticket-290\\KittyClaw.QaRunner\\Scenarios\\ticket-290\\rtk-fake.cmd"
+    "KITTYCLAW_RTK_BIN": "{scenarioDirectory}\\rtk-fake.cmd"
   },
   "setup": [
     {
       "type": "createProject",
       "name": "RTK Stack QA",
-      "workspacePath": "C:\\Sources\\KittyClaw\\Sources.worktrees\\ticket-290\\KittyClaw.QaRunner\\Scenarios\\ticket-290\\workspace-priced"
+      "workspacePath": "{scenarioDirectory}\\workspace-priced"
     },
     {
       "type": "createProject",
       "name": "RTK Unpriced QA",
-      "workspacePath": "C:\\Sources\\KittyClaw\\Sources.worktrees\\ticket-290\\KittyClaw.QaRunner\\Scenarios\\ticket-290\\workspace-unpriced"
+      "workspacePath": "{scenarioDirectory}\\workspace-unpriced"
     },
     {
       "type": "api",

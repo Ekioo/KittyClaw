@@ -93,4 +93,14 @@ public class ScenarioParseTests
         Assert.Equal(42, resolved.RootElement.GetProperty("ticketId").GetInt32());
         Assert.True(resolved.RootElement.GetProperty("enabled").GetBoolean());
     }
+
+    [Fact]
+    public void ResolveText_ExpandsScenarioDirectoryInPortableFixtures()
+    {
+        var resolved = ScenarioRunner.ResolveText(
+            @"{scenarioDirectory}\fixtures\rtk-fake.cmd",
+            new Dictionary<string, string> { ["scenarioDirectory"] = @"D:\qa\ticket-290" });
+
+        Assert.Equal(@"D:\qa\ticket-290\fixtures\rtk-fake.cmd", resolved);
+    }
 }

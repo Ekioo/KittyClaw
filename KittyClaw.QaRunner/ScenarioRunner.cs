@@ -19,13 +19,22 @@ public sealed class ScenarioRunner
     private readonly HttpClient _http;
     private readonly Dictionary<string, string> _vars = new(StringComparer.Ordinal);
 
-    public ScenarioRunner(string instanceApiUrl, string screenshotDir, HttpClient? http = null)
+    public ScenarioRunner(
+        string instanceApiUrl,
+        string screenshotDir,
+        HttpClient? http = null,
+        IReadOnlyDictionary<string, string>? initialVariables = null)
     {
         _instanceApiUrl = instanceApiUrl.TrimEnd('/');
         _screenshotDir = screenshotDir;
         Directory.CreateDirectory(_screenshotDir);
         _http = http ?? new HttpClient { BaseAddress = new Uri(_instanceApiUrl), Timeout = TimeSpan.FromSeconds(30) };
         if (_http.BaseAddress is null) _http.BaseAddress = new Uri(_instanceApiUrl);
+        if (initialVariables is not null)
+        {
+            foreach (var (name, value) in initialVariables)
+                _vars[name] = value;
+        }
     }
 
     public async Task<ScenarioResult> RunAsync(Scenario scenario, CancellationToken ct = default)
@@ -553,10 +562,12 @@ public sealed class ScenarioRunner
         await Task.CompletedTask; // suppress warning when no awaits in some branches
     }
 
-    private string Resolve(string? s)
+    private string Resolve(string? s) => ResolveText(s, _vars);
+
+    internal static string ResolveText(string? s, IReadOnlyDictionary<string, string> variables)
     {
         if (s is null) return "";
-        foreach (var kv in _vars)
+        foreach (var kv in variables)
             s = s.Replace("{" + kv.Key + "}", kv.Value);
         return s;
     }

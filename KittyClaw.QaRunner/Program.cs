@@ -57,12 +57,20 @@ catch (Exception ex)
 
 var screenshotDir = Path.Combine(Path.GetTempPath(), "kittyclaw-qa-shots-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(screenshotDir);
+var scenarioVariables = new Dictionary<string, string>(StringComparer.Ordinal)
+{
+    ["scenarioDirectory"] = Path.GetDirectoryName(Path.GetFullPath(scenarioPath))!,
+};
+var scenarioEnvironment = scenario.Environment.ToDictionary(
+    pair => pair.Key,
+    pair => ScenarioRunner.ResolveText(pair.Value, scenarioVariables),
+    StringComparer.Ordinal);
 
 ScenarioResult result;
-await using (var instance = await TestInstance.StartAsync(webExe, scenario.Environment))
+await using (var instance = await TestInstance.StartAsync(webExe, scenarioEnvironment))
 {
     Console.Error.WriteLine($"[qa-runner] test instance up at {instance.ApiUrl}");
-    var runner = new ScenarioRunner(instance.ApiUrl, screenshotDir);
+    var runner = new ScenarioRunner(instance.ApiUrl, screenshotDir, initialVariables: scenarioVariables);
     result = await runner.RunAsync(scenario);
 }
 
