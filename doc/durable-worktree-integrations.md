@@ -18,6 +18,7 @@ Versioned project knowledge stays in Git. Local control data such as prompts, tr
 - `KittyClaw.Core/Services/WorktreeFinalizationCoordinator.cs` — prevents finalization while a column processor is still writing to a ticket family worktree.
 - `KittyClaw.Core/Automation/AgentMemoryHandler.cs` and `KittyClaw.Core/Services/ChatMemoryConsolidationService.cs` — route versioned memory writes away from the primary checkout.
 - `KittyClaw.Core/Services/ColumnMemoryCapitalizationService.cs` — attributes processor lessons to the ticket worktree, or to maintenance work when no ticket exists.
+- `KittyClaw.Core/Services/ColumnProcessorService.cs` — migrates legacy SQLite processor projections to versioned definitions through a maintenance worktree without dirtying the primary checkout.
 - `KittyClaw.Core/Services/DashboardRefreshService.cs` — runs dashboard scripts and prompts in maintenance worktrees so generated file changes are isolated and reviewed.
 - `KittyClaw.Web/Components/ProjectCards.razor` — displays live integration count, severity, and blocked age even for paused projects.
 

@@ -2,6 +2,8 @@ using KittyClaw.Core.Services;
 using KittyClaw.Core.Tests.Helpers;
 using KittyClaw.Core.Models;
 using KittyClaw.Core.Automation;
+using Microsoft.EntityFrameworkCore;
+using System.Diagnostics;
 using System.Text.Json.Nodes;
 
 namespace KittyClaw.Core.Tests.Services;
@@ -225,6 +227,142 @@ public sealed class ProjectSkillAndProcessorTests : IDisposable
     }
 
     [Fact]
+    public async Task First_read_routes_legacy_processor_migration_through_maintenance_worktree()
+    {
+        var repository = ProjectWorktreeSettingsTests.CreateRepository(_temp.Path, "integration");
+        var project = await _projects.CreateProjectAsync("Routed legacy processor");
+        await _projects.UpdateProjectAsync(project.Slug, repository);
+        await _projects.UpdateProjectAsync(project.Slug, null,
+            worktreesEnabled: true, integrationBranch: "integration");
+        var tickets = new TicketService(_projects, new MemberService(_projects));
+        var worktrees = new TicketWorktreeService(_projects, tickets);
+        var queue = new WorktreeMergeQueueService(_projects, worktrees);
+        var router = new DurableWriteRouter(_projects, worktrees, queue);
+        var processors = new ColumnProcessorService(_projects, _skills,
+            durableWrites: new Lazy<DurableWriteRouter>(() => router));
+        var column = (await _columns.ListColumnsAsync(project.Slug)).First();
+        await using (var db = _projects.GetProjectDb(project.Slug))
+        {
+            await ColumnProcessorService.EnsureTableAsync(db);
+            db.ColumnProcessors.Add(new ColumnProcessor
+            {
+                ColumnId = column.Id,
+                Name = "Legacy routed worker",
+                Mission = "Preserve routed migration.",
+                Prompt = "Keep every field.",
+                Enabled = false,
+                MaxTurns = 91,
+            });
+            await db.SaveChangesAsync();
+        }
+        var initialStatus = Git(repository, "status", "--porcelain=v1", "--untracked-files=all");
+
+        var migrated = await processors.GetAsync(project.Slug, column.Id);
+
+        Assert.NotNull(migrated);
+        Assert.Equal("Keep every field.", migrated.Prompt);
+        Assert.False(migrated.Enabled);
+        Assert.Equal(91, migrated.MaxTurns);
+        Assert.Equal(initialStatus, Git(repository, "status", "--porcelain=v1", "--untracked-files=all"));
+        Assert.False(File.Exists(Path.Combine(repository, ".agents", "processors", ".source-of-truth-v1")));
+        var request = Assert.Single(await queue.ListAsync(project.Slug));
+        Assert.Equal(WorktreeMergeJobKind.Maintenance, request.JobKind);
+        Assert.True(File.Exists(Path.Combine(request.WorktreePath, ".agents", "processors", ".source-of-truth-v1")));
+        Assert.True(File.Exists(Path.Combine(request.WorktreePath, ".agents", "processors", $"column-{column.Id}", "processor.json")));
+
+        await processors.GetAsync(project.Slug, column.Id);
+        Assert.Single(await queue.ListAsync(project.Slug));
+
+        var integrated = await queue.ProcessNextAsync(project.Slug, CancellationToken.None);
+        Assert.NotNull(integrated);
+        Assert.Equal(WorktreeMergeStatus.Completed, integrated.Status);
+        Assert.True(File.Exists(Path.Combine(repository, ".agents", "processors", ".source-of-truth-v1")));
+        var reloaded = await processors.GetAsync(project.Slug, column.Id);
+        Assert.NotNull(reloaded);
+        Assert.Equal("Legacy routed worker", reloaded.Name);
+        Assert.Single(await queue.ListAsync(project.Slug));
+    }
+
+    [Fact]
+    public async Task Interrupted_processor_migration_reuses_committed_maintenance_checkpoint()
+    {
+        var repository = ProjectWorktreeSettingsTests.CreateRepository(_temp.Path, "integration");
+        var project = await _projects.CreateProjectAsync("Interrupted routed processor");
+        await _projects.UpdateProjectAsync(project.Slug, repository);
+        await _projects.UpdateProjectAsync(project.Slug, null,
+            worktreesEnabled: true, integrationBranch: "integration");
+        var tickets = new TicketService(_projects, new MemberService(_projects));
+        var worktrees = new TicketWorktreeService(_projects, tickets);
+        var queue = new WorktreeMergeQueueService(_projects, worktrees);
+        var router = new DurableWriteRouter(_projects, worktrees, queue);
+        var processors = new ColumnProcessorService(_projects, _skills,
+            durableWrites: new Lazy<DurableWriteRouter>(() => router));
+        var column = (await _columns.ListColumnsAsync(project.Slug)).First();
+        await using (var db = _projects.GetProjectDb(project.Slug))
+        {
+            await ColumnProcessorService.EnsureTableAsync(db);
+            db.ColumnProcessors.Add(new ColumnProcessor
+            {
+                ColumnId = column.Id,
+                Name = "Checkpoint worker",
+                Mission = "Preserve the committed definition.",
+                Prompt = "Keep the checkpointed prompt.",
+                Enabled = false,
+                MaxTurns = 73,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await processors.GetAsync(project.Slug, column.Id);
+        var interrupted = Assert.Single(await queue.ListAsync(project.Slug));
+        var definitionPath = Path.Combine(interrupted.WorktreePath, ".agents", "processors",
+            $"column-{column.Id}", "processor.json");
+        var committedDefinition = await File.ReadAllTextAsync(definitionPath);
+        var committedHead = Git(interrupted.WorktreePath, "rev-parse", "HEAD").Trim();
+        var baselineHead = Git(repository, "rev-parse", "integration").Trim();
+        await using (var db = _projects.GetProjectDb(project.Slug))
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.CommitPending},
+                    Checkpoint = {(int)WorktreeMergeCheckpoint.Writing}, SourceCommit = {baselineHead}
+                WHERE Id = {interrupted.Id}
+                """);
+            var stale = await db.ColumnProcessors.SingleAsync(p => p.ColumnId == column.Id);
+            Assert.NotNull(stale);
+            stale.Name = "Stale SQLite name";
+            stale.Prompt = "Must not overwrite the committed file.";
+            stale.MaxTurns = 1;
+            await db.SaveChangesAsync();
+        }
+        queue.ReleaseMaintenanceWrite(interrupted.Id);
+
+        var restartedQueue = new WorktreeMergeQueueService(_projects, worktrees);
+        var restartedRouter = new DurableWriteRouter(_projects, worktrees, restartedQueue);
+        var restartedProcessors = new ColumnProcessorService(_projects, _skills,
+            durableWrites: new Lazy<DurableWriteRouter>(() => restartedRouter));
+        var recovered = await restartedProcessors.GetAsync(project.Slug, column.Id);
+
+        Assert.NotNull(recovered);
+        Assert.Equal("Checkpoint worker", recovered.Name);
+        Assert.Equal("Keep the checkpointed prompt.", recovered.Prompt);
+        Assert.False(recovered.Enabled);
+        Assert.Equal(73, recovered.MaxTurns);
+        Assert.Equal(committedDefinition, await File.ReadAllTextAsync(definitionPath));
+        Assert.Equal(committedHead, Git(interrupted.WorktreePath, "rev-parse", "HEAD").Trim());
+        Assert.Single(Directory.EnumerateFiles(interrupted.WorktreePath, ".source-of-truth-v1", SearchOption.AllDirectories));
+        Assert.Single(Directory.EnumerateFiles(interrupted.WorktreePath, "processor.json", SearchOption.AllDirectories));
+        var resumed = Assert.Single(await restartedQueue.ListAsync(project.Slug));
+        Assert.Equal(interrupted.Id, resumed.Id);
+        Assert.Equal(WorktreeMergeStatus.Pending, resumed.Status);
+
+        var integrated = await restartedQueue.ProcessNextAsync(project.Slug, CancellationToken.None);
+        Assert.NotNull(integrated);
+        Assert.Equal(WorktreeMergeStatus.Completed, integrated.Status);
+        Assert.Equal(committedHead, Git(repository, "rev-parse", "integration").Trim());
+        Assert.Single(await restartedQueue.ListAsync(project.Slug));
+    }
+
+    [Fact]
     public async Task Processor_rejects_unknown_project_skills()
     {
         var project = await _projects.CreateProjectAsync("Unknown skill");
@@ -326,4 +464,22 @@ public sealed class ProjectSkillAndProcessorTests : IDisposable
     }
 
     public void Dispose() => _temp.Dispose();
+
+    private static string Git(string cwd, params string[] args)
+    {
+        var info = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = cwd,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        foreach (var arg in args) info.ArgumentList.Add(arg);
+        using var process = Process.Start(info)!;
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, error);
+        return output;
+    }
 }

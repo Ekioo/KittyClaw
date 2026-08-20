@@ -51,7 +51,11 @@ builder.Services.AddSingleton<LabelService>();
 builder.Services.AddSingleton<ColumnService>();
 builder.Services.AddSingleton<PipelineService>();
 builder.Services.AddSingleton<ProjectSkillService>();
-builder.Services.AddSingleton<ColumnProcessorService>();
+builder.Services.AddSingleton(sp => new ColumnProcessorService(
+    sp.GetRequiredService<ProjectService>(),
+    sp.GetRequiredService<ProjectSkillService>(),
+    sp.GetService<ILogger<ColumnProcessorService>>(),
+    new Lazy<DurableWriteRouter>(sp.GetRequiredService<DurableWriteRouter>)));
 builder.Services.AddSingleton<PipelineExportService>();
 builder.Services.AddSingleton<PipelineImportService>();
 builder.Services.AddSingleton<ColumnScheduledTaskService>();

@@ -16,7 +16,8 @@ namespace KittyClaw.Core.Services;
 public sealed class ColumnProcessorService(
     ProjectService projects,
     ProjectSkillService skills,
-    ILogger<ColumnProcessorService>? logger = null)
+    ILogger<ColumnProcessorService>? logger = null,
+    Lazy<DurableWriteRouter>? durableWrites = null)
 {
     private const int DefinitionVersion = 2;
     private const int OldestSupportedDefinitionVersion = 1;
@@ -282,12 +283,34 @@ public sealed class ColumnProcessorService(
         // absence of a file acquires its new meaning (processor intentionally removed).
         if (!File.Exists(marker))
         {
+            DurableWriteRoute? route = null;
+            var project = await projects.GetProjectAsync(projectSlug)
+                ?? throw new InvalidOperationException($"Le projet '{projectSlug}' n'existe pas.");
+            if (durableWrites is not null && project.WorktreesEnabled &&
+                !string.IsNullOrWhiteSpace(project.IntegrationBranch))
+            {
+                route = await durableWrites.Value.ResolveAsync(projectSlug, null, [".agents/processors"]);
+                root = Path.Combine(route.RootPath, ".agents", "processors");
+                Directory.CreateDirectory(root);
+                marker = Path.Combine(root, SourceMarkerName);
+            }
+
             foreach (var processor in existing)
             {
                 var path = Path.Combine(root, ColumnReference(processor.ColumnId), "processor.json");
-                if (!File.Exists(path)) await WriteDefinitionAsync(projectSlug, ToDefinition(processor));
+                if (!File.Exists(path)) await WriteDefinitionAtRootAsync(root, ToDefinition(processor));
             }
-            await File.WriteAllTextAsync(marker, "processor.json is authoritative; SQLite stores only a runtime projection.\n");
+            if (!File.Exists(marker))
+                await File.WriteAllTextAsync(marker, "processor.json is authoritative; SQLite stores only a runtime projection.\n");
+
+            if (route is not null)
+            {
+                var validation = await durableWrites!.Value.CommitAndQueueAsync(projectSlug, route,
+                    "chore: migrate processor definitions");
+                if (validation.Status != DurableWriteValidationStatus.Ready)
+                    throw new InvalidOperationException(validation.Error ??
+                        $"Processor migration durable write requires review ({validation.Status}).");
+            }
         }
 
         var files = Directory.EnumerateFiles(root, "processor.json", SearchOption.AllDirectories)
@@ -435,8 +458,14 @@ public sealed class ColumnProcessorService(
 
     private async Task WriteDefinitionAsync(string projectSlug, ProcessorDefinition definition)
     {
+        var root = await GetProcessorsRootAsync(projectSlug);
+        await WriteDefinitionAtRootAsync(root, definition);
+    }
+
+    private static async Task WriteDefinitionAtRootAsync(string root, ProcessorDefinition definition)
+    {
         var columnId = ParseColumnReference(definition.Column, "processor.json", "column");
-        var path = await GetDefinitionPathAsync(projectSlug, columnId);
+        var path = Path.Combine(root, ColumnReference(columnId), "processor.json");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var json = JsonSerializer.Serialize(definition, DefinitionJson) + Environment.NewLine;
         var temporary = path + $".{Guid.NewGuid():N}.tmp";
