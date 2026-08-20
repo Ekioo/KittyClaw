@@ -132,21 +132,41 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             return candidate;
         }
 
-        // Retries keep their original durable claim and take precedence over new work.
-        var retry = await db.ColumnExecutions
+        // Retries keep their original durable claim and take precedence over new work. Revalidate
+        // their trigger context in the same transaction that claims them: a delayed retry must not
+        // dispatch an agent after the ticket has moved or otherwise changed since the failed attempt.
+        await using var retryTransaction = await db.Database.BeginTransactionAsync();
+        var retries = await db.ColumnExecutions
             .Where(e => e.ProcessorId == processor.Id && e.Status == ColumnExecutionStatus.Retrying
                 && (e.AvailableAt == null || e.AvailableAt <= now))
             .OrderBy(e => e.AvailableAt).ThenBy(e => e.ClaimedAt)
-            .FirstOrDefaultAsync();
-        if (retry is not null)
+            .ToListAsync();
+        foreach (var retry in retries)
         {
+            var triggerIsCurrent = await db.Tickets.AsNoTracking().AnyAsync(ticket =>
+                ticket.Id == retry.TicketId
+                && ticket.ColumnId == processor.ColumnId
+                && (retry.TriggerTicketUpdatedAt == null
+                    || ticket.UpdatedAt == retry.TriggerTicketUpdatedAt));
+            if (!triggerIsCurrent)
+            {
+                retry.Status = ColumnExecutionStatus.Cancelled;
+                retry.AvailableAt = null;
+                retry.EndedAt = DateTime.UtcNow;
+                retry.ContextRejectionReason = "stale_trigger_context";
+                retry.Error = "stale_trigger_context: le ticket a quitté la colonne déclencheuse ou son contexte a changé.";
+                continue;
+            }
             retry.Status = ColumnExecutionStatus.Running;
             retry.Attempt++;
             retry.AvailableAt = null;
             retry.Error = null;
             await db.SaveChangesAsync();
+            await retryTransaction.CommitAsync();
             return retry;
         }
+        await db.SaveChangesAsync();
+        await retryTransaction.CommitAsync();
 
         var activeTicketIds = db.ColumnExecutions
             .Where(e => e.Status == ColumnExecutionStatus.Running

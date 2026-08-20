@@ -241,6 +241,82 @@ public sealed class ColumnExecutionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Retry_is_cancelled_when_ticket_left_triggering_column()
+    {
+        var project = await _projects.CreateProjectAsync("Stale retry column");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: pipeline.Id);
+        var elsewhere = await _columns.CreateColumnAsync(project.Slug, "Technical review", pipelineId: pipeline.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Done", pipelineId: pipeline.Id, role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, target.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Moved during backoff", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var first = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+        await _executions.FailAttemptAsync(project.Slug, first!, processor, "timeout", processor.Name);
+
+        await _tickets.MoveTicketAsync(project.Slug, ticket.Id, elsewhere.Name, processor.Name);
+        var retry = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow.AddMinutes(1));
+
+        Assert.Null(retry);
+        var cancelled = Assert.Single(await _executions.ListAsync(project.Slug, ticket.Id));
+        Assert.Equal(ColumnExecutionStatus.Cancelled, cancelled.Status);
+        Assert.Equal("stale_trigger_context", cancelled.ContextRejectionReason);
+        Assert.Contains("quitté la colonne déclencheuse", cancelled.Error);
+        Assert.NotNull(cancelled.EndedAt);
+        Assert.Null(cancelled.AvailableAt);
+        Assert.Equal(1, cancelled.Attempt);
+    }
+
+    [Fact]
+    public async Task Retry_still_runs_when_trigger_context_is_unchanged()
+    {
+        var project = await _projects.CreateProjectAsync("Current retry context");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: pipeline.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Done", pipelineId: pipeline.Id, role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, target.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Retry safely", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var first = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+        await _executions.FailAttemptAsync(project.Slug, first!, processor, "timeout", processor.Name);
+
+        var retry = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow.AddMinutes(1));
+
+        Assert.NotNull(retry);
+        Assert.Equal(first!.Id, retry.Id);
+        Assert.Equal(ColumnExecutionStatus.Running, retry.Status);
+        Assert.Equal(2, retry.Attempt);
+        Assert.Null(retry.ContextRejectionReason);
+        Assert.Equal(source.Id, (await _tickets.GetTicketAsync(project.Slug, ticket.Id))!.ColumnId);
+    }
+
+    [Fact]
+    public async Task Retry_is_cancelled_when_ticket_context_changed_in_same_column()
+    {
+        var project = await _projects.CreateProjectAsync("Stale retry version");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: pipeline.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Done", pipelineId: pipeline.Id, role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, target.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Edited during backoff", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var first = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+        await _executions.FailAttemptAsync(project.Slug, first!, processor, "timeout", processor.Name);
+
+        await _tickets.UpdateTicketAsync(project.Slug, ticket.Id, description: "New requirements");
+        var replacement = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow.AddMinutes(1));
+
+        Assert.NotNull(replacement);
+        Assert.NotEqual(first!.Id, replacement.Id);
+        Assert.Equal(1, replacement.Attempt);
+        var cancelled = Assert.Single(await _executions.ListAsync(project.Slug, ticket.Id),
+            execution => execution.Id == first.Id);
+        Assert.Equal(ColumnExecutionStatus.Cancelled, cancelled.Status);
+        Assert.Equal("stale_trigger_context", cancelled.ContextRejectionReason);
+        Assert.Equal(1, cancelled.Attempt);
+    }
+
+    [Fact]
     public async Task Parent_waits_for_blocking_children_then_becomes_eligible()
     {
         var project = await _projects.CreateProjectAsync("Children");
