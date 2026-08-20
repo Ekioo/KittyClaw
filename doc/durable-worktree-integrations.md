@@ -2,7 +2,7 @@
 
 ## Purpose
 
-When project worktrees are enabled, KittyClaw keeps the primary checkout read-only. Ticket work is written to the root ticket worktree; background durable writes such as memories, lessons, and dashboard outputs use a serialized maintenance worktree. Both kinds of work are integrated through a persistent queue, so a restart cannot silently forget pending changes.
+When project worktrees are enabled, KittyClaw keeps the primary checkout read-only. Ticket work is written to the root ticket worktree; background durable writes such as memories, lessons, and dashboard outputs use a serialized maintenance worktree. Both kinds of work are integrated through a persistent queue, so a restart cannot silently forget pending changes. Disabling worktrees prevents new worktree creation but does not disable recovery and finalization of terminal-ticket worktrees that Git already has registered.
 
 The queue never modifies a target branch while its primary checkout has local changes. Isolated runs continue, while the integration becomes `BlockedByExternalChanges` and remains visible on the project tile. The background reconciler retries it after the external changes are resolved. It also discovers registered worktrees for terminal root tickets after startup and queues them without creating missing worktrees.
 
