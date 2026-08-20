@@ -26,6 +26,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
     private readonly ConcurrentDictionary<string, Task> _activeProcessors = new();
     private readonly SemaphoreSlim _wake = new(0);
     internal Func<Task>? BeforeFinalSuccessValidationAsync { get; set; }
+    internal TimeSpan PeriodicSweepInterval { get; set; } = TimeSpan.FromSeconds(10);
 
     public ColumnProcessingEngine(
         ProjectService projects, TicketService tickets, ColumnProcessorService processors,
@@ -70,15 +71,23 @@ public sealed class ColumnProcessingEngine : BackgroundService
             if (!project.IsPaused) Signal(project.Slug);
         }
 
+        var nextPeriodicSweepAt = DateTime.UtcNow.Add(PeriodicSweepInterval);
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await _wake.WaitAsync(TimeSpan.FromSeconds(10), stoppingToken);
-                // Periodic recovery also discovers processor edits and due retries.
-                if (_pendingProjects.IsEmpty)
+                var now = DateTime.UtcNow;
+                var untilSweep = nextPeriodicSweepAt - now;
+                await _wake.WaitAsync(untilSweep > TimeSpan.Zero ? untilSweep : TimeSpan.Zero, stoppingToken);
+                now = DateTime.UtcNow;
+                // A real clock-based sweep prevents a busy project from keeping the pending
+                // dictionary non-empty and starving due retries in otherwise quiet projects.
+                if (now >= nextPeriodicSweepAt)
+                {
                     foreach (var project in (await _projects.ListProjectsAsync()).Where(p => !p.IsPaused))
                         _pendingProjects[project.Slug] = 0;
+                    nextPeriodicSweepAt = now.Add(PeriodicSweepInterval);
+                }
 
                 foreach (var slug in _pendingProjects.Keys)
                 {
