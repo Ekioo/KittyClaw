@@ -578,16 +578,22 @@ public sealed class AgentRunner
     private static async Task<string> CaptureRepositoryStateAsync(
         string repositoryPath, CancellationToken cancellationToken)
     {
-        // Session/debug state is intentionally written by the orchestrator, not by the agent
-        // subprocess. Exclude that control-plane directory while guarding published source files.
+        // Session/debug state and consolidated agent memory are intentionally written by the
+        // orchestrator, not by the ticket subprocess. Exclude those control-plane paths so a
+        // background consolidation pass cannot invalidate an otherwise isolated worktree run.
+        // All project source and agent definitions remain protected by the fingerprint.
+        const string exclusions =
+            "\":(exclude).agents/channel/**\" " +
+            "\":(exclude).agents/**/memory/**\" " +
+            "\":(exclude).agents/*/memory.md\"";
         var status = await ProcessRunner.RunAsync("git",
-            "status --porcelain=v1 --untracked-files=all -- . \":(exclude).agents/channel/**\"",
+            $"status --porcelain=v1 --untracked-files=all -- . {exclusions}",
             repositoryPath, TimeSpan.FromSeconds(30), ct: cancellationToken);
         var diff = await ProcessRunner.RunAsync("git",
-            "diff --binary HEAD -- . \":(exclude).agents/channel/**\"",
+            $"diff --binary HEAD -- . {exclusions}",
             repositoryPath, TimeSpan.FromSeconds(30), ct: cancellationToken);
         var untracked = await ProcessRunner.RunAsync("git",
-            "ls-files -z --others --exclude-standard -- . \":(exclude).agents/channel/**\"",
+            $"ls-files -z --others --exclude-standard -- . {exclusions}",
             repositoryPath, TimeSpan.FromSeconds(30), ct: cancellationToken);
         if (!status.Success || !diff.Success || !untracked.Success)
         {

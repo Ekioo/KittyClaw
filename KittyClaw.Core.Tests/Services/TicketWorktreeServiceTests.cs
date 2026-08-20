@@ -174,6 +174,50 @@ public sealed class TicketWorktreeServiceTests
     }
 
     [Fact]
+    public async Task TicketRun_IgnoresOrchestratorMemoryConsolidationInPrimaryRepository()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.Tickets.CreateTicketAsync(fixture.ProjectSlug, "Memory consolidation overlap");
+        var scenarios = Path.Combine(fixture.Root.Path, "scenarios");
+        Directory.CreateDirectory(scenarios);
+        await File.WriteAllTextAsync(Path.Combine(scenarios, "worktree-memory-delay.ndjson"), string.Join('\n',
+        [
+            "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"{{session_id}}\",\"model\":\"mock\"}",
+            "{\"_meta\":{\"delay_ms\":1000}}",
+            "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":1000,\"num_turns\":1}",
+        ]));
+        TestSkillBuilder.Create(fixture.Repository, "worktree-agent", scenario: "worktree-memory-delay");
+        var memoryDirectory = Path.Combine(fixture.Repository, ".agents", "processors", "column-25", "memory");
+        Directory.CreateDirectory(memoryDirectory);
+        var memoryFile = Path.Combine(memoryDirectory, "MEMORY.md");
+        await File.WriteAllTextAsync(memoryFile, "before");
+        var launched = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var runner = new AgentRunner(new SessionRegistry(), new AgentRunRegistry(), new RunConcurrencyGate(1),
+            NullLogger<AgentRunner>.Instance, worktrees: fixture.Worktrees);
+
+        var running = runner.RunAsync(new AgentRunContext
+        {
+            ProjectSlug = fixture.ProjectSlug,
+            WorkspacePath = fixture.Repository,
+            AgentName = "worktree-agent",
+            SkillFile = "worktree-agent/SKILL.md",
+            TicketId = ticket.Id,
+            MaxTurns = 1,
+            Env = new Dictionary<string, string> { ["KITTYCLAW_MOCK_SCENARIOS_DIR"] = scenarios },
+            OnEventHook = e =>
+            {
+                if (e.Kind == "launch") launched.TrySetResult();
+            },
+        }, CancellationToken.None);
+        await launched.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await File.WriteAllTextAsync(memoryFile, "after");
+        var run = await running.WaitAsync(TimeSpan.FromSeconds(30));
+
+        Assert.Equal(AgentRunStatus.Completed, run.Status);
+        Assert.DoesNotContain(run.SnapshotBuffer(), e => e.Text.Contains("Worktree boundary violation"));
+    }
+
+    [Fact]
     public void InternalRetries_PreserveResolvedWorktree()
     {
         var context = new AgentRunContext
