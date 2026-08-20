@@ -283,8 +283,10 @@ public sealed class ColumnExecutionServiceTests : IDisposable
         var secondChild = await _tickets.CreateTicketAsync(project.Slug, "Second child", status: childWork.Name,
             parentId: parent.Id, pipelineId: childPipeline.Id, columnId: childWork.Id, blocksParent: true);
 
-        await _executions.CompleteAsync(project.Slug, execution!, processor,
-            new ColumnAgentResult("wait_for_children", []), "column-agent");
+        var waitingResult = new ColumnAgentResult("wait_for_children", []);
+        await _executions.SaveAgentResultAsync(project.Slug, execution!, waitingResult);
+        await _executions.SetCapitalizationAsync(project.Slug, execution!, MemoryCapitalizationStatus.Succeeded);
+        await _executions.CompleteAsync(project.Slug, execution!, processor, waitingResult, "column-agent");
         await _tickets.UpdateTicketAsync(project.Slug, firstChild.Id, status: childDone.Name);
         await _tickets.UpdateTicketAsync(project.Slug, secondChild.Id, status: childDone.Name);
 
@@ -292,6 +294,9 @@ public sealed class ColumnExecutionServiceTests : IDisposable
         Assert.NotNull(resumed);
         Assert.Equal(execution!.Id, resumed.Id);
         Assert.Equal(parent.Id, resumed.TicketId);
+        Assert.False(resumed.AgentCompleted);
+        Assert.Null(resumed.AgentResult);
+        Assert.Equal(MemoryCapitalizationStatus.Pending, resumed.CapitalizationStatus);
     }
 
     [Fact]

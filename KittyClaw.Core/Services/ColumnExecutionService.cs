@@ -115,6 +115,18 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             if (successCount != childColumnIds.Count) continue;
             candidate.Status = ColumnExecutionStatus.Running;
             candidate.Attempt++;
+            // The previous agent result is necessarily `wait_for_children`. Replaying that
+            // durable checkpoint after the children have finished would put the execution
+            // straight back into WaitingForChildren and create a tight claim/complete loop.
+            // Clear the agent checkpoint so the processor resumes with the completed child
+            // context and can choose its next route. Completed actions stay checkpointed.
+            candidate.AgentCompleted = false;
+            candidate.AgentResult = null;
+            candidate.Outcome = null;
+            candidate.Summary = null;
+            candidate.CapitalizationStatus = MemoryCapitalizationStatus.Pending;
+            candidate.CapitalizationError = null;
+            candidate.CapitalizedAt = null;
             candidate.Error = null;
             await db.SaveChangesAsync();
             return candidate;
