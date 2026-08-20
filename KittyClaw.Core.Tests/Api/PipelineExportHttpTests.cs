@@ -124,6 +124,110 @@ public sealed class PipelineExportHttpTests : IClassFixture<PipelineExportHttpTe
     }
 
     [Fact]
+    public async Task End_to_end_kit_is_sanitized_portable_remapped_and_never_executes_content()
+    {
+        var (sourceSlug, pipelineId, sourceColumnId, targetColumnId) =
+            await CreatePipelineAsync("Portable source");
+        var secretValue = "vault-only-" + Guid.NewGuid().ToString("N");
+        var secret = await _client.PutAsJsonAsync($"/api/projects/{sourceSlug}/secrets/DEPLOY_TOKEN",
+            new { value = secretValue });
+        secret.EnsureSuccessStatusCode();
+        var skill = await _client.PostAsJsonAsync($"/api/projects/{sourceSlug}/project-skills", new
+        {
+            name = "Portable verifier",
+            description = "Complete embedded project skill",
+            instructions = "Verify {{input.REGION}} using {{secret.TOKEN}} without side effects."
+        });
+        skill.EnsureSuccessStatusCode();
+        var skillSlug = (await skill.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("slug").GetString()!;
+        var processorSave = await _client.PutAsJsonAsync($"/api/projects/{sourceSlug}/columns/{sourceColumnId}/processor", new
+        {
+            name = "Portable worker",
+            mission = "Deploy {{input.REGION}} with {{secret.TOKEN}}.",
+            prompt = "Keep the workflow portable.",
+            enabled = true,
+            availableSkills = new[] { skillSlug },
+            recommendedSkills = new[] { skillSlug },
+            requiredSkills = new[] { skillSlug },
+            routes = new[] { new { outcome = "completed", targetColumnId } },
+            beforeActions = new object[]
+            {
+                new { id = "no-shell", action = new { type = "executePowerShell", script = "throw 'pipeline kit content must not execute'" } },
+                new { id = "no-network", action = new { type = "httpRequest", method = "POST", url = "https://127.0.0.1:1/must-not-run" } },
+            },
+            afterActions = Array.Empty<object>(),
+        });
+        processorSave.EnsureSuccessStatusCode();
+
+        var kit = await _client.GetByteArrayAsync($"/api/projects/{sourceSlug}/pipelines/{pipelineId}/export");
+        using (var zip = new ZipArchive(new MemoryStream(kit), ZipArchiveMode.Read))
+        {
+            var names = zip.Entries.Select(entry => entry.FullName).Order().ToArray();
+            Assert.Equal(new[]
+            {
+                "manifest.json", "pipeline.json", $"skills/{skillSlug}/skill.json",
+                $"skills/{skillSlug}/SKILL.md",
+            }, names);
+            var allText = string.Join("\n", zip.Entries.Select(ReadEntry));
+            Assert.DoesNotContain(secretValue, allText, StringComparison.Ordinal);
+            Assert.DoesNotContain("ticket", allText, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("agentCost", allText, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("workspacePath", allText, StringComparison.OrdinalIgnoreCase);
+            var portable = JsonDocument.Parse(ReadEntry(zip.GetEntry("pipeline.json")!)).RootElement;
+            Assert.All(portable.GetProperty("columns").EnumerateArray(), column =>
+            {
+                Assert.False(column.TryGetProperty("id", out _));
+                Assert.False(column.TryGetProperty("pipelineId", out _));
+            });
+        }
+        var targetCreate = await _client.PostAsJsonAsync("/api/projects", new CreateProjectRequest("Portable target"));
+        targetCreate.EnsureSuccessStatusCode();
+        var targetSlug = (await targetCreate.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("slug").GetString()!;
+        var targetSecret = await _client.PutAsJsonAsync($"/api/projects/{targetSlug}/secrets/DEPLOY_TOKEN",
+            new { value = "target-only-" + Guid.NewGuid().ToString("N") });
+        targetSecret.EnsureSuccessStatusCode();
+        var targetDefaultPipeline = (await _client.GetFromJsonAsync<JsonElement[]>(
+            $"/api/projects/{targetSlug}/pipelines"))![0].GetProperty("id").GetInt32();
+        for (var i = 0; i < 2; i++)
+        {
+            var decoy = await _client.PostAsJsonAsync($"/api/projects/{targetSlug}/columns",
+                new { name = $"Target-only {i}", pipelineId = targetDefaultPipeline });
+            decoy.EnsureSuccessStatusCode();
+        }
+        using var analyzeBody = new ByteArrayContent(kit);
+        analyzeBody.Headers.ContentType = new("application/zip");
+        var analyze = await _client.PostAsync($"/api/projects/{targetSlug}/pipeline-kits/analyze", analyzeBody);
+        analyze.EnsureSuccessStatusCode();
+
+        using var form = new MultipartFormDataContent();
+        form.Add(new ByteArrayContent(kit), "kit", "portable.kittyclaw-pipeline");
+        form.Add(new StringContent(JsonSerializer.Serialize(new
+        {
+            parameters = new { REGION = "eu-west" },
+            secretBindings = new { TOKEN = "DEPLOY_TOKEN" },
+            approvals = new[] { "executePowerShell", "httpRequest" },
+        }), Encoding.UTF8, "application/json"), "confirmation");
+        var confirm = await _client.PostAsync($"/api/projects/{targetSlug}/pipeline-kits/confirm", form);
+        Assert.True(confirm.StatusCode == HttpStatusCode.Created,
+            $"Expected 201 Created, got {(int)confirm.StatusCode}: {await confirm.Content.ReadAsStringAsync()}");
+
+        var installed = await confirm.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(installed.GetProperty("enabled").GetBoolean());
+        var installedColumns = installed.GetProperty("columns").EnumerateArray().ToArray();
+        var importedSourceId = installedColumns.Single(column => column.GetProperty("key").GetString() == "entree")
+            .GetProperty("columnId").GetInt32();
+        var importedTargetId = installedColumns.Single(column => column.GetProperty("key").GetString() == "sortie")
+            .GetProperty("columnId").GetInt32();
+        Assert.NotEqual(sourceColumnId, importedSourceId);
+        Assert.NotEqual(targetColumnId, importedTargetId);
+        var importedProcessor = await _client.GetFromJsonAsync<JsonElement>(
+            $"/api/projects/{targetSlug}/columns/{importedSourceId}/processor");
+        Assert.Equal(importedTargetId,
+            importedProcessor.GetProperty("routes")[0].GetProperty("targetColumnId").GetInt32());
+        Assert.Equal(skillSlug, importedProcessor.GetProperty("requiredSkills")[0].GetString());
+    }
+
+    [Fact]
     public async Task Tampered_kit_is_rejected_without_creating_a_pipeline()
     {
         var (sourceSlug, pipelineId, source, target) = await CreatePipelineAsync("Tamper source");
@@ -186,6 +290,12 @@ public sealed class PipelineExportHttpTests : IClassFixture<PipelineExportHttpTe
             }
         }
         return output.ToArray();
+    }
+
+    private static string ReadEntry(ZipArchiveEntry entry)
+    {
+        using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
+        return reader.ReadToEnd();
     }
 
     public sealed class ApiFactory : WebApplicationFactory<CreateProjectRequest>
