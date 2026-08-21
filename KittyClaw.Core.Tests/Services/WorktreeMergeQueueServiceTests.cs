@@ -221,6 +221,38 @@ public sealed class WorktreeMergeQueueServiceTests
     }
 
     [Fact]
+    public async Task StartupRecovery_IntegratesRegisteredLegacyChildWorktreeForTerminalRoot()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var root = await fixture.Tickets.CreateTicketAsync(fixture.Slug, "Root ticket");
+        var child = await fixture.Tickets.CreateTicketAsync(fixture.Slug, "Legacy child", parentId: root.Id);
+        var worktreesDirectory = Path.Combine(Path.GetDirectoryName(fixture.Repository)!,
+            $"{Path.GetFileName(fixture.Repository)}.worktrees");
+        var legacyPath = Path.Combine(worktreesDirectory, $"ticket-{child.Id}");
+        Directory.CreateDirectory(worktreesDirectory);
+        Git(fixture.Repository, true, "worktree", "add", "-b", $"ticket/{child.Id}", legacyPath, "integration");
+        await File.WriteAllTextAsync(Path.Combine(legacyPath, "legacy-child.txt"), "preserve me");
+        Git(legacyPath, true, "add", "legacy-child.txt");
+        Git(legacyPath, true, "commit", "-m", "legacy child delivery");
+        await fixture.Tickets.MoveTicketAsync(fixture.Slug, root.Id, "Done", "test");
+
+        var recovered = await fixture.Queue.RecoverTerminalWorktreesAsync(fixture.Slug, CancellationToken.None);
+        var pending = Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+        var completed = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(1, recovered);
+        Assert.Equal(root.Id, pending.RootTicketId);
+        Assert.Equal(child.Id, pending.TicketId);
+        Assert.Equal(Path.GetFullPath(legacyPath), Path.GetFullPath(pending.WorktreePath));
+        Assert.Equal($"ticket/{child.Id}", pending.SourceBranch);
+        Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
+        Assert.Equal("preserve me", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "legacy-child.txt")));
+        Assert.False(Directory.Exists(legacyPath));
+        Assert.NotEqual(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet",
+            $"refs/heads/ticket/{child.Id}").ExitCode);
+    }
+
+    [Fact]
     public async Task RecoveryAfterWorktreesAreDisabled_FinalizesSafeTerminalWorktree()
     {
         using var fixture = await Fixture.CreateAsync();

@@ -95,10 +95,11 @@ public sealed partial class WorktreeMergeQueueService(
     }
 
     public async Task<WorktreeMergeRequest> EnqueueAsync(string projectSlug, int ticketId, CancellationToken ct)
-        => await EnqueueAsync(projectSlug, ticketId, allowDisabledProject: false, ct);
+        => await EnqueueAsync(projectSlug, ticketId, allowDisabledProject: false, ct, registeredWorktree: null);
 
     private async Task<WorktreeMergeRequest> EnqueueAsync(
-        string projectSlug, int ticketId, bool allowDisabledProject, CancellationToken ct)
+        string projectSlug, int ticketId, bool allowDisabledProject, CancellationToken ct,
+        TicketWorktree? registeredWorktree)
     {
         var project = await projects.GetProjectAsync(projectSlug)
             ?? throw new InvalidOperationException($"Project '{projectSlug}' does not exist.");
@@ -108,13 +109,15 @@ public sealed partial class WorktreeMergeQueueService(
         await EnsureTableAsync(db);
         var rootTicketId = await worktrees.ResolveRootTicketIdAsync(projectSlug, ticketId);
         var existing = await ReadByRootAsync(db, rootTicketId);
-        TicketWorktreeState? inspected = null;
+        TicketWorktreeState? inspected = registeredWorktree is null
+            ? null
+            : InspectRegisteredWorktree(registeredWorktree, rootTicketId);
         if (existing is not null)
         {
             if (existing.Status != WorktreeMergeStatus.Completed)
                 return existing;
 
-            inspected = await worktrees.InspectAsync(projectSlug, ticketId);
+            inspected ??= await worktrees.InspectAsync(projectSlug, ticketId);
             if (inspected is not { Exists: true })
                 return existing;
 
@@ -143,7 +146,11 @@ public sealed partial class WorktreeMergeQueueService(
             }
         }
         TicketWorktree? worktree;
-        if (inspected is { Exists: true })
+        if (registeredWorktree is not null && inspected is { Exists: true })
+        {
+            worktree = registeredWorktree with { RootTicketId = rootTicketId };
+        }
+        else if (inspected is { Exists: true })
         {
             worktree = new TicketWorktree(inspected.Path, inspected.Branch, inspected.RootTicketId,
                 projects.ResolveRepositoryPath(project));
@@ -174,7 +181,7 @@ public sealed partial class WorktreeMergeQueueService(
     }
 
     /// <summary>
-    /// Discovers canonical worktrees left behind for root tickets that are already terminal.
+    /// Discovers registered worktrees left behind for ticket families that are already terminal.
     /// Inspection is deliberately non-creating: recovery must never manufacture a worktree for
     /// an old completed ticket merely because its queue row is absent.
     /// </summary>
@@ -186,15 +193,18 @@ public sealed partial class WorktreeMergeQueueService(
 
         var recovered = await RecoverMaintenanceWorktreeAsync(projectSlug, project, ct);
         var terminalRoots = (await worktrees.ListTerminalRootTicketsAsync(projectSlug))
-            .Distinct()
-            .ToList();
-        foreach (var ticketId in terminalRoots)
+            .ToHashSet();
+        foreach (var registered in await worktrees.ListRegisteredAsync(projectSlug))
         {
             ct.ThrowIfCancellationRequested();
-            if (await IsBusyAsync(projectSlug, ticketId)) continue;
-            var state = await worktrees.InspectAsync(projectSlug, ticketId);
-            if (state is not { Exists: true }) continue;
-            await EnqueueAsync(projectSlug, ticketId, allowDisabledProject: true, ct);
+            var ticketId = registered.RootTicketId;
+            int rootTicketId;
+            try { rootTicketId = await worktrees.ResolveRootTicketIdAsync(projectSlug, ticketId); }
+            catch (InvalidOperationException) { continue; }
+            if (!terminalRoots.Contains(rootTicketId) || await IsBusyAsync(projectSlug, rootTicketId))
+                continue;
+            await EnqueueAsync(projectSlug, ticketId, allowDisabledProject: true, ct,
+                registered with { RootTicketId = rootTicketId });
             recovered++;
         }
         return recovered;
@@ -685,6 +695,21 @@ public sealed partial class WorktreeMergeQueueService(
             .Where(line => line.StartsWith("worktree ", StringComparison.Ordinal))
             .Select(line => Path.GetFullPath(line[9..].Trim()).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
             .Any(path => string.Equals(path, expected, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static TicketWorktreeState InspectRegisteredWorktree(TicketWorktree worktree, int rootTicketId)
+    {
+        if (!Directory.Exists(worktree.Path))
+            return new(worktree.Path, worktree.Branch, rootTicketId, false, false, null);
+        var branch = RunGit(worktree.Path, ["branch", "--show-current"], false);
+        if (branch.ExitCode != 0)
+            return new(worktree.Path, worktree.Branch, rootTicketId, true, false, branch.Error.Trim());
+        if (!string.Equals(branch.Output.Trim(), worktree.Branch, StringComparison.Ordinal))
+            return new(worktree.Path, worktree.Branch, rootTicketId, true, false,
+                $"Registered on {branch.Output.Trim()}, expected {worktree.Branch}.");
+        var status = RunGit(worktree.Path, ["status", "--porcelain"], false);
+        return new(worktree.Path, worktree.Branch, rootTicketId, true,
+            !string.IsNullOrWhiteSpace(status.Output), status.ExitCode == 0 ? null : status.Error.Trim());
     }
 
     private static void RemoveEmptyResidualDirectory(string path)
