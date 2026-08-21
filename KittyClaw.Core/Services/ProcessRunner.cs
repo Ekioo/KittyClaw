@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using KittyClaw.Core.Automation;
 
 namespace KittyClaw.Core.Services;
 
@@ -38,6 +39,7 @@ public static class ProcessRunner
             };
             using var proc = Process.Start(psi);
             if (proc is null) return false;
+            using var job = ProcessJobObject.TryCreateAndAssign(proc);
             // Drain pipes via internal thread pool to prevent buffer-fill deadlock.
             proc.BeginOutputReadLine();
             proc.BeginErrorReadLine();
@@ -81,6 +83,7 @@ public static class ProcessRunner
 
         using var proc = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start '{fileName}' process");
+        using var job = ProcessJobObject.TryCreateAndAssign(proc);
 
         // Killing the process (below) closes its pipe ends, so these reads always complete.
         var stdoutTask = proc.StandardOutput.ReadToEndAsync(CancellationToken.None);
