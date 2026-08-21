@@ -41,6 +41,7 @@ This is the legacy, backward-compatible automation system. New business-state wo
 ## External process lifecycle and isolation
 - Every detached `executePowerShell` action is represented by a persisted run. Its execution worktree and branch are emitted as an `execution_workspace` event and exposed as the run working directory.
 - With worktrees enabled, ticket-backed actions use the canonical ticket worktree and ticketless scheduled actions use the serialized maintenance worktree. Unrestricted script changes are preserved for review; they are never committed directly to the primary checkout.
+- `versionedWritePaths` declares the project-relative paths a successful PowerShell action may integrate automatically. The default is conservative (`.agents`, `tools`, `scripts`); an unexpected path or probable secret remains visible as a review-required maintenance write. A successful no-op reuses the clean maintenance worktree without creating an alert or another queue row.
 - Stop, project pause, and hosted-service shutdown cancel the run and wait for bounded cleanup. On Windows, a kill-on-close Job Object owns the descendant tree; other platforms use `Kill(entireProcessTree)` as fallback. Repeated cancellation is idempotent.
 - Persisted runs found active after restart are reconciled to `Stopped`; KittyClaw never reconnects to or replays an old operating-system process.
 

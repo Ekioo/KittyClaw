@@ -173,8 +173,20 @@ public sealed partial class WorktreeMergeQueueService(
         await EnsureTableAsync(db);
         const int maintenanceRoot = int.MinValue;
         var existing = await ReadByRootAsync(db, maintenanceRoot);
-        if (existing is not null && existing.Status != WorktreeMergeStatus.Completed)
+        if (existing is not null)
         {
+            if (existing.Status == WorktreeMergeStatus.Completed)
+            {
+                var baseline = RunGit(worktreePath, ["rev-parse", "HEAD"]).Output.Trim();
+                await db.Database.ExecuteSqlInterpolatedAsync($"""
+                    UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.CommitPending},
+                        Checkpoint = {(int)WorktreeMergeCheckpoint.Writing}, SourceCommit = {baseline},
+                        IntegratedCommit = NULL, Error = NULL, ConflictFiles = NULL,
+                        LocalIntegratedAt = NULL, RemotePublishedAt = NULL, UpdatedAt = {DateTime.UtcNow}
+                    WHERE Id = {existing.Id}
+                    """);
+                existing = (await ReadByIdAsync(db, existing.Id))!;
+            }
             _activeMaintenanceWrites.TryAdd(existing.Id, 0);
             return existing;
         }
@@ -199,6 +211,36 @@ public sealed partial class WorktreeMergeQueueService(
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Pending},
                 Checkpoint = {(int)WorktreeMergeCheckpoint.Waiting}, SourceCommit = {sourceCommit}, Error = NULL, UpdatedAt = {DateTime.UtcNow}
+            WHERE Id = {requestId} AND TicketId = 0
+            """);
+    }
+
+    public async Task MarkMaintenanceNoChangesAsync(string projectSlug, long requestId, string sourceCommit)
+    {
+        await using var db = projects.GetProjectDb(projectSlug);
+        await EnsureTableAsync(db);
+        var request = await ReadByIdAsync(db, requestId);
+        if (request is null || request.JobKind != WorktreeMergeJobKind.Maintenance)
+            return;
+        if (request.Status != WorktreeMergeStatus.CommitPending)
+            return;
+        if (!string.Equals(request.SourceCommit, sourceCommit, StringComparison.Ordinal))
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Pending},
+                    Checkpoint = {(int)WorktreeMergeCheckpoint.Waiting}, SourceCommit = {sourceCommit},
+                    Error = 'Recovered committed maintenance write while finalizing a no-op',
+                    UpdatedAt = {DateTime.UtcNow}
+                WHERE Id = {requestId} AND TicketId = 0
+                """);
+            return;
+        }
+        var now = DateTime.UtcNow;
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Completed},
+                Checkpoint = {(int)WorktreeMergeCheckpoint.Merge}, SourceCommit = {sourceCommit},
+                IntegratedCommit = {sourceCommit}, Error = NULL, ConflictFiles = NULL,
+                LocalIntegratedAt = {now}, UpdatedAt = {now}
             WHERE Id = {requestId} AND TicketId = 0
             """);
     }
@@ -432,21 +474,25 @@ public sealed partial class WorktreeMergeQueueService(
             var integrated = request.SourceCommit ?? RunGit(repository, ["rev-parse", request.TargetBranch]).Output.Trim();
             if (!IsAncestor(repository, integrated, request.TargetBranch))
                 throw new InvalidOperationException($"Commit {integrated} is not reachable from {request.TargetBranch}; cleanup was stopped.");
-            if (IsRegisteredWorktree(repository, request.WorktreePath))
+            var registeredForCleanup = IsRegisteredWorktree(repository, request.WorktreePath);
+            if (registeredForCleanup && !IsClean(request.WorktreePath))
+                throw new InvalidOperationException("The source worktree has local changes; cleanup was stopped.");
+            if (request.JobKind == WorktreeMergeJobKind.Ticket
+                && registeredForCleanup)
             {
-                if (!IsClean(request.WorktreePath))
-                    throw new InvalidOperationException("The source worktree has local changes; cleanup was stopped.");
                 var removed = RunGit(repository, ["worktree", "remove", request.WorktreePath], false);
                 if (removed.ExitCode != 0 && IsRegisteredWorktree(repository, request.WorktreePath))
                     throw new InvalidOperationException($"The source worktree could not be detached: {removed.Error.Trim()}");
             }
-            if (RunGit(repository, ["show-ref", "--verify", "--quiet", $"refs/heads/{request.SourceBranch}"], false).ExitCode == 0)
+            if (request.JobKind == WorktreeMergeJobKind.Ticket
+                && RunGit(repository, ["show-ref", "--verify", "--quiet", $"refs/heads/{request.SourceBranch}"], false).ExitCode == 0)
             {
                 var deleted = RunGit(repository, ["branch", "-d", request.SourceBranch], false);
                 if (deleted.ExitCode != 0 && ResolveSourceHead(repository, request.SourceBranch) is not null)
                     throw new InvalidOperationException($"The integrated source branch could not be deleted: {deleted.Error.Trim()}");
             }
-            RemoveEmptyResidualDirectory(request.WorktreePath);
+            if (request.JobKind == WorktreeMergeJobKind.Ticket)
+                RemoveEmptyResidualDirectory(request.WorktreePath);
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Completed},
                     Checkpoint = {(int)WorktreeMergeCheckpoint.Merge}, IntegratedCommit = {integrated},

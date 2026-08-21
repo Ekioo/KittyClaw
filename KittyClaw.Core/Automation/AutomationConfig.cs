@@ -417,5 +417,11 @@ public sealed class ExecutePowerShellActionSpec : ActionSpec
     /// idempotent scripts that scan current state instead of processing one firing payload.
     /// </summary>
     public bool CoalesceOverlapping { get; set; }
+    /// <summary>
+    /// Versioned project paths that a successful script may change and that KittyClaw may
+    /// commit automatically from the isolated maintenance worktree. Unexpected paths and
+    /// probable secrets are preserved for review instead.
+    /// </summary>
+    public List<string> VersionedWritePaths { get; set; } = [".agents", "tools", "scripts"];
     public Dictionary<string, string> Env { get; set; } = new();
 }

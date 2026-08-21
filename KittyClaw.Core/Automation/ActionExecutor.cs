@@ -298,8 +298,11 @@ internal sealed class ActionExecutor
                             var backgroundRuntime = rt;
                             if (actionRun is not null && _durableWrites is not null)
                             {
+                                var versionedWritePaths = action is ExecutePowerShellActionSpec script
+                                    ? script.VersionedWritePaths
+                                    : [".agents", "tools", "scripts"];
                                 route = await _durableWrites.ResolveAsync(rt.Slug, firing.TicketId,
-                                    [".agents", "tools", "scripts"], actionCancellation!.Token);
+                                    versionedWritePaths, actionCancellation!.Token);
                                 actionRun.WorkingDirectory = route.RootPath;
                                 actionRun.Push(new(DateTime.UtcNow, "execution_workspace",
                                     $"Automation execution isolated in {route.RootPath}", route.Branch));
@@ -326,8 +329,22 @@ internal sealed class ActionExecutor
                                     actionRun.Cancellation.IsCancellationRequested || ct.IsCancellationRequested
                                         ? AgentRunStatus.Stopped : AgentRunStatus.Failed, null);
                             if (route is not null && _durableWrites is not null)
-                                await _durableWrites.PreserveExecutionAsync(rt.Slug, route,
-                                    $"Automation {automation.Id} execution preserved for review ({actionRun?.Status}).");
+                            {
+                                try
+                                {
+                                    if (actionRun?.Status == AgentRunStatus.Completed)
+                                        await _durableWrites.CommitAndQueueAsync(rt.Slug, route,
+                                            $"chore(automation): persist {automation.Id}", CancellationToken.None);
+                                    else
+                                        await _durableWrites.PreserveExecutionAsync(rt.Slug, route,
+                                            $"Automation {automation.Id} execution preserved for review ({actionRun?.Status}).");
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogWarning(ex,
+                                        "Automation durable write finalization failed for {Id}", automation.Id);
+                                }
+                            }
                             actionCancellation?.Dispose();
                             if (ownsDetachedGuard)
                                 _inFlightDetachedActions.TryRemove(guardKey, out _);

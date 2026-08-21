@@ -80,7 +80,12 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
         if (secrets.Length > 0) return Task.FromResult(new DurableWriteValidationResult(DurableWriteValidationStatus.SecretBlocked, [], secrets));
         foreach (var allowed in route.AllowedPaths)
         {
-            var add = RunGit(route.RootPath, ["add", "--", allowed], false);
+            var exists = File.Exists(Path.Combine(route.RootPath, allowed))
+                || Directory.Exists(Path.Combine(route.RootPath, allowed));
+            var tracked = !string.IsNullOrWhiteSpace(
+                RunGit(route.RootPath, ["ls-files", "--", allowed], false).Output);
+            if (!exists && !tracked) continue;
+            var add = RunGit(route.RootPath, ["add", "-A", "--", allowed], false);
             if (add.ExitCode != 0) return Task.FromResult(new DurableWriteValidationResult(DurableWriteValidationStatus.NeedsReview, [], [], add.Error.Trim()));
         }
         return Task.FromResult(new DurableWriteValidationResult(DurableWriteValidationStatus.Ready, [], []));
@@ -104,8 +109,13 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
             }
 
             var staged = RunGit(route.RootPath, ["diff", "--cached", "--quiet"], false).ExitCode != 0;
-            if (staged)
-                RunGit(route.RootPath, ["commit", "-m", message]);
+            if (!staged)
+            {
+                var unchanged = RunGit(route.RootPath, ["rev-parse", "HEAD"]).Output.Trim();
+                await mergeQueue.MarkMaintenanceNoChangesAsync(projectSlug, requestId, unchanged);
+                return validation;
+            }
+            RunGit(route.RootPath, ["commit", "-m", message]);
             var commit = RunGit(route.RootPath, ["rev-parse", "HEAD"]).Output.Trim();
             await mergeQueue.MarkMaintenanceReadyAsync(projectSlug, requestId, commit);
             return validation;

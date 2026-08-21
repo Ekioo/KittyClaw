@@ -52,6 +52,34 @@ public sealed class PowerShellAutomationLifecycleIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task SuccessfulPowerShell_CommitsDeclaredPaths_AndQueuesTheirIntegration()
+    {
+        var fixture = await CreateFixtureAsync();
+        var before = Fingerprint(fixture.Repository, fixture.Sentinel);
+        var script = "New-Item -ItemType Directory -Force generated | Out-Null; Set-Content generated/result.txt durable";
+
+        await fixture.Executor.ExecuteAutomationAsync(fixture.Runtime,
+            Automation(script, ["generated"]), new TriggerFiring(null, null, null), CancellationToken.None);
+        var run = await WaitForFinishedRunAsync(fixture.Runs);
+        var request = await WaitForMergeRequestAsync(fixture.Queue, fixture.Slug,
+            WorktreeMergeStatus.Pending);
+
+        Assert.Equal(AgentRunStatus.Completed, run.Status);
+        Assert.Equal(WorktreeMergeStatus.Pending, request.Status);
+        Assert.Equal(before, Fingerprint(fixture.Repository, fixture.Sentinel));
+        Assert.True(File.Exists(Path.Combine(request.WorktreePath, "generated", "result.txt")));
+
+        var integrated = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        Assert.Equal("durable", (await File.ReadAllTextAsync(
+            Path.Combine(fixture.Repository, "generated", "result.txt"))).Trim());
+        Assert.True(Directory.Exists(request.WorktreePath));
+        Assert.Empty(Git(request.WorktreePath, "status", "--porcelain"));
+        Assert.Null(await fixture.Queue.GetAlertSummaryAsync(fixture.Slug));
+    }
+
+    [Fact]
     public async Task PauseAndServiceShutdown_CancelOnlyTheirSelectedActiveRuns_AndAreIdempotent()
     {
         var registry = new AgentRunRegistry();
@@ -199,12 +227,17 @@ public sealed class PowerShellAutomationLifecycleIntegrationTests : IDisposable
         return fixture;
     }
 
-    private static AutomationRule Automation(string script) => new()
+    private static AutomationRule Automation(string script, List<string>? versionedWritePaths = null) => new()
     {
         Id = "nightly-write",
         Enabled = true,
         Trigger = new IntervalTriggerSpec { Cron = "0 * * * *" },
-        Actions = [new ExecutePowerShellActionSpec { Script = script, TimeoutSeconds = 60 }],
+        Actions = [new ExecutePowerShellActionSpec
+        {
+            Script = script,
+            TimeoutSeconds = 60,
+            VersionedWritePaths = versionedWritePaths ?? [".agents", "tools", "scripts"],
+        }],
     };
 
     private static AgentRun NewRun(string slug, string agent) => new()
@@ -246,6 +279,32 @@ public sealed class PowerShellAutomationLifecycleIntegrationTests : IDisposable
             await Task.Delay(50);
         }
         throw new TimeoutException("The isolated PowerShell automation did not start.");
+    }
+
+    private static async Task<AgentRun> WaitForFinishedRunAsync(AgentRunRegistry runs)
+    {
+        for (var i = 0; i < 300; i++)
+        {
+            var run = runs.AllForProject("powershell-lifecycle")
+                .FirstOrDefault(r => r.AgentName.StartsWith("automation:", StringComparison.Ordinal));
+            if (run is not null && run.Status != AgentRunStatus.Running)
+                return run;
+            await Task.Delay(50);
+        }
+        throw new TimeoutException("The PowerShell automation did not finish.");
+    }
+
+    private static async Task<WorktreeMergeRequest> WaitForMergeRequestAsync(
+        WorktreeMergeQueueService queue, string slug, WorktreeMergeStatus status)
+    {
+        for (var i = 0; i < 200; i++)
+        {
+            var request = (await queue.ListAsync(slug)).SingleOrDefault();
+            if (request?.Status == status) return request;
+            await Task.Delay(50);
+        }
+        var current = (await queue.ListAsync(slug)).SingleOrDefault();
+        throw new TimeoutException($"Merge request did not reach {status}; current={current?.Status}.");
     }
 
     private static string Fingerprint(string repository, string sentinel) =>

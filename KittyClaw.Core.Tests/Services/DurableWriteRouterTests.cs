@@ -43,6 +43,34 @@ public sealed class DurableWriteRouterTests
     }
 
     [Fact]
+    public async Task SuccessfulNoOp_ReusesMaintenanceRowAndWorktreeWithoutAlert()
+    {
+        using var fixture = await Fixture.CreateAsync(withQueue: true);
+        var first = await fixture.Router.ResolveAsync(fixture.Slug, null, [".agents"]);
+
+        var firstValidation = await fixture.Router.CommitAndQueueAsync(
+            fixture.Slug, first, "chore: no-op maintenance write");
+        var firstRequest = Assert.Single(await fixture.Queue!.ListAsync(fixture.Slug));
+
+        Assert.True(firstValidation.Status == DurableWriteValidationStatus.Ready,
+            $"status={firstValidation.Status}; unexpected={string.Join(',', firstValidation.UnexpectedPaths)}; secrets={string.Join(',', firstValidation.SecretPaths)}; error={firstValidation.Error}");
+        Assert.Equal(WorktreeMergeStatus.Completed, firstRequest.Status);
+        Assert.Null(await fixture.Queue.GetAlertSummaryAsync(fixture.Slug));
+        Assert.True(Directory.Exists(first.RootPath));
+
+        var second = await fixture.Router.ResolveAsync(fixture.Slug, null, [".agents"]);
+        var secondValidation = await fixture.Router.CommitAndQueueAsync(
+            fixture.Slug, second, "chore: repeated no-op maintenance write");
+        var reused = Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+
+        Assert.Equal(DurableWriteValidationStatus.Ready, secondValidation.Status);
+        Assert.Equal(firstRequest.Id, reused.Id);
+        Assert.Equal(WorktreeMergeStatus.Completed, reused.Status);
+        Assert.Equal(first.RootPath, second.RootPath);
+        Assert.Null(await fixture.Queue.GetAlertSummaryAsync(fixture.Slug));
+    }
+
+    [Fact]
     public async Task UnexpectedPath_ReturnsNeedsReview_AndLeavesFilesUnstaged()
     {
         using var fixture = await Fixture.CreateAsync();
@@ -111,6 +139,8 @@ public sealed class DurableWriteRouterTests
 
         Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
         Assert.True(File.Exists(Path.Combine(fixture.Repository, ".agents", "programmer", "memory", "MEMORY.md")));
+        Assert.True(Directory.Exists(route.RootPath));
+        Assert.Empty(Git(route.RootPath, "status", "--porcelain"));
         Assert.Null(await fixture.Queue.GetAlertSummaryAsync(fixture.Slug));
     }
 
