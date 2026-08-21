@@ -346,6 +346,55 @@ public sealed class WorktreeMergeQueueServiceTests
     }
 
     [Fact]
+    public async Task CompletedRequest_WithNewCommittedWorktree_EnqueuesAnotherGeneration()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        var first = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        Assert.Equal(WorktreeMergeStatus.Completed,
+            (await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None))!.Status);
+        var worktree = (await fixture.Worktrees.ResolveAsync(fixture.Slug, ticket, CancellationToken.None))!;
+        await File.WriteAllTextAsync(Path.Combine(worktree.Path, "memory.md"), "durable lesson");
+        Git(worktree.Path, true, "add", "memory.md");
+        Git(worktree.Path, true, "commit", "-m", "record durable lesson");
+
+        var second = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        var completed = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.NotEqual(first.Id, second.Id);
+        Assert.Equal(WorktreeMergeStatus.Pending, second.Status);
+        Assert.Equal(second.Id, completed!.Id);
+        Assert.Equal(WorktreeMergeStatus.Completed, completed.Status);
+        Assert.Equal("durable lesson", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "memory.md")));
+        Assert.False(Directory.Exists(worktree.Path));
+    }
+
+    [Fact]
+    public async Task CompletedRequest_WithNewDirtyWorktree_EnqueuesAndFinalizesChanges()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        var first = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        Assert.Equal(WorktreeMergeStatus.Completed,
+            (await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None))!.Status);
+        var worktree = (await fixture.Worktrees.ResolveAsync(fixture.Slug, ticket, CancellationToken.None))!;
+        var relativeMemory = Path.Combine(".agents", "processors", "column-1", "memory", "MEMORY.md");
+        var memoryPath = Path.Combine(worktree.Path, relativeMemory);
+        Directory.CreateDirectory(Path.GetDirectoryName(memoryPath)!);
+        await File.WriteAllTextAsync(memoryPath, "preserve me");
+
+        var second = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        var completed = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.NotEqual(first.Id, second.Id);
+        Assert.Equal(WorktreeMergeStatus.Pending, second.Status);
+        Assert.Equal(second.Id, completed!.Id);
+        Assert.Equal(WorktreeMergeStatus.Completed, completed.Status);
+        Assert.Equal("preserve me", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, relativeMemory)));
+        Assert.False(Directory.Exists(worktree.Path));
+    }
+
+    [Fact]
     public async Task IntegratedTicketBranch_IsDeletedWhenItsTrackedRemoteRefIsStale()
     {
         using var fixture = await Fixture.CreateAsync();

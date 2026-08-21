@@ -107,9 +107,31 @@ public sealed partial class WorktreeMergeQueueService(
         await EnsureTableAsync(db);
         var rootTicketId = await worktrees.ResolveRootTicketIdAsync(projectSlug, ticketId);
         var existing = await ReadByRootAsync(db, rootTicketId);
-        if (existing is not null) return existing;
+        TicketWorktreeState? inspected = null;
+        if (existing is not null)
+        {
+            if (existing.Status != WorktreeMergeStatus.Completed)
+                return existing;
+
+            inspected = await worktrees.InspectAsync(projectSlug, ticketId);
+            if (inspected is not { Exists: true })
+                return existing;
+
+            var head = RunGit(inspected.Path, ["rev-parse", "HEAD"], false);
+            var repository = projects.ResolveRepositoryPath(project);
+            if (!inspected.IsDirty
+                && string.IsNullOrWhiteSpace(inspected.Error)
+                && head.ExitCode == 0
+                && IsAncestor(repository, head.Output.Trim(), project.IntegrationBranch))
+                return existing;
+        }
         TicketWorktree? worktree;
-        if (allowDisabledProject)
+        if (inspected is { Exists: true })
+        {
+            worktree = new TicketWorktree(inspected.Path, inspected.Branch, inspected.RootTicketId,
+                projects.ResolveRepositoryPath(project));
+        }
+        else if (allowDisabledProject)
         {
             var registered = await worktrees.InspectAsync(projectSlug, ticketId);
             worktree = registered is { Exists: true }
