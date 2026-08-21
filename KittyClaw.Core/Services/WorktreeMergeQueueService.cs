@@ -239,6 +239,8 @@ public sealed partial class WorktreeMergeQueueService(
 
     public async Task MarkMaintenanceNoChangesAsync(string projectSlug, long requestId, string sourceCommit)
     {
+        var project = await projects.GetProjectAsync(projectSlug)
+            ?? throw new InvalidOperationException($"Project '{projectSlug}' does not exist.");
         await using var db = projects.GetProjectDb(projectSlug);
         await EnsureTableAsync(db);
         var request = await ReadByIdAsync(db, requestId);
@@ -257,6 +259,22 @@ public sealed partial class WorktreeMergeQueueService(
                 """);
             return;
         }
+
+        var repository = projects.ResolveRepositoryPath(project);
+        if (string.IsNullOrWhiteSpace(project.IntegrationBranch)
+            || !IsAncestor(repository, sourceCommit, project.IntegrationBranch))
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Pending},
+                    Checkpoint = {(int)WorktreeMergeCheckpoint.Waiting}, SourceCommit = {sourceCommit},
+                    IntegratedCommit = NULL,
+                    Error = 'Recovered unintegrated maintenance commit while finalizing a no-op',
+                    LocalIntegratedAt = NULL, UpdatedAt = {DateTime.UtcNow}
+                WHERE Id = {requestId} AND TicketId = 0
+                """);
+            return;
+        }
+
         var now = DateTime.UtcNow;
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Completed},

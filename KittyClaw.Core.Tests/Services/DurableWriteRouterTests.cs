@@ -166,6 +166,38 @@ public sealed class DurableWriteRouterTests
     }
 
     [Fact]
+    public async Task NoOpMaintenanceWrite_RequeuesACommitCreatedAfterThePreviousIntegration()
+    {
+        using var fixture = await Fixture.CreateAsync(withQueue: true);
+        var initial = await fixture.Router.ResolveAsync(fixture.Slug, null, [".agents/programmer/memory"]);
+        var memory = Path.Combine(initial.RootPath, ".agents", "programmer", "memory", "MEMORY.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(memory)!);
+        await File.WriteAllTextAsync(memory, "# Initial durable memory\n");
+        await fixture.Router.CommitAndQueueAsync(fixture.Slug, initial, "chore(memory): initial");
+        Assert.Equal(WorktreeMergeStatus.Completed,
+            (await fixture.Queue!.ProcessNextAsync(fixture.Slug, CancellationToken.None))!.Status);
+
+        await File.AppendAllTextAsync(memory, "\nLate recovered lesson.\n");
+        Git(initial.RootPath, "add", ".agents/programmer/memory/MEMORY.md");
+        Git(initial.RootPath, "commit", "-m", "chore(memory): late recovered lesson");
+
+        var noOp = await fixture.Router.ResolveAsync(fixture.Slug, null, [".agents/programmer/memory"]);
+        var validation = await fixture.Router.CommitAndQueueAsync(
+            fixture.Slug, noOp, "chore(memory): no-op checkpoint");
+        var queued = Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+
+        Assert.Equal(DurableWriteValidationStatus.Ready, validation.Status);
+        Assert.Equal(WorktreeMergeStatus.Pending, queued.Status);
+        Assert.Contains("unintegrated maintenance commit", queued.Error, StringComparison.Ordinal);
+
+        var integrated = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        Assert.Contains("Late recovered lesson.",
+            await File.ReadAllTextAsync(Path.Combine(fixture.Repository, ".agents", "programmer", "memory", "MEMORY.md")));
+    }
+
+    [Fact]
     public async Task ActiveMaintenanceWrite_IsNotMistakenForAnInterruptedWrite()
     {
         using var fixture = await Fixture.CreateAsync(withQueue: true);
