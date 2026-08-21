@@ -24,6 +24,10 @@ public sealed class WorktreeMergeQueueProcessor(
                 if (stoppingToken.IsCancellationRequested) return;
                 try
                 {
+                    // Drain already durable work first. A full terminal-ticket discovery can be
+                    // expensive on old boards and must not starve a known pending integration.
+                    if (await queue.ProcessNextAsync(project.Slug, stoppingToken) is not null)
+                        continue;
                     await queue.RecoverTerminalWorktreesAsync(project.Slug, stoppingToken);
                     await queue.ProcessNextAsync(project.Slug, stoppingToken);
                 }

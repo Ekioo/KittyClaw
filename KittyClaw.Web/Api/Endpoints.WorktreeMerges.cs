@@ -15,6 +15,8 @@ public static partial class Endpoints
         });
         group.MapPost("/process-next", async (string slug, WorktreeMergeQueueService queue, CancellationToken ct) =>
         {
+            var pending = await queue.ProcessNextAsync(slug, ct);
+            if (pending is not null) return Results.Ok(pending);
             await queue.RecoverTerminalWorktreesAsync(slug, ct);
             return Results.Ok(await queue.ProcessNextAsync(slug, ct));
         });
