@@ -346,6 +346,52 @@ public sealed class WorktreeMergeQueueServiceTests
     }
 
     [Fact]
+    public async Task UnresolvedMergeConflict_IsPreservedWithoutFinalizationCommit()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "shared.txt"), "base");
+        Git(fixture.Repository, true, "add", "shared.txt");
+        Git(fixture.Repository, true, "commit", "-m", "shared base");
+        var ticket = await fixture.CreateCommittedTicketAsync("shared.txt", "ticket version");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "shared.txt"), "target version");
+        Git(fixture.Repository, true, "add", "shared.txt");
+        Git(fixture.Repository, true, "commit", "-m", "target version");
+        var headBeforeReview = Git(request.WorktreePath, true, "rev-parse", "HEAD").Output.Trim();
+        Assert.NotEqual(0, Git(request.WorktreePath, false, "merge", "integration").ExitCode);
+
+        var result = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Conflict, result!.Status);
+        Assert.Contains("shared.txt", result.ConflictFiles);
+        Assert.Contains("no finalization commit", result.Error);
+        Assert.Equal(headBeforeReview, Git(request.WorktreePath, true, "rev-parse", "HEAD").Output.Trim());
+        Assert.True(Directory.Exists(request.WorktreePath));
+        Assert.Contains("UU shared.txt", Git(request.WorktreePath, true, "status", "--short").Output);
+    }
+
+    [Fact]
+    public async Task StagedConflictMarkers_RequireReviewWithoutFinalizationCommit()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        var conflicted = Path.Combine(request.WorktreePath, "conflicted.txt");
+        await File.WriteAllTextAsync(conflicted, "<<<<<<< HEAD\ncurrent\n=======\nincoming\n>>>>>>> branch\n");
+        Git(request.WorktreePath, true, "add", "conflicted.txt");
+        var headBeforeReview = Git(request.WorktreePath, true, "rev-parse", "HEAD").Output.Trim();
+
+        var result = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.NeedsReview, result!.Status);
+        Assert.Contains("conflict markers", result.Error);
+        Assert.Contains("conflicted.txt", result.ConflictFiles);
+        Assert.Equal(headBeforeReview, Git(request.WorktreePath, true, "rev-parse", "HEAD").Output.Trim());
+        Assert.True(File.Exists(conflicted));
+        Assert.True(Directory.Exists(request.WorktreePath));
+    }
+
+    [Fact]
     public async Task CompletedRequest_WithNewCommittedWorktree_EnqueuesAnotherGeneration()
     {
         using var fixture = await Fixture.CreateAsync();

@@ -412,6 +412,16 @@ public sealed partial class WorktreeMergeQueueService(
             var worktreeIsRegistered = IsRegisteredWorktree(repository, request.WorktreePath);
             if (request.JobKind == WorktreeMergeJobKind.Ticket && worktreeIsRegistered)
             {
+                var unresolved = ConflictFiles(request.WorktreePath);
+                if (unresolved.Length > 0)
+                    return await MarkAsync(db, request.Id, WorktreeMergeStatus.Conflict,
+                        "The ticket worktree contains unresolved Git conflicts. Resolve and stage every conflict before resuming; no finalization commit was created.",
+                        string.Join('\n', unresolved));
+                var markerFiles = ConflictMarkerFiles(request.WorktreePath, request.TargetBranch);
+                if (markerFiles.Length > 0)
+                    return await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
+                        "Files containing unresolved conflict markers were preserved. Remove the markers and verify the intended content before resuming: "
+                        + string.Join(", ", markerFiles), string.Join('\n', markerFiles));
                 var preparation = PrepareTicketWorktree(request);
                 if (preparation.Error is not null)
                     return await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
@@ -715,6 +725,49 @@ public sealed partial class WorktreeMergeQueueService(
 
     private static string[] ConflictFiles(string path) => RunGit(path, ["diff", "--name-only", "--diff-filter=U"], false)
         .Output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+
+    private static string[] ConflictMarkerFiles(string worktreePath, string targetBranch)
+    {
+        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var committed = RunGit(worktreePath, ["diff", "--name-only", "-z", $"{targetBranch}...HEAD"], false);
+        foreach (var path in committed.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+            candidates.Add(path.Replace('\\', '/'));
+        var status = RunGit(worktreePath, ["status", "--porcelain", "-z", "--untracked-files=all"], false);
+        foreach (var entry in status.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+            if (entry.Length >= 4)
+                candidates.Add(entry[3..].Replace('\\', '/'));
+
+        var root = Path.GetFullPath(worktreePath) + Path.DirectorySeparatorChar;
+        return candidates.Where(path =>
+            {
+                var fullPath = Path.GetFullPath(Path.Combine(worktreePath, path));
+                return fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase)
+                    && ContainsConflictMarkers(fullPath);
+            })
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool ContainsConflictMarkers(string path)
+    {
+        if (!File.Exists(path) || new FileInfo(path).Length > 4 * 1024 * 1024) return false;
+        try
+        {
+            var left = false;
+            var separator = false;
+            var right = false;
+            foreach (var line in File.ReadLines(path))
+            {
+                left |= line.StartsWith("<<<<<<< ", StringComparison.Ordinal);
+                separator |= line.Equals("=======", StringComparison.Ordinal);
+                right |= line.StartsWith(">>>>>>> ", StringComparison.Ordinal);
+                if (left && separator && right) return true;
+            }
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        return false;
+    }
 
     private static async Task<WorktreeMergeRequest> MarkGitFailureAsync(TodoDbContext db, WorktreeMergeRequest request, GitResult result)
     {
