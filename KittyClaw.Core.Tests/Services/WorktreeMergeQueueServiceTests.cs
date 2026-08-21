@@ -285,6 +285,33 @@ public sealed class WorktreeMergeQueueServiceTests
     }
 
     [Fact]
+    public async Task Conflict_CanBeResumedAfterOperatorAlreadyCompletedTheRebase()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "shared.txt"), "target\n");
+        Git(fixture.Repository, true, "add", "shared.txt");
+        Git(fixture.Repository, true, "commit", "-m", "target change");
+        var ticket = await fixture.CreateTicketAsync();
+        var worktree = (await fixture.Worktrees.ResolveAsync(fixture.Slug, ticket, CancellationToken.None))!;
+        Git(worktree.Path, true, "reset", "--hard", "HEAD~1");
+        await File.WriteAllTextAsync(Path.Combine(worktree.Path, "shared.txt"), "source\n");
+        Git(worktree.Path, true, "add", "shared.txt");
+        Git(worktree.Path, true, "commit", "-m", "source change");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+
+        var conflict = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        Assert.Equal(WorktreeMergeStatus.Conflict, conflict!.Status);
+        await File.WriteAllTextAsync(Path.Combine(worktree.Path, "shared.txt"), "resolved\n");
+        Git(worktree.Path, true, "add", "shared.txt");
+        Git(worktree.Path, true, "-c", "core.editor=true", "rebase", "--continue");
+
+        var completed = await fixture.Queue.ResumeAsync(fixture.Slug, request.Id, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
+        Assert.Equal("resolved\n", (await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "shared.txt"))).Replace("\r\n", "\n"));
+    }
+
+    [Fact]
     public async Task ProcessingRow_IsRecoveredAfterServiceRestart()
     {
         using var fixture = await Fixture.CreateAsync();

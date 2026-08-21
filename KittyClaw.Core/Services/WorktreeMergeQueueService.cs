@@ -428,9 +428,18 @@ public sealed partial class WorktreeMergeQueueService(
                     if (unresolved.Length > 0)
                         return await MarkAsync(db, request.Id, WorktreeMergeStatus.Conflict,
                             "Resolve and stage all conflict files before resuming.", string.Join('\n', unresolved));
-                    var continued = RunGit(request.WorktreePath, ["-c", "core.editor=true", "rebase", "--continue"], false);
-                    if (continued.ExitCode != 0)
-                        return await MarkGitFailureAsync(db, request, continued);
+                    if (IsRebaseInProgress(request.WorktreePath))
+                    {
+                        var continued = RunGit(request.WorktreePath, ["-c", "core.editor=true", "rebase", "--continue"], false);
+                        if (continued.ExitCode != 0)
+                            return await MarkGitFailureAsync(db, request, continued);
+                    }
+                    else if (!IsAncestor(repository, request.TargetBranch, request.SourceBranch))
+                    {
+                        var rebased = RunGit(request.WorktreePath, ["rebase", request.TargetBranch], false);
+                        if (rebased.ExitCode != 0)
+                            return await MarkGitFailureAsync(db, request, rebased);
+                    }
                 }
                 else
                 {
@@ -509,6 +518,19 @@ public sealed partial class WorktreeMergeQueueService(
 
     private static bool IsAncestor(string repository, string commit, string target) =>
         RunGit(repository, ["merge-base", "--is-ancestor", commit, target], false).ExitCode == 0;
+
+    private static bool IsRebaseInProgress(string worktreePath)
+    {
+        foreach (var stateDirectory in new[] { "rebase-merge", "rebase-apply" })
+        {
+            var result = RunGit(worktreePath, ["rev-parse", "--git-path", stateDirectory], false);
+            if (result.ExitCode != 0) continue;
+            var path = result.Output.Trim();
+            if (!Path.IsPathRooted(path)) path = Path.Combine(worktreePath, path);
+            if (Directory.Exists(path)) return true;
+        }
+        return false;
+    }
 
     private static string? ResolveSourceHead(string repository, string sourceBranch)
     {
