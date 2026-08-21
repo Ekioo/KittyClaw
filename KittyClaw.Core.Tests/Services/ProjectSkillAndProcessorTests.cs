@@ -4,6 +4,7 @@ using KittyClaw.Core.Models;
 using KittyClaw.Core.Automation;
 using Microsoft.EntityFrameworkCore;
 using System.Diagnostics;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace KittyClaw.Core.Tests.Services;
@@ -56,7 +57,7 @@ public sealed class ProjectSkillAndProcessorTests : IDisposable
     }
 
     [Fact]
-    public async Task Listing_skills_migrates_legacy_plain_markdown_without_changing_slug_or_body()
+    public async Task Listing_skills_reads_legacy_plain_markdown_without_modifying_versioned_files()
     {
         var project = await _projects.CreateProjectAsync("Legacy project skill");
         var skill = await _skills.CreateAsync(project.Slug, "Ticket triage", "Initial body.");
@@ -64,15 +65,35 @@ public sealed class ProjectSkillAndProcessorTests : IDisposable
         await File.WriteAllTextAsync(skill.InstructionsPath, legacyBody);
         await File.WriteAllTextAsync(Path.Combine(Path.GetDirectoryName(skill.InstructionsPath)!, "skill.json"),
             "{\"Name\":\"Ticket triage\"}");
+        var metadataPath = Path.Combine(Path.GetDirectoryName(skill.InstructionsPath)!, "skill.json");
+        var originalMetadata = await File.ReadAllTextAsync(metadataPath);
 
         var migrated = Assert.Single(await _skills.ListAsync(project.Slug));
         var document = await File.ReadAllTextAsync(skill.InstructionsPath);
 
         Assert.Equal(skill.Slug, migrated.Slug);
         Assert.Equal(legacyBody, await _skills.ReadInstructionsAsync(project.Slug, skill.Slug));
-        Assert.Contains("name: ticket-triage", document);
-        Assert.Contains("description: \"Reusable ticket triage. Clarify acceptance criteria.\"", document);
-        Assert.EndsWith(legacyBody + "\n", document);
+        Assert.Equal(legacyBody, document);
+        Assert.Equal(originalMetadata, await File.ReadAllTextAsync(metadataPath));
+    }
+
+    [Fact]
+    public async Task Listing_skills_does_not_truncate_existing_versioned_descriptions()
+    {
+        var project = await _projects.CreateProjectAsync("Long project skill");
+        var skill = await _skills.CreateAsync(project.Slug, "Durable routing", "Keep writes isolated.");
+        var directory = Path.GetDirectoryName(skill.InstructionsPath)!;
+        var description = string.Join(' ', Enumerable.Repeat("complete durable routing guidance", 12));
+        var document = $"---\nname: {skill.Slug}\ndescription: {JsonSerializer.Serialize(description)}\n---\n\nKeep writes isolated.\n";
+        var metadata = JsonSerializer.Serialize(new { Name = "Durable routing", Description = description });
+        await File.WriteAllTextAsync(skill.InstructionsPath, document);
+        await File.WriteAllTextAsync(Path.Combine(directory, "skill.json"), metadata);
+
+        var listed = Assert.Single(await _skills.ListAsync(project.Slug));
+
+        Assert.EndsWith("…", listed.Description);
+        Assert.Equal(document, await File.ReadAllTextAsync(skill.InstructionsPath));
+        Assert.Equal(metadata, await File.ReadAllTextAsync(Path.Combine(directory, "skill.json")));
     }
 
     [Fact]

@@ -115,12 +115,6 @@ public sealed partial class ProjectSkillService(ProjectService projects)
         var original = await File.ReadAllTextAsync(instructionsPath);
         var parsed = ParseDocument(original);
         var description = NormalizeDescription(metadata.Description ?? parsed.Description, metadata.Name, parsed.Body);
-        var normalized = BuildDocument(slug, description, parsed.Body);
-        if (!string.Equals(original.Replace("\r\n", "\n"), normalized, StringComparison.Ordinal))
-            await WriteAtomicAsync(instructionsPath, normalized);
-        if (!string.Equals(metadata.Description, description, StringComparison.Ordinal))
-            await WriteAtomicAsync(Path.Combine(directory, "skill.json"),
-                JsonSerializer.Serialize(metadata with { Description = description }));
         return new SkillDocument(description, parsed.Body);
     }
 
