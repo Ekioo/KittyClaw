@@ -364,7 +364,10 @@ public sealed partial class WorktreeMergeQueueService(
                 && await IsBusyAsync(projectSlug, request.RootTicketId))
                 return null;
             await SetStateAsync(db, request.Id, WorktreeMergeStatus.Processing, request.Checkpoint);
-            return await IntegrateAsync(projectSlug, request, continueRebase: request.Status == WorktreeMergeStatus.Conflict, ct);
+            return await IntegrateAsync(projectSlug, request,
+                continueRebase: request.Status == WorktreeMergeStatus.Conflict
+                    || request.Checkpoint == WorktreeMergeCheckpoint.Rebase,
+                ct);
         }
         finally { gate.Release(); }
     }

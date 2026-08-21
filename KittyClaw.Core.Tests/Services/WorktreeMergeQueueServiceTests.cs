@@ -304,6 +304,12 @@ public sealed class WorktreeMergeQueueServiceTests
         await File.WriteAllTextAsync(Path.Combine(worktree.Path, "shared.txt"), "resolved\n");
         Git(worktree.Path, true, "add", "shared.txt");
         Git(worktree.Path, true, "-c", "core.editor=true", "rebase", "--continue");
+        await using (var db = fixture.Projects.GetProjectDb(fixture.Slug))
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE WorktreeMergeQueue
+                SET Status = {(int)WorktreeMergeStatus.Failed}, Checkpoint = {(int)WorktreeMergeCheckpoint.Rebase}
+                WHERE Id = {request.Id}
+                """);
 
         var completed = await fixture.Queue.ResumeAsync(fixture.Slug, request.Id, CancellationToken.None);
 
