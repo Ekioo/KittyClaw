@@ -524,6 +524,28 @@ public sealed class WorktreeMergeQueueServiceTests
     }
 
     [Fact]
+    public async Task Recovery_ClosesAReviewRowWhenItsCleanHeadIsAlreadyIntegrated()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var worktreePath = Path.Combine(fixture.Root.Path, "maintenance-worktree");
+        Git(fixture.Repository, true, "worktree", "add", "-b", "maintenance/test", worktreePath, "integration");
+        var request = await fixture.Queue.PrepareMaintenanceAsync(
+            fixture.Slug, worktreePath, "maintenance/test", CancellationToken.None);
+        var head = Git(worktreePath, true, "rev-parse", "HEAD").Output.Trim();
+        await fixture.Queue.MarkMaintenanceNoChangesAsync(fixture.Slug, request.Id, head);
+        fixture.Queue.ReleaseMaintenanceWrite(request.Id);
+        await fixture.Queue.MarkReviewRequiredAsync(fixture.Slug, request.Id, "simulated stale review");
+
+        var recovered = await fixture.Queue.RecoverTerminalWorktreesAsync(fixture.Slug, CancellationToken.None);
+        var completed = Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+
+        Assert.Equal(1, recovered);
+        Assert.Equal(WorktreeMergeStatus.Completed, completed.Status);
+        Assert.Equal(head, completed.IntegratedCommit);
+        Assert.Null(completed.Error);
+    }
+
+    [Fact]
     public async Task TargetAdvanceBetweenRebaseAndFastForward_IsRebasedAgainWithinTheSameAttempt()
     {
         using var fixture = await Fixture.CreateAsync();

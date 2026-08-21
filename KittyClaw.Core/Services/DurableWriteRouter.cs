@@ -144,6 +144,35 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
         }
     }
 
+    public async Task CloseOrPreserveExecutionAsync(
+        string projectSlug, DurableWriteRoute route, string reason, CancellationToken ct = default)
+    {
+        try
+        {
+            if (route.Kind != DurableWriteKind.Maintenance ||
+                route.QueueRequestId is not long requestId || mergeQueue is null)
+                return;
+
+            var validation = await ValidateAndStageAsync(route, ct);
+            var staged = validation.Status == DurableWriteValidationStatus.Ready &&
+                RunGit(route.RootPath, ["diff", "--cached", "--quiet"], false).ExitCode != 0;
+            if (validation.Status == DurableWriteValidationStatus.Ready && !staged)
+            {
+                var head = RunGit(route.RootPath, ["rev-parse", "HEAD"]).Output.Trim();
+                await mergeQueue.MarkMaintenanceNoChangesAsync(projectSlug, requestId, head);
+                return;
+            }
+
+            await mergeQueue.MarkReviewRequiredAsync(projectSlug, requestId, reason);
+        }
+        finally
+        {
+            if (route.QueueRequestId is long requestId)
+                mergeQueue?.ReleaseMaintenanceWrite(requestId);
+            route.ReleaseMaintenanceLease();
+        }
+    }
+
     private static IReadOnlyList<string> NormalizeAllowedPaths(IEnumerable<string> paths)
     {
         var result = paths.Select(path => path.Replace('\\', '/').Trim('/')).Where(path => path.Length > 0 && !Path.IsPathRooted(path) && path.Split('/').All(p => p is not ".." and not ".")).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();

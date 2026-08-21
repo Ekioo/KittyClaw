@@ -217,9 +217,9 @@ public sealed class AgentMemoryAdHocTests
         Assert.True(string.IsNullOrEmpty(remaining), $"Failed consolidation left durable worktree dirty: {remaining}");
         var probe = await router.ResolveAsync(project.Slug, null, [".dashboard"])
             .WaitAsync(TimeSpan.FromSeconds(2));
-        await router.PreserveExecutionAsync(project.Slug, probe, "release test probe");
-        Assert.Equal(WorktreeMergeStatus.NeedsReview,
-            preserved.Status);
+        await router.CloseOrPreserveExecutionAsync(project.Slug, probe, "release test probe");
+        Assert.Equal(WorktreeMergeStatus.Completed,
+            Assert.Single(await queue.ListAsync(project.Slug)).Status);
     }
 
     private static async Task<(ProjectService Projects, KittyClaw.Core.Models.Project Project,

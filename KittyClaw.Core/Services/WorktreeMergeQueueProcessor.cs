@@ -19,22 +19,33 @@ public sealed class WorktreeMergeQueueProcessor(
         await Task.Yield();
         while (!stoppingToken.IsCancellationRequested)
         {
-            foreach (var project in await projects.ListProjectsAsync())
+            var snapshot = await projects.ListProjectsAsync();
+            foreach (var project in snapshot)
             {
                 if (stoppingToken.IsCancellationRequested) return;
                 try
                 {
-                    // Drain already durable work first. A full terminal-ticket discovery can be
-                    // expensive on old boards and must not starve a known pending integration.
-                    if (await queue.ProcessNextAsync(project.Slug, stoppingToken) is not null)
-                        continue;
+                    await queue.ProcessNextAsync(project.Slug, stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Unable to process durable integrations for {ProjectSlug}", project.Slug);
+                }
+            }
+
+            foreach (var project in snapshot)
+            {
+                if (stoppingToken.IsCancellationRequested) return;
+                try
+                {
                     await queue.RecoverTerminalWorktreesAsync(project.Slug, stoppingToken);
                     await queue.ProcessNextAsync(project.Slug, stoppingToken);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Unable to reconcile durable integrations for {ProjectSlug}", project.Slug);
+                    logger.LogWarning(ex, "Unable to discover recoverable worktrees for {ProjectSlug}", project.Slug);
                 }
             }
 

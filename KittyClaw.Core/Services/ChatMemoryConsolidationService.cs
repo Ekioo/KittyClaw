@@ -106,8 +106,9 @@ public sealed class ChatMemoryConsolidationService(
                     {
                         try
                         {
-                            await durableWrites.PreserveExecutionAsync(project.Slug, route,
-                                $"Chat memory consolidation for {candidate.TargetSlug} failed: {ex.Message}");
+                            await durableWrites.CloseOrPreserveExecutionAsync(project.Slug, route,
+                                $"Chat memory consolidation for {candidate.TargetSlug} failed: {ex.Message}",
+                                candidateToken);
                             routeFinalized = true;
                         }
                         catch (Exception preserveError)

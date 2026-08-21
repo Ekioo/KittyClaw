@@ -191,7 +191,9 @@ public sealed partial class WorktreeMergeQueueService(
         await using var db = projects.GetProjectDb(projectSlug);
         await EnsureTableAsync(db);
         var request = await ReadByRootAsync(db, int.MinValue);
-        if (request is not { JobKind: WorktreeMergeJobKind.Maintenance, Status: WorktreeMergeStatus.Completed })
+        if (request is not { JobKind: WorktreeMergeJobKind.Maintenance })
+            return 0;
+        if (_activeMaintenanceWrites.ContainsKey(request.Id))
             return 0;
         if (!Directory.Exists(request.WorktreePath))
             return 0;
@@ -218,7 +220,20 @@ public sealed partial class WorktreeMergeQueueService(
         var sourceCommit = head.Output.Trim();
         var repository = projects.ResolveRepositoryPath(project);
         if (IsAncestor(repository, sourceCommit, project.IntegrationBranch!))
-            return 0;
+        {
+            if (request.Status == WorktreeMergeStatus.Completed &&
+                string.Equals(request.IntegratedCommit, sourceCommit, StringComparison.Ordinal))
+                return 0;
+            var now = DateTime.UtcNow;
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Completed},
+                    Checkpoint = {(int)WorktreeMergeCheckpoint.Merge}, SourceCommit = {sourceCommit},
+                    IntegratedCommit = {sourceCommit}, Error = NULL, ConflictFiles = NULL,
+                    LocalIntegratedAt = COALESCE(LocalIntegratedAt, {now}), UpdatedAt = {now}
+                WHERE Id = {request.Id} AND TicketId = 0
+                """);
+            return 1;
+        }
 
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Pending},
