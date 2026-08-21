@@ -118,6 +118,21 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
         }
     }
 
+    public async Task PreserveExecutionAsync(string projectSlug, DurableWriteRoute route, string reason)
+    {
+        try
+        {
+            if (route.QueueRequestId is long requestId && mergeQueue is not null)
+                await mergeQueue.MarkReviewRequiredAsync(projectSlug, requestId, reason);
+        }
+        finally
+        {
+            if (route.QueueRequestId is long requestId)
+                mergeQueue?.ReleaseMaintenanceWrite(requestId);
+            route.ReleaseMaintenanceLease();
+        }
+    }
+
     private static IReadOnlyList<string> NormalizeAllowedPaths(IEnumerable<string> paths)
     {
         var result = paths.Select(path => path.Replace('\\', '/').Trim('/')).Where(path => path.Length > 0 && !Path.IsPathRooted(path) && path.Split('/').All(p => p is not ".." and not ".")).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();

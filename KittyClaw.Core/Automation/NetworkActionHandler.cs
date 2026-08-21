@@ -159,11 +159,10 @@ internal sealed class NetworkActionHandler(
                 return spec.AbortOnFailure;
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            // Engine shutdown / chain cancellation — the process tree was already killed.
             logger.LogWarning("executePowerShell cancelled");
-            if (spec.AbortOnFailure) return true;
+            throw;
         }
         catch (Exception ex)
         {

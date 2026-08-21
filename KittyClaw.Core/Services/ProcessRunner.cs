@@ -97,12 +97,14 @@ public static class ProcessRunner
         }
         catch (OperationCanceledException)
         {
+            job?.Dispose();
             try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); }
             catch { /* may have exited between the check and the kill */ }
+            await DrainPumpsBoundedAsync(stdoutTask, stderrTask).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
             return new ProcessResult(null,
-                await stdoutTask.ConfigureAwait(false),
-                await stderrTask.ConfigureAwait(false),
+                stdoutTask.IsCompletedSuccessfully ? stdoutTask.Result : string.Empty,
+                stderrTask.IsCompletedSuccessfully ? stderrTask.Result : string.Empty,
                 TimedOut: true);
         }
 
@@ -110,5 +112,11 @@ public static class ProcessRunner
             await stdoutTask.ConfigureAwait(false),
             await stderrTask.ConfigureAwait(false),
             TimedOut: false);
+    }
+
+    private static async Task DrainPumpsBoundedAsync(params Task<string>[] pumps)
+    {
+        try { await Task.WhenAll(pumps).WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false); }
+        catch { }
     }
 }

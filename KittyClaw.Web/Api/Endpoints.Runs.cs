@@ -167,11 +167,11 @@ public static partial class Endpoints
             return Results.NoContent();
         }).WithTags("Runs");
 
-        api.MapPost("/projects/{slug}/runs/{runId}/stop", (string slug, string runId, AgentRunRegistry reg) =>
+        api.MapPost("/projects/{slug}/runs/{runId}/stop", async (string slug, string runId, AgentRunRegistry reg, CancellationToken ct) =>
         {
             var run = reg.Get(runId);
             if (run is null || run.ProjectSlug != slug) return Results.NotFound();
-            run.Cancellation.Cancel();
+            await AutomationEngine.CancelAndWaitForRunsAsync([run], ct);
             return Results.NoContent();
         }).WithTags("Runs");
 

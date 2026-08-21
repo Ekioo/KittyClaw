@@ -22,6 +22,7 @@ internal sealed class ActionExecutor
     private readonly ProjectService _projects;
     private readonly RunStateManager _runState;
     private readonly ILogger _logger;
+    private readonly DurableWriteRouter? _durableWrites;
 
     private readonly TicketMutationHandler _ticketMutation;
     private readonly AgentMemoryHandler _agentMemory;
@@ -48,7 +49,8 @@ internal sealed class ActionExecutor
         ProjectService projects,
         RunStateManager runState,
         ILogger logger,
-        ProjectSecretVault? projectSecrets = null)
+        ProjectSecretVault? projectSecrets = null,
+        DurableWriteRouter? durableWrites = null)
     {
         _tickets = tickets;
         _members = members;
@@ -60,6 +62,7 @@ internal sealed class ActionExecutor
         _projects = projects;
         _runState = runState;
         _logger = logger;
+        _durableWrites = durableWrites;
 
         _ticketMutation = new TicketMutationHandler(tickets, labels, members, loc, logger);
         _agentMemory = new AgentMemoryHandler(tickets, members, projects, runner, sessions, logger);
@@ -246,8 +249,11 @@ internal sealed class ActionExecutor
         // inline; at the first long-running action (a consolidation subprocess, a PowerShell
         // script) the remaining chain is detached to a background task, guarded against
         // overlapping executions of the same (automation, ticket).
-        async Task<AgentRun?> ExecuteFromAsync(int startIndex, bool background)
+        async Task<AgentRun?> ExecuteFromAsync(int startIndex, bool background,
+            ProjectRuntime? executionRuntime = null, CancellationToken? executionToken = null)
         {
+            var activeRuntime = executionRuntime ?? rt;
+            var activeToken = executionToken ?? ct;
             for (int i = startIndex; i < automation.Actions.Count; i++)
             {
                 var action = automation.Actions[i];
@@ -268,13 +274,61 @@ internal sealed class ActionExecutor
                     }
                     detached = true;
                     var idx = i;
+                    AgentRun? actionRun = null;
+                    CancellationTokenSource? actionCancellation = null;
+                    if (action is ExecutePowerShellActionSpec)
+                    {
+                        actionRun = _runs.Register(new AgentRun
+                        {
+                            RunId = Guid.NewGuid().ToString("N"),
+                            ProjectSlug = rt.Slug,
+                            TicketId = firing.TicketId,
+                            AgentName = $"automation:{automation.Id}",
+                            SkillFile = "executePowerShell",
+                            ConcurrencyGroup = $"automation:{automation.Id}",
+                            StartedAt = DateTime.UtcNow,
+                        });
+                        actionCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct, actionRun.Cancellation.Token);
+                    }
                     _ = Task.Run(async () =>
                     {
-                        try { await ExecuteFromAsync(idx, background: true); }
+                        DurableWriteRoute? route = null;
+                        try
+                        {
+                            var backgroundRuntime = rt;
+                            if (actionRun is not null && _durableWrites is not null)
+                            {
+                                route = await _durableWrites.ResolveAsync(rt.Slug, firing.TicketId,
+                                    [".agents", "tools", "scripts"], actionCancellation!.Token);
+                                actionRun.WorkingDirectory = route.RootPath;
+                                actionRun.Push(new(DateTime.UtcNow, "execution_workspace",
+                                    $"Automation execution isolated in {route.RootPath}", route.Branch));
+                                _runs.Persist(actionRun);
+                                backgroundRuntime = new ProjectRuntime(rt.Slug)
+                                {
+                                    Workspace = route.RootPath,
+                                    Config = rt.Config,
+                                    Triggers = rt.Triggers,
+                                    ConfigDirty = rt.ConfigDirty,
+                                };
+                            }
+                            await ExecuteFromAsync(idx, background: true, backgroundRuntime,
+                                actionCancellation?.Token ?? ct);
+                            if (actionRun is not null)
+                                _runs.Complete(actionRun.RunId, AgentRunStatus.Completed, 0);
+                        }
                         catch (OperationCanceledException) { /* engine shutdown */ }
                         catch (Exception ex) { _logger.LogWarning(ex, "Detached automation actions failed for {Id}", automation.Id); }
                         finally
                         {
+                            if (actionRun is not null && actionRun.Status == AgentRunStatus.Running)
+                                _runs.Complete(actionRun.RunId,
+                                    actionRun.Cancellation.IsCancellationRequested || ct.IsCancellationRequested
+                                        ? AgentRunStatus.Stopped : AgentRunStatus.Failed, null);
+                            if (route is not null && _durableWrites is not null)
+                                await _durableWrites.PreserveExecutionAsync(rt.Slug, route,
+                                    $"Automation {automation.Id} execution preserved for review ({actionRun?.Status}).");
+                            actionCancellation?.Dispose();
                             if (ownsDetachedGuard)
                                 _inFlightDetachedActions.TryRemove(guardKey, out _);
                             // Mirrors the outer finally: a dispatched runAgent hands chain
@@ -301,7 +355,7 @@ internal sealed class ActionExecutor
                         // Everything except runAgent goes through the single shared dispatch —
                         // see ExecuteChainActionAsync. An unregistered type throws here (the
                         // pre-run chain is allowed to fail loudly).
-                        if (await ExecuteChainActionAsync(rt, firing, action, state, parentRun: null, ct))
+                        if (await ExecuteChainActionAsync(activeRuntime, firing, action, state, parentRun: null, activeToken))
                             return state.LastRun;
                         break;
                 }

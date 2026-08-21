@@ -46,9 +46,14 @@ public static partial class Endpoints
         }).WithTags("Projects")
         .ProducesProblem(StatusCodes.Status400BadRequest);
 
-        api.MapPost("/projects/{slug}/pause", async (string slug, ProjectService ps) =>
+        api.MapPost("/projects/{slug}/pause", async (string slug, ProjectService ps, AgentRunRegistry runs, CancellationToken ct) =>
         {
             var project = await ps.TogglePauseAsync(slug);
+            if (project?.IsPaused == true)
+            {
+                var active = runs.ActiveForProject(slug).ToArray();
+                await AutomationEngine.CancelAndWaitForRunsAsync(active, ct);
+            }
             return project is null ? Results.NotFound() : Results.Ok(project);
         }).WithTags("Projects");
 

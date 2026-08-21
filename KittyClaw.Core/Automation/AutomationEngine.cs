@@ -30,14 +30,15 @@ public sealed class AutomationEngine : BackgroundService
         CostTracker cost,
         LocalizationService loc,
         ILogger<AutomationEngine> logger,
-        ProjectSecretVault? projectSecrets = null)
+        ProjectSecretVault? projectSecrets = null,
+        DurableWriteRouter? durableWrites = null)
     {
         _runs = runs;
         _logger = logger;
 
         _runtimeManager = new ProjectRuntimeManager(store, triggerState, logger);
         var runState = new RunStateManager(runs, cost, tickets, logger);
-        var executor = new ActionExecutor(tickets, members, labels, sessions, runs, runner, cost, loc, projects, runState, logger, projectSecrets);
+        var executor = new ActionExecutor(tickets, members, labels, sessions, runs, runner, cost, loc, projects, runState, logger, projectSecrets, durableWrites);
         _triggerHandler = new TriggerHandler(projects, _runtimeManager, executor, tickets, members, sessions, runs, queue, loc, logger);
         _queueProcessor = new AutomationQueueProcessor(projects, tickets, queue, _runtimeManager, executor, logger);
         queue.WorkAvailable += WakeQueueConsumer;
@@ -126,4 +127,30 @@ public sealed class AutomationEngine : BackgroundService
     }
 
     private Task TickAsync(CancellationToken ct) => _triggerHandler.ProcessTickAsync(ct);
+
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        var active = _runs.AllActive().ToArray();
+        foreach (var run in active) run.Cancellation.Cancel();
+        await base.StopAsync(cancellationToken);
+        await WaitForRunsAsync(active, cancellationToken);
+    }
+
+    public static Task CancelAndWaitForRunsAsync(IEnumerable<AgentRun> runs, CancellationToken ct)
+    {
+        var snapshot = runs.ToArray();
+        foreach (var run in snapshot) run.Cancellation.Cancel();
+        return WaitForRunsAsync(snapshot, ct);
+    }
+
+    public static async Task WaitForRunsAsync(IEnumerable<AgentRun> runs, CancellationToken ct)
+    {
+        var snapshot = runs.ToArray();
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (snapshot.Any(run => run.Status == AgentRunStatus.Running) && DateTime.UtcNow < deadline)
+            await Task.Delay(50, ct);
+        var remaining = snapshot.Where(run => run.Status == AgentRunStatus.Running).Select(run => run.RunId).ToArray();
+        if (remaining.Length > 0)
+            throw new TimeoutException($"Run cleanup did not finish within 10 seconds: {string.Join(", ", remaining)}");
+    }
 }
