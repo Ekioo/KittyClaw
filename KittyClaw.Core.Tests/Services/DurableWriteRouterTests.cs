@@ -117,6 +117,30 @@ public sealed class DurableWriteRouterTests
     }
 
     [Fact]
+    public async Task MaintenanceWorktree_WindowsMixedSeparators_ExposesOnlyCanonicalDependencies()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        using var fixture = await Fixture.CreateAsync(productionTopology: true, useForwardSlashesForWorkspace: true);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, ".gitignore"), "node_modules\n");
+        Git(fixture.Repository, "add", ".gitignore");
+        Git(fixture.Repository, "commit", "-m", "ignore local dependencies");
+        var package = Path.Combine(fixture.Workspace, ".agents", "tools", "node_modules", "local-package", "index.mjs");
+        Directory.CreateDirectory(Path.GetDirectoryName(package)!);
+        await File.WriteAllTextAsync(package, "export const available = true;\n");
+        var unrelated = Path.Combine(fixture.Workspace, "Sources.worktrees", "ticket-other", "node_modules", "unrelated-package");
+        Directory.CreateDirectory(unrelated);
+
+        var route = await fixture.Router.ResolveAsync(fixture.Slug, null, [".agents"]);
+
+        Assert.True(File.Exists(Path.Combine(route.RootPath, ".agents", "tools", "node_modules", "local-package", "index.mjs")));
+        Assert.False(Directory.Exists(Path.Combine(route.RootPath, "Sources.worktrees")));
+        Assert.False(Directory.Exists(Path.Combine(route.RootPath, "ticket-other", "node_modules")));
+        Assert.Empty(Git(route.RootPath, "status", "--porcelain", "--untracked-files=all"));
+        await fixture.Router.CommitAndQueueAsync(fixture.Slug, route, "chore: release mixed separator fixture");
+    }
+
+    [Fact]
     public async Task MaintenanceWorktree_ReportsLocalDependencyPreparationFailureWithSourceAndTarget()
     {
         using var fixture = await Fixture.CreateAsync();
@@ -394,7 +418,10 @@ public sealed class DurableWriteRouterTests
             => (_root, Workspace, Repository, Slug, Projects, Tickets, Worktrees, Router, Queue) =
                 (root, workspace, repository, slug, projects, tickets, worktrees, router, queue);
 
-        public static async Task<Fixture> CreateAsync(bool withQueue = false, bool productionTopology = false)
+        public static async Task<Fixture> CreateAsync(
+            bool withQueue = false,
+            bool productionTopology = false,
+            bool useForwardSlashesForWorkspace = false)
         {
             var root = new TempDir();
             var workspace = root.Path;
@@ -411,7 +438,10 @@ public sealed class DurableWriteRouterTests
             }
             var projects = new ProjectService(Path.Combine(root.Path, "data"));
             var project = await projects.CreateProjectAsync("router");
-            await projects.UpdateProjectAsync(project.Slug, productionTopology ? workspace : repository);
+            var configuredWorkspace = productionTopology ? workspace : repository;
+            if (useForwardSlashesForWorkspace)
+                configuredWorkspace = configuredWorkspace.Replace('\\', '/');
+            await projects.UpdateProjectAsync(project.Slug, configuredWorkspace);
             await projects.UpdateProjectAsync(project.Slug, null, worktreesEnabled: true, integrationBranch: "integration",
                 repositoryPath: productionTopology ? repository : null);
             var tickets = new TicketService(projects, new MemberService(projects));

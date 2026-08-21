@@ -270,7 +270,9 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
     }
     private static void PrepareLocalDependencies(string canonicalWorkspace, string worktreePath)
     {
-        if (string.Equals(Path.GetFullPath(canonicalWorkspace), Path.GetFullPath(worktreePath), StringComparison.OrdinalIgnoreCase))
+        canonicalWorkspace = Path.TrimEndingDirectorySeparator(Path.GetFullPath(canonicalWorkspace));
+        worktreePath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(worktreePath));
+        if (string.Equals(canonicalWorkspace, worktreePath, StringComparison.OrdinalIgnoreCase))
             return;
 
         var worktreeContainer = Directory.GetParent(worktreePath)?.FullName;
@@ -332,6 +334,10 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
 
     private static IEnumerable<string> FindLocalDependencyDirectories(string root, string? excludedRoot)
     {
+        root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+        excludedRoot = string.IsNullOrWhiteSpace(excludedRoot)
+            ? null
+            : Path.TrimEndingDirectorySeparator(Path.GetFullPath(excludedRoot));
         if (!Directory.Exists(root)) yield break;
         var pending = new Stack<string>();
         pending.Push(root);
