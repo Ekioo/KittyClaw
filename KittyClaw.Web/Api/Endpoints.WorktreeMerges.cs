@@ -14,7 +14,10 @@ public static partial class Endpoints
             catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
         });
         group.MapPost("/process-next", async (string slug, WorktreeMergeQueueService queue, CancellationToken ct) =>
-            Results.Ok(await queue.ProcessNextAsync(slug, ct)));
+        {
+            await queue.RecoverTerminalWorktreesAsync(slug, ct);
+            return Results.Ok(await queue.ProcessNextAsync(slug, ct));
+        });
         group.MapPost("/{requestId:long}/resume", async (string slug, long requestId, WorktreeMergeQueueService queue, CancellationToken ct) =>
         {
             var result = await queue.ResumeAsync(slug, requestId, ct);

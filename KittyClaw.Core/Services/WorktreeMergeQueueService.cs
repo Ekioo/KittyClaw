@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using KittyClaw.Core.Automation;
+using KittyClaw.Core.Models;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using KittyClaw.Core.Data;
@@ -167,10 +168,10 @@ public sealed partial class WorktreeMergeQueueService(
         if (project is null || string.IsNullOrWhiteSpace(project.IntegrationBranch))
             return 0;
 
+        var recovered = await RecoverMaintenanceWorktreeAsync(projectSlug, project, ct);
         var terminalRoots = (await worktrees.ListTerminalRootTicketsAsync(projectSlug))
             .Distinct()
             .ToList();
-        var recovered = 0;
         foreach (var ticketId in terminalRoots)
         {
             ct.ThrowIfCancellationRequested();
@@ -181,6 +182,54 @@ public sealed partial class WorktreeMergeQueueService(
             recovered++;
         }
         return recovered;
+    }
+
+    private async Task<int> RecoverMaintenanceWorktreeAsync(
+        string projectSlug, Project project, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        await using var db = projects.GetProjectDb(projectSlug);
+        await EnsureTableAsync(db);
+        var request = await ReadByRootAsync(db, int.MinValue);
+        if (request is not { JobKind: WorktreeMergeJobKind.Maintenance, Status: WorktreeMergeStatus.Completed })
+            return 0;
+        if (!Directory.Exists(request.WorktreePath))
+            return 0;
+
+        var branch = RunGit(request.WorktreePath, ["branch", "--show-current"], false);
+        var head = RunGit(request.WorktreePath, ["rev-parse", "HEAD"], false);
+        if (branch.ExitCode != 0 || head.ExitCode != 0 ||
+            !string.Equals(branch.Output.Trim(), request.SourceBranch, StringComparison.Ordinal))
+        {
+            await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
+                "The maintenance worktree could not be verified during recovery.", null);
+            return 1;
+        }
+
+        var changed = RunGit(request.WorktreePath,
+            ["status", "--porcelain", "--untracked-files=all"], false);
+        if (changed.ExitCode != 0 || !string.IsNullOrWhiteSpace(changed.Output))
+        {
+            await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
+                "The maintenance worktree contains uncommitted durable changes and requires recovery.", null);
+            return 1;
+        }
+
+        var sourceCommit = head.Output.Trim();
+        var repository = projects.ResolveRepositoryPath(project);
+        if (IsAncestor(repository, sourceCommit, project.IntegrationBranch!))
+            return 0;
+
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Pending},
+                Checkpoint = {(int)WorktreeMergeCheckpoint.Waiting}, SourceCommit = {sourceCommit},
+                IntegratedCommit = NULL,
+                Error = 'Recovered committed maintenance work after the previous integration completed',
+                ConflictFiles = NULL, LocalIntegratedAt = NULL, RemotePublishedAt = NULL,
+                UpdatedAt = {DateTime.UtcNow}
+            WHERE Id = {request.Id} AND TicketId = 0
+            """);
+        return 1;
     }
 
     public async Task<WorktreeMergeRequest> PrepareMaintenanceAsync(

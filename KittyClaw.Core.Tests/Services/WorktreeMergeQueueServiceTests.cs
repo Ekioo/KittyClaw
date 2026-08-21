@@ -495,6 +495,35 @@ public sealed class WorktreeMergeQueueServiceTests
     }
 
     [Fact]
+    public async Task Recovery_RequeuesACommittedMaintenanceWorktreeAfterItsPreviousIntegrationCompleted()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var worktreePath = Path.Combine(fixture.Root.Path, "maintenance-worktree");
+        Git(fixture.Repository, true, "worktree", "add", "-b", "maintenance/test", worktreePath, "integration");
+        var request = await fixture.Queue.PrepareMaintenanceAsync(
+            fixture.Slug, worktreePath, "maintenance/test", CancellationToken.None);
+        var baseline = Git(worktreePath, true, "rev-parse", "HEAD").Output.Trim();
+        await fixture.Queue.MarkMaintenanceNoChangesAsync(fixture.Slug, request.Id, baseline);
+        fixture.Queue.ReleaseMaintenanceWrite(request.Id);
+        await File.WriteAllTextAsync(Path.Combine(worktreePath, "late.txt"), "preserved");
+        Git(worktreePath, true, "add", "late.txt");
+        Git(worktreePath, true, "commit", "-m", "late durable write");
+        var lateHead = Git(worktreePath, true, "rev-parse", "HEAD").Output.Trim();
+
+        var recovered = await fixture.Queue.RecoverTerminalWorktreesAsync(fixture.Slug, CancellationToken.None);
+        var pending = Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+
+        Assert.Equal(1, recovered);
+        Assert.Equal(WorktreeMergeStatus.Pending, pending.Status);
+        Assert.Equal(lateHead, pending.SourceCommit);
+
+        var completed = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
+        Assert.Equal("preserved", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "late.txt")));
+    }
+
+    [Fact]
     public async Task TargetAdvanceBetweenRebaseAndFastForward_IsRebasedAgainWithinTheSameAttempt()
     {
         using var fixture = await Fixture.CreateAsync();
