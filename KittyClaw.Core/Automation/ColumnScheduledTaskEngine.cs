@@ -13,7 +13,8 @@ public sealed class ColumnScheduledTaskEngine(
     TicketService tickets,
     ColumnScheduledTaskService schedules,
     ColumnActionExecutor actions,
-    ILogger<ColumnScheduledTaskEngine> logger) : BackgroundService
+    ILogger<ColumnScheduledTaskEngine> logger,
+    StartupWorkGate? startupGate = null) : BackgroundService
 {
     private readonly ConcurrentDictionary<string, Task> _active = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, List<(ColumnScheduledTask Task, ColumnScheduledTaskRun Run)>>
@@ -21,6 +22,8 @@ public sealed class ColumnScheduledTaskEngine(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (startupGate is not null)
+            await startupGate.WaitAsync(stoppingToken);
         foreach (var project in await projects.ListProjectsAsync())
         {
             try

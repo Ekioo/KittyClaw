@@ -24,6 +24,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
     private readonly WorktreeFinalizationCoordinator? _finalization;
     private readonly WorktreeMergeQueueService? _mergeQueue;
     private readonly ILogger<ColumnProcessingEngine> _logger;
+    private readonly StartupWorkGate? _startupGate;
     private readonly ConcurrentDictionary<string, byte> _pendingProjects = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<int, int>> _ownerFeedbackSignals = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Task> _activeProcessors = new();
@@ -38,7 +39,8 @@ public sealed class ColumnProcessingEngine : BackgroundService
         ILogger<ColumnProcessingEngine> logger,
         TicketWorktreeService? worktrees = null,
         WorktreeFinalizationCoordinator? finalization = null,
-        WorktreeMergeQueueService? mergeQueue = null)
+        WorktreeMergeQueueService? mergeQueue = null,
+        StartupWorkGate? startupGate = null)
     {
         _projects = projects;
         _tickets = tickets;
@@ -51,6 +53,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
         _worktrees = worktrees;
         _finalization = finalization;
         _mergeQueue = mergeQueue;
+        _startupGate = startupGate;
         _tickets.TicketStatusChanged += OnTicketChanged;
         _tickets.TicketCreated += OnTicketCreated;
         _tickets.TicketCommentAdded += OnTicketCommentAdded;
@@ -73,6 +76,8 @@ public sealed class ColumnProcessingEngine : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (_startupGate is not null)
+            await _startupGate.WaitAsync(stoppingToken);
         var projects = await _projects.ListProjectsAsync();
         foreach (var project in projects)
         {

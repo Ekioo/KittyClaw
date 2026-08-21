@@ -21,6 +21,7 @@ public sealed class DashboardRefreshService : BackgroundService
     private readonly DashboardScriptRunner _scriptRunner;
     private readonly ILogger<DashboardRefreshService> _logger;
     private readonly DurableWriteRouter? _durableWrites;
+    private readonly StartupWorkGate? _startupGate;
 
     // key = "{projectSlug}:{tileSlug}", value = last refresh UTC
     private readonly ConcurrentDictionary<string, DateTime> _lastRefreshed = new();
@@ -32,7 +33,8 @@ public sealed class DashboardRefreshService : BackgroundService
         DashboardTileGate gate,
         DashboardScriptRunner scriptRunner,
         ILogger<DashboardRefreshService> logger,
-        DurableWriteRouter? durableWrites = null)
+        DurableWriteRouter? durableWrites = null,
+        StartupWorkGate? startupGate = null)
     {
         _projects = projects;
         _dashboard = dashboard;
@@ -41,10 +43,15 @@ public sealed class DashboardRefreshService : BackgroundService
         _scriptRunner = scriptRunner;
         _logger = logger;
         _durableWrites = durableWrites;
+        _startupGate = startupGate;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Keep migrations and catch-up refreshes behind the explicit host-start boundary.
+        // Task.Yield alone is not a startup boundary on modern BackgroundService hosts.
+        if (_startupGate is not null)
+            await _startupGate.WaitAsync(stoppingToken);
         _logger.LogInformation("DashboardRefreshService started — running startup migration");
         await RunStartupMigrationAsync(stoppingToken);
 

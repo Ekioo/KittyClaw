@@ -14,6 +14,7 @@ public sealed class AutomationEngine : BackgroundService
     private readonly ProjectRuntimeManager _runtimeManager;
     private readonly TriggerHandler _triggerHandler;
     private readonly AutomationQueueProcessor _queueProcessor;
+    private readonly StartupWorkGate? _startupGate;
     private readonly SemaphoreSlim _queueWake = new(0, 1);
 
     public AutomationEngine(
@@ -31,10 +32,12 @@ public sealed class AutomationEngine : BackgroundService
         LocalizationService loc,
         ILogger<AutomationEngine> logger,
         ProjectSecretVault? projectSecrets = null,
-        DurableWriteRouter? durableWrites = null)
+        DurableWriteRouter? durableWrites = null,
+        StartupWorkGate? startupGate = null)
     {
         _runs = runs;
         _logger = logger;
+        _startupGate = startupGate;
 
         _runtimeManager = new ProjectRuntimeManager(store, triggerState, logger);
         var runState = new RunStateManager(runs, cost, tickets, logger);
@@ -86,6 +89,8 @@ public sealed class AutomationEngine : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (_startupGate is not null)
+            await _startupGate.WaitAsync(stoppingToken);
         _logger.LogInformation("AutomationEngine started");
         var consumer = ConsumeQueueAsync(stoppingToken);
         while (!stoppingToken.IsCancellationRequested)

@@ -24,6 +24,7 @@ public sealed class GitRepositoryWatcher : BackgroundService
     private readonly AutomationStore _store;
     private readonly AutomationEngine _engine;
     private readonly ILogger<GitRepositoryWatcher> _logger;
+    private readonly StartupWorkGate? _startupGate;
 
     // slug → active watcher entry
     private readonly ConcurrentDictionary<string, WatcherEntry> _watchers = new();
@@ -32,16 +33,20 @@ public sealed class GitRepositoryWatcher : BackgroundService
         ProjectService projects,
         AutomationStore store,
         AutomationEngine engine,
-        ILogger<GitRepositoryWatcher> logger)
+        ILogger<GitRepositoryWatcher> logger,
+        StartupWorkGate? startupGate = null)
     {
         _projects = projects;
         _store = store;
         _engine = engine;
         _logger = logger;
+        _startupGate = startupGate;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (_startupGate is not null)
+            await _startupGate.WaitAsync(stoppingToken);
         _logger.LogInformation("GitRepositoryWatcher started");
 
         // Refresh the watcher set every 30 s to pick up newly added projects.

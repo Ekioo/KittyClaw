@@ -290,7 +290,7 @@ public class DashboardService
 
     // -- Startup migration (flat to folder-per-tile) --------------------------------
 
-    public async Task MigrateAsync(string projectSlug, string workspace, Action<string>? log = null)
+    public virtual async Task MigrateAsync(string projectSlug, string workspace, Action<string>? log = null)
     {
         var dashDir = GetDashboardDir(workspace);
         if (!Directory.Exists(dashDir)) return;
