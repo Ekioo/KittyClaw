@@ -43,6 +43,26 @@ public sealed class DurableWriteRouterTests
     }
 
     [Fact]
+    public async Task ReusedMaintenanceWorktree_FastForwardsToTheCurrentIntegrationBranchBeforeWriting()
+    {
+        using var fixture = await Fixture.CreateAsync(withQueue: true);
+        var first = await fixture.Router.ResolveAsync(fixture.Slug, null, [".agents"]);
+        await fixture.Router.CommitAndQueueAsync(fixture.Slug, first, "chore: initial no-op");
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "new-baseline.txt"), "current");
+        Git(fixture.Repository, "add", "new-baseline.txt");
+        Git(fixture.Repository, "commit", "-m", "advance integration baseline");
+        var expected = Git(fixture.Repository, "rev-parse", "integration").Trim();
+
+        var second = await fixture.Router.ResolveAsync(fixture.Slug, null, [".agents"]);
+
+        Assert.Equal(expected, Git(second.RootPath, "rev-parse", "HEAD").Trim());
+        Assert.True(File.Exists(Path.Combine(second.RootPath, "new-baseline.txt")));
+        await fixture.Router.CommitAndQueueAsync(fixture.Slug, second, "chore: synchronized no-op");
+        Assert.Equal(WorktreeMergeStatus.Completed,
+            Assert.Single(await fixture.Queue!.ListAsync(fixture.Slug)).Status);
+    }
+
+    [Fact]
     public async Task SuccessfulNoOp_ReusesMaintenanceRowAndWorktreeWithoutAlert()
     {
         using var fixture = await Fixture.CreateAsync(withQueue: true);

@@ -50,6 +50,7 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
                 RunGit(repository, exists ? ["worktree", "add", path, branch] : ["worktree", "add", "-b", branch, path, project.IntegrationBranch!]);
             }
             VerifyWorktree(path, branch);
+            SynchronizeMaintenanceWorktree(path, repository, project.IntegrationBranch!);
         }
         catch
         {
@@ -158,6 +159,32 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
     {
         var top = Path.GetFullPath(RunGit(path, ["rev-parse", "--show-toplevel"]).Output.Trim());
         if (!string.Equals(top, Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase) || !string.Equals(RunGit(path, ["branch", "--show-current"]).Output.Trim(), branch, StringComparison.Ordinal)) throw new InvalidOperationException($"Maintenance worktree '{path}' is not on '{branch}'.");
+    }
+    private static void SynchronizeMaintenanceWorktree(string path, string repository, string targetBranch)
+    {
+        var status = RunGit(path, ["status", "--porcelain", "--untracked-files=all"], false);
+        if (status.ExitCode != 0 || !string.IsNullOrWhiteSpace(status.Output))
+            throw new InvalidOperationException(
+                $"Maintenance worktree '{path}' contains uncommitted changes and must be recovered before another durable write.");
+
+        var head = RunGit(path, ["rev-parse", "HEAD"]).Output.Trim();
+        var target = RunGit(repository, ["rev-parse", targetBranch]).Output.Trim();
+        if (string.Equals(head, target, StringComparison.Ordinal)) return;
+
+        if (RunGit(repository, ["merge-base", "--is-ancestor", head, target], false).ExitCode == 0)
+        {
+            RunGit(path, ["merge", "--ff-only", target]);
+            return;
+        }
+
+        // A clean branch ahead of the target contains a previous durable write that has not
+        // reached the queue yet. Keep using that history: PrepareMaintenanceAsync plus the
+        // no-op checkpoint will recover and enqueue the complete branch atomically.
+        if (RunGit(repository, ["merge-base", "--is-ancestor", target, head], false).ExitCode == 0)
+            return;
+
+        throw new InvalidOperationException(
+            $"Maintenance worktree '{path}' has diverged from '{targetBranch}' and requires recovery.");
     }
     private static GitResult RunGit(string cwd, IReadOnlyList<string> args, bool throwOnError = true)
     {

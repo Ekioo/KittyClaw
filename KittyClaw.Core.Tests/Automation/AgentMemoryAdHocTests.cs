@@ -174,6 +174,54 @@ public sealed class AgentMemoryAdHocTests
         Assert.Equal(string.Empty, RunGit(workspace, "status", "--porcelain", "--", ".agents/programmer/memory").Trim());
     }
 
+    [Fact]
+    public async Task FailedWorktreeConsolidation_ReleasesTheMaintenanceRoute()
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("adhoc-memory-route-release");
+        var workspace = projects.ResolveWorkspacePath(project);
+        var members = new MemberService(projects);
+        await members.CreateMemberAsync(project.Slug, "Programmer");
+        Directory.CreateDirectory(Path.Combine(workspace, ".agents", "programmer", "memory"));
+        await File.WriteAllTextAsync(Path.Combine(workspace, ".agents", "programmer", "memory", "MEMORY.md"), "# Memory\n");
+        await File.WriteAllTextAsync(Path.Combine(workspace, ".agents", "memory-consolidation.md"),
+            "Consolidate. <!--scenario:error-exit-->");
+        RunGit(workspace, "init");
+        RunGit(workspace, "config", "user.email", "tests@kittyclaw.local");
+        RunGit(workspace, "config", "user.name", "KittyClaw Tests");
+        RunGit(workspace, "add", ".agents");
+        RunGit(workspace, "commit", "-m", "baseline");
+        RunGit(workspace, "branch", "-M", "integration");
+        await projects.UpdateProjectAsync(project.Slug, null, worktreesEnabled: true,
+            integrationBranch: "integration");
+
+        var tickets = new TicketService(projects, members);
+        var worktrees = new TicketWorktreeService(projects, tickets);
+        var queue = new WorktreeMergeQueueService(projects, worktrees);
+        var router = new DurableWriteRouter(projects, worktrees, queue);
+        var chats = new ChatService(projects);
+        var runs = new AgentRunRegistry();
+        var sessions = new SessionRegistry();
+        var handler = new AgentMemoryHandler(tickets, members, projects,
+            new AgentRunner(sessions, runs, new RunConcurrencyGate(1), NullLogger<AgentRunner>.Instance),
+            sessions, NullLogger.Instance);
+        var service = new ChatMemoryConsolidationService(projects, chats, members, runs, handler,
+            NullLogger<ChatMemoryConsolidationService>.Instance, router);
+        await chats.AppendAsync(project.Slug, "programmer", "user", "This attempt must fail safely");
+
+        await service.ProcessOnceAsync(DateTime.UtcNow.AddMinutes(16));
+
+        var preserved = Assert.Single(await queue.ListAsync(project.Slug));
+        var remaining = RunGit(preserved.WorktreePath, "status", "--porcelain", "--untracked-files=all").Trim();
+        Assert.True(string.IsNullOrEmpty(remaining), $"Failed consolidation left durable worktree dirty: {remaining}");
+        var probe = await router.ResolveAsync(project.Slug, null, [".dashboard"])
+            .WaitAsync(TimeSpan.FromSeconds(2));
+        await router.PreserveExecutionAsync(project.Slug, probe, "release test probe");
+        Assert.Equal(WorktreeMergeStatus.NeedsReview,
+            preserved.Status);
+    }
+
     private static async Task<(ProjectService Projects, KittyClaw.Core.Models.Project Project,
         string Workspace, MemberService Members, ChatService Chats, AgentRunRegistry Runs,
         ChatMemoryConsolidationService Service)> CreateServiceAsync(string root, string projectName, string scenario)

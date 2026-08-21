@@ -73,9 +73,10 @@ public sealed class ChatMemoryConsolidationService(
 
                 var segment = await chats.ListSegmentAsync(project.Slug, candidate.TargetSlug,
                     candidate.LastConsolidatedMessageId, candidate.LatestMessageId);
+                DurableWriteRoute? route = null;
+                var routeFinalized = false;
                 try
                 {
-                    DurableWriteRoute? route = null;
                     var writeWorkspace = workspace;
                     if (project.WorktreesEnabled && durableWrites is not null)
                     {
@@ -89,6 +90,7 @@ public sealed class ChatMemoryConsolidationService(
                     {
                         var validation = await durableWrites.CommitAndQueueAsync(project.Slug, route,
                             $"chore(memory): consolidate {agent} chat memory", candidateToken);
+                        routeFinalized = true;
                         if (validation.Status != DurableWriteValidationStatus.Ready)
                             throw new InvalidOperationException(validation.Error ??
                                 "Consolidated memory requires review before integration.");
@@ -100,6 +102,21 @@ public sealed class ChatMemoryConsolidationService(
                 }
                 catch (Exception ex)
                 {
+                    if (route is not null && !routeFinalized && durableWrites is not null)
+                    {
+                        try
+                        {
+                            await durableWrites.PreserveExecutionAsync(project.Slug, route,
+                                $"Chat memory consolidation for {candidate.TargetSlug} failed: {ex.Message}");
+                            routeFinalized = true;
+                        }
+                        catch (Exception preserveError)
+                        {
+                            logger.LogWarning(preserveError,
+                                "Failed to preserve and release chat memory route for {Project}/{Target}",
+                                project.Slug, candidate.TargetSlug);
+                        }
+                    }
                     var attempts = candidate.AttemptCount + 1;
                     var retry = now + TimeSpan.FromMinutes(Math.Min(60, Math.Pow(2, Math.Min(attempts, 6))));
                     await chats.RecordMemoryFailureAsync(project.Slug, candidate.TargetSlug,

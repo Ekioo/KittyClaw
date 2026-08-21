@@ -314,7 +314,6 @@ public sealed class AgentMemoryHandler(
         if (routing.Error is not null) throw new InvalidOperationException(routing.Error);
 
         const string scope = "consolidate-chat";
-        sessions.Clear(workspace, $"{scope}:{agent}", ticketId: null);
         var run = await runner.RunAsync(new AgentRunContext
         {
             ProjectSlug = projectSlug,
@@ -328,6 +327,7 @@ public sealed class AgentMemoryHandler(
             SessionScope = scope,
             Target = routing.ToTarget(effectiveModel),
             RetryOnResumeFailure = true,
+            PersistSession = false,
             MaxRunDuration = TimeSpan.FromMinutes(30),
         }, ct);
         if (run.Status != AgentRunStatus.Completed || (run.ExitCode ?? 0) != 0)
