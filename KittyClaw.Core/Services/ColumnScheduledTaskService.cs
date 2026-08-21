@@ -1,10 +1,14 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using KittyClaw.Core.Automation;
 using KittyClaw.Core.Data;
 using KittyClaw.Core.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NCrontab;
 
 namespace KittyClaw.Core.Services;
@@ -13,10 +17,14 @@ namespace KittyClaw.Core.Services;
 /// Project-owned cron tasks attached to stable columns. Versioned files are authoritative;
 /// SQLite stores scheduling state and durable action checkpoints.
 /// </summary>
-public sealed class ColumnScheduledTaskService(ProjectService projects)
+public sealed class ColumnScheduledTaskService(
+    ProjectService projects,
+    ILogger<ColumnScheduledTaskService>? logger = null)
 {
     private const int DefinitionVersion = 1;
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> ProjectGates = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, string> ReportedInvalidFiles = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ILogger<ColumnScheduledTaskService> _logger = logger ?? NullLogger<ColumnScheduledTaskService>.Instance;
     private static readonly JsonSerializerOptions FileJson = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -133,6 +141,19 @@ public sealed class ColumnScheduledTaskService(ProjectService projects)
         string projectSlug, DateTime nowUtc)
     {
         await SynchronizeAsync(projectSlug);
+        return await ClaimDueAfterSynchronizationAsync(projectSlug, nowUtc);
+    }
+
+    public async Task<List<(ColumnScheduledTask Task, ColumnScheduledTaskRun Run)>> ClaimDueForBackgroundAsync(
+        string projectSlug, DateTime nowUtc)
+    {
+        await SynchronizeAsync(projectSlug, tolerateInvalidFiles: true);
+        return await ClaimDueAfterSynchronizationAsync(projectSlug, nowUtc);
+    }
+
+    private async Task<List<(ColumnScheduledTask Task, ColumnScheduledTaskRun Run)>> ClaimDueAfterSynchronizationAsync(
+        string projectSlug, DateTime nowUtc)
+    {
         await using var db = projects.GetProjectDb(projectSlug);
         await EnsureTablesAsync(db);
         var due = await db.ColumnScheduledTasks
@@ -164,6 +185,18 @@ public sealed class ColumnScheduledTaskService(ProjectService projects)
     public async Task<List<(ColumnScheduledTask Task, ColumnScheduledTaskRun Run)>> RecoverAsync(string projectSlug)
     {
         await SynchronizeAsync(projectSlug);
+        return await RecoverAfterSynchronizationAsync(projectSlug);
+    }
+
+    public async Task<List<(ColumnScheduledTask Task, ColumnScheduledTaskRun Run)>> RecoverForBackgroundAsync(string projectSlug)
+    {
+        await SynchronizeAsync(projectSlug, tolerateInvalidFiles: true);
+        return await RecoverAfterSynchronizationAsync(projectSlug);
+    }
+
+    private async Task<List<(ColumnScheduledTask Task, ColumnScheduledTaskRun Run)>> RecoverAfterSynchronizationAsync(
+        string projectSlug)
+    {
         await using var db = projects.GetProjectDb(projectSlug);
         await EnsureTablesAsync(db);
         var running = await db.ColumnScheduledTaskRuns
@@ -256,7 +289,7 @@ public sealed class ColumnScheduledTaskService(ProjectService projects)
         return TimeZoneInfo.ConvertTimeToUtc(nextLocal, zone);
     }
 
-    private async Task SynchronizeAsync(string projectSlug)
+    private async Task SynchronizeAsync(string projectSlug, bool tolerateInvalidFiles = false)
     {
         var gate = ProjectGates.GetOrAdd(projectSlug, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync();
@@ -265,12 +298,13 @@ public sealed class ColumnScheduledTaskService(ProjectService projects)
             await using var db = projects.GetProjectDb(projectSlug);
             await ColumnService.EnsureBoardColumnsTableAsync(db);
             await EnsureTablesAsync(db);
-            await SynchronizeLockedAsync(projectSlug, db);
+            await SynchronizeLockedAsync(projectSlug, db, tolerateInvalidFiles);
         }
         finally { gate.Release(); }
     }
 
-    private async Task SynchronizeLockedAsync(string projectSlug, TodoDbContext db)
+    private async Task SynchronizeLockedAsync(
+        string projectSlug, TodoDbContext db, bool tolerateInvalidFiles = false)
     {
         var project = await projects.GetProjectAsync(projectSlug)
             ?? throw new InvalidOperationException($"Le projet '{projectSlug}' n’existe pas.");
@@ -278,46 +312,88 @@ public sealed class ColumnScheduledTaskService(ProjectService projects)
         Directory.CreateDirectory(root);
         var knownColumns = await db.BoardColumns.Select(column => column.Id).ToListAsync();
         var definedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var protectedColumns = new HashSet<int>();
         foreach (var path in Directory.EnumerateFiles(root, "tasks.json", SearchOption.AllDirectories)
                      .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
         {
-            var file = JsonSerializer.Deserialize<ColumnTasksDefinition>(await File.ReadAllTextAsync(path), FileJson)
-                ?? throw new InvalidOperationException($"Le fichier de tâches '{path}' est vide.");
-            if (file.Version != DefinitionVersion)
-                throw new InvalidOperationException($"Version de tâches planifiées non prise en charge dans '{path}'.");
-            var columnId = ParseColumnReference(file.Column, path);
-            ValidateDefinitions(file.Tasks, columnId, knownColumns);
-            foreach (var definition in file.Tasks)
+            string? content = null;
+            try
             {
-                if (!definedIds.Add(definition.Id))
-                    throw new InvalidOperationException($"Identifiant de tâche planifiée dupliqué : {definition.Id}.");
-                var row = await db.ColumnScheduledTasks.FindAsync(definition.Id);
-                var scheduleChanged = row is null
-                    || !string.Equals(row.Cron, definition.Cron, StringComparison.Ordinal)
-                    || !string.Equals(row.TimeZoneId, definition.TimeZoneId, StringComparison.OrdinalIgnoreCase);
-                row ??= new ColumnScheduledTask
+                content = await File.ReadAllTextAsync(path);
+                var file = JsonSerializer.Deserialize<ColumnTasksDefinition>(content, FileJson)
+                    ?? throw new InvalidOperationException($"Le fichier de tâches '{path}' est vide.");
+                if (file.Version != DefinitionVersion)
+                    throw new InvalidOperationException($"Version de tâches planifiées non prise en charge dans '{path}'.");
+                var columnId = ParseColumnReference(file.Column, path);
+                ValidateDefinitions(file.Tasks, columnId, knownColumns);
+                var fileIds = file.Tasks.Select(definition => definition.Id).ToList();
+                var duplicate = fileIds.FirstOrDefault(id => definedIds.Contains(id));
+                if (duplicate is not null)
+                    throw new InvalidOperationException($"Identifiant de tâche planifiée dupliqué : {duplicate}.");
+                foreach (var id in fileIds) definedIds.Add(id);
+                foreach (var definition in file.Tasks)
                 {
-                    Id = definition.Id,
-                    ColumnId = columnId,
-                    Name = definition.Name,
-                    NextRunAt = ComputeNext(definition.Cron, definition.TimeZoneId, DateTime.UtcNow),
-                };
-                if (db.Entry(row).State == EntityState.Detached) db.ColumnScheduledTasks.Add(row);
-                row.ColumnId = columnId;
-                row.Name = definition.Name.Trim();
-                row.Enabled = definition.Enabled;
-                row.Cron = definition.Cron.Trim();
-                row.TimeZoneId = definition.TimeZoneId;
-                row.TicketScope = definition.TicketScope;
-                row.Actions = definition.Actions.Select(action => new ColumnProcessorAction(
-                    action.Id, action.Action, ParseOptionalColumnReference(action.OnFailure))).ToList();
-                if (scheduleChanged) row.NextRunAt = ComputeNext(row.Cron, row.TimeZoneId, DateTime.UtcNow);
-                row.UpdatedAt = DateTime.UtcNow;
+                    var row = await db.ColumnScheduledTasks.FindAsync(definition.Id);
+                    var scheduleChanged = row is null
+                        || !string.Equals(row.Cron, definition.Cron, StringComparison.Ordinal)
+                        || !string.Equals(row.TimeZoneId, definition.TimeZoneId, StringComparison.OrdinalIgnoreCase);
+                    row ??= new ColumnScheduledTask
+                    {
+                        Id = definition.Id,
+                        ColumnId = columnId,
+                        Name = definition.Name,
+                        NextRunAt = ComputeNext(definition.Cron, definition.TimeZoneId, DateTime.UtcNow),
+                    };
+                    if (db.Entry(row).State == EntityState.Detached) db.ColumnScheduledTasks.Add(row);
+                    row.ColumnId = columnId;
+                    row.Name = definition.Name.Trim();
+                    row.Enabled = definition.Enabled;
+                    row.Cron = definition.Cron.Trim();
+                    row.TimeZoneId = definition.TimeZoneId;
+                    row.TicketScope = definition.TicketScope;
+                    row.Actions = definition.Actions.Select(action => new ColumnProcessorAction(
+                        action.Id, action.Action, ParseOptionalColumnReference(action.OnFailure))).ToList();
+                    if (scheduleChanged) row.NextRunAt = ComputeNext(row.Cron, row.TimeZoneId, DateTime.UtcNow);
+                    row.UpdatedAt = DateTime.UtcNow;
+                }
+                ReportedInvalidFiles.TryRemove(InvalidFileKey(projectSlug, path), out _);
+            }
+            catch (Exception ex) when (tolerateInvalidFiles && ex is not OperationCanceledException)
+            {
+                if (TryParseColumnDirectory(path, out var protectedColumn)) protectedColumns.Add(protectedColumn);
+                ReportInvalidFileOnce(projectSlug, path, content, ex);
             }
         }
-        var removed = await db.ColumnScheduledTasks.Where(task => !definedIds.Contains(task.Id)).ToListAsync();
+        var removed = await db.ColumnScheduledTasks
+            .Where(task => !definedIds.Contains(task.Id) && !protectedColumns.Contains(task.ColumnId)).ToListAsync();
         db.ColumnScheduledTasks.RemoveRange(removed);
         await db.SaveChangesAsync();
+    }
+
+    private void ReportInvalidFileOnce(string projectSlug, string path, string? content, Exception error)
+    {
+        var fingerprintSource = content is null ? $"{error.GetType().FullName}:{error.Message}" : content;
+        var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fingerprintSource)));
+        var key = InvalidFileKey(projectSlug, path);
+        if (!ReportedInvalidFiles.TryGetValue(key, out var previous) || previous != fingerprint)
+        {
+            ReportedInvalidFiles[key] = fingerprint;
+            _logger.LogWarning(
+                "Invalid scheduled task definition ignored for project {Project} at {Path}: {Cause}",
+                projectSlug, path, error.Message);
+        }
+    }
+
+    private static string InvalidFileKey(string projectSlug, string path) => $"{projectSlug}|{Path.GetFullPath(path)}";
+
+    private static bool TryParseColumnDirectory(string path, out int columnId)
+    {
+        columnId = 0;
+        var directory = Path.GetFileName(Path.GetDirectoryName(path));
+        return directory is not null
+            && directory.StartsWith("column-", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(directory[7..], out columnId)
+            && columnId > 0;
     }
 
     private async Task WriteColumnFileAsync(

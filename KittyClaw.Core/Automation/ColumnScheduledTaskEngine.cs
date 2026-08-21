@@ -25,7 +25,7 @@ public sealed class ColumnScheduledTaskEngine(
         {
             try
             {
-                var recovered = await schedules.RecoverAsync(project.Slug);
+                var recovered = await schedules.RecoverForBackgroundAsync(project.Slug);
                 if (project.IsPaused)
                 {
                     if (recovered.Count > 0) _pausedRecoveries[project.Slug] = recovered;
@@ -53,7 +53,7 @@ public sealed class ColumnScheduledTaskEngine(
                         if (_pausedRecoveries.TryRemove(project.Slug, out var recovered))
                             foreach (var item in recovered)
                                 Start(project.Slug, item.Task, item.Run, stoppingToken);
-                        foreach (var item in await schedules.ClaimDueAsync(project.Slug, DateTime.UtcNow))
+                        foreach (var item in await schedules.ClaimDueForBackgroundAsync(project.Slug, DateTime.UtcNow))
                             Start(project.Slug, item.Task, item.Run, stoppingToken);
                     }
                     catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }

@@ -117,7 +117,8 @@ public sealed class PausedProjectRestartRecoveryTests : IDisposable
         var validProject = await projects.CreateProjectAsync("Valid scheduled project");
         var invalidColumn = (await new ColumnService(projects).ListColumnsAsync(invalidProject.Slug))[0];
         var validColumn = (await new ColumnService(projects).ListColumnsAsync(validProject.Slug))[0];
-        var schedules = new ColumnScheduledTaskService(projects);
+        var scheduleLogger = new CapturingLogger<ColumnScheduledTaskService>();
+        var schedules = new ColumnScheduledTaskService(projects, scheduleLogger);
 
         var invalidPath = await schedules.GetDefinitionPathAsync(invalidProject.Slug, invalidColumn.Id);
         Directory.CreateDirectory(Path.GetDirectoryName(invalidPath)!);
@@ -168,7 +169,8 @@ public sealed class PausedProjectRestartRecoveryTests : IDisposable
         {
             await Task.Delay(200);
             Assert.False(engine.ExecuteTask?.IsCompleted ?? true);
-            Assert.Contains(logger.Errors, message => message.Contains(invalidProject.Slug, StringComparison.Ordinal));
+            Assert.Contains(scheduleLogger.Warnings, message => message.Contains(invalidProject.Slug, StringComparison.Ordinal));
+            Assert.Empty(logger.Errors);
             Assert.Single(await schedules.ListAsync(validProject.Slug, validColumn.Id));
         }
         finally
@@ -201,6 +203,7 @@ public sealed class PausedProjectRestartRecoveryTests : IDisposable
     private sealed class CapturingLogger<T> : ILogger<T>
     {
         public List<string> Errors { get; } = [];
+        public List<string> Warnings { get; } = [];
 
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
         public bool IsEnabled(LogLevel logLevel) => true;
@@ -208,6 +211,7 @@ public sealed class PausedProjectRestartRecoveryTests : IDisposable
             Func<TState, Exception?, string> formatter)
         {
             if (logLevel >= LogLevel.Error) Errors.Add(formatter(state, exception));
+            else if (logLevel == LogLevel.Warning) Warnings.Add(formatter(state, exception));
         }
     }
 }
