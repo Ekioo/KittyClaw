@@ -17,34 +17,38 @@
      @oncontextmenu:stopPropagation
      @onclick="OnClickHandler">
     <div class="ticket-card-top">
-        <span class="priority-dot priority-@GetPriorityClass(Ticket.Priority)" title="@GetPriorityLabel(Ticket.Priority)"></span>
-        @if (ColRole == ColumnRole.OwnerAction)
-        {
-            <span class="owner-action-badge" title="@L["OwnerActionRequired"]">⚠ @L["OwnerActionRequired"]</span>
-        }
-        @if (Ticket.UnresolvedBlockerCount > 0)
-        {
-            <span class="blocker-indicator" title="@L.Get("CardBlockerTooltip", Ticket.UnresolvedBlockerCount)">🔒 @Ticket.UnresolvedBlockerCount</span>
-        }
+        <div class="ticket-card-statuses">
+            <span class="priority-dot priority-@GetPriorityClass(Ticket.Priority)" title="@GetPriorityLabel(Ticket.Priority)"></span>
+            @if (ColRole == ColumnRole.OwnerAction)
+            {
+                <span class="owner-action-badge" title="@L["OwnerActionRequired"]">⚠ @L["OwnerActionRequired"]</span>
+            }
+            @if (Ticket.UnresolvedBlockerCount > 0)
+            {
+                <span class="blocker-indicator" title="@L.Get("CardBlockerTooltip", Ticket.UnresolvedBlockerCount)">🔒 @Ticket.UnresolvedBlockerCount</span>
+            }
+        </div>
         @{
             var activeRun = AgentRuns.ActiveForTicket(Slug, Ticket.Id);
             var lastRun = activeRun is null ? AgentRuns.LastForTicket(Slug, Ticket.Id) : null;
         }
-        @if (activeRun is not null)
-        {
-            <span class="agent-spinner"
-                  title="@activeRun.AgentName en cours"
-                  @onclick="() => OnOpenRunDrawer.InvokeAsync(activeRun.RunId)"
-                  @onclick:stopPropagation></span>
-        }
-        else if (lastRun is not null)
-        {
-            <button class="agent-log-btn agent-log-@lastRun.Status.ToString().ToLowerInvariant()"
-                    title="Voir le dernier run (@lastRun.AgentName · @lastRun.Status)"
-                    @onclick="() => OnOpenRunDrawer.InvokeAsync(lastRun.RunId)"
-                    @onclick:stopPropagation>log</button>
-        }
-        <span class="ticket-id">#@Ticket.Id</span>
+        <div class="ticket-card-meta">
+            @if (activeRun is not null)
+            {
+                <span class="agent-spinner"
+                      title="@activeRun.AgentName en cours"
+                      @onclick="() => OnOpenRunDrawer.InvokeAsync(activeRun.RunId)"
+                      @onclick:stopPropagation></span>
+            }
+            else if (lastRun is not null)
+            {
+                <button class="agent-log-btn agent-log-@lastRun.Status.ToString().ToLowerInvariant()"
+                        title="Voir le dernier run (@lastRun.AgentName · @lastRun.Status)"
+                        @onclick="() => OnOpenRunDrawer.InvokeAsync(lastRun.RunId)"
+                        @onclick:stopPropagation>log</button>
+            }
+            <span class="ticket-id">#@Ticket.Id</span>
+        </div>
     </div>
     <span class="ticket-title">@Ticket.Title</span>
     <AutomationQueueSummary Slug="@Slug" TicketId="@Ticket.Id" Compact="true" />

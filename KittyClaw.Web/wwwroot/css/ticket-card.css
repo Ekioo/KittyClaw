@@ -52,18 +52,41 @@
     font-weight: 700;
     line-height: 1.25;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
 }
-.ticket-card-top { display: flex; align-items: center; }
+.ticket-card-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+    min-width: 0;
+}
+.ticket-card-statuses {
+    display: flex;
+    align-items: center;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    min-width: 0;
+}
+.ticket-card-statuses .owner-action-badge {
+    flex: 1 1 5.5rem;
+}
+.ticket-card-meta {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    gap: 0.3rem;
+    min-height: 1rem;
+}
 .ticket-id {
     font-size: 0.72rem;
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
     font-weight: 500;
-    margin-left: auto;
     flex-shrink: 0;
 }
-.agent-spinner + .ticket-id,
-.agent-log-btn + .ticket-id { margin-left: 0; }
 .ticket-title { font-size: 0.88rem; color: var(--text); line-height: 1.4; }
 .ticket-card-bottom {
     display: flex;

@@ -187,16 +187,20 @@ else
                                              @ondragend="OnDragEnd"
                                              @onclick="() => OpenTicket(slug, ticket.Id)">
                                         <div class="ticket-card-top">
-                                            <span class="priority-dot priority-@GetPriorityClass(ticket.Priority)" title="@GetPriorityLabel(ticket.Priority)"></span>
-                                            @if (col.Role == ColumnRole.OwnerAction)
-                                            {
-                                                <span class="owner-action-badge" title="@L["OwnerActionRequired"]">⚠ @L["OwnerActionRequired"]</span>
-                                            }
-                                            @if (ticket.UnresolvedBlockerCount > 0)
-                                            {
-                                                <span class="blocker-indicator" title="@L.Get("CardBlockerTooltip", ticket.UnresolvedBlockerCount)">🔒 @ticket.UnresolvedBlockerCount</span>
-                                            }
-                                            <span class="ticket-id">#@ticket.Id</span>
+                                            <div class="ticket-card-statuses">
+                                                <span class="priority-dot priority-@GetPriorityClass(ticket.Priority)" title="@GetPriorityLabel(ticket.Priority)"></span>
+                                                @if (col.Role == ColumnRole.OwnerAction)
+                                                {
+                                                    <span class="owner-action-badge" title="@L["OwnerActionRequired"]">⚠ @L["OwnerActionRequired"]</span>
+                                                }
+                                                @if (ticket.UnresolvedBlockerCount > 0)
+                                                {
+                                                    <span class="blocker-indicator" title="@L.Get("CardBlockerTooltip", ticket.UnresolvedBlockerCount)">🔒 @ticket.UnresolvedBlockerCount</span>
+                                                }
+                                            </div>
+                                            <div class="ticket-card-meta">
+                                                <span class="ticket-id">#@ticket.Id</span>
+                                            </div>
                                         </div>
                                         <span class="ticket-title">@ticket.Title</span>
                                         <AutomationQueueSummary Slug="@slug" TicketId="@ticket.Id" Compact="true" />

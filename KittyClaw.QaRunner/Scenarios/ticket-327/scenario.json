@@ -1,0 +1,67 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "qa-ticket-327" },
+    {
+      "type": "api",
+      "method": "PATCH",
+      "path": "/api/projects/qa-ticket-327/columns/6",
+      "body": { "role": "OwnerAction" }
+    },
+    {
+      "type": "createTicket",
+      "project": "qa-ticket-327",
+      "title": "Dependency used to reproduce the narrow card header",
+      "status": "Todo",
+      "extract": { "blockerId": "id" }
+    },
+    {
+      "type": "createTicket",
+      "project": "qa-ticket-327",
+      "title": "Article: moderniser une application legacy avant d'y intégrer l'IA",
+      "status": "Review",
+      "priority": "Required",
+      "extract": { "blockedId": "id" }
+    },
+    {
+      "type": "createDependency",
+      "project": "qa-ticket-327",
+      "value": "{blockedId}",
+      "target": "{blockerId}"
+    },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/qa-ticket-327/chat/start",
+      "body": {
+        "target": "programmer#ticket-{blockedId}",
+        "message": "Produce a short deterministic visual fixture.",
+        "model": "codex:gpt-5.6-sol",
+        "forceNew": true
+      }
+    }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-ticket-327" },
+    { "type": "setViewport", "width": 640, "height": 720 },
+    { "type": "wait", "ms": 2500 },
+    {
+      "type": "assertVisible",
+      "selector": ".ticket-card:has-text(\"Article: moderniser\") .owner-action-badge"
+    },
+    {
+      "type": "assertVisible",
+      "selector": ".ticket-card:has-text(\"Article: moderniser\") .blocker-indicator"
+    },
+    {
+      "type": "assertVisible",
+      "selector": ".ticket-card:has-text(\"Article: moderniser\") .ticket-card-meta"
+    },
+    {
+      "type": "screenshot",
+      "name": "ticket-327-card-indicators",
+      "selector": ".ticket-card:has-text(\"Article: moderniser\")",
+      "description": "Carte étroite avec priorité, action requise, blocage, journal d'agent et numéro séparés sans chevauchement."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

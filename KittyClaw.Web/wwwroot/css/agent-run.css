@@ -3,7 +3,6 @@
     display: inline-block;
     width: 14px;
     height: 14px;
-    margin-left: auto;
     border: 2px solid #4a9eff44;
     border-top-color: #4a9eff;
     border-radius: 50%;
@@ -30,7 +29,6 @@
 
 /* Small "log" button shown on a ticket that has a completed (non-active) run. */
 .agent-log-btn {
-    margin-left: auto;
     background: #1a1f2c;
     border: 1px solid var(--border, #333);
     border-radius: 4px;
