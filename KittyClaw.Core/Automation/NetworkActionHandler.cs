@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using KittyClaw.Core.Automation.Triggers;
 using KittyClaw.Core.Services;
+using System.Text.RegularExpressions;
 
 namespace KittyClaw.Core.Automation;
 
@@ -96,7 +97,8 @@ internal sealed class NetworkActionHandler(
 
     // Returns true when AbortOnFailure is set and the process exited with a non-zero code.
     public async Task<bool> ExecutePowerShellAsync(
-        ExecutePowerShellActionSpec spec, string workspacePath, string slug, TriggerFiring firing, CancellationToken ct)
+        ExecutePowerShellActionSpec spec, string workspacePath, string canonicalWorkspacePath,
+        string slug, TriggerFiring firing, CancellationToken ct)
     {
         try
         {
@@ -108,7 +110,7 @@ internal sealed class NetworkActionHandler(
             string scriptArg;
             if (!string.IsNullOrWhiteSpace(spec.ScriptFile))
             {
-                var rendered = Render(spec.ScriptFile);
+                var rendered = RebaseProjectPath(Render(spec.ScriptFile), canonicalWorkspacePath, workspacePath);
                 var path = Path.IsPathRooted(rendered)
                     ? rendered
                     : Path.Combine(workspacePath, rendered);
@@ -116,12 +118,14 @@ internal sealed class NetworkActionHandler(
             }
             else
             {
-                var bytes = System.Text.Encoding.Unicode.GetBytes(Render(spec.Script));
+                var command = RebaseProjectPath(Render(spec.Script), canonicalWorkspacePath, workspacePath);
+                var bytes = System.Text.Encoding.Unicode.GetBytes(command);
                 scriptArg = $"-EncodedCommand {Convert.ToBase64String(bytes)}";
             }
 
             var extraArgs = spec.Arguments.Count > 0
-                ? " " + string.Join(" ", spec.Arguments.Select(a => $"\"{Render(a)}\""))
+                ? " " + string.Join(" ", spec.Arguments.Select(a =>
+                    $"\"{RebaseProjectPath(Render(a), canonicalWorkspacePath, workspacePath)}\""))
                 : "";
 
             var pwshBin = ShellResolver.ResolvePowerShell();
@@ -170,6 +174,27 @@ internal sealed class NetworkActionHandler(
             if (spec.AbortOnFailure) return true;
         }
         return false;
+    }
+
+    internal static string RebaseProjectPath(
+        string value, string canonicalWorkspacePath, string executionWorkspacePath)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        var canonical = Path.TrimEndingDirectorySeparator(Path.GetFullPath(canonicalWorkspacePath));
+        var execution = Path.TrimEndingDirectorySeparator(Path.GetFullPath(executionWorkspacePath));
+        if (string.Equals(canonical, execution, StringComparison.OrdinalIgnoreCase)) return value;
+
+        var result = value;
+        foreach (var (source, target) in new[]
+        {
+            (canonical.Replace('/', '\\'), execution.Replace('/', '\\')),
+            (canonical.Replace('\\', '/'), execution.Replace('\\', '/')),
+        })
+        {
+            result = Regex.Replace(result, Regex.Escape(source) + @"(?=$|[\\/])",
+                _ => target, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+        return result;
     }
 
     private async Task<string> ResolveHttpPlaceholdersAsync(string template, ProjectRuntime rt, TriggerFiring firing)

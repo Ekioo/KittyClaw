@@ -310,6 +310,7 @@ internal sealed class ActionExecutor
                                 backgroundRuntime = new ProjectRuntime(rt.Slug)
                                 {
                                     Workspace = route.RootPath,
+                                    CanonicalWorkspace = rt.CanonicalWorkspace ?? rt.Workspace,
                                     Config = rt.Config,
                                     Triggers = rt.Triggers,
                                     ConfigDirty = rt.ConfigDirty,
@@ -868,7 +869,8 @@ internal sealed class ActionExecutor
             case HttpRequestActionSpec hr:
                 return await _network.ExecuteHttpRequestAsync(hr, rt, firing, ct);
             case ExecutePowerShellActionSpec ps:
-                return await _network.ExecutePowerShellAsync(ps, rt.Workspace!, rt.Slug, firing, ct);
+                return await _network.ExecutePowerShellAsync(ps, rt.Workspace!,
+                    rt.CanonicalWorkspace ?? rt.Workspace!, rt.Slug, firing, ct);
             case RunAgentActionSpec:
                 throw new InvalidOperationException(
                     "runAgent is dispatched by the chain owners, never by ExecuteChainActionAsync.");

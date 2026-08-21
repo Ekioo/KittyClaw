@@ -52,6 +52,7 @@ internal sealed class ProjectRuntimeManager
             // a new config whose automations have no registered triggers (silent unregistration).
             var triggers = await BuildTriggersAsync(slug, config);
             rt.Workspace = workspace;
+            rt.CanonicalWorkspace = workspace;
             rt.Config = config;
             rt.Triggers = triggers;
             _logger.LogInformation("Automations loaded for {Slug}: {Count} entries", slug, config.Automations.Count);

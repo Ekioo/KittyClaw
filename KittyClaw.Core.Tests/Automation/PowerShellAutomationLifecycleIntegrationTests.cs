@@ -80,6 +80,32 @@ public sealed class PowerShellAutomationLifecycleIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task SuccessfulPowerShell_RebasesLegacyAbsoluteProjectPaths_ToMaintenanceWorktree()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var fixture = await CreateFixtureAsync();
+        var primaryOutput = Path.Combine(fixture.Repository, "generated", "absolute.txt");
+        var primaryOutputDirectory = Path.GetDirectoryName(primaryOutput)!;
+        var escapedOutput = primaryOutput.Replace("'", "''", StringComparison.Ordinal);
+        var escapedOutputDirectory = primaryOutputDirectory.Replace("'", "''", StringComparison.Ordinal);
+        var before = Fingerprint(fixture.Repository, fixture.Sentinel);
+        var script = $"New-Item -ItemType Directory -Force '{escapedOutputDirectory}' | Out-Null; " +
+            $"Set-Content '{escapedOutput}' isolated";
+
+        await fixture.Executor.ExecuteAutomationAsync(fixture.Runtime,
+            Automation(script, ["generated"]), new TriggerFiring(null, null, null), CancellationToken.None);
+        var run = await WaitForFinishedRunAsync(fixture.Runs);
+        var request = await WaitForMergeRequestAsync(fixture.Queue, fixture.Slug,
+            WorktreeMergeStatus.Pending);
+
+        Assert.Equal(AgentRunStatus.Completed, run.Status);
+        Assert.Equal(before, Fingerprint(fixture.Repository, fixture.Sentinel));
+        Assert.False(File.Exists(primaryOutput));
+        Assert.Equal("isolated", (await File.ReadAllTextAsync(
+            Path.Combine(request.WorktreePath, "generated", "absolute.txt"))).Trim());
+    }
+
+    [Fact]
     public async Task PauseAndServiceShutdown_CancelOnlyTheirSelectedActiveRuns_AndAreIdempotent()
     {
         var registry = new AgentRunRegistry();
