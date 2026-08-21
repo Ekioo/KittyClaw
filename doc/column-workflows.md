@@ -73,7 +73,7 @@ owner comment records `ticket_refresh_failed`, `stale_ticket_context`, or
 running configured actions or persisting partial success effects. Runs without owner feedback may
 consume an explicitly evidenced current ticket version, preserving legacy and custom outcome routes.
 
-At host startup, interrupted executions are recovered for every project, including projects that are paused. Recovery updates the durable execution state without dispatching new work; processing resumes only after the project is unpaused.
+After the host reports `ApplicationStarted`, interrupted executions are recovered for every project, including projects that are paused. This keeps HTTP health and root responses available before recovery work begins. Recovery updates the durable execution state without dispatching new work; processing resumes only after the project is unpaused.
 
 A route cannot point back to its source column. Repeating work is expressed through the explicit retry policy, avoiding accidental processing loops.
 

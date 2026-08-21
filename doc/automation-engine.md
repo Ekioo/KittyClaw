@@ -62,7 +62,7 @@ This is the legacy, backward-compatible automation system. New business-state wo
 - `ProjectRuntimeManager.ReloadProjectAsync` builds the new trigger map before swapping `Config`/`Triggers` in, so a failed reload keeps the previous coherent pair instead of leaving automations without registered triggers.
 
 ## Entry points
-- Hosted at app startup via DI in `KittyClaw.Web/Program.cs`.
+- Hosted via DI in `KittyClaw.Web/Program.cs`; its initial project sweep and Git watcher synchronization wait for the shared `StartupWorkGate`, which opens when the host reports `ApplicationStarted`.
 - Per-project configuration loaded from `<workspace>/.agents/automations.json` (seeded by the [project template](./project-template.md)).
 - Configuration is authored directly in the trusted `<workspace>/.agents/automations.json` file. The REST API is deliberately limited to consultation, targeted disabling, and targeted deletion; it cannot create or arbitrarily edit definitions.
 
