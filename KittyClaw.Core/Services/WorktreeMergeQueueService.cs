@@ -124,7 +124,23 @@ public sealed partial class WorktreeMergeQueueService(
                 && string.IsNullOrWhiteSpace(inspected.Error)
                 && head.ExitCode == 0
                 && IsAncestor(repository, head.Output.Trim(), project.IntegrationBranch))
-                return existing;
+            {
+                var recoveryAt = DateTime.UtcNow;
+                var sourceCommit = head.Output.Trim();
+                await db.Database.ExecuteSqlInterpolatedAsync($"""
+                    UPDATE WorktreeMergeQueue SET
+                        TicketId = {ticketId}, WorktreePath = {inspected.Path},
+                        SourceBranch = {inspected.Branch}, TargetBranch = {project.IntegrationBranch},
+                        Status = {(int)WorktreeMergeStatus.Pending},
+                        Checkpoint = {(int)WorktreeMergeCheckpoint.Waiting},
+                        SourceCommit = {sourceCommit}, IntegratedCommit = NULL,
+                        Error = 'Recovered registered worktree left after completed integration',
+                        ConflictFiles = NULL, LocalIntegratedAt = NULL, RemotePublishedAt = NULL,
+                        UpdatedAt = {recoveryAt}
+                    WHERE Id = {existing.Id}
+                    """);
+                return (await ReadByIdAsync(db, existing.Id))!;
+            }
         }
         TicketWorktree? worktree;
         if (inspected is { Exists: true })

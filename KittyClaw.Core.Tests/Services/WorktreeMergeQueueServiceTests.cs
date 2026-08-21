@@ -197,6 +197,30 @@ public sealed class WorktreeMergeQueueServiceTests
     }
 
     [Fact]
+    public async Task StartupRecovery_CleansRegisteredWorktreeLeftAfterCompletedIntegration()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("terminal.txt", "terminal");
+        var first = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        Assert.Equal(WorktreeMergeStatus.Completed,
+            (await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None))!.Status);
+        var leftBehind = (await fixture.Worktrees.ResolveAsync(fixture.Slug, ticket, CancellationToken.None))!;
+        await fixture.Tickets.MoveTicketAsync(fixture.Slug, ticket, "Done", "test");
+
+        var recovered = await fixture.Queue.RecoverTerminalWorktreesAsync(fixture.Slug, CancellationToken.None);
+        var pending = Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+        var completed = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(1, recovered);
+        Assert.Equal(first.Id, pending.Id);
+        Assert.Equal(WorktreeMergeStatus.Pending, pending.Status);
+        Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
+        Assert.False(Directory.Exists(leftBehind.Path));
+        Assert.NotEqual(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet",
+            $"refs/heads/{leftBehind.Branch}").ExitCode);
+    }
+
+    [Fact]
     public async Task RecoveryAfterWorktreesAreDisabled_FinalizesSafeTerminalWorktree()
     {
         using var fixture = await Fixture.CreateAsync();
