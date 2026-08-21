@@ -5,6 +5,26 @@ namespace KittyClaw.Core.Tests.Services;
 public sealed class ProcessRunnerTests
 {
     [Fact]
+    public async Task RunAsync_ClosesInheritedPipesAfterParentExits()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var child = "Start-Sleep -Seconds 30";
+        var childEncoded = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(child));
+        var parent = $"Start-Process pwsh -NoNewWindow -ArgumentList '-NoProfile','-EncodedCommand','{childEncoded}'";
+        var parentEncoded = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(parent));
+
+        var run = ProcessRunner.RunAsync(
+            "pwsh",
+            $"-NoProfile -EncodedCommand {parentEncoded}",
+            timeout: TimeSpan.FromSeconds(10));
+
+        var result = await run.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.True(result.Success, result.Stderr);
+    }
+
+    [Fact]
     public async Task RunAsync_TerminatesDetachedChildrenWhenParentExits()
     {
         if (!OperatingSystem.IsWindows()) return;

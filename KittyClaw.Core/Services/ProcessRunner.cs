@@ -108,9 +108,17 @@ public static class ProcessRunner
                 TimedOut: true);
         }
 
-        return new ProcessResult(proc.ExitCode,
-            await stdoutTask.ConfigureAwait(false),
-            await stderrTask.ConfigureAwait(false),
+        // The parent can exit while a detached descendant still owns inherited stdout/stderr
+        // handles. Waiting for EOF before closing the job would then keep the run in Running
+        // forever, and the configured timeout no longer applies because WaitForExitAsync already
+        // completed successfully. Close the kill-on-close job first so descendants release their
+        // handles, then bound the final pipe drain for platforms where no job could be assigned.
+        var exitCode = proc.ExitCode;
+        job?.Dispose();
+        await DrainPumpsBoundedAsync(stdoutTask, stderrTask).ConfigureAwait(false);
+        return new ProcessResult(exitCode,
+            stdoutTask.IsCompletedSuccessfully ? stdoutTask.Result : string.Empty,
+            stderrTask.IsCompletedSuccessfully ? stderrTask.Result : string.Empty,
             TimedOut: false);
     }
 
