@@ -99,6 +99,35 @@ public sealed class RunAgentDurableWorktreeIntegrationTests : IDisposable
             && e.Text.Contains("undeclared paths", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task TicketlessPowerShellFollowedByAgent_ReleasesMaintenanceRouteBeforeAgentStarts()
+    {
+        var fixture = await CreateFixtureAsync("after-powershell",
+            """
+            {"type":"system","subtype":"init","session_id":"{{session_id}}","model":"mock"}
+            {"_meta":{"write_file":{"path":"generated/agent.txt","content":"agent"}}}
+            {"type":"result","subtype":"success","is_error":false,"duration_ms":1,"num_turns":1}
+            """);
+        var automation = Automation(fixture.ScenarioDirectory, ["generated"]);
+        automation.Actions.Insert(0, new ExecutePowerShellActionSpec
+        {
+            Script = "New-Item -ItemType Directory -Force generated | Out-Null; Set-Content generated/powershell.txt powershell",
+            TimeoutSeconds = 30,
+            VersionedWritePaths = ["generated"],
+        });
+
+        await fixture.Executor.ExecuteAutomationAsync(fixture.Runtime, automation,
+            new TriggerFiring(null, null, null), CancellationToken.None);
+        var run = await WaitForFinishedRunAsync(fixture.Runs, fixture.Slug);
+
+        Assert.Equal(AgentRunStatus.Completed, run.Status);
+        Assert.Equal("powershell", (await File.ReadAllTextAsync(
+            Path.Combine(run.WorkingDirectory!, "generated", "powershell.txt"))).Trim());
+        Assert.Equal("agent", (await File.ReadAllTextAsync(
+            Path.Combine(run.WorkingDirectory!, "generated", "agent.txt"))).Trim());
+        Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+    }
+
     private async Task<Fixture> CreateFixtureAsync(string scenario, string scenarioContent)
     {
         var root = new TempDir();

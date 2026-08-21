@@ -293,6 +293,7 @@ internal sealed class ActionExecutor
                     _ = Task.Run(async () =>
                     {
                         DurableWriteRoute? route = null;
+                        var abortChain = false;
                         try
                         {
                             var backgroundRuntime = rt;
@@ -316,10 +317,23 @@ internal sealed class ActionExecutor
                                     ConfigDirty = rt.ConfigDirty,
                                 };
                             }
-                            await ExecuteFromAsync(idx, background: true, backgroundRuntime,
-                                actionCancellation?.Token ?? ct);
+                            // Execute and finalize this detached action before advancing the chain.
+                            // A ticketless runAgent resolves the same maintenance worktree, so keeping
+                            // this route alive while dispatching the next action deadlocks on its lease.
+                            abortChain = await ExecuteChainActionAsync(backgroundRuntime, firing, action,
+                                state, parentRun: null, actionCancellation?.Token ?? ct);
                             if (actionRun is not null)
                                 _runs.Complete(actionRun.RunId, AgentRunStatus.Completed, 0);
+
+                            if (route is not null && _durableWrites is not null)
+                            {
+                                await _durableWrites.CommitAndQueueAsync(rt.Slug, route,
+                                    $"chore(automation): persist {automation.Id}", CancellationToken.None);
+                                route = null;
+                            }
+
+                            if (!abortChain)
+                                await ExecuteFromAsync(idx + 1, background: true, rt, ct);
                         }
                         catch (OperationCanceledException) { /* engine shutdown */ }
                         catch (Exception ex) { _logger.LogWarning(ex, "Detached automation actions failed for {Id}", automation.Id); }
