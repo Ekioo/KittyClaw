@@ -243,6 +243,11 @@ public sealed class AgentRunner
                         $"Using worktree {worktree.Path} on branch {worktree.Branch} for root ticket #{worktree.RootTicketId}"));
                 }
             }
+            else if (!string.IsNullOrWhiteSpace(ctx.ExecutionWorkspacePath))
+            {
+                run.Push(new StreamEvent(DateTime.UtcNow, "worktree",
+                    $"Using durable automation worktree {ctx.ExecutionWorkspacePath}"));
+            }
         }
         catch (OperationCanceledException)
         {
@@ -1340,13 +1345,9 @@ public sealed class AgentRunner
 
     private void AppendDebugLog(AgentRunContext ctx, string line)
     {
-        try
-        {
-            var path = _sessions.ChannelFilePath(ctx.WorkspacePath, "debug.log");
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.AppendAllText(path,
-                $"[{DateTime.UtcNow:o}] {line}\n");
-        }
-        catch { /* best-effort debug log — disk errors must not crash the run */ }
+        // Run lifecycle diagnostics belong to the application logger. Writing them below
+        // .agents/channel made every agent run dirty the project's primary checkout, even
+        // when the actual process was correctly isolated in a ticket or maintenance worktree.
+        _logger.LogDebug("Agent lifecycle {Project}: {Line}", ctx.ProjectSlug, line);
     }
 }

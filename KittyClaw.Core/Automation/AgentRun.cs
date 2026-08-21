@@ -377,6 +377,21 @@ public sealed class AgentRunRegistry
         OnRunEnded?.Invoke(run);
     }
 
+    /// <summary>
+    /// Converts a provider-successful run into a failure when its required post-run durable
+    /// finalization is rejected. This explicit transition is intentionally narrower than
+    /// <see cref="Complete"/> so duplicate stop/completion calls remain idempotent.
+    /// </summary>
+    public bool FailPostRunFinalization(string runId, int exitCode = -1)
+    {
+        if (!_runs.TryGetValue(runId, out var run) || run.Status != AgentRunStatus.Completed)
+            return false;
+        run.Status = AgentRunStatus.Failed;
+        run.ExitCode = exitCode;
+        _store?.Save(run);
+        return true;
+    }
+
     public AgentRun? Get(string runId) => _runs.TryGetValue(runId, out var r) ? r : null;
 
     public IEnumerable<AgentRun> ActiveForProject(string projectSlug) =>

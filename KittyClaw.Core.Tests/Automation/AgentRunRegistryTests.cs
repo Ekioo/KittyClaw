@@ -68,6 +68,30 @@ public class AgentRunRegistryTests
     }
 
     [Fact]
+    public void FailPostRunFinalization_OnlyConvertsProviderSuccessToFailure()
+    {
+        var registry = new AgentRunRegistry();
+        var completed = NewRun("completed", "p", null);
+        var failed = NewRun("failed", "p", null);
+        var running = NewRun("running", "p", null);
+        registry.Register(completed);
+        registry.Register(failed);
+        registry.Register(running);
+        registry.Complete(completed.RunId, AgentRunStatus.Completed, 0);
+        registry.Complete(failed.RunId, AgentRunStatus.Failed, 23);
+
+        Assert.True(registry.FailPostRunFinalization(completed.RunId));
+        Assert.Equal(AgentRunStatus.Failed, completed.Status);
+        Assert.Equal(-1, completed.ExitCode);
+        Assert.False(registry.FailPostRunFinalization(completed.RunId));
+        Assert.False(registry.FailPostRunFinalization(failed.RunId));
+        Assert.False(registry.FailPostRunFinalization(running.RunId));
+        Assert.False(registry.FailPostRunFinalization("missing"));
+        Assert.Equal(23, failed.ExitCode);
+        Assert.Equal(AgentRunStatus.Running, running.Status);
+    }
+
+    [Fact]
     public void Push_UpdatesLastActivityAt_ToEventTimestamp()
     {
         var run = new AgentRun

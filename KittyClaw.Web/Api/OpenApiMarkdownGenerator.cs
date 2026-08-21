@@ -363,7 +363,7 @@ public static class OpenApiMarkdownGenerator
         sb.AppendLine();
         sb.AppendLine("| Type | Params | Description |");
         sb.AppendLine("|------|--------|-------------|");
-        sb.AppendLine("| `runAgent` | `agent`, `maxTurns?`, `concurrencyGroup?`, `mutuallyExclusiveWith[]`, `context?`, `env?`, `model?` | Launches the named agent; its skill is resolved by convention to `.agents/{agent}/SKILL.md` |");
+        sb.AppendLine("| `runAgent` | `agent`, `maxTurns?`, `concurrencyGroup?`, `mutuallyExclusiveWith[]`, `context?`, `env?`, `model?`, `versionedWritePaths[]` | Launches the named agent; its skill is resolved by convention to `.agents/{agent}/SKILL.md`. Ticketless runs use the durable maintenance worktree and queue only the declared paths. |");
         sb.AppendLine("| `moveTicketStatus` | `to` | Moves the ticket to the given column |");
         sb.AppendLine("| `setLabels` | `add[]`, `remove[]` | Adds or removes labels on the ticket |");
         sb.AppendLine("| `assignTicket` | `slug?` | Assigns or unassigns the ticket |");

@@ -288,6 +288,9 @@ public sealed class RunAgentActionSpec : ActionSpec
     public Dictionary<string, string> Env { get; set; } = new();
     public string? Model { get; set; }
     public bool RestoreStatusOnFail { get; set; } = true;
+    /// <summary>Repository-relative paths that a ticketless automation agent may persist.
+    /// Ticket-bound agents keep using their ticket worktree and do not use this list.</summary>
+    public List<string> VersionedWritePaths { get; set; } = [".agents", "tools", "scripts"];
 }
 
 public sealed class MoveTicketStatusActionSpec : ActionSpec

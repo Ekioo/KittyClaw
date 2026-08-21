@@ -434,13 +434,14 @@ internal sealed class ActionExecutor
         List<ActionSpec> remainingActions,
         string? chainKey)
     {
-        var (skip, runTask, agentName) = await StartAgentRunAsync(rt, firing, a, ct);
+        var (skip, runTask, agentName, durableRoute) = await StartAgentRunAsync(rt, firing, a, ct);
         if (skip || runTask is null) return true;
 
         var statusBefore = state.StatusBeforeMove;
         var statusAfter = state.StatusAfterMove;
         var assigneeBefore = state.AssigneeBeforeMove;
-        _ = HandleRunCompletionAsync(runTask, rt, firing, a, agentName, statusBefore, statusAfter, assigneeBefore, remainingActions, commitAsync, chainKey, ct);
+        _ = HandleRunCompletionAsync(runTask, rt, firing, a, agentName, durableRoute, statusBefore,
+            statusAfter, assigneeBefore, remainingActions, commitAsync, chainKey, ct);
         state.LastRun = null;
         return false;
     }
@@ -448,7 +449,7 @@ internal sealed class ActionExecutor
     // Resolves the agent name, applies the skip gate, and starts the run (without awaiting it).
     // Returns skip=true when the run must not proceed (placeholder unresolved or gate skip);
     // otherwise runTask is the in-flight run and agentName the resolved slug.
-    private async Task<(bool skip, Task<AgentRun>? runTask, string agentName)> StartAgentRunAsync(
+    private async Task<(bool skip, Task<AgentRun>? runTask, string agentName, DurableWriteRoute? durableRoute)> StartAgentRunAsync(
         ProjectRuntime rt,
         TriggerFiring firing,
         RunAgentActionSpec a,
@@ -460,14 +461,14 @@ internal sealed class ActionExecutor
             if (firing.TicketId is null)
             {
                 _logger.LogWarning("Placeholder {{assignee}} in Agent but no ticketId in firing — skipping");
-                return (true, null, agentName);
+                return (true, null, agentName, null);
             }
             var t = await _tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
             var assignee = t?.AssignedTo;
             if (string.IsNullOrEmpty(assignee))
             {
                 _logger.LogWarning("Placeholder {{assignee}} in Agent but ticket #{Id} has no assignee — skipping", firing.TicketId);
-                return (true, null, agentName);
+                return (true, null, agentName, null);
             }
             agentName = agentName.Replace("{assignee}", assignee);
         }
@@ -479,7 +480,8 @@ internal sealed class ActionExecutor
                 .Replace("{assignee}", agentName)
                 .Replace("{ticketId}", firing.TicketId?.ToString() ?? "none");
 
-        if (await _runState.ShouldSkipAsync(rt, a, firing, agentName, group)) return (true, null, agentName);
+        if (await _runState.ShouldSkipAsync(rt, a, firing, agentName, group))
+            return (true, null, agentName, null);
 
         // Dependency gate: do not dispatch if the ticket has unresolved blockers.
         if (firing.TicketId is int depCheckId)
@@ -496,7 +498,7 @@ internal sealed class ActionExecutor
                     _logger.LogInformation(
                         "Skipping dispatch for ticket #{Id}: {N} unresolved blocker(s)",
                         depCheckId, unresolved.Count);
-                    return (true, null, agentName);
+                    return (true, null, agentName, null);
                 }
             }
         }
@@ -534,32 +536,57 @@ internal sealed class ActionExecutor
             ? null
             : fallbackRouting.ToTarget(fallbackModel, a.Env);
 
-        var runCtx = new AgentRunContext
-        {
-            ProjectSlug = rt.Slug,
-            WorkspacePath = rt.Workspace!,
-            AgentName = agentName,
-            SkillFile = skillFile,
-            TicketId = firing.TicketId,
-            TicketTitle = firing.TicketTitle,
-            TicketStatus = firing.TicketStatus,
-            MaxTurns = a.MaxTurns,
-            ConcurrencyGroup = group,
-            LockTimeoutMinutes = a.LockTimeoutMinutes,
-            Target = target,
-            FallbackTarget = fallbackTarget,
-            ExtraContext = a.Context,
-            RetryOnResumeFailure = true,
-            MaxRunDuration = TimeSpan.FromMinutes(30),
-        };
-        _sessions.SetLastDispatched(rt.Workspace!, agentName, DateTime.UtcNow);
-        if (firing.TicketId is not null)
-        {
-            try { await _tickets.AddActivityAsync(rt.Slug, firing.TicketId.Value, _loc.Get("ActAgentStarted", agentName), "automation"); }
-            catch { /* non-blocking */ }
-        }
+        DurableWriteRoute? durableRoute = null;
+        if (firing.TicketId is null && project?.WorktreesEnabled == true && _durableWrites is not null)
+            durableRoute = await _durableWrites.ResolveAsync(rt.Slug, null, a.VersionedWritePaths, ct);
 
-        return (false, _runner.RunAsync(runCtx, ct), agentName);
+        try
+        {
+            var runCtx = new AgentRunContext
+            {
+                ProjectSlug = rt.Slug,
+                WorkspacePath = rt.Workspace!,
+                AgentName = agentName,
+                SkillFile = skillFile,
+                TicketId = firing.TicketId,
+                TicketTitle = firing.TicketTitle,
+                TicketStatus = firing.TicketStatus,
+                MaxTurns = a.MaxTurns,
+                ConcurrencyGroup = group,
+                LockTimeoutMinutes = a.LockTimeoutMinutes,
+                Target = target,
+                FallbackTarget = fallbackTarget,
+                ExtraContext = a.Context,
+                RetryOnResumeFailure = true,
+                MaxRunDuration = TimeSpan.FromMinutes(30),
+                ExecutionWorkspacePath = durableRoute?.RootPath,
+            };
+            _sessions.SetLastDispatched(rt.Workspace!, agentName, DateTime.UtcNow);
+            if (firing.TicketId is not null)
+            {
+                try { await _tickets.AddActivityAsync(rt.Slug, firing.TicketId.Value, _loc.Get("ActAgentStarted", agentName), "automation"); }
+                catch { /* non-blocking */ }
+            }
+
+            return (false, _runner.RunAsync(runCtx, ct), agentName, durableRoute);
+        }
+        catch (Exception ex)
+        {
+            if (durableRoute is not null && _durableWrites is not null)
+            {
+                try
+                {
+                    await _durableWrites.PreserveExecutionAsync(rt.Slug, durableRoute,
+                        $"Agent automation '{agentName}' could not start: {ex.Message}");
+                }
+                catch (Exception preserveEx)
+                {
+                    _logger.LogError(preserveEx,
+                        "Failed to preserve ticketless agent route after startup failure for {Agent}", agentName);
+                }
+            }
+            throw;
+        }
     }
 
     private async Task HandleRunCompletionAsync(
@@ -568,6 +595,7 @@ internal sealed class ActionExecutor
         TriggerFiring firing,
         RunAgentActionSpec spec,
         string agentName,
+        DurableWriteRoute? durableRoute,
         string? statusBeforeMove,
         string? statusAfterMove,
         string? assigneeBeforeMove,
@@ -584,8 +612,17 @@ internal sealed class ActionExecutor
         catch (Exception ex)
         {
             _logger.LogError(ex, "runAgent {Agent} crashed for ticket #{Id}", agentName, firing.TicketId);
+            if (durableRoute is not null && _durableWrites is not null)
+            {
+                try { await _durableWrites.PreserveExecutionAsync(rt.Slug, durableRoute,
+                    $"Agent automation '{agentName}' crashed: {ex.Message}"); }
+                catch (Exception preserveEx) { _logger.LogError(preserveEx,
+                    "Failed to preserve crashed ticketless agent {Agent}", agentName); }
+            }
             return;
         }
+
+        await FinalizeDurableAgentRunAsync(rt.Slug, agentName, run, durableRoute);
 
         if (run.Status == AgentRunStatus.Completed)
             await commitAsync(DateTime.UtcNow);
@@ -670,6 +707,42 @@ internal sealed class ActionExecutor
         }
     }
 
+    private async Task FinalizeDurableAgentRunAsync(
+        string projectSlug,
+        string agentName,
+        AgentRun run,
+        DurableWriteRoute? route)
+    {
+        if (route is null || _durableWrites is null) return;
+        try
+        {
+            if (run.Status == AgentRunStatus.Completed)
+            {
+                var validation = await _durableWrites.CommitAndQueueAsync(projectSlug, route,
+                    $"chore(automation): persist {agentName} durable changes", CancellationToken.None);
+                if (validation.Status == DurableWriteValidationStatus.Ready) return;
+
+                run.Push(new StreamEvent(DateTime.UtcNow, "error",
+                    validation.Error ?? (validation.SecretPaths.Count > 0
+                        ? $"Durable agent output contains a possible secret: {string.Join(", ", validation.SecretPaths)}"
+                        : $"Durable agent output changed undeclared paths: {string.Join(", ", validation.UnexpectedPaths)}")));
+                _runs.FailPostRunFinalization(run.RunId);
+                return;
+            }
+
+            await _durableWrites.PreserveExecutionAsync(projectSlug, route,
+                $"Agent automation '{agentName}' ended with status {run.Status}; its isolated changes were preserved.");
+        }
+        catch (Exception ex)
+        {
+            run.Push(new StreamEvent(DateTime.UtcNow, "error",
+                $"Durable agent finalization failed: {ex.Message}"));
+            _runs.FailPostRunFinalization(run.RunId);
+            _logger.LogError(ex, "Failed to finalize ticketless agent {Agent} for {Project}",
+                agentName, projectSlug);
+        }
+    }
+
     // Runs the side-effect actions that follow a runAgent. A second runAgent in the chain
     // (e.g. the judge that decides whether to advance the ticket) is dispatched here, awaited,
     // and its own trailing actions are processed recursively. Without this, the chained judge
@@ -691,7 +764,7 @@ internal sealed class ActionExecutor
                 {
                     case RunAgentActionSpec ra:
                     {
-                        var (skip, runTask, agentName) = await StartAgentRunAsync(rt, firing, ra, ct);
+                        var (skip, runTask, agentName, durableRoute) = await StartAgentRunAsync(rt, firing, ra, ct);
                         if (skip || runTask is null) return;
 
                         AgentRun chainedRun;
@@ -699,8 +772,17 @@ internal sealed class ActionExecutor
                         catch (Exception ex)
                         {
                             _logger.LogError(ex, "chained runAgent {Agent} crashed for ticket #{Id}", agentName, firing.TicketId);
+                            if (durableRoute is not null && _durableWrites is not null)
+                            {
+                                try { await _durableWrites.PreserveExecutionAsync(rt.Slug, durableRoute,
+                                    $"Chained agent automation '{agentName}' crashed: {ex.Message}"); }
+                                catch (Exception preserveEx) { _logger.LogError(preserveEx,
+                                    "Failed to preserve crashed chained agent {Agent}", agentName); }
+                            }
                             return;
                         }
+
+                        await FinalizeDurableAgentRunAsync(rt.Slug, agentName, chainedRun, durableRoute);
 
                         if (chainedRun.Status == AgentRunStatus.Completed)
                             await commitAsync(DateTime.UtcNow);
