@@ -84,11 +84,12 @@ public class ChatImagePasteContractTests
     }
 
     [Fact]
-    public void ChatStart_endpoint_writes_images_to_channel_tmp_and_forwards_paths_to_runner()
+    public void ChatStart_endpoint_writes_images_outside_the_repository_and_forwards_paths_to_runner()
     {
         var src = Read("KittyClaw.Web/Api/Endpoints.Chat.cs");
-        // Plan: decode data URL, write under <workspace>/.agents/channel/tmp/.
-        Assert.Matches(new Regex(@"channel[/\\]+tmp"), src);
+        // Temporary transport files must not dirty the project checkout, including after a crash.
+        Assert.Contains("Path.GetTempPath()", src);
+        Assert.DoesNotContain("Path.Combine(workspacePath, \".agents\", \"channel\", \"tmp\")", src);
         // Forwards to AgentRunContext.ImagePaths.
         Assert.Matches(new Regex(@"ImagePaths\s*="), src);
     }

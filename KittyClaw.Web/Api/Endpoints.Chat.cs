@@ -393,7 +393,8 @@ public static partial class Endpoints
     };
 
     /// <summary>
-    /// Validates and persists pasted images to <c>&lt;workspace&gt;/.agents/channel/tmp/</c>.
+    /// Validates and persists pasted images outside the project repository. A host interruption
+    /// may leave a temporary file behind, but it can no longer dirty a versioned checkout.
     /// Returns the list of absolute paths to forward to <see cref="AgentRunContext.ImagePaths"/>,
     /// or a non-null reason string for a 400 "image_rejected" response.
     /// </summary>
@@ -404,7 +405,8 @@ public static partial class Endpoints
         if (images.Count > ChatImageMaxCount)
             return (null, $"too many images (max {ChatImageMaxCount})");
 
-        var tmpDir = Path.Combine(workspacePath, ".agents", "channel", "tmp");
+        _ = workspacePath; // Kept in the signature for compatibility with existing callers/tests.
+        var tmpDir = Path.Combine(Path.GetTempPath(), "KittyClaw", "chat-images", runId);
         Directory.CreateDirectory(tmpDir);
 
         var paths = new List<string>(images.Count);

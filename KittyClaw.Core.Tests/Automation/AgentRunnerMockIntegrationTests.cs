@@ -1,6 +1,7 @@
 using KittyClaw.Core.Services;
 using KittyClaw.Core.Models;
 using KittyClaw.Core.Tests.Helpers;
+using KittyClaw.Core.Tests.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace KittyClaw.Core.Tests.Automation;
@@ -193,6 +194,63 @@ public class AgentRunnerMockIntegrationTests
     }
 
     [Fact]
+    public async Task NoTicketChat_UsesMaintenanceWorktree_AndQueuesEverySafeProjectChange()
+    {
+        using var tmp = new TempDir();
+        var repository = ProjectWorktreeSettingsTests.CreateRepository(tmp.Path, "integration");
+        var projects = new ProjectService(Path.Combine(tmp.Path, "data"));
+        var project = await projects.CreateProjectAsync("isolated-chat");
+        await projects.UpdateProjectAsync(project.Slug, repository);
+        await projects.UpdateProjectAsync(project.Slug, null,
+            worktreesEnabled: true, integrationBranch: "integration");
+        var tickets = new TicketService(projects, new MemberService(projects));
+        var worktrees = new TicketWorktreeService(projects, tickets);
+        var queue = new WorktreeMergeQueueService(projects, worktrees);
+        var router = new DurableWriteRouter(projects, worktrees, queue);
+
+        var scenarioDir = Path.Combine(tmp.Path, "mock-scenarios");
+        Directory.CreateDirectory(scenarioDir);
+        await File.WriteAllTextAsync(Path.Combine(scenarioDir, "chat-write.ndjson"), string.Join('\n', new[]
+        {
+            "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"{{session_id}}\",\"model\":\"mock\"}",
+            "{\"_meta\":{\"write_file\":{\"path\":\"chat-output.txt\",\"content\":\"preserved\"}}}",
+            "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":42,\"num_turns\":1}",
+        }));
+        var runs = new AgentRunRegistry();
+        var runner = new AgentRunner(new SessionRegistry(Path.Combine(tmp.Path, "session-data")), runs, new RunConcurrencyGate(1),
+            NullLogger<AgentRunner>.Instance, worktrees: worktrees, durableWrites: router);
+        var ctx = new AgentRunContext
+        {
+            ProjectSlug = project.Slug,
+            WorkspacePath = repository,
+            AgentName = "test-agent",
+            SkillFile = "(inline)",
+            InlineSkillContent = "You are a test agent. <!--scenario:chat-write-->",
+            ExtraContext = "Create the file",
+            MaxTurns = 1,
+            SessionScope = "chat",
+            ConcurrencyGroup = $"chat:{project.Slug}:test-agent",
+            Env = new Dictionary<string, string> { ["KITTYCLAW_MOCK_SCENARIOS_DIR"] = scenarioDir },
+        };
+
+        var run = await runner.RunAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(AgentRunStatus.Completed, run.Status);
+        Assert.NotEqual(repository, run.WorkingDirectory);
+        Assert.False(File.Exists(Path.Combine(repository, "chat-output.txt")));
+        Assert.Empty(Git(repository, "status", "--porcelain"));
+        var request = Assert.Single(await queue.ListAsync(project.Slug));
+        Assert.Equal(WorktreeMergeStatus.Pending, request.Status);
+        Assert.Empty(Git(request.WorktreePath, "status", "--porcelain"));
+
+        var integrated = await queue.ProcessNextAsync(project.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        Assert.Equal("preserved", await File.ReadAllTextAsync(Path.Combine(repository, "chat-output.txt")));
+        Assert.Empty(Git(repository, "status", "--porcelain"));
+    }
+
+    [Fact]
     public async Task ScenarioWithErrorExit_MarksRunAsFailed()
     {
         using var tmp = new TempDir();
@@ -219,6 +277,25 @@ public class AgentRunnerMockIntegrationTests
 
         Assert.Equal(AgentRunStatus.Failed, run.Status);
         Assert.Equal(1, run.ExitCode);
+    }
+
+    private static string Git(string cwd, params string[] args)
+    {
+        var info = new System.Diagnostics.ProcessStartInfo("git")
+        {
+            WorkingDirectory = cwd,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        foreach (var arg in args) info.ArgumentList.Add(arg);
+        using var process = System.Diagnostics.Process.Start(info)!;
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.Equal(0, process.ExitCode);
+        Assert.True(string.IsNullOrWhiteSpace(error), error);
+        return output;
     }
 
     // Regression for ticket #221: claude (Node) can emit its terminal `result` event yet never

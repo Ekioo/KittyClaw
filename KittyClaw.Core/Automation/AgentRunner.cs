@@ -13,6 +13,12 @@ public sealed class AgentRunContext
     public required string WorkspacePath { get; init; }
     /// <summary>Process cwd. When null, the control workspace is used.</summary>
     internal string? ExecutionWorkspacePath { get; set; }
+    /// <summary>Project-wide maintenance route owned by a no-ticket interactive chat chain.</summary>
+    internal DurableWriteRoute? DurableWriteRoute { get; set; }
+    /// <summary>True when ownership of <see cref="DurableWriteRoute"/> moved to an auto-follow turn.</summary>
+    internal bool DurableWriteRouteTransferred { get; set; }
+    /// <summary>Fail-closed error captured before the provider process is started.</summary>
+    internal string? ExecutionWorkspaceError { get; set; }
     public required string AgentName { get; init; }
     public required string SkillFile { get; init; }
     public int? TicketId { get; init; }
@@ -82,6 +88,8 @@ public sealed class AgentRunContext
         ProjectSlug = ProjectSlug,
         WorkspacePath = WorkspacePath,
         ExecutionWorkspacePath = ExecutionWorkspacePath,
+        DurableWriteRoute = DurableWriteRoute,
+        ExecutionWorkspaceError = ExecutionWorkspaceError,
         AgentName = AgentName,
         SkillFile = SkillFile,
         TicketId = TicketId,
@@ -117,6 +125,8 @@ public sealed class AgentRunContext
         ProjectSlug = ProjectSlug,
         WorkspacePath = WorkspacePath,
         ExecutionWorkspacePath = ExecutionWorkspacePath,
+        DurableWriteRoute = DurableWriteRoute,
+        ExecutionWorkspaceError = ExecutionWorkspaceError,
         AgentName = AgentName,
         SkillFile = SkillFile,
         TicketId = TicketId,
@@ -162,7 +172,7 @@ public sealed class AgentRunContext
     /// <summary>Bounded transcript injected when an interactive chat changes CLI provider.</summary>
     public string? ConversationHandoff { get; init; }
 
-    /// <summary>Absolute paths to user-pasted image files saved under the workspace's channel/tmp. BuildPromptAsync surfaces them under an [Attached images] block; the runner best-effort deletes them after the process exits.</summary>
+    /// <summary>Absolute paths to user-pasted temporary image files. BuildPromptAsync surfaces them under an [Attached images] block; the runner best-effort deletes them after the process exits.</summary>
     public IReadOnlyList<string>? ImagePaths { get; init; }
 
     /// <summary>Maximum wall-clock duration for this run. When exceeded, the subprocess is killed and the run fails.
@@ -188,8 +198,9 @@ public sealed class AgentRunner
     private readonly TicketWorktreeService? _worktrees;
     private readonly RtkIntegrationService? _rtk;
     private readonly ProjectSecretVault? _projectSecrets;
+    private readonly DurableWriteRouter? _durableWrites;
 
-    public AgentRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<AgentRunner> logger, AppSettingsService? appSettings = null, BoundaryObservationService? boundaryObserver = null, TicketWorktreeService? worktrees = null, RtkIntegrationService? rtk = null, ProjectSecretVault? projectSecrets = null)
+    public AgentRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<AgentRunner> logger, AppSettingsService? appSettings = null, BoundaryObservationService? boundaryObserver = null, TicketWorktreeService? worktrees = null, RtkIntegrationService? rtk = null, ProjectSecretVault? projectSecrets = null, DurableWriteRouter? durableWrites = null)
     {
         _sessions = sessions;
         _runs = runs;
@@ -200,9 +211,76 @@ public sealed class AgentRunner
         _worktrees = worktrees;
         _rtk = rtk;
         _projectSecrets = projectSecrets;
+        _durableWrites = durableWrites;
     }
 
     public async Task<AgentRun> RunAsync(AgentRunContext ctx, CancellationToken ct)
+    {
+        var route = ctx.DurableWriteRoute;
+        if (route is null && _durableWrites is not null &&
+            ctx.SessionScope == "chat" && ctx.TicketId is null)
+        {
+            try
+            {
+                route = await _durableWrites.TryResolveWorkspaceAsync(ctx.ProjectSlug, null, ct);
+                if (route is not null)
+                {
+                    ctx.DurableWriteRoute = route;
+                    ctx.ExecutionWorkspacePath = route.RootPath;
+                }
+            }
+            catch (Exception ex)
+            {
+                ctx.ExecutionWorkspaceError = $"Interactive worktree resolution failed: {ex.Message}";
+            }
+        }
+
+        var run = await RunCoreAsync(ctx, ct);
+        if (route is null || ctx.DurableWriteRouteTransferred)
+            return run;
+
+        try
+        {
+            if (run.Status == AgentRunStatus.Completed)
+            {
+                var validation = await _durableWrites!.CommitAndQueueAsync(
+                    ctx.ProjectSlug, route, $"chore(chat): preserve {ctx.AgentName} instruction",
+                    CancellationToken.None);
+                if (validation.Status != DurableWriteValidationStatus.Ready)
+                {
+                    var reason = validation.Error ?? (validation.SecretPaths.Count > 0
+                        ? $"Possible secret detected in: {string.Join(", ", validation.SecretPaths)}"
+                        : $"Unexpected local-only paths detected in: {string.Join(", ", validation.UnexpectedPaths)}");
+                    run.Push(new StreamEvent(DateTime.UtcNow, "error",
+                        $"The instruction changes were preserved for review: {reason}"));
+                    _runs.FailPostRunFinalization(run.RunId);
+                }
+            }
+            else
+            {
+                await _durableWrites!.CloseOrPreserveExecutionAsync(
+                    ctx.ProjectSlug, route,
+                    $"Interactive run {run.RunId} ended as {run.Status}; its worktree was preserved.",
+                    CancellationToken.None);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to finalize interactive durable route for {Project}/{RunId}",
+                ctx.ProjectSlug, run.RunId);
+            try
+            {
+                run.Push(new StreamEvent(DateTime.UtcNow, "error",
+                    $"The instruction worktree could not be finalized automatically: {ex.Message}"));
+            }
+            catch { }
+            _runs.FailPostRunFinalization(run.RunId);
+        }
+        return run;
+    }
+
+    private async Task<AgentRun> RunCoreAsync(AgentRunContext ctx, CancellationToken ct)
     {
         var run = new AgentRun
         {
@@ -225,6 +303,13 @@ public sealed class AgentRunner
         if (_boundaryObserver is not null) run.OnEvent += ev => _boundaryObserver.Observe(run, ev);
         _boundaryObserver?.RecordRun(run);
         _runs.Register(run);
+
+        if (!string.IsNullOrWhiteSpace(ctx.ExecutionWorkspaceError))
+        {
+            run.Push(new StreamEvent(DateTime.UtcNow, "error", ctx.ExecutionWorkspaceError));
+            _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
+            return run;
+        }
 
         SemaphoreSlim? worktreeExecutionGate = null;
         string? primaryRepositoryPath = null;
@@ -524,6 +609,8 @@ public sealed class AgentRunner
                 {
                     ProjectSlug = ctx.ProjectSlug,
                     WorkspacePath = ctx.WorkspacePath,
+                    ExecutionWorkspacePath = ctx.ExecutionWorkspacePath,
+                    DurableWriteRoute = ctx.DurableWriteRoute,
                     AgentName = ctx.AgentName,
                     SkillFile = ctx.SkillFile,
                     InlineSkillContent = ctx.InlineSkillContent,
@@ -545,6 +632,7 @@ public sealed class AgentRunner
                     MaxRunDuration = ctx.MaxRunDuration,
                     LockTimeoutMinutes = ctx.LockTimeoutMinutes,
                 };
+                ctx.DurableWriteRouteTransferred = ctx.DurableWriteRoute is not null;
                 _ = Task.Run(() => RunAsync(followCtx, CancellationToken.None));
             }
 
@@ -1196,10 +1284,28 @@ public sealed class AgentRunner
     private void CleanupImageTempFiles(AgentRunContext ctx)
     {
         if (ctx.ImagePaths is null || ctx.ImagePaths.Count == 0) return;
+        var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var p in ctx.ImagePaths)
         {
-            try { File.Delete(p); }
+            try
+            {
+                File.Delete(p);
+                var directory = Path.GetDirectoryName(p);
+                if (!string.IsNullOrWhiteSpace(directory)) directories.Add(directory);
+            }
             catch (Exception ex) { _logger.LogDebug(ex, "Failed to delete temporary image for project {ProjectSlug} agent {AgentName}", ctx.ProjectSlug, ctx.AgentName); }
+        }
+        foreach (var directory in directories)
+        {
+            try
+            {
+                if (Directory.Exists(directory) && !Directory.EnumerateFileSystemEntries(directory).Any())
+                    Directory.Delete(directory);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to remove empty temporary image directory {Directory}", directory);
+            }
         }
     }
 

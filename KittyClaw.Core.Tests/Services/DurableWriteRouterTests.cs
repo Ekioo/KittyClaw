@@ -124,6 +124,53 @@ public sealed class DurableWriteRouterTests
     }
 
     [Fact]
+    public async Task WholeWorkspaceRoute_StagesProjectChanges_ButRejectsLocalOnlyControlData()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var route = await fixture.Router.TryResolveWorkspaceAsync(fixture.Slug);
+        Assert.NotNull(route);
+        await File.WriteAllTextAsync(Path.Combine(route!.RootPath, "new-project-file.txt"), "safe");
+
+        var ready = await fixture.Router.ValidateAndStageAsync(route);
+
+        Assert.Equal(DurableWriteValidationStatus.Ready, ready.Status);
+        Assert.Equal("new-project-file.txt",
+            Git(route.RootPath, "diff", "--cached", "--name-only").Trim().Replace('\\', '/'));
+
+        Git(route.RootPath, "reset", "HEAD", "--", "new-project-file.txt");
+        var localOnly = Path.Combine(route.RootPath, ".agents", "channel", "tmp");
+        Directory.CreateDirectory(localOnly);
+        await File.WriteAllTextAsync(Path.Combine(localOnly, "transport.txt"), "ephemeral");
+
+        var rejected = await fixture.Router.ValidateAndStageAsync(route);
+
+        Assert.Equal(DurableWriteValidationStatus.NeedsReview, rejected.Status);
+        Assert.Contains(".agents/channel/tmp/transport.txt", rejected.UnexpectedPaths);
+        Assert.Empty(Git(route.RootPath, "diff", "--cached", "--name-only"));
+        await fixture.Router.PreserveExecutionAsync(fixture.Slug, route, "test cleanup");
+    }
+
+    [Fact]
+    public async Task WholeWorkspaceRoute_HandlesRenamesWithoutLosingEitherPath()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "old-name.txt"), "tracked");
+        Git(fixture.Repository, "add", "old-name.txt");
+        Git(fixture.Repository, "commit", "-m", "add rename fixture");
+        var route = await fixture.Router.TryResolveWorkspaceAsync(fixture.Slug);
+        Assert.NotNull(route);
+        File.Move(Path.Combine(route!.RootPath, "old-name.txt"), Path.Combine(route.RootPath, "new-name.txt"));
+
+        var result = await fixture.Router.ValidateAndStageAsync(route);
+
+        Assert.Equal(DurableWriteValidationStatus.Ready, result.Status);
+        var staged = Git(route.RootPath, "diff", "--cached", "--name-status");
+        Assert.Contains("old-name.txt", staged);
+        Assert.Contains("new-name.txt", staged);
+        await fixture.Router.PreserveExecutionAsync(fixture.Slug, route, "test cleanup");
+    }
+
+    [Fact]
     public async Task DeclaredPathsOnly_AreStaged_AndLocalOnlyPathsAreRejected()
     {
         using var fixture = await Fixture.CreateAsync();
