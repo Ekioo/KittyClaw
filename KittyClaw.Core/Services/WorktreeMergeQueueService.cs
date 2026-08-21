@@ -502,7 +502,9 @@ public sealed partial class WorktreeMergeQueueService(
             if (request.JobKind == WorktreeMergeJobKind.Ticket
                 && RunGit(repository, ["show-ref", "--verify", "--quiet", $"refs/heads/{request.SourceBranch}"], false).ExitCode == 0)
             {
-                var deleted = RunGit(repository, ["branch", "-d", request.SourceBranch], false);
+                // Integration was proven above against the configured target. A stale upstream tracking
+                // ref must not prevent cleanup of the now-detached local ticket branch.
+                var deleted = RunGit(repository, ["branch", "-D", request.SourceBranch], false);
                 if (deleted.ExitCode != 0 && ResolveSourceHead(repository, request.SourceBranch) is not null)
                     throw new InvalidOperationException($"The integrated source branch could not be deleted: {deleted.Error.Trim()}");
             }

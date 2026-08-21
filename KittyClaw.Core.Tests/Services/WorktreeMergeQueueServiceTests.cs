@@ -346,6 +346,24 @@ public sealed class WorktreeMergeQueueServiceTests
     }
 
     [Fact]
+    public async Task IntegratedTicketBranch_IsDeletedWhenItsTrackedRemoteRefIsStale()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("tracked.txt", "tracked branch");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        var staleUpstream = Git(request.WorktreePath, true, "rev-parse", "HEAD~1").Output.Trim();
+        Git(fixture.Repository, true, "update-ref", $"refs/remotes/origin/{request.SourceBranch}", staleUpstream);
+        Git(fixture.Repository, true, "config", $"branch.{request.SourceBranch}.remote", "origin");
+        Git(fixture.Repository, true, "config", $"branch.{request.SourceBranch}.merge", $"refs/heads/{request.SourceBranch}");
+
+        var completed = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
+        Assert.NotEqual(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet", $"refs/heads/{request.SourceBranch}").ExitCode);
+        Assert.True(File.Exists(Path.Combine(fixture.Repository, "tracked.txt")));
+    }
+
+    [Fact]
     public async Task ProcessingRow_IsRecoveredAfterServiceRestart()
     {
         using var fixture = await Fixture.CreateAsync();
