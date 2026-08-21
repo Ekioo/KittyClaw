@@ -450,9 +450,12 @@ public sealed partial class WorktreeMergeQueueService(
                     await SetSourceCommitAsync(db, request.Id, sourceCommit);
                     request = request with { SourceCommit = sourceCommit };
                     await SetStateAsync(db, request.Id, WorktreeMergeStatus.Processing, WorktreeMergeCheckpoint.Rebase);
-                    var rebased = RunGit(request.WorktreePath, ["rebase", request.TargetBranch], false);
-                    if (rebased.ExitCode != 0)
-                        return await MarkGitFailureAsync(db, request, rebased);
+                    if (!IsAncestor(repository, request.TargetBranch, request.SourceBranch))
+                    {
+                        var rebased = RunGit(request.WorktreePath, ["rebase", request.TargetBranch], false);
+                        if (rebased.ExitCode != 0)
+                            return await MarkGitFailureAsync(db, request, rebased);
+                    }
                 }
 
                 var rebasedCommit = RunGit(request.WorktreePath, ["rev-parse", "HEAD"]).Output.Trim();

@@ -318,6 +318,34 @@ public sealed class WorktreeMergeQueueServiceTests
     }
 
     [Fact]
+    public async Task SourceThatAlreadyMergedTarget_IsFastForwardedWithoutReplayingOldConflicts()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "shared.txt"), "base\n");
+        Git(fixture.Repository, true, "add", "shared.txt");
+        Git(fixture.Repository, true, "commit", "-m", "common base");
+        var ticket = await fixture.CreateTicketAsync();
+        var worktree = (await fixture.Worktrees.ResolveAsync(fixture.Slug, ticket, CancellationToken.None))!;
+        await File.WriteAllTextAsync(Path.Combine(worktree.Path, "shared.txt"), "source\n");
+        Git(worktree.Path, true, "add", "shared.txt");
+        Git(worktree.Path, true, "commit", "-m", "source change");
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "shared.txt"), "target\n");
+        Git(fixture.Repository, true, "add", "shared.txt");
+        Git(fixture.Repository, true, "commit", "-m", "target change");
+        Git(worktree.Path, false, "merge", "integration", "--no-edit");
+        await File.WriteAllTextAsync(Path.Combine(worktree.Path, "shared.txt"), "resolved merge\n");
+        Git(worktree.Path, true, "add", "shared.txt");
+        Git(worktree.Path, true, "-c", "core.editor=true", "commit", "--no-edit");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+
+        var completed = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
+        Assert.Equal("resolved merge\n", (await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "shared.txt"))).Replace("\r\n", "\n"));
+        Assert.False(Directory.Exists(request.WorktreePath));
+    }
+
+    [Fact]
     public async Task ProcessingRow_IsRecoveredAfterServiceRestart()
     {
         using var fixture = await Fixture.CreateAsync();
