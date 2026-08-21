@@ -63,6 +63,82 @@ public sealed class DurableWriteRouterTests
     }
 
     [Fact]
+    public async Task MaintenanceWorktree_ExposesIgnoredLocalNodeDependencies_AndReusesThemAfterRestart()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        await File.AppendAllTextAsync(Path.Combine(fixture.Repository, ".gitignore"), "\nnode_modules\n");
+        Git(fixture.Repository, "add", ".gitignore");
+        Git(fixture.Repository, "commit", "-m", "ignore local dependencies");
+        var package = Path.Combine(fixture.Repository, ".agents", "tools", "node_modules", "local-package", "index.mjs");
+        Directory.CreateDirectory(Path.GetDirectoryName(package)!);
+        await File.WriteAllTextAsync(package, "export const available = true;\n");
+
+        var first = await fixture.Router.ResolveAsync(fixture.Slug, null, [".agents"]);
+        var exposed = Path.Combine(first.RootPath, ".agents", "tools", "node_modules", "local-package", "index.mjs");
+
+        Assert.True(File.Exists(exposed));
+        Assert.Equal("export const available = true;\n", await File.ReadAllTextAsync(exposed));
+        Assert.Empty(Git(first.RootPath, "status", "--porcelain", "--untracked-files=all"));
+        await fixture.Router.CommitAndQueueAsync(fixture.Slug, first, "chore: release dependency fixture");
+
+        var restarted = new DurableWriteRouter(fixture.Projects, fixture.Worktrees);
+        var second = await restarted.ResolveAsync(fixture.Slug, null, [".agents"]);
+
+        Assert.Equal(first.RootPath, second.RootPath);
+        Assert.True(File.Exists(exposed));
+        Assert.Empty(Git(second.RootPath, "status", "--porcelain", "--untracked-files=all"));
+        await restarted.CommitAndQueueAsync(fixture.Slug, second, "chore: release restarted dependency fixture");
+    }
+
+    [Fact]
+    public async Task MaintenanceWorktree_ProductionTopology_DoesNotRediscoverWorktreeDependencies()
+    {
+        using var fixture = await Fixture.CreateAsync(productionTopology: true);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, ".gitignore"), "node_modules\n");
+        Git(fixture.Repository, "add", ".gitignore");
+        Git(fixture.Repository, "commit", "-m", "ignore local dependencies");
+        var package = Path.Combine(fixture.Workspace, ".agents", "tools", "node_modules", "local-package", "index.mjs");
+        Directory.CreateDirectory(Path.GetDirectoryName(package)!);
+        await File.WriteAllTextAsync(package, "export const available = true;\n");
+        var unrelated = Path.Combine(fixture.Workspace, "Sources.worktrees", "ticket-other", "node_modules", "unrelated-package");
+        Directory.CreateDirectory(unrelated);
+
+        var first = await fixture.Router.ResolveAsync(fixture.Slug, null, [".agents"]);
+        await fixture.Router.CommitAndQueueAsync(fixture.Slug, first, "chore: release production topology fixture");
+        var restarted = new DurableWriteRouter(fixture.Projects, fixture.Worktrees);
+        var second = await restarted.ResolveAsync(fixture.Slug, null, [".agents"]);
+
+        Assert.Equal(first.RootPath, second.RootPath);
+        Assert.True(File.Exists(Path.Combine(second.RootPath, ".agents", "tools", "node_modules", "local-package", "index.mjs")));
+        Assert.False(Directory.Exists(Path.Combine(second.RootPath, "Sources.worktrees")));
+        Assert.False(Directory.Exists(Path.Combine(second.RootPath, "ticket-other", "node_modules")));
+        Assert.Empty(Git(second.RootPath, "status", "--porcelain", "--untracked-files=all"));
+        await restarted.CommitAndQueueAsync(fixture.Slug, second, "chore: release restarted production topology fixture");
+    }
+
+    [Fact]
+    public async Task MaintenanceWorktree_ReportsLocalDependencyPreparationFailureWithSourceAndTarget()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        await File.AppendAllTextAsync(Path.Combine(fixture.Repository, ".gitignore"), "\nnode_modules\n");
+        Git(fixture.Repository, "add", ".gitignore");
+        Git(fixture.Repository, "commit", "-m", "ignore local dependencies");
+        var source = Path.Combine(fixture.Repository, "node_modules");
+        Directory.CreateDirectory(source);
+        var initial = await fixture.Router.ResolveAsync(fixture.Slug, null, [".agents"]);
+        await fixture.Router.CommitAndQueueAsync(fixture.Slug, initial, "chore: release dependency fixture");
+        var target = Path.Combine(initial.RootPath, "node_modules");
+        Directory.Delete(target);
+        await File.WriteAllTextAsync(target, "collision");
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => fixture.Router.ResolveAsync(fixture.Slug, null, [".agents"]));
+
+        Assert.Contains("Local dependency preparation failed", error.Message, StringComparison.Ordinal);
+        Assert.Contains(target, error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task SuccessfulNoOp_ReusesMaintenanceRowAndWorktreeWithoutAlert()
     {
         using var fixture = await Fixture.CreateAsync(withQueue: true);
@@ -305,6 +381,7 @@ public sealed class DurableWriteRouterTests
     {
         private readonly TempDir _root;
         public string Repository { get; }
+        public string Workspace { get; }
         public string Slug { get; }
         public TicketService Tickets { get; }
         public ProjectService Projects { get; }
@@ -312,23 +389,35 @@ public sealed class DurableWriteRouterTests
         public DurableWriteRouter Router { get; }
         public WorktreeMergeQueueService? Queue { get; }
 
-        private Fixture(TempDir root, string repository, string slug, ProjectService projects,
+        private Fixture(TempDir root, string workspace, string repository, string slug, ProjectService projects,
             TicketService tickets, TicketWorktreeService worktrees, DurableWriteRouter router, WorktreeMergeQueueService? queue)
-            => (_root, Repository, Slug, Projects, Tickets, Worktrees, Router, Queue) =
-                (root, repository, slug, projects, tickets, worktrees, router, queue);
+            => (_root, Workspace, Repository, Slug, Projects, Tickets, Worktrees, Router, Queue) =
+                (root, workspace, repository, slug, projects, tickets, worktrees, router, queue);
 
-        public static async Task<Fixture> CreateAsync(bool withQueue = false)
+        public static async Task<Fixture> CreateAsync(bool withQueue = false, bool productionTopology = false)
         {
             var root = new TempDir();
-            var repository = ProjectWorktreeSettingsTests.CreateRepository(root.Path, "integration");
+            var workspace = root.Path;
+            var repository = productionTopology
+                ? Path.Combine(workspace, "Sources")
+                : ProjectWorktreeSettingsTests.CreateRepository(workspace, "integration");
+            if (productionTopology)
+            {
+                Directory.CreateDirectory(repository);
+                Git(repository, "init", "--initial-branch", "integration");
+                Git(repository, "config", "user.email", "tests@kittyclaw.local");
+                Git(repository, "config", "user.name", "KittyClaw Tests");
+                Git(repository, "commit", "--allow-empty", "-m", "initial");
+            }
             var projects = new ProjectService(Path.Combine(root.Path, "data"));
             var project = await projects.CreateProjectAsync("router");
-            await projects.UpdateProjectAsync(project.Slug, repository);
-            await projects.UpdateProjectAsync(project.Slug, null, worktreesEnabled: true, integrationBranch: "integration");
+            await projects.UpdateProjectAsync(project.Slug, productionTopology ? workspace : repository);
+            await projects.UpdateProjectAsync(project.Slug, null, worktreesEnabled: true, integrationBranch: "integration",
+                repositoryPath: productionTopology ? repository : null);
             var tickets = new TicketService(projects, new MemberService(projects));
             var worktrees = new TicketWorktreeService(projects, tickets);
             var queue = withQueue ? new WorktreeMergeQueueService(projects, worktrees) : null;
-            return new Fixture(root, repository, project.Slug, projects, tickets, worktrees,
+            return new Fixture(root, workspace, repository, project.Slug, projects, tickets, worktrees,
                 new DurableWriteRouter(projects, worktrees, queue), queue);
         }
         public void Dispose() => _root.Dispose();

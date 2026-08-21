@@ -73,6 +73,7 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
             }
             VerifyWorktree(path, branch);
             SynchronizeMaintenanceWorktree(path, repository, project.IntegrationBranch!);
+            PrepareLocalDependencies(projects.ResolveWorkspacePath(project), path);
         }
         catch
         {
@@ -266,6 +267,107 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
 
         throw new InvalidOperationException(
             $"Maintenance worktree '{path}' has diverged from '{targetBranch}' and requires recovery.");
+    }
+    private static void PrepareLocalDependencies(string canonicalWorkspace, string worktreePath)
+    {
+        if (string.Equals(Path.GetFullPath(canonicalWorkspace), Path.GetFullPath(worktreePath), StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var worktreeContainer = Directory.GetParent(worktreePath)?.FullName;
+        foreach (var source in FindLocalDependencyDirectories(canonicalWorkspace, worktreeContainer))
+        {
+            var relative = Path.GetRelativePath(canonicalWorkspace, source);
+            var target = Path.Combine(worktreePath, relative);
+            if (Directory.Exists(target)) continue;
+            if (File.Exists(target))
+                throw new InvalidOperationException(
+                    $"Local dependency preparation failed: '{target}' exists and is not a directory.");
+
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                CreateDirectoryLink(target, source);
+                if (!Directory.Exists(target))
+                    throw new IOException("The created directory link cannot be resolved.");
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Local dependency preparation failed: could not expose '{source}' as '{target}'.", ex);
+            }
+        }
+    }
+
+    private static void CreateDirectoryLink(string target, string source)
+    {
+        try
+        {
+            Directory.CreateSymbolicLink(target, source);
+            return;
+        }
+        catch (IOException) when (OperatingSystem.IsWindows())
+        {
+            var info = new ProcessStartInfo("cmd.exe")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            foreach (var argument in new[] { "/d", "/c", "mklink", "/J", target, source })
+                info.ArgumentList.Add(argument);
+            using var process = Process.Start(info)
+                ?? throw new IOException("The Windows junction helper could not be started.");
+            var output = process.StandardOutput.ReadToEnd();
+            var error = process.StandardError.ReadToEnd();
+            if (!process.WaitForExit(30_000))
+            {
+                process.Kill(true);
+                throw new IOException("The Windows junction helper timed out.");
+            }
+            if (process.ExitCode != 0)
+                throw new IOException($"The Windows junction helper failed: {(error.Length > 0 ? error : output).Trim()}");
+        }
+    }
+
+    private static IEnumerable<string> FindLocalDependencyDirectories(string root, string? excludedRoot)
+    {
+        if (!Directory.Exists(root)) yield break;
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.TryPop(out var current))
+        {
+            IEnumerable<string> children;
+            try { children = Directory.EnumerateDirectories(current); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                throw new InvalidOperationException(
+                    $"Local dependency preparation failed while inspecting '{current}'.", ex);
+            }
+
+            foreach (var child in children)
+            {
+                if (IsSameOrDescendant(child, excludedRoot)) continue;
+                if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0) continue;
+                var name = Path.GetFileName(child);
+                if (name.Equals("node_modules", StringComparison.OrdinalIgnoreCase))
+                {
+                    yield return child;
+                    continue;
+                }
+                if (name.Equals(".git", StringComparison.OrdinalIgnoreCase)) continue;
+                pending.Push(child);
+            }
+        }
+    }
+
+    private static bool IsSameOrDescendant(string path, string? root)
+    {
+        if (string.IsNullOrWhiteSpace(root)) return false;
+        var candidate = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        var ancestor = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+        return string.Equals(candidate, ancestor, StringComparison.OrdinalIgnoreCase)
+            || candidate.StartsWith(ancestor + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
     private static GitResult RunGit(string cwd, IReadOnlyList<string> args, bool throwOnError = true)
     {
