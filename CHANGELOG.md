@@ -35,6 +35,7 @@ Startup and navigation now become usable before historical maintenance finishes.
 - Completed worktrees are no longer abandoned when worktrees are later disabled, commits arrive after initial finalization, branches are already merged, or a rebase was interrupted.
 - Uncommitted or conflicted worktrees are preserved for review instead of being deleted, silently blocked, or incorrectly marked complete.
 - Cancelled automations terminate their complete child-process trees; inherited standard streams no longer keep sessions alive after the command exits.
+- Process runs cancelled before launch now stop before creating any child process, consistently on Windows and Linux.
 - Stale trigger retries cannot overwrite newer ticket evidence, and processor results survive subsequent evidence updates.
 - Detached automation failures remain recorded in run logs even when no live agent session owns them.
 - The dashboard remains responsive during startup, ticket status indicators no longer overlap, and RTK savings use a visually distinct color.
