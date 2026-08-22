@@ -68,6 +68,8 @@ public static class ProcessRunner
         IReadOnlyDictionary<string, string>? env = null,
         CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
+
         var psi = new ProcessStartInfo
         {
             FileName = fileName,

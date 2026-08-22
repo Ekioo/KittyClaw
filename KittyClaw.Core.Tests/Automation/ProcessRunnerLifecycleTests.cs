@@ -35,8 +35,8 @@ public sealed class ProcessRunnerLifecycleTests : IDisposable
         cancellation.Cancel();
         cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ProcessRunner.RunAsync(
-            OperatingSystem.IsWindows() ? "powershell.exe" : "/bin/sh",
-            OperatingSystem.IsWindows() ? "-NoProfile -Command Start-Sleep -Seconds 30" : "-c 'sleep 30'",
+            "kittyclaw-cancelled-process-must-not-start",
+            string.Empty,
             ct: cancellation.Token));
     }
 
