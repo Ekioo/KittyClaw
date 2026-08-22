@@ -3,8 +3,14 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using KittyClaw.Core.Services;
+using KittyClaw.Core.Tests.Helpers;
 using KittyClaw.Web.Api;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace KittyClaw.Core.Tests.Api;
 
@@ -309,6 +315,15 @@ public sealed class PipelineExportHttpTests : IClassFixture<PipelineExportHttpTe
             File.WriteAllText(Path.Combine(_dataDir, "settings.json"),
                 """{"OnboardingSeen":true,"Language":"en"}""");
             Environment.SetEnvironmentVariable("KITTYCLAW_DATA_DIR", _dataDir);
+        }
+
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<ProjectSecretVault>();
+                services.AddSingleton(new ProjectSecretVault(_dataDir, new TestSecretProtector()));
+            });
         }
 
         protected override void Dispose(bool disposing)
