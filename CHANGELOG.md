@@ -4,6 +4,49 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.18] — 2026-08-23
+
+Recoverable durable worktrees, safer automation lifecycles, progressive startup, and clearer operational state.
+
+### Highlights
+
+KittyClaw now routes every durable project write through recoverable worktrees, including ticketless automations, processor migrations, memory updates, and project chat. Completed worktrees are finalized deterministically: late commits are requeued, stale or already-merged histories are recognized, interrupted rebases resume safely, and conflicts or external changes remain preserved for explicit review.
+
+Automation execution is more resilient under real operating conditions. Process trees are confined and cancelled completely, inherited pipes no longer strand sessions, stale retries are rejected, routing locks are released between actions, and failures that happen outside an attached agent session remain visible in run history.
+
+Startup and navigation now become usable before historical maintenance finishes. The dashboard shell renders immediately, run history loads in the background, project dependencies are made available inside maintenance worktrees, and recovery continues independently without blocking HTTP availability.
+
+### Added
+
+- A durable-write router that isolates project-owned files in recoverable maintenance worktrees and serializes their integration into the configured target branch.
+- Autonomous recovery for interrupted maintenance writes, late commits, terminal ticket worktrees, disabled-worktree projects, and resumable rebase checkpoints.
+- Persistent, visible recovery outcomes for dirty targets, uncommitted worktrees, divergent histories, merge conflicts, and external changes that require review.
+- Integration and QA coverage for automation process lifecycles, durable routing, worktree recovery, dirty-target alerts, progressive startup, and cross-platform pipeline-kit export.
+
+### Changed
+
+- Ticketless agent automations, project chat, memory capitalization, processor migration, and scheduled column work now use the same durable worktree boundary as ticket delivery.
+- The integration queue prioritizes recoverable work, reuses registered worktree branches, and cleans integrated branches whose upstream metadata is stale.
+- Run history and startup maintenance load asynchronously after HTTP begins serving, while the dashboard exposes its shell before project data finishes loading.
+- Maintenance worktrees resolve project-local dependencies without falling back to writes in the primary checkout.
+
+### Fixed
+
+- Completed worktrees are no longer abandoned when worktrees are later disabled, commits arrive after initial finalization, branches are already merged, or a rebase was interrupted.
+- Uncommitted or conflicted worktrees are preserved for review instead of being deleted, silently blocked, or incorrectly marked complete.
+- Cancelled automations terminate their complete child-process trees; inherited standard streams no longer keep sessions alive after the command exits.
+- Stale trigger retries cannot overwrite newer ticket evidence, and processor results survive subsequent evidence updates.
+- Detached automation failures remain recorded in run logs even when no live agent session owns them.
+- The dashboard remains responsive during startup, ticket status indicators no longer overlap, and RTK savings use a visually distinct color.
+- Linux pipeline-kit HTTP tests use an isolated test secret protector instead of depending on the host credential service.
+
+### Security
+
+- Project skill inspection is read-only, project chat writes are isolated, and runtime state stays outside project checkouts.
+- Durable boundary checks ignore only explicitly consolidated memory artifacts while continuing to reject unrelated primary-checkout contamination.
+
+---
+
 ## [v0.17] — 2026-08-20
 
 Secure project secrets, portable pipeline kits, DeepSeek V4, configurable MCP, and stronger runtime delivery controls.
