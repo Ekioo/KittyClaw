@@ -291,6 +291,69 @@ public sealed class ColumnExecutionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Completed_processor_result_survives_restart_after_publishing_its_own_evidence()
+    {
+        var project = await _projects.CreateProjectAsync("Processor evidence restart");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: pipeline.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Done", pipelineId: pipeline.Id,
+            role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, target.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Publish proof", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+        await _tickets.AddCommentAsync(project.Slug, ticket.Id, "Proof: regression verified", processor.Name);
+        var evidenceVersion = (await _tickets.GetTicketAsync(project.Slug, ticket.Id))!.UpdatedAt;
+        var result = new ColumnAgentResult("completed", [], "Verified",
+            Evidence: new ColumnResultEvidence(evidenceVersion));
+        await _executions.SaveAgentResultAsync(project.Slug, execution!, result);
+
+        await _executions.RecoverInterruptedAsync(project.Slug);
+        var resumed = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow.AddSeconds(1));
+
+        Assert.NotNull(resumed);
+        Assert.Equal(execution!.Id, resumed.Id);
+        Assert.True(resumed.AgentCompleted);
+        await _executions.CompleteAsync(project.Slug, resumed, processor, resumed.AgentResult!, processor.Name);
+        Assert.Equal(target.Id, (await _tickets.GetTicketAsync(project.Slug, ticket.Id))!.ColumnId);
+        Assert.Null(await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow.AddSeconds(2)));
+        var completed = Assert.Single(await _executions.ListAsync(project.Slug, ticket.Id));
+        Assert.Equal(ColumnExecutionStatus.Completed, completed.Status);
+        Assert.Null(completed.ContextRejectionReason);
+    }
+
+    [Fact]
+    public async Task External_mutation_after_completed_processor_evidence_still_cancels_restart()
+    {
+        var project = await _projects.CreateProjectAsync("Stale processor evidence restart");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: pipeline.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Done", pipelineId: pipeline.Id,
+            role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, target.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Publish stale proof", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+        await _tickets.AddCommentAsync(project.Slug, ticket.Id, "Proof: initial verification", processor.Name);
+        var evidenceVersion = (await _tickets.GetTicketAsync(project.Slug, ticket.Id))!.UpdatedAt;
+        await _executions.SaveAgentResultAsync(project.Slug, execution!,
+            new ColumnAgentResult("completed", [], "Verified",
+                Evidence: new ColumnResultEvidence(evidenceVersion)));
+        await _tickets.AddCommentAsync(project.Slug, ticket.Id, "New owner requirement", "owner");
+
+        await _executions.RecoverInterruptedAsync(project.Slug);
+        var replacement = await _executions.ClaimNextAsync(
+            project.Slug, processor, DateTime.UtcNow.AddSeconds(1));
+
+        Assert.NotNull(replacement);
+        Assert.NotEqual(execution!.Id, replacement.Id);
+        var cancelled = Assert.Single(await _executions.ListAsync(project.Slug, ticket.Id),
+            item => item.Id == execution.Id);
+        Assert.Equal(ColumnExecutionStatus.Cancelled, cancelled.Status);
+        Assert.Equal("stale_trigger_context", cancelled.ContextRejectionReason);
+    }
+
+    [Fact]
     public async Task Retry_is_cancelled_when_ticket_context_changed_in_same_column()
     {
         var project = await _projects.CreateProjectAsync("Stale retry version");

@@ -143,11 +143,17 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             .ToListAsync();
         foreach (var retry in retries)
         {
-            var triggerIsCurrent = await db.Tickets.AsNoTracking().AnyAsync(ticket =>
-                ticket.Id == retry.TicketId
-                && ticket.ColumnId == processor.ColumnId
+            var ticket = await db.Tickets.AsNoTracking().FirstOrDefaultAsync(ticket =>
+                ticket.Id == retry.TicketId && ticket.ColumnId == processor.ColumnId);
+            var triggerIsCurrent = ticket is not null
                 && (retry.TriggerTicketUpdatedAt == null
-                    || ticket.UpdatedAt == retry.TriggerTicketUpdatedAt));
+                    || ticket.UpdatedAt == retry.TriggerTicketUpdatedAt
+                    // A completed processor may have advanced UpdatedAt itself by publishing
+                    // its evidence before a restart. The durable result is authoritative only
+                    // when it names the exact current version; any later mutation still rejects it.
+                    || retry.AgentCompleted
+                        && retry.AgentResult?.Evidence?.TicketUpdatedAt is DateTime consumedVersion
+                        && consumedVersion.ToUniversalTime() == ticket.UpdatedAt.ToUniversalTime());
             if (!triggerIsCurrent)
             {
                 retry.Status = ColumnExecutionStatus.Cancelled;
