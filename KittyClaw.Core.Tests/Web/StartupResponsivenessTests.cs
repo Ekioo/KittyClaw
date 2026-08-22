@@ -19,6 +19,10 @@ public sealed class StartupResponsivenessTests
         try
         {
             const int runCount = 60;
+            var seedProjects = new ProjectService(dataDir);
+            for (var i = 0; i < 5; i++)
+                await seedProjects.CreateProjectAsync($"Startup portfolio {i}");
+
             var seedStore = new RunLogStore(dataDir);
             for (var i = 0; i < runCount; i++)
             {

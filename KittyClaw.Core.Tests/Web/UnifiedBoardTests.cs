@@ -111,7 +111,10 @@ public class UnifiedBoardTests
         var src = LoadUnifiedBoard();
 
         Assert.Contains("@attribute [StreamRendering]", src, StringComparison.Ordinal);
-        Assert.Contains("Task.WhenAll(laneTasks)", src, StringComparison.Ordinal);
+        var init = src.IndexOf("OnInitializedAsync", StringComparison.Ordinal);
+        var afterRender = src.IndexOf("OnAfterRenderAsync", StringComparison.Ordinal);
+        Assert.DoesNotContain("EnsureLanesAsync", src[init..afterRender], StringComparison.Ordinal);
+        Assert.Contains("_ = EnsureLanesAsync();", src[afterRender..], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -149,9 +152,12 @@ public class UnifiedBoardTests
     }
 
     [Fact]
-    public void UnifiedBoard_LoadsLanesConcurrently()
+    public void UnifiedBoard_LoadsLanesSequentially()
     {
-        Assert.Contains("Task.WhenAll(laneTasks)", LoadUnifiedBoard());
+        var src = LoadUnifiedBoard();
+        Assert.Contains("foreach (var project in _projects)", src);
+        Assert.Contains("_lanes.Add(await LoadLaneAsync(project))", src);
+        Assert.DoesNotContain("Task.WhenAll(laneTasks)", src);
     }
 
     [Fact]

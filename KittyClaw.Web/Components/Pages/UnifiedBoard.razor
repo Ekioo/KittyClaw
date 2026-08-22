@@ -381,6 +381,7 @@ else
     // Cards mode only needs the project list — the full lanes (tickets, columns, members of
     // every project) are loaded lazily, the first time the kanban mode is actually shown.
     private List<Project>? _projects;
+    private bool _lanesLoading;
     private readonly Dictionary<string, int> _ownerActionCounts = new(StringComparer.OrdinalIgnoreCase);
 
     private IReadOnlyList<Project> CardProjects =>
@@ -429,8 +430,6 @@ else
         if (_viewMode == "cards")
             await RefreshOwnerActionCountsAsync(_projects);
         _prefsLoaded = true;
-        if (_viewMode == "kanban")
-            await EnsureLanesAsync();
     }
 
     private async Task RefreshOwnerActionCountsAsync(IEnumerable<Project> projects)
@@ -460,18 +459,34 @@ else
             }
             catch { /* localStorage unavailable — defaults apply */ }
             StateHasChanged();
+
+            // The server-rendered shell must be sent before opening every project database.
+            // Loading here keeps / responsive during startup and lets lanes appear progressively.
+            if (_viewMode == "kanban")
+                _ = EnsureLanesAsync();
         }
     }
 
     private async Task EnsureLanesAsync()
     {
-        if (_lanes is not null || _projects is null) return;
-        // Load every lane concurrently — with 7-10 projects and a few hundred tickets each,
-        // sequential per-project round trips would make the page noticeably slow to first paint.
-        var laneTasks = _projects.Select(project => LoadLaneAsync(project));
-        var lanes = await Task.WhenAll(laneTasks);
-        _lanes = lanes.OrderBy(l => l.Project.Name, StringComparer.OrdinalIgnoreCase).ToList();
-        StateHasChanged();
+        if (_lanes is not null || _projects is null || _lanesLoading) return;
+        _lanesLoading = true;
+        _lanes = [];
+        try
+        {
+            // Project databases are independent SQLite files. Open them sequentially so startup
+            // does not fan out migrations, worktree inspection and history scans across the disk.
+            foreach (var project in _projects)
+            {
+                _lanes.Add(await LoadLaneAsync(project));
+                _lanes = _lanes.OrderBy(l => l.Project.Name, StringComparer.OrdinalIgnoreCase).ToList();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        finally
+        {
+            _lanesLoading = false;
+        }
     }
 
     private async Task<LaneData> LoadLaneAsync(Project project, int? selectedPipelineId = null)
