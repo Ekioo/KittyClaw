@@ -336,7 +336,17 @@ internal sealed class ActionExecutor
                                 await ExecuteFromAsync(idx + 1, background: true, rt, ct);
                         }
                         catch (OperationCanceledException) { /* engine shutdown */ }
-                        catch (Exception ex) { _logger.LogWarning(ex, "Detached automation actions failed for {Id}", automation.Id); }
+                        catch (Exception ex)
+                        {
+                            if (actionRun is not null)
+                            {
+                                actionRun.Push(new(DateTime.UtcNow, "error",
+                                    $"Automation '{automation.Id}' failed before completion: {ex.Message}",
+                                    ex.ToString()));
+                                _runs.Persist(actionRun);
+                            }
+                            _logger.LogWarning(ex, "Detached automation actions failed for {Id}", automation.Id);
+                        }
                         finally
                         {
                             if (actionRun is not null && actionRun.Status == AgentRunStatus.Running)

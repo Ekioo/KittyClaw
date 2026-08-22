@@ -106,6 +106,37 @@ public sealed class PowerShellAutomationLifecycleIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task PowerShellWorkspacePreparationFailure_IsPersistedOnTheRun()
+    {
+        var fixture = await CreateFixtureAsync();
+        await fixture.Executor.ExecuteAutomationAsync(fixture.Runtime,
+            Automation("Write-Output first"), new TriggerFiring(null, null, null), CancellationToken.None);
+        var first = await WaitForFinishedRunAsync(fixture.Runs);
+        var request = await WaitForMergeRequestAsync(fixture.Queue, fixture.Slug,
+            WorktreeMergeStatus.Completed);
+        var existingIds = fixture.Runs.AllForProject(fixture.Slug).Select(run => run.RunId).ToHashSet();
+        Directory.CreateDirectory(Path.Combine(request.WorktreePath, ".agents"));
+        await File.WriteAllTextAsync(Path.Combine(request.WorktreePath, ".agents", "uncommitted.txt"), "dirty");
+
+        await fixture.Executor.ExecuteAutomationAsync(fixture.Runtime,
+            Automation("Write-Output second"), new TriggerFiring(null, null, null), CancellationToken.None);
+        AgentRun? failed = null;
+        for (var i = 0; i < 200; i++)
+        {
+            failed = fixture.Runs.AllForProject(fixture.Slug)
+                .FirstOrDefault(run => !existingIds.Contains(run.RunId));
+            if (failed is not null && failed.Status != AgentRunStatus.Running) break;
+            await Task.Delay(50);
+        }
+
+        Assert.NotNull(failed);
+        Assert.Equal(AgentRunStatus.Failed, failed.Status);
+        var error = Assert.Single(failed.SnapshotBuffer(), e => e.Kind == "error");
+        Assert.Contains("uncommitted changes", error.Text, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(AgentRunStatus.Completed, first.Status);
+    }
+
+    [Fact]
     public async Task PauseAndServiceShutdown_CancelOnlyTheirSelectedActiveRuns_AndAreIdempotent()
     {
         var registry = new AgentRunRegistry();
