@@ -37,10 +37,11 @@ public sealed class TicketWorktreeService(ProjectService projects, TicketService
             var existing = FindRegisteredWorktree(repositoryRoot, path);
             if (existing is not null)
             {
-                if (!string.Equals(existing, $"refs/heads/{branch}", StringComparison.Ordinal))
-                    throw new InvalidOperationException($"Worktree '{path}' is registered on '{existing}', expected 'refs/heads/{branch}'.");
-                VerifyWorktree(path, branch);
-                return new TicketWorktree(path, branch, rootTicketId, repositoryRoot);
+                var existingBranch = ParseLocalBranch(existing, path);
+                VerifyWorktree(path, existingBranch);
+                if (!string.Equals(existingBranch, branch, StringComparison.Ordinal))
+                    VerifyCleanWorktree(path);
+                return new TicketWorktree(path, existingBranch, rootTicketId, repositoryRoot);
             }
 
             if (Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any())
@@ -94,11 +95,14 @@ public sealed class TicketWorktreeService(ProjectService projects, TicketService
                 currentPath = Path.GetFullPath(line[9..]);
                 continue;
             }
-            if (currentPath is null || !line.StartsWith("branch refs/heads/ticket/", StringComparison.Ordinal))
+            if (currentPath is null || !line.StartsWith("branch refs/heads/", StringComparison.Ordinal))
                 continue;
-            var suffix = line[25..];
-            if (int.TryParse(suffix, out var rootTicketId))
-                result.Add(new(currentPath, $"ticket/{rootTicketId}", rootTicketId, repositoryRoot));
+            var directoryName = Path.GetFileName(Path.TrimEndingDirectorySeparator(currentPath));
+            if (directoryName.StartsWith("ticket-", StringComparison.Ordinal)
+                && int.TryParse(directoryName[7..], out var rootTicketId)
+                && string.Equals(currentPath, GetCanonicalPath(repositoryRoot, rootTicketId),
+                    StringComparison.OrdinalIgnoreCase))
+                result.Add(new(currentPath, line[18..], rootTicketId, repositoryRoot));
         }
         return result;
     }
@@ -131,6 +135,14 @@ public sealed class TicketWorktreeService(ProjectService projects, TicketService
         return null;
     }
 
+    private static string GetCanonicalPath(string repositoryRoot, int rootTicketId)
+    {
+        var repositoryName = Path.GetFileName(Path.TrimEndingDirectorySeparator(repositoryRoot));
+        var parent = Directory.GetParent(repositoryRoot)?.FullName
+            ?? throw new InvalidOperationException($"Git repository '{repositoryRoot}' has no parent directory.");
+        return Path.GetFullPath(Path.Combine(parent, $"{repositoryName}.worktrees", $"ticket-{rootTicketId}"));
+    }
+
     private static void VerifyWorktree(string path, string branch)
     {
         var topLevel = Path.GetFullPath(RunGit(path, ["rev-parse", "--show-toplevel"]).Output.Trim());
@@ -139,6 +151,22 @@ public sealed class TicketWorktreeService(ProjectService projects, TicketService
         var actualBranch = RunGit(path, ["branch", "--show-current"]).Output.Trim();
         if (!string.Equals(actualBranch, branch, StringComparison.Ordinal))
             throw new InvalidOperationException($"Worktree '{path}' uses branch '{actualBranch}', expected '{branch}'.");
+    }
+
+    private static string ParseLocalBranch(string reference, string path)
+    {
+        const string prefix = "refs/heads/";
+        if (!reference.StartsWith(prefix, StringComparison.Ordinal) || reference.Length == prefix.Length)
+            throw new InvalidOperationException($"Worktree '{path}' is not registered on a local branch.");
+        return reference[prefix.Length..];
+    }
+
+    private static void VerifyCleanWorktree(string path)
+    {
+        var status = RunGit(path, ["status", "--porcelain"]);
+        if (!string.IsNullOrWhiteSpace(status.Output))
+            throw new InvalidOperationException(
+                $"Worktree '{path}' uses a non-canonical branch and contains uncommitted changes.");
     }
 
     private static GitResult RunGit(string workingDirectory, IReadOnlyList<string> arguments, bool throwOnError = true)
@@ -188,8 +216,14 @@ public sealed class TicketWorktreeService(ProjectService projects, TicketService
         var registered = FindRegisteredWorktree(repositoryRoot, path);
         if (registered is null)
             return new(path, branch, rootTicketId, false, false, null);
-        if (!string.Equals(registered, $"refs/heads/{branch}", StringComparison.Ordinal))
-            return new(path, branch, rootTicketId, true, false, $"Registered on {registered}.");
+        try
+        {
+            branch = ParseLocalBranch(registered, path);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return new(path, branch, rootTicketId, true, false, ex.Message);
+        }
         var status = RunGit(path, ["status", "--porcelain"], throwOnError: false);
         return new(path, branch, rootTicketId, true, !string.IsNullOrWhiteSpace(status.Output),
             status.ExitCode == 0 ? null : status.Error.Trim());

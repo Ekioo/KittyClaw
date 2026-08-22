@@ -65,6 +65,49 @@ public sealed class TicketWorktreeServiceTests
     }
 
     [Fact]
+    public async Task ParentAndChildren_ReuseCleanCanonicalWorktreeOnExistingNonCanonicalBranch()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var parent = await fixture.Tickets.CreateTicketAsync(fixture.ProjectSlug, "Parent");
+        var firstChild = await fixture.Tickets.CreateTicketAsync(fixture.ProjectSlug, "First child", parentId: parent.Id);
+        var secondChild = await fixture.Tickets.CreateTicketAsync(fixture.ProjectSlug, "Second child", parentId: parent.Id);
+        var path = Path.Combine(fixture.Repository + ".worktrees", $"ticket-{parent.Id}");
+        const string branch = "ekioo/shared-delivery";
+        RunGit(fixture.Repository, "worktree", "add", "-b", branch, path, "integration");
+
+        var parentWorktree = await fixture.Worktrees.ResolveAsync(fixture.ProjectSlug, parent.Id, CancellationToken.None);
+        var firstChildWorktree = await fixture.Worktrees.ResolveAsync(fixture.ProjectSlug, firstChild.Id, CancellationToken.None);
+        var secondChildWorktree = await fixture.Worktrees.ResolveAsync(fixture.ProjectSlug, secondChild.Id, CancellationToken.None);
+
+        Assert.Equal(parentWorktree, firstChildWorktree);
+        Assert.Equal(parentWorktree, secondChildWorktree);
+        Assert.Equal(branch, parentWorktree!.Branch);
+        Assert.Equal(Path.GetFullPath(path), Path.GetFullPath(parentWorktree.Path), ignoreCase: true);
+        Assert.Equal(branch, RunGit(path, "branch", "--show-current").Trim());
+        var inspected = await fixture.Worktrees.InspectAsync(fixture.ProjectSlug, secondChild.Id);
+        Assert.Equal(branch, inspected!.Branch);
+        Assert.Null(inspected.Error);
+        Assert.Contains(await fixture.Worktrees.ListRegisteredAsync(fixture.ProjectSlug),
+            worktree => worktree.RootTicketId == parent.Id && worktree.Branch == branch);
+    }
+
+    [Fact]
+    public async Task NonCanonicalBranch_IsRejectedWhenExistingWorktreeIsDirty()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var parent = await fixture.Tickets.CreateTicketAsync(fixture.ProjectSlug, "Parent");
+        var path = Path.Combine(fixture.Repository + ".worktrees", $"ticket-{parent.Id}");
+        RunGit(fixture.Repository, "worktree", "add", "-b", "ekioo/dirty-delivery", path, "integration");
+        await File.WriteAllTextAsync(Path.Combine(path, "uncommitted.txt"), "keep");
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            fixture.Worktrees.ResolveAsync(fixture.ProjectSlug, parent.Id, CancellationToken.None));
+
+        Assert.Contains("non-canonical branch", error.Message);
+        Assert.Contains("uncommitted changes", error.Message);
+    }
+
+    [Fact]
     public async Task Inspect_ReportsSharedIdentityAndDirtyState_WithoutCreatingMissingWorktree()
     {
         using var fixture = await Fixture.CreateAsync();
