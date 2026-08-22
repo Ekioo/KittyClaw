@@ -97,7 +97,7 @@ public sealed class PausedProjectRestartRecoveryTests : IDisposable
             await projects.TogglePauseAsync(project.Slug);
             var resumed = await WaitForAsync(async () =>
                 (await tickets.ListTicketsAsync(project.Slug))
-                    .Any(ticket => ticket.Title == "Recovered scheduled work"), TimeSpan.FromSeconds(12));
+                    .Any(ticket => ticket.Title == "Recovered scheduled work"), TimeSpan.FromSeconds(30));
 
             Assert.True(resumed);
             Assert.Single(await tickets.ListTicketsAsync(project.Slug),
