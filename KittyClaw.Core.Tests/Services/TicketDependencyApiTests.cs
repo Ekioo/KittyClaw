@@ -242,6 +242,55 @@ public sealed class TicketDependencyApiTests
     }
 
     [Fact]
+    public async Task ListTickets_BlockerInSuccessColumnOfAnotherPipeline_CountDropsToZero()
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("cross-pipeline-dependency-test");
+        var members = new MemberService(projects);
+        var tickets = new TicketService(projects, members);
+        var pipelines = new PipelineService(projects);
+        var columns = new ColumnService(projects);
+        var delivery = await pipelines.CreateAsync(project.Slug, "Delivery");
+        var delivered = await columns.CreateColumnAsync(project.Slug, "Livré",
+            pipelineId: delivery.Id, role: ColumnRole.Success);
+        var blocker = await tickets.CreateTicketAsync(project.Slug, "Blocker");
+        var blocked = await tickets.CreateTicketAsync(project.Slug, "Blocked");
+        await tickets.AddDependencyAsync(project.Slug, blocked.Id, blocker.Id);
+
+        await tickets.UpdateTicketAsync(project.Slug, blocker.Id, author: "test",
+            pipelineId: delivery.Id, columnId: delivered.Id, status: "Livré");
+
+        var summaries = await tickets.ListTicketsAsync(project.Slug);
+        var blockedSummary = summaries.Single(t => t.Id == blocked.Id);
+
+        Assert.Equal(0, blockedSummary.UnresolvedBlockerCount);
+    }
+
+    [Fact]
+    public async Task ListTickets_BlockerInFailureColumn_RemainsUnresolved()
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("failure-column-dependency-test");
+        var members = new MemberService(projects);
+        var tickets = new TicketService(projects, members);
+        var columns = new ColumnService(projects);
+        var rejected = await columns.CreateColumnAsync(project.Slug, "Rejected", role: ColumnRole.Failure);
+        var blocker = await tickets.CreateTicketAsync(project.Slug, "Blocker");
+        var blocked = await tickets.CreateTicketAsync(project.Slug, "Blocked");
+        await tickets.AddDependencyAsync(project.Slug, blocked.Id, blocker.Id);
+
+        await tickets.UpdateTicketAsync(project.Slug, blocker.Id, author: "test",
+            columnId: rejected.Id, status: "Rejected");
+
+        var summaries = await tickets.ListTicketsAsync(project.Slug);
+        var blockedSummary = summaries.Single(t => t.Id == blocked.Id);
+
+        Assert.Equal(1, blockedSummary.UnresolvedBlockerCount);
+    }
+
+    [Fact]
     public async Task AddDependency_NoCycle_Succeeds()
     {
         // A ← B ← C, then A ← C is fine (diamond, not a cycle)

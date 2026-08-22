@@ -258,14 +258,20 @@ public class TicketService
                 ColumnRole = x.ColumnId is int columnId && childRoles.TryGetValue(columnId, out var role) ? role : ColumnRole.Normal,
             }).ToList());
 
-        // Load unresolved blocker counts (blockers whose status is not "Done") for all returned tickets.
+        // Load unresolved blocker counts. Column roles are authoritative because each
+        // pipeline can use its own localized or business-specific terminal labels.
         await EnsureTicketDependenciesTableAsync(db);
         var ticketIds = allTickets.Select(t => t.Id).ToList();
+        var successColumnIds = await db.BoardColumns
+            .Where(c => c.Role == ColumnRole.Success)
+            .Select(c => c.Id)
+            .ToListAsync();
         var unresolvedCounts = ticketIds.Count > 0
             ? await db.TicketDependencies
                 .Where(d => ticketIds.Contains(d.BlockedTicketId))
-                .Join(db.Tickets, d => d.BlocksTicketId, t => t.Id, (d, t) => new { d.BlockedTicketId, t.Status })
-                .Where(x => x.Status != "Done")
+                .Join(db.Tickets, d => d.BlocksTicketId, t => t.Id,
+                    (d, t) => new { d.BlockedTicketId, t.ColumnId })
+                .Where(x => !x.ColumnId.HasValue || !successColumnIds.Contains(x.ColumnId.Value))
                 .GroupBy(x => x.BlockedTicketId)
                 .Select(g => new { BlockedId = g.Key, Count = g.Count() })
                 .ToDictionaryAsync(x => x.BlockedId, x => x.Count)
