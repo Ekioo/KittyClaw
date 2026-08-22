@@ -13,6 +13,53 @@ namespace KittyClaw.Core.Tests.Web;
 public sealed class StartupResponsivenessTests
 {
     [Fact]
+    public async Task HttpRespondsBeforeLargeSlowRunHistoryFinishesThenHistoryIsComplete()
+    {
+        var dataDir = Path.Combine(Path.GetTempPath(), "kittyclaw-run-history-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            const int runCount = 60;
+            var seedStore = new RunLogStore(dataDir);
+            for (var i = 0; i < runCount; i++)
+            {
+                seedStore.Save(new AgentRun
+                {
+                    RunId = $"history-{i}", ProjectSlug = "history-project", TicketId = i,
+                    AgentName = "agent", SkillFile = "agent/SKILL.md", ConcurrencyGroup = "history",
+                    StartedAt = DateTime.UtcNow.AddMinutes(-i),
+                    ChatTarget = i == 0 ? "owner-chat" : null,
+                });
+            }
+
+            await using var factory = new RunHistoryStartupFactory(dataDir);
+            var stopwatch = Stopwatch.StartNew();
+            using var client = factory.CreateClient();
+            var loader = factory.Services.GetRequiredService<RunHistoryLoadingService>();
+
+            var health = await client.GetAsync("/api/engine/health");
+            var root = await client.GetAsync("/");
+
+            Assert.True(health.IsSuccessStatusCode);
+            Assert.True(root.IsSuccessStatusCode);
+            Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(8),
+                $"HTTP startup took {stopwatch.Elapsed} while run history was still loading.");
+            Assert.False(loader.Completion.IsCompleted,
+                "HTTP must respond while the deliberately slow history reader is still active.");
+
+            await loader.Completion.WaitAsync(TimeSpan.FromSeconds(20));
+            var registry = factory.Services.GetRequiredService<AgentRunRegistry>();
+            Assert.Equal(runCount, registry.AllForProject("history-project").Count());
+            Assert.Empty(registry.ActiveForProject("history-project"));
+            Assert.Equal("history-0", registry.InterruptedChats().Single().RunId);
+            Assert.Equal(new RunHistoryLoadProgress(runCount, runCount, true), loader.Progress);
+        }
+        finally
+        {
+            await DeleteDirectoryWithRetryAsync(dataDir);
+        }
+    }
+
+    [Fact]
     public async Task HealthAndRootRespondWhileDeferredStartupWorkIsStillRunning()
     {
         var dataDir = Path.Combine(Path.GetTempPath(), "kittyclaw-startup-test-" + Guid.NewGuid().ToString("N"));
@@ -70,6 +117,39 @@ public sealed class StartupResponsivenessTests
                 services.RemoveAll<IHostedService>();
                 services.AddHostedService(provider =>
                     provider.GetRequiredService<DashboardRefreshService>());
+            });
+        }
+    }
+
+    private sealed class RunHistoryStartupFactory(string dataDir)
+        : WebApplicationFactory<CreateProjectRequest>
+    {
+        protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
+        {
+            builder.UseSetting("KITTYCLAW_DATA_DIR", dataDir);
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<RunLogStore>();
+                services.AddSingleton(provider =>
+                {
+                    var lifetime = provider.GetRequiredService<IHostApplicationLifetime>();
+                    return new RunLogStore(dataDir, async (path, cancellationToken) =>
+                    {
+                        Assert.True(lifetime.ApplicationStarted.IsCancellationRequested,
+                            "Persisted run reads must not begin before ApplicationStarted.");
+                        Thread.Sleep(200);
+                        cancellationToken.ThrowIfCancellationRequested();
+                        return await File.ReadAllTextAsync(path, cancellationToken);
+                    });
+                });
+                services.RemoveAll<AgentRunRegistry>();
+                services.AddSingleton(provider =>
+                    new AgentRunRegistry(provider.GetRequiredService<RunLogStore>(), loadPersistedRuns: false));
+                services.RemoveAll<RunHistoryLoadingService>();
+                services.AddSingleton<RunHistoryLoadingService>();
+                services.RemoveAll<IHostedService>();
+                services.AddHostedService(provider =>
+                    provider.GetRequiredService<RunHistoryLoadingService>());
             });
         }
     }

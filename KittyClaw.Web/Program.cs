@@ -83,7 +83,10 @@ builder.Services.AddSingleton<AutomationQueueStore>();
 builder.Services.AddSingleton<TriggerStateStore>();
 builder.Services.AddSingleton(new SessionRegistry(dataDir));
 builder.Services.AddSingleton(new RunLogStore(dataDir));
-builder.Services.AddSingleton<AgentRunRegistry>(sp => new AgentRunRegistry(sp.GetRequiredService<RunLogStore>()));
+builder.Services.AddSingleton<AgentRunRegistry>(sp =>
+    new AgentRunRegistry(sp.GetRequiredService<RunLogStore>(), loadPersistedRuns: false));
+builder.Services.AddSingleton<RunHistoryLoadingService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<RunHistoryLoadingService>());
 builder.Services.AddHostedService<TicketCommentSteeringService>();
 builder.Services.AddHostedService<KittyClaw.Web.Services.InterruptedChatRecoveryService>();
 // Cap concurrent claude subprocesses across all projects (chats bypass). Override with the

@@ -12,6 +12,7 @@ namespace KittyClaw.Web.Services;
 /// </summary>
 public sealed class InterruptedChatRecoveryService(
     AgentRunRegistry runs,
+    RunHistoryLoadingService historyLoader,
     IHttpClientFactory clients,
     IServer server,
     IHostApplicationLifetime lifetime,
@@ -22,6 +23,7 @@ public sealed class InterruptedChatRecoveryService(
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var registration = lifetime.ApplicationStarted.Register(started.SetResult);
         await started.Task.WaitAsync(stoppingToken);
+        await historyLoader.Completion.WaitAsync(stoppingToken);
 
         var interrupted = runs.InterruptedChats();
         if (interrupted.Count == 0) return;

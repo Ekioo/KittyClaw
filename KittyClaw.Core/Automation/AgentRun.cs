@@ -223,17 +223,25 @@ public sealed class AgentRunSnapshot
 public sealed class RunLogStore
 {
     private readonly string _dir;
+    private readonly Func<string, CancellationToken, Task<string>> _readAllTextAsync;
     private static readonly JsonSerializerOptions s_json = new()
     {
         WriteIndented = false,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
-    public RunLogStore(string dataDir)
+    public RunLogStore(
+        string dataDir,
+        Func<string, CancellationToken, Task<string>>? readAllTextAsync = null)
     {
         _dir = Path.Combine(dataDir, "runs");
+        _readAllTextAsync = readAllTextAsync ?? File.ReadAllTextAsync;
         Directory.CreateDirectory(_dir);
     }
+
+    public int Count => Directory.Exists(_dir)
+        ? Directory.EnumerateFiles(_dir, "*.json").Count()
+        : 0;
 
     public void Save(AgentRun run)
     {
@@ -315,6 +323,55 @@ public sealed class RunLogStore
             yield return run;
         }
     }
+
+    public async IAsyncEnumerable<AgentRun> LoadAllAsync(
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        if (!Directory.Exists(_dir)) yield break;
+        foreach (var file in Directory.EnumerateFiles(_dir, "*.json"))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            AgentRunSnapshot? snapshot;
+            try
+            {
+                var json = await _readAllTextAsync(file, cancellationToken);
+                snapshot = JsonSerializer.Deserialize<AgentRunSnapshot>(json, s_json);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch { continue; }
+            if (snapshot is null) continue;
+
+            yield return FromSnapshot(snapshot);
+        }
+    }
+
+    private static AgentRun FromSnapshot(AgentRunSnapshot snapshot)
+    {
+        var run = new AgentRun
+        {
+            RunId = snapshot.RunId,
+            ProjectSlug = snapshot.ProjectSlug,
+            TicketId = snapshot.TicketId,
+            AgentName = snapshot.AgentName,
+            SkillFile = snapshot.SkillFile,
+            ConcurrencyGroup = snapshot.ConcurrencyGroup,
+            StartedAt = snapshot.StartedAt,
+            WorkingDirectory = snapshot.WorkingDirectory,
+        };
+        run.SessionId = snapshot.SessionId;
+        run.Model = snapshot.Model;
+        run.ChatTarget = snapshot.ChatTarget;
+        run.Status = snapshot.Status;
+        run.EndedAt = snapshot.EndedAt;
+        run.ExitCode = snapshot.ExitCode;
+        run.CliVersion = snapshot.CliVersion;
+        run.AddUsage(snapshot.InputTokens, snapshot.OutputTokens,
+            snapshot.CacheReadTokens, snapshot.CacheWriteTokens, snapshot.TotalCostUsd,
+            snapshot.CostIsEstimated);
+        foreach (var ev in snapshot.Events) run.Push(ev);
+        foreach (var msg in snapshot.PendingSteerMessages) run.AddPendingSteerMessage(msg);
+        return run;
+    }
 }
 
 public sealed class AgentRunRegistry
@@ -328,9 +385,10 @@ public sealed class AgentRunRegistry
 
     public AgentRunRegistry() { }
 
-    public AgentRunRegistry(RunLogStore store)
+    public AgentRunRegistry(RunLogStore store, bool loadPersistedRuns = true)
     {
         _store = store;
+        if (!loadPersistedRuns) return;
         foreach (var run in store.LoadAll())
         {
             // A live run is never persisted — any snapshot with Status=Running is stale
@@ -361,6 +419,16 @@ public sealed class AgentRunRegistry
         _store?.Save(run);
         OnRunStarted?.Invoke(run);
         return run;
+    }
+
+    public void Restore(AgentRun run)
+    {
+        if (_runs.TryGetValue(run.RunId, out var current)
+            && current.StartedAt >= run.StartedAt)
+            return;
+        if (current is not null) Unindex(current);
+        _runs[run.RunId] = run;
+        Index(run);
     }
 
     public void Persist(AgentRun run) => _store?.Save(run);
