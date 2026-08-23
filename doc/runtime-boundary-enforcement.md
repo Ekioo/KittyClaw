@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Runtime boundary enforcement stops protected provider actions before their external or destructive effect unless a matching temporary approval can be durably receipted. Protection is advertised only for provider and boundary pairs with a reliable native pre-effect hook; observation of provider output after an effect starts is never presented as enforcement.
+Runtime boundary enforcement stops protected provider actions before their external or destructive effect unless a matching temporary approval can be durably receipted. Each project persists an `Observe` or `Enforce` mode, and `AgentRunner` applies it centrally to every run context. Protection is advertised only for provider and boundary pairs with a reliable native pre-effect hook; unsupported providers fail before spawn in strict mode.
 
 ## Key components
 
@@ -15,7 +15,7 @@ Runtime boundary enforcement stops protected provider actions before their exter
 
 - `GET /api/runtime-enforcement/capabilities` returns the catalogue used by dispatch policy and protection claims.
 - `POST /api/projects/{slug}/approvals/gate?runId={runId}` receives provider hook events before and after effects.
-- A run requested with `Enforce` installs the native hook adapter when every protected boundary is enforceable, or fails before provider spawn when the runtime is observation-only.
+- Every run reloads the project's enforcement mode before dispatch. `Enforce` installs the native hook adapter when every protected boundary is enforceable, or fails before provider spawn when the runtime is observation-only.
 
 ## Capability matrix
 
@@ -24,11 +24,11 @@ The five protected boundary classes are repository push or pull-request mutation
 | Runtime path | All five boundary classes | Mechanism or exclusion |
 | --- | --- | --- |
 | Claude Code | Enforced | Native `PreToolUse` hook calls the KittyClaw gate before the effect; `PostToolUse` records the outcome. |
-| DeepSeek through Claude Code | Enforced | Uses the Claude Code transport and the same native hook adapter. |
 | Ollama through Claude Code | Enforced | Uses the Claude Code transport and the same native hook adapter. |
 | OpenAI Codex CLI | Observation only | JSONL events can arrive after the effect starts; an `Enforce` dispatch fails before spawn. |
 | Grok Build CLI | Observation only | JSONL events can arrive after the effect starts; an `Enforce` dispatch fails before spawn. |
 | Mistral Vibe CLI | Observation only | JSONL events can arrive after the effect starts; an `Enforce` dispatch fails before spawn. |
+| DeepSeek CLI | Observation only | No reliable native pre-effect hook is available; an `Enforce` dispatch fails before spawn. |
 
 The Claude adapter can classify only effects whose command, URL, path, or destination is present in structured hook input. Effects hidden inside an opaque provider tool are excluded from the protection claim. Direct JSONL streams, aliases or encoded commands that do not expose the protected resource, and subprocess effects invisible to a native hook remain observation-only exclusions.
 
