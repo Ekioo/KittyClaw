@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using KittyClaw.Core.Models;
 
 namespace KittyClaw.Core.Services;
 
@@ -20,7 +21,7 @@ public sealed class WorktreeMergeQueueProcessor(
         while (!stoppingToken.IsCancellationRequested)
         {
             var snapshot = await projects.ListProjectsAsync();
-            foreach (var project in snapshot)
+            foreach (var project in snapshot.Where(ShouldProcess))
             {
                 if (stoppingToken.IsCancellationRequested) return;
                 try
@@ -34,7 +35,7 @@ public sealed class WorktreeMergeQueueProcessor(
                 }
             }
 
-            foreach (var project in snapshot)
+            foreach (var project in snapshot.Where(ShouldProcess))
             {
                 if (stoppingToken.IsCancellationRequested) return;
                 try
@@ -53,4 +54,6 @@ public sealed class WorktreeMergeQueueProcessor(
             catch (OperationCanceledException) { return; }
         }
     }
+
+    internal static bool ShouldProcess(Project project) => !project.IsPaused;
 }
