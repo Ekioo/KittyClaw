@@ -670,12 +670,33 @@ public sealed class WorkflowMigrationPlanner(
         var changedColumn = originalColumns.FirstOrDefault(original =>
             !currentColumnsById.TryGetValue(original.Id, out var current)
             || current.PipelineId != original.PipelineId
-            || current.Name != original.Name
-            || current.SortOrder != original.SortOrder);
+            || current.Name != original.Name);
         if (changedColumn is not null)
             throw new WorkflowMigrationPlanningException(
                 "existing-workflow-replaced",
                 $"Migration removed or recreated existing column '{changedColumn.Name}' (#{changedColumn.Id}) instead of extending its pipeline.");
+
+        foreach (var pipelineId in originalPipelineIds)
+        {
+            var originalOrder = originalColumns
+                .Where(column => column.PipelineId == pipelineId)
+                .OrderBy(column => column.SortOrder)
+                .ThenBy(column => column.Id)
+                .Select(column => column.Id);
+            var originalIds = originalColumns
+                .Where(column => column.PipelineId == pipelineId)
+                .Select(column => column.Id)
+                .ToHashSet();
+            var currentOriginalOrder = currentColumns
+                .Where(column => column.PipelineId == pipelineId && originalIds.Contains(column.Id))
+                .OrderBy(column => column.SortOrder)
+                .ThenBy(column => column.Id)
+                .Select(column => column.Id);
+            if (!originalOrder.SequenceEqual(currentOriginalOrder))
+                throw new WorkflowMigrationPlanningException(
+                    "existing-workflow-replaced",
+                    $"Migration reordered existing columns in pipeline #{pipelineId} instead of extending it in place.");
+        }
     }
 
     internal static string BuildApplicationPrompt(WorkflowMigrationPlan plan, bool isProjectOnboarding,

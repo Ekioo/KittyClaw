@@ -359,6 +359,48 @@ public sealed class WorkflowMigrationPromptTests
     }
 
     [Fact]
+    public void Existing_workflow_guard_accepts_a_new_column_inserted_between_existing_columns()
+    {
+        var pipeline = new Pipeline { Id = 42, Name = "Delivery", Slug = "delivery" };
+        var originalColumns = new[]
+        {
+            new BoardColumn { Id = 7, PipelineId = 42, Name = "Ready", SortOrder = 0 },
+            new BoardColumn { Id = 8, PipelineId = 42, Name = "Published", SortOrder = 1 },
+        };
+        var extendedColumns = new[]
+        {
+            new BoardColumn { Id = 7, PipelineId = 42, Name = "Ready", SortOrder = 0 },
+            new BoardColumn { Id = 9, PipelineId = 42, Name = "Review", SortOrder = 1 },
+            new BoardColumn { Id = 8, PipelineId = 42, Name = "Published", SortOrder = 2 },
+        };
+
+        WorkflowMigrationPlanner.EnsureExistingWorkflowWasExtended(
+            [pipeline], originalColumns, [pipeline], extendedColumns);
+    }
+
+    [Fact]
+    public void Existing_workflow_guard_rejects_reordered_existing_columns()
+    {
+        var pipeline = new Pipeline { Id = 42, Name = "Delivery", Slug = "delivery" };
+        var originalColumns = new[]
+        {
+            new BoardColumn { Id = 7, PipelineId = 42, Name = "Ready", SortOrder = 0 },
+            new BoardColumn { Id = 8, PipelineId = 42, Name = "Published", SortOrder = 1 },
+        };
+        var reorderedColumns = new[]
+        {
+            new BoardColumn { Id = 8, PipelineId = 42, Name = "Published", SortOrder = 0 },
+            new BoardColumn { Id = 7, PipelineId = 42, Name = "Ready", SortOrder = 1 },
+        };
+
+        var error = Assert.ThrowsAny<InvalidOperationException>(() =>
+            WorkflowMigrationPlanner.EnsureExistingWorkflowWasExtended(
+                [pipeline], originalColumns, [pipeline], reorderedColumns));
+
+        Assert.Contains("reordered existing columns", error.Message);
+    }
+
+    [Fact]
     public void Existing_workflow_guard_rejects_regenerated_pipelines()
     {
         var originalPipelines = new[]
