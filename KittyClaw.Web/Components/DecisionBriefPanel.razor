@@ -52,7 +52,7 @@
                     @foreach (var finding in _brief.Findings.OrderByDescending(f => f.IsBlocking))
                     {
                         <li class="brief-finding @(finding.IsBlocking ? "brief-finding--blocking" : "brief-finding--info")">
-                            @finding.Summary
+                            @DecisionBriefDiagnosticLocalizer.Finding(L, finding)
                         </li>
                     }
                 </ul>
@@ -62,7 +62,7 @@
             {
                 <div class="decision-brief-recovery">
                     <strong>@L[$"RecoveryAction{_brief.RecoveryGuidance.Action}"]</strong>
-                    <span> — @_brief.RecoveryGuidance.Reason</span>
+                    <span> — @DecisionBriefDiagnosticLocalizer.Recovery(L, _brief)</span>
                 </div>
             }
 

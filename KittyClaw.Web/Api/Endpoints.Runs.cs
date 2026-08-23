@@ -43,6 +43,29 @@ public static partial class Endpoints
                 return Results.Ok(new { count = req.Count });
             }).ExcludeFromDescription();
 
+            api.MapPost("/projects/{slug}/qa/language", (QaSetLanguageRequest req, AppSettingsService settings) =>
+            {
+                settings.Language = req.Language;
+                return Results.Ok(new { language = settings.Language });
+            }).ExcludeFromDescription();
+
+            api.MapPost("/projects/{slug}/qa/tickets/{ticketId:int}/evidence",
+                (string slug, int ticketId, QaSeedEvidenceRequest req, EvidenceStore store) =>
+                {
+                    if (!Enum.TryParse<EvidenceStatus>(req.Status, ignoreCase: true, out var status))
+                        return Results.BadRequest(new { error = "A valid evidence status is required" });
+
+                    store.SaveTicket(new TicketEvidence
+                    {
+                        TicketId = ticketId.ToString(),
+                        ProjectSlug = slug,
+                        CapturedAt = req.CapturedAt ?? DateTime.UtcNow,
+                        Status = status,
+                        RunIds = ["qa-evidence"],
+                    });
+                    return Results.Ok(new { status = status.ToString() });
+                }).ExcludeFromDescription();
+
             api.MapGet("/projects/{slug}/qa/runs/latest-input-images", (string slug, AgentRunRegistry reg) =>
             {
                 var run = reg.AllForProject(slug)
@@ -239,6 +262,10 @@ public static partial class Endpoints
             return Results.Ok(new { runId = newRunId });
         }).WithTags("Runs");
     }
+
+    private sealed record QaSeedEvidenceRequest(string Status, DateTime? CapturedAt = null);
+
+    private sealed record QaSetLanguageRequest(string Language);
 
     private sealed record QaSeedRunsRequest(IReadOnlyList<string> TicketIds, int Count);
 

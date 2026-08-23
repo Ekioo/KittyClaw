@@ -1,0 +1,70 @@
+{
+  "environment": {
+    "KITTYCLAW_ENABLE_QA_ENDPOINTS": "1"
+  },
+  "setup": [
+    { "type": "createProject", "name": "qa-ticket-341" },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/qa-ticket-341/qa/language",
+      "body": { "language": "fr" }
+    },
+    { "type": "api", "method": "GET", "path": "/api/projects/qa-ticket-341/columns" },
+    {
+      "type": "api",
+      "method": "PATCH",
+      "path": "/api/projects/qa-ticket-341/columns/6",
+      "body": { "role": 4 }
+    },
+    {
+      "type": "api",
+      "method": "PUT",
+      "path": "/api/projects/qa-ticket-341/columns/6/processor",
+      "body": {
+        "name": "Owner decision routing",
+        "mission": "Expose the configured owner decision destinations.",
+        "enabled": false,
+        "defaultTargetColumnId": 7,
+        "routes": [
+          { "outcome": "approved", "targetColumnId": 7 },
+          { "outcome": "changes_requested", "targetColumnId": 2 }
+        ]
+      }
+    },
+    {
+      "type": "createTicket",
+      "project": "qa-ticket-341",
+      "title": "Localize stale evidence diagnostics",
+      "status": "Todo"
+    },
+    { "type": "setStatus", "project": "qa-ticket-341", "status": "Review" },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/qa-ticket-341/qa/tickets/{ticketId}/evidence",
+      "body": { "status": "Stale" }
+    }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-ticket-341/ticket/{ticketId}" },
+    { "type": "wait", "ms": 1500 },
+    {
+      "type": "assertText",
+      "selector": ".brief-finding--blocking",
+      "expected": "Les preuves sont périmées et peuvent ne plus refléter l’état actuel"
+    },
+    {
+      "type": "assertText",
+      "selector": ".decision-brief-recovery span",
+      "expected": "— Les preuves sont antérieures au seuil de péremption. Relancez l’agent pour capturer des artefacts récents, ou abaissez le seuil de fraîcheur pour ce contexte."
+    },
+    {
+      "type": "screenshot",
+      "name": "ticket-341-stale-diagnostics-fr",
+      "selector": ".decision-brief-panel",
+      "description": "The stale finding and recovery reason are rendered in French in the isolated decision brief."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}
