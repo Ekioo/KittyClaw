@@ -671,9 +671,7 @@ public sealed class WorkflowMigrationPlanner(
             !currentColumnsById.TryGetValue(original.Id, out var current)
             || current.PipelineId != original.PipelineId
             || current.Name != original.Name
-            || current.SortOrder != original.SortOrder
-            || current.Role != original.Role
-            || current.Color != original.Color);
+            || current.SortOrder != original.SortOrder);
         if (changedColumn is not null)
             throw new WorkflowMigrationPlanningException(
                 "existing-workflow-replaced",

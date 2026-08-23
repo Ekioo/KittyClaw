@@ -337,6 +337,28 @@ public sealed class WorkflowMigrationPromptTests
     }
 
     [Fact]
+    public void Existing_workflow_guard_accepts_semantic_column_enrichment()
+    {
+        var pipeline = new Pipeline { Id = 42, Name = "Delivery", Slug = "delivery" };
+        var originalColumn = new BoardColumn
+        {
+            Id = 7, PipelineId = 42, Name = "Published", Color = "#999", Role = ColumnRole.Normal,
+        };
+        var enrichedColumn = new BoardColumn
+        {
+            Id = 7,
+            PipelineId = 42,
+            Name = "Published",
+            Color = "#0f0",
+            Role = ColumnRole.Success,
+            UserGuidance = "Publication verified.",
+        };
+
+        WorkflowMigrationPlanner.EnsureExistingWorkflowWasExtended(
+            [pipeline], [originalColumn], [pipeline], [enrichedColumn]);
+    }
+
+    [Fact]
     public void Existing_workflow_guard_rejects_regenerated_pipelines()
     {
         var originalPipelines = new[]
