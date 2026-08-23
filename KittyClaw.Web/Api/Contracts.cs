@@ -1,5 +1,7 @@
 ﻿using KittyClaw.Core.Models;
 
+using KittyClaw.Core.Automation;
+
 namespace KittyClaw.Web.Api;
 
 public record CreateProjectRequest(string Name);
@@ -70,7 +72,8 @@ public record UpdateProjectRequest(
     bool UpdateFallbackModel = false,
     bool? WorktreesEnabled = null,
     string? IntegrationBranch = null,
-    string? RepositoryPath = null);
+    string? RepositoryPath = null,
+    BoundaryEnforcementMode? BoundaryEnforcement = null);
 public record SaveLocalModelConfigRequest(string? LocalModelBaseUrl = null, string? LocalModelName = null);
 public record SaveRtkConfigRequest(bool Enabled);
 public record SteerRunRequest(string Text);

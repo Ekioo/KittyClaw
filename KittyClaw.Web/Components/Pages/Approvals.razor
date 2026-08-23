@@ -1,114 +1,288 @@
 @page "/board/{Slug}/approvals"
+@using KittyClaw.Core.Automation
 @using KittyClaw.Core.Models
 @inject ProjectService ProjectService
 @inject ApprovalRegistryService Registry
 @inject ApprovalWorkflowService Workflow
 @inject LocalizationService L
 @rendermode InteractiveServer
+@implements IDisposable
 
-<PageTitle>@L["RuntimeApprovalsTitle"]</PageTitle>
+<PageTitle>@L["AgentPermissionsTitle"]</PageTitle>
 
 <div class="page-header">
     <a class="back-link" href="/board/@Slug">&larr; @L["ApprovalBackToBoard"]</a>
-    <h1>@L["RuntimeApprovalsTitle"]</h1>
-    <button class="header-action-btn" @onclick="LoadAsync">@L["Refresh"]</button>
+    <h1>@L["AgentPermissionsTitle"]</h1>
+    <div class="approval-header-actions">
+        <a class="header-action-btn" href="/board/@Slug/settings">@L["AgentPermissionsConfigure"]</a>
+        <button class="header-action-btn" @onclick="() => LoadAsync(true)" disabled="@_refreshing">@L["Refresh"]</button>
+    </div>
 </div>
+
+@if (_project is not null)
+{
+    <section class="approval-intro approval-intro--@(_project.BoundaryEnforcement == BoundaryEnforcementMode.Enforce ? "active" : "observe")"
+             data-testid="approval-mode-summary">
+        <div class="approval-intro-icon">@(_project.BoundaryEnforcement == BoundaryEnforcementMode.Enforce ? "🛡" : "◉")</div>
+        <div>
+            <strong>@L[_project.BoundaryEnforcement == BoundaryEnforcementMode.Enforce
+                ? "AgentPermissionsProtectionActive"
+                : "AgentPermissionsObservationOnly"]</strong>
+            <p>@L[_project.BoundaryEnforcement == BoundaryEnforcementMode.Enforce
+                ? "AgentPermissionsProtectionActiveHint"
+                : "AgentPermissionsObservationOnlyHint"]</p>
+        </div>
+    </section>
+}
 
 @if (_loading)
 {
-    <p>@L["ApprovalLoading"]</p>
-}
-else if (_requests.Count == 0)
-{
-    <div class="approval-empty">@L["ApprovalEmpty"]</div>
+    <p class="approval-loading">@L["ApprovalLoading"]</p>
 }
 else
 {
-    <div class="approval-list">
-        @foreach (var request in _requests.OrderByDescending(r => r.ObservedAt))
+    var pending = _requests.Where(request => request.State == "pending").OrderByDescending(request => request.ObservedAt).ToList();
+    var history = _requests.Where(request => request.State != "pending").OrderByDescending(request => request.ObservedAt).ToList();
+
+    <div class="approval-summary" aria-label="@L["AgentPermissionsSummary"]">
+        <div class="approval-summary-card approval-summary-card--pending">
+            <strong data-testid="approval-pending-count">@pending.Count</strong>
+            <span>@L["AgentPermissionsPending"]</span>
+        </div>
+        <div class="approval-summary-card">
+            <strong>@history.Count</strong>
+            <span>@L["AgentPermissionsHistory"]</span>
+        </div>
+    </div>
+
+    <section class="approval-section" data-testid="pending-approvals">
+        <div class="approval-section-heading">
+            <div>
+                <span class="approval-kicker">@L["AgentPermissionsNeedsYou"]</span>
+                <h2>@L["AgentPermissionsPendingTitle"]</h2>
+            </div>
+            <p>@L["AgentPermissionsPendingHint"]</p>
+        </div>
+        @if (pending.Count == 0)
         {
-            var decisions = Decisions(request.RequestId);
-            var receipts = Receipts(request.RequestId);
-            <article class="approval-card approval-card--@request.State" data-request-id="@request.RequestId">
-                <header>
-                    <div><span class="approval-state">@request.State</span> <strong>@request.Operation</strong></div>
-                    <span>@request.ObservedAt.ToLocalTime().ToString("g")</span>
-                </header>
-                <dl class="approval-grid">
-                    <dt>@L["ApprovalAction"]</dt><dd>@request.ActionClass</dd>
-                    <dt>@L["ApprovalDestinationResource"]</dt><dd>@request.ResourceDisplay <code>@request.ResourceCanonicalId</code></dd>
-                    <dt>@L["ApprovalReason"]</dt><dd>@request.Reason</dd>
-                    <dt>@L["ApprovalScope"]</dt><dd>@(request.ScopeRequested ?? L["ApprovalSingleEffect"])</dd>
-                    <dt>@L["ApprovalDuration"]</dt><dd>@Duration(request)</dd>
-                    <dt>@L["ApprovalProvider"]</dt><dd>@request.ProviderName @request.ProviderCliVersion · @request.EnforcementProfile</dd>
-                    <dt>@L["ApprovalRun"]</dt><dd><code>@request.RunId</code></dd>
-                    <dt>@L["ApprovalTicket"]</dt><dd><a href="/board/@Slug/ticket/@request.TicketId">#@request.TicketId</a></dd>
-                </dl>
-                @if (request.State == "pending")
+            <div class="approval-empty approval-empty--success">
+                <strong>@L["AgentPermissionsNothingPending"]</strong>
+                <span>@L["AgentPermissionsNothingPendingHint"]</span>
+            </div>
+        }
+        else
+        {
+            <div class="approval-list">
+                @foreach (var request in pending)
                 {
-                    <div class="approval-actions">
-                        <button class="approval-allow" @onclick="() => DecideAsync(request, ApprovalDecisionKind.AllowOnce)">@L["ApprovalAllowOnce"]</button>
-                        <button class="approval-ticket" @onclick="() => DecideAsync(request, ApprovalDecisionKind.AllowForTicket)">@L["ApprovalAllowForTicket"]</button>
-                        <button class="approval-deny" @onclick="() => DecideAsync(request, ApprovalDecisionKind.Deny)">@L["ApprovalDeny"]</button>
-                    </div>
-                }
-                @if (decisions.Count > 0 || receipts.Count > 0)
-                {
-                    <details class="approval-audit">
-                        <summary>@L.Get("ApprovalAuditHistory", decisions.Count + receipts.Count)</summary>
-                        @foreach (var decision in decisions)
+                    <article class="approval-card approval-card--pending" data-request-id="@request.RequestId">
+                        <header>
+                            <div>
+                                <span class="approval-state">@StateLabel(request.State)</span>
+                                <strong>@ActionLabel(request.ActionClass)</strong>
+                            </div>
+                            <time>@request.ObservedAt.ToLocalTime().ToString("g")</time>
+                        </header>
+                        <p class="approval-request-summary">@RequestSummary(request)</p>
+                        <div class="approval-context">
+                            <a href="/board/@Slug/ticket/@request.TicketId">#@request.TicketId</a>
+                            <span>@request.AgentSlug</span>
+                            <span>@request.ProviderName</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(request.RiskSummary))
                         {
-                            <p><strong>@decision.Kind</strong> @L.Get("ApprovalDecisionAudit", decision.Actor, decision.CreatedAt.ToLocalTime().ToString("g"), decision.Scope, decision.ExpiresAt.ToLocalTime().ToString("g"))</p>
+                            <div class="approval-risk">@request.RiskSummary</div>
                         }
-                        @foreach (var receipt in receipts)
+                        <div class="approval-actions">
+                            <button class="approval-allow" disabled="@IsDeciding(request)"
+                                    @onclick="() => DecideAsync(request, ApprovalDecisionKind.AllowOnce)">
+                                @L["ApprovalAllowOnce"]
+                            </button>
+                            <button class="approval-ticket" disabled="@IsDeciding(request)"
+                                    title="@L["ApprovalAllowForTicketHint"]"
+                                    @onclick="() => DecideAsync(request, ApprovalDecisionKind.AllowForTicket)">
+                                @L["ApprovalAllowForTicket"]
+                            </button>
+                            <button class="approval-deny" disabled="@IsDeciding(request)"
+                                    @onclick="() => DecideAsync(request, ApprovalDecisionKind.Deny)">
+                                @L["ApprovalDeny"]
+                            </button>
+                        </div>
+                        <p class="approval-ticket-grant-hint">@L["ApprovalAllowForTicketHint"]</p>
+                        <details class="approval-technical">
+                            <summary>@L["AgentPermissionsTechnicalDetails"]</summary>
+                            <dl class="approval-grid">
+                                <dt>@L["ApprovalDestinationResource"]</dt><dd>@request.ResourceDisplay</dd>
+                                <dt>@L["ApprovalProvider"]</dt><dd>@request.ProviderName @request.ProviderCliVersion</dd>
+                                <dt>@L["ApprovalRun"]</dt><dd><code>@request.RunId</code></dd>
+                                <dt>@L["ApprovalDuration"]</dt><dd>@Duration(request)</dd>
+                                <dt>@L["ApprovalOperation"]</dt><dd><code>@request.Operation</code></dd>
+                                <dt>@L["ApprovalEvidence"]</dt><dd><code>@ShortHash(request.RedactedArgumentsHash)</code></dd>
+                            </dl>
+                        </details>
+                    </article>
+                }
+            </div>
+        }
+    </section>
+
+    <section class="approval-section approval-section--history" data-testid="approval-history">
+        <div class="approval-section-heading">
+            <div>
+                <span class="approval-kicker">@L["AgentPermissionsTraceability"]</span>
+                <h2>@L["AgentPermissionsHistoryTitle"]</h2>
+            </div>
+            <p>@L["AgentPermissionsHistoryHint"]</p>
+        </div>
+        @if (history.Count == 0)
+        {
+            <div class="approval-empty">@L["AgentPermissionsNoHistory"]</div>
+        }
+        else
+        {
+            <div class="approval-history-list">
+                @foreach (var request in history)
+                {
+                    var decisions = Decisions(request.RequestId);
+                    var receipts = Receipts(request.RequestId);
+                    <details class="approval-history-card approval-card--@request.State" data-request-id="@request.RequestId">
+                        <summary>
+                            <span class="approval-state">@StateLabel(request.State)</span>
+                            <strong>@ActionLabel(request.ActionClass)</strong>
+                            <span>#@request.TicketId · @request.ObservedAt.ToLocalTime().ToString("g")</span>
+                        </summary>
+                        <p class="approval-request-summary">@RequestSummary(request)</p>
+                        <dl class="approval-grid">
+                            <dt>@L["ApprovalDestinationResource"]</dt><dd>@request.ResourceDisplay</dd>
+                            <dt>@L["ApprovalProvider"]</dt><dd>@request.ProviderName @request.ProviderCliVersion</dd>
+                            <dt>@L["ApprovalRun"]</dt><dd><code>@request.RunId</code></dd>
+                            <dt>@L["ApprovalDuration"]</dt><dd>@Duration(request)</dd>
+                            <dt>@L["ApprovalOperation"]</dt><dd><code>@request.Operation</code></dd>
+                            <dt>@L["ApprovalEvidence"]</dt><dd><code>@ShortHash(request.RedactedArgumentsHash)</code></dd>
+                        </dl>
+                        @if (decisions.Count > 0 || receipts.Count > 0)
                         {
-                            <p><strong>@receipt.Outcome</strong> @L.Get("ApprovalReceiptAudit", receipt.EnforcementPointId, receipt.EndedAt.ToLocalTime().ToString("g")) <code>@receipt.IntegrityHash[..12]</code></p>
+                            <div class="approval-audit">
+                                <strong>@L.Get("ApprovalAuditHistory", decisions.Count + receipts.Count)</strong>
+                                @foreach (var decision in decisions)
+                                {
+                                    <p><span>@DecisionLabel(decision.Kind)</span> @L.Get("ApprovalDecisionAudit", decision.Actor, decision.CreatedAt.ToLocalTime().ToString("g"), ScopeLabel(decision.Scope), decision.ExpiresAt.ToLocalTime().ToString("g"))</p>
+                                }
+                                @foreach (var receipt in receipts)
+                                {
+                                    <p><span>@ReceiptLabel(receipt.Outcome)</span> @L.Get("ApprovalReceiptAudit", receipt.EnforcementPointId, receipt.EndedAt.ToLocalTime().ToString("g")) <code>@receipt.IntegrityHash[..12]</code></p>
+                                }
+                            </div>
                         }
                     </details>
                 }
-            </article>
+            </div>
         }
-    </div>
+    </section>
+}
+
+@if (_error is not null)
+{
+    <div class="approval-error" role="alert">@_error</div>
 }
 
 @code {
     [Parameter] public string Slug { get; set; } = "";
     private bool _loading = true;
+    private bool _refreshing;
+    private string? _decidingRequestId;
+    private string? _error;
+    private Project? _project;
     private IReadOnlyList<ApprovalRequestRecord> _requests = [];
     private IReadOnlyList<ApprovalDecisionRecord> _decisions = [];
     private IReadOnlyList<ApprovalReceiptRecord> _receipts = [];
+    private Timer? _refreshTimer;
 
-    protected override Task OnParametersSetAsync() => LoadAsync();
-
-    private async Task LoadAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        _loading = true;
-        if (await ProjectService.GetProjectAsync(Slug) is not null)
+        await LoadAsync(true);
+        _refreshTimer ??= new Timer(_ => _ = InvokeAsync(async () =>
         {
-            _requests = await Registry.QueryRequestsAsync(Slug, new());
-            _decisions = await Registry.QueryDecisionsAsync(Slug);
-            _receipts = await Registry.QueryReceiptsAsync(Slug);
-        }
-        _loading = false;
+            await LoadAsync(false);
+            StateHasChanged();
+        }), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
     }
 
-    private List<ApprovalDecisionRecord> Decisions(string id) => _decisions.Where(d => d.RequestId == id).OrderByDescending(d => d.CreatedAt).ToList();
-    private List<ApprovalReceiptRecord> Receipts(string id) => _receipts.Where(r => r.RequestId == id).OrderByDescending(r => r.EndedAt).ToList();
-    private string Duration(ApprovalRequestRecord r) => r.DurationRequestedSeconds is int seconds
-        ? TimeSpan.FromSeconds(seconds).ToString()
-        : L.Get("ApprovalUntil", r.ExpiresAt.ToLocalTime().ToString("g"));
+    private async Task LoadAsync(bool showLoading)
+    {
+        if (_refreshing) return;
+        _refreshing = true;
+        if (showLoading) _loading = true;
+        try
+        {
+            _project = await ProjectService.GetProjectAsync(Slug);
+            if (_project is not null)
+            {
+                _requests = await Registry.QueryRequestsAsync(Slug, new());
+                _decisions = await Registry.QueryDecisionsAsync(Slug);
+                _receipts = await Registry.QueryReceiptsAsync(Slug);
+            }
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = L.Get("AgentPermissionsLoadFailed", ex.Message);
+        }
+        finally
+        {
+            _loading = false;
+            _refreshing = false;
+        }
+    }
+
+    private List<ApprovalDecisionRecord> Decisions(string id) =>
+        _decisions.Where(decision => decision.RequestId == id).OrderByDescending(decision => decision.CreatedAt).ToList();
+
+    private List<ApprovalReceiptRecord> Receipts(string id) =>
+        _receipts.Where(receipt => receipt.RequestId == id).OrderByDescending(receipt => receipt.EndedAt).ToList();
+
+    private bool IsDeciding(ApprovalRequestRecord request) => _decidingRequestId is not null;
 
     private async Task DecideAsync(ApprovalRequestRecord request, ApprovalDecisionKind kind)
     {
-        var now = DateTime.UtcNow;
-        var expiry = kind == ApprovalDecisionKind.AllowForTicket
-            ? new[] { request.ExpiresAt, now.AddHours(24) }.Min()
-            : kind == ApprovalDecisionKind.AllowOnce && request.DurationRequestedSeconds is int seconds
-                ? new[] { request.ExpiresAt, now.AddSeconds(seconds) }.Min()
-                : request.ExpiresAt;
-        await Workflow.DecideAsync(Slug, new(Guid.NewGuid().ToString("N"), request.RequestId, kind,
-            "owner", now, expiry, kind == ApprovalDecisionKind.AllowForTicket ? $"ticket:{request.TicketId}" : "once",
-            "Operator decision from the runtime approval queue", null));
-        await LoadAsync();
+        _decidingRequestId = request.RequestId;
+        _error = null;
+        try
+        {
+            var now = DateTime.UtcNow;
+            var expiry = kind == ApprovalDecisionKind.AllowForTicket
+                ? new[] { request.ExpiresAt, now.AddHours(24) }.Min()
+                : kind == ApprovalDecisionKind.AllowOnce && request.DurationRequestedSeconds is int seconds
+                    ? new[] { request.ExpiresAt, now.AddSeconds(seconds) }.Min()
+                    : request.ExpiresAt;
+            await Workflow.DecideAsync(Slug, new(Guid.NewGuid().ToString("N"), request.RequestId, kind,
+                "owner", now, expiry, kind == ApprovalDecisionKind.AllowForTicket ? $"ticket:{request.TicketId}" : "once",
+                "Operator decision from the agent permissions queue", null));
+            await LoadAsync(false);
+        }
+        catch (Exception ex)
+        {
+            _error = L.Get("AgentPermissionsDecisionFailed", ex.Message);
+        }
+        finally { _decidingRequestId = null; }
     }
+
+    private string StateLabel(string state) => L[$"ApprovalState{state}"];
+    private string ActionLabel(string actionClass) => L[$"ApprovalAction{actionClass}"];
+    private string DecisionLabel(ApprovalDecisionKind kind) => L[$"ApprovalDecision{kind}"];
+    private string ReceiptLabel(ApprovalReceiptOutcome outcome) => L[$"ApprovalReceipt{outcome}"];
+    private string ScopeLabel(string scope) => scope.StartsWith("ticket:", StringComparison.Ordinal)
+        ? L["ApprovalScopeTicket"] : L["ApprovalSingleEffect"];
+    private string RequestSummary(ApprovalRequestRecord request) =>
+        L.Get($"ApprovalSummary{request.ActionClass}", request.ResourceDisplay);
+
+    private static string ShortHash(string? hash) => string.IsNullOrWhiteSpace(hash)
+        ? "—"
+        : hash[..Math.Min(12, hash.Length)];
+
+    private string Duration(ApprovalRequestRecord request) => request.DurationRequestedSeconds is int seconds
+        ? TimeSpan.FromSeconds(seconds).ToString()
+        : L.Get("ApprovalUntil", request.ExpiresAt.ToLocalTime().ToString("g"));
+
+    public void Dispose() => _refreshTimer?.Dispose();
 }

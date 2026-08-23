@@ -507,5 +507,7 @@
 .pipeline-kit-detail dd { margin:.25rem 0 .8rem; }
 .pipeline-kit-body>label { display:grid; gap:.35rem; }
 .pipeline-kit-approval { grid-template-columns:auto 1fr!important; align-items:start; padding:.75rem; border:1px solid #4a4e6d; border-radius:8px; }
+.settings-provider-compatibility { margin-top: .8rem; display: flex; flex-wrap: wrap; align-items: center; gap: .55rem; color: var(--text-muted); }
+.settings-provider-compatibility small { flex-basis: 100%; line-height: 1.45; }
 .pipeline-kit-body footer { position:sticky; bottom:-1.25rem; display:flex; justify-content:flex-end; gap:.6rem; padding:1rem 0; background:#181a2b; }
 @media (max-width:700px) { .pipeline-kit-dialog { width:100vw; max-height:100vh; min-height:100vh; border-radius:0; } .pipeline-kit-summary { grid-template-columns:1fr 1fr; } .pipeline-kit-grid { grid-template-columns:1fr; } }

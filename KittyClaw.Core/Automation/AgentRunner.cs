@@ -30,7 +30,7 @@ public sealed class AgentRunContext
     /// <summary>Fail-closed boundary enforcement for this run. Enforce dispatches only on providers
     /// whose adapter intercepts every protected boundary class before the effect (see
     /// <see cref="RuntimeEnforcementCapabilities"/>); other providers fail closed before spawn.</summary>
-    public BoundaryEnforcementMode BoundaryEnforcement { get; init; } = BoundaryEnforcementMode.Observe;
+    public BoundaryEnforcementMode BoundaryEnforcement { get; set; } = BoundaryEnforcementMode.Observe;
 
     /// <summary>Atomic model/backend/environment selection. Keeping these values together prevents
     /// impossible combinations such as a Grok model with the Claude backend or leaked Ollama env.</summary>
@@ -199,8 +199,9 @@ public sealed class AgentRunner
     private readonly RtkIntegrationService? _rtk;
     private readonly ProjectSecretVault? _projectSecrets;
     private readonly DurableWriteRouter? _durableWrites;
+    private readonly ProjectService? _projects;
 
-    public AgentRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<AgentRunner> logger, AppSettingsService? appSettings = null, BoundaryObservationService? boundaryObserver = null, TicketWorktreeService? worktrees = null, RtkIntegrationService? rtk = null, ProjectSecretVault? projectSecrets = null, DurableWriteRouter? durableWrites = null)
+    public AgentRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<AgentRunner> logger, AppSettingsService? appSettings = null, BoundaryObservationService? boundaryObserver = null, TicketWorktreeService? worktrees = null, RtkIntegrationService? rtk = null, ProjectSecretVault? projectSecrets = null, DurableWriteRouter? durableWrites = null, ProjectService? projects = null)
     {
         _sessions = sessions;
         _runs = runs;
@@ -212,10 +213,14 @@ public sealed class AgentRunner
         _rtk = rtk;
         _projectSecrets = projectSecrets;
         _durableWrites = durableWrites;
+        _projects = projects;
     }
 
     public async Task<AgentRun> RunAsync(AgentRunContext ctx, CancellationToken ct)
     {
+        if (_projects is not null && await _projects.GetProjectAsync(ctx.ProjectSlug) is { } project)
+            ctx.BoundaryEnforcement = project.BoundaryEnforcement;
+
         var route = ctx.DurableWriteRoute;
         if (route is null && _durableWrites is not null &&
             ctx.SessionScope == "chat" && ctx.TicketId is null)

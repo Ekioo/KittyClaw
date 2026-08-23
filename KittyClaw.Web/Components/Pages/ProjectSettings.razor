@@ -1,6 +1,7 @@
 @page "/board/{Slug}/settings"
 @using KittyClaw.Core.Models
 @using KittyClaw.Core.Services
+@using KittyClaw.Core.Automation
 @inject ProjectService ProjectService
 @inject MemberService MemberService
 @inject LabelService LabelService
@@ -255,6 +256,41 @@ else
             @if (_rtkSaveStatus is not null)
             {
                 <div class="settings-status @_rtkSaveStatus.Value.css" data-testid="rtk-save-status">@_rtkSaveStatus.Value.text</div>
+            }
+        </section>
+
+        <section class="settings-section" data-testid="agent-permissions-settings">
+            <h2>@L["AgentPermissionsTitle"]</h2>
+            <p class="settings-hint">@L["AgentPermissionsSettingsHint"]</p>
+            <label class="settings-label">@L["AgentPermissionsMode"]</label>
+            <select class="settings-input" style="max-width:360px" data-testid="boundary-enforcement-mode"
+                    @bind="_boundaryEnforcement">
+                <option value="@BoundaryEnforcementMode.Observe">@L["AgentPermissionsObserve"]</option>
+                <option value="@BoundaryEnforcementMode.Enforce">@L["AgentPermissionsEnforce"]</option>
+            </select>
+            <div class="settings-status @(_boundaryEnforcement == BoundaryEnforcementMode.Enforce ? "settings-status-warn" : "")"
+                 data-testid="boundary-enforcement-explanation">
+                @L[_boundaryEnforcement == BoundaryEnforcementMode.Enforce
+                    ? "AgentPermissionsEnforceExplanation"
+                    : "AgentPermissionsObserveExplanation"]
+            </div>
+            <div class="settings-provider-compatibility">
+                <strong>@L["AgentPermissionsCompatibleProvider"]</strong>
+                <span class="settings-status settings-status-ok">Claude Code</span>
+                <small>@L["AgentPermissionsOtherProviders"]</small>
+            </div>
+            <div class="settings-row" style="margin-top:.8rem">
+                <button class="settings-primary" data-testid="save-boundary-enforcement"
+                        @onclick="SaveBoundaryEnforcement" disabled="@_savingBoundaryEnforcement">
+                    @(_savingBoundaryEnforcement ? "…" : L["Save"])
+                </button>
+                <a class="settings-browse" href="/board/@Slug/approvals">@L["AgentPermissionsOpen"]</a>
+            </div>
+            @if (_boundaryEnforcementStatus is not null)
+            {
+                <div class="settings-status @_boundaryEnforcementStatus.Value.css" data-testid="boundary-enforcement-status">
+                    @_boundaryEnforcementStatus.Value.text
+                </div>
             }
         </section>
 
@@ -548,6 +584,9 @@ else
     private bool _rtkEnabled, _savingRtk;
     private RtkStatusDto? _rtkRuntimeStatus;
     private (string text, string css)? _rtkSaveStatus;
+    private BoundaryEnforcementMode _boundaryEnforcement = BoundaryEnforcementMode.Observe;
+    private bool _savingBoundaryEnforcement;
+    private (string text, string css)? _boundaryEnforcementStatus;
     private List<ProjectSecretDto> _secrets = new();
     private string _secretName = "";
     private string _secretValue = "";
@@ -586,6 +625,7 @@ else
         _repositoryPath = _project.RepositoryPath ?? "";
         _localModelBaseUrl = _project.LocalModelBaseUrl ?? "";
         _rtkEnabled = _project.RtkEnabled;
+        _boundaryEnforcement = _project.BoundaryEnforcement;
         await ReloadAllAsync();
         await RefreshGitStatus();
         await RefreshRtkStatus();
@@ -754,6 +794,33 @@ else
             _fallbackStatus = ($"{L["Error"]}: {ex.Message}", "settings-status-err");
         }
         finally { _savingFallback = false; }
+    }
+
+    private async Task SaveBoundaryEnforcement()
+    {
+        _savingBoundaryEnforcement = true;
+        _boundaryEnforcementStatus = null;
+        try
+        {
+            var response = await NewHttp().PatchAsJsonAsync($"/api/projects/{Slug}", new
+            {
+                boundaryEnforcement = _boundaryEnforcement.ToString(),
+            });
+            if (!response.IsSuccessStatusCode)
+            {
+                _boundaryEnforcementStatus = ($"{L["Error"]}: {await response.Content.ReadAsStringAsync()}", "settings-status-err");
+                return;
+            }
+
+            _project = await response.Content.ReadFromJsonAsync<Project>();
+            _boundaryEnforcement = _project?.BoundaryEnforcement ?? BoundaryEnforcementMode.Observe;
+            _boundaryEnforcementStatus = (L["Saved"], "settings-status-ok");
+        }
+        catch (Exception ex)
+        {
+            _boundaryEnforcementStatus = ($"{L["Error"]}: {ex.Message}", "settings-status-err");
+        }
+        finally { _savingBoundaryEnforcement = false; }
     }
 
     private async Task DiscoverLocalModels()

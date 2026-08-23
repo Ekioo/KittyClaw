@@ -13,7 +13,13 @@ public sealed class ApprovalPageTests
     public void ApprovalPage_ShowsRequiredContextAndOnlyTemporaryChoices()
     {
         Assert.Contains("@inject LocalizationService L", Source);
-        foreach (var key in new[] { "ApprovalAction", "ApprovalDestinationResource", "ApprovalReason", "ApprovalScope", "ApprovalDuration", "ApprovalProvider", "ApprovalRun", "ApprovalTicket" })
+        foreach (var key in new[]
+                 {
+                     "AgentPermissionsPendingTitle", "AgentPermissionsPendingHint",
+                     "AgentPermissionsTechnicalDetails", "ApprovalDestinationResource",
+                     "ApprovalDuration", "ApprovalProvider", "ApprovalRun", "ApprovalOperation",
+                     "ApprovalEvidence"
+                 })
             Assert.Contains($"L[\"{key}\"]", Source);
         Assert.Contains("L[\"ApprovalAllowOnce\"]", Source);
         Assert.Contains("L[\"ApprovalAllowForTicket\"]", Source);
@@ -34,15 +40,26 @@ public sealed class ApprovalPageTests
     {
         Assert.DoesNotContain(">Runtime approvals<", Source, StringComparison.Ordinal);
         Assert.DoesNotContain(">Refresh<", Source, StringComparison.Ordinal);
-        Assert.Contains("L[\"RuntimeApprovalsTitle\"]", BoardSource, StringComparison.Ordinal);
-        Assert.Contains("L[\"Approvals\"]", BoardSource, StringComparison.Ordinal);
+        Assert.Contains("L[\"AgentPermissionsTitle\"]", BoardSource, StringComparison.Ordinal);
+        Assert.Contains("L[\"AgentPermissionsNav\"]", BoardSource, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"pending-approval-badge\"", BoardSource, StringComparison.Ordinal);
         Assert.DoesNotContain("&#128737; Approvals</a>", BoardSource, StringComparison.Ordinal);
 
         var requiredKeys = new[]
         {
-            "Approvals", "RuntimeApprovalsTitle", "Refresh", "ApprovalBackToBoard", "ApprovalLoading",
-            "ApprovalEmpty", "ApprovalAction", "ApprovalDestinationResource", "ApprovalReason", "ApprovalScope",
-            "ApprovalSingleEffect", "ApprovalDuration", "ApprovalProvider", "ApprovalRun", "ApprovalTicket",
+            "AgentPermissionsTitle", "AgentPermissionsNav", "AgentPermissionsOpen", "AgentPermissionsConfigure",
+            "AgentPermissionsSettingsHint", "AgentPermissionsMode", "AgentPermissionsObserve",
+            "AgentPermissionsEnforce", "AgentPermissionsEnforceExplanation", "AgentPermissionsObserveExplanation",
+            "AgentPermissionsCompatibleProvider", "AgentPermissionsOtherProviders", "AgentPermissionsProtectionActive",
+            "AgentPermissionsProtectionActiveHint", "AgentPermissionsObservationOnly",
+            "AgentPermissionsObservationOnlyHint", "AgentPermissionsSummary", "AgentPermissionsPending",
+            "AgentPermissionsHistory", "AgentPermissionsNeedsYou", "AgentPermissionsPendingTitle",
+            "AgentPermissionsPendingHint", "AgentPermissionsNothingPending", "AgentPermissionsNothingPendingHint",
+            "AgentPermissionsTechnicalDetails", "AgentPermissionsTraceability", "AgentPermissionsHistoryTitle",
+            "AgentPermissionsHistoryHint", "AgentPermissionsNoHistory", "AgentPermissionsDecisionFailed",
+            "AgentPermissionsLoadFailed", "AgentPermissionsPendingCount", "Refresh", "ApprovalBackToBoard",
+            "ApprovalLoading", "ApprovalDestinationResource", "ApprovalDuration", "ApprovalProvider", "ApprovalRun",
+            "ApprovalOperation", "ApprovalEvidence", "ApprovalSingleEffect", "ApprovalScopeTicket",
             "ApprovalAllowOnce", "ApprovalAllowForTicket", "ApprovalDeny", "ApprovalAuditHistory",
             "ApprovalDecisionAudit", "ApprovalReceiptAudit", "ApprovalUntil"
         };

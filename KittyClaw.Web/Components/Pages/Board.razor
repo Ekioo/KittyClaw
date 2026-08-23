@@ -19,6 +19,7 @@
 @inject ColumnProcessorService ProcessorService
 @inject KittyClaw.Core.Automation.AutomationStore AutomationStore
 @inject MemberService MemberService
+@inject ApprovalRegistryService ApprovalRegistry
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject LocalizationService L
@@ -65,7 +66,15 @@ else
                 &#8630;
             </button>
             <button class="header-action-btn new-instruction-btn" @onclick="OpenChatDrawer" title="@L["NewInstruction"]">&#128172; @L["NewInstruction"]</button>
-            <a class="header-action-btn" href="/board/@Slug/approvals" title="@L["RuntimeApprovalsTitle"]">&#128737; @L["Approvals"]</a>
+            <a class="header-action-btn agent-permissions-link @(_pendingApprovalCount > 0 ? "agent-permissions-link--pending" : "")"
+               href="/board/@Slug/approvals" title="@L["AgentPermissionsTitle"]">
+                &#128737; @L["AgentPermissionsNav"]
+                @if (_pendingApprovalCount > 0)
+                {
+                    <span class="approval-pending-badge" data-testid="pending-approval-badge"
+                          aria-label="@L.Get("AgentPermissionsPendingCount", _pendingApprovalCount)">@_pendingApprovalCount</span>
+                }
+            </a>
             <a class="header-action-btn" href="/board/@Slug/workflows" title="@L["WorkflowTitle"]">&#8644; @L["WorkflowTitle"]</a>
             <a class="header-action-btn" href="/board/@Slug/settings" title="@L["ProjectSettingsTooltip"]">&#9881;&#65039; @L["ProjectSettings"]</a>
         </div>
@@ -650,6 +659,8 @@ else
     private const int MaxUndoSize = 30;
     private IJSObjectReference? _undoHandler;
     private DotNetObjectReference<Board>? _dotNetRef;
+    private Timer? _approvalRefreshTimer;
+    private int _pendingApprovalCount;
 
     private void PushUndo(string label, Func<Task> undo, int? affectedTicketId = null)
     {
@@ -738,6 +749,12 @@ else
             ResetLoadedColumns();
             await RefreshTicketsAsync();
             _allMembers = await MemberService.ListMembersAsync(Slug);
+            await RefreshPendingApprovalsAsync();
+            _approvalRefreshTimer = new Timer(_ => _ = InvokeAsync(async () =>
+            {
+                await RefreshPendingApprovalsAsync();
+                StateHasChanged();
+            }), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
 
             // A legacy board deserves an explicit migration path, but opening a deep-linked
             // ticket must remain interruption-free. The wizard is shown once for this board
@@ -779,6 +796,7 @@ else
                 ResetLoadedColumns();
                 await RefreshTicketsAsync();
                 _allMembers = await MemberService.ListMembersAsync(Slug);
+                await RefreshPendingApprovalsAsync();
                 StateHasChanged();
             }
             catch (Exception ex)
@@ -795,9 +813,23 @@ else
         if (_undoHandler is not null)
             _ = JS.InvokeVoidAsync("unregisterUndoShortcut", _undoHandler);
         _dotNetRef?.Dispose();
+        _approvalRefreshTimer?.Dispose();
         _escRunDrawer?.Dispose();
         _escChatDrawer?.Dispose();
         _escTrashDialog?.Dispose();
+    }
+
+    private async Task RefreshPendingApprovalsAsync()
+    {
+        try
+        {
+            var requests = await ApprovalRegistry.QueryRequestsAsync(Slug, new());
+            _pendingApprovalCount = requests.Count(request => request.State == "pending");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Could not refresh pending agent permissions for {ProjectSlug}", Slug);
+        }
     }
 
     protected override async Task OnParametersSetAsync()

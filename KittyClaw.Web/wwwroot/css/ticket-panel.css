@@ -872,6 +872,21 @@ select:focus-visible,
     opacity: 0.4;
     cursor: default;
 }
+.agent-permissions-link { gap: .4rem; }
+.agent-permissions-link--pending { border-color: #f59e0b; color: #f7b733; }
+.approval-pending-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.2rem;
+    height: 1.2rem;
+    padding: 0 .3rem;
+    border-radius: 999px;
+    background: #f59e0b;
+    color: #211607;
+    font-size: .68rem;
+    font-weight: 800;
+}
 .ticket-desc {
     color: var(--text);
     margin-bottom: 1rem;
