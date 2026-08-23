@@ -32,6 +32,23 @@ public sealed class TicketWorktreeServiceTests
     }
 
     [Fact]
+    public async Task Resolution_DrainsVerboseGitHookWithoutDeadlocking()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var hooks = Path.Combine(fixture.Repository, ".git", "hooks");
+        Directory.CreateDirectory(hooks);
+        await File.WriteAllTextAsync(Path.Combine(hooks, "post-checkout"),
+            "#!/bin/sh\ni=0\nwhile [ $i -lt 8192 ]; do echo 'verbose post-checkout diagnostic output' >&2; i=$((i+1)); done\n");
+        var ticket = await fixture.Tickets.CreateTicketAsync(fixture.ProjectSlug, "Verbose hook");
+
+        var worktree = await fixture.Worktrees.ResolveAsync(fixture.ProjectSlug, ticket.Id, CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(15));
+
+        Assert.NotNull(worktree);
+        Assert.True(Directory.Exists(worktree.Path));
+    }
+
+    [Fact]
     public async Task NestedConfiguredRepository_CreatesWorktreeBesideNestedRepositoryOnly()
     {
         using var fixture = await Fixture.CreateAsync(nested: true);

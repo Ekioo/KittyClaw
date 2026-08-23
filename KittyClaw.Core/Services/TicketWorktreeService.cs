@@ -184,13 +184,18 @@ public sealed class TicketWorktreeService(ProjectService projects, TicketService
             foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
             using var process = Process.Start(startInfo)
                 ?? throw new InvalidOperationException("Git process could not be started.");
-            var stdout = process.StandardOutput.ReadToEnd();
-            var stderr = process.StandardError.ReadToEnd();
+            // Drain both redirected streams concurrently. Reading them sequentially can
+            // deadlock before WaitForExit when a Git hook fills the stderr pipe.
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
             if (!process.WaitForExit(30_000))
             {
                 process.Kill(entireProcessTree: true);
+                process.WaitForExit();
                 throw new InvalidOperationException($"Git command timed out: git {string.Join(' ', arguments)}");
             }
+            var stdout = stdoutTask.GetAwaiter().GetResult();
+            var stderr = stderrTask.GetAwaiter().GetResult();
             var result = new GitResult(process.ExitCode, stdout, stderr);
             if (throwOnError && result.ExitCode != 0)
                 throw new InvalidOperationException($"Git command failed ({result.ExitCode}): git {string.Join(' ', arguments)}\n{stderr.Trim()}");
