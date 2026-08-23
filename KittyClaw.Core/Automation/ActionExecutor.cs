@@ -65,7 +65,7 @@ internal sealed class ActionExecutor
         _durableWrites = durableWrites;
 
         _ticketMutation = new TicketMutationHandler(tickets, labels, members, loc, logger);
-        _agentMemory = new AgentMemoryHandler(tickets, members, projects, runner, sessions, logger);
+        _agentMemory = new AgentMemoryHandler(tickets, members, projects, runner, sessions, logger, durableWrites);
         _network = new NetworkActionHandler(tickets, logger, projectSecrets);
     }
 
