@@ -8,6 +8,7 @@ For a high-level overview see the root [README.md](../README.md). For repo layou
 
 ## Features
 
+- [Projects using KittyClaw](./projects-using-kittyclaw.md) — public community showcase with transparent verification labels.
 - [Durable worktree integrations](./durable-worktree-integrations.md) — isolates versioned runtime writes and integrates them through a crash-recoverable queue.
 
 - [Repository data policy](./repository-data-policy.md) — prevents execution evidence and private exports from entering published history.

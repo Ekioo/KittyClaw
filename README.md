@@ -254,6 +254,8 @@ Two things the AGPL does **not** touch (see [NOTICE.md](NOTICE.md)):
 
 → **Site + demo:** [kittyclaw.dev](https://kittyclaw.dev)
 
+→ **Community showcase:** [Projects using KittyClaw](doc/projects-using-kittyclaw.md)
+
 Check out my other projects at **[ekioo.com](https://ekioo.com)**.
 
 Follow me on X: **[@DamienHOFFSCHIR](https://x.com/DamienHOFFSCHIR)**
