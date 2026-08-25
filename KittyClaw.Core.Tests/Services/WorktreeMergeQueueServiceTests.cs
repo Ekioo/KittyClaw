@@ -619,6 +619,90 @@ public sealed class WorktreeMergeQueueServiceTests
     }
 
     [Fact]
+    public async Task PrepareMaintenance_ConcurrentCallsReuseTheSameActiveRequest()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var worktreePath = Path.Combine(fixture.Root.Path, "maintenance-worktree");
+        Git(fixture.Repository, true, "worktree", "add", "-b", "maintenance/test", worktreePath, "integration");
+        var queues = Enumerable.Range(0, 8)
+            .Select(_ => new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees))
+            .ToArray();
+        var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var preparations = queues.Select(async queue =>
+        {
+            await start.Task;
+            return await queue.PrepareMaintenanceAsync(
+                fixture.Slug, worktreePath, "maintenance/test", CancellationToken.None);
+        }).ToArray();
+        start.SetResult();
+
+        var requests = await Task.WhenAll(preparations);
+
+        Assert.Single(requests.Select(request => request.Id).Distinct());
+        Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+        Assert.All(requests, request => Assert.Equal(WorktreeMergeStatus.CommitPending, request.Status));
+    }
+
+    [Fact]
+    public async Task PrepareMaintenance_ConcurrentCallsAfterQuarantineCreateASingleActiveRequest()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var quarantinePath = Path.Combine(fixture.Root.Path, "maintenance-quarantine");
+        Git(fixture.Repository, true, "worktree", "add", "-b", "recovery/maintenance-test", quarantinePath, "integration");
+        await fixture.Queue.QuarantineMaintenanceAsync(
+            fixture.Slug, Path.Combine(fixture.Root.Path, "maintenance-worktree"),
+            quarantinePath, "recovery/maintenance-test",
+            "Interrupted maintenance files require quarantine: transport.txt");
+        var worktreePath = Path.Combine(fixture.Root.Path, "maintenance-worktree");
+        Git(fixture.Repository, true, "worktree", "add", "-b", "maintenance/test", worktreePath, "integration");
+        var queues = Enumerable.Range(0, 8)
+            .Select(_ => new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees))
+            .ToArray();
+        var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var preparations = queues.Select(async queue =>
+        {
+            await start.Task;
+            return await queue.PrepareMaintenanceAsync(
+                fixture.Slug, worktreePath, "maintenance/test", CancellationToken.None);
+        }).ToArray();
+        start.SetResult();
+
+        var requests = await Task.WhenAll(preparations);
+
+        Assert.Single(requests.Select(request => request.Id).Distinct());
+        Assert.All(requests, request => Assert.Equal(WorktreeMergeStatus.CommitPending, request.Status));
+        var rows = await fixture.Queue.ListAsync(fixture.Slug);
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(WorktreeMergeStatus.Quarantined, rows[0].Status);
+        Assert.Contains("require quarantine", rows[0].Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PrepareMaintenance_ReturnsTheActiveRequestShadowedByANewerQuarantineRow()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var worktreePath = Path.Combine(fixture.Root.Path, "maintenance-worktree");
+        Git(fixture.Repository, true, "worktree", "add", "-b", "maintenance/test", worktreePath, "integration");
+        var active = await fixture.Queue.PrepareMaintenanceAsync(
+            fixture.Slug, worktreePath, "maintenance/test", CancellationToken.None);
+        var quarantinePath = Path.Combine(fixture.Root.Path, "maintenance-quarantine");
+        Git(fixture.Repository, true, "worktree", "add", "-b", "recovery/maintenance-test", quarantinePath, "integration");
+        await fixture.Queue.QuarantineMaintenanceAsync(
+            fixture.Slug, Path.Combine(fixture.Root.Path, "unrelated-worktree"),
+            quarantinePath, "recovery/maintenance-test",
+            "Interrupted maintenance files require quarantine: transport.txt");
+
+        var reused = await fixture.Queue.PrepareMaintenanceAsync(
+            fixture.Slug, worktreePath, "maintenance/test", CancellationToken.None);
+
+        Assert.Equal(active.Id, reused.Id);
+        Assert.Equal(WorktreeMergeStatus.CommitPending, reused.Status);
+        Assert.Equal(2, (await fixture.Queue.ListAsync(fixture.Slug)).Count);
+    }
+
+    [Fact]
     public async Task Recovery_RequeuesACommittedMaintenanceWorktreeAfterItsPreviousIntegrationCompleted()
     {
         using var fixture = await Fixture.CreateAsync();

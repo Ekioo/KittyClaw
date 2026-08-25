@@ -288,6 +288,21 @@ public sealed partial class WorktreeMergeQueueService(
     public async Task<WorktreeMergeRequest> PrepareMaintenanceAsync(
         string projectSlug, string worktreePath, string sourceBranch, CancellationToken ct)
     {
+        var gate = ProjectGates.GetOrAdd(projectSlug, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            return await PrepareMaintenanceCoreAsync(projectSlug, worktreePath, sourceBranch, ct);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task<WorktreeMergeRequest> PrepareMaintenanceCoreAsync(
+        string projectSlug, string worktreePath, string sourceBranch, CancellationToken ct)
+    {
         ct.ThrowIfCancellationRequested();
         var project = await projects.GetProjectAsync(projectSlug)
             ?? throw new InvalidOperationException($"Project '{projectSlug}' does not exist.");
@@ -296,7 +311,9 @@ public sealed partial class WorktreeMergeQueueService(
         await using var db = projects.GetProjectDb(projectSlug);
         await EnsureTableAsync(db);
         const int maintenanceRoot = int.MinValue;
-        var existing = await ReadByRootAsync(db, maintenanceRoot);
+        // A quarantine insert creates a newer row for the same root; reading only the latest row
+        // would shadow the single active request and make the insert below violate the unique index.
+        var existing = await ReadActiveMaintenanceAsync(db) ?? await ReadByRootAsync(db, maintenanceRoot);
         if (existing is not null && existing.Status != WorktreeMergeStatus.Quarantined)
         {
             if (existing.Status == WorktreeMergeStatus.Completed)
@@ -316,14 +333,26 @@ public sealed partial class WorktreeMergeQueueService(
         }
         var now = DateTime.UtcNow;
         var baselineCommit = RunGit(worktreePath, ["rev-parse", "HEAD"]).Output.Trim();
-        await db.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO WorktreeMergeQueue
-                (TicketId, RootTicketId, WorktreePath, SourceBranch, TargetBranch, Status, CreatedAt, UpdatedAt, SourceCommit, JobKind, Checkpoint)
-            VALUES ({0}, {maintenanceRoot}, {worktreePath}, {sourceBranch}, {project.IntegrationBranch},
-                {(int)WorktreeMergeStatus.CommitPending}, {now}, {now}, {baselineCommit},
-                {(int)WorktreeMergeJobKind.Maintenance}, {(int)WorktreeMergeCheckpoint.Writing})
-            """);
-        var created = (await ReadByRootAsync(db, maintenanceRoot))!;
+        try
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO WorktreeMergeQueue
+                    (TicketId, RootTicketId, WorktreePath, SourceBranch, TargetBranch, Status, CreatedAt, UpdatedAt, SourceCommit, JobKind, Checkpoint)
+                VALUES ({0}, {maintenanceRoot}, {worktreePath}, {sourceBranch}, {project.IntegrationBranch},
+                    {(int)WorktreeMergeStatus.CommitPending}, {now}, {now}, {baselineCommit},
+                    {(int)WorktreeMergeJobKind.Maintenance}, {(int)WorktreeMergeCheckpoint.Writing})
+                """);
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
+        {
+            // A preparation outside this process gate won the insert; adopt its active request.
+            var concurrent = await ReadActiveMaintenanceAsync(db);
+            if (concurrent is not { JobKind: WorktreeMergeJobKind.Maintenance })
+                throw;
+            _activeMaintenanceWrites.TryAdd(concurrent.Id, 0);
+            return concurrent;
+        }
+        var created = (await ReadActiveMaintenanceAsync(db))!;
         _activeMaintenanceWrites.TryAdd(created.Id, 0);
         return created;
     }
@@ -1039,6 +1068,13 @@ public sealed partial class WorktreeMergeQueueService(
         ReadSingleAsync(db, "SELECT * FROM WorktreeMergeQueue WHERE Id = $id", ("$id", id));
     private static Task<WorktreeMergeRequest?> ReadByRootAsync(TodoDbContext db, int root) =>
         ReadSingleAsync(db, "SELECT * FROM WorktreeMergeQueue WHERE RootTicketId = $root ORDER BY Id DESC LIMIT 1", ("$root", root));
+
+    // The partial unique index guarantees at most one such row; SingleOrDefault asserts it.
+    private static Task<WorktreeMergeRequest?> ReadActiveMaintenanceAsync(TodoDbContext db) =>
+        ReadSingleAsync(db, $"""
+            SELECT * FROM WorktreeMergeQueue WHERE RootTicketId = $root
+                AND Status NOT IN ({(int)WorktreeMergeStatus.Completed}, {(int)WorktreeMergeStatus.Quarantined})
+            """, ("$root", int.MinValue));
 
     private static async Task<List<WorktreeMergeRequest>> ListMaintenanceWritesAwaitingCommitAsync(TodoDbContext db)
     {
