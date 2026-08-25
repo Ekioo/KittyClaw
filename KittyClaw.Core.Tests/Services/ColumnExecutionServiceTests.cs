@@ -489,6 +489,38 @@ public sealed class ColumnExecutionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Waiting_parent_resumes_when_a_blocking_child_reaches_failure()
+    {
+        var project = await _projects.CreateProjectAsync("Failed blocking child");
+        var parentPipeline = await _pipelines.CreateAsync(project.Slug, "Parent flow");
+        var childPipeline = await _pipelines.CreateAsync(project.Slug, "Child flow");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: parentPipeline.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Done", pipelineId: parentPipeline.Id, role: ColumnRole.Success);
+        var childWork = await _columns.CreateColumnAsync(project.Slug, "Work", pipelineId: childPipeline.Id);
+        var childFailed = await _columns.CreateColumnAsync(project.Slug, "Rejected", pipelineId: childPipeline.Id, role: ColumnRole.Failure);
+        var processor = await SaveProcessor(project.Slug, source.Id, target.Id);
+        var parent = await _tickets.CreateTicketAsync(project.Slug, "Parent", status: source.Name,
+            pipelineId: parentPipeline.Id, columnId: source.Id);
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+        var child = await _tickets.CreateTicketAsync(project.Slug, "Child", status: childWork.Name,
+            parentId: parent.Id, pipelineId: childPipeline.Id, columnId: childWork.Id, blocksParent: true);
+
+        var waitingResult = new ColumnAgentResult("wait_for_children", []);
+        await _executions.SaveAgentResultAsync(project.Slug, execution!, waitingResult);
+        await _executions.SetCapitalizationAsync(project.Slug, execution!, MemoryCapitalizationStatus.Succeeded);
+        await _executions.CompleteAsync(project.Slug, execution!, processor, waitingResult, "column-agent");
+        await _tickets.UpdateTicketAsync(project.Slug, child.Id, status: childFailed.Name);
+
+        var resumed = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+
+        Assert.NotNull(resumed);
+        Assert.Equal(execution!.Id, resumed.Id);
+        Assert.Equal(parent.Id, resumed.TicketId);
+        Assert.False(resumed.AgentCompleted);
+        Assert.Null(resumed.AgentResult);
+    }
+
+    [Fact]
     public async Task Waiting_parent_resumes_when_its_last_child_stops_blocking()
     {
         var project = await _projects.CreateProjectAsync("Removed child blocker");

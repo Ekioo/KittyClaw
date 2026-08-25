@@ -111,8 +111,9 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             var childColumnIds = await db.Tickets
                 .Where(t => t.ParentId == candidate.TicketId && t.BlocksParent)
                 .Select(t => t.ColumnId).Distinct().ToListAsync();
-            var successCount = await db.BoardColumns.CountAsync(c => childColumnIds.Contains(c.Id) && c.Role == ColumnRole.Success);
-            if (successCount != childColumnIds.Count) continue;
+            var terminalCount = await db.BoardColumns.CountAsync(c => childColumnIds.Contains(c.Id)
+                && (c.Role == ColumnRole.Success || c.Role == ColumnRole.Failure));
+            if (terminalCount != childColumnIds.Count) continue;
             candidate.Status = ColumnExecutionStatus.Running;
             candidate.Attempt++;
             // The previous agent result is necessarily `wait_for_children`. Replaying that
@@ -207,8 +208,9 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                 selected = candidate;
                 break;
             }
-            var successful = await db.BoardColumns.CountAsync(c => blockingChildren.Contains(c.Id) && c.Role == ColumnRole.Success);
-            if (successful == blockingChildren.Count)
+            var terminal = await db.BoardColumns.CountAsync(c => blockingChildren.Contains(c.Id)
+                && (c.Role == ColumnRole.Success || c.Role == ColumnRole.Failure));
+            if (terminal == blockingChildren.Count)
             {
                 selected = candidate;
                 break;
