@@ -224,6 +224,42 @@ public sealed class DurableWriteRouterTests
     }
 
     [Fact]
+    public async Task CodeVariableNamedLikeASecret_IsAllowedAndStaged()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var route = await fixture.Router.ResolveAsync(fixture.Slug, null, ["scripts"]);
+        var directory = Path.Combine(route.RootPath, "scripts");
+        Directory.CreateDirectory(directory);
+        await File.WriteAllTextAsync(Path.Combine(directory, "reauth.mjs"),
+            "const body = { client_secret: clientSecretV2, access_token: accessToken };\n");
+
+        var result = await fixture.Router.ValidateAndStageAsync(route);
+
+        Assert.Equal(DurableWriteValidationStatus.Ready, result.Status);
+        Assert.Empty(result.SecretPaths);
+        Assert.Equal("scripts/reauth.mjs",
+            Git(route.RootPath, "diff", "--cached", "--name-only").Trim().Replace('\\', '/'));
+    }
+
+    [Theory]
+    [InlineData("client_secret: 'literalSecretValue'")]
+    [InlineData("access_token=abcdefgh12345678")]
+    public async Task LiteralAndProbableTokenValues_RemainBlocked(string content)
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var route = await fixture.Router.ResolveAsync(fixture.Slug, null, ["scripts"]);
+        var directory = Path.Combine(route.RootPath, "scripts");
+        Directory.CreateDirectory(directory);
+        await File.WriteAllTextAsync(Path.Combine(directory, "reauth.mjs"), content);
+
+        var result = await fixture.Router.ValidateAndStageAsync(route);
+
+        Assert.Equal(DurableWriteValidationStatus.SecretBlocked, result.Status);
+        Assert.Single(result.SecretPaths);
+        Assert.Empty(Git(route.RootPath, "diff", "--cached", "--name-only"));
+    }
+
+    [Fact]
     public async Task WholeWorkspaceRoute_StagesProjectChanges_ButRejectsLocalOnlyControlData()
     {
         using var fixture = await Fixture.CreateAsync();

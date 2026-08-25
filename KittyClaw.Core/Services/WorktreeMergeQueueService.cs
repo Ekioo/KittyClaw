@@ -849,7 +849,7 @@ public sealed partial class WorktreeMergeQueueService(
                 if (File.Exists(fullPath)) File.Delete(fullPath);
                 continue;
             }
-            if (ContainsProbableSecret(fullPath))
+            if (ProbableSecretScanner.ContainsProbableSecret(fullPath))
             {
                 blocked.Add(path + " (possible secret content)");
                 continue;
@@ -887,7 +887,7 @@ public sealed partial class WorktreeMergeQueueService(
                 if (File.Exists(fullPath)) File.Delete(fullPath);
                 continue;
             }
-            if (IsSensitive(path) || ContainsProbableSecret(fullPath))
+            if (IsSensitive(path) || ProbableSecretScanner.ContainsProbableSecret(fullPath))
             {
                 blocked.Add(path + " (local-only or potentially sensitive)");
                 continue;
@@ -922,15 +922,8 @@ public sealed partial class WorktreeMergeQueueService(
             || name.EndsWith(".key", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool ContainsProbableSecret(string path) => File.Exists(path)
-        && new FileInfo(path).Length <= 1024 * 1024
-        && SecretContentRegex().IsMatch(File.ReadAllText(path));
-
     [GeneratedRegex(@"/(transcripts?|prompts?|sessions?|traces?|secrets?)/|/(\.env|credentials?[^/]*)/|\.(pem|key)/$", RegexOptions.IgnoreCase)]
     private static partial Regex LocalOnlyPathRegex();
-
-    [GeneratedRegex("(?i)(api[_-]?key|access[_-]?token|client[_-]?secret|password|private[_-]?key)\\s*[:=]\\s*['\\\"]?[A-Za-z0-9_\\-/+=]{8,}")]
-    private static partial Regex SecretContentRegex();
 
     private sealed record WorktreePreparation(bool HasChanges, string? Error);
 

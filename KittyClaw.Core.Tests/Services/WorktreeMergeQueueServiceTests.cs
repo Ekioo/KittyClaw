@@ -174,6 +174,43 @@ public sealed class WorktreeMergeQueueServiceTests
     }
 
     [Fact]
+    public async Task CodeVariableNamedLikeASecret_IsFinalizedAndIntegrated()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        var script = Path.Combine(request.WorktreePath, "reauth.mjs");
+        await File.WriteAllTextAsync(script,
+            "const body = { client_secret: clientSecretV2, access_token: accessToken };\n");
+
+        var result = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, result!.Status);
+        Assert.Equal("const body = { client_secret: clientSecretV2, access_token: accessToken };",
+            (await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "reauth.mjs"))).TrimEnd());
+        Assert.False(Directory.Exists(request.WorktreePath));
+    }
+
+    [Theory]
+    [InlineData("client_secret: \"literalSecretValue\"")]
+    [InlineData("access_token=abcdefgh12345678")]
+    public async Task LiteralAndProbableTokenValues_BlockFinalization(string content)
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        var script = Path.Combine(request.WorktreePath, "reauth.mjs");
+        await File.WriteAllTextAsync(script, content);
+
+        var result = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.NeedsReview, result!.Status);
+        Assert.Contains("possible secret content", result.Error);
+        Assert.True(File.Exists(script));
+        Assert.True(Directory.Exists(request.WorktreePath));
+    }
+
+    [Fact]
     public async Task SafeUntrackedFile_IsCheckpointedIntegratedAndCleanedUp()
     {
         using var fixture = await Fixture.CreateAsync();

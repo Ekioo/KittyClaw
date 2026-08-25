@@ -152,7 +152,7 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
         if (unexpected.Length > 0) return Task.FromResult(new DurableWriteValidationResult(DurableWriteValidationStatus.NeedsReview, unexpected, []));
         var secrets = changed.Where(path =>
             (route.AllowWholeWorkspace || IsAllowed(path, route.AllowedPaths)) &&
-            ContainsProbableSecret(Path.Combine(route.RootPath, path))).ToArray();
+            ProbableSecretScanner.ContainsProbableSecret(Path.Combine(route.RootPath, path))).ToArray();
         if (secrets.Length > 0) return Task.FromResult(new DurableWriteValidationResult(DurableWriteValidationStatus.SecretBlocked, [], secrets));
         if (route.AllowWholeWorkspace)
         {
@@ -284,7 +284,6 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
         return paths.Where(path => path.Length > 0).ToArray();
     }
     private static bool IsLocalOnly(string path) => LocalOnlyRegex().IsMatch('/' + path.Replace('\\', '/') + '/');
-    private static bool ContainsProbableSecret(string path) => File.Exists(path) && new FileInfo(path).Length <= 1024 * 1024 && SecretRegex().IsMatch(File.ReadAllText(path));
     private static string SafeName(string value) => new(value.ToLowerInvariant().Select(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' ? c : '-').ToArray());
     private static void VerifyWorktree(string path, string branch)
     {
@@ -312,7 +311,7 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
 
             var secrets = changed.Where(candidate =>
                 (allowWholeWorkspace || IsAllowed(candidate, allowedPaths)) &&
-                ContainsProbableSecret(Path.Combine(path, candidate))).ToArray();
+                ProbableSecretScanner.ContainsProbableSecret(Path.Combine(path, candidate))).ToArray();
             if (secrets.Length > 0)
                 throw new MaintenanceWorktreeNeedsQuarantineException(
                     $"Maintenance worktree '{path}' contains possible secrets that require review: {string.Join(", ", secrets)}.");
@@ -462,7 +461,6 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
         return result;
     }
     [GeneratedRegex(@"/(channel|transcripts?|prompts?|sessions?|traces?|secrets?)/|(^|/)\.env(/|$)", RegexOptions.IgnoreCase)] private static partial Regex LocalOnlyRegex();
-    [GeneratedRegex("(?i)(api[_-]?key|access[_-]?token|client[_-]?secret|password|private[_-]?key)\\s*[:=]\\s*['\\\"]?[A-Za-z0-9_\\-/+=]{8,}")] private static partial Regex SecretRegex();
     private sealed class MaintenanceWorktreeNeedsQuarantineException(string message)
         : InvalidOperationException(message);
     private sealed record GitResult(int ExitCode, string Output, string Error);
