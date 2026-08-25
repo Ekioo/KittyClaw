@@ -358,7 +358,12 @@ public sealed class AgentMemoryHandler(
     }
 
     public async Task<AdHocMemoryResult> ConsolidateAdHocConversationAsync(
-        string projectSlug, string workspace, string agent, string transcript, CancellationToken ct)
+        string projectSlug,
+        string workspace,
+        string agent,
+        string transcript,
+        CancellationToken ct,
+        bool deferCommitToCaller = false)
     {
         var instructionPath = Path.Combine(workspace, ".agents", "memory-consolidation.md");
         if (!File.Exists(instructionPath))
@@ -399,6 +404,11 @@ public sealed class AgentMemoryHandler(
             throw new InvalidOperationException($"Memory consolidation run {run.RunId} failed ({run.Status}, exit {run.ExitCode}).");
 
         var after = SnapshotMemory(memoryDir, legacyMemory);
+        if (deferCommitToCaller)
+            return before.SequenceEqual(after)
+                ? AdHocMemoryResult.NoChanges
+                : AdHocMemoryResult.Modified;
+
         var rt = new ProjectRuntime(projectSlug) { Workspace = workspace };
         var commit = await ExecuteCommitAgentMemoryAsync(rt, new CommitAgentMemoryActionSpec { Agent = agent });
         if (commit == CommitMemoryResult.Failed ||

@@ -85,7 +85,8 @@ public sealed class ChatMemoryConsolidationService(
                         writeWorkspace = route.RootPath;
                     }
                     var result = await memory.ConsolidateAdHocConversationAsync(project.Slug, writeWorkspace,
-                        agent, FormatTranscript(segment), candidateToken);
+                        agent, FormatTranscript(segment), candidateToken,
+                        deferCommitToCaller: route is not null && durableWrites is not null);
                     if (route is not null && durableWrites is not null)
                     {
                         var validation = await durableWrites.CommitAndQueueAsync(project.Slug, route,

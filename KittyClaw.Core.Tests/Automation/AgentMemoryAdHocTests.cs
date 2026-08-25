@@ -175,6 +175,58 @@ public sealed class AgentMemoryAdHocTests
     }
 
     [Fact]
+    public async Task SuccessfulWorktreeConsolidation_UsesAndFinalizesItsExistingMaintenanceRoute()
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("adhoc-memory-worktree-success");
+        var workspace = projects.ResolveWorkspacePath(project);
+        var members = new MemberService(projects);
+        await members.CreateMemberAsync(project.Slug, "Programmer");
+        Directory.CreateDirectory(Path.Combine(workspace, ".agents", "programmer", "memory"));
+        await File.WriteAllTextAsync(
+            Path.Combine(workspace, ".agents", "programmer", "memory", "MEMORY.md"), "# Memory\n");
+        await File.WriteAllTextAsync(Path.Combine(workspace, ".agents", "memory-consolidation.md"),
+            "Consolidate. <!--scenario:memory-update-->");
+        RunGit(workspace, "init");
+        RunGit(workspace, "config", "user.email", "tests@kittyclaw.local");
+        RunGit(workspace, "config", "user.name", "KittyClaw Tests");
+        RunGit(workspace, "add", ".agents");
+        RunGit(workspace, "commit", "-m", "baseline");
+        RunGit(workspace, "branch", "-M", "integration");
+        await projects.UpdateProjectAsync(project.Slug, null, worktreesEnabled: true,
+            integrationBranch: "integration");
+
+        var tickets = new TicketService(projects, members);
+        var worktrees = new TicketWorktreeService(projects, tickets);
+        var queue = new WorktreeMergeQueueService(projects, worktrees);
+        var router = new DurableWriteRouter(projects, worktrees, queue);
+        var chats = new ChatService(projects);
+        var runs = new AgentRunRegistry();
+        var sessions = new SessionRegistry();
+        var handler = new AgentMemoryHandler(tickets, members, projects,
+            new AgentRunner(sessions, runs, new RunConcurrencyGate(1), NullLogger<AgentRunner>.Instance),
+            sessions, NullLogger.Instance, router);
+        var service = new ChatMemoryConsolidationService(projects, chats, members, runs, handler,
+            NullLogger<ChatMemoryConsolidationService>.Instance, router);
+        await chats.AppendAsync(project.Slug, "programmer", "user", "Remember this durable lesson");
+
+        await service.ProcessOnceAsync(DateTime.UtcNow.AddMinutes(16))
+            .WaitAsync(TimeSpan.FromSeconds(15));
+
+        Assert.Empty(await chats.ListMemoryCandidatesAsync(
+            project.Slug, DateTime.UtcNow.AddMinutes(17), DateTime.UtcNow.AddMinutes(17)));
+        var pending = Assert.Single(await queue.ListAsync(project.Slug));
+        Assert.Equal(WorktreeMergeStatus.Pending, pending.Status);
+        Assert.Empty(RunGit(pending.WorktreePath, "status", "--porcelain"));
+
+        var integrated = await queue.ProcessNextAsync(project.Slug, CancellationToken.None);
+        Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        Assert.True(File.Exists(Path.Combine(
+            workspace, ".agents", "programmer", "memory", "routing.md")));
+    }
+
+    [Fact]
     public async Task FailedWorktreeConsolidation_ReleasesTheMaintenanceRoute()
     {
         using var tmp = new TempDir();
