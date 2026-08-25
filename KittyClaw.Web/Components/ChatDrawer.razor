@@ -808,21 +808,15 @@
             _pasteError = null;
 
             _sessionModel = _selectedModel;
+            // The run is registered server-side before /chat/start responds, so the SSE
+            // stream can attach on the returned id directly — no registry lookup, no race.
             _activeRun = RunsState.Get(body.RunId);
             if (_activeRun is not null)
-            {
                 _activeRun.OnEvent += HandleEvent;
-                _sseModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/agent-sse.js");
-                _dotnetRef ??= DotNetObjectReference.Create(this);
-                _activeStreamId = body.RunId;
-                await _sseModule.InvokeVoidAsync("start", _dotnetRef, $"/api/projects/{ProjectSlug}/runs/{body.RunId}/stream");
-            }
-            else
-            {
-                _messages.Add(new ChatMessage("error", "Run not found"));
-                _loading = false;
-                StateHasChanged();
-            }
+            _sseModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/agent-sse.js");
+            _dotnetRef ??= DotNetObjectReference.Create(this);
+            _activeStreamId = body.RunId;
+            await _sseModule.InvokeVoidAsync("start", _dotnetRef, $"/api/projects/{ProjectSlug}/runs/{body.RunId}/stream");
         }
         catch (Exception ex)
         {

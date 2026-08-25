@@ -224,10 +224,58 @@ public sealed class AgentRunner
         _projects = projects;
     }
 
-    public async Task<AgentRun> RunAsync(AgentRunContext ctx, CancellationToken ct)
+    public Task<AgentRun> RunAsync(AgentRunContext ctx, CancellationToken ct)
     {
-        if (_projects is not null && await _projects.GetProjectAsync(ctx.ProjectSlug) is { } project)
-            ctx.BoundaryEnforcement = project.BoundaryEnforcement;
+        // The run must be registered before the first await: callers return the run id to the
+        // UI as soon as this method yields, and the drawer/stream endpoints resolve it through
+        // the registry. Registering after async preparation (project lookup, worktree
+        // resolution) made those lookups race and report "Run not found".
+        var run = CreateAndRegisterRun(ctx);
+        return ExecuteRegisteredAsync(run, ctx, ct);
+    }
+
+    private AgentRun CreateAndRegisterRun(AgentRunContext ctx)
+    {
+        var run = new AgentRun
+        {
+            RunId = ctx.PresetRunId ?? Guid.NewGuid().ToString("N"),
+            ProjectSlug = ctx.ProjectSlug,
+            TicketId = ctx.TicketId,
+            AgentName = ctx.AgentName,
+            SkillFile = ctx.SkillFile,
+            ConcurrencyGroup = string.IsNullOrEmpty(ctx.ConcurrencyGroup) ? ctx.AgentName : ctx.ConcurrencyGroup,
+            StartedAt = DateTime.UtcNow,
+            Model = ctx.Target.Model,
+            ChatTarget = ctx.ChatTarget,
+            InputImagePaths = ctx.ImagePaths ?? [],
+            InputImageHashes = (ctx.ImagePaths ?? [])
+                .Select(path => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant())
+                .ToArray(),
+            LockTimeoutMinutes = ctx.LockTimeoutMinutes,
+        };
+        if (ctx.OnEventHook is not null) run.OnEvent += ctx.OnEventHook;
+        if (_boundaryObserver is not null) run.OnEvent += ev => _boundaryObserver.Observe(run, ev);
+        _boundaryObserver?.RecordRun(run);
+        _runs.Register(run);
+        return run;
+    }
+
+    private async Task<AgentRun> ExecuteRegisteredAsync(AgentRun run, AgentRunContext ctx, CancellationToken ct)
+    {
+        try
+        {
+            if (_projects is not null && await _projects.GetProjectAsync(ctx.ProjectSlug) is { } project)
+                ctx.BoundaryEnforcement = project.BoundaryEnforcement;
+        }
+        catch (Exception ex)
+        {
+            // Preparation failures must surface on the already-registered run: most callers
+            // fire-and-forget this task, so a thrown exception would be an invisible failure.
+            _logger.LogError(ex, "Run preparation failed for {Agent} run={RunId}", ctx.AgentName, run.RunId);
+            try { run.Push(new StreamEvent(DateTime.UtcNow, "error", $"Run preparation failed: {ex.Message}")); } catch { /* subscriber may throw */ }
+            _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
+            return run;
+        }
 
         var route = ctx.DurableWriteRoute;
         if (route is null && _durableWrites is not null &&
@@ -248,7 +296,7 @@ public sealed class AgentRunner
             }
         }
 
-        var run = await RunCoreAsync(ctx, ct);
+        await RunCoreAsync(run, ctx, ct);
         if (route is null || ctx.DurableWriteRouteTransferred)
             return run;
 
@@ -293,30 +341,8 @@ public sealed class AgentRunner
         return run;
     }
 
-    private async Task<AgentRun> RunCoreAsync(AgentRunContext ctx, CancellationToken ct)
+    private async Task<AgentRun> RunCoreAsync(AgentRun run, AgentRunContext ctx, CancellationToken ct)
     {
-        var run = new AgentRun
-        {
-            RunId = ctx.PresetRunId ?? Guid.NewGuid().ToString("N"),
-            ProjectSlug = ctx.ProjectSlug,
-            TicketId = ctx.TicketId,
-            AgentName = ctx.AgentName,
-            SkillFile = ctx.SkillFile,
-            ConcurrencyGroup = string.IsNullOrEmpty(ctx.ConcurrencyGroup) ? ctx.AgentName : ctx.ConcurrencyGroup,
-            StartedAt = DateTime.UtcNow,
-            Model = ctx.Target.Model,
-            ChatTarget = ctx.ChatTarget,
-            InputImagePaths = ctx.ImagePaths ?? [],
-            InputImageHashes = (ctx.ImagePaths ?? [])
-                .Select(path => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant())
-                .ToArray(),
-            LockTimeoutMinutes = ctx.LockTimeoutMinutes,
-        };
-        if (ctx.OnEventHook is not null) run.OnEvent += ctx.OnEventHook;
-        if (_boundaryObserver is not null) run.OnEvent += ev => _boundaryObserver.Observe(run, ev);
-        _boundaryObserver?.RecordRun(run);
-        _runs.Register(run);
-
         if (!string.IsNullOrWhiteSpace(ctx.ExecutionWorkspaceError))
         {
             run.Push(new StreamEvent(DateTime.UtcNow, "error", ctx.ExecutionWorkspaceError));
