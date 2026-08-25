@@ -592,13 +592,6 @@ public sealed partial class WorktreeMergeQueueService(
         var repository = projects.ResolveRepositoryPath(project);
         try
         {
-            if (!IsClean(repository))
-                return await MarkAsync(db, request.Id, WorktreeMergeStatus.BlockedByExternalChanges,
-                    "The target branch checkout has local changes. Runs can continue, but integration is paused until those external changes are resolved.", null);
-            var checkedOut = RunGit(repository, ["branch", "--show-current"]).Output.Trim();
-            if (!string.Equals(checkedOut, request.TargetBranch, StringComparison.Ordinal))
-                throw new InvalidOperationException($"Integration checkout is on '{checkedOut}', expected '{request.TargetBranch}'.");
-
             var worktreeIsRegistered = IsRegisteredWorktree(repository, request.WorktreePath);
             if (request.JobKind == WorktreeMergeJobKind.Ticket && worktreeIsRegistered)
             {
@@ -637,6 +630,15 @@ public sealed partial class WorktreeMergeQueueService(
                 await SetSourceCommitAsync(db, request.Id, sourceHead);
                 request = request with { SourceCommit = sourceHead };
             }
+
+            // Checkpoint the isolated source before inspecting the target checkout. External target
+            // changes may pause integration, but they must never leave safe ticket files uncommitted.
+            if (!IsClean(repository))
+                return await MarkAsync(db, request.Id, WorktreeMergeStatus.BlockedByExternalChanges,
+                    "The target branch checkout has local changes. Runs can continue, but integration is paused until those external changes are resolved.", null);
+            var checkedOut = RunGit(repository, ["branch", "--show-current"]).Output.Trim();
+            if (!string.Equals(checkedOut, request.TargetBranch, StringComparison.Ordinal))
+                throw new InvalidOperationException($"Integration checkout is on '{checkedOut}', expected '{request.TargetBranch}'.");
 
             var alreadyIntegrated = !string.IsNullOrWhiteSpace(request.SourceCommit)
                 && IsAncestor(repository, request.SourceCommit!, request.TargetBranch);

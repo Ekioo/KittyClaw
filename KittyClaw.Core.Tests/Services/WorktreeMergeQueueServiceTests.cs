@@ -79,6 +79,26 @@ public sealed class WorktreeMergeQueueServiceTests
     }
 
     [Fact]
+    public async Task DirtyCheckout_CheckpointsSafeTicketFilesBeforeBlockingIntegration()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        var isolated = Path.Combine(request.WorktreePath, "recovered.txt");
+        await File.WriteAllTextAsync(isolated, "recovered");
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "external.txt"), "external");
+
+        var result = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.BlockedByExternalChanges, result!.Status);
+        Assert.Empty(Git(request.WorktreePath, true, "status", "--porcelain").Output);
+        Assert.Equal("recovered", Git(request.WorktreePath, true,
+            "show", "HEAD:recovered.txt").Output.Trim());
+        Assert.False(File.Exists(Path.Combine(fixture.Repository, "recovered.txt")));
+        Assert.True(File.Exists(Path.Combine(fixture.Repository, "external.txt")));
+    }
+
+    [Fact]
     public async Task DirtyTargetCheckout_BecomesVisibleAndResumesAfterExternalChangesAreResolved()
     {
         using var fixture = await Fixture.CreateAsync();
