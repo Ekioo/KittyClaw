@@ -19,7 +19,8 @@ public enum WorktreeMergeStatus
     CommitPending = 5,
     ValidationRequired = 6,
     NeedsReview = 7,
-    BlockedByExternalChanges = 8
+    BlockedByExternalChanges = 8,
+    Quarantined = 9
 }
 
 public enum WorktreeMergeJobKind { Ticket = 0, Maintenance = 1 }
@@ -92,6 +93,13 @@ public sealed partial class WorktreeMergeQueueService(
                 catch (SqliteException ex) when (ex.SqliteErrorCode == 1 && ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase)) { }
             }
         });
+        await MigrationGate.RunOnceAsync(db, "worktree-merge-queue-v4-quarantine", static d =>
+            d.Database.ExecuteSqlRawAsync($"""
+                DROP INDEX IF EXISTS IX_WorktreeMergeQueue_ActiveRoot;
+                CREATE UNIQUE INDEX IX_WorktreeMergeQueue_ActiveRoot
+                    ON WorktreeMergeQueue(RootTicketId)
+                    WHERE Status NOT IN ({(int)WorktreeMergeStatus.Completed}, {(int)WorktreeMergeStatus.Quarantined});
+                """));
     }
 
     public async Task<WorktreeMergeRequest> EnqueueAsync(string projectSlug, int ticketId, CancellationToken ct)
@@ -219,6 +227,10 @@ public sealed partial class WorktreeMergeQueueService(
         var request = await ReadByRootAsync(db, int.MinValue);
         if (request is not { JobKind: WorktreeMergeJobKind.Maintenance })
             return 0;
+        // A quarantined row deliberately keeps its dirty worktree for human review; recovering it
+        // here would demote the quarantine to a generic review state and lose its reason.
+        if (request.Status == WorktreeMergeStatus.Quarantined)
+            return 0;
         if (_activeMaintenanceWrites.ContainsKey(request.Id))
             return 0;
         if (!Directory.Exists(request.WorktreePath))
@@ -285,7 +297,7 @@ public sealed partial class WorktreeMergeQueueService(
         await EnsureTableAsync(db);
         const int maintenanceRoot = int.MinValue;
         var existing = await ReadByRootAsync(db, maintenanceRoot);
-        if (existing is not null)
+        if (existing is not null && existing.Status != WorktreeMergeStatus.Quarantined)
         {
             if (existing.Status == WorktreeMergeStatus.Completed)
             {
@@ -314,6 +326,46 @@ public sealed partial class WorktreeMergeQueueService(
         var created = (await ReadByRootAsync(db, maintenanceRoot))!;
         _activeMaintenanceWrites.TryAdd(created.Id, 0);
         return created;
+    }
+
+    public async Task QuarantineMaintenanceAsync(
+        string projectSlug,
+        string originalPath,
+        string quarantinePath,
+        string quarantineBranch,
+        string reason)
+    {
+        var project = await projects.GetProjectAsync(projectSlug)
+            ?? throw new InvalidOperationException($"Project '{projectSlug}' does not exist.");
+        await using var db = projects.GetProjectDb(projectSlug);
+        await EnsureTableAsync(db);
+        const int maintenanceRoot = int.MinValue;
+        var existing = await ReadByRootAsync(db, maintenanceRoot);
+        var now = DateTime.UtcNow;
+        if (existing is { JobKind: WorktreeMergeJobKind.Maintenance }
+            && string.Equals(existing.WorktreePath, originalPath, StringComparison.OrdinalIgnoreCase))
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE WorktreeMergeQueue SET WorktreePath = {quarantinePath},
+                    SourceBranch = {quarantineBranch}, Status = {(int)WorktreeMergeStatus.Quarantined},
+                    Checkpoint = {(int)WorktreeMergeCheckpoint.Validation}, Error = {reason},
+                    ConflictFiles = NULL, UpdatedAt = {now}
+                WHERE Id = {existing.Id}
+                """);
+            _activeMaintenanceWrites.TryRemove(existing.Id, out _);
+            return;
+        }
+
+        var head = RunGit(quarantinePath, ["rev-parse", "HEAD"], false).Output.Trim();
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO WorktreeMergeQueue
+                (TicketId, RootTicketId, WorktreePath, SourceBranch, TargetBranch, Status,
+                 CreatedAt, UpdatedAt, SourceCommit, JobKind, Checkpoint, Error)
+            VALUES ({0}, {maintenanceRoot}, {quarantinePath}, {quarantineBranch},
+                {project.IntegrationBranch!}, {(int)WorktreeMergeStatus.Quarantined},
+                {now}, {now}, {head}, {(int)WorktreeMergeJobKind.Maintenance},
+                {(int)WorktreeMergeCheckpoint.Validation}, {reason})
+            """);
     }
 
     public async Task MarkMaintenanceReadyAsync(string projectSlug, long requestId, string sourceCommit)
@@ -434,12 +486,9 @@ public sealed partial class WorktreeMergeQueueService(
             // A host may stop after claiming. Replaying the same row is safe because integration is verified by ancestry.
             await db.Database.ExecuteSqlRawAsync("UPDATE WorktreeMergeQueue SET Status = 0, Error = 'Recovered after interruption' WHERE Status = 1");
             await ReconcileInterruptedMaintenanceAsync(db);
-            var request = await ReadNextAsync(db, WorktreeMergeStatus.Pending)
-                ?? await ReadNextAsync(db, WorktreeMergeStatus.BlockedByExternalChanges);
+            var request = await ReadNextAvailableAsync(db, projectSlug, WorktreeMergeStatus.Pending)
+                ?? await ReadNextAvailableAsync(db, projectSlug, WorktreeMergeStatus.BlockedByExternalChanges);
             if (request is null) return null;
-            if (request.JobKind == WorktreeMergeJobKind.Ticket
-                && await IsBusyAsync(projectSlug, request.RootTicketId))
-                return null;
             await SetStateAsync(db, request.Id, WorktreeMergeStatus.Processing, WorktreeMergeCheckpoint.Preparation);
             return await IntegrateAsync(projectSlug, request, continueRebase: false, ct);
         }
@@ -452,19 +501,52 @@ public sealed partial class WorktreeMergeQueueService(
             .Where(row => !_activeMaintenanceWrites.ContainsKey(row.Id));
         foreach (var request in interrupted)
         {
-            var dirty = RunGit(request.WorktreePath, ["status", "--porcelain"]).Output;
-            if (!string.IsNullOrWhiteSpace(dirty))
+            var preparation = PrepareInterruptedMaintenanceWorktree(request.WorktreePath);
+            if (preparation.Error is not null)
             {
                 await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
-                    "Maintenance writing was interrupted with preserved uncommitted changes; review and commit them before resuming.", null);
+                    preparation.Error, null);
+                continue;
+            }
+
+            if (preparation.HasChanges)
+            {
+                RunGit(request.WorktreePath, ["add", "-A"]);
+                var commit = RunGit(request.WorktreePath,
+                    ["commit", "-m", "Recover interrupted maintenance write"], false);
+                if (commit.ExitCode != 0)
+                {
+                    await MarkAsync(db, request.Id, WorktreeMergeStatus.CommitPending,
+                        $"Recovered files could not be checkpointed: {commit.Error.Trim()}", null);
+                    continue;
+                }
+
+                var recoveredHead = RunGit(request.WorktreePath, ["rev-parse", "HEAD"]).Output.Trim();
+                await db.Database.ExecuteSqlInterpolatedAsync($"""
+                    UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Pending},
+                        Checkpoint = {(int)WorktreeMergeCheckpoint.Waiting}, SourceCommit = {recoveredHead},
+                        Error = 'Recovered and checkpointed interrupted maintenance write',
+                        UpdatedAt = {DateTime.UtcNow}
+                    WHERE Id = {request.Id}
+                    """);
                 continue;
             }
 
             var head = RunGit(request.WorktreePath, ["rev-parse", "HEAD"]).Output.Trim();
             if (string.Equals(head, request.SourceCommit, StringComparison.Ordinal))
             {
-                await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
-                    "Maintenance writing was interrupted before a new commit was created; the worktree was preserved.", null);
+                var integrated = IsAncestor(request.WorktreePath, head, request.TargetBranch);
+                await db.Database.ExecuteSqlInterpolatedAsync($"""
+                    UPDATE WorktreeMergeQueue SET Status = {(int)(integrated
+                            ? WorktreeMergeStatus.Completed : WorktreeMergeStatus.Pending)},
+                        Checkpoint = {(int)(integrated
+                            ? WorktreeMergeCheckpoint.Merge : WorktreeMergeCheckpoint.Waiting)},
+                        IntegratedCommit = {(integrated ? head : null)},
+                        LocalIntegratedAt = {(integrated ? DateTime.UtcNow : null)},
+                        Error = {(integrated ? "Recovered interrupted no-op maintenance write" : "Recovered interrupted maintenance checkpoint")},
+                        UpdatedAt = {DateTime.UtcNow}
+                    WHERE Id = {request.Id}
+                    """);
                 continue;
             }
 
@@ -765,11 +847,6 @@ public sealed partial class WorktreeMergeQueueService(
                 if (File.Exists(fullPath)) File.Delete(fullPath);
                 continue;
             }
-            if (entry.StartsWith("??", StringComparison.Ordinal) && !IsDurableMemory(path))
-            {
-                blocked.Add(path + " (unexpected untracked path)");
-                continue;
-            }
             if (ContainsProbableSecret(fullPath))
             {
                 blocked.Add(path + " (possible secret content)");
@@ -782,13 +859,44 @@ public sealed partial class WorktreeMergeQueueService(
             : new(hasChanges, "Unexpected or potentially sensitive files were preserved and require review: " + string.Join(", ", blocked));
     }
 
-    private static bool IsDurableMemory(string path)
+    private static WorktreePreparation PrepareInterruptedMaintenanceWorktree(string worktreePath)
     {
-        var segments = path.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
-        return segments.Length >= 4
-            && segments[0].Equals(".agents", StringComparison.OrdinalIgnoreCase)
-            && segments.Skip(1).Take(segments.Length - 2)
-                .Any(segment => segment.Equals("memory", StringComparison.OrdinalIgnoreCase));
+        var status = RunGit(worktreePath,
+            ["status", "--porcelain", "-z", "--untracked-files=all"], false);
+        if (status.ExitCode != 0)
+            return new(false,
+                $"Interrupted maintenance worktree could not be inspected: {status.Error.Trim()}");
+
+        var blocked = new List<string>();
+        var hasChanges = false;
+        foreach (var entry in status.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (entry.Length < 4) continue;
+            var path = entry[3..].Replace('\\', '/');
+            var fullPath = Path.GetFullPath(Path.Combine(worktreePath, path));
+            if (!fullPath.StartsWith(Path.GetFullPath(worktreePath) + Path.DirectorySeparatorChar,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                blocked.Add(path + " (outside worktree)");
+                continue;
+            }
+            if (entry.StartsWith("??", StringComparison.Ordinal) && IsRecognizedTemporary(path))
+            {
+                if (File.Exists(fullPath)) File.Delete(fullPath);
+                continue;
+            }
+            if (IsSensitive(path) || ContainsProbableSecret(fullPath))
+            {
+                blocked.Add(path + " (local-only or potentially sensitive)");
+                continue;
+            }
+            hasChanges = true;
+        }
+
+        return blocked.Count == 0
+            ? new(hasChanges, null)
+            : new(hasChanges,
+                "Interrupted maintenance files require quarantine: " + string.Join(", ", blocked));
     }
 
     private static bool IsRecognizedTemporary(string path)
@@ -837,6 +945,7 @@ public sealed partial class WorktreeMergeQueueService(
     private static int Severity(WorktreeMergeStatus status) => status switch
     {
         WorktreeMergeStatus.Conflict => 5,
+        WorktreeMergeStatus.Quarantined => 5,
         WorktreeMergeStatus.NeedsReview => 4,
         WorktreeMergeStatus.Failed => 4,
         WorktreeMergeStatus.BlockedByExternalChanges => 3,
@@ -915,8 +1024,22 @@ public sealed partial class WorktreeMergeQueueService(
     private static Task SetSourceCommitAsync(TodoDbContext db, long id, string commit) =>
         db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET SourceCommit = {commit}, UpdatedAt = {DateTime.UtcNow} WHERE Id = {id}");
 
-    private static Task<WorktreeMergeRequest?> ReadNextAsync(TodoDbContext db, WorktreeMergeStatus status) =>
-        ReadSingleAsync(db, "SELECT * FROM WorktreeMergeQueue WHERE Status = $status ORDER BY Id LIMIT 1", ("$status", (int)status));
+    private async Task<WorktreeMergeRequest?> ReadNextAvailableAsync(
+        TodoDbContext db, string projectSlug, WorktreeMergeStatus status)
+    {
+        var connection = (SqliteConnection)db.Database.GetDbConnection();
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT * FROM WorktreeMergeQueue WHERE Status = $status ORDER BY Id";
+        command.Parameters.AddWithValue("$status", (int)status);
+        foreach (var request in await ReadAllAsync(command))
+        {
+            if (request.JobKind != WorktreeMergeJobKind.Ticket
+                || !await IsBusyAsync(projectSlug, request.RootTicketId))
+                return request;
+        }
+        return null;
+    }
     private static Task<WorktreeMergeRequest?> ReadByIdAsync(TodoDbContext db, long id) =>
         ReadSingleAsync(db, "SELECT * FROM WorktreeMergeQueue WHERE Id = $id", ("$id", id));
     private static Task<WorktreeMergeRequest?> ReadByRootAsync(TodoDbContext db, int root) =>

@@ -72,8 +72,17 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
                 RunGit(repository, exists ? ["worktree", "add", path, branch] : ["worktree", "add", "-b", branch, path, project.IntegrationBranch!]);
             }
             VerifyWorktree(path, branch);
-            SynchronizeMaintenanceWorktree(
-                path, repository, project.IntegrationBranch!, normalized, allowWholeWorkspace);
+            try
+            {
+                SynchronizeMaintenanceWorktree(
+                    path, repository, project.IntegrationBranch!, normalized, allowWholeWorkspace);
+            }
+            catch (MaintenanceWorktreeNeedsQuarantineException ex) when (mergeQueue is not null)
+            {
+                await QuarantineMaintenanceWorktreeAsync(
+                    projectSlug, repository, path, branch, project.IntegrationBranch!, safeSlug,
+                    ex.Message, ct);
+            }
             PrepareLocalDependencies(projects.ResolveWorkspacePath(project), path);
         }
         catch
@@ -93,6 +102,45 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
             gate.Release();
             throw;
         }
+    }
+
+    private async Task QuarantineMaintenanceWorktreeAsync(
+        string projectSlug,
+        string repository,
+        string path,
+        string branch,
+        string targetBranch,
+        string safeSlug,
+        string reason,
+        CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        var suffix = DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + "-" + Guid.NewGuid().ToString("N")[..8];
+        var quarantineBranch = $"recovery/maintenance-{safeSlug}-{suffix}";
+        var quarantinePath = Path.Combine(
+            Path.GetDirectoryName(path)!, $"maintenance-{safeSlug}-quarantine-{suffix}");
+        var renamed = false;
+        var moved = false;
+        try
+        {
+            RunGit(path, ["branch", "-m", quarantineBranch]);
+            renamed = true;
+            RunGit(repository, ["worktree", "move", path, quarantinePath]);
+            moved = true;
+            await mergeQueue!.QuarantineMaintenanceAsync(
+                projectSlug, path, quarantinePath, quarantineBranch, reason);
+        }
+        catch
+        {
+            if (moved)
+                RunGit(repository, ["worktree", "move", quarantinePath, path], false);
+            if (renamed && Directory.Exists(path))
+                RunGit(path, ["branch", "-m", branch], false);
+            throw;
+        }
+
+        RunGit(repository, ["worktree", "add", "-b", branch, path, targetBranch]);
+        VerifyWorktree(path, branch);
     }
 
     public Task<DurableWriteValidationResult> ValidateAndStageAsync(DurableWriteRoute route, CancellationToken ct = default)
@@ -259,14 +307,14 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
             var unexpected = changed.Where(candidate => IsLocalOnly(candidate) ||
                 (!allowWholeWorkspace && !IsAllowed(candidate, allowedPaths))).ToArray();
             if (unexpected.Length > 0)
-                throw new InvalidOperationException(
+                throw new MaintenanceWorktreeNeedsQuarantineException(
                     $"Maintenance worktree '{path}' contains changes that require review: {string.Join(", ", unexpected)}.");
 
             var secrets = changed.Where(candidate =>
                 (allowWholeWorkspace || IsAllowed(candidate, allowedPaths)) &&
                 ContainsProbableSecret(Path.Combine(path, candidate))).ToArray();
             if (secrets.Length > 0)
-                throw new InvalidOperationException(
+                throw new MaintenanceWorktreeNeedsQuarantineException(
                     $"Maintenance worktree '{path}' contains possible secrets that require review: {string.Join(", ", secrets)}.");
 
             // A previous durable writer may have stopped after changing safe project files but
@@ -415,5 +463,7 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
     }
     [GeneratedRegex(@"/(channel|transcripts?|prompts?|sessions?|traces?|secrets?)/|(^|/)\.env(/|$)", RegexOptions.IgnoreCase)] private static partial Regex LocalOnlyRegex();
     [GeneratedRegex("(?i)(api[_-]?key|access[_-]?token|client[_-]?secret|password|private[_-]?key)\\s*[:=]\\s*['\\\"]?[A-Za-z0-9_\\-/+=]{8,}")] private static partial Regex SecretRegex();
+    private sealed class MaintenanceWorktreeNeedsQuarantineException(string message)
+        : InvalidOperationException(message);
     private sealed record GitResult(int ExitCode, string Output, string Error);
 }

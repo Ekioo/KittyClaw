@@ -382,7 +382,7 @@ public sealed class DurableWriteRouterTests
     }
 
     [Fact]
-    public async Task UncommittedMaintenanceWrite_IsPreservedAndReportedAfterRestart()
+    public async Task UncommittedSafeMaintenanceWrite_IsCheckpointedAndIntegratedAfterRestart()
     {
         using var fixture = await Fixture.CreateAsync(withQueue: true);
         var route = await fixture.Router.ResolveAsync(fixture.Slug, null, [".agents/programmer/memory"]);
@@ -391,13 +391,19 @@ public sealed class DurableWriteRouterTests
         await File.WriteAllTextAsync(memory, "# Preserved after interruption\n");
 
         var restarted = new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees);
-        Assert.Null(await restarted.ProcessNextAsync(fixture.Slug, CancellationToken.None));
+        var completed = await restarted.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
         var request = Assert.Single(await restarted.ListAsync(fixture.Slug));
-        Assert.Equal(WorktreeMergeStatus.NeedsReview, request.Status);
-        Assert.Contains("preserved uncommitted changes", request.Error, StringComparison.Ordinal);
-        Assert.True(File.Exists(memory));
-        Assert.NotNull(await restarted.GetAlertSummaryAsync(fixture.Slug));
+        Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
+        Assert.Equal(WorktreeMergeStatus.Completed, request.Status);
+        Assert.Contains("Preserved after interruption",
+            await File.ReadAllTextAsync(Path.Combine(
+                fixture.Repository, ".agents", "programmer", "memory", "MEMORY.md")));
+        Assert.Empty(Git(route.RootPath, "status", "--porcelain"));
+        var restartedAgain = new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees);
+        Assert.Null(await restartedAgain.ProcessNextAsync(fixture.Slug, CancellationToken.None));
+        Assert.Equal(WorktreeMergeStatus.Completed,
+            Assert.Single(await restartedAgain.ListAsync(fixture.Slug)).Status);
         fixture.Queue!.ReleaseMaintenanceWrite(route.QueueRequestId!.Value);
     }
 
@@ -471,7 +477,7 @@ public sealed class DurableWriteRouterTests
     }
 
     [Fact]
-    public async Task NextInteractiveWrite_StillRejectsLocalOnlyInterruptedChanges()
+    public async Task NextInteractiveWrite_QuarantinesLocalOnlyInterruptedChangesAndContinues()
     {
         using var fixture = await Fixture.CreateAsync(withQueue: true);
         var interrupted = await fixture.Router.TryResolveWorkspaceAsync(fixture.Slug);
@@ -483,11 +489,24 @@ public sealed class DurableWriteRouterTests
         await fixture.Router.PreserveExecutionAsync(
             fixture.Slug, interrupted, "preserved local-only changes");
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => fixture.Router.TryResolveWorkspaceAsync(fixture.Slug));
+        var resumed = await fixture.Router.TryResolveWorkspaceAsync(fixture.Slug);
+        Assert.NotNull(resumed);
+        Assert.Equal(interrupted.RootPath, resumed!.RootPath);
+        Assert.False(File.Exists(Path.Combine(
+            resumed.RootPath, ".agents", "channel", "tmp", "transport.txt")));
 
-        Assert.Contains("changes that require review", error.Message, StringComparison.Ordinal);
-        Assert.Contains(".agents/channel/tmp/transport.txt", error.Message, StringComparison.Ordinal);
+        var rows = await fixture.Queue!.ListAsync(fixture.Slug);
+        var quarantined = Assert.Single(rows,
+            row => row.Status == WorktreeMergeStatus.Quarantined);
+        var replacement = Assert.Single(rows,
+            row => row.Status == WorktreeMergeStatus.CommitPending);
+        Assert.NotEqual(quarantined.Id, replacement.Id);
+        Assert.Contains("changes that require review", quarantined.Error, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(
+            quarantined.WorktreePath, ".agents", "channel", "tmp", "transport.txt")));
+
+        await fixture.Router.CommitAndQueueAsync(
+            fixture.Slug, resumed, "chore(chat): continue after quarantine");
     }
 
     private sealed class Fixture : IDisposable
