@@ -401,6 +401,95 @@ public sealed class DurableWriteRouterTests
         fixture.Queue!.ReleaseMaintenanceWrite(route.QueueRequestId!.Value);
     }
 
+    [Fact]
+    public async Task NextInteractiveWrite_RecoversSafeUncommittedMaintenanceChanges()
+    {
+        using var fixture = await Fixture.CreateAsync(withQueue: true);
+        var interrupted = await fixture.Router.ResolveAsync(
+            fixture.Slug, null, [".agents/programmer/memory"]);
+        var memory = Path.Combine(
+            interrupted.RootPath, ".agents", "programmer", "memory", "MEMORY.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(memory)!);
+        await File.WriteAllTextAsync(memory, "# Preserved after interruption\n");
+        await fixture.Router.PreserveExecutionAsync(
+            fixture.Slug, interrupted, "preserved uncommitted changes");
+
+        var recovered = await fixture.Router.TryResolveWorkspaceAsync(fixture.Slug);
+        Assert.NotNull(recovered);
+        var validation = await fixture.Router.CommitAndQueueAsync(
+            fixture.Slug, recovered!, "chore(chat): recover interrupted durable write");
+        var queued = Assert.Single(await fixture.Queue!.ListAsync(fixture.Slug));
+
+        Assert.Equal(DurableWriteValidationStatus.Ready, validation.Status);
+        Assert.Equal(WorktreeMergeStatus.Pending, queued.Status);
+        Assert.Empty(Git(recovered!.RootPath, "status", "--porcelain"));
+
+        var integrated = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        Assert.Contains("Preserved after interruption",
+            await File.ReadAllTextAsync(Path.Combine(
+                fixture.Repository, ".agents", "programmer", "memory", "MEMORY.md")));
+    }
+
+    [Fact]
+    public async Task NextInteractiveWrite_RequeuesCleanDivergentMaintenanceHistory()
+    {
+        using var fixture = await Fixture.CreateAsync(withQueue: true);
+        var initial = await fixture.Router.ResolveAsync(
+            fixture.Slug, null, [".agents/programmer/memory"]);
+        var memory = Path.Combine(
+            initial.RootPath, ".agents", "programmer", "memory", "MEMORY.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(memory)!);
+        await File.WriteAllTextAsync(memory, "# Initial memory\n");
+        await fixture.Router.CommitAndQueueAsync(
+            fixture.Slug, initial, "chore(memory): initial");
+        Assert.Equal(WorktreeMergeStatus.Completed,
+            (await fixture.Queue!.ProcessNextAsync(fixture.Slug, CancellationToken.None))!.Status);
+
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "main-only.txt"), "main\n");
+        Git(fixture.Repository, "add", "main-only.txt");
+        Git(fixture.Repository, "commit", "-m", "main change");
+        await File.AppendAllTextAsync(memory, "Maintenance lesson.\n");
+        Git(initial.RootPath, "add", ".agents/programmer/memory/MEMORY.md");
+        Git(initial.RootPath, "commit", "-m", "maintenance change");
+
+        var recovered = await fixture.Router.TryResolveWorkspaceAsync(fixture.Slug);
+        Assert.NotNull(recovered);
+        var validation = await fixture.Router.CommitAndQueueAsync(
+            fixture.Slug, recovered!, "chore(chat): recover divergent maintenance history");
+        var queued = Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+
+        Assert.Equal(DurableWriteValidationStatus.Ready, validation.Status);
+        Assert.Equal(WorktreeMergeStatus.Pending, queued.Status);
+
+        var integrated = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        Assert.True(File.Exists(Path.Combine(fixture.Repository, "main-only.txt")));
+        Assert.Contains("Maintenance lesson",
+            await File.ReadAllTextAsync(Path.Combine(
+                fixture.Repository, ".agents", "programmer", "memory", "MEMORY.md")));
+    }
+
+    [Fact]
+    public async Task NextInteractiveWrite_StillRejectsLocalOnlyInterruptedChanges()
+    {
+        using var fixture = await Fixture.CreateAsync(withQueue: true);
+        var interrupted = await fixture.Router.TryResolveWorkspaceAsync(fixture.Slug);
+        Assert.NotNull(interrupted);
+        var localOnly = Path.Combine(
+            interrupted!.RootPath, ".agents", "channel", "tmp", "transport.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(localOnly)!);
+        await File.WriteAllTextAsync(localOnly, "ephemeral\n");
+        await fixture.Router.PreserveExecutionAsync(
+            fixture.Slug, interrupted, "preserved local-only changes");
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => fixture.Router.TryResolveWorkspaceAsync(fixture.Slug));
+
+        Assert.Contains("changes that require review", error.Message, StringComparison.Ordinal);
+        Assert.Contains(".agents/channel/tmp/transport.txt", error.Message, StringComparison.Ordinal);
+    }
+
     private sealed class Fixture : IDisposable
     {
         private readonly TempDir _root;

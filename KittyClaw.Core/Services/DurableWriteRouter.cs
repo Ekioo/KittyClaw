@@ -72,7 +72,8 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
                 RunGit(repository, exists ? ["worktree", "add", path, branch] : ["worktree", "add", "-b", branch, path, project.IntegrationBranch!]);
             }
             VerifyWorktree(path, branch);
-            SynchronizeMaintenanceWorktree(path, repository, project.IntegrationBranch!);
+            SynchronizeMaintenanceWorktree(
+                path, repository, project.IntegrationBranch!, normalized, allowWholeWorkspace);
             PrepareLocalDependencies(projects.ResolveWorkspacePath(project), path);
         }
         catch
@@ -242,12 +243,37 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
         var top = Path.GetFullPath(RunGit(path, ["rev-parse", "--show-toplevel"]).Output.Trim());
         if (!string.Equals(top, Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase) || !string.Equals(RunGit(path, ["branch", "--show-current"]).Output.Trim(), branch, StringComparison.Ordinal)) throw new InvalidOperationException($"Maintenance worktree '{path}' is not on '{branch}'.");
     }
-    private static void SynchronizeMaintenanceWorktree(string path, string repository, string targetBranch)
+    private static void SynchronizeMaintenanceWorktree(
+        string path,
+        string repository,
+        string targetBranch,
+        IReadOnlyList<string> allowedPaths,
+        bool allowWholeWorkspace)
     {
         var status = RunGit(path, ["status", "--porcelain", "--untracked-files=all"], false);
-        if (status.ExitCode != 0 || !string.IsNullOrWhiteSpace(status.Output))
-            throw new InvalidOperationException(
-                $"Maintenance worktree '{path}' contains uncommitted changes and must be recovered before another durable write.");
+        if (status.ExitCode != 0)
+            throw new InvalidOperationException($"Maintenance worktree '{path}' could not be inspected.");
+        if (!string.IsNullOrWhiteSpace(status.Output))
+        {
+            var changed = StatusPaths(path);
+            var unexpected = changed.Where(candidate => IsLocalOnly(candidate) ||
+                (!allowWholeWorkspace && !IsAllowed(candidate, allowedPaths))).ToArray();
+            if (unexpected.Length > 0)
+                throw new InvalidOperationException(
+                    $"Maintenance worktree '{path}' contains changes that require review: {string.Join(", ", unexpected)}.");
+
+            var secrets = changed.Where(candidate =>
+                (allowWholeWorkspace || IsAllowed(candidate, allowedPaths)) &&
+                ContainsProbableSecret(Path.Combine(path, candidate))).ToArray();
+            if (secrets.Length > 0)
+                throw new InvalidOperationException(
+                    $"Maintenance worktree '{path}' contains possible secrets that require review: {string.Join(", ", secrets)}.");
+
+            // A previous durable writer may have stopped after changing safe project files but
+            // before its final commit. Keep those files in place so the next compatible writer
+            // can validate, commit and enqueue them together with its own changes.
+            return;
+        }
 
         var head = RunGit(path, ["rev-parse", "HEAD"]).Output.Trim();
         var target = RunGit(repository, ["rev-parse", targetBranch]).Output.Trim();
@@ -265,8 +291,9 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
         if (RunGit(repository, ["merge-base", "--is-ancestor", target, head], false).ExitCode == 0)
             return;
 
-        throw new InvalidOperationException(
-            $"Maintenance worktree '{path}' has diverged from '{targetBranch}' and requires recovery.");
+        // A clean divergent branch contains committed durable writes that have not reached the
+        // target yet. Reuse it and let the merge queue perform the normal conflict-safe merge.
+        // Even a no-op writer will enqueue it through MarkMaintenanceNoChangesAsync.
     }
     private static void PrepareLocalDependencies(string canonicalWorkspace, string worktreePath)
     {
