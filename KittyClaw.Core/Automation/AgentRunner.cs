@@ -82,6 +82,12 @@ public sealed class AgentRunContext
     public string? InlineSkillContent { get; init; }
     public string? PresetRunId { get; init; }
 
+    /// <summary>For column-processor dispatches: the owner comment that actually triggered this
+    /// execution, when there is one. A ticket resume must only announce owner feedback when this
+    /// is set — a plain session resume (retry, fresh execution reusing the ticket session) used
+    /// to fabricate "The owner has posted feedback" without any owner comment (#1497/#1508).</summary>
+    public int? TriggerOwnerCommentId { get; init; }
+
     /// <summary>Returns a copy of this context suitable for auto-replaying steer messages in the same run, with ExtraContext replaced and non-repeatable fields cleared.</summary>
     internal AgentRunContext WithChatReplay(string steerText) => new AgentRunContext
     {
@@ -102,6 +108,7 @@ public sealed class AgentRunContext
         FallbackTarget = FallbackTarget,
         ExtraContext = steerText,
         InlineSkillContent = InlineSkillContent,
+        TriggerOwnerCommentId = TriggerOwnerCommentId,
         SessionScope = SessionScope,
         // A replay can race the provider's session finalization. Preserve the normal
         // expired-resume recovery so a late steer starts a fresh turn instead of changing
@@ -139,6 +146,7 @@ public sealed class AgentRunContext
         FallbackTarget = null,
         ExtraContext = ExtraContext,
         InlineSkillContent = InlineSkillContent,
+        TriggerOwnerCommentId = TriggerOwnerCommentId,
         SessionScope = SessionScope,
         RetryOnResumeFailure = RetryOnResumeFailure,
         PersistSession = PersistSession,
@@ -1258,9 +1266,21 @@ public sealed class AgentRunner
             return $"{languageReminder}{handoff}\n\n{userMsg}{imagesBlock}";
         }
 
-        // Automation resume on a ticket: ping the agent that the owner posted new feedback.
+        // Automation resume on a ticket. Column-processor resumes only announce owner feedback
+        // when an owner comment actually triggered the execution: a plain session resume (retry,
+        // fresh execution reusing the ticket session) used to fabricate "The owner has posted
+        // feedback" without any owner comment and sent agents chasing phantom feedback
+        // (#1497/#1508). Legacy automation resumes keep the historical wording — their
+        // ticketCommentAdded triggers carry their own author filter.
         if (isResume && ctx.TicketId is not null)
-            return $"The owner has posted feedback on ticket #{ctx.TicketId}: {SpotlightTicketField(ctx.TicketTitle)}\n{TicketUntrustedNotice}\nRead ALL owner comments on this ticket and address them.";
+        {
+            if (ctx.SessionScope != "column-processor")
+                return $"The owner has posted feedback on ticket #{ctx.TicketId}: {SpotlightTicketField(ctx.TicketTitle)}\n{TicketUntrustedNotice}\nRead ALL owner comments on this ticket and address them.";
+            var resumeContext = string.IsNullOrWhiteSpace(ctx.ExtraContext) ? "" : $"\n\n{ctx.ExtraContext}";
+            if (ctx.TriggerOwnerCommentId is int ownerCommentId)
+                return $"The owner has posted feedback (comment #{ownerCommentId}) on ticket #{ctx.TicketId}: {SpotlightTicketField(ctx.TicketTitle)}\n{TicketUntrustedNotice}\nRead ALL owner comments on this ticket and address them.{resumeContext}";
+            return $"Execution resumed on ticket #{ctx.TicketId}: {SpotlightTicketField(ctx.TicketTitle)}\n{TicketUntrustedNotice}\nNo owner feedback triggered this resume. Re-read the current ticket state via the API, finish the column mission for this ticket, and return the result contract JSON from the column profile.{resumeContext}";
+        }
 
         var prefix = await BuildPreambleAsync(ctx, uiLanguage, ct);
 

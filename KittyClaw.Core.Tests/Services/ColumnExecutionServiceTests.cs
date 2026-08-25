@@ -380,6 +380,56 @@ public sealed class ColumnExecutionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Retry_still_runs_when_only_the_runs_own_comment_advanced_the_ticket()
+    {
+        var project = await _projects.CreateProjectAsync("Own comment retry");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: pipeline.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Done", pipelineId: pipeline.Id, role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, target.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Delivered then rejected", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var first = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+        await _tickets.AddCommentAsync(project.Slug, ticket.Id, "Livraison : travail terminé.", "content-creator");
+        await _executions.FailAttemptAsync(project.Slug, first!, processor,
+            "Skills obligatoires non exécutés : demo-skill.", processor.Name);
+
+        var retry = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow.AddMinutes(1));
+
+        Assert.NotNull(retry);
+        Assert.Equal(first!.Id, retry.Id);
+        Assert.Equal(ColumnExecutionStatus.Running, retry.Status);
+        Assert.Equal(2, retry.Attempt);
+        Assert.Null(retry.ContextRejectionReason);
+        Assert.Equal("Skills obligatoires non exécutés : demo-skill.", retry.PreviousAttemptError);
+    }
+
+    [Fact]
+    public async Task Retry_is_cancelled_when_owner_commented_after_the_runs_own_comment()
+    {
+        var project = await _projects.CreateProjectAsync("Owner comment during run");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: pipeline.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Done", pipelineId: pipeline.Id, role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, target.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Owner interjects", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var first = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+        await _tickets.AddCommentAsync(project.Slug, ticket.Id, "Livraison : travail terminé.", "content-creator");
+        await _tickets.AddCommentAsync(project.Slug, ticket.Id, "Changez l'approche.", "owner");
+        await _executions.FailAttemptAsync(project.Slug, first!, processor, "timeout", processor.Name);
+
+        var replacement = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow.AddMinutes(1));
+
+        Assert.NotNull(replacement);
+        Assert.NotEqual(first!.Id, replacement.Id);
+        var cancelled = Assert.Single(await _executions.ListAsync(project.Slug, ticket.Id),
+            execution => execution.Id == first.Id);
+        Assert.Equal(ColumnExecutionStatus.Cancelled, cancelled.Status);
+        Assert.Equal("stale_trigger_context", cancelled.ContextRejectionReason);
+    }
+
+    [Fact]
     public async Task Parent_waits_for_blocking_children_then_becomes_eligible()
     {
         var project = await _projects.CreateProjectAsync("Children");

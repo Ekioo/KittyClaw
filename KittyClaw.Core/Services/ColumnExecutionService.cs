@@ -153,7 +153,12 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                     // when it names the exact current version; any later mutation still rejects it.
                     || retry.AgentCompleted
                         && retry.AgentResult?.Evidence?.TicketUpdatedAt is DateTime consumedVersion
-                        && consumedVersion.ToUniversalTime() == ticket.UpdatedAt.ToUniversalTime());
+                        && consumedVersion.ToUniversalTime() == ticket.UpdatedAt.ToUniversalTime()
+                    // The agent's own delivery or progress comments during a failed attempt also
+                    // advance UpdatedAt. Cancelling the retry for that discarded completed business
+                    // work and re-triggered the ticket from scratch (#1497/#1508); only foreign
+                    // mutations — owner feedback, field edits — actually invalidate the context.
+                    || await AdvancedOnlyByRunCommentsAsync(db, retry, ticket));
             if (!triggerIsCurrent)
             {
                 retry.Status = ColumnExecutionStatus.Cancelled;
@@ -166,6 +171,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             retry.Status = ColumnExecutionStatus.Running;
             retry.Attempt++;
             retry.AvailableAt = null;
+            retry.PreviousAttemptError = retry.Error;
             retry.Error = null;
             await db.SaveChangesAsync();
             await retryTransaction.CommitAsync();
@@ -311,6 +317,25 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             return null;
         }
         return execution;
+    }
+
+    /// <summary>True when the ticket's UpdatedAt advance is fully explained by non-owner
+    /// comments posted since this execution was claimed — i.e. the run's own delivery or
+    /// progress comments. Any owner comment in that window, or an UpdatedAt that does not
+    /// match the latest run comment (another field was edited afterwards), keeps the retry
+    /// stale. Same sub-second tolerance as the delivery-comment check in
+    /// ValidateSuccessContextAsync: the comment row and UpdatedAt are written microseconds
+    /// apart in the same save.</summary>
+    private static async Task<bool> AdvancedOnlyByRunCommentsAsync(
+        TodoDbContext db, ColumnExecution retry, Ticket ticket)
+    {
+        var runComments = await db.Comments.AsNoTracking()
+            .Where(comment => comment.TicketId == ticket.Id && comment.CreatedAt >= retry.ClaimedAt)
+            .OrderByDescending(comment => comment.CreatedAt)
+            .ToListAsync();
+        if (runComments.Count == 0) return false;
+        if (runComments.Any(comment => comment.Author == "owner")) return false;
+        return Math.Abs((ticket.UpdatedAt - runComments[0].CreatedAt).TotalSeconds) < 1;
     }
 
     private static int? ResolveHistoricalTarget(ColumnProcessor processor, string? outcome)

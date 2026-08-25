@@ -54,6 +54,7 @@ public sealed class ColumnAgentDispatcher(
             Target = target,
             FallbackTarget = fallback,
             SessionScope = "column-processor",
+            TriggerOwnerCommentId = execution.TriggerOwnerCommentId,
             RetryOnResumeFailure = true,
             PresetRunId = execution.Id,
             MaxRunDuration = TimeSpan.FromMinutes(30),
@@ -147,6 +148,9 @@ public sealed class ColumnAgentDispatcher(
         {{string.Join("\n", ticket.SubTickets.Select(s => $"- #{s.Id} [{s.Status}] {s.Title} (blocks parent: {s.BlocksParent})"))}}
 
         Return the result contract from the column profile. Do not change the ticket's column.
+        {{(string.IsNullOrWhiteSpace(execution.PreviousAttemptError)
+            ? ""
+            : $"\nThis dispatch retries a rejected attempt. Platform rejection to correct: {execution.PreviousAttemptError}")}}
         """;
 
     internal static bool TryParseResult(string? assistantText, out ColumnAgentResult? result, out string? error)
