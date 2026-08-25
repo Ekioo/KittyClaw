@@ -703,6 +703,7 @@ public sealed class AgentRunner
             _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
             slot.Dispose();
             CleanupImageTempFiles(ctx);
+            CleanupImageTempFiles(ctx, run.DrainTemporarySteerImagePaths());
             worktreeExecutionGate?.Release();
         }
     }
@@ -1334,9 +1335,14 @@ public sealed class AgentRunner
 
     private void CleanupImageTempFiles(AgentRunContext ctx)
     {
-        if (ctx.ImagePaths is null || ctx.ImagePaths.Count == 0) return;
+        CleanupImageTempFiles(ctx, ctx.ImagePaths);
+    }
+
+    private void CleanupImageTempFiles(AgentRunContext ctx, IReadOnlyList<string>? paths)
+    {
+        if (paths is null || paths.Count == 0) return;
         var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var p in ctx.ImagePaths)
+        foreach (var p in paths)
         {
             try
             {

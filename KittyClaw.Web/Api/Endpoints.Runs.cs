@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using KittyClaw.Core.Automation;
 using KittyClaw.Core.Evidence;
+using KittyClaw.Core.Models;
 using KittyClaw.Core.Services;
 
 namespace KittyClaw.Web.Api;
@@ -41,6 +42,23 @@ public static partial class Endpoints
                 }
 
                 return Results.Ok(new { count = req.Count });
+            }).ExcludeFromDescription();
+
+            api.MapPost("/projects/{slug}/qa/chat/active", (string slug, AgentRunRegistry reg) =>
+            {
+                var run = reg.Register(new AgentRun
+                {
+                    RunId = $"qa-chat-{Guid.NewGuid():N}",
+                    ProjectSlug = slug,
+                    TicketId = null,
+                    AgentName = "owner-chat",
+                    SkillFile = "qa",
+                    ConcurrencyGroup = $"chat:{slug}:owner-chat",
+                    StartedAt = DateTime.UtcNow,
+                    ChatTarget = "owner-chat",
+                });
+
+                return Results.Ok(new { runId = run.RunId });
             }).ExcludeFromDescription();
 
             api.MapPost("/projects/{slug}/qa/language", (QaSetLanguageRequest req, AppSettingsService settings) =>
@@ -183,10 +201,28 @@ public static partial class Endpoints
             var run = reg.Get(runId);
             if (run is null || run.ProjectSlug != slug) return Results.NotFound();
             if (run.Status != AgentRunStatus.Running) return Results.BadRequest(new { error = "Run is not active." });
-            await run.SteeringQueue.Writer.WriteAsync(req.Text);
+            var (imagePaths, imageError) = await PersistChatImagesAsync(req.Images, "", $"{runId}-steer-{Guid.NewGuid():N}");
+            if (imageError is not null)
+                return Results.BadRequest(new { error = "image_rejected", reason = imageError });
+
+            var steerText = req.Text;
+            if (string.IsNullOrWhiteSpace(req.Text) && imagePaths is not { Count: > 0 })
+                return Results.BadRequest(new { error = "empty_steer" });
+            if (imagePaths is { Count: > 0 })
+            {
+                if (!run.TryAddTemporarySteerImagePaths(imagePaths))
+                {
+                    CleanupChatImageFiles(imagePaths);
+                    return Results.BadRequest(new { error = "Run is not active." });
+                }
+                steerText += "\n\n[Attached images]\n" + string.Join("\n", imagePaths.Select(path => $"- {path}"));
+            }
+            await run.SteeringQueue.Writer.WriteAsync(steerText);
             var targetModel = model ?? run.Model; // Use provided model or the run's current model
             if (!string.IsNullOrEmpty(run.ChatTarget))
-                await cs.AppendAsync(slug, run.ChatTarget, "inject", req.Text, targetModel);
+                await cs.AppendAsync(slug, run.ChatTarget, "inject", req.Text, targetModel, images: req.Images?
+                    .Select(i => new ChatMessageImage(i.DataUrl, i.Mime, i.Name, i.SizeBytes))
+                    .ToList());
             return Results.NoContent();
         }).WithTags("Runs");
 

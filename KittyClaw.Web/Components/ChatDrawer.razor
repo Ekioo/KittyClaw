@@ -182,7 +182,22 @@
                 else if (msg.Role == "inject")
                 {
                     <div class="chat-message chat-message-inject">
-                        <div class="chat-bubble">↩ @msg.Text</div>
+                        <div class="chat-bubble">
+                            @if (msg.Images.Count > 0)
+                            {
+                                <div class="chat-message-images" data-testid="chat-message-images">
+                                    @foreach (var image in msg.Images)
+                                    {
+                                        <img class="chat-message-image" data-testid="chat-message-image"
+                                             src="@image.DataUrl" alt="@image.Name" loading="lazy" />
+                                    }
+                                </div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(msg.Text))
+                            {
+                                <div class="chat-message-text">↩ @msg.Text</div>
+                            }
+                        </div>
                     </div>
                 }
                 else if (msg is DiagnosticMessage diagnostic)
@@ -291,7 +306,7 @@
                 @if (_loading && !string.IsNullOrEmpty(_activeStreamId))
                 {
                     <div class="chat-input-actions">
-                        <button class="chat-inject-btn" @onclick="Inject" disabled="@string.IsNullOrWhiteSpace(_inputText)" title="@L["ChatInject"]">↩ @L["ChatInject"]</button>
+                        <button class="chat-inject-btn" @onclick="Inject" disabled="@(string.IsNullOrWhiteSpace(_inputText) && _pendingImages.Count == 0)" title="@L["ChatInject"]">↩ @L["ChatInject"]</button>
                         <button class="chat-stop-btn" @onclick="StopActiveRun" title="@L["Stop"]">⏹ @L["Stop"]</button>
                     </div>
                 }
@@ -706,23 +721,28 @@
     private async Task Inject()
     {
         var text = _inputText.Trim();
-        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(_activeStreamId)) return;
-
-        _messages.Add(new ChatMessage("inject", text));
-        _inputText = "";
-        StateHasChanged();
+        if ((string.IsNullOrEmpty(text) && _pendingImages.Count == 0) || string.IsNullOrEmpty(_activeStreamId)) return;
+        var sentImages = _pendingImages
+            .Select(p => new MessageImage(p.DataUrl, p.Mime, p.Name, p.SizeBytes)).ToList();
+        var imagesPayload = sentImages
+            .Select(p => new { dataUrl = p.DataUrl, mime = p.Mime, name = p.Name, sizeBytes = p.SizeBytes }).ToList();
 
         using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
         try
         {
             var resp = await http.PostAsJsonAsync(
                 $"/api/projects/{ProjectSlug}/runs/{_activeStreamId}/steer",
-                new { text });
+                new { text, images = imagesPayload });
             if (!resp.IsSuccessStatusCode)
             {
                 AddErrorMessage("Impossible d’envoyer l’instruction. Réessayez.");
                 Logger.LogWarning("Chat steer request failed for project {ProjectSlug} run {RunId} with status {StatusCode}", ProjectSlug, _activeStreamId, (int)resp.StatusCode);
+                return;
             }
+            _messages.Add(new ChatMessage("inject", text, sentImages));
+            _inputText = "";
+            _pendingImages.Clear();
+            _pasteError = null;
         }
         catch (Exception ex)
         {

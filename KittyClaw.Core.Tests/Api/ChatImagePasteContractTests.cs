@@ -63,7 +63,8 @@ public class ChatImagePasteContractTests
     {
         var src = Read("KittyClaw.Core/Automation/AgentRunner.cs");
         // Plan: best-effort File.Delete on each ImagePaths entry after the process exits.
-        Assert.Matches(new Regex(@"File\.Delete\([\s\S]{0,200}?ImagePaths|foreach[\s\S]{0,200}?ImagePaths[\s\S]{0,300}?File\.Delete"), src);
+        Assert.Contains("CleanupImageTempFiles(ctx, ctx.ImagePaths)", src);
+        Assert.Matches(new Regex(@"foreach[\s\S]{0,200}?paths[\s\S]{0,300}?File\.Delete"), src);
     }
 
     [Fact]
@@ -188,6 +189,31 @@ public class ChatImagePasteContractTests
         Assert.Contains("_pasteLoading", src);
         Assert.Contains("EndStalledPasteAsync", src);
         Assert.Contains("TimeSpan.FromSeconds(10)", src);
+    }
+
+    [Fact]
+    public void Active_session_injection_transmits_persists_and_clears_images_only_after_success()
+    {
+        var contracts = Read("KittyClaw.Web/Api/Contracts.cs");
+        var endpoint = Read("KittyClaw.Web/Api/Endpoints.Runs.cs");
+        var drawer = Read("KittyClaw.Web/Components/ChatDrawer.razor");
+
+        Assert.Matches(new Regex(@"SteerRunRequest[\s\S]{0,200}?Images"), contracts);
+        Assert.Contains("PersistChatImagesAsync(req.Images", endpoint);
+        Assert.Contains("new ChatMessageImage(i.DataUrl", endpoint);
+        Assert.Contains("[Attached images]", endpoint);
+
+        var inject = drawer.IndexOf("private async Task Inject()", StringComparison.Ordinal);
+        var post = drawer.IndexOf("/steer\"", inject, StringComparison.Ordinal);
+        var clear = drawer.IndexOf("_pendingImages.Clear();", post, StringComparison.Ordinal);
+        Assert.True(inject >= 0 && post > inject && clear > post,
+            "Injected images must remain retryable until the steer endpoint accepts them");
+        Assert.Contains("new ChatMessage(\"inject\", text, sentImages)", drawer);
+        Assert.Contains("images = imagesPayload", drawer);
+        var injectRender = drawer.IndexOf("msg.Role == \"inject\"", StringComparison.Ordinal);
+        var injectImage = drawer.IndexOf("data-testid=\"chat-message-image\"", injectRender, StringComparison.Ordinal);
+        Assert.True(injectRender >= 0 && injectImage > injectRender,
+            "Injected images must render in their corresponding stream message");
     }
 
     [Fact]

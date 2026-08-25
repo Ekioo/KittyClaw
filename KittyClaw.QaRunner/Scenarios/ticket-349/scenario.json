@@ -1,0 +1,38 @@
+{
+  "environment": {
+    "KITTYCLAW_ENABLE_QA_ENDPOINTS": "1"
+  },
+  "setup": [
+    { "type": "createProject", "name": "qa-ticket-349" },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-ticket-349/qa/chat/active" }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-ticket-349" },
+    { "type": "wait", "ms": 800 },
+    { "type": "click", "selector": ".new-instruction-btn" },
+    { "type": "wait", "ms": 800 },
+    { "type": "click", "selector": ".chat-target-item.claude-direct" },
+    { "type": "wait", "ms": 300 },
+    {
+      "type": "pasteImage",
+      "selector": ".chat-input-area textarea",
+      "property": "image/png",
+      "text": "Inspect this injected image",
+      "value": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nS8AAAAASUVORK5CYII="
+    },
+    { "type": "wait", "ms": 150 },
+    { "type": "assertCount", "selector": ".chat-paste-preview img", "expected": "1" },
+    { "type": "click", "selector": ".chat-inject-btn" },
+    { "type": "wait", "ms": 250 },
+    { "type": "assertCount", "selector": ".chat-paste-preview", "expected": "0" },
+    { "type": "assertVisible", "selector": ".chat-message-inject [data-testid=chat-message-image]" },
+    { "type": "assertText", "selector": ".chat-message-inject .chat-message-text", "expected": "↩ Inspect this injected image" },
+    {
+      "type": "screenshot",
+      "name": "ticket-349-injected-image-cycle",
+      "selector": ".chat-drawer",
+      "description": "An image accepted during an active session is removed from the composer and displayed in its injected stream message."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

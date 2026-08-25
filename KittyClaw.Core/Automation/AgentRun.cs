@@ -127,6 +127,8 @@ public sealed class AgentRun
     }
 
     private readonly List<string> _pendingSteerMessages = new();
+    private readonly List<string> _temporarySteerImagePaths = new();
+    private bool _temporarySteerImageCleanupStarted;
     public IReadOnlyList<string> PendingSteerMessages => _pendingSteerMessages;
 
     // Grok (and any token-streamed provider) assembles assistant text across many small
@@ -162,6 +164,28 @@ public sealed class AgentRun
         {
             var result = _pendingSteerMessages.ToList();
             _pendingSteerMessages.Clear();
+            return result;
+        }
+    }
+
+    public bool TryAddTemporarySteerImagePaths(IEnumerable<string> paths)
+    {
+        lock (_logLock)
+        {
+            if (_temporarySteerImageCleanupStarted || Status != AgentRunStatus.Running)
+                return false;
+            _temporarySteerImagePaths.AddRange(paths);
+            return true;
+        }
+    }
+
+    public IReadOnlyList<string> DrainTemporarySteerImagePaths()
+    {
+        lock (_logLock)
+        {
+            _temporarySteerImageCleanupStarted = true;
+            var result = _temporarySteerImagePaths.ToList();
+            _temporarySteerImagePaths.Clear();
             return result;
         }
     }
