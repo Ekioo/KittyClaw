@@ -8,6 +8,44 @@ namespace KittyClaw.Core.Tests.Services;
 public sealed class WorktreeMergeQueueServiceTests
 {
     [Fact]
+    public async Task LegacyDuplicateActiveRows_ArePreservedWithoutBlockingMigration()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        await using (var db = fixture.Projects.GetProjectDb(fixture.Slug))
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE WorktreeMergeQueue (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    TicketId INTEGER NOT NULL,
+                    RootTicketId INTEGER NOT NULL,
+                    WorktreePath TEXT NOT NULL,
+                    SourceBranch TEXT NOT NULL,
+                    TargetBranch TEXT NOT NULL,
+                    Status INTEGER NOT NULL,
+                    CreatedAt TEXT NOT NULL,
+                    UpdatedAt TEXT NOT NULL,
+                    SourceCommit TEXT NULL,
+                    IntegratedCommit TEXT NULL,
+                    Error TEXT NULL,
+                    ConflictFiles TEXT NULL
+                );
+                INSERT INTO WorktreeMergeQueue
+                    (TicketId, RootTicketId, WorktreePath, SourceBranch, TargetBranch, Status, CreatedAt, UpdatedAt)
+                VALUES
+                    (41, 41, 'old', 'old-branch', 'integration', 5, '2026-01-01', '2026-01-01'),
+                    (41, 41, 'new', 'new-branch', 'integration', 5, '2026-01-02', '2026-01-02');
+                """);
+        }
+
+        var rows = await fixture.Queue.ListAsync(fixture.Slug);
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(WorktreeMergeStatus.Completed, rows[0].Status);
+        Assert.Contains("Superseded duplicate integration", rows[0].Error);
+        Assert.Equal(WorktreeMergeStatus.CommitPending, rows[1].Status);
+    }
+
+    [Fact]
     public async Task Success_FastForwardsThenProvesCommitBeforeCleanup()
     {
         using var fixture = await Fixture.CreateAsync();

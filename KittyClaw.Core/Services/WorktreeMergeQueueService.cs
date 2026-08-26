@@ -76,6 +76,21 @@ public sealed partial class WorktreeMergeQueueService(
         await MigrationGate.RunOnceAsync(db, "worktree-merge-queue-v2-active-states", static d =>
             d.Database.ExecuteSqlRawAsync("""
                 DROP INDEX IF EXISTS IX_WorktreeMergeQueue_ActiveRoot;
+                UPDATE WorktreeMergeQueue AS candidate
+                SET Status = 4,
+                    UpdatedAt = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                    Error = CASE
+                        WHEN Error IS NULL OR Error = '' THEN 'Superseded duplicate integration preserved during queue migration.'
+                        ELSE Error || char(10) || 'Superseded duplicate integration preserved during queue migration.'
+                    END
+                WHERE Status <> 4
+                  AND EXISTS (
+                      SELECT 1
+                      FROM WorktreeMergeQueue AS newer
+                      WHERE newer.RootTicketId = candidate.RootTicketId
+                        AND newer.Status <> 4
+                        AND newer.Id > candidate.Id
+                  );
                 CREATE UNIQUE INDEX IX_WorktreeMergeQueue_ActiveRoot
                     ON WorktreeMergeQueue(RootTicketId) WHERE Status <> 4;
                 """));
@@ -96,6 +111,21 @@ public sealed partial class WorktreeMergeQueueService(
         await MigrationGate.RunOnceAsync(db, "worktree-merge-queue-v4-quarantine", static d =>
             d.Database.ExecuteSqlRawAsync($"""
                 DROP INDEX IF EXISTS IX_WorktreeMergeQueue_ActiveRoot;
+                UPDATE WorktreeMergeQueue AS candidate
+                SET Status = {(int)WorktreeMergeStatus.Completed},
+                    UpdatedAt = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                    Error = CASE
+                        WHEN Error IS NULL OR Error = '' THEN 'Superseded duplicate integration preserved during queue migration.'
+                        ELSE Error || char(10) || 'Superseded duplicate integration preserved during queue migration.'
+                    END
+                WHERE Status NOT IN ({(int)WorktreeMergeStatus.Completed}, {(int)WorktreeMergeStatus.Quarantined})
+                  AND EXISTS (
+                      SELECT 1
+                      FROM WorktreeMergeQueue AS newer
+                      WHERE newer.RootTicketId = candidate.RootTicketId
+                        AND newer.Status NOT IN ({(int)WorktreeMergeStatus.Completed}, {(int)WorktreeMergeStatus.Quarantined})
+                        AND newer.Id > candidate.Id
+                  );
                 CREATE UNIQUE INDEX IX_WorktreeMergeQueue_ActiveRoot
                     ON WorktreeMergeQueue(RootTicketId)
                     WHERE Status NOT IN ({(int)WorktreeMergeStatus.Completed}, {(int)WorktreeMergeStatus.Quarantined});
