@@ -79,17 +79,36 @@ public static partial class Endpoints
         }).WithTags("Dashboard");
 
         // Overwrites the output file of a tile. Body is plain text. Template determines extension.
-        api.MapPut("/projects/{slug}/dashboard/tiles/{tileSlug}/output", async (string slug, string tileSlug, HttpRequest req, ProjectService ps, DashboardService ds) =>
+        api.MapPut("/projects/{slug}/dashboard/tiles/{tileSlug}/output", async (string slug, string tileSlug, HttpRequest req, ProjectService ps, DashboardService ds, DurableWriteRouter durableWrites) =>
         {
             var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
             if (workspace is null) return Results.NotFound();
             if (!IsInsideTileDir(workspace, tileSlug, ds)) return Results.BadRequest();
-            var sidecar = await ds.ReadSidecarAsync(workspace, tileSlug);
-            var template = sidecar?.Template ?? TileTemplate.Markdown;
-            using var reader = new StreamReader(req.Body);
-            var body = await reader.ReadToEndAsync();
-            await ds.WriteOutputAsync(workspace, tileSlug, body, template);
-            return Results.NoContent();
+            var route = await durableWrites.ResolveAsync(slug, null,
+                [Path.Combine(".dashboard", tileSlug)], req.HttpContext.RequestAborted);
+            try
+            {
+                var sidecar = await ds.ReadSidecarAsync(route.RootPath, tileSlug);
+                var template = sidecar?.Template ?? TileTemplate.Markdown;
+                using var reader = new StreamReader(req.Body);
+                var body = await reader.ReadToEndAsync();
+                await ds.WriteOutputAsync(route.RootPath, tileSlug, body, template);
+                var validation = await durableWrites.CommitAndQueueAsync(slug, route,
+                    $"chore(dashboard): update {tileSlug}", req.HttpContext.RequestAborted);
+                return validation.Status == DurableWriteValidationStatus.Ready
+                    ? Results.NoContent()
+                    : Results.Conflict(new
+                    {
+                        error = validation.Error ?? "Dashboard output requires review before integration.",
+                        unexpectedPaths = validation.UnexpectedPaths,
+                        secretPaths = validation.SecretPaths
+                    });
+            }
+            catch (Exception ex)
+            {
+                await durableWrites.PreserveExecutionAsync(slug, route, ex.Message);
+                throw;
+            }
         }).WithTags("Dashboard");
 
         // Returns the parsed tile.yaml sidecar. 404 if none.
