@@ -690,19 +690,23 @@ public sealed partial class WorktreeMergeQueueService(
                 request = request with { SourceCommit = sourceHead };
             }
 
-            // Checkpoint the isolated source before inspecting the target checkout. External target
-            // changes may pause integration, but they must never leave safe ticket files uncommitted.
-            if (!IsClean(repository))
-                return await MarkAsync(db, request.Id, WorktreeMergeStatus.BlockedByExternalChanges,
-                    "The target branch checkout has local changes. Runs can continue, but integration is paused until those external changes are resolved.", null);
-            var checkedOut = RunGit(repository, ["branch", "--show-current"]).Output.Trim();
-            if (!string.Equals(checkedOut, request.TargetBranch, StringComparison.Ordinal))
-                throw new InvalidOperationException($"Integration checkout is on '{checkedOut}', expected '{request.TargetBranch}'.");
-
+            // An already-integrated source is proven by ancestry against the target ref and only
+            // needs cleanup, which never mutates the target checkout's files. Only integrations
+            // that must advance the target require a clean checkout on the target branch.
             var alreadyIntegrated = !string.IsNullOrWhiteSpace(request.SourceCommit)
                 && IsAncestor(repository, request.SourceCommit!, request.TargetBranch);
             if (!alreadyIntegrated)
             {
+                // The isolated source was checkpointed above, before inspecting the target checkout.
+                // External target changes may pause integration, but they must never leave safe
+                // ticket files uncommitted.
+                if (!IsClean(repository))
+                    return await MarkAsync(db, request.Id, WorktreeMergeStatus.BlockedByExternalChanges,
+                        "The target branch checkout has local changes. Runs can continue, but integration is paused until those external changes are resolved.", null);
+                var checkedOut = RunGit(repository, ["branch", "--show-current"]).Output.Trim();
+                if (!string.Equals(checkedOut, request.TargetBranch, StringComparison.Ordinal))
+                    throw new InvalidOperationException($"Integration checkout is on '{checkedOut}', expected '{request.TargetBranch}'.");
+
                 if (!worktreeIsRegistered)
                     return await MarkAsync(db, request.Id, WorktreeMergeStatus.Failed,
                         "The source worktree is no longer registered and its last known commit is not integrated; cleanup was stopped.", null);

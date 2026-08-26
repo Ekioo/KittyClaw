@@ -160,6 +160,26 @@ public sealed class WorktreeMergeQueueServiceTests
     }
 
     [Fact]
+    public async Task AlreadyIntegratedCleanWorktree_IsCleanedUpDespiteDirtyTargetCheckout()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        Git(fixture.Repository, true, "merge", "--ff-only", request.SourceBranch);
+        var external = Path.Combine(fixture.Repository, "external.txt");
+        await File.WriteAllTextAsync(external, "external");
+
+        var result = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, result!.Status);
+        Assert.Equal(0, Git(fixture.Repository, false, "merge-base", "--is-ancestor", result.IntegratedCommit!, "integration").ExitCode);
+        Assert.False(Directory.Exists(request.WorktreePath));
+        Assert.NotEqual(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet", $"refs/heads/{request.SourceBranch}").ExitCode);
+        Assert.Equal("external", await File.ReadAllTextAsync(external));
+        Assert.Equal("?? external.txt", Git(fixture.Repository, true, "status", "--porcelain").Output.Trim());
+    }
+
+    [Fact]
     public async Task StagedTicketWrite_IsCommittedAndIntegrated()
     {
         using var fixture = await Fixture.CreateAsync();
