@@ -812,6 +812,30 @@ public sealed class WorktreeMergeQueueServiceTests
     }
 
     [Fact]
+    public async Task Resume_IntegratesAReviewedQuarantinedMaintenanceWorktree()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var quarantinePath = Path.Combine(fixture.Root.Path, "maintenance-quarantine");
+        Git(fixture.Repository, true, "worktree", "add", "-b", "recovery/maintenance-test", quarantinePath, "integration");
+        await File.WriteAllTextAsync(Path.Combine(quarantinePath, "transport.txt"), "reviewed payload");
+        Git(quarantinePath, true, "add", "transport.txt");
+        Git(quarantinePath, true, "commit", "-m", "preserve reviewed maintenance payload");
+        await fixture.Queue.QuarantineMaintenanceAsync(
+            fixture.Slug, Path.Combine(fixture.Root.Path, "maintenance-worktree"),
+            quarantinePath, "recovery/maintenance-test",
+            "Interrupted maintenance files require quarantine: transport.txt");
+        var quarantined = Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+
+        var completed = await fixture.Queue.ResumeAsync(fixture.Slug, quarantined.Id, CancellationToken.None);
+
+        Assert.NotNull(completed);
+        Assert.Equal(WorktreeMergeStatus.Completed, completed.Status);
+        Assert.Equal("reviewed payload",
+            await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "transport.txt")));
+        Assert.False(Directory.Exists(quarantinePath));
+    }
+
+    [Fact]
     public async Task Recovery_ClosesAReviewRowWhenItsCleanHeadIsAlreadyIntegrated()
     {
         using var fixture = await Fixture.CreateAsync();

@@ -629,7 +629,8 @@ public sealed partial class WorktreeMergeQueueService(
             var request = await ReadByIdAsync(db, requestId);
             if (request is null || request.Status is not (WorktreeMergeStatus.Conflict or WorktreeMergeStatus.Failed
                 or WorktreeMergeStatus.BlockedByExternalChanges or WorktreeMergeStatus.NeedsReview
-                or WorktreeMergeStatus.CommitPending or WorktreeMergeStatus.ValidationRequired))
+                or WorktreeMergeStatus.CommitPending or WorktreeMergeStatus.ValidationRequired
+                or WorktreeMergeStatus.Quarantined))
                 return null;
             if (request.JobKind == WorktreeMergeJobKind.Ticket
                 && await IsBusyAsync(projectSlug, request.RootTicketId))
@@ -776,17 +777,18 @@ public sealed partial class WorktreeMergeQueueService(
             var integrated = request.SourceCommit ?? RunGit(repository, ["rev-parse", request.TargetBranch]).Output.Trim();
             if (!IsAncestor(repository, integrated, request.TargetBranch))
                 throw new InvalidOperationException($"Commit {integrated} is not reachable from {request.TargetBranch}; cleanup was stopped.");
+            var removeAfterIntegration = request.JobKind == WorktreeMergeJobKind.Ticket
+                || request.Status == WorktreeMergeStatus.Quarantined;
             var registeredForCleanup = IsRegisteredWorktree(repository, request.WorktreePath);
             if (registeredForCleanup && !IsClean(request.WorktreePath))
                 throw new InvalidOperationException("The source worktree has local changes; cleanup was stopped.");
-            if (request.JobKind == WorktreeMergeJobKind.Ticket
-                && registeredForCleanup)
+            if (removeAfterIntegration && registeredForCleanup)
             {
                 var removed = RunGit(repository, ["worktree", "remove", request.WorktreePath], false);
                 if (removed.ExitCode != 0 && IsRegisteredWorktree(repository, request.WorktreePath))
                     throw new InvalidOperationException($"The source worktree could not be detached: {removed.Error.Trim()}");
             }
-            if (request.JobKind == WorktreeMergeJobKind.Ticket
+            if (removeAfterIntegration
                 && RunGit(repository, ["show-ref", "--verify", "--quiet", $"refs/heads/{request.SourceBranch}"], false).ExitCode == 0)
             {
                 // Integration was proven above against the configured target. A stale upstream tracking
@@ -795,7 +797,7 @@ public sealed partial class WorktreeMergeQueueService(
                 if (deleted.ExitCode != 0 && ResolveSourceHead(repository, request.SourceBranch) is not null)
                     throw new InvalidOperationException($"The integrated source branch could not be deleted: {deleted.Error.Trim()}");
             }
-            if (request.JobKind == WorktreeMergeJobKind.Ticket)
+            if (removeAfterIntegration)
                 RemoveEmptyResidualDirectory(request.WorktreePath);
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Completed},
