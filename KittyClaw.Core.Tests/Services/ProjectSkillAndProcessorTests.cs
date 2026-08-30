@@ -484,6 +484,52 @@ public sealed class ProjectSkillAndProcessorTests : IDisposable
         Assert.Equal(1, secondRead.Split("- Preserve this lesson.").Length - 1);
     }
 
+    [Fact]
+    public async Task Legacy_processor_memory_migration_uses_maintenance_worktree_without_dirtying_target()
+    {
+        var repository = ProjectWorktreeSettingsTests.CreateRepository(_temp.Path, "integration");
+        var project = await _projects.CreateProjectAsync("Routed legacy processor memory");
+        await _projects.UpdateProjectAsync(project.Slug, repository);
+        var column = (await _columns.ListColumnsAsync(project.Slug)).First();
+        var baselineProcessors = new ColumnProcessorService(_projects, _skills);
+        await baselineProcessors.SaveAsync(project.Slug, column.Id, "Memory worker", "Preserve lessons.", null,
+            true, 20, [], [], []);
+        var legacyDirectory = Path.Combine(repository, ".agents", $"column-{column.Id}");
+        Directory.CreateDirectory(legacyDirectory);
+        await File.WriteAllTextAsync(Path.Combine(legacyDirectory, "memory.md"),
+            "# Legacy memory\n\n- Preserve this routed lesson.\n");
+        Git(repository, "add", ".agents");
+        Git(repository, "commit", "-m", "test: seed legacy processor memory");
+        await _projects.UpdateProjectAsync(project.Slug, null,
+            worktreesEnabled: true, integrationBranch: "integration");
+        var tickets = new TicketService(_projects, new MemberService(_projects));
+        var worktrees = new TicketWorktreeService(_projects, tickets);
+        var queue = new WorktreeMergeQueueService(_projects, worktrees);
+        var router = new DurableWriteRouter(_projects, worktrees, queue);
+        var processors = new ColumnProcessorService(_projects, _skills,
+            durableWrites: new Lazy<DurableWriteRouter>(() => router));
+        var primaryIndex = Path.Combine(repository, ".agents", "processors", $"column-{column.Id}", "memory", "MEMORY.md");
+        var initialStatus = Git(repository, "status", "--porcelain=v1", "--untracked-files=all");
+
+        var routedIndex = await processors.GetMemoryIndexPathAsync(project.Slug, column.Id);
+
+        Assert.Equal(initialStatus, Git(repository, "status", "--porcelain=v1", "--untracked-files=all"));
+        Assert.DoesNotContain("- Preserve this routed lesson.", await File.ReadAllTextAsync(primaryIndex));
+        var request = Assert.Single(await queue.ListAsync(project.Slug));
+        Assert.Equal(WorktreeMergeJobKind.Maintenance, request.JobKind);
+        Assert.StartsWith(Path.GetFullPath(request.WorktreePath), Path.GetFullPath(routedIndex!), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("- Preserve this routed lesson.", await File.ReadAllTextAsync(routedIndex!));
+
+        await processors.GetMemoryIndexPathAsync(project.Slug, column.Id);
+        Assert.Single(await queue.ListAsync(project.Slug));
+
+        var integrated = await queue.ProcessNextAsync(project.Slug, CancellationToken.None);
+        Assert.NotNull(integrated);
+        Assert.Equal(WorktreeMergeStatus.Completed, integrated.Status);
+        Assert.Contains("- Preserve this routed lesson.", await File.ReadAllTextAsync(primaryIndex));
+        Assert.Equal(initialStatus, Git(repository, "status", "--porcelain=v1", "--untracked-files=all"));
+    }
+
     public void Dispose() => _temp.Dispose();
 
     private static string Git(string cwd, params string[] args)
