@@ -378,10 +378,11 @@ public sealed class AgentMemoryHandler(
         var instructionContent = (await File.ReadAllTextAsync(instructionPath, ct)).Replace("{agentSlug}", agent);
         var project = await projects.GetProjectAsync(projectSlug);
         var member = await members.GetMemberBySlugAsync(projectSlug, agent);
-        var effectiveModel = ActionExecutor.FirstConfiguredModel(member?.DefaultModel,
-            project?.FallbackModel, project?.LocalModelName);
-        var routing = ModelRouting.Resolve(effectiveModel, project?.LocalModelBaseUrl);
-        if (routing.Error is not null) throw new InvalidOperationException(routing.Error);
+        var (target, fallbackTarget) = ResolveAdHocModelTargets(
+            member?.DefaultModel,
+            project?.FallbackModel,
+            project?.LocalModelName,
+            project?.LocalModelBaseUrl);
 
         const string scope = "consolidate-chat";
         var run = await runner.RunAsync(new AgentRunContext
@@ -395,7 +396,8 @@ public sealed class AgentMemoryHandler(
             InlineSkillContent = instructionContent,
             ExtraContext = "## Ad-hoc conversation segment\n\n" + transcript,
             SessionScope = scope,
-            Target = routing.ToTarget(effectiveModel),
+            Target = target,
+            FallbackTarget = fallbackTarget,
             RetryOnResumeFailure = true,
             PersistSession = false,
             MaxRunDuration = TimeSpan.FromMinutes(30),
@@ -418,6 +420,42 @@ public sealed class AgentMemoryHandler(
             ? AdHocMemoryResult.Modified
             : AdHocMemoryResult.NoChanges;
     }
+
+    internal static (AgentDispatchTarget Target, AgentDispatchTarget? FallbackTarget)
+        ResolveAdHocModelTargets(
+            string? memberModel,
+            string? projectFallback,
+            string? localModel,
+            string? localModelBaseUrl)
+    {
+        var effectiveModel = ActionExecutor.FirstConfiguredModel(
+            memberModel, projectFallback, localModel);
+        var routing = ModelRouting.Resolve(effectiveModel, localModelBaseUrl);
+        if (routing.Error is not null) throw new InvalidOperationException(routing.Error);
+
+        var target = routing.ToTarget(effectiveModel);
+        AgentDispatchTarget? fallbackTarget = null;
+        if (!string.IsNullOrWhiteSpace(projectFallback))
+        {
+            var fallbackRouting = ModelRouting.Resolve(projectFallback, localModelBaseUrl);
+            if (fallbackRouting.Error is null)
+            {
+                var candidate = fallbackRouting.ToTarget(projectFallback);
+                if (!TargetsAreEquivalent(target, candidate))
+                    fallbackTarget = candidate;
+            }
+        }
+
+        return (target, fallbackTarget);
+    }
+
+    private static bool TargetsAreEquivalent(AgentDispatchTarget left, AgentDispatchTarget right) =>
+        left.Provider == right.Provider
+        && string.Equals(left.Model, right.Model, StringComparison.OrdinalIgnoreCase)
+        && left.Environment.Count == right.Environment.Count
+        && left.Environment.All(pair =>
+            right.Environment.TryGetValue(pair.Key, out var value)
+            && string.Equals(pair.Value, value, StringComparison.Ordinal));
 
     private static string[] SnapshotMemory(string memoryDir, string legacyMemory)
     {

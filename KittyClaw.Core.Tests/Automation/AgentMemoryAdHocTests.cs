@@ -119,6 +119,83 @@ public sealed class AgentMemoryAdHocTests
     }
 
     [Fact]
+    public void AdHocConsolidation_PreservesProjectQuotaFallbackWhenMemberModelIsPrimary()
+    {
+        var (target, fallback) = AgentMemoryHandler.ResolveAdHocModelTargets(
+            "claude:claude-opus-5",
+            "codex:gpt-5.6-sol",
+            localModel: null,
+            localModelBaseUrl: null);
+
+        Assert.Equal(CliProvider.Claude, target.Provider);
+        Assert.Equal("claude-opus-5", target.Model);
+        Assert.NotNull(fallback);
+        Assert.Equal(CliProvider.Codex, fallback.Provider);
+        Assert.Equal("gpt-5.6-sol", fallback.Model);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("claude:claude-opus-5")]
+    [InlineData("CLAUDE:CLAUDE-OPUS-5")]
+    public void AdHocConsolidation_DoesNotRetryWithoutADistinctProjectFallback(string? projectFallback)
+    {
+        var (target, fallback) = AgentMemoryHandler.ResolveAdHocModelTargets(
+            "claude:claude-opus-5",
+            projectFallback,
+            localModel: "local-default",
+            localModelBaseUrl: "http://localhost:11434");
+
+        Assert.Equal(CliProvider.Claude, target.Provider);
+        Assert.Equal("claude-opus-5", target.Model);
+        Assert.Null(fallback);
+    }
+
+    [Fact]
+    public void AdHocConsolidation_DoesNotRetryEquivalentResolvedTarget()
+    {
+        var (target, fallback) = AgentMemoryHandler.ResolveAdHocModelTargets(
+            "claude:claude-opus-5",
+            "claude-opus-5",
+            localModel: null,
+            localModelBaseUrl: null);
+
+        Assert.Equal(CliProvider.Claude, target.Provider);
+        Assert.Equal("claude-opus-5", target.Model);
+        Assert.Null(fallback);
+    }
+
+    [Fact]
+    public void AdHocConsolidation_IgnoresInvalidFallbackWithoutReplacingValidMemberTarget()
+    {
+        var (target, fallback) = AgentMemoryHandler.ResolveAdHocModelTargets(
+            "claude:claude-opus-5",
+            "not-a-routable-model",
+            localModel: null,
+            localModelBaseUrl: null);
+
+        Assert.Equal(CliProvider.Claude, target.Provider);
+        Assert.Equal("claude-opus-5", target.Model);
+        Assert.Null(fallback);
+    }
+
+    [Fact]
+    public void AdHocConsolidation_UsesProjectFallbackAsPrimaryWhenMemberModelIsAbsent()
+    {
+        var (target, fallback) = AgentMemoryHandler.ResolveAdHocModelTargets(
+            memberModel: null,
+            projectFallback: "claude:claude-sonnet-4-6",
+            localModel: "local-default",
+            localModelBaseUrl: "http://localhost:11434");
+
+        Assert.Equal(CliProvider.Claude, target.Provider);
+        Assert.Equal("claude-sonnet-4-6", target.Model);
+        Assert.Null(fallback);
+    }
+
+    [Fact]
     public async Task Service_DefersActiveChatRunThenProcessesTheSameSegment()
     {
         using var tmp = new TempDir();
