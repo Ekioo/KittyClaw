@@ -760,6 +760,18 @@ public sealed partial class WorktreeMergeQueueService(
                     }
                 }
 
+                // A resumed rebase may have started against an older target. The target can
+                // legitimately advance while the request waits for conflict resolution, so prove
+                // ancestry again before attempting the fast-forward and catch up when necessary.
+                if (!IsAncestor(repository, request.TargetBranch, request.SourceBranch))
+                {
+                    var catchUpRebase = RunGit(request.WorktreePath, ["rebase", request.TargetBranch], false);
+                    if (catchUpRebase.ExitCode != 0)
+                        catchUpRebase = CompleteMemoryOnlyRebase(request.WorktreePath, catchUpRebase);
+                    if (catchUpRebase.ExitCode != 0)
+                        return await MarkGitFailureAsync(db, request, catchUpRebase);
+                }
+
                 var rebasedCommit = RunGit(request.WorktreePath, ["rev-parse", "HEAD"]).Output.Trim();
                 for (var attempt = 0; ; attempt++)
                 {
