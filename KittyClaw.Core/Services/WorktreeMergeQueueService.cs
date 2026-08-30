@@ -1077,22 +1077,18 @@ public sealed partial class WorktreeMergeQueueService(
             for (var index = 0; index < conflicts.Count; index++)
             {
                 var relativePath = conflicts[index].Replace('\\', '/');
-                var ours = RunGit(worktreePath, ["show", $":2:{relativePath}"], false);
-                var theirs = RunGit(worktreePath, ["show", $":3:{relativePath}"], false);
-                if (ours.ExitCode != 0 || theirs.ExitCode != 0)
-                    return false;
-
-                var baseline = RunGit(worktreePath, ["show", $":1:{relativePath}"], false);
                 var oursPath = Path.Combine(temporaryDirectory, $"{index}-ours.md");
                 var baselinePath = Path.Combine(temporaryDirectory, $"{index}-base.md");
                 var theirsPath = Path.Combine(temporaryDirectory, $"{index}-theirs.md");
-                File.WriteAllText(oursPath, ours.Output);
-                File.WriteAllText(baselinePath, baseline.ExitCode == 0 ? baseline.Output : "");
-                File.WriteAllText(theirsPath, theirs.Output);
+                if (!TryWriteGitOutputToFile(worktreePath, ["show", $":2:{relativePath}"], oursPath)
+                    || !TryWriteGitOutputToFile(worktreePath, ["show", $":3:{relativePath}"], theirsPath))
+                    return false;
+                if (!TryWriteGitOutputToFile(worktreePath, ["show", $":1:{relativePath}"], baselinePath))
+                    File.WriteAllBytes(baselinePath, []);
 
                 var merged = RunGit(worktreePath,
-                    ["merge-file", "--union", "-p", oursPath, baselinePath, theirsPath], false);
-                if (merged.ExitCode != 0 || merged.Output.Contains("<<<<<<<", StringComparison.Ordinal))
+                    ["merge-file", "--union", oursPath, baselinePath, theirsPath], false);
+                if (merged.ExitCode != 0 || ContainsConflictMarkers(oursPath))
                     return false;
 
                 var destination = Path.GetFullPath(Path.Combine(worktreePath, relativePath));
@@ -1100,7 +1096,7 @@ public sealed partial class WorktreeMergeQueueService(
                 if (!destination.StartsWith(root, StringComparison.OrdinalIgnoreCase))
                     return false;
                 Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-                File.WriteAllText(destination, merged.Output);
+                File.Copy(oursPath, destination, true);
                 if (RunGit(worktreePath, ["add", "--", relativePath], false).ExitCode != 0)
                     return false;
             }
@@ -1111,6 +1107,30 @@ public sealed partial class WorktreeMergeQueueService(
         {
             Directory.Delete(temporaryDirectory, true);
         }
+    }
+
+    private static bool TryWriteGitOutputToFile(
+        string worktreePath, IReadOnlyList<string> arguments, string destination)
+    {
+        var info = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = worktreePath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (var argument in arguments) info.ArgumentList.Add(argument);
+        using var process = Process.Start(info) ?? throw new InvalidOperationException("Git could not be started.");
+        using (var output = File.Create(destination))
+            process.StandardOutput.BaseStream.CopyTo(output);
+        _ = process.StandardError.ReadToEnd();
+        if (!process.WaitForExit(30_000))
+        {
+            process.Kill(true);
+            throw new InvalidOperationException("Git command timed out.");
+        }
+        return process.ExitCode == 0;
     }
 
     private static string[] ConflictMarkerFiles(string worktreePath, string targetBranch)
