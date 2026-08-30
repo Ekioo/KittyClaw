@@ -500,6 +500,106 @@ public sealed class WorktreeMergeQueueServiceTests
     }
 
     [Fact]
+    public async Task AppendOnlyProcessorMemoryConflict_IsUnionMergedAndIntegrated()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var relativePath = Path.Combine(".agents", "processors", "column-12", "memory", "MEMORY.md");
+        var targetPath = Path.Combine(fixture.Repository, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+        await File.WriteAllTextAsync(targetPath, "# Memory\n");
+        Git(fixture.Repository, true, "add", relativePath);
+        Git(fixture.Repository, true, "commit", "-m", "memory base");
+
+        var ticket = await fixture.CreateTicketAsync();
+        var worktree = (await fixture.Worktrees.ResolveAsync(fixture.Slug, ticket, CancellationToken.None))!;
+        await File.AppendAllTextAsync(Path.Combine(worktree.Path, relativePath), "\n- ticket lesson\n");
+        Git(worktree.Path, true, "add", relativePath);
+        Git(worktree.Path, true, "commit", "-m", "ticket memory");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+
+        await File.AppendAllTextAsync(targetPath, "\n- target lesson\n");
+        Git(fixture.Repository, true, "add", relativePath);
+        Git(fixture.Repository, true, "commit", "-m", "target memory");
+
+        var completed = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
+        var merged = await File.ReadAllTextAsync(targetPath);
+        Assert.Contains("- ticket lesson", merged);
+        Assert.Contains("- target lesson", merged);
+        Assert.DoesNotContain("<<<<<<<", merged);
+        Assert.False(Directory.Exists(request.WorktreePath));
+    }
+
+    [Fact]
+    public async Task ExistingAppendOnlyProcessorMemoryConflict_IsResolvedOnResume()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var relativePath = Path.Combine(".agents", "processors", "column-12", "memory", "MEMORY.md");
+        var targetPath = Path.Combine(fixture.Repository, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+        await File.WriteAllTextAsync(targetPath, "# Memory\n");
+        Git(fixture.Repository, true, "add", relativePath);
+        Git(fixture.Repository, true, "commit", "-m", "memory base");
+        var ticket = await fixture.CreateTicketAsync();
+        var worktree = (await fixture.Worktrees.ResolveAsync(fixture.Slug, ticket, CancellationToken.None))!;
+        await File.AppendAllTextAsync(Path.Combine(worktree.Path, relativePath), "\n- ticket lesson\n");
+        Git(worktree.Path, true, "add", relativePath);
+        Git(worktree.Path, true, "commit", "-m", "ticket memory");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        await File.AppendAllTextAsync(targetPath, "\n- target lesson\n");
+        Git(fixture.Repository, true, "add", relativePath);
+        Git(fixture.Repository, true, "commit", "-m", "target memory");
+        Assert.NotEqual(0, Git(worktree.Path, false, "rebase", "integration").ExitCode);
+        await using (var db = fixture.Projects.GetProjectDb(fixture.Slug))
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Conflict}, Checkpoint = {(int)WorktreeMergeCheckpoint.Rebase} WHERE Id = {request.Id}");
+
+        var completed = await fixture.Queue.ResumeAsync(fixture.Slug, request.Id, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
+        var merged = await File.ReadAllTextAsync(targetPath);
+        Assert.Contains("- ticket lesson", merged);
+        Assert.Contains("- target lesson", merged);
+        Assert.False(Directory.Exists(request.WorktreePath));
+    }
+
+    [Fact]
+    public async Task MixedMemoryAndCodeConflicts_RemainEntirelyManual()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var memory = Path.Combine(".agents", "processors", "column-12", "memory", "pipeline-lessons.md");
+        var code = "shared.txt";
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(fixture.Repository, memory))!);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, memory), "memory base\n");
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, code), "code base\n");
+        Git(fixture.Repository, true, "add", memory, code);
+        Git(fixture.Repository, true, "commit", "-m", "mixed base");
+
+        var ticket = await fixture.CreateTicketAsync();
+        var worktree = (await fixture.Worktrees.ResolveAsync(fixture.Slug, ticket, CancellationToken.None))!;
+        await File.WriteAllTextAsync(Path.Combine(worktree.Path, memory), "ticket memory\n");
+        await File.WriteAllTextAsync(Path.Combine(worktree.Path, code), "ticket code\n");
+        Git(worktree.Path, true, "add", memory, code);
+        Git(worktree.Path, true, "commit", "-m", "ticket mixed changes");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, memory), "target memory\n");
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, code), "target code\n");
+        Git(fixture.Repository, true, "add", memory, code);
+        Git(fixture.Repository, true, "commit", "-m", "target mixed changes");
+
+        var conflict = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Conflict, conflict!.Status);
+        Assert.Contains(memory.Replace('\\', '/'), conflict.ConflictFiles);
+        Assert.Contains(code, conflict.ConflictFiles);
+        var unresolved = Git(request.WorktreePath, true, "diff", "--name-only", "--diff-filter=U").Output;
+        Assert.Contains(memory.Replace('\\', '/'), unresolved);
+        Assert.Contains(code, unresolved);
+        Assert.True(Directory.Exists(request.WorktreePath));
+    }
+
+    [Fact]
     public async Task SourceThatAlreadyMergedTarget_IsFastForwardedWithoutReplayingOldConflicts()
     {
         using var fixture = await Fixture.CreateAsync();

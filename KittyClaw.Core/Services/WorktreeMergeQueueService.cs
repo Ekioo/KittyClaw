@@ -656,31 +656,35 @@ public sealed partial class WorktreeMergeQueueService(
             if (request.JobKind == WorktreeMergeJobKind.Ticket && worktreeIsRegistered)
             {
                 var unresolved = ConflictFiles(request.WorktreePath);
-                if (unresolved.Length > 0)
+                var rebaseInProgress = IsRebaseInProgress(request.WorktreePath);
+                if (unresolved.Length > 0 && !rebaseInProgress)
                     return await MarkAsync(db, request.Id, WorktreeMergeStatus.Conflict,
                         "The ticket worktree contains unresolved Git conflicts. Resolve and stage every conflict before resuming; no finalization commit was created.",
                         string.Join('\n', unresolved));
-                var markerFiles = ConflictMarkerFiles(request.WorktreePath, request.TargetBranch);
-                if (markerFiles.Length > 0)
-                    return await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
-                        "Files containing unresolved conflict markers were preserved. Remove the markers and verify the intended content before resuming: "
-                        + string.Join(", ", markerFiles), string.Join('\n', markerFiles));
-                var preparation = PrepareTicketWorktree(request);
-                if (preparation.Error is not null)
-                    return await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
-                        preparation.Error, null);
-                if (preparation.HasChanges)
+                if (!rebaseInProgress)
                 {
-                    RunGit(request.WorktreePath, ["add", "-A"]);
-                    var commit = RunGit(request.WorktreePath,
-                        ["commit", "-m", $"Finalize ticket #{request.RootTicketId} worktree"], false);
-                    if (commit.ExitCode != 0)
-                        return await MarkAsync(db, request.Id, WorktreeMergeStatus.CommitPending,
-                            $"Validated changes could not be committed: {commit.Error.Trim()}", null);
-                    if (!IsClean(request.WorktreePath))
+                    var markerFiles = ConflictMarkerFiles(request.WorktreePath, request.TargetBranch);
+                    if (markerFiles.Length > 0)
                         return await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
-                            "The finalization commit did not capture the complete worktree; cleanup was stopped.", null);
-                    request = request with { SourceCommit = null };
+                            "Files containing unresolved conflict markers were preserved. Remove the markers and verify the intended content before resuming: "
+                            + string.Join(", ", markerFiles), string.Join('\n', markerFiles));
+                    var preparation = PrepareTicketWorktree(request);
+                    if (preparation.Error is not null)
+                        return await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
+                            preparation.Error, null);
+                    if (preparation.HasChanges)
+                    {
+                        RunGit(request.WorktreePath, ["add", "-A"]);
+                        var commit = RunGit(request.WorktreePath,
+                            ["commit", "-m", $"Finalize ticket #{request.RootTicketId} worktree"], false);
+                        if (commit.ExitCode != 0)
+                            return await MarkAsync(db, request.Id, WorktreeMergeStatus.CommitPending,
+                                $"Validated changes could not be committed: {commit.Error.Trim()}", null);
+                        if (!IsClean(request.WorktreePath))
+                            return await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
+                                "The finalization commit did not capture the complete worktree; cleanup was stopped.", null);
+                        request = request with { SourceCommit = null };
+                    }
                 }
             }
 
@@ -717,17 +721,25 @@ public sealed partial class WorktreeMergeQueueService(
                     await SetStateAsync(db, request.Id, WorktreeMergeStatus.Processing, WorktreeMergeCheckpoint.Rebase);
                     var unresolved = ConflictFiles(request.WorktreePath);
                     if (unresolved.Length > 0)
-                        return await MarkAsync(db, request.Id, WorktreeMergeStatus.Conflict,
-                            "Resolve and stage all conflict files before resuming.", string.Join('\n', unresolved));
-                    if (IsRebaseInProgress(request.WorktreePath))
+                    {
+                        var resumed = CompleteMemoryOnlyRebase(request.WorktreePath,
+                            new GitResult(1, "", "The rebase still contains unresolved conflicts."));
+                        if (resumed.ExitCode != 0)
+                            return await MarkGitFailureAsync(db, request, resumed);
+                    }
+                    else if (IsRebaseInProgress(request.WorktreePath))
                     {
                         var continued = RunGit(request.WorktreePath, ["-c", "core.editor=true", "rebase", "--continue"], false);
+                        if (continued.ExitCode != 0)
+                            continued = CompleteMemoryOnlyRebase(request.WorktreePath, continued);
                         if (continued.ExitCode != 0)
                             return await MarkGitFailureAsync(db, request, continued);
                     }
                     else if (!IsAncestor(repository, request.TargetBranch, request.SourceBranch))
                     {
                         var rebased = RunGit(request.WorktreePath, ["rebase", request.TargetBranch], false);
+                        if (rebased.ExitCode != 0)
+                            rebased = CompleteMemoryOnlyRebase(request.WorktreePath, rebased);
                         if (rebased.ExitCode != 0)
                             return await MarkGitFailureAsync(db, request, rebased);
                     }
@@ -741,6 +753,8 @@ public sealed partial class WorktreeMergeQueueService(
                     if (!IsAncestor(repository, request.TargetBranch, request.SourceBranch))
                     {
                         var rebased = RunGit(request.WorktreePath, ["rebase", request.TargetBranch], false);
+                        if (rebased.ExitCode != 0)
+                            rebased = CompleteMemoryOnlyRebase(request.WorktreePath, rebased);
                         if (rebased.ExitCode != 0)
                             return await MarkGitFailureAsync(db, request, rebased);
                     }
@@ -764,6 +778,8 @@ public sealed partial class WorktreeMergeQueueService(
 
                     await SetStateAsync(db, request.Id, WorktreeMergeStatus.Processing, WorktreeMergeCheckpoint.Rebase);
                     var retryRebase = RunGit(request.WorktreePath, ["rebase", request.TargetBranch], false);
+                    if (retryRebase.ExitCode != 0)
+                        retryRebase = CompleteMemoryOnlyRebase(request.WorktreePath, retryRebase);
                     if (retryRebase.ExitCode != 0)
                         return await MarkGitFailureAsync(db, request, retryRebase);
                     rebasedCommit = RunGit(request.WorktreePath, ["rev-parse", "HEAD"]).Output.Trim();
@@ -1017,6 +1033,73 @@ public sealed partial class WorktreeMergeQueueService(
 
     private static string[] ConflictFiles(string path) => RunGit(path, ["diff", "--name-only", "--diff-filter=U"], false)
         .Output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+
+    private static GitResult CompleteMemoryOnlyRebase(string worktreePath, GitResult failure)
+    {
+        for (var attempt = 0; attempt < 100 && failure.ExitCode != 0; attempt++)
+        {
+            var conflicts = ConflictFiles(worktreePath);
+            if (conflicts.Length == 0 || conflicts.Any(path => !IsAppendOnlyProcessorMemory(path)))
+                return failure;
+            if (!TryResolveAppendOnlyMemoryConflicts(worktreePath, conflicts))
+                return failure;
+
+            failure = RunGit(worktreePath,
+                ["-c", "core.editor=true", "rebase", "--continue"], false);
+        }
+
+        return failure;
+    }
+
+    private static bool IsAppendOnlyProcessorMemory(string path) => Regex.IsMatch(
+        path.Replace('\\', '/'),
+        @"^\.agents/processors/column-\d+/memory/(?:MEMORY\.md|pipeline-lessons\.md)$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static bool TryResolveAppendOnlyMemoryConflicts(string worktreePath, IReadOnlyList<string> conflicts)
+    {
+        var temporaryDirectory = Path.Combine(Path.GetTempPath(), $"KittyClaw-memory-merge-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(temporaryDirectory);
+        try
+        {
+            for (var index = 0; index < conflicts.Count; index++)
+            {
+                var relativePath = conflicts[index].Replace('\\', '/');
+                var ours = RunGit(worktreePath, ["show", $":2:{relativePath}"], false);
+                var theirs = RunGit(worktreePath, ["show", $":3:{relativePath}"], false);
+                if (ours.ExitCode != 0 || theirs.ExitCode != 0)
+                    return false;
+
+                var baseline = RunGit(worktreePath, ["show", $":1:{relativePath}"], false);
+                var oursPath = Path.Combine(temporaryDirectory, $"{index}-ours.md");
+                var baselinePath = Path.Combine(temporaryDirectory, $"{index}-base.md");
+                var theirsPath = Path.Combine(temporaryDirectory, $"{index}-theirs.md");
+                File.WriteAllText(oursPath, ours.Output);
+                File.WriteAllText(baselinePath, baseline.ExitCode == 0 ? baseline.Output : "");
+                File.WriteAllText(theirsPath, theirs.Output);
+
+                var merged = RunGit(worktreePath,
+                    ["merge-file", "--union", "-p", oursPath, baselinePath, theirsPath], false);
+                if (merged.ExitCode != 0 || merged.Output.Contains("<<<<<<<", StringComparison.Ordinal))
+                    return false;
+
+                var destination = Path.GetFullPath(Path.Combine(worktreePath, relativePath));
+                var root = Path.GetFullPath(worktreePath) + Path.DirectorySeparatorChar;
+                if (!destination.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                    return false;
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                File.WriteAllText(destination, merged.Output);
+                if (RunGit(worktreePath, ["add", "--", relativePath], false).ExitCode != 0)
+                    return false;
+            }
+
+            return true;
+        }
+        finally
+        {
+            Directory.Delete(temporaryDirectory, true);
+        }
+    }
 
     private static string[] ConflictMarkerFiles(string worktreePath, string targetBranch)
     {
