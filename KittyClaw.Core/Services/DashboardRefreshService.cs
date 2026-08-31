@@ -310,7 +310,7 @@ public sealed class DashboardRefreshService : BackgroundService
             AgentName = "dashboard",
             SkillFile = "dashboard/SKILL.md",
             InlineSkillContent = sidecar.Prompt + TileTemplate.SchemaPrompt(sidecar.Template),
-            MaxTurns = 5,
+            MaxTurns = DashboardRunPolicy.MaxTurns,
             ConcurrencyGroup = $"dashboard-{projectSlug}-{SanitizeName(tileSlug)}",
             Target = target,
             FallbackTarget = fallbackTarget,

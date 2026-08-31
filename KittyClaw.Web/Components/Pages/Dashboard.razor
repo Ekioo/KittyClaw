@@ -1021,7 +1021,7 @@ else
                             AgentName = "dashboard",
                             SkillFile = "dashboard",
                             InlineSkillContent = sidecar.Prompt + TileTemplate.SchemaPrompt(sidecar.Template),
-                            MaxTurns = 5,
+                            MaxTurns = DashboardRunPolicy.MaxTurns,
                             ConcurrencyGroup = $"dashboard-{Slug}-{SanitizeName(tileSlug)}",
                             Target = target,
                             FallbackTarget = fallbackTarget,
