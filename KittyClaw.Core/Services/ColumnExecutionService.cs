@@ -714,7 +714,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
     {
         if (row.TriggerTicketUpdatedAt is null) return "ticket_refresh_failed";
         if (result.Evidence?.TicketUpdatedAt is DateTime consumedVersion
-            && consumedVersion.ToUniversalTime() != ticket.UpdatedAt.ToUniversalTime())
+            && NormalizeUtcInstant(consumedVersion) != NormalizeUtcInstant(ticket.UpdatedAt))
             return "stale_ticket_context";
         if (row.TriggerOwnerCommentId is not int ownerCommentId)
             return result.Evidence?.TicketUpdatedAt is DateTime
@@ -745,6 +745,15 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             return "stale_ticket_context";
         return null;
     }
+
+    private static DateTime NormalizeUtcInstant(DateTime value) => value.Kind switch
+    {
+        DateTimeKind.Utc => value,
+        DateTimeKind.Local => value.ToUniversalTime(),
+        // SQLite does not persist DateTimeKind. KittyClaw stores these timestamps as UTC,
+        // so a materialized Unspecified value must not be interpreted as machine-local time.
+        _ => DateTime.SpecifyKind(value, DateTimeKind.Utc),
+    };
 
     private static (string Fingerprint, string[] Signals) BuildProgress(
         ColumnAgentResult result, IReadOnlyCollection<string> completedActionIds,

@@ -977,6 +977,34 @@ public sealed class ColumnExecutionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Approved_success_accepts_explicit_utc_evidence_for_sqlite_unspecified_timestamp()
+    {
+        var project = await _projects.CreateProjectAsync("UTC evidence timestamp");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Editorial delivery");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Control", pipelineId: pipeline.Id);
+        var success = await _columns.CreateColumnAsync(project.Slug, "Published", pipelineId: pipeline.Id,
+            role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, success.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Approved integration", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+
+        await _tickets.AddCommentAsync(project.Slug, ticket.Id,
+            "Control approved with verified delivery evidence", "fact-checker");
+        var sqliteVersion = (await _tickets.GetTicketAsync(project.Slug, ticket.Id))!.UpdatedAt;
+        var explicitUtcVersion = DateTime.SpecifyKind(sqliteVersion, DateTimeKind.Utc);
+
+        await _executions.CompleteAsync(project.Slug, execution!, processor,
+            new ColumnAgentResult("approved", [], "Integration verified", Evidence:
+                new ColumnResultEvidence(explicitUtcVersion)), processor.Name);
+
+        var completed = Assert.Single(await _executions.ListAsync(project.Slug, ticket.Id));
+        Assert.Equal(ColumnExecutionStatus.Completed, completed.Status);
+        Assert.Null(completed.ContextRejectionReason);
+        Assert.Equal(success.Id, (await _tickets.GetTicketAsync(project.Slug, ticket.Id))!.ColumnId);
+    }
+
+    [Fact]
     public async Task Owner_feedback_success_requires_consumed_comment_and_new_delivery()
     {
         var project = await _projects.CreateProjectAsync("Owner feedback guard");
