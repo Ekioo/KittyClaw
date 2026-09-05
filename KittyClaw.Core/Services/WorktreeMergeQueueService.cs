@@ -37,7 +37,12 @@ public sealed record WorktreeMergeRequest(
 public sealed record WorktreeMergeAlertSummary(
     int ActiveCount, WorktreeMergeStatus MostSevereStatus, DateTime OldestUpdatedAt);
 
-/// <summary>Durable, per-project serialized integration queue for canonical ticket worktrees.</summary>
+/// <summary>
+/// Durable, per-project serialized integration queue for canonical ticket worktrees.
+/// The integration phase advances a per-target integration tip (<c>refs/kittyclaw/integration/&lt;target&gt;</c>)
+/// through a dedicated detached-HEAD integration worktree and never mutates the primary checkout;
+/// advancing the local checkout to the tip is a separate synchronization concern.
+/// </summary>
 public sealed partial class WorktreeMergeQueueService(
     ProjectService projects,
     TicketWorktreeService worktrees,
@@ -46,6 +51,10 @@ public sealed partial class WorktreeMergeQueueService(
     Action<string, string>? beforeFastForward = null)
 {
     private const int MaxTargetAdvanceRetries = 3;
+    private const string DivergedTipError =
+        "The target branch received external commits that are not part of the integration tip. "
+        + "Reconcile the target branch with the integration tip (for example merge the integration tip ref "
+        + "into the target branch), then resume; integration is paused until the divergence is resolved.";
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> ProjectGates =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<long, byte> _activeMaintenanceWrites = new();
@@ -164,7 +173,7 @@ public sealed partial class WorktreeMergeQueueService(
             if (!inspected.IsDirty
                 && string.IsNullOrWhiteSpace(inspected.Error)
                 && head.ExitCode == 0
-                && IsAncestor(repository, head.Output.Trim(), project.IntegrationBranch))
+                && IsIntegratedCommit(repository, head.Output.Trim(), project.IntegrationBranch))
             {
                 var recoveryAt = DateTime.UtcNow;
                 var sourceCommit = head.Output.Trim();
@@ -287,7 +296,7 @@ public sealed partial class WorktreeMergeQueueService(
 
         var sourceCommit = head.Output.Trim();
         var repository = projects.ResolveRepositoryPath(project);
-        if (IsAncestor(repository, sourceCommit, project.IntegrationBranch!))
+        if (IsIntegratedCommit(repository, sourceCommit, project.IntegrationBranch!))
         {
             if (request.Status == WorktreeMergeStatus.Completed &&
                 string.Equals(request.IntegratedCommit, sourceCommit, StringComparison.Ordinal))
@@ -463,7 +472,7 @@ public sealed partial class WorktreeMergeQueueService(
 
         var repository = projects.ResolveRepositoryPath(project);
         if (string.IsNullOrWhiteSpace(project.IntegrationBranch)
-            || !IsAncestor(repository, sourceCommit, project.IntegrationBranch))
+            || !IsIntegratedCommit(repository, sourceCommit, project.IntegrationBranch))
         {
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Pending},
@@ -594,7 +603,7 @@ public sealed partial class WorktreeMergeQueueService(
             var head = RunGit(request.WorktreePath, ["rev-parse", "HEAD"]).Output.Trim();
             if (string.Equals(head, request.SourceCommit, StringComparison.Ordinal))
             {
-                var integrated = IsAncestor(request.WorktreePath, head, request.TargetBranch);
+                var integrated = IsIntegratedCommit(request.WorktreePath, head, request.TargetBranch);
                 await db.Database.ExecuteSqlInterpolatedAsync($"""
                     UPDATE WorktreeMergeQueue SET Status = {(int)(integrated
                             ? WorktreeMergeStatus.Completed : WorktreeMergeStatus.Pending)},
@@ -653,6 +662,7 @@ public sealed partial class WorktreeMergeQueueService(
         try
         {
             var worktreeIsRegistered = IsRegisteredWorktree(repository, request.WorktreePath);
+            var target = ResolveIntegrationTarget(repository, request.TargetBranch);
             if (request.JobKind == WorktreeMergeJobKind.Ticket && worktreeIsRegistered)
             {
                 var unresolved = ConflictFiles(request.WorktreePath);
@@ -663,7 +673,7 @@ public sealed partial class WorktreeMergeQueueService(
                         string.Join('\n', unresolved));
                 if (!rebaseInProgress)
                 {
-                    var markerFiles = ConflictMarkerFiles(request.WorktreePath, request.TargetBranch);
+                    var markerFiles = ConflictMarkerFiles(request.WorktreePath, target.TipCommit);
                     if (markerFiles.Length > 0)
                         return await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
                             "Files containing unresolved conflict markers were preserved. Remove the markers and verify the intended content before resuming: "
@@ -695,22 +705,20 @@ public sealed partial class WorktreeMergeQueueService(
                 request = request with { SourceCommit = sourceHead };
             }
 
-            // An already-integrated source is proven by ancestry against the target ref and only
-            // needs cleanup, which never mutates the target checkout's files. Only integrations
-            // that must advance the target require a clean checkout on the target branch.
+            // An already-integrated source is proven by ancestry against the integration tip (or the
+            // target branch itself when an operator merged externally) and only needs cleanup, which
+            // never mutates any checkout's files.
             var alreadyIntegrated = !string.IsNullOrWhiteSpace(request.SourceCommit)
-                && IsAncestor(repository, request.SourceCommit!, request.TargetBranch);
+                && IsIntegrated(repository, request.SourceCommit!, request.TargetBranch, target);
             if (!alreadyIntegrated)
             {
-                // The isolated source was checkpointed above, before inspecting the target checkout.
-                // External target changes may pause integration, but they must never leave safe
-                // ticket files uncommitted.
-                if (!IsClean(repository))
+                // Integration advances only the integration tip through the dedicated detached-HEAD
+                // worktree, so a dirty primary checkout never pauses it. Divergence, however, means
+                // the target branch holds external commits the tip does not: advancing the tip past
+                // them could publish an integration that can never fast-forward the local checkout.
+                if (target.Diverged)
                     return await MarkAsync(db, request.Id, WorktreeMergeStatus.BlockedByExternalChanges,
-                        "The target branch checkout has local changes. Runs can continue, but integration is paused until those external changes are resolved.", null);
-                var checkedOut = RunGit(repository, ["branch", "--show-current"]).Output.Trim();
-                if (!string.Equals(checkedOut, request.TargetBranch, StringComparison.Ordinal))
-                    throw new InvalidOperationException($"Integration checkout is on '{checkedOut}', expected '{request.TargetBranch}'.");
+                        DivergedTipError, null);
 
                 if (!worktreeIsRegistered)
                     return await MarkAsync(db, request.Id, WorktreeMergeStatus.Failed,
@@ -735,9 +743,9 @@ public sealed partial class WorktreeMergeQueueService(
                         if (continued.ExitCode != 0)
                             return await MarkGitFailureAsync(db, request, continued);
                     }
-                    else if (!IsAncestor(repository, request.TargetBranch, request.SourceBranch))
+                    else if (!IsAncestor(repository, target.TipCommit, request.SourceBranch))
                     {
-                        var rebased = RunGit(request.WorktreePath, ["rebase", request.TargetBranch], false);
+                        var rebased = RunGit(request.WorktreePath, ["rebase", target.TipCommit], false);
                         if (rebased.ExitCode != 0)
                             rebased = CompleteMemoryOnlyRebase(request.WorktreePath, rebased);
                         if (rebased.ExitCode != 0)
@@ -750,9 +758,9 @@ public sealed partial class WorktreeMergeQueueService(
                     await SetSourceCommitAsync(db, request.Id, sourceCommit);
                     request = request with { SourceCommit = sourceCommit };
                     await SetStateAsync(db, request.Id, WorktreeMergeStatus.Processing, WorktreeMergeCheckpoint.Rebase);
-                    if (!IsAncestor(repository, request.TargetBranch, request.SourceBranch))
+                    if (!IsAncestor(repository, target.TipCommit, request.SourceBranch))
                     {
-                        var rebased = RunGit(request.WorktreePath, ["rebase", request.TargetBranch], false);
+                        var rebased = RunGit(request.WorktreePath, ["rebase", target.TipCommit], false);
                         if (rebased.ExitCode != 0)
                             rebased = CompleteMemoryOnlyRebase(request.WorktreePath, rebased);
                         if (rebased.ExitCode != 0)
@@ -760,12 +768,16 @@ public sealed partial class WorktreeMergeQueueService(
                     }
                 }
 
-                // A resumed rebase may have started against an older target. The target can
-                // legitimately advance while the request waits for conflict resolution, so prove
-                // ancestry again before attempting the fast-forward and catch up when necessary.
-                if (!IsAncestor(repository, request.TargetBranch, request.SourceBranch))
+                // A resumed rebase may have started against an older tip. The tip can legitimately
+                // advance while the request waits for conflict resolution, so prove ancestry again
+                // before attempting the fast-forward and catch up when necessary.
+                target = ResolveIntegrationTarget(repository, request.TargetBranch);
+                if (target.Diverged)
+                    return await MarkAsync(db, request.Id, WorktreeMergeStatus.BlockedByExternalChanges,
+                        DivergedTipError, null);
+                if (!IsAncestor(repository, target.TipCommit, request.SourceBranch))
                 {
-                    var catchUpRebase = RunGit(request.WorktreePath, ["rebase", request.TargetBranch], false);
+                    var catchUpRebase = RunGit(request.WorktreePath, ["rebase", target.TipCommit], false);
                     if (catchUpRebase.ExitCode != 0)
                         catchUpRebase = CompleteMemoryOnlyRebase(request.WorktreePath, catchUpRebase);
                     if (catchUpRebase.ExitCode != 0)
@@ -777,34 +789,58 @@ public sealed partial class WorktreeMergeQueueService(
                 {
                     ct.ThrowIfCancellationRequested();
                     await SetStateAsync(db, request.Id, WorktreeMergeStatus.Processing, WorktreeMergeCheckpoint.Merge);
-                    var targetBeforeMerge = RunGit(repository, ["rev-parse", request.TargetBranch]).Output.Trim();
                     beforeFastForward?.Invoke(repository, request.TargetBranch);
-                    var ff = RunGit(repository, ["merge", "--ff-only", request.SourceBranch], false);
+                    var integrationWorktree = EnsureIntegrationWorktree(repository, slug, target.TipCommit);
+                    var ff = RunGit(integrationWorktree, ["merge", "--ff-only", rebasedCommit], false);
+                    string failure;
                     if (ff.ExitCode == 0)
-                        break;
+                    {
+                        // The target branch may receive external commits while the fast-forward is
+                        // validated; re-resolving before publishing keeps them ahead of the new tip.
+                        // The compare-and-swap then rejects a tip moved by a concurrent process.
+                        var latest = ResolveIntegrationTarget(repository, request.TargetBranch);
+                        if (!latest.Diverged && string.Equals(latest.TipCommit, target.TipCommit, StringComparison.Ordinal))
+                        {
+                            var published = RunGit(repository,
+                                ["update-ref", target.TipRef, rebasedCommit, target.RefValue ?? ""], false);
+                            if (published.ExitCode == 0)
+                                break;
+                            failure = published.Error;
+                        }
+                        else
+                            failure = "The integration target advanced while the fast-forward was validated.";
+                    }
+                    else
+                        failure = ff.Error;
 
-                    var targetAfterFailure = RunGit(repository, ["rev-parse", request.TargetBranch]).Output.Trim();
+                    var refreshed = ResolveIntegrationTarget(repository, request.TargetBranch);
+                    if (refreshed.Diverged)
+                        return await MarkAsync(db, request.Id, WorktreeMergeStatus.BlockedByExternalChanges,
+                            DivergedTipError, null);
                     if (attempt >= MaxTargetAdvanceRetries - 1
-                        || string.Equals(targetBeforeMerge, targetAfterFailure, StringComparison.Ordinal))
-                        throw new InvalidOperationException(ff.Error.Trim());
+                        || (string.Equals(refreshed.TipCommit, target.TipCommit, StringComparison.Ordinal)
+                            && string.Equals(refreshed.RefValue, target.RefValue, StringComparison.Ordinal)))
+                        throw new InvalidOperationException(failure.Trim());
 
+                    target = refreshed;
                     await SetStateAsync(db, request.Id, WorktreeMergeStatus.Processing, WorktreeMergeCheckpoint.Rebase);
-                    var retryRebase = RunGit(request.WorktreePath, ["rebase", request.TargetBranch], false);
+                    var retryRebase = RunGit(request.WorktreePath, ["rebase", target.TipCommit], false);
                     if (retryRebase.ExitCode != 0)
                         retryRebase = CompleteMemoryOnlyRebase(request.WorktreePath, retryRebase);
                     if (retryRebase.ExitCode != 0)
                         return await MarkGitFailureAsync(db, request, retryRebase);
                     rebasedCommit = RunGit(request.WorktreePath, ["rev-parse", "HEAD"]).Output.Trim();
                 }
-                if (!IsAncestor(repository, rebasedCommit, request.TargetBranch))
-                    throw new InvalidOperationException($"Commit {rebasedCommit} is not reachable from {request.TargetBranch}.");
+                if (!IsIntegratedCommit(repository, rebasedCommit, request.TargetBranch))
+                    throw new InvalidOperationException($"Commit {rebasedCommit} is not reachable from the integration tip of {request.TargetBranch}.");
                 await SetSourceCommitAsync(db, request.Id, rebasedCommit);
                 request = request with { SourceCommit = rebasedCommit };
             }
 
-            var integrated = request.SourceCommit ?? RunGit(repository, ["rev-parse", request.TargetBranch]).Output.Trim();
-            if (!IsAncestor(repository, integrated, request.TargetBranch))
-                throw new InvalidOperationException($"Commit {integrated} is not reachable from {request.TargetBranch}; cleanup was stopped.");
+            var integrated = request.SourceCommit
+                ?? ResolveIntegrationTarget(repository, request.TargetBranch).TipCommit;
+            if (!IsIntegratedCommit(repository, integrated, request.TargetBranch))
+                throw new InvalidOperationException($"Commit {integrated} is not reachable from the integration tip of {request.TargetBranch}; cleanup was stopped.");
             var removeAfterIntegration = request.JobKind == WorktreeMergeJobKind.Ticket
                 || request.Status == WorktreeMergeStatus.Quarantined;
             var registeredForCleanup = IsRegisteredWorktree(repository, request.WorktreePath);
@@ -843,6 +879,72 @@ public sealed partial class WorktreeMergeQueueService(
 
     private static bool IsAncestor(string repository, string commit, string target) =>
         RunGit(repository, ["merge-base", "--is-ancestor", commit, target], false).ExitCode == 0;
+
+    /// <summary>
+    /// Durable ref recording how far integrations have advanced for a target branch. It is never a
+    /// checked-out branch, so publishing it cannot desynchronize any checkout; the local checkout
+    /// catches up during the separate synchronization step.
+    /// </summary>
+    public static string IntegrationTipRef(string targetBranch) => $"refs/kittyclaw/integration/{targetBranch}";
+
+    private sealed record IntegrationTarget(string TipRef, string? RefValue, string TipCommit, bool Diverged);
+
+    private static IntegrationTarget? TryResolveIntegrationTarget(string gitPath, string targetBranch)
+    {
+        var head = RunGit(gitPath, ["rev-parse", "--verify", $"refs/heads/{targetBranch}"], false);
+        if (head.ExitCode != 0) return null;
+        var targetHead = head.Output.Trim();
+        var tipRef = IntegrationTipRef(targetBranch);
+        var recorded = RunGit(gitPath, ["rev-parse", "--verify", tipRef], false);
+        var refValue = recorded.ExitCode == 0 ? recorded.Output.Trim() : null;
+        if (refValue is null || string.Equals(refValue, targetHead, StringComparison.Ordinal)
+            || IsAncestor(gitPath, refValue, targetHead))
+            return new(tipRef, refValue, targetHead, false);
+        if (IsAncestor(gitPath, targetHead, refValue))
+            return new(tipRef, refValue, refValue, false);
+        return new(tipRef, refValue, refValue, true);
+    }
+
+    private static IntegrationTarget ResolveIntegrationTarget(string gitPath, string targetBranch) =>
+        TryResolveIntegrationTarget(gitPath, targetBranch)
+        ?? throw new InvalidOperationException($"The integration branch '{targetBranch}' does not exist.");
+
+    private static bool IsIntegrated(string gitPath, string commit, string targetBranch, IntegrationTarget target) =>
+        IsAncestor(gitPath, commit, target.TipCommit) || IsAncestor(gitPath, commit, targetBranch);
+
+    private static bool IsIntegratedCommit(string gitPath, string commit, string targetBranch) =>
+        TryResolveIntegrationTarget(gitPath, targetBranch) is { } target
+        && IsIntegrated(gitPath, commit, targetBranch, target);
+
+    /// <summary>
+    /// The dedicated per-project integration worktree. It always rides a detached HEAD so it never
+    /// claims branch ownership, and it only ever materializes commits that are already durable,
+    /// so resetting it to the current tip can never destroy the sole copy of any change.
+    /// </summary>
+    private static string EnsureIntegrationWorktree(string repository, string projectSlug, string tipCommit)
+    {
+        var parent = Directory.GetParent(repository)?.FullName
+            ?? throw new InvalidOperationException($"Repository '{repository}' has no parent directory.");
+        var repositoryName = Path.GetFileName(Path.TrimEndingDirectorySeparator(repository));
+        var path = Path.GetFullPath(Path.Combine(parent, $"{repositoryName}.worktrees", $"integration-{SafeName(projectSlug)}"));
+        if (IsRegisteredWorktree(repository, path) && !Directory.Exists(path))
+            RunGit(repository, ["worktree", "prune"], false);
+        if (!IsRegisteredWorktree(repository, path))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            RunGit(repository, ["worktree", "add", "--detach", path, tipCommit]);
+            return path;
+        }
+        var headRef = RunGit(path, ["rev-parse", "--abbrev-ref", "HEAD"]).Output.Trim();
+        if (!string.Equals(headRef, "HEAD", StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                $"The integration worktree '{path}' unexpectedly has branch '{headRef}' checked out; remove the worktree before resuming.");
+        RunGit(path, ["reset", "--hard", tipCommit]);
+        return path;
+    }
+
+    private static string SafeName(string value) =>
+        new(value.ToLowerInvariant().Select(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' ? c : '-').ToArray());
 
     private static bool IsRebaseInProgress(string worktreePath)
     {
@@ -1133,10 +1235,10 @@ public sealed partial class WorktreeMergeQueueService(
         return process.ExitCode == 0;
     }
 
-    private static string[] ConflictMarkerFiles(string worktreePath, string targetBranch)
+    private static string[] ConflictMarkerFiles(string worktreePath, string integrationTip)
     {
         var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var committed = RunGit(worktreePath, ["diff", "--name-only", "-z", $"{targetBranch}...HEAD"], false);
+        var committed = RunGit(worktreePath, ["diff", "--name-only", "-z", $"{integrationTip}...HEAD"], false);
         foreach (var path in committed.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
             candidates.Add(path.Replace('\\', '/'));
         var status = RunGit(worktreePath, ["status", "--porcelain", "-z", "--untracked-files=all"], false);
