@@ -27,6 +27,7 @@ public sealed class WorktreeMergeQueueProcessor(
                 try
                 {
                     await queue.ProcessNextAsync(project.Slug, stoppingToken);
+                    await queue.SynchronizeNextAsync(project.Slug, stoppingToken);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
                 catch (Exception ex)
@@ -42,6 +43,7 @@ public sealed class WorktreeMergeQueueProcessor(
                 {
                     await queue.RecoverTerminalWorktreesAsync(project.Slug, stoppingToken);
                     await queue.ProcessNextAsync(project.Slug, stoppingToken);
+                    await queue.SynchronizeNextAsync(project.Slug, stoppingToken);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
                 catch (Exception ex)

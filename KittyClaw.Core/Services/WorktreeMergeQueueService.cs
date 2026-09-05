@@ -25,6 +25,11 @@ public enum WorktreeMergeStatus
 
 public enum WorktreeMergeJobKind { Ticket = 0, Maintenance = 1 }
 public enum WorktreeMergeCheckpoint { Preparation = 0, Writing = 1, Validation = 2, Commit = 3, Waiting = 4, Rebase = 5, Merge = 6 }
+public enum LocalCheckoutSyncStatus
+{
+    NotRequired = 0, Pending = 1, Processing = 2, Completed = 3, Conflict = 4,
+    Diverged = 5, CheckoutMissing = 6, ConcurrentChanges = 7, CleanupPending = 8
+}
 
 public sealed record WorktreeMergeRequest(
     long Id, int TicketId, int RootTicketId, string WorktreePath, string SourceBranch,
@@ -32,7 +37,10 @@ public sealed record WorktreeMergeRequest(
     string? SourceCommit, string? IntegratedCommit, string? Error, string? ConflictFiles,
     WorktreeMergeJobKind JobKind = WorktreeMergeJobKind.Ticket,
     WorktreeMergeCheckpoint Checkpoint = WorktreeMergeCheckpoint.Preparation,
-    DateTime? LocalIntegratedAt = null, DateTime? RemotePublishedAt = null);
+    DateTime? LocalIntegratedAt = null, DateTime? RemotePublishedAt = null,
+    LocalCheckoutSyncStatus SyncStatus = LocalCheckoutSyncStatus.NotRequired,
+    string? SyncTargetCommit = null, string? SyncBackupRef = null,
+    string? SyncError = null, string? SyncConflictFiles = null, DateTime? SyncUpdatedAt = null);
 
 public sealed record WorktreeMergeAlertSummary(
     int ActiveCount, WorktreeMergeStatus MostSevereStatus, DateTime OldestUpdatedAt);
@@ -48,7 +56,10 @@ public sealed partial class WorktreeMergeQueueService(
     TicketWorktreeService worktrees,
     WorktreeFinalizationCoordinator? finalization = null,
     AgentRunRegistry? runs = null,
-    Action<string, string>? beforeFastForward = null)
+    Action<string, string>? beforeFastForward = null,
+    Action<string>? beforeLocalSync = null,
+    Action<string>? beforeLocalSyncCompletion = null,
+    Action<string>? afterSyncCompletionPersisted = null)
 {
     private const int MaxTargetAdvanceRetries = 3;
     private const string DivergedTipError =
@@ -139,6 +150,22 @@ public sealed partial class WorktreeMergeQueueService(
                     ON WorktreeMergeQueue(RootTicketId)
                     WHERE Status NOT IN ({(int)WorktreeMergeStatus.Completed}, {(int)WorktreeMergeStatus.Quarantined});
                 """));
+        await MigrationGate.RunOnceAsync(db, "worktree-merge-queue-v5-local-sync", static async d =>
+        {
+            foreach (var sql in new[]
+            {
+                "ALTER TABLE WorktreeMergeQueue ADD COLUMN SyncStatus INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE WorktreeMergeQueue ADD COLUMN SyncTargetCommit TEXT NULL",
+                "ALTER TABLE WorktreeMergeQueue ADD COLUMN SyncBackupRef TEXT NULL",
+                "ALTER TABLE WorktreeMergeQueue ADD COLUMN SyncError TEXT NULL",
+                "ALTER TABLE WorktreeMergeQueue ADD COLUMN SyncConflictFiles TEXT NULL",
+                "ALTER TABLE WorktreeMergeQueue ADD COLUMN SyncUpdatedAt TEXT NULL"
+            })
+            {
+                try { await d.Database.ExecuteSqlRawAsync(sql); }
+                catch (SqliteException ex) when (ex.SqliteErrorCode == 1 && ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase)) { }
+            }
+        });
     }
 
     public async Task<WorktreeMergeRequest> EnqueueAsync(string projectSlug, int ticketId, CancellationToken ct)
@@ -866,7 +893,10 @@ public sealed partial class WorktreeMergeQueueService(
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Completed},
                     Checkpoint = {(int)WorktreeMergeCheckpoint.Merge}, IntegratedCommit = {integrated},
-                    LocalIntegratedAt = {DateTime.UtcNow}, Error = NULL, ConflictFiles = NULL, UpdatedAt = {DateTime.UtcNow}
+                    LocalIntegratedAt = {DateTime.UtcNow}, Error = NULL, ConflictFiles = NULL,
+                    SyncStatus = {(int)LocalCheckoutSyncStatus.Pending}, SyncTargetCommit = {integrated},
+                    SyncError = NULL, SyncConflictFiles = NULL, SyncUpdatedAt = {DateTime.UtcNow},
+                    UpdatedAt = {DateTime.UtcNow}
                 WHERE Id = {request.Id}
                 """);
             return (await ReadByIdAsync(db, request.Id))!;
@@ -876,6 +906,205 @@ public sealed partial class WorktreeMergeQueueService(
             return await MarkAsync(db, request.Id, WorktreeMergeStatus.Failed, ex.Message, null);
         }
     }
+
+    /// <summary>
+    /// Reconciles one integrated commit into the configured local checkout. Integration and later
+    /// jobs never wait on this step: a conflict remains on its own durable row with a recoverable ref.
+    /// </summary>
+    public async Task<WorktreeMergeRequest?> SynchronizeNextAsync(string projectSlug, CancellationToken ct)
+    {
+        var gate = ProjectGates.GetOrAdd(projectSlug, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            await using var db = projects.GetProjectDb(projectSlug);
+            await EnsureTableAsync(db);
+            await db.Database.ExecuteSqlRawAsync($"UPDATE WorktreeMergeQueue SET SyncStatus = {(int)LocalCheckoutSyncStatus.Pending}, SyncError = 'Recovered local synchronization after interruption' WHERE SyncStatus = {(int)LocalCheckoutSyncStatus.Processing}");
+            var request = await ReadNextSyncAsync(db);
+            if (request is null) return null;
+            var project = await projects.GetProjectAsync(projectSlug);
+            if (project is null) return null;
+            var repository = projects.ResolveRepositoryPath(project);
+            return await SynchronizeAsync(db, request, repository, ct);
+        }
+        finally { gate.Release(); }
+    }
+
+    private async Task<WorktreeMergeRequest> SynchronizeAsync(
+        TodoDbContext db, WorktreeMergeRequest request, string repository, CancellationToken ct)
+    {
+        if (request.SyncStatus == LocalCheckoutSyncStatus.CleanupPending)
+            return await CompleteSyncAsync(db, request.Id, request.SyncTargetCommit!, request.SyncBackupRef, repository);
+
+        if (!Directory.Exists(repository) || RunGit(repository, ["rev-parse", "--show-toplevel"], false).ExitCode != 0)
+            return await MarkSyncAsync(db, request.Id, LocalCheckoutSyncStatus.CheckoutMissing,
+                "The configured local checkout is absent. Integration is safe; restore or reconfigure the checkout, then retry synchronization.", null,
+                request.SyncTargetCommit ?? request.IntegratedCommit ?? "unknown", request.SyncBackupRef);
+        var target = ResolveIntegrationTarget(repository, request.TargetBranch);
+        var desired = target.TipCommit; // always catch up to the newest successful integration
+
+        var branch = RunGit(repository, ["branch", "--show-current"], false).Output.Trim();
+        if (!string.Equals(branch, request.TargetBranch, StringComparison.Ordinal))
+            return await MarkSyncAsync(db, request.Id, LocalCheckoutSyncStatus.Diverged,
+                $"The local checkout is on branch '{branch}', not '{request.TargetBranch}'. Check out the target branch and retry synchronization.", null, desired, request.SyncBackupRef);
+        var localHead = RunGit(repository, ["rev-parse", "HEAD"]).Output.Trim();
+        var alreadyAtDesired = string.Equals(localHead, desired, StringComparison.Ordinal);
+        if (alreadyAtDesired && string.IsNullOrWhiteSpace(request.SyncBackupRef))
+            return await CompleteSyncAsync(db, request.Id, desired, request.SyncBackupRef, repository);
+        if (!alreadyAtDesired && !IsAncestor(repository, localHead, desired))
+            return await MarkSyncAsync(db, request.Id, LocalCheckoutSyncStatus.Diverged,
+                $"Local commits diverge from integration commit {desired}. Reconcile the commits manually; the integrated result remains available at {target.TipRef}.", null, desired, request.SyncBackupRef);
+
+        await SetSyncProcessingAsync(db, request.Id, desired);
+        var backupRef = request.SyncBackupRef;
+        if (string.IsNullOrWhiteSpace(backupRef) && !IsClean(repository))
+        {
+            var marker = $"KittyClaw local synchronization #{request.Id}";
+            var stashed = RunGit(repository, ["stash", "push", "--include-untracked", "--message", marker], false);
+            if (stashed.ExitCode != 0)
+                return await MarkSyncAsync(db, request.Id, LocalCheckoutSyncStatus.ConcurrentChanges,
+                    $"Local changes could not be saved safely: {stashed.Error.Trim()}", null, desired, null);
+            var stashCommit = RunGit(repository, ["rev-parse", "stash@{0}"], false);
+            if (stashCommit.ExitCode != 0)
+                return await MarkSyncAsync(db, request.Id, LocalCheckoutSyncStatus.ConcurrentChanges,
+                    "Local changes were moved to Git's stash but the durable backup could not be identified. Recover the newest stash before retrying.", null, desired, null);
+            backupRef = $"refs/kittyclaw/sync-backups/{request.Id}";
+            RunGit(repository, ["update-ref", backupRef, stashCommit.Output.Trim()]);
+            await SetSyncBackupAsync(db, request.Id, backupRef);
+            RunGit(repository, ["stash", "drop", "stash@{0}"]);
+        }
+
+        beforeLocalSync?.Invoke(repository);
+        ct.ThrowIfCancellationRequested();
+        if (!IsClean(repository))
+            return await MarkSyncAsync(db, request.Id, LocalCheckoutSyncStatus.ConcurrentChanges,
+                "The local checkout changed after its backup was captured. The new files were left untouched; retry after external writes stop.", null, desired, backupRef);
+
+        if (!alreadyAtDesired)
+        {
+            var ff = RunGit(repository, ["merge", "--ff-only", desired], false);
+            if (ff.ExitCode != 0)
+                return await MarkSyncAsync(db, request.Id, LocalCheckoutSyncStatus.ConcurrentChanges,
+                    $"The local checkout could not be advanced safely: {ff.Error.Trim()}", null, desired, backupRef);
+        }
+
+        if (!string.IsNullOrWhiteSpace(backupRef))
+        {
+            var restored = RunGit(repository, ["stash", "apply", "--index", backupRef], false);
+            if (restored.ExitCode != 0)
+            {
+                var conflicts = ConflictFiles(repository);
+                return await MarkSyncAsync(db, request.Id, LocalCheckoutSyncStatus.Conflict,
+                    $"The integrated checkout is current, but saved local work conflicted while being restored. Resolve the listed files; the complete backup remains at {backupRef}.",
+                    conflicts.Length == 0 ? null : string.Join('\n', conflicts), desired, backupRef);
+            }
+        }
+
+        var completedState = CaptureCheckoutState(repository);
+        beforeLocalSyncCompletion?.Invoke(repository);
+        ct.ThrowIfCancellationRequested();
+        var finalState = CaptureCheckoutState(repository);
+        var finalHead = RunGit(repository, ["rev-parse", "HEAD"], false).Output.Trim();
+        if (!string.Equals(completedState, finalState, StringComparison.Ordinal)
+            || !string.Equals(finalHead, desired, StringComparison.Ordinal))
+            return await MarkSyncAsync(db, request.Id, LocalCheckoutSyncStatus.ConcurrentChanges,
+                $"The local checkout files, index, branch, or HEAD changed while synchronization was completing. The external change and recoverable backup at {backupRef ?? "the current checkout"} were preserved; reconcile HEAD with {desired}, then retry after external writes stop.",
+                null, desired, backupRef);
+        return await CompleteSyncAsync(db, request.Id, desired, backupRef, repository);
+    }
+
+    private static string CaptureCheckoutState(string repository)
+    {
+        using var hash = System.Security.Cryptography.IncrementalHash.CreateHash(
+            System.Security.Cryptography.HashAlgorithmName.SHA256);
+        var visibleFiles = RunGit(repository,
+            ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], false).Output;
+        foreach (var relative in visibleFiles.Split('\0', StringSplitOptions.RemoveEmptyEntries)
+                     .OrderBy(path => path, StringComparer.Ordinal))
+        {
+            hash.AppendData(System.Text.Encoding.UTF8.GetBytes(relative));
+            try
+            {
+                var file = Path.Combine(repository, relative);
+                using var stream = File.Open(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                var buffer = new byte[81920];
+                int read;
+                while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+                    hash.AppendData(buffer, 0, read);
+            }
+            catch (IOException)
+            {
+                hash.AppendData(System.Text.Encoding.UTF8.GetBytes("<concurrent-io>"));
+            }
+        }
+        hash.AppendData(System.Text.Encoding.UTF8.GetBytes(RunGit(repository, ["write-tree"], false).Output));
+        hash.AppendData(System.Text.Encoding.UTF8.GetBytes(RunGit(repository, ["symbolic-ref", "--quiet", "HEAD"], false).Output));
+        hash.AppendData(System.Text.Encoding.UTF8.GetBytes(RunGit(repository, ["rev-parse", "HEAD"], false).Output));
+        return Convert.ToHexString(hash.GetHashAndReset());
+    }
+
+    public async Task<WorktreeMergeRequest?> RetrySynchronizationAsync(string projectSlug, long requestId, CancellationToken ct)
+    {
+        var gate = ProjectGates.GetOrAdd(projectSlug, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            await using var db = projects.GetProjectDb(projectSlug);
+            await EnsureTableAsync(db);
+            var request = await ReadByIdAsync(db, requestId);
+            if (request is null || request.SyncStatus is not (LocalCheckoutSyncStatus.Conflict
+                or LocalCheckoutSyncStatus.Diverged or LocalCheckoutSyncStatus.CheckoutMissing
+                or LocalCheckoutSyncStatus.ConcurrentChanges)) return null;
+            var project = await projects.GetProjectAsync(projectSlug);
+            if (project is null) return null;
+            var repository = projects.ResolveRepositoryPath(project);
+            // Completing in place is only safe while the reconciled work is still visible in the
+            // working tree. A checkout reset clean to the target must take the full path below so
+            // the durable backup is re-applied instead of silently deleted.
+            if (request.SyncStatus == LocalCheckoutSyncStatus.Conflict && Directory.Exists(repository)
+                && ConflictFiles(repository).Length == 0
+                && !IsClean(repository)
+                && string.Equals(RunGit(repository, ["rev-parse", "HEAD"], false).Output.Trim(), request.SyncTargetCommit, StringComparison.Ordinal))
+                return await CompleteSyncAsync(db, request.Id, request.SyncTargetCommit!, request.SyncBackupRef, repository);
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET SyncStatus = {(int)LocalCheckoutSyncStatus.Pending}, SyncError = 'Local synchronization retry requested', SyncUpdatedAt = {DateTime.UtcNow} WHERE Id = {requestId}");
+            request = (await ReadByIdAsync(db, requestId))!;
+            return await SynchronizeAsync(db, request, repository, ct);
+        }
+        finally { gate.Release(); }
+    }
+
+    private async Task<WorktreeMergeRequest> CompleteSyncAsync(TodoDbContext db, long id, string desired, string? backupRef, string repository)
+    {
+        var now = DateTime.UtcNow;
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET SyncStatus = {(int)LocalCheckoutSyncStatus.CleanupPending}, SyncTargetCommit = {desired}, SyncError = NULL, SyncConflictFiles = NULL, SyncUpdatedAt = {now}, UpdatedAt = {now} WHERE Id = {id}");
+        afterSyncCompletionPersisted?.Invoke(repository);
+        if (!string.IsNullOrWhiteSpace(backupRef))
+        {
+            var deleted = RunGit(repository, ["update-ref", "-d", backupRef], false);
+            if (deleted.ExitCode != 0)
+            {
+                var error = $"The local work was restored, but its recoverable backup could not be cleaned up: {deleted.Error.Trim()}. Retry cleanup; the checkout is already synchronized.";
+                await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET SyncError = {error}, SyncUpdatedAt = {DateTime.UtcNow}, UpdatedAt = {DateTime.UtcNow} WHERE Id = {id}");
+                return (await ReadByIdAsync(db, id))!;
+            }
+        }
+        now = DateTime.UtcNow;
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET SyncStatus = {(int)LocalCheckoutSyncStatus.Completed}, SyncTargetCommit = {desired}, SyncBackupRef = NULL, SyncError = NULL, SyncConflictFiles = NULL, SyncUpdatedAt = {now}, UpdatedAt = {now} WHERE Id = {id}");
+        return (await ReadByIdAsync(db, id))!;
+    }
+
+    private static async Task<WorktreeMergeRequest> MarkSyncAsync(TodoDbContext db, long id, LocalCheckoutSyncStatus status, string error, string? conflicts, string target, string? backupRef)
+    {
+        var now = DateTime.UtcNow;
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET SyncStatus = {(int)status}, SyncTargetCommit = {target}, SyncBackupRef = {backupRef}, SyncError = {error}, SyncConflictFiles = {conflicts}, SyncUpdatedAt = {now}, UpdatedAt = {now} WHERE Id = {id}");
+        return (await ReadByIdAsync(db, id))!;
+    }
+
+    private static Task SetSyncProcessingAsync(TodoDbContext db, long id, string target) =>
+        db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET SyncStatus = {(int)LocalCheckoutSyncStatus.Processing}, SyncTargetCommit = {target}, SyncUpdatedAt = {DateTime.UtcNow} WHERE Id = {id}");
+
+    private static Task SetSyncBackupAsync(TodoDbContext db, long id, string backupRef) =>
+        db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET SyncBackupRef = {backupRef}, SyncUpdatedAt = {DateTime.UtcNow} WHERE Id = {id}");
 
     private static bool IsAncestor(string repository, string commit, string target) =>
         RunGit(repository, ["merge-base", "--is-ancestor", commit, target], false).ExitCode == 0;
@@ -1322,6 +1551,17 @@ public sealed partial class WorktreeMergeQueueService(
     private static Task<WorktreeMergeRequest?> ReadByRootAsync(TodoDbContext db, int root) =>
         ReadSingleAsync(db, "SELECT * FROM WorktreeMergeQueue WHERE RootTicketId = $root ORDER BY Id DESC LIMIT 1", ("$root", root));
 
+    private static async Task<WorktreeMergeRequest?> ReadNextSyncAsync(TodoDbContext db)
+    {
+        var connection = (SqliteConnection)db.Database.GetDbConnection();
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT * FROM WorktreeMergeQueue WHERE SyncStatus IN ($pending, $cleanup) ORDER BY CASE SyncStatus WHEN $cleanup THEN 0 ELSE 1 END, Id LIMIT 1";
+        command.Parameters.AddWithValue("$pending", (int)LocalCheckoutSyncStatus.Pending);
+        command.Parameters.AddWithValue("$cleanup", (int)LocalCheckoutSyncStatus.CleanupPending);
+        return (await ReadAllAsync(command)).SingleOrDefault();
+    }
+
     // The partial unique index guarantees at most one such row; SingleOrDefault asserts it.
     private static Task<WorktreeMergeRequest?> ReadActiveMaintenanceAsync(TodoDbContext db) =>
         ReadSingleAsync(db, $"""
@@ -1369,7 +1609,11 @@ public sealed partial class WorktreeMergeQueueService(
             GetNullable(reader, "Error"), GetNullable(reader, "ConflictFiles"),
             (WorktreeMergeJobKind)reader.GetInt32(reader.GetOrdinal("JobKind")),
             (WorktreeMergeCheckpoint)reader.GetInt32(reader.GetOrdinal("Checkpoint")),
-            GetNullableDateTime(reader, "LocalIntegratedAt"), GetNullableDateTime(reader, "RemotePublishedAt")));
+            GetNullableDateTime(reader, "LocalIntegratedAt"), GetNullableDateTime(reader, "RemotePublishedAt"),
+            (LocalCheckoutSyncStatus)reader.GetInt32(reader.GetOrdinal("SyncStatus")),
+            GetNullable(reader, "SyncTargetCommit"), GetNullable(reader, "SyncBackupRef"),
+            GetNullable(reader, "SyncError"), GetNullable(reader, "SyncConflictFiles"),
+            GetNullableDateTime(reader, "SyncUpdatedAt")));
         return rows;
     }
 
