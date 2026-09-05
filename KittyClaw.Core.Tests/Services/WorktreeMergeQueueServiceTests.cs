@@ -8,6 +8,26 @@ namespace KittyClaw.Core.Tests.Services;
 public sealed class WorktreeMergeQueueServiceTests
 {
     [Fact]
+    public async Task GetAsync_ReturnsOneRequestAndItsSynchronizationCheckpoint()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        var queued = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None);
+
+        var request = await fixture.Queue.GetAsync(fixture.Slug, queued.Id);
+
+        Assert.NotNull(request);
+        Assert.Equal(WorktreeMergeStatus.Completed, request.Status);
+        Assert.Equal(LocalCheckoutSyncStatus.Completed, request.SyncStatus);
+        Assert.False(request.HasSynchronizationLag);
+        Assert.False(string.IsNullOrWhiteSpace(request.IntegratedCommit));
+        Assert.Equal(request.IntegratedCommit, request.SyncTargetCommit);
+        Assert.Null(await fixture.Queue.GetAsync(fixture.Slug, long.MaxValue));
+    }
+
+    [Fact]
     public async Task LegacyDuplicateActiveRows_ArePreservedWithoutBlockingMigration()
     {
         using var fixture = await Fixture.CreateAsync();

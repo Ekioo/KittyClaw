@@ -38,7 +38,7 @@ Open the project settings, enter the code repository (absolute or relative to th
 
 For compatibility, projects with no `RepositoryPath` keep the historical workspace-based Git resolution; migration never guesses a nested repository or changes the target. Configure `RepositoryPath` explicitly to opt into a distinct or nested code repository. Control files (`.agents/**`, memories, skills, automations, and dashboard files) always remain rooted at `WorkspacePath`.
 
-When enabled, each ticket drawer shows the canonical root ticket, path and branch shared by the whole ticket family. It also shows worktree cleanliness and merge-queue state/position, with actionable guidance for waiting, dirty checkouts, conflicts, failures and successful integration. Safe retry/resume actions are available for pending or failed requests. When disabled, this panel is absent and the normal ticket flow is unchanged.
+When enabled, each ticket drawer shows the canonical root ticket, path and branch shared by the whole ticket family. Integration and local-checkout synchronization have separate panels and badges: the former shows source and integrated commits, while the latter shows its target commit, any lag or conflict files, and recovery guidance. Integration retry/resume and local synchronization retry are separate actions. When disabled, this panel is absent and the normal ticket flow is unchanged. See [Local checkout synchronization recovery](./local-checkout-sync-recovery.md) before manually changing a conflicted checkout or its backup ref.
 
 ## Caveats
 
@@ -54,6 +54,8 @@ When enabled, each ticket drawer shows the canonical root ticket, path and branc
 - `POST /api/projects/{slug}/worktree-merges` — idempotently enqueues a ticket family for integration.
 - `POST /api/projects/{slug}/worktree-merges/process-next` — processes the oldest pending request.
 - `POST /api/projects/{slug}/worktree-merges/{requestId}/resume` — resumes a failed or conflict-paused request after correction.
+- `GET /api/projects/{slug}/worktree-merges/{requestId}` — reads the integration and synchronization checkpoints for one request.
+- `POST /api/projects/{slug}/worktree-merges/{requestId}/retry-synchronization` — retries a recoverable local-checkout synchronization without re-running integration.
 - `AgentRunner.RunAsync` — selects the execution directory and applies the per-worktree execution gate.
 - `tools/worktree-ensure.ps1`, `tools/worktree-merge.ps1` — explicit helpers for implementation and integration workflows.
 - `KittyClaw.Core/Automation/ActionExecutor.cs` and `RunStateManager.cs` — perform the `{ticketId}` substitution in `concurrencyGroup` and `mutuallyExclusiveWith`.

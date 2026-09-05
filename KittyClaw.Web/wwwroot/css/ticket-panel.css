@@ -592,6 +592,10 @@ select:focus-visible,
     font-size: .78rem;
 }
 .worktree-summary-title { grid-column: 1 / -1; display: flex; align-items: center; gap: .6rem; }
+.worktree-phase { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .3rem 1rem; padding: .55rem .65rem; border: 1px solid var(--border); border-radius: .45rem; background: color-mix(in srgb, var(--surface) 88%, transparent); }
+.worktree-phase-title { grid-column: 1 / -1; display: flex; align-items: center; gap: .55rem; }
+.worktree-phase p, .worktree-phase .worktree-action, .worktree-phase .worktree-error, .worktree-phase .worktree-conflicts, .worktree-sync-lag { grid-column: 1 / -1; }
+.worktree-sync-lag { color: #fbbf24; font-weight: 650; }
 .worktree-summary p, .worktree-error, .worktree-conflicts { grid-column: 1 / -1; margin: .15rem 0; }
 .worktree-summary code { overflow-wrap: anywhere; color: #5eead4; }
 .worktree-state { border-radius: 999px; padding: .12rem .5rem; font-weight: 650; }
@@ -600,7 +604,7 @@ select:focus-visible,
 .worktree-state--danger, .worktree-error, .worktree-conflicts { color: #f87171; }
 .worktree-state--neutral { color: var(--text-muted); background: var(--surface3); }
 .worktree-action { grid-column: 1 / -1; justify-self: start; padding: .3rem .7rem; }
-@media (max-width: 760px) { .worktree-summary { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .worktree-summary, .worktree-phase { grid-template-columns: 1fr; } }
 .ticket-assignee-row {
     display: flex;
     flex-wrap: wrap;
