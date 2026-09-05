@@ -811,6 +811,41 @@ public sealed class ColumnExecutionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Paraphrased_summaries_without_durable_evidence_do_not_bypass_the_loop_guard()
+    {
+        var project = await _projects.CreateProjectAsync("Loop paraphrase filtering");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var drafting = await _columns.CreateColumnAsync(project.Slug, "Drafting", pipelineId: pipeline.Id);
+        var review = await _columns.CreateColumnAsync(project.Slug, "Review", pipelineId: pipeline.Id);
+        var writer = await SaveProcessor(project.Slug, drafting.Id, review.Id);
+        var reviewer = await SaveProcessor(project.Slug, review.Id, drafting.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Paraphrased loop", status: drafting.Name,
+            pipelineId: pipeline.Id, columnId: drafting.Id);
+        var now = DateTime.UtcNow;
+
+        for (var cycle = 1; cycle <= 3; cycle++)
+        {
+            var draft = await _executions.ClaimNextAsync(project.Slug, writer, now.AddMinutes(cycle * 2 - 2));
+            Assert.NotNull(draft);
+            await _executions.CompleteAsync(project.Slug, draft!, writer,
+                new ColumnAgentResult("needs_review", [], $"Draft verdict wording {cycle}"), writer.Name);
+            if (cycle == 3) break;
+
+            var reviewRun = await _executions.ClaimNextAsync(project.Slug, reviewer, now.AddMinutes(cycle * 2 - 1));
+            Assert.NotNull(reviewRun);
+            await _executions.CompleteAsync(project.Slug, reviewRun!, reviewer,
+                new ColumnAgentResult("changes_requested", [], $"Review verdict wording {cycle}"), reviewer.Name);
+        }
+
+        var blockedReview = await _executions.ClaimNextAsync(project.Slug, reviewer, now.AddMinutes(5));
+        var history = await _executions.ListAsync(project.Slug, ticket.Id);
+
+        Assert.Null(blockedReview);
+        var protection = Assert.Single(history, execution => execution.Outcome == "routing_loop");
+        Assert.Contains("repeated_transition_without_material_evidence", protection.LoopDiagnosticJson);
+    }
+
+    [Fact]
     public async Task New_validation_diagnostic_or_human_evidence_is_persisted_as_progress()
     {
         var project = await _projects.CreateProjectAsync("Diagnostic and evidence progress");

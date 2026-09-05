@@ -247,11 +247,19 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         if (incoming is not null)
         {
             var comparable = incomingExecutions.Where(e => e.ProcessorId == incoming.ProcessorId)
-                .OrderByDescending(e => e.EndedAt).Take(2).ToList();
-            if (comparable.Count == 2
+                .OrderByDescending(e => e.EndedAt).Take(3).ToList();
+            var repeatedFingerprint = comparable.Count >= 2
                 && !string.IsNullOrWhiteSpace(comparable[0].ProgressFingerprint)
                 && string.Equals(comparable[0].ProgressFingerprint, comparable[1].ProgressFingerprint,
-                    StringComparison.Ordinal))
+                    StringComparison.Ordinal);
+            // Summaries are useful diagnostics, but an agent can paraphrase the same verdict on
+            // every pass. After two complete round trips, require a durable progress signal
+            // (human/agent comment or completed action) before dispatching the same route again.
+            // This catches A -> B -> A ping-pong loops whose wording changes just enough to evade
+            // the exact-fingerprint guard.
+            var repeatedWithoutMaterialEvidence = comparable.Count == 3
+                && comparable.All(execution => !HasMaterialProgressSignal(execution.ProgressSignalsJson));
+            if (repeatedFingerprint || repeatedWithoutMaterialEvidence)
             {
                 var sourceProcessor = await db.ColumnProcessors.AsNoTracking()
                     .FirstOrDefaultAsync(p => p.Id == incoming.ProcessorId);
@@ -266,7 +274,9 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                     comparedExecutionIds = comparable.Select(e => e.Id).ToArray(),
                     fingerprint = comparable[0].ProgressFingerprint,
                     signals = JsonSerializer.Deserialize<JsonElement>(comparable[0].ProgressSignalsJson),
-                    reason = "same_transition_and_progress_fingerprint"
+                    reason = repeatedFingerprint
+                        ? "same_transition_and_progress_fingerprint"
+                        : "repeated_transition_without_material_evidence"
                 };
                 var protectedExecution = new ColumnExecution
                 {
@@ -799,6 +809,22 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         var author = NormalizeProgressText(comment.Author);
         if (author.Length == 0) return false;
         return author is not "automation" and not "system" and not "kittyclaw";
+    }
+
+    private static bool HasMaterialProgressSignal(string? progressSignalsJson)
+    {
+        if (string.IsNullOrWhiteSpace(progressSignalsJson)) return false;
+        try
+        {
+            var signals = JsonSerializer.Deserialize<string[]>(progressSignalsJson) ?? [];
+            return signals.Any(signal => signal.StartsWith("checkpoint:", StringComparison.Ordinal)
+                || signal.StartsWith("comment:", StringComparison.Ordinal));
+        }
+        catch (JsonException)
+        {
+            // Historical or corrupt diagnostics must not disable the bounded-cycle safeguard.
+            return false;
+        }
     }
 
     private sealed record ProgressComment(string Author, string Content);
