@@ -95,6 +95,9 @@ var maxConcurrent = int.TryParse(Environment.GetEnvironmentVariable("KITTYCLAW_M
 builder.Services.AddSingleton(new RunConcurrencyGate(maxConcurrent));
 builder.Services.AddSingleton<TicketWorktreeService>();
 builder.Services.AddSingleton<DurableWriteRouter>();
+// Shared by WorktreeMergeQueueService (writer) and AgentRunner (reader): lets the end-of-run
+// boundary check classify local-checkout synchronization as a coordinated change, not agent work.
+builder.Services.AddSingleton<PrimaryCheckoutActivityRegistry>();
 builder.Services.AddSingleton<WorktreeMergeQueueService>();
 builder.Services.AddSingleton<WorktreeFinalizationCoordinator>();
 builder.Services.AddHostedService<WorktreeMergeQueueProcessor>();

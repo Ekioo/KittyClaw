@@ -246,6 +246,11 @@ public class AgentRunnerMockIntegrationTests
         var integrated = await queue.ProcessNextAsync(project.Slug, CancellationToken.None);
 
         Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        // Since the integration/synchronization split, integration only advances the durable tip;
+        // the local checkout catches up during the dedicated synchronization step.
+        Assert.False(File.Exists(Path.Combine(repository, "chat-output.txt")));
+        var synchronized = await queue.SynchronizeNextAsync(project.Slug, CancellationToken.None);
+        Assert.Equal(LocalCheckoutSyncStatus.Completed, synchronized!.SyncStatus);
         Assert.Equal("preserved", await File.ReadAllTextAsync(Path.Combine(repository, "chat-output.txt")));
         Assert.Empty(Git(repository, "status", "--porcelain"));
     }

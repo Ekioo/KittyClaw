@@ -1195,6 +1195,31 @@ public sealed class WorktreeMergeQueueServiceTests
     }
 
     [Fact]
+    public async Task LocalSync_RegistersACoordinatedMutationWindow()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var registry = new PrimaryCheckoutActivityRegistry();
+        var since = DateTime.UtcNow;
+        var activeDuringSync = false;
+        var queue = new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees,
+            beforeLocalSyncCompletion: repository =>
+                activeDuringSync = registry.HasCoordinatedMutationSince(repository, DateTime.UtcNow),
+            primaryCheckoutActivity: registry);
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        await queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        await queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        // Integration itself never mutates the local checkout, so no window may be recorded yet.
+        Assert.False(registry.HasCoordinatedMutationSince(fixture.Repository, since));
+
+        var synced = await queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(LocalCheckoutSyncStatus.Completed, synced!.SyncStatus);
+        Assert.True(activeDuringSync);
+        Assert.True(registry.HasCoordinatedMutationSince(fixture.Repository, since));
+        Assert.False(registry.HasCoordinatedMutationSince(fixture.Repository, DateTime.UtcNow.AddMinutes(1)));
+    }
+
+    [Fact]
     public async Task LocalSync_NonConflictingTrackedStagedAndUntrackedWorkIsRestoredExactly()
     {
         using var fixture = await Fixture.CreateAsync();

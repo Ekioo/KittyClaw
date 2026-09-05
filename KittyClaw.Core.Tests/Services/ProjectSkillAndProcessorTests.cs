@@ -297,6 +297,9 @@ public sealed class ProjectSkillAndProcessorTests : IDisposable
         var integrated = await queue.ProcessNextAsync(project.Slug, CancellationToken.None);
         Assert.NotNull(integrated);
         Assert.Equal(WorktreeMergeStatus.Completed, integrated.Status);
+        // Integration only advances the durable tip; the local checkout catches up on sync.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await queue.SynchronizeNextAsync(project.Slug, CancellationToken.None))!.SyncStatus);
         Assert.True(File.Exists(Path.Combine(repository, ".agents", "processors", ".source-of-truth-v1")));
         var reloaded = await processors.GetAsync(project.Slug, column.Id);
         Assert.NotNull(reloaded);
@@ -379,6 +382,10 @@ public sealed class ProjectSkillAndProcessorTests : IDisposable
         var integrated = await restartedQueue.ProcessNextAsync(project.Slug, CancellationToken.None);
         Assert.NotNull(integrated);
         Assert.Equal(WorktreeMergeStatus.Completed, integrated.Status);
+        // Since the integration/synchronization split, integration only advances the durable tip;
+        // the local checkout branch catches up during the dedicated synchronization step.
+        var synchronized = await restartedQueue.SynchronizeNextAsync(project.Slug, CancellationToken.None);
+        Assert.Equal(LocalCheckoutSyncStatus.Completed, synchronized!.SyncStatus);
         Assert.Equal(committedHead, Git(repository, "rev-parse", "integration").Trim());
         Assert.Single(await restartedQueue.ListAsync(project.Slug));
     }
@@ -526,6 +533,9 @@ public sealed class ProjectSkillAndProcessorTests : IDisposable
         var integrated = await queue.ProcessNextAsync(project.Slug, CancellationToken.None);
         Assert.NotNull(integrated);
         Assert.Equal(WorktreeMergeStatus.Completed, integrated.Status);
+        // Integration only advances the durable tip; the local checkout catches up on sync.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await queue.SynchronizeNextAsync(project.Slug, CancellationToken.None))!.SyncStatus);
         Assert.Contains("- Preserve this routed lesson.", await File.ReadAllTextAsync(primaryIndex));
         Assert.Equal(initialStatus, Git(repository, "status", "--porcelain=v1", "--untracked-files=all"));
     }

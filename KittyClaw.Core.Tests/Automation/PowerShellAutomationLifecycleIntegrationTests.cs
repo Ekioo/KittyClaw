@@ -72,6 +72,9 @@ public sealed class PowerShellAutomationLifecycleIntegrationTests : IDisposable
         var integrated = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
         Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        // Integration only advances the durable tip; the local checkout catches up on sync.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None))!.SyncStatus);
         Assert.Equal("durable", (await File.ReadAllTextAsync(
             Path.Combine(fixture.Repository, "generated", "result.txt"))).Trim());
         Assert.True(Directory.Exists(request.WorktreePath));
@@ -139,6 +142,9 @@ public sealed class PowerShellAutomationLifecycleIntegrationTests : IDisposable
         var integrated = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
         Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        // Integration only advances the durable tip; the local checkout catches up on sync.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None))!.SyncStatus);
         Assert.Equal("dirty", await File.ReadAllTextAsync(
             Path.Combine(fixture.Repository, ".agents", "uncommitted.txt")));
         Assert.Empty(Git(pending.WorktreePath, "status", "--porcelain"));

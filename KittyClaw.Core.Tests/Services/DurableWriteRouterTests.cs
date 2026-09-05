@@ -341,6 +341,9 @@ public sealed class DurableWriteRouterTests
         var integrated = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
         Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        // Integration only advances the durable tip; the local checkout catches up on sync.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None))!.SyncStatus);
         Assert.True(File.Exists(Path.Combine(fixture.Repository, ".agents", "programmer", "memory", "MEMORY.md")));
         Assert.True(Directory.Exists(route.RootPath));
         Assert.Empty(Git(route.RootPath, "status", "--porcelain"));
@@ -363,6 +366,9 @@ public sealed class DurableWriteRouterTests
 
         Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
         Assert.Equal(WorktreeMergeCheckpoint.Merge, integrated.Checkpoint);
+        // Integration only advances the durable tip; the local checkout catches up on sync.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await restarted.SynchronizeNextAsync(fixture.Slug, CancellationToken.None))!.SyncStatus);
         Assert.True(File.Exists(Path.Combine(fixture.Repository, ".agents", "programmer", "memory", "MEMORY.md")));
         Assert.Null(await restarted.ProcessNextAsync(fixture.Slug, CancellationToken.None));
         fixture.Queue!.ReleaseMaintenanceWrite(route.QueueRequestId!.Value);
@@ -396,6 +402,9 @@ public sealed class DurableWriteRouterTests
         var integrated = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
         Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        // Integration only advances the durable tip; the local checkout catches up on sync.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None))!.SyncStatus);
         Assert.Contains("Late recovered lesson.",
             await File.ReadAllTextAsync(Path.Combine(fixture.Repository, ".agents", "programmer", "memory", "MEMORY.md")));
     }
@@ -432,6 +441,9 @@ public sealed class DurableWriteRouterTests
         var request = Assert.Single(await restarted.ListAsync(fixture.Slug));
         Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
         Assert.Equal(WorktreeMergeStatus.Completed, request.Status);
+        // Integration only advances the durable tip; the local checkout catches up on sync.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await restarted.SynchronizeNextAsync(fixture.Slug, CancellationToken.None))!.SyncStatus);
         Assert.Contains("Preserved after interruption",
             await File.ReadAllTextAsync(Path.Combine(
                 fixture.Repository, ".agents", "programmer", "memory", "MEMORY.md")));
@@ -468,6 +480,9 @@ public sealed class DurableWriteRouterTests
 
         var integrated = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
         Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        // Integration only advances the durable tip; the local checkout catches up on sync.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None))!.SyncStatus);
         Assert.Contains("Preserved after interruption",
             await File.ReadAllTextAsync(Path.Combine(
                 fixture.Repository, ".agents", "programmer", "memory", "MEMORY.md")));
@@ -487,6 +502,10 @@ public sealed class DurableWriteRouterTests
             fixture.Slug, initial, "chore(memory): initial");
         Assert.Equal(WorktreeMergeStatus.Completed,
             (await fixture.Queue!.ProcessNextAsync(fixture.Slug, CancellationToken.None))!.Status);
+        // Catch the local checkout up to the first integration before committing the external
+        // change, so `main-only` sits on top of the integrated tip instead of diverging from it.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None))!.SyncStatus);
 
         await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "main-only.txt"), "main\n");
         Git(fixture.Repository, "add", "main-only.txt");
@@ -506,6 +525,9 @@ public sealed class DurableWriteRouterTests
 
         var integrated = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
         Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        // Integration only advances the durable tip; the local checkout catches up on sync.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None))!.SyncStatus);
         Assert.True(File.Exists(Path.Combine(fixture.Repository, "main-only.txt")));
         Assert.Contains("Maintenance lesson",
             await File.ReadAllTextAsync(Path.Combine(

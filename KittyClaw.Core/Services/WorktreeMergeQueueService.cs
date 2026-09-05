@@ -59,7 +59,8 @@ public sealed partial class WorktreeMergeQueueService(
     Action<string, string>? beforeFastForward = null,
     Action<string>? beforeLocalSync = null,
     Action<string>? beforeLocalSyncCompletion = null,
-    Action<string>? afterSyncCompletionPersisted = null)
+    Action<string>? afterSyncCompletionPersisted = null,
+    PrimaryCheckoutActivityRegistry? primaryCheckoutActivity = null)
 {
     private const int MaxTargetAdvanceRetries = 3;
     private const string DivergedTipError =
@@ -956,6 +957,10 @@ public sealed partial class WorktreeMergeQueueService(
                 $"Local commits diverge from integration commit {desired}. Reconcile the commits manually; the integrated result remains available at {target.TipRef}.", null, desired, request.SyncBackupRef);
 
         await SetSyncProcessingAsync(db, request.Id, desired);
+        // Everything below may mutate the local checkout (stash, fast-forward, stash apply).
+        // Register the window so a concurrent agent run's boundary check can classify the
+        // resulting fingerprint drift as a coordinated KittyClaw change, not agent activity.
+        using var coordinatedMutation = primaryCheckoutActivity?.BeginCoordinatedMutation(repository);
         var backupRef = request.SyncBackupRef;
         if (string.IsNullOrWhiteSpace(backupRef) && !IsClean(repository))
         {

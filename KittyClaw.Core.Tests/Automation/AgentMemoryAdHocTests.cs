@@ -299,6 +299,9 @@ public sealed class AgentMemoryAdHocTests
 
         var integrated = await queue.ProcessNextAsync(project.Slug, CancellationToken.None);
         Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        // Integration only advances the durable tip; the local checkout catches up on sync.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await queue.SynchronizeNextAsync(project.Slug, CancellationToken.None))!.SyncStatus);
         Assert.True(File.Exists(Path.Combine(
             workspace, ".agents", "programmer", "memory", "routing.md")));
     }

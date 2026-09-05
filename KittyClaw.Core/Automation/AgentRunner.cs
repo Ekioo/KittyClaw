@@ -208,8 +208,9 @@ public sealed class AgentRunner
     private readonly ProjectSecretVault? _projectSecrets;
     private readonly DurableWriteRouter? _durableWrites;
     private readonly ProjectService? _projects;
+    private readonly PrimaryCheckoutActivityRegistry? _primaryCheckoutActivity;
 
-    public AgentRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<AgentRunner> logger, AppSettingsService? appSettings = null, BoundaryObservationService? boundaryObserver = null, TicketWorktreeService? worktrees = null, RtkIntegrationService? rtk = null, ProjectSecretVault? projectSecrets = null, DurableWriteRouter? durableWrites = null, ProjectService? projects = null)
+    public AgentRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<AgentRunner> logger, AppSettingsService? appSettings = null, BoundaryObservationService? boundaryObserver = null, TicketWorktreeService? worktrees = null, RtkIntegrationService? rtk = null, ProjectSecretVault? projectSecrets = null, DurableWriteRouter? durableWrites = null, ProjectService? projects = null, PrimaryCheckoutActivityRegistry? primaryCheckoutActivity = null)
     {
         _sessions = sessions;
         _runs = runs;
@@ -222,6 +223,7 @@ public sealed class AgentRunner
         _projectSecrets = projectSecrets;
         _durableWrites = durableWrites;
         _projects = projects;
+        _primaryCheckoutActivity = primaryCheckoutActivity;
     }
 
     public Task<AgentRun> RunAsync(AgentRunContext ctx, CancellationToken ct)
@@ -353,6 +355,8 @@ public sealed class AgentRunner
         SemaphoreSlim? worktreeExecutionGate = null;
         string? primaryRepositoryPath = null;
         string? primaryRepositoryState = null;
+        var primaryStateCapturedAt = DateTime.UtcNow;
+        List<StreamEvent>? primaryToolActivity = null;
         try
         {
             if (_worktrees is not null && ctx.TicketId is int ticketId)
@@ -362,7 +366,19 @@ public sealed class AgentRunner
                 {
                     ctx.ExecutionWorkspacePath = worktree.Path;
                     primaryRepositoryPath = worktree.RepositoryPath;
+                    primaryStateCapturedAt = DateTime.UtcNow;
                     primaryRepositoryState = await CaptureRepositoryStateAsync(primaryRepositoryPath, ct);
+                    // The run buffer is a bounded ring: evidence for the end-of-run attribution is
+                    // collected live so a long run cannot age it out before the final check.
+                    var evidenceLog = new List<StreamEvent>();
+                    var evidenceRoot = primaryRepositoryPath;
+                    primaryToolActivity = evidenceLog;
+                    run.OnEvent += ev =>
+                    {
+                        if (ev.Kind == "tool_use"
+                            && PrimaryCheckoutChangeAttribution.MentionsPrimaryRepository(ev.Detail, evidenceRoot))
+                            lock (evidenceLog) evidenceLog.Add(ev);
+                    };
                     run.Push(new StreamEvent(DateTime.UtcNow, "worktree",
                         $"Using worktree {worktree.Path} on branch {worktree.Branch} for root ticket #{worktree.RootTicketId}"));
                 }
@@ -624,19 +640,9 @@ public sealed class AgentRunner
             if (attempt.FallbackReason == FallbackReason.Quota && attempt.Exit != 0)
                 run.HitQuota = true;
 
-            if (primaryRepositoryPath is not null
-                && !string.Equals(primaryRepositoryState,
-                    await CaptureRepositoryStateAsync(primaryRepositoryPath, CancellationToken.None),
-                    StringComparison.Ordinal))
-            {
-                run.Push(new StreamEvent(DateTime.UtcNow, "error",
-                    $"Worktree boundary violation: the primary repository '{primaryRepositoryPath}' changed during the ticket run."));
-                _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
-            }
-            else
-            {
-                _runs.Complete(run.RunId, attempt.Exit == 0 ? AgentRunStatus.Completed : AgentRunStatus.Failed, attempt.Exit);
-            }
+            CompletePrimaryBoundaryVerdict(run, attempt.Exit, primaryRepositoryPath,
+                primaryRepositoryState, primaryStateCapturedAt, primaryToolActivity,
+                await TryCaptureFinalRepositoryStateAsync(primaryRepositoryPath));
             AppendDebugLog(ctx, $"FINISHED {ctx.AgentName} run={run.RunId} exit={attempt.Exit}");
 
             // Auto-continue: when a chat run ends with undelivered steer messages, fire a
@@ -706,6 +712,97 @@ public sealed class AgentRunner
             CleanupImageTempFiles(ctx, run.DrainTemporarySteerImagePaths());
             worktreeExecutionGate?.Release();
         }
+    }
+
+    private async Task<(string? State, string? Error)> TryCaptureFinalRepositoryStateAsync(string? repositoryPath)
+    {
+        if (repositoryPath is null) return (null, null);
+        try
+        {
+            return (await CaptureRepositoryStateAsync(repositoryPath, CancellationToken.None), null);
+        }
+        catch (Exception ex)
+        {
+            // Inspection can fail transiently (e.g. the synchronization step holds a Git lock).
+            // An unverifiable state is not evidence of an agent write.
+            return (null, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Completes the run after attributing any primary-repository fingerprint drift. Drift is a
+    /// boundary violation only when the agent's own tool stream declares a write into the primary
+    /// checkout; a drift that overlaps a coordinated KittyClaw synchronization window, or whose
+    /// origin cannot be determined, is reported without failing the run and without imputing the
+    /// change to the agent.
+    /// </summary>
+    private void CompletePrimaryBoundaryVerdict(
+        AgentRun run, int? exit, string? primaryRepositoryPath, string? initialState,
+        DateTime initialStateCapturedAt, List<StreamEvent>? toolActivity,
+        (string? State, string? Error) finalCapture)
+    {
+        void CompleteFromProviderResult() =>
+            _runs.Complete(run.RunId, exit == 0 ? AgentRunStatus.Completed : AgentRunStatus.Failed, exit);
+
+        if (primaryRepositoryPath is null || initialState is null)
+        {
+            CompleteFromProviderResult();
+            return;
+        }
+
+        if (finalCapture.Error is not null)
+        {
+            run.Push(new StreamEvent(DateTime.UtcNow, "warning",
+                $"The primary repository '{primaryRepositoryPath}' could not be re-inspected at run end: " +
+                $"{finalCapture.Error} The run outcome is based on the provider result only."));
+            CompleteFromProviderResult();
+            return;
+        }
+
+        if (string.Equals(initialState, finalCapture.State, StringComparison.Ordinal))
+        {
+            CompleteFromProviderResult();
+            return;
+        }
+
+        var changedPaths = PrimaryCheckoutChangeAttribution.ChangedPaths(initialState, finalCapture.State!);
+        var changedSummary = changedPaths.Count == 0
+            ? "(paths not identified)"
+            : string.Join(", ", changedPaths.Take(10)) + (changedPaths.Count > 10 ? ", …" : "");
+        StreamEvent? evidence = null;
+        if (toolActivity is not null)
+            lock (toolActivity)
+                evidence = toolActivity.FirstOrDefault(ev =>
+                    PrimaryCheckoutChangeAttribution.IsAgentWriteEvidence(
+                        ev.Text, ev.Detail, primaryRepositoryPath, changedPaths));
+
+        if (evidence is not null)
+        {
+            var detail = (evidence.Detail ?? "").ReplaceLineEndings(" ");
+            if (detail.Length > 160) detail = detail[..160] + "…";
+            run.Push(new StreamEvent(DateTime.UtcNow, "error",
+                $"Worktree boundary violation: the agent's tool activity wrote to the primary repository " +
+                $"'{primaryRepositoryPath}' during the ticket run. Evidence: {evidence.Text} {detail}. " +
+                $"Changed paths: {changedSummary}."));
+            _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
+            return;
+        }
+
+        if (_primaryCheckoutActivity?.HasCoordinatedMutationSince(primaryRepositoryPath, initialStateCapturedAt) == true)
+        {
+            run.Push(new StreamEvent(DateTime.UtcNow, "worktree",
+                $"The primary repository '{primaryRepositoryPath}' was updated by KittyClaw's local checkout " +
+                $"synchronization during the run (changed paths: {changedSummary}); the change is not attributed to the agent."));
+            CompleteFromProviderResult();
+            return;
+        }
+
+        run.Push(new StreamEvent(DateTime.UtcNow, "warning",
+            $"The primary repository '{primaryRepositoryPath}' changed during the ticket run without any agent " +
+            $"tool activity referencing it (changed paths: {changedSummary}). The change is treated as external " +
+            $"and is not attributed to the agent; review recent external tooling or manual edits before relying " +
+            $"on the primary checkout."));
+        CompleteFromProviderResult();
     }
 
     private static async Task<string> CaptureRepositoryStateAsync(
