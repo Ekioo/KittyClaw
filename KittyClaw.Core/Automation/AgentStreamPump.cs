@@ -90,6 +90,18 @@ internal static class AgentStreamPump
                     }
                     else
                     {
+                        // Claude can emit a result-shaped notification when a background task from
+                        // a resumed session no longer exists. It is not the terminal turn result:
+                        // treating it as one starts the exit watchdog and can kill the resumed agent
+                        // before it produces its actual answer.
+                        if (kind == "result" &&
+                            doc.RootElement.TryGetProperty("origin", out var origin) &&
+                            origin.ValueKind == JsonValueKind.Object &&
+                            origin.TryGetProperty("kind", out var originKind) &&
+                            originKind.GetString() == "task-notification")
+                        {
+                            kind = "system";
+                        }
                         // The terminal result event carries the whole turn's token usage and
                         // priced cost — record it before the max_turns remap below, because an
                         // error_max_turns result still reports the tokens it burned.
