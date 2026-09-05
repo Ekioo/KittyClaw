@@ -10,6 +10,8 @@ namespace KittyClaw.QaRunner;
 /// </summary>
 public sealed class Scenario
 {
+    public string? BrowserLocale { get; set; }
+    public string? BrowserTimeZone { get; set; }
     public Dictionary<string, string> Environment { get; set; } = new();
     public ScenarioInstance Instance { get; set; } = new();
     public ScenarioReport Report { get; set; } = new();

@@ -52,6 +52,8 @@ Example: testing "ticket detail shows assignee badge":
 
 ```json
 {
+  "browserLocale": "fr-FR",
+  "browserTimeZone": "Europe/Paris",
   "setup": [
     { "type": "createProject", "name": "qa-test" },
     { "type": "createTicket", "project": "qa-test", "title": "My ticket", "status": "Todo" },
@@ -65,6 +67,10 @@ Example: testing "ticket detail shows assignee badge":
   "verdict": { "passOn": "all-asserts-pass" }
 }
 ```
+
+`browserLocale` and `browserTimeZone` are optional. Use them when a visual
+assertion must prove locale or system-time-zone behavior independently of the
+machine running QA.
 
 ## Variable substitution
 
@@ -215,6 +221,7 @@ These require Playwright (run inside `actions`, after setup).
 | `assertValue`  | `selector`, `expected`                   | Asserts the current value of an input or select.                       |
 | `assertFocused`| `selector`                               | Asserts that the matching element owns keyboard focus.                 |
 | `assertAttribute`| `selector`, `property`, `expected`     | Asserts one DOM attribute exactly.                                    |
+| `assertDateTimeLocale` | `selector`, `expected` locale | Asserts a local-time element uses the requested UI locale and the browser time zone. |
 | `assertJson`   | `path`, `jsonPath`, `expected`           | GET `path`, extract `jsonPath` (dotted), assert equals `expected`.    |
 
 #### `assertJson`

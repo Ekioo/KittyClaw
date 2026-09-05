@@ -58,6 +58,8 @@ public sealed class ScenarioRunner
             await using var ctxBrowser = await browser.NewContextAsync(new()
             {
                 ViewportSize = new() { Width = 1440, Height = 900 },
+                Locale = scenario.BrowserLocale,
+                TimezoneId = scenario.BrowserTimeZone,
             });
             var page = await ctxBrowser.NewPageAsync();
 
@@ -553,6 +555,32 @@ public sealed class ScenarioRunner
                         Property = "textContent",
                         Expected = Resolve(action.Expected),
                         Actual = actual,
+                        Passed = passed,
+                    });
+                    break;
+                }
+            case "assertDateTimeLocale":
+                {
+                    var selector = Required(Resolve(action.Selector), "assertDateTimeLocale.selector");
+                    var locale = Required(Resolve(action.Expected), "assertDateTimeLocale.expected");
+                    var actual = await page.Locator(selector).EvaluateAsync<string>(@"(element, locale) => {
+                        const value = new Date(element.getAttribute('datetime'));
+                        const expected = new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' }).format(value);
+                        return JSON.stringify({ text: element.textContent.trim(), expected, locale: element.dataset.localDateTimeLocale, browser: navigator.language });
+                    }", locale);
+                    using var details = JsonDocument.Parse(actual);
+                    var root = details.RootElement;
+                    var textValue = root.GetProperty("text").GetString();
+                    var expectedValue = root.GetProperty("expected").GetString();
+                    var elementLocale = root.GetProperty("locale").GetString();
+                    var browserLocale = root.GetProperty("browser").GetString();
+                    var passed = textValue == expectedValue && elementLocale == locale && browserLocale != locale;
+                    result.Assertions.Add(new AssertionEntry
+                    {
+                        Selector = selector,
+                        Property = "localizedDateTime",
+                        Expected = $"{locale} formatting with a different browser locale",
+                        Actual = $"text={textValue}; locale={elementLocale}; browser={browserLocale}",
                         Passed = passed,
                     });
                     break;

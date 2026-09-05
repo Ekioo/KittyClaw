@@ -369,7 +369,7 @@
                             <div class="timeline-comment">
                                 <div class="timeline-comment-header">
                                     <strong>@item.Author</strong>
-                                    <small>@item.At.ToString("g")</small>
+                                    <small><time datetime="@BrowserLocalDateTime.UtcIso(item.At)" data-local-date-time data-local-date-time-locale="@L.Lang">@BrowserLocalDateTime.UtcFallback(item.At)</time></small>
                                     @if (_editingCommentId != item.Id)
                                     {
                                         <button class="icon-btn pencil-btn" title="Modifier" @onclick="() => StartEditComment(item.Id!.Value, item.Text)">&#9998;</button>
@@ -385,7 +385,7 @@
                                 <div class="event-content">
                                     <span class="event-author">@item.Author</span>
                                     <span class="event-text">@item.Text</span>
-                                    <small>@item.At.ToString("g")</small>
+                                    <small><time datetime="@BrowserLocalDateTime.UtcIso(item.At)" data-local-date-time data-local-date-time-locale="@L.Lang">@BrowserLocalDateTime.UtcFallback(item.At)</time></small>
                                 </div>
                             </div>
                         }
