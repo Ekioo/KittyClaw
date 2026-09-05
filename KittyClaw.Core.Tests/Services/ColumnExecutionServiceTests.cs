@@ -825,19 +825,19 @@ public sealed class ColumnExecutionServiceTests : IDisposable
 
         for (var cycle = 1; cycle <= 3; cycle++)
         {
-            var draft = await _executions.ClaimNextAsync(project.Slug, writer, now.AddMinutes(cycle * 2 - 2));
+            var draft = await _executions.ClaimNextAsync(project.Slug, writer, now.AddMinutes(cycle * 20 - 20));
             Assert.NotNull(draft);
             await _executions.CompleteAsync(project.Slug, draft!, writer,
                 new ColumnAgentResult("needs_review", [], $"Draft verdict wording {cycle}"), writer.Name);
             if (cycle == 3) break;
 
-            var reviewRun = await _executions.ClaimNextAsync(project.Slug, reviewer, now.AddMinutes(cycle * 2 - 1));
+            var reviewRun = await _executions.ClaimNextAsync(project.Slug, reviewer, now.AddMinutes(cycle * 20 - 10));
             Assert.NotNull(reviewRun);
             await _executions.CompleteAsync(project.Slug, reviewRun!, reviewer,
                 new ColumnAgentResult("changes_requested", [], $"Review verdict wording {cycle}"), reviewer.Name);
         }
 
-        var blockedReview = await _executions.ClaimNextAsync(project.Slug, reviewer, now.AddMinutes(5));
+        var blockedReview = await _executions.ClaimNextAsync(project.Slug, reviewer, now.AddMinutes(50));
         var history = await _executions.ListAsync(project.Slug, ticket.Id);
 
         Assert.Null(blockedReview);
