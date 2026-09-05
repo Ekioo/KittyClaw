@@ -63,7 +63,9 @@ public sealed class EvidenceBenchmarkSuiteTests : IClassFixture<EvidenceBenchmar
         Assert.Equal(1, brief["commandsRun"]!.GetValue<int>());
         Assert.Equal(0, brief["testsPassed"]!.GetValue<int>());
         Assert.Equal(0, brief["testsFailed"]!.GetValue<int>());
-        Assert.False(brief["repositoryClean"]!.GetValue<bool>());
+        // The fixture commits the workspace before the run and the default scenario writes
+        // nothing, so automatic capture observes a clean tree.
+        Assert.True(brief["repositoryClean"]!.GetValue<bool>());
         Assert.Contains(brief["runIds"]!.AsArray(), n => n!.GetValue<string>() == run.RunId);
         Assert.DoesNotContain(brief["findings"]!.AsArray(), f => f!["isBlocking"]!.GetValue<bool>());
         Assert.Equal("None", brief["recoveryGuidance"]!["action"]!.GetValue<string>());

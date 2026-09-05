@@ -48,16 +48,30 @@ if (scenario is null)
     return 2;
 }
 
+// The Codex/Grok dialects replay canned envelopes, but still honor the selected
+// scenario's exit code so failure scenarios (e.g. error-exit) fail on every provider path.
+var scenarioExit = ScenarioExitCode(scenario);
 if (args.FirstOrDefault() == "exec")
 {
     Console.WriteLine("{\"type\":\"thread.started\",\"thread_id\":\"mock-codex-thread\"}");
     Console.WriteLine("{\"type\":\"turn.started\"}");
+    if (scenarioExit != 0)
+    {
+        Console.WriteLine("{\"type\":\"turn.failed\",\"error\":{\"message\":\"Mock scenario '" + scenarioName + "' requested a failing exit.\"}}");
+        return scenarioExit;
+    }
     Console.WriteLine("{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"{\\\"outcome\\\":\\\"done\\\",\\\"skillsUsed\\\":[],\\\"summary\\\":\\\"First run complete.\\\"}\"}}");
     Console.WriteLine("{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":10,\"output_tokens\":10}}");
     return 0;
 }
 if (args.Contains("--output-format") && args.Contains("streaming-json"))
 {
+    if (scenarioExit != 0)
+    {
+        Console.WriteLine("{\"type\":\"error\",\"message\":\"Mock scenario '" + scenarioName + "' requested a failing exit.\"}");
+        Console.WriteLine("{\"type\":\"end\",\"stopReason\":\"Error\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5}}");
+        return scenarioExit;
+    }
     Console.WriteLine("{\"type\":\"text\",\"data\":\"{\\\"outcome\\\":\\\"done\\\",\\\"skillsUsed\\\":[],\\\"summary\\\":\\\"First run complete.\\\"}\"}");
     Console.WriteLine("{\"type\":\"end\",\"stopReason\":\"EndTurn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":10}}");
     return 0;
@@ -68,3 +82,26 @@ if (args.Contains("--output-format") && args.Contains("streaming-json"))
 var hooks = HookSettings.Load(ArgParser.Get(args, "--settings"));
 
 return await ScenarioReplayer.ReplayAsync(scenario, sessionId, Directory.GetCurrentDirectory(), hooks);
+
+// Reads the scenario's control envelope ({"_meta":{"exit":N}}) without emitting anything.
+static int ScenarioExitCode(string[] lines)
+{
+    foreach (var raw in lines)
+    {
+        var line = raw.Trim();
+        if (line.Length == 0) continue;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(line);
+            if (doc.RootElement.TryGetProperty("_meta", out var meta)
+                && meta.TryGetProperty("exit", out var exit)
+                && exit.TryGetInt32(out var code))
+                return code;
+        }
+        catch
+        {
+            // Non-JSON lines (comments) carry no exit code.
+        }
+    }
+    return 0;
+}
