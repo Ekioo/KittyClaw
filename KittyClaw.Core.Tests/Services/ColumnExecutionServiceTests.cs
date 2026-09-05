@@ -198,6 +198,7 @@ public sealed class ColumnExecutionServiceTests : IDisposable
         Assert.Equal(fireAt, scheduled.FireAt);
         Assert.Equal(ready.Name, scheduled.ScheduleTarget);
         Assert.Equal(ColumnExecutionStatus.Completed, attempt.Status);
+        Assert.Null(await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow.AddHours(2)));
     }
 
     [Fact]

@@ -187,7 +187,12 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                 || e.Status == ColumnExecutionStatus.WaitingForChildren
                 || e.Status == ColumnExecutionStatus.Failed)
             .Select(e => e.TicketId);
-        var candidates = db.Tickets.Where(t => t.ColumnId == processor.ColumnId && !activeTicketIds.Contains(t.Id));
+        // A ticket with FireAt is parked durably until ScheduledPromotionService moves it to its
+        // wake target. Re-claiming it in the waiting column would turn every persisted schedule
+        // into a tight column-scan loop and eventually trip the routing-loop guard.
+        var candidates = db.Tickets.Where(t => t.ColumnId == processor.ColumnId
+            && t.FireAt == null
+            && !activeTicketIds.Contains(t.Id));
         candidates = processor.SelectionOrder switch
         {
             TicketSelectionOrder.PriorityThenPosition => candidates.OrderByDescending(t => t.Priority).ThenBy(t => t.SortOrder).ThenBy(t => t.CreatedAt),
