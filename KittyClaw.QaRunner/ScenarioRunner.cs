@@ -662,6 +662,9 @@ public sealed class ScenarioRunner
                     throw new InvalidOperationException("enableProviders requires providersInitiallyUnavailable.");
                 await File.WriteAllTextAsync(_providerReadinessFile, "ready", ct);
                 break;
+            case "writeWorkspaceFile":
+                await ExecuteSetupAsync(action, ct);
+                break;
             default:
                 throw new InvalidOperationException($"Unknown action: {action.Type}");
         }

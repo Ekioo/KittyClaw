@@ -4,6 +4,7 @@ using KittyClaw.Core.Automation;
 using KittyClaw.Core.Evidence;
 using KittyClaw.Core.Models;
 using KittyClaw.Core.Services;
+using Microsoft.EntityFrameworkCore;
 
 namespace KittyClaw.Web.Api;
 
@@ -66,6 +67,17 @@ public static partial class Endpoints
                 settings.Language = req.Language;
                 return Results.Ok(new { language = settings.Language });
             }).ExcludeFromDescription();
+
+            api.MapPost("/projects/{slug}/qa/worktree-merges/{requestId:long}/synchronization",
+                async (string slug, long requestId, QaSetSynchronizationRequest req,
+                    ProjectService projects, WorktreeMergeQueueService queue) =>
+                {
+                    if (!Enum.TryParse<LocalCheckoutSyncStatus>(req.Status, true, out var status))
+                        return Results.BadRequest(new { error = "A valid synchronization status is required" });
+                    await using var db = projects.GetProjectDb(slug);
+                    var changed = await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET SyncStatus = {(int)status}, SyncError = {req.Error}, SyncConflictFiles = {req.ConflictFiles}, SyncUpdatedAt = {DateTime.UtcNow}, UpdatedAt = {DateTime.UtcNow} WHERE Id = {requestId}");
+                    return changed == 0 ? Results.NotFound() : Results.Ok(await queue.GetAsync(slug, requestId));
+                }).ExcludeFromDescription();
 
             api.MapPost("/projects/{slug}/qa/tickets/{ticketId:int}/evidence",
                 (string slug, int ticketId, QaSeedEvidenceRequest req, EvidenceStore store) =>
@@ -326,6 +338,7 @@ public static partial class Endpoints
     private sealed record QaSeedEvidenceRequest(string Status, DateTime? CapturedAt = null);
 
     private sealed record QaSetLanguageRequest(string Language);
+    private sealed record QaSetSynchronizationRequest(string Status, string? Error, string? ConflictFiles);
 
     private sealed record QaSeedRunsRequest(IReadOnlyList<string> TicketIds, int Count);
 

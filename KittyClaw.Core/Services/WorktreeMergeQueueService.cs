@@ -40,7 +40,11 @@ public sealed record WorktreeMergeRequest(
     DateTime? LocalIntegratedAt = null, DateTime? RemotePublishedAt = null,
     LocalCheckoutSyncStatus SyncStatus = LocalCheckoutSyncStatus.NotRequired,
     string? SyncTargetCommit = null, string? SyncBackupRef = null,
-    string? SyncError = null, string? SyncConflictFiles = null, DateTime? SyncUpdatedAt = null);
+    string? SyncError = null, string? SyncConflictFiles = null, DateTime? SyncUpdatedAt = null)
+{
+    public bool HasSynchronizationLag => Status == WorktreeMergeStatus.Completed
+        && SyncStatus != LocalCheckoutSyncStatus.Completed;
+}
 
 public sealed record WorktreeMergeAlertSummary(
     int ActiveCount, WorktreeMergeStatus MostSevereStatus, DateTime OldestUpdatedAt);
@@ -559,6 +563,13 @@ public sealed partial class WorktreeMergeQueueService(
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT * FROM WorktreeMergeQueue ORDER BY Id";
         return await ReadAllAsync(command);
+    }
+
+    public async Task<WorktreeMergeRequest?> GetAsync(string projectSlug, long requestId)
+    {
+        await using var db = projects.GetProjectDb(projectSlug);
+        await EnsureTableAsync(db);
+        return await ReadByIdAsync(db, requestId);
     }
 
     public async Task<WorktreeMergeAlertSummary?> GetAlertSummaryAsync(string projectSlug)

@@ -27,15 +27,18 @@ Versioned project knowledge stays in Git. Local control data such as prompts, tr
 - `KittyClaw.Core/Services/ColumnProcessorService.cs` — migrates legacy SQLite processor projections to versioned definitions through a maintenance worktree without dirtying the primary checkout.
 - `KittyClaw.Core/Services/DashboardRefreshService.cs` — runs dashboard scripts and prompts in maintenance worktrees so generated file changes are isolated and reviewed.
 - `KittyClaw.Web/Components/ProjectCards.razor` — displays live integration count, severity, and blocked age even for paused projects.
+- `KittyClaw.Web/Components/TicketPanel.razor` — presents integration and local-checkout synchronization as separate phases, including their commits, lag, conflict files, and retry action.
 
 Queue states are `Pending`, `Processing`, `CommitPending`, `ValidationRequired`, `NeedsReview`, `BlockedByExternalChanges`, `Conflict`, `Failed`, `Quarantined`, and `Completed`. Each row additionally tracks a local-checkout synchronization status (`NotRequired`, `Pending`, `Processing`, `CleanupPending`, `Completed`, `Conflict`, `Diverged`, `CheckoutMissing`, `ConcurrentChanges`) with its target commit, backup ref, error, and conflict files. Worktrees, branches, commits, unexpected files, and conflict files remain in place until completion or an explicit recovery action; a `Quarantined` maintenance row keeps its moved worktree and quarantine branch for human review while a replacement maintenance worktree serves new writes.
 
 ## Entry points
 
 - `GET /api/projects/{slug}/worktree-merges` lists the durable queue without exposing file contents.
+- `GET /api/projects/{slug}/worktree-merges/{requestId}` returns one integration request with both phase statuses, source/integrated/target commits, synchronization lag data, and conflict diagnostics.
 - `POST /api/projects/{slug}/worktree-merges` enqueues a ticket worktree.
 - `POST /api/projects/{slug}/worktree-merges/process-next` requests an immediate reconciliation.
 - `POST /api/projects/{slug}/worktree-merges/{requestId}/resume` resumes a preserved review, conflict, failure, or external-change block after its cause is resolved.
+- `POST /api/projects/{slug}/worktree-merges/{requestId}/retry-synchronization` retries only the local-checkout phase after a conflict, divergence, missing checkout, or concurrent mutation; it does not repeat integration.
 - The project list polls queue summaries and presents warnings directly on project tiles.
 - Memory consolidation, processor capitalization, dashboard migration, and dashboard refresh create maintenance jobs automatically.
 
@@ -45,3 +48,5 @@ Queue states are `Pending`, `Processing`, `CommitPending`, `ValidationRequired`,
 - SQLite project databases for durable queue checkpoints.
 - The project integration branch configured in project settings.
 - ASP.NET Core hosted services for automatic reconciliation.
+
+Operational recovery procedures are documented in [Local checkout synchronization recovery](./local-checkout-sync-recovery.md).

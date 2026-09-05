@@ -67,11 +67,16 @@
         @if (_worktreeState is not null)
         {
             <section class="worktree-summary" data-testid="ticket-worktree-summary">
-                <div class="worktree-summary-title"><strong>@L["WorktreeTitle"]</strong><span class="worktree-state worktree-state--@WorktreeTone()">@WorktreeStatusLabel()</span></div>
+                <div class="worktree-summary-title"><strong>@L["WorktreeTitle"]</strong></div>
                 <div><span>@L["WorktreeRoot"]</span> <strong>#@_worktreeState.RootTicketId</strong></div>
                 <div><span>@L["WorktreeBranch"]</span> <code data-testid="worktree-branch">@_worktreeState.Branch</code></div>
                 <div><span>@L["WorktreePath"]</span> <code data-testid="worktree-path">@_worktreeState.Path</code></div>
-                <p>@WorktreeGuidance()</p>
+                <div class="worktree-phase" data-testid="integration-status">
+                    <div class="worktree-phase-title"><strong>@L["WorktreeIntegrationTitle"]</strong><span class="worktree-state worktree-state--@WorktreeTone()">@WorktreeStatusLabel()</span></div>
+                    @if (_mergeRequest?.SourceCommit is { Length: > 0 }) { <div>@L["WorktreeSourceCommit"] <code>@_mergeRequest.SourceCommit</code></div> }
+                    @if (_mergeRequest?.IntegratedCommit is { Length: > 0 }) { <div>@L["WorktreeIntegratedCommit"] <code>@_mergeRequest.IntegratedCommit</code></div> }
+                    <p>@WorktreeGuidance()</p>
+                </div>
                 @if (_mergeRequest?.ConflictFiles is { Length: > 0 })
                 {
                     <div class="worktree-conflicts">@L["WorktreeConflictFiles"] @_mergeRequest.ConflictFiles</div>
@@ -89,6 +94,21 @@
                 else if (_mergeRequest?.Status == WorktreeMergeStatus.Pending)
                 {
                     <button class="worktree-action" @onclick="ProcessMergeAsync" disabled="@_worktreeActionBusy">@L["WorktreeRetry"]</button>
+                }
+                @if (_mergeRequest is not null)
+                {
+                    <div class="worktree-phase" data-testid="synchronization-status">
+                        <div class="worktree-phase-title"><strong>@L["WorktreeSynchronizationTitle"]</strong><span class="worktree-state worktree-state--@SyncTone()">@SyncStatusLabel()</span></div>
+                        @if (_mergeRequest.SyncTargetCommit is { Length: > 0 }) { <div>@L["WorktreeSyncCommit"] <code>@_mergeRequest.SyncTargetCommit</code></div> }
+                        @if (_mergeRequest.HasSynchronizationLag) { <div class="worktree-sync-lag" data-testid="synchronization-lag">@L["WorktreeSyncLag"]</div> }
+                        @if (_mergeRequest.SyncConflictFiles is { Length: > 0 }) { <div class="worktree-conflicts">@L["WorktreeConflictFiles"] @_mergeRequest.SyncConflictFiles</div> }
+                        @if (_mergeRequest.SyncError is { Length: > 0 }) { <div class="worktree-error">@_mergeRequest.SyncError</div> }
+                        <p>@SyncGuidance()</p>
+                        @if (CanRetrySynchronization())
+                        {
+                            <button class="worktree-action" data-testid="retry-synchronization" @onclick="RetrySynchronizationAsync" disabled="@_worktreeActionBusy">@L["WorktreeRetrySynchronization"]</button>
+                        }
+                    </div>
                 }
             </section>
         }
@@ -715,6 +735,51 @@
         _ when _worktreeState?.Exists == true => L["WorktreeReadyGuidance"],
         _ => L["WorktreeNotCreatedGuidance"]
     };
+
+    private bool CanRetrySynchronization() => _mergeRequest?.SyncStatus is LocalCheckoutSyncStatus.Conflict
+        or LocalCheckoutSyncStatus.Diverged or LocalCheckoutSyncStatus.CheckoutMissing
+        or LocalCheckoutSyncStatus.ConcurrentChanges;
+
+    private string SyncStatusLabel() => _mergeRequest?.SyncStatus switch
+    {
+        LocalCheckoutSyncStatus.Pending => L["WorktreeSyncPending"],
+        LocalCheckoutSyncStatus.Processing => L["WorktreeSyncProcessing"],
+        LocalCheckoutSyncStatus.CleanupPending => L["WorktreeSyncCleanupPending"],
+        LocalCheckoutSyncStatus.Completed => L["WorktreeSyncCompleted"],
+        LocalCheckoutSyncStatus.Conflict => L["WorktreeSyncConflict"],
+        LocalCheckoutSyncStatus.Diverged => L["WorktreeSyncDiverged"],
+        LocalCheckoutSyncStatus.CheckoutMissing => L["WorktreeSyncCheckoutMissing"],
+        LocalCheckoutSyncStatus.ConcurrentChanges => L["WorktreeSyncConcurrentChanges"],
+        _ => L["WorktreeSyncNotRequired"]
+    };
+
+    private string SyncTone() => _mergeRequest?.SyncStatus switch
+    {
+        LocalCheckoutSyncStatus.Completed => "success",
+        LocalCheckoutSyncStatus.Conflict or LocalCheckoutSyncStatus.Diverged
+            or LocalCheckoutSyncStatus.CheckoutMissing or LocalCheckoutSyncStatus.ConcurrentChanges => "danger",
+        LocalCheckoutSyncStatus.Pending or LocalCheckoutSyncStatus.Processing or LocalCheckoutSyncStatus.CleanupPending => "waiting",
+        _ => "neutral"
+    };
+
+    private string SyncGuidance() => _mergeRequest?.SyncStatus switch
+    {
+        LocalCheckoutSyncStatus.Completed => L["WorktreeSyncCompletedGuidance"],
+        LocalCheckoutSyncStatus.Conflict => L["WorktreeSyncConflictGuidance"],
+        LocalCheckoutSyncStatus.Diverged => L["WorktreeSyncDivergedGuidance"],
+        LocalCheckoutSyncStatus.CheckoutMissing => L["WorktreeSyncCheckoutMissingGuidance"],
+        LocalCheckoutSyncStatus.ConcurrentChanges => L["WorktreeSyncConcurrentChangesGuidance"],
+        LocalCheckoutSyncStatus.Pending or LocalCheckoutSyncStatus.Processing or LocalCheckoutSyncStatus.CleanupPending => L["WorktreeSyncPendingGuidance"],
+        _ => L["WorktreeSyncNotRequiredGuidance"]
+    };
+
+    private async Task RetrySynchronizationAsync()
+    {
+        if (_mergeRequest is null) return;
+        _worktreeActionBusy = true;
+        try { await WorktreeMergeQueueService.RetrySynchronizationAsync(Slug, _mergeRequest.Id, CancellationToken.None); await LoadWorktreeAsync(); }
+        finally { _worktreeActionBusy = false; }
+    }
 
     private async Task ResumeMergeAsync()
     {
