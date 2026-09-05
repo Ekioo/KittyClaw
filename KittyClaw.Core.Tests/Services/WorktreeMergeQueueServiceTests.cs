@@ -378,6 +378,37 @@ public sealed class WorktreeMergeQueueServiceTests
     }
 
     [Fact]
+    public async Task StartupRecovery_RepeatedRestartsStayIdempotent()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("terminal.txt", "terminal");
+        var first = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        Assert.Equal(WorktreeMergeStatus.Completed,
+            (await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None))!.Status);
+        var leftBehind = (await fixture.Worktrees.ResolveAsync(fixture.Slug, ticket, CancellationToken.None))!;
+        await fixture.Tickets.MoveTicketAsync(fixture.Slug, ticket, "Done", "test");
+
+        await fixture.Queue.RecoverTerminalWorktreesAsync(fixture.Slug, CancellationToken.None);
+        var requeued = Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+        await fixture.Queue.RecoverTerminalWorktreesAsync(fixture.Slug, CancellationToken.None);
+        var afterRestart = Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+        var completed = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        var recoveredAfterCleanup =
+            await fixture.Queue.RecoverTerminalWorktreesAsync(fixture.Slug, CancellationToken.None);
+        var final = Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+
+        Assert.Equal(first.Id, requeued.Id);
+        Assert.Equal(WorktreeMergeStatus.Pending, requeued.Status);
+        Assert.Equal(requeued, afterRestart);
+        Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
+        Assert.Equal(0, recoveredAfterCleanup);
+        Assert.Equal(WorktreeMergeStatus.Completed, final.Status);
+        Assert.False(Directory.Exists(leftBehind.Path));
+        Assert.NotEqual(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet",
+            $"refs/heads/{leftBehind.Branch}").ExitCode);
+    }
+
+    [Fact]
     public async Task RecoveryAfterWorktreesAreDisabled_FinalizesSafeTerminalWorktree()
     {
         using var fixture = await Fixture.CreateAsync();
