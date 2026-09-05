@@ -13,8 +13,9 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
 {
     internal Func<Task>? BeforeSuccessCompareAndSwapAsync { get; set; }
     internal static readonly TimeSpan RoutingLoopWindow = TimeSpan.FromMinutes(10);
+    internal static readonly TimeSpan RoutingLoopEvidenceWindow = TimeSpan.FromHours(24);
     internal const string RoutingLoopError =
-        "Protection anti-boucle : cette transition a été répétée sans progrès observable dans les 10 dernières minutes.";
+        "Protection anti-boucle : cette transition a été répétée sans progrès durable observable.";
 
     private static async Task EnsureTableAsync(TodoDbContext db)
     {
@@ -230,7 +231,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         var recentCompleted = await db.ColumnExecutions.AsNoTracking()
             .Where(e => e.TicketId == selected.Id
                 && e.Status == ColumnExecutionStatus.Completed
-                && e.EndedAt >= now.Subtract(RoutingLoopWindow))
+                && e.EndedAt >= now.Subtract(RoutingLoopEvidenceWindow))
             .OrderByDescending(e => e.EndedAt)
             .ToListAsync();
         var recentProcessorIds = recentCompleted.Select(e => e.ProcessorId).Distinct().ToList();
@@ -249,6 +250,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             var comparable = incomingExecutions.Where(e => e.ProcessorId == incoming.ProcessorId)
                 .OrderByDescending(e => e.EndedAt).Take(3).ToList();
             var repeatedFingerprint = comparable.Count >= 2
+                && comparable[1].EndedAt >= now.Subtract(RoutingLoopWindow)
                 && !string.IsNullOrWhiteSpace(comparable[0].ProgressFingerprint)
                 && string.Equals(comparable[0].ProgressFingerprint, comparable[1].ProgressFingerprint,
                     StringComparison.Ordinal);
@@ -268,7 +270,9 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                     : await db.BoardColumns.AsNoTracking().FirstOrDefaultAsync(c => c.Id == sourceProcessor.ColumnId);
                 var diagnostic = new
                 {
-                    windowMinutes = RoutingLoopWindow.TotalMinutes,
+                    windowMinutes = repeatedFingerprint
+                        ? RoutingLoopWindow.TotalMinutes
+                        : RoutingLoopEvidenceWindow.TotalMinutes,
                     sourceColumnId = sourceProcessor?.ColumnId,
                     targetColumnId = processor.ColumnId,
                     comparedExecutionIds = comparable.Select(e => e.Id).ToArray(),
@@ -302,7 +306,8 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                     TicketId = selected.Id,
                     Author = processor.Name,
                     Text = $"protection anti-boucle : transition {transition} répétée sans progrès " +
-                        $"(fenêtre 10 min, exécutions {string.Join(", ", comparable.Select(e => e.Id))}, " +
+                        $"(fenêtre {(repeatedFingerprint ? RoutingLoopWindow : RoutingLoopEvidenceWindow).TotalMinutes:g} min, " +
+                        $"exécutions {string.Join(", ", comparable.Select(e => e.Id))}, " +
                         $"empreinte {comparable[0].ProgressFingerprint}); ticket maintenu dans {oldStatus}, reprise manuelle disponible",
                 });
                 await db.SaveChangesAsync();
