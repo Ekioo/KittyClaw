@@ -534,6 +534,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             return;
         }
 
+        var isScheduled = string.Equals(result.Outcome, "scheduled", StringComparison.OrdinalIgnoreCase);
         var route = processor.Routes.FirstOrDefault(r =>
             string.Equals(r.Outcome, result.Outcome, StringComparison.OrdinalIgnoreCase));
         var targetId = route?.TargetColumnId ?? processor.DefaultTargetColumnId;
@@ -548,9 +549,15 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         await ColumnService.EnsureBoardColumnsTableAsync(db);
         await TicketService.EnsureActivityTableAsync(db);
         await EnsureTableAsync(db);
+        var source = await db.BoardColumns.FindAsync(processor.ColumnId)
+            ?? throw new InvalidOperationException($"La colonne source #{processor.ColumnId} n'existe plus.");
+        // A waiting processor may legitimately ask to wake itself later even when its route table
+        // only declares business outcomes. Keep an explicit scheduled route authoritative, but do
+        // not send an otherwise valid scheduled result through the default failure destination.
+        if (isScheduled && route is null && source.Role == ColumnRole.Waiting)
+            targetId = source.Id;
         var target = await db.BoardColumns.FindAsync(targetId.Value)
             ?? throw new InvalidOperationException($"La colonne cible #{targetId} n'existe plus.");
-        var isScheduled = string.Equals(result.Outcome, "scheduled", StringComparison.OrdinalIgnoreCase);
         BoardColumn? wakeTarget = null;
         if (isScheduled)
         {
@@ -579,7 +586,6 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             ?? throw new InvalidOperationException($"Le ticket #{execution.TicketId} n’existe plus.");
         var row = await db.ColumnExecutions.FindAsync(execution.Id);
         if (row is null) return;
-        var source = await db.BoardColumns.FindAsync(processor.ColumnId);
         var oldStatus = ticket.Status;
         Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? successTransaction = null;
         if (target.Role == ColumnRole.Success)

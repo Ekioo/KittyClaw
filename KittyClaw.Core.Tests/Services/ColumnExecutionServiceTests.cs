@@ -174,6 +174,33 @@ public sealed class ColumnExecutionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Scheduled_completion_from_waiting_column_uses_source_when_route_is_omitted()
+    {
+        var project = await _projects.CreateProjectAsync("Waiting self schedule");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Dependencies");
+        var waiting = await _columns.CreateColumnAsync(project.Slug, "En attente", pipelineId: pipeline.Id,
+            role: ColumnRole.Waiting);
+        var ready = await _columns.CreateColumnAsync(project.Slug, "Prêt", pipelineId: pipeline.Id);
+        var abandoned = await _columns.CreateColumnAsync(project.Slug, "Abandonné", pipelineId: pipeline.Id,
+            role: ColumnRole.Failure);
+        var processor = await SaveProcessor(project.Slug, waiting.Id, abandoned.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Blocked work", status: waiting.Name,
+            pipelineId: pipeline.Id, columnId: waiting.Id);
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+        var fireAt = DateTime.UtcNow.AddHours(1);
+
+        await _executions.CompleteAsync(project.Slug, execution!, processor,
+            new ColumnAgentResult("scheduled", [], "Still blocked.", fireAt, ready.Name), "column-agent");
+        var scheduled = await _tickets.GetTicketAsync(project.Slug, ticket.Id);
+        var attempt = Assert.Single(await _executions.ListAsync(project.Slug, ticket.Id));
+
+        Assert.Equal(waiting.Id, scheduled!.ColumnId);
+        Assert.Equal(fireAt, scheduled.FireAt);
+        Assert.Equal(ready.Name, scheduled.ScheduleTarget);
+        Assert.Equal(ColumnExecutionStatus.Completed, attempt.Status);
+    }
+
+    [Fact]
     public async Task Scheduled_completion_to_a_non_waiting_column_is_rejected()
     {
         var project = await _projects.CreateProjectAsync("Invalid scheduled destination");
