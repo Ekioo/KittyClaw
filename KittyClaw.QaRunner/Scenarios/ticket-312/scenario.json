@@ -1,0 +1,26 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "qa-nested-search-312" },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-nested-search-312/tickets", "body": { "title": "Search context parent", "createdBy": "qa-runner", "status": "Backlog" }, "extract": { "parentId": "id" } },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-nested-search-312/tickets", "body": { "title": "Exact nested result", "createdBy": "qa-runner", "status": "Backlog", "parentId": "{parentId}" }, "extract": { "childId": "id" } },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-nested-search-312/tickets", "body": { "title": "Unrelated root", "createdBy": "qa-runner", "status": "Backlog" } }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/" },
+    { "type": "wait", "ms": 1000 },
+    { "type": "fill", "selector": ".unified-filter-bar .filter-input", "value": "{childId}" },
+    { "type": "wait", "ms": 500 },
+    { "type": "assertCount", "selector": "[data-global-ticket-search-results] [data-ticket-id]", "expected": "2" },
+    { "type": "assertVisible", "selector": "[data-global-ticket-search-results] [data-ticket-id='{parentId}'][data-parent-result='true']" },
+    { "type": "assertVisible", "selector": "[data-global-ticket-search-results] [data-ticket-id='{childId}'][data-parent-result='false']" },
+    { "type": "click", "selector": "[data-global-ticket-search-results] [data-ticket-id='{childId}']" },
+    { "type": "wait", "ms": 500 },
+    { "type": "assertVisible", "selector": ".ticket-modal-overlay" },
+    { "type": "click", "selector": ".ticket-modal-overlay .close-btn" },
+    { "type": "fill", "selector": ".unified-filter-bar .filter-input", "value": "{childId}" },
+    { "type": "wait", "ms": 500 },
+    { "type": "assertCount", "selector": "[data-global-ticket-search-results] [data-ticket-id]", "expected": "2" },
+    { "type": "screenshot", "name": "nested-ticket-number-search", "description": "Global number search shows the exact nested ticket and its direct parent only" }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

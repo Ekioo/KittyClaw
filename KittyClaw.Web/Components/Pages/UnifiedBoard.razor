@@ -41,7 +41,8 @@
                    placeholder="@L["UnifiedBoardSearchPlaceholder"]"
                    aria-label="@L["UnifiedBoardSearchPlaceholder"]"
                    @bind="_filterText"
-                   @bind:event="oninput" />
+                   @bind:event="oninput"
+                   @bind:after="OnFilterChangedAsync" />
             @if (!string.IsNullOrEmpty(_filterText))
             {
                 <button class="filter-clear"
@@ -79,6 +80,54 @@
 else if (_projects.Count == 0)
 {
     <p class="empty-hint">@L["UnifiedBoardNoProjects"]</p>
+}
+else if (TicketNumberSearchId is not null)
+{
+    @if (_lanes is null)
+    {
+        <p class="empty-hint">@L["UnifiedBoardLoading"]</p>
+    }
+    else if (TicketNumberResults.Count == 0)
+    {
+        <p class="empty-hint">@L["UnifiedBoardNoMatches"]</p>
+    }
+    else
+    {
+        <div class="global-ticket-search-results" data-global-ticket-search-results="true">
+            @foreach (var projectResults in TicketNumberResults.GroupBy(result => result.Lane.Project.Slug))
+            {
+                var lane = projectResults.First().Lane;
+                <section class="global-ticket-search-project" data-project-slug="@lane.Project.Slug">
+                    <h2>@lane.Project.Name</h2>
+                    <div class="global-ticket-search-grid">
+                        @foreach (var result in projectResults)
+                        {
+                            var ticket = result.Match.Ticket;
+                            <button type="button"
+                                    class="global-ticket-search-card @(result.Match.IsParent ? "global-ticket-search-card--parent" : "")"
+                                    data-ticket-id="@ticket.Id"
+                                    data-parent-result="@result.Match.IsParent.ToString().ToLowerInvariant()"
+                                    @onclick="() => OpenTicket(lane.Project.Slug, ticket.Id)">
+                                <span class="global-ticket-search-card-top">
+                                    <span class="ticket-id">#@ticket.Id</span>
+                                    @if (result.Match.IsParent)
+                                    {
+                                        <span class="global-ticket-search-context">@L["Parent"]</span>
+                                    }
+                                    <span class="global-ticket-search-status">@ticket.Status</span>
+                                </span>
+                                <span class="ticket-title">@ticket.Title</span>
+                                @if (!result.Match.IsParent && ticket.ParentId is int parentId)
+                                {
+                                    <span class="global-ticket-search-context">@L["Parent"] #@parentId</span>
+                                }
+                            </button>
+                        }
+                    </div>
+                </section>
+            }
+        </div>
+    }
 }
 else if (_viewMode == "cards")
 {
@@ -356,11 +405,34 @@ else
         List<TicketSummary> Tickets,
         List<Member> Members);
 
+    private sealed record GlobalTicketSearchResult(LaneData Lane, TicketNumberSearchResult Match);
+
     private List<LaneData>? _lanes;
     private readonly Dictionary<string, bool> _collapsed = new(StringComparer.OrdinalIgnoreCase);
     private bool _prefsLoaded;
     private string _filterText = "";
     private readonly Dictionary<string, LatestRefreshGuard> _laneRefreshGuards = new(StringComparer.OrdinalIgnoreCase);
+
+    private int? TicketNumberSearchId =>
+        TicketNumberSearch.TryParse(_filterText, out var ticketId) ? ticketId : null;
+
+    private IReadOnlyList<GlobalTicketSearchResult> TicketNumberResults
+    {
+        get
+        {
+            if (_lanes is null || TicketNumberSearchId is not int ticketId) return [];
+
+            var results = new List<GlobalTicketSearchResult>();
+            foreach (var lane in _lanes)
+            {
+                var matches = TicketNumberSearch.Find(lane.Tickets, ticketId);
+                var exact = matches.FirstOrDefault(match => !match.IsParent);
+                if (exact is null || !ApplyFilter([exact.Ticket], lane, ticketId).Any()) continue;
+                results.AddRange(matches.Select(match => new GlobalTicketSearchResult(lane, match)));
+            }
+            return results;
+        }
+    }
 
     // Home display mode: "cards" (project grid) or "kanban" (unified swimlanes), persisted
     // per browser. Kanban is the default for a fresh browser.
@@ -489,6 +561,12 @@ else
         }
     }
 
+    private async Task OnFilterChangedAsync()
+    {
+        if (TicketNumberSearchId is not null)
+            await EnsureLanesAsync();
+    }
+
     private async Task<LaneData> LoadLaneAsync(Project project, int? selectedPipelineId = null)
     {
         var pipelinesTask = PipelineService.ListAsync(project.Slug);
@@ -565,13 +643,22 @@ else
 
     // Same token syntax as the per-project board search: free text matches ticket title or
     // project name/slug; #42, @assignee, project:, priority:, label:, by: narrow further.
-    private IEnumerable<TicketSummary> ApplyFilter(IEnumerable<TicketSummary> tickets, LaneData lane)
+    private IEnumerable<TicketSummary> ApplyFilter(
+        IEnumerable<TicketSummary> tickets,
+        LaneData lane,
+        int? ignoredTicketNumber = null)
     {
         if (string.IsNullOrWhiteSpace(_filterText)) return tickets;
 
         foreach (var token in _filterText.Split(' ', StringSplitOptions.RemoveEmptyEntries))
         {
-            if (token.StartsWith('#') && int.TryParse(token[1..], out var id))
+            if (ignoredTicketNumber is int ignored
+                && (token.Equals(ignored.ToString(), StringComparison.Ordinal)
+                    || token.Equals($"#{ignored}", StringComparison.Ordinal)))
+            {
+                continue;
+            }
+            else if (token.StartsWith('#') && int.TryParse(token[1..], out var id))
             {
                 tickets = tickets.Where(t => t.Id == id);
             }

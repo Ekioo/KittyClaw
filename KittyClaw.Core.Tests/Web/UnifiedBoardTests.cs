@@ -196,6 +196,28 @@ public class UnifiedBoardTests
     }
 
     [Fact]
+    public void UnifiedBoard_TicketNumberSearch_RendersExactTicketAndParentResults()
+    {
+        var src = LoadUnifiedBoard();
+
+        Assert.Contains("TicketNumberSearch.TryParse", src);
+        Assert.Contains("TicketNumberSearch.Find(lane.Tickets, ticketId)", src);
+        Assert.Contains("data-global-ticket-search-results", src);
+        Assert.Contains("data-parent-result", src);
+        Assert.Contains("OpenTicket(lane.Project.Slug, ticket.Id)", src);
+    }
+
+    [Fact]
+    public void UnifiedBoard_TicketNumberSearch_LoadsTicketDataFromCardsMode()
+    {
+        var src = LoadUnifiedBoard();
+
+        Assert.Contains("@bind:after=\"OnFilterChangedAsync\"", src);
+        Assert.Contains("if (TicketNumberSearchId is not null)", src);
+        Assert.Contains("await EnsureLanesAsync();", src);
+    }
+
+    [Fact]
     public void TicketPanel_IsExtracted_AndSharedWithTheProjectBoard()
     {
         // One ticket detail implementation for both views. The panel owns its own data and
