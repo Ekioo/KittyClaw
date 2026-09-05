@@ -329,20 +329,34 @@ public class TicketService
         {
             ColumnRole = t.ColumnId is int columnId && subRoles.TryGetValue(columnId, out var role) ? role : ColumnRole.Normal,
         }).ToList();
-        ticket.BlockedBy = await (
+        var blockedBy = await (
             from d in db.TicketDependencies
             join t in db.Tickets on d.BlocksTicketId equals t.Id
             where d.BlockedTicketId == ticketId
             orderby d.Id
-            select new TicketDependencyInfo(d.Id, t.Id, t.Title, t.Status)
+            select new { DependencyId = d.Id, TicketId = t.Id, t.Title, t.Status, t.ColumnId }
         ).ToListAsync();
-        ticket.Blocks = await (
+        var blocks = await (
             from d in db.TicketDependencies
             join t in db.Tickets on d.BlockedTicketId equals t.Id
             where d.BlocksTicketId == ticketId
             orderby d.Id
-            select new TicketDependencyInfo(d.Id, t.Id, t.Title, t.Status)
+            select new { DependencyId = d.Id, TicketId = t.Id, t.Title, t.Status, t.ColumnId }
         ).ToListAsync();
+        var dependencyColumnIds = blockedBy.Concat(blocks)
+            .Where(t => t.ColumnId is not null).Select(t => t.ColumnId!.Value).Distinct().ToList();
+        var dependencyRoles = await db.BoardColumns.Where(c => dependencyColumnIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, c => c.Role);
+        ticket.BlockedBy = blockedBy.Select(t => new TicketDependencyInfo(t.DependencyId, t.TicketId, t.Title, t.Status)
+        {
+            ColumnRole = t.ColumnId is int columnId && dependencyRoles.TryGetValue(columnId, out var role)
+                ? role : ColumnRole.Normal,
+        }).ToList();
+        ticket.Blocks = blocks.Select(t => new TicketDependencyInfo(t.DependencyId, t.TicketId, t.Title, t.Status)
+        {
+            ColumnRole = t.ColumnId is int columnId && dependencyRoles.TryGetValue(columnId, out var role)
+                ? role : ColumnRole.Normal,
+        }).ToList();
         return ticket;
     }
 

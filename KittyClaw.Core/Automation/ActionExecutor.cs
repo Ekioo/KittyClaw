@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using KittyClaw.Core.Automation.Triggers;
+using KittyClaw.Core.Models;
 using KittyClaw.Core.Services;
 
 namespace KittyClaw.Core.Automation;
@@ -515,7 +516,7 @@ internal sealed class ActionExecutor
             if (depTicket is not null)
             {
                 var unresolved = depTicket.BlockedBy
-                    .Where(b => !string.Equals(b.Status, "Done", StringComparison.OrdinalIgnoreCase))
+                    .Where(b => b.ColumnRole != ColumnRole.Success)
                     .ToList();
                 if (unresolved.Count > 0)
                 {

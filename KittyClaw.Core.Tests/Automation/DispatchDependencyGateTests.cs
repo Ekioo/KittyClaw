@@ -18,6 +18,7 @@ public sealed class DispatchDependencyGateTests
         ActionExecutor executor,
         ProjectRuntime runtime,
         TicketService tickets,
+        ColumnService columns,
         AgentRunRegistry runs,
         string slug)> BuildAsync(TempDir tmp)
     {
@@ -36,6 +37,7 @@ public sealed class DispatchDependencyGateTests
         var appSettings = new AppSettingsService(tmp.Path);
         var loc = new LocalizationService(appSettings);
         var tickets = new TicketService(projects, members);
+        var columns = new ColumnService(projects);
         var runState = new RunStateManager(runs, cost, tickets, NullLogger.Instance);
 
         var executor = new ActionExecutor(
@@ -46,7 +48,7 @@ public sealed class DispatchDependencyGateTests
         rt.Workspace = workspace;
         rt.Config = new AutomationConfig { Automations = [] };
 
-        return (executor, rt, tickets, runs, project.Slug);
+        return (executor, rt, tickets, columns, runs, project.Slug);
     }
 
     private static AutomationRule MakeRunAgentAutomation() =>
@@ -65,7 +67,7 @@ public sealed class DispatchDependencyGateTests
     public async Task Dispatch_skipped_when_blocker_is_not_Done()
     {
         using var tmp = new TempDir();
-        var (executor, rt, tickets, runs, slug) = await BuildAsync(tmp);
+        var (executor, rt, tickets, _, runs, slug) = await BuildAsync(tmp);
 
         var blocker = await tickets.CreateTicketAsync(slug, "Blocker ticket");
         var blocked = await tickets.CreateTicketAsync(slug, "Blocked ticket");
@@ -85,7 +87,7 @@ public sealed class DispatchDependencyGateTests
     public async Task Blocker_comment_is_posted_once_and_not_duplicated()
     {
         using var tmp = new TempDir();
-        var (executor, rt, tickets, runs, slug) = await BuildAsync(tmp);
+        var (executor, rt, tickets, _, runs, slug) = await BuildAsync(tmp);
 
         var blocker = await tickets.CreateTicketAsync(slug, "Upstream work");
         var blocked = await tickets.CreateTicketAsync(slug, "Downstream ticket");
@@ -114,7 +116,7 @@ public sealed class DispatchDependencyGateTests
     public async Task Blocker_comment_includes_blocker_status()
     {
         using var tmp = new TempDir();
-        var (executor, rt, tickets, runs, slug) = await BuildAsync(tmp);
+        var (executor, rt, tickets, _, runs, slug) = await BuildAsync(tmp);
 
         var blocker = await tickets.CreateTicketAsync(slug, "Pending task");
         await tickets.MoveTicketAsync(slug, blocker.Id, "InProgress", "owner");
@@ -137,7 +139,7 @@ public sealed class DispatchDependencyGateTests
     public async Task New_comment_posted_when_different_blockers_are_unresolved()
     {
         using var tmp = new TempDir();
-        var (executor, rt, tickets, runs, slug) = await BuildAsync(tmp);
+        var (executor, rt, tickets, _, runs, slug) = await BuildAsync(tmp);
 
         var blockerA = await tickets.CreateTicketAsync(slug, "Blocker A");
         var blockerB = await tickets.CreateTicketAsync(slug, "Blocker B");
@@ -173,7 +175,7 @@ public sealed class DispatchDependencyGateTests
     public async Task No_blocker_comment_when_all_blockers_are_Done()
     {
         using var tmp = new TempDir();
-        var (executor, rt, tickets, runs, slug) = await BuildAsync(tmp);
+        var (executor, rt, tickets, _, runs, slug) = await BuildAsync(tmp);
 
         var blocker = await tickets.CreateTicketAsync(slug, "Resolved blocker");
         await tickets.MoveTicketAsync(slug, blocker.Id, "Done", "owner");
@@ -198,6 +200,34 @@ public sealed class DispatchDependencyGateTests
 
         Assert.Empty(blockerComments);
         Assert.NotEmpty(runs.AllForTicket(slug, blocked.Id));
+    }
+
+    [Fact]
+    public async Task Dependency_in_project_specific_success_column_is_resolved()
+    {
+        using var tmp = new TempDir();
+        var (executor, rt, tickets, columns, runs, slug) = await BuildAsync(tmp);
+
+        var success = (await columns.ListColumnsAsync(slug)).Single(c => c.Role == ColumnRole.Success);
+        await columns.UpdateColumnAsync(slug, success.Id, name: "Livré");
+
+        var blocker = await tickets.CreateTicketAsync(slug, "Localized resolved blocker");
+        await tickets.MoveTicketAsync(slug, blocker.Id, "Livré", "owner");
+        var blocked = await tickets.CreateTicketAsync(slug, "Ready downstream ticket");
+        await tickets.AddDependencyAsync(slug, blocked.Id, blocker.Id);
+
+        var automation = MakeRunAgentAutomation();
+        var firing = new TriggerFiring(blocked.Id, blocked.Title, blocked.Status);
+        await executor.ExecuteAutomationAsync(rt, automation, firing, CancellationToken.None);
+
+        await AssertEventuallyAsync(
+            () => runs.AllForTicket(slug, blocked.Id).Any(),
+            TimeSpan.FromSeconds(5));
+
+        var updated = await tickets.GetTicketAsync(slug, blocked.Id);
+        Assert.Equal(ColumnRole.Success, Assert.Single(updated!.BlockedBy).ColumnRole);
+        Assert.DoesNotContain(updated.Comments,
+            c => c.Author == "automation" && c.Content.Contains("Dispatch blocked"));
     }
 
     private static async Task AssertEventuallyAsync(Func<bool> assertion, TimeSpan timeout)
