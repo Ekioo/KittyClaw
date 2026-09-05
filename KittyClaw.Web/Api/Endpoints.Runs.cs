@@ -84,6 +84,30 @@ public static partial class Endpoints
                     return Results.Ok(new { status = status.ToString() });
                 }).ExcludeFromDescription();
 
+            api.MapGet("/projects/{slug}/qa/tickets/{ticketId:int}/evidence/branch-diff",
+                (string slug, int ticketId, string branch, string commitSha, string baseCommitSha,
+                    string files, EvidenceStore store) =>
+                {
+                    var provenance = new EvidenceProvenance(
+                        "git-branch-diff", "qa", "qa-evidence", DateTime.UtcNow, EvidenceTrust.Verified);
+                    var evidence = new TicketEvidence
+                    {
+                        TicketId = ticketId.ToString(),
+                        ProjectSlug = slug,
+                        CapturedAt = DateTime.UtcNow,
+                        Status = EvidenceStatus.Complete,
+                        RunIds = ["qa-evidence"],
+                        RepositoryState = new RepositoryState(branch, commitSha, true, [], provenance)
+                        {
+                            BaseCommitSha = baseCommitSha,
+                        },
+                    };
+                    foreach (var path in files.Split('|', StringSplitOptions.RemoveEmptyEntries))
+                        evidence.ChangedFiles.Add(new ChangedFile(path, FileChangeKind.Added, null, provenance));
+                    store.SaveTicket(evidence);
+                    return Results.Ok(new { fileCount = evidence.ChangedFiles.Count });
+                }).ExcludeFromDescription();
+
             api.MapGet("/projects/{slug}/qa/runs/latest-input-images", (string slug, AgentRunRegistry reg) =>
             {
                 var run = reg.AllForProject(slug)

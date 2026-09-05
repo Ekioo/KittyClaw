@@ -82,7 +82,7 @@ public sealed class EvidenceBenchmarkSuiteTests : IClassFixture<EvidenceBenchmar
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task Codex_PartialEvidence_NonBlockingFindingAndShipVerdict()
+    public async Task Codex_PartialEvidence_NonBlockingFindingAndFixVerdict()
     {
         var (slug, ticketId) = await CreateProjectAndTicketAsync(
             "bench-s2-codex", "Refactor database connection pool to use async/await pattern");
@@ -112,7 +112,7 @@ public sealed class EvidenceBenchmarkSuiteTests : IClassFixture<EvidenceBenchmar
         Assert.Equal("Partial", ev!["status"]!.GetValue<string>());
 
         var brief = await GetJsonAsync($"/api/projects/{slug}/tickets/{ticketId}/brief");
-        Assert.Equal("Ship", brief!["verdict"]!.GetValue<string>());
+        Assert.Equal("Fix", brief!["verdict"]!.GetValue<string>());
         Assert.Equal("Partial", brief["evidenceStatus"]!.GetValue<string>());
 
         var findings = brief["findings"]!.AsArray();

@@ -1,0 +1,39 @@
+{
+  "environment": { "KITTYCLAW_ENABLE_QA_ENDPOINTS": "1" },
+  "setup": [
+    { "type": "createProject", "name": "qa-227-evidence-brief" },
+    {
+      "type": "api",
+      "method": "PATCH",
+      "path": "/api/projects/qa-227-evidence-brief/columns/6",
+      "body": { "role": 4 }
+    },
+    {
+      "type": "createTicket",
+      "project": "qa-227-evidence-brief",
+      "title": "Review the final branch evidence",
+      "status": "Todo"
+    },
+    {
+      "type": "setStatus",
+      "project": "qa-227-evidence-brief",
+      "status": "Review"
+    },
+    {
+      "type": "api",
+      "method": "GET",
+      "path": "/api/projects/qa-227-evidence-brief/qa/tickets/{ticketId}/evidence/branch-diff?branch=chore-226-contact-spam-audit&commitSha=aeea5ae&baseCommitSha=main-base&files=report-contact-spam-audit-226.md%7CMEMORY.md"
+    }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-227-evidence-brief/ticket/{ticketId}" },
+    { "type": "wait", "ms": 1500 },
+    { "type": "assertText", "selector": ".decision-brief-files summary", "expected": "2 delivered file(s) — view list" },
+    { "type": "click", "selector": ".decision-brief-files summary" },
+    { "type": "assertCount", "selector": ".decision-brief-files li", "expected": "2" },
+    { "type": "assertVisible", "selector": ".decision-brief-context" },
+    { "type": "assertVisible", "selector": ".decision-brief-repository" },
+    { "type": "screenshot", "name": "ticket-227-evidence-brief", "selector": ".decision-brief", "description": "The expanded evidence brief shows exactly two delivered files, stable Git coordinates, and separates the technical result from ticket status and owner action." }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

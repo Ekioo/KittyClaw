@@ -49,12 +49,12 @@ public sealed class TicketDecisionBriefTests
     }
 
     [Fact]
-    public void PartialEvidence_AllCommandsPass_ProducesShip()
+    public void PartialEvidence_AllCommandsPass_ProducesFix()
     {
         var brief = DecisionBriefComposer.Compose(
             MakeEvidence(EvidenceStatus.Partial, commandTrust: EvidenceTrust.AgentClaim));
 
-        Assert.Equal(DecisionVerdict.Ship, brief.Verdict);
+        Assert.Equal(DecisionVerdict.Fix, brief.Verdict);
         Assert.Contains(brief.Findings, f => f.Category == "agent-claim" && !f.IsBlocking);
     }
 
