@@ -93,7 +93,7 @@ public sealed class ColumnAgentDispatcherFirstRunIntegrationTests
 
             _projects = new ProjectService(_temp.Path);
             var readiness = new AgentCliReadinessService(
-                () => "claude", () => null, () => grok ? "grok" : null,
+                () => "claude", () => null, () => grok ? "grok" : null, () => null,
                 (_, _, _) => Task.FromResult(claude || grok));
             FirstRun = new FirstRunProviderService(_temp.Path, readiness);
             _eventFile = Path.Combine(_temp.Path, "activation", "first-run-events.jsonl");

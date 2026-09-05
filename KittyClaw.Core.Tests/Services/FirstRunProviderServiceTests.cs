@@ -67,6 +67,7 @@ public sealed class FirstRunProviderServiceTests : IDisposable
             () => claude ? "claude" : "missing-claude",
             () => codex ? "codex" : null,
             () => grok ? "grok" : null,
+            () => null,
             (binary, _, _) => Task.FromResult(binary == "git" || binary is "claude" or "codex" or "grok"));
         return new FirstRunProviderService(_dir, readiness);
     }
