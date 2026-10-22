@@ -64,6 +64,133 @@
             </div>
         </div>
 
+        <div class="ticket-properties-row">
+        <div class="ticket-column-row" data-testid="ticket-current-column">
+            <span class="ticket-column-badge" title="@L["TicketCurrentColumn"]" aria-label="@(L["TicketCurrentColumn"] + ": " + (CurrentColumn()?.Name ?? _ticket.Status))">
+                <span class="sub-ticket-status-dot" style="background: @(CurrentColumn()?.Color ?? GetColumnColor(_ticket.Status))" aria-hidden="true"></span>
+                @(CurrentColumn()?.Name ?? _ticket.Status)
+            </span>
+        </div>
+
+        @* ── Labels row ── *@
+        <div class="ticket-labels-row" title="@L["Labels"]">
+            @foreach (var label in _ticket.Labels)
+            {
+                var lid = label.Id;
+                <span class="label-pill label-removable" style="--lc: @label.Color">
+                    @label.Name
+                    <button class="label-remove-btn" @onclick="() => RemoveLabel(lid)" @onclick:stopPropagation>&times;</button>
+                </span>
+            }
+            <div class="label-autocomplete">
+                <input class="label-autocomplete-input"
+                       placeholder="+ Label..."
+                       aria-label="@L["Labels"]"
+                       @bind="_labelSearch"
+                       @bind:event="oninput"
+                       @onfocus="OpenLabelDropdown"
+                       @onblur="OnLabelBlur"
+                       @onkeydown="HandleLabelKeyDown" />
+                @if (_labelDropdownOpen && GetLabelSuggestions().Any())
+                {
+                    <div class="label-dropdown">
+                        @foreach (var suggestion in GetLabelSuggestions())
+                        {
+                            <button class="label-dropdown-item" style="--lc: @suggestion.Color"
+                                    @onmousedown="() => AddExistingLabel(suggestion)">
+                                <span class="label-pill" style="--lc: @suggestion.Color">@suggestion.Name</span>
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* ── Assignee row ── *@
+        <div class="ticket-assignee-row" title="@L["AssignedToLabel"]">
+            @if (!string.IsNullOrEmpty(_ticket.AssignedTo))
+            {
+                <span class="assignee-pill">
+                    @MemberDisplayName(_ticket.AssignedTo)
+                    <button class="label-remove-btn" @onclick="RemoveAssignee">&times;</button>
+                </span>
+            }
+            <div class="label-autocomplete">
+                <input class="label-autocomplete-input"
+                       placeholder="@(string.IsNullOrEmpty(_ticket.AssignedTo) ? L["AssignPlaceholder"] : L["ChangePlaceholder"])"
+                       aria-label="@L["AssignedToLabel"]"
+                       @bind="_assigneeSearch"
+                       @bind:event="oninput"
+                       @onfocus="OpenAssigneeDropdown"
+                       @onblur="OnAssigneeBlur"
+                       @onkeydown="HandleAssigneeKeyDown" />
+                @if (_assigneeDropdownOpen && GetAssigneeSuggestions().Any())
+                {
+                    <div class="label-dropdown">
+                        @foreach (var member in GetAssigneeSuggestions())
+                        {
+                            <button class="label-dropdown-item" @onmousedown="() => SetAssignee(member.Slug)">
+                                <span class="assignee-pill">@member.Name</span>
+                                <span class="member-slug-hint">@member.Slug</span>
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+
+        </div>
+
+        @* ── Schedule row ── *@
+        @if (_editingSchedule)
+        {
+            <div class="ticket-schedule-row">
+                <span class="section-label-sm">⏰ @L["ScheduledForLabel"]</span>
+                <input type="datetime-local" class="schedule-input" @bind="_editFireAtLocal" @bind:event="oninput" />
+                <span class="schedule-arrow">&#8594;</span>
+                <select class="schedule-target-select" @bind="_editScheduleTarget">
+                    @foreach (var c in _columns.Where(c => c.Name != "Scheduled"))
+                    {
+                        <option value="@c.Name">@c.Name</option>
+                    }
+                </select>
+                <button class="icon-btn save-btn" title="@L["Save"]" disabled="@(_editFireAtLocal is null)" @onclick="SaveSchedule">&#10003;</button>
+                <button class="icon-btn cancel-icon-btn" title="@L["Cancel"]" @onclick="() => _editingSchedule = false">&#10005;</button>
+            </div>
+        }
+        else if (_ticket.FireAt is not null || _ticket.Status == "Scheduled")
+        {
+            <div class="ticket-schedule-row">
+                <span class="section-label-sm">⏰ @L["ScheduledForLabel"]</span>
+                @if (_ticket.FireAt is DateTime fireAtUtc)
+                {
+                    <span class="schedule-value">@UtcToLocal(fireAtUtc).ToString("g")</span>
+                    <span class="schedule-arrow">&#8594; @(_ticket.ScheduleTarget ?? "Todo")</span>
+                }
+                else
+                {
+                    <span class="schedule-value empty-hint">@L["ScheduleNoDate"]</span>
+                }
+                <button class="icon-btn pencil-btn" title="@L["ScheduleEdit"]" @onclick="StartEditSchedule">&#9998;</button>
+            </div>
+        }
+        else if (_columns.Any(c => c.Name == "Scheduled"))
+        {
+            <div class="ticket-schedule-row">
+                <button class="schedule-add-btn" title="@L["ScheduleButton"]" @onclick="StartEditSchedule">⏰ @L["ScheduleButton"]</button>
+            </div>
+        }
+
+            <div class="ticket-meta">
+                <span>@_ticket.CreatedBy</span>
+                <span>@_ticket.CreatedAt.ToString("d")</span>
+                @if (_ticket.AgentTokens > 0)
+                {
+                    <span class="token-badge" title="@CostTooltip(_ticket.AgentTokens, _ticket.AgentCostUsd, _ticket.AgentCostEstimated)">⛁ @KittyClaw.Web.Services.TokenDisplay.Compact(_ticket.AgentTokens)@(_ticket.AgentCostUsd > 0 ? $" · {(_ticket.AgentCostEstimated ? "≈ " : "")}{KittyClaw.Web.Services.TokenDisplay.Usd(_ticket.AgentCostUsd)}" : "")</span>
+                }
+            </div>
+
+        </div>
+
         @if (_worktreeState is not null)
         {
             <section class="worktree-summary" data-testid="ticket-worktree-summary">
@@ -115,121 +242,6 @@
         else if (_worktreeLoadError is not null)
         {
             <div class="worktree-summary worktree-error" data-testid="ticket-worktree-error">@L["WorktreeLoadError"] @_worktreeLoadError</div>
-        }
-
-        @* ── Labels row ── *@
-        <div class="ticket-labels-row">
-            @foreach (var label in _ticket.Labels)
-            {
-                var lid = label.Id;
-                <span class="label-pill label-removable" style="--lc: @label.Color">
-                    @label.Name
-                    <button class="label-remove-btn" @onclick="() => RemoveLabel(lid)" @onclick:stopPropagation>&times;</button>
-                </span>
-            }
-            <div class="label-autocomplete">
-                <input class="label-autocomplete-input"
-                       placeholder="+ Label..."
-                       @bind="_labelSearch"
-                       @bind:event="oninput"
-                       @onfocus="OpenLabelDropdown"
-                       @onblur="OnLabelBlur"
-                       @onkeydown="HandleLabelKeyDown" />
-                @if (_labelDropdownOpen && GetLabelSuggestions().Any())
-                {
-                    <div class="label-dropdown">
-                        @foreach (var suggestion in GetLabelSuggestions())
-                        {
-                            <button class="label-dropdown-item" style="--lc: @suggestion.Color"
-                                    @onmousedown="() => AddExistingLabel(suggestion)">
-                                <span class="label-pill" style="--lc: @suggestion.Color">@suggestion.Name</span>
-                            </button>
-                        }
-                    </div>
-                }
-            </div>
-        </div>
-
-        @* ── Assignee row ── *@
-        <div class="ticket-assignee-row">
-            <span class="section-label-sm">@L["AssignedToLabel"]</span>
-            @if (!string.IsNullOrEmpty(_ticket.AssignedTo))
-            {
-                <span class="assignee-pill">
-                    @MemberDisplayName(_ticket.AssignedTo)
-                    <button class="label-remove-btn" @onclick="RemoveAssignee">&times;</button>
-                </span>
-            }
-            <div class="label-autocomplete">
-                <input class="label-autocomplete-input"
-                       placeholder="@(string.IsNullOrEmpty(_ticket.AssignedTo) ? L["AssignPlaceholder"] : L["ChangePlaceholder"])"
-                       @bind="_assigneeSearch"
-                       @bind:event="oninput"
-                       @onfocus="OpenAssigneeDropdown"
-                       @onblur="OnAssigneeBlur"
-                       @onkeydown="HandleAssigneeKeyDown" />
-                @if (_assigneeDropdownOpen && GetAssigneeSuggestions().Any())
-                {
-                    <div class="label-dropdown">
-                        @foreach (var member in GetAssigneeSuggestions())
-                        {
-                            <button class="label-dropdown-item" @onmousedown="() => SetAssignee(member.Slug)">
-                                <span class="assignee-pill">@member.Name</span>
-                                <span class="member-slug-hint">@member.Slug</span>
-                            </button>
-                        }
-                    </div>
-                }
-            </div>
-            <div class="ticket-meta">
-                <span>@_ticket.Status</span>
-                <span>@_ticket.CreatedBy</span>
-                <span>@_ticket.CreatedAt.ToString("d")</span>
-                @if (_ticket.AgentTokens > 0)
-                {
-                    <span class="token-badge" title="@CostTooltip(_ticket.AgentTokens, _ticket.AgentCostUsd, _ticket.AgentCostEstimated)">⛁ @KittyClaw.Web.Services.TokenDisplay.Compact(_ticket.AgentTokens)@(_ticket.AgentCostUsd > 0 ? $" · {(_ticket.AgentCostEstimated ? "≈ " : "")}{KittyClaw.Web.Services.TokenDisplay.Usd(_ticket.AgentCostUsd)}" : "")</span>
-                }
-            </div>
-        </div>
-
-        @* ── Schedule row ── *@
-        @if (_editingSchedule)
-        {
-            <div class="ticket-schedule-row">
-                <span class="section-label-sm">⏰ @L["ScheduledForLabel"]</span>
-                <input type="datetime-local" class="schedule-input" @bind="_editFireAtLocal" @bind:event="oninput" />
-                <span class="schedule-arrow">&#8594;</span>
-                <select class="schedule-target-select" @bind="_editScheduleTarget">
-                    @foreach (var c in _columns.Where(c => c.Name != "Scheduled"))
-                    {
-                        <option value="@c.Name">@c.Name</option>
-                    }
-                </select>
-                <button class="icon-btn save-btn" title="@L["Save"]" disabled="@(_editFireAtLocal is null)" @onclick="SaveSchedule">&#10003;</button>
-                <button class="icon-btn cancel-icon-btn" title="@L["Cancel"]" @onclick="() => _editingSchedule = false">&#10005;</button>
-            </div>
-        }
-        else if (_ticket.FireAt is not null || _ticket.Status == "Scheduled")
-        {
-            <div class="ticket-schedule-row">
-                <span class="section-label-sm">⏰ @L["ScheduledForLabel"]</span>
-                @if (_ticket.FireAt is DateTime fireAtUtc)
-                {
-                    <span class="schedule-value">@UtcToLocal(fireAtUtc).ToString("g")</span>
-                    <span class="schedule-arrow">&#8594; @(_ticket.ScheduleTarget ?? "Todo")</span>
-                }
-                else
-                {
-                    <span class="schedule-value empty-hint">@L["ScheduleNoDate"]</span>
-                }
-                <button class="icon-btn pencil-btn" title="@L["ScheduleEdit"]" @onclick="StartEditSchedule">&#9998;</button>
-            </div>
-        }
-        else if (_columns.Any(c => c.Name == "Scheduled"))
-        {
-            <div class="ticket-schedule-row">
-                <button class="schedule-add-btn" @onclick="StartEditSchedule">⏰ @L["ScheduleButton"]</button>
-            </div>
         }
 
         @* ── Sub-tickets section ── *@
