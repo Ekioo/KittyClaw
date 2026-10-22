@@ -40,7 +40,7 @@ For a high-level overview see the root [README.md](../README.md). For repo layou
 - [Dashboard](./dashboard.md) — free-form tile view backed by `.dashboard/` Markdown files with drag-and-drop layout.
 - [Cost reporting](./cost-reporting.md) — global agent-cost history with date, project, and pipeline filtering.
 - [Graphic charter](./graphic-charter.md) — palette, typography, spacing, form controls, button variants. Reference before adding any new UI.
-- [Update check](./update-check.md) — background poll of GitHub Releases that surfaces a dismissible "new version available" banner in the app shell.
+- [Windows installation and updates](./update-check.md) — self-contained Velopack installer, desktop lifetime, package downloads and restart, and source-installation release checks.
 - [Telemetry](./telemetry.md) — anonymous daily heartbeat to Umami Cloud (instance id, version, OS); always on outside Development.
 - [Per-ticket worktree workflow](./worktree-workflow.md) — opt-in canonical root-ticket worktrees, isolated agent execution, and linear integration helpers.
 - [Local models (Ollama)](./local-models.md) — dispatching agents to a local Ollama model via the Anthropic-compat endpoint.

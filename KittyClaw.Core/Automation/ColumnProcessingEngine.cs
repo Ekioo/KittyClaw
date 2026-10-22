@@ -25,6 +25,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
     private readonly WorktreeMergeQueueService? _mergeQueue;
     private readonly ILogger<ColumnProcessingEngine> _logger;
     private readonly StartupWorkGate? _startupGate;
+    private readonly AgentRunRegistry? _runs;
     private readonly ConcurrentDictionary<string, byte> _pendingProjects = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<int, int>> _ownerFeedbackSignals = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Task> _activeProcessors = new();
@@ -40,7 +41,8 @@ public sealed class ColumnProcessingEngine : BackgroundService
         TicketWorktreeService? worktrees = null,
         WorktreeFinalizationCoordinator? finalization = null,
         WorktreeMergeQueueService? mergeQueue = null,
-        StartupWorkGate? startupGate = null)
+        StartupWorkGate? startupGate = null,
+        AgentRunRegistry? runs = null)
     {
         _projects = projects;
         _tickets = tickets;
@@ -54,6 +56,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
         _finalization = finalization;
         _mergeQueue = mergeQueue;
         _startupGate = startupGate;
+        _runs = runs;
         _tickets.TicketStatusChanged += OnTicketChanged;
         _tickets.TicketCreated += OnTicketCreated;
         _tickets.TicketCommentAdded += OnTicketCommentAdded;
@@ -142,6 +145,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
         CancellationToken cancellationToken)
     {
         if (processor.JevObservationOnly || processor.JevAcceptanceValidation) return;
+        using var updateLease = _runs?.TrackExecution();
         IDisposable? finalizationLease = null;
         int? rootTicketId = null;
         try

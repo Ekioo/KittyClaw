@@ -5,8 +5,23 @@ using KittyClaw.Core.Automation;
 using KittyClaw.Core.Services;
 using KittyClaw.Web.Api;
 using KittyClaw.Web.Components;
+using Velopack;
 
-var builder = WebApplication.CreateBuilder(args);
+// Installer hooks must exit before the web host or any data services are created.
+// Applying updates is explicit, so a second launch cannot update a running server.
+VelopackApp.Build()
+#if WINDOWS
+    .OnFirstRun(_ => KittyClaw.Web.Services.WindowsDesktopLifetime.ConfirmInstallation())
+#endif
+    .SetAutoApplyOnStartup(false).Run();
+
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+#if WINDOWS
+    ContentRootPath = AppContext.BaseDirectory,
+#endif
+});
 
 // Default to HTTP-only on :5230 when no URL config is provided. KittyClaw is a local-only
 // app with no HTTPS cert, so the framework default (HTTP + HTTPS dual binding on :5000/:5001)
@@ -33,6 +48,11 @@ if (string.IsNullOrEmpty(builder.Configuration["urls"]))
 var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 var dataDir = builder.Configuration["KITTYCLAW_DATA_DIR"]
     ?? Path.Combine(appData, "KittyClaw");
+#if WINDOWS
+using var desktop = builder.Configuration.GetValue("KITTYCLAW_DESKTOP", true)
+    ? new KittyClaw.Web.Services.WindowsDesktopLifetime(dataDir) : null;
+if (desktop is { IsFirstInstance: false }) return;
+#endif
 var legacyDataDir = Path.Combine(appData, "TodoApp");
 if (!Directory.Exists(dataDir) && Directory.Exists(legacyDataDir))
 {
@@ -161,6 +181,8 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<KittyClaw.Core.Ser
 builder.Services.AddHostedService<KittyClaw.Core.Services.ScheduledPromotionService>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.AgentRunsState>();
 builder.Services.AddHttpClient();
+builder.Services.AddSingleton<KittyClaw.Web.Services.IInstalledUpdateClient, KittyClaw.Web.Services.VelopackUpdateClient>();
+builder.Services.AddSingleton<KittyClaw.Web.Services.InstalledUpdateService>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.UpdateCheckService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<KittyClaw.Web.Services.UpdateCheckService>());
 // Anonymous daily usage heartbeat (see README "Telemetry" and doc/telemetry.md).
@@ -304,4 +326,13 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
+#if WINDOWS
+desktop?.Attach(app);
+try { app.Run(); }
+catch (Exception ex) when (desktop is not null)
+{
+    desktop.ReportStartupFailure(ex);
+}
+#else
 app.Run();
+#endif

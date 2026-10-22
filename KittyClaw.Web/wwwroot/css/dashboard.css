@@ -1174,6 +1174,8 @@
 }
 .update-banner-icon { font-size: 16px; line-height: 1; }
 .update-banner-text { line-height: 1.35; }
+.update-banner .btn { flex-shrink: 0; }
+.update-banner [role="alert"] { color: var(--s-blocked); }
 .update-banner-text a { color: var(--accent, #6366f1); text-decoration: underline; font-weight: 600; }
 .update-banner-dismiss {
     margin-left: 6px;

@@ -408,6 +408,47 @@ public sealed class AgentRunRegistry
     private readonly ConcurrentDictionary<string, AgentRun> _runs = new();
     private readonly ConcurrentDictionary<(string ProjectSlug, int TicketId), ConcurrentDictionary<string, AgentRun>> _runsByTicket = new();
     private readonly RunLogStore? _store;
+    private readonly object _updateLock = new();
+    private bool _updateInProgress;
+    private int _executingTasks;
+
+    /// <summary>Atomically prevent new dispatches only when all registered runs are idle.</summary>
+    public bool TryBeginUpdate()
+    {
+        lock (_updateLock)
+        {
+            if (_updateInProgress || _executingTasks > 0 || AllActive().Any()) return false;
+            _updateInProgress = true;
+            return true;
+        }
+    }
+
+    public void CancelUpdate()
+    {
+        lock (_updateLock) _updateInProgress = false;
+    }
+
+    /// <summary>Keep the process alive through post-run finalization, even after terminal status.</summary>
+    public IDisposable TrackExecution()
+    {
+        lock (_updateLock)
+        {
+            if (_updateInProgress)
+                throw new InvalidOperationException("KittyClaw is restarting to install an update.");
+            _executingTasks++;
+            return new ExecutionLease(this);
+        }
+    }
+
+    private sealed class ExecutionLease(AgentRunRegistry owner) : IDisposable
+    {
+        private int _disposed;
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+            lock (owner._updateLock) owner._executingTasks--;
+        }
+    }
 
     public event Action<AgentRun>? OnRunStarted;
     public event Action<AgentRun>? OnRunEnded;
@@ -441,10 +482,15 @@ public sealed class AgentRunRegistry
 
     public AgentRun Register(AgentRun run)
     {
-        if (_runs.TryGetValue(run.RunId, out var previous))
-            Unindex(previous);
-        _runs[run.RunId] = run;
-        Index(run);
+        lock (_updateLock)
+        {
+            if (_updateInProgress)
+                throw new InvalidOperationException("KittyClaw is restarting to install an update. Try again after restart.");
+            if (_runs.TryGetValue(run.RunId, out var previous))
+                Unindex(previous);
+            _runs[run.RunId] = run;
+            Index(run);
+        }
         _store?.Save(run);
         OnRunStarted?.Invoke(run);
         return run;

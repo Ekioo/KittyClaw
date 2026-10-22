@@ -1,0 +1,39 @@
+name: Windows installer
+
+on:
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Build self-contained installer
+        shell: pwsh
+        run: |
+          ./tools/Test-WindowsReleaseBaseline.ps1
+          ./tools/build-windows-installer.ps1 -Version "0.0.0-ci.${{ github.run_number }}.1" -OutputDir publish-windows/ci
+          ./tools/build-windows-installer.ps1 -Version "0.0.0-ci.${{ github.run_number }}.2" -OutputDir publish-windows/ci
+      - name: Verify published host and update package in isolation
+        shell: pwsh
+        run: ./tools/Test-WindowsInstaller.ps1 -ArtifactsDir publish-windows/ci
+      - name: Verify incremental download without full-package fallback
+        shell: pwsh
+        run: ./tools/Test-WindowsDeltaUpdate.ps1 -ArtifactsDir publish-windows/ci -BaselineVersion "0.0.0-ci.${{ github.run_number }}.1" -TargetVersion "0.0.0-ci.${{ github.run_number }}.2"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KittyClaw-Windows-x64
+          path: |
+            publish-windows/ci/*Setup.exe
+            publish-windows/ci/*full.nupkg
+            publish-windows/ci/*delta.nupkg
+            publish-windows/ci/releases.win.json
+          if-no-files-found: error

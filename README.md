@@ -32,6 +32,25 @@ definition under `.agents/processors/column-<id>/memory/MEMORY.md`.
 
 ## Getting Started
 
+### Windows installer
+
+Download **Ekioo.KittyClaw-win-Setup.exe** from the [latest release](https://github.com/Ekioo/KittyClaw/releases/latest)
+when that release includes the Windows installer. Run it, acknowledge the installation
+confirmation, then launch **KittyClaw** from its desktop or Start-menu shortcut.
+The Windows x64 installer includes the .NET, ASP.NET Core, and Windows Desktop runtimes;
+no SDK or separate .NET installation is required. Agent CLIs still need to be installed and
+authenticated separately (see the [provider guide](doc/agent-providers.md)).
+
+KittyClaw opens in your browser and stays in the notification area. Double-click its icon to
+open it again, or choose **Quit KittyClaw** from its menu to stop it. Installation is per user
+under `%LOCALAPPDATA%/Ekioo.KittyClaw`; project data stays in `%APPDATA%/KittyClaw`.
+
+The update banner offers **Download update**, followed by **Update and restart**. Downloads do
+not interrupt work; installation is blocked while agent work or tracked finalization is active.
+See [Windows packaging and updates](doc/update-check.md) for build and release details.
+
+### Run from source
+
 ### Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)

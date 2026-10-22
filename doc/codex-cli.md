@@ -16,6 +16,9 @@ KittyClaw; a custom `codex:*` identifier can still be persisted through the API.
 
 - `CodexCli` detects the executable from `KITTYCLAW_CODEX_BIN`, the application
   directory, its `tools` directory, or `PATH`, and exposes the selectable models.
+  Windows also checks `%LOCALAPPDATA%/OpenAI/Codex/bin` and its version directories,
+  so the desktop app's CLI can be found when launched from Explorer without a CLI PATH entry.
+  Only existing executables that pass `--version` are accepted; incomplete updates are skipped.
 - `ModelRouting` resolves a `codex:*` selection to a single `AgentDispatchTarget`.
 - `AgentCliBackend` owns Codex command construction and session semantics.
 - `CodexStreamAdapter` converts `codex exec --json` JSONL events into KittyClaw run
