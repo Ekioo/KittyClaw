@@ -121,17 +121,30 @@ public sealed class AgentMemoryAdHocTests
     [Fact]
     public void AdHocConsolidation_PreservesProjectQuotaFallbackWhenMemberModelIsPrimary()
     {
-        var (target, fallback) = AgentMemoryHandler.ResolveAdHocModelTargets(
-            "claude:claude-opus-5",
-            "codex:gpt-5.6-sol",
-            localModel: null,
-            localModelBaseUrl: null);
+        var mockBinary = Environment.GetEnvironmentVariable("KITTYCLAW_CLAUDE_BIN");
+        Assert.False(string.IsNullOrWhiteSpace(mockBinary));
+        var previousBinary = Environment.GetEnvironmentVariable("KITTYCLAW_CODEX_BIN");
+        Environment.SetEnvironmentVariable("KITTYCLAW_CODEX_BIN", mockBinary);
+        CodexCli.ResetForTests();
+        try
+        {
+            var (target, fallback) = AgentMemoryHandler.ResolveAdHocModelTargets(
+                "claude:claude-opus-5",
+                "codex:gpt-5.6-sol",
+                localModel: null,
+                localModelBaseUrl: null);
 
-        Assert.Equal(CliProvider.Claude, target.Provider);
-        Assert.Equal("claude-opus-5", target.Model);
-        Assert.NotNull(fallback);
-        Assert.Equal(CliProvider.Codex, fallback.Provider);
-        Assert.Equal("gpt-5.6-sol", fallback.Model);
+            Assert.Equal(CliProvider.Claude, target.Provider);
+            Assert.Equal("claude-opus-5", target.Model);
+            Assert.NotNull(fallback);
+            Assert.Equal(CliProvider.Codex, fallback.Provider);
+            Assert.Equal("gpt-5.6-sol", fallback.Model);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("KITTYCLAW_CODEX_BIN", previousBinary);
+            CodexCli.ResetForTests();
+        }
     }
 
     [Theory]
