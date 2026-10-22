@@ -404,5 +404,19 @@
   "JevComplexitysimple": "Simple",
   "JevComplexitymoderate": "Moderate",
   "JevComplexitycomplex": "Complex",
-  "JevComplexityunknown": "Unknown"
+  "JevComplexityunknown": "Unknown",
+  "JevPostRunMode": "JEV routing proposals after agent runs — observation only",
+  "JevPostRunHelp": "Observe new agent executions after this option is enabled. Existing workflow routing still applies; JEV cannot move tickets, start agents or run column actions.",
+  "JevPostRunHeading": "JEV after agent execution — observation only",
+  "JevPostRunNotice": "Historical routing suggestion. JEV did not apply any action; existing workflow transitions remain authoritative.",
+  "JevSourceColumn": "Execution source column",
+  "JevActualRoute": "Destination applied by the workflow",
+  "JevNoRoute": "None",
+  "JevPostRunHistorical": "The ticket has changed since this observation. This proposal describes the recorded execution context.",
+  "JevEvidenceAvailable": "Captured evidence is available. Individual provenance determines what is verified; agent claims remain unverified.",
+  "JevEvidenceMissing": "No independent evidence bundle was available. Agent statements are unverified claims.",
+  "JevSuggestedRoute": "Suggested destination",
+  "JevRouteProbabilities": "Destination probabilities",
+  "JevExecution": "Execution",
+  "JevRun": "Agent run"
 }

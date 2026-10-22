@@ -404,5 +404,19 @@
   "JevComplexitysimple": "Simple",
   "JevComplexitymoderate": "Modérée",
   "JevComplexitycomplex": "Complexe",
-  "JevComplexityunknown": "Indéterminée"
+  "JevComplexityunknown": "Indéterminée",
+  "JevPostRunMode": "Propositions de routage JEV après exécution — observation uniquement",
+  "JevPostRunHelp": "Observe les nouvelles exécutions après activation. Le routage existant reste appliqué ; JEV ne peut ni déplacer les tickets, ni lancer un agent ou une action de colonne.",
+  "JevPostRunHeading": "JEV après exécution d’agent — observation uniquement",
+  "JevPostRunNotice": "Proposition de routage historique. JEV n’a appliqué aucune action ; les transitions du workflow existant restent déterminantes.",
+  "JevSourceColumn": "Colonne source de l’exécution",
+  "JevActualRoute": "Destination appliquée par le workflow",
+  "JevNoRoute": "Aucune",
+  "JevPostRunHistorical": "Le ticket a changé depuis cette observation. La proposition décrit le contexte enregistré de l’exécution.",
+  "JevEvidenceAvailable": "Des preuves capturées sont disponibles. Leur provenance individuelle détermine ce qui est vérifié ; les affirmations de l’agent restent non vérifiées.",
+  "JevEvidenceMissing": "Aucun ensemble de preuves indépendantes n’était disponible. Les déclarations de l’agent restent non vérifiées.",
+  "JevSuggestedRoute": "Destination proposée",
+  "JevRouteProbabilities": "Probabilités des destinations",
+  "JevExecution": "Exécution",
+  "JevRun": "Exécution de l’agent"
 }

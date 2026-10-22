@@ -16,6 +16,9 @@ public class ColumnProcessor
     public string? Model { get; set; }
     public bool Enabled { get; set; } = true;
     public bool JevObservationOnly { get; set; }
+    public DateTime? JevPostRunObservationSince { get; set; }
+    [NotMapped]
+    public bool JevPostRunObservation => JevPostRunObservationSince.HasValue;
     public int MaxTurns { get; set; } = 100;
     public TicketSelectionOrder SelectionOrder { get; set; } = TicketSelectionOrder.Position;
     public int MaxAttempts { get; set; } = 3;

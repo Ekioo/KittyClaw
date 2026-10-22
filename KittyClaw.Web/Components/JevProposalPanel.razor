@@ -53,10 +53,41 @@
     </section>
 }
 
+
+@foreach (var observation in _postRun)
+{
+    <section class="worktree-summary" data-testid="jev-post-run-proposal" aria-label="@L["JevPostRunHeading"]">
+        <strong>@L["JevPostRunHeading"]</strong>
+        <p>@L["JevPostRunNotice"]</p>
+        <p>@L["JevSourceColumn"]: @_columnNames.GetValueOrDefault(observation.SourceColumnId, $"#{observation.SourceColumnId}")</p>
+        <p>@L["JevActualRoute"]: @(observation.ActualTargetColumnId is int target ? _columnNames.GetValueOrDefault(target, $"#{target}") : L["JevNoRoute"])</p>
+        @if (_currentTicket?.UpdatedAt != observation.TicketUpdatedAt || _currentTicket?.ColumnId != observation.TicketColumnId)
+        { <p class="settings-hint">@L["JevPostRunHistorical"]</p> }
+        <p class="settings-hint">@L[observation.EvidenceAvailable ? "JevEvidenceAvailable" : "JevEvidenceMissing"]</p>
+        @if (observation.Error is not null)
+        { <p role="status">@observation.Error</p> }
+        else
+        {
+            <p>@L["JevSuggestedRoute"]: <strong>@observation.Destinations.GetValueOrDefault(observation.Choice ?? "", L["JevNoRoute"])</strong></p>
+            <p>@L["JevConfidence"]: @observation.Confidence?.ToString("P0")</p>
+            <details>
+                <summary>@L["JevRouteProbabilities"]</summary>
+                @foreach (var option in observation.Probabilities.OrderByDescending(p => p.Value))
+                { <p>@observation.Destinations.GetValueOrDefault(option.Key, option.Key): @option.Value.ToString("P1")</p> }
+            </details>
+        }
+        <p class="settings-hint">@L["JevExecution"]: <code>@observation.ExecutionId</code> · @L["JevRun"]: <code>@observation.RunId</code></p>
+        <p class="settings-hint">@observation.ExecutionEndedAt?.ToLocalTime().ToString("g") · @observation.Model · @observation.ObservedAt.ToLocalTime().ToString("g")</p>
+    </section>
+}
+
 @code {
     [Parameter] public string Slug { get; set; } = "";
     [Parameter] public int TicketId { get; set; }
     private JevRoutingProposal? _proposal;
+    private List<JevRoutingProposal> _postRun = [];
+    private KittyClaw.Core.Models.Ticket? _currentTicket;
+    private Dictionary<int, string> _columnNames = [];
     private bool _stale;
     private readonly CancellationTokenSource _stop = new();
     private Task? _poll;
@@ -69,6 +100,13 @@
     {
         _proposal = await Qualification.GetAsync(Slug, TicketId, _stop.Token);
         var ticket = await Tickets.GetTicketAsync(Slug, TicketId);
+        _currentTicket = ticket;
+        _postRun = await Qualification.GetPostRunAsync(Slug, TicketId, _stop.Token);
+        if (_postRun.Count > 0)
+        {
+            await using var namesDb = Projects.GetProjectDb(Slug);
+            _columnNames = await namesDb.BoardColumns.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.Name, _stop.Token);
+        }
         _stale = false;
         if (_proposal is not null)
         {

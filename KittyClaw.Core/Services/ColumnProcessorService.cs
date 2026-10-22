@@ -62,6 +62,8 @@ public sealed class ColumnProcessorService(
                 """));
         await MigrationGate.RunOnceAsync(db, "column-processors-jev-v1", static d =>
             MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN JevObservationOnly INTEGER NOT NULL DEFAULT 0"));
+        await MigrationGate.RunOnceAsync(db, "column-processors-jev-post-run-v1", static d =>
+            MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN JevPostRunObservationSince TEXT NULL"));
         await MigrationGate.RunOnceAsync(db, "column-processors-routing-v1", static async d =>
         {
             await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN SelectionOrder INTEGER NOT NULL DEFAULT 0");
@@ -107,7 +109,7 @@ public sealed class ColumnProcessorService(
         List<ColumnRoute>? routes = null, string? prompt = null,
         List<ColumnProcessorAction>? beforeActions = null,
         List<ColumnProcessorAction>? afterActions = null,
-        bool? jevObservationOnly = null)
+        bool? jevObservationOnly = null, bool? jevPostRunObservation = null)
     {
         var gate = ProjectGates.GetOrAdd(projectSlug, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync();
@@ -118,6 +120,7 @@ public sealed class ColumnProcessorService(
             await EnsureTableAsync(db);
             await SynchronizeLockedAsync(projectSlug, db);
 
+            var previous = await db.ColumnProcessors.FirstOrDefaultAsync(p => p.ColumnId == columnId);
             var definition = new ProcessorDefinition
             {
                 Version = DefinitionVersion,
@@ -127,6 +130,8 @@ public sealed class ColumnProcessorService(
                 Prompt = prompt ?? "",
                 Model = model,
                 JevObservationOnly = jevObservationOnly ?? (await db.ColumnProcessors.FirstOrDefaultAsync(p => p.ColumnId == columnId))?.JevObservationOnly ?? false,
+                JevPostRunObservationSince = jevPostRunObservation is null ? previous?.JevPostRunObservationSince
+                    : jevPostRunObservation.Value ? previous?.JevPostRunObservationSince ?? DateTime.UtcNow : null,
                 Enabled = enabled,
                 MaxTurns = maxTurns,
                 SelectionOrder = selectionOrder,
@@ -369,6 +374,8 @@ public sealed class ColumnProcessorService(
         if (!await db.BoardColumns.AnyAsync(c => c.Id == columnId))
             throw new InvalidOperationException($"La colonne #{columnId} n'existe pas pour son processor.json.");
 
+        if (definition.JevObservationOnly && definition.JevPostRunObservationSince is not null)
+            throw new InvalidOperationException("Choose either JEV qualification or post-run observation for this column.");
         definition.Name = definition.Name.Trim();
         definition.Mission = definition.Mission.Trim();
         definition.Prompt = definition.Prompt?.Trim() ?? "";
@@ -443,6 +450,7 @@ public sealed class ColumnProcessorService(
         processor.Prompt = definition.Prompt;
         processor.Model = definition.Model;
         processor.JevObservationOnly = definition.JevObservationOnly;
+        processor.JevPostRunObservationSince = definition.JevPostRunObservationSince;
         processor.Enabled = definition.Enabled;
         processor.MaxTurns = definition.MaxTurns;
         processor.SelectionOrder = definition.SelectionOrder;
@@ -582,6 +590,7 @@ public sealed class ColumnProcessorService(
         Prompt = processor.Prompt,
         Model = processor.Model,
         JevObservationOnly = processor.JevObservationOnly,
+        JevPostRunObservationSince = processor.JevPostRunObservationSince,
         Enabled = processor.Enabled,
         MaxTurns = processor.MaxTurns,
         SelectionOrder = processor.SelectionOrder,
@@ -665,6 +674,7 @@ public sealed class ColumnProcessorService(
         public string? Model { get; set; }
         public bool Enabled { get; set; } = true;
         public bool JevObservationOnly { get; set; }
+        public DateTime? JevPostRunObservationSince { get; set; }
         public int MaxTurns { get; set; } = 100;
         public TicketSelectionOrder SelectionOrder { get; set; } = TicketSelectionOrder.Position;
         public int MaxAttempts { get; set; } = 3;

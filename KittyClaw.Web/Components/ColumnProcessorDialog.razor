@@ -135,6 +135,8 @@
                         <label><FieldHelp Label="@L["ProcessorPrompt"]" Help="@L["ProcessorPromptHelp"]" /><textarea class="settings-input workflow-textarea processor-prompt" @bind="_prompt"></textarea></label>
                         @if (!_jevObservationOnly)
                         {
+                        <label class="workflow-check"><input type="checkbox" @bind="_jevPostRunObservation" disabled="@(!_jevAvailability.Available && !_jevPostRunObservation)" /> @L["JevPostRunMode"]</label>
+                        <p class="settings-hint">@L["JevPostRunHelp"]</p>
                         <label><FieldHelp Label="@L["ProcessorModel"]" Help="@L["ProcessorModelHelp"]" />
                             <select @key="@($"{_model}#{AllModels.Count}")" value="@(_model ?? "")" @onchange="OnModelChanged">
                                 <option value="">@L["ProcessorModelAutomatic"]</option>
@@ -343,6 +345,7 @@
     private bool _removeProcessorOnSave;
     private JevAvailability _jevAvailability = new(false, false, null);
     private bool _jevObservationOnly;
+    private bool _jevPostRunObservation;
     private bool _enabled = true;
     private string _activeTab = "general";
     private string _columnName = "";
@@ -461,6 +464,7 @@
         _model = processor?.Model;
         _enabled = processor?.Enabled ?? true;
         _jevObservationOnly = processor?.JevObservationOnly ?? false;
+        _jevPostRunObservation = processor?.JevPostRunObservation ?? false;
         _maxTurns = processor?.MaxTurns ?? 100;
         _maxAttempts = processor?.MaxAttempts ?? 3;
         _retryBackoff = processor?.RetryBackoffSeconds ?? 60;
@@ -520,7 +524,8 @@
                     prompt: _prompt,
                     beforeActions: _beforeActions.Select(action => action.ToModel()).ToList(),
                     afterActions: _afterActions.Select(action => action.ToModel()).ToList(),
-                    jevObservationOnly: _jevObservationOnly);
+                    jevObservationOnly: _jevObservationOnly,
+                    jevPostRunObservation: !_jevObservationOnly && _jevPostRunObservation);
             }
 
             await ScheduledTaskService.SaveColumnAsync(Slug, savedColumn.Id, _scheduledTasks);

@@ -91,3 +91,34 @@ $env:KITTYCLAW_JEV_DEBUG_E2E = '1'
 dotnet test KittyClaw.Core.Tests --filter FullyQualifiedName~JevObservationJourneyTests
 Remove-Item Env:KITTYCLAW_JEV_DEBUG_E2E
 ```
+
+## Routing proposals after agent execution
+
+Regular agent columns can separately enable **JEV routing proposals after agent runs — observation only**.
+This mode is mutually exclusive with qualification-only processing. Normal agent execution, actions,
+validation and routing remain authoritative. JEV is scheduled in its own background sweep, so a timeout,
+missing key or malformed response cannot fail the agent execution or alter its workflow transition.
+
+The authoritative processor definition stores `jevPostRunObservationSince`; the REST save contract
+accepts `jevPostRunObservation` and preserves the timestamp when omitted. Only terminal column executions
+with an agent run id ending after opt-in are observed. Ad-hoc chats and legacy agent runs without a column
+execution are outside this feature because they have no source-column routing contract.
+
+Each request asks only for routing among the source processor's business routes and default destination,
+plus `none`. Context includes ticket state, recorded outcome, summary, error and agent-result claims,
+and a matching per-run evidence bundle when available. Command output and raw command strings are omitted;
+exit codes, test counts and provenance remain available. Evidence must match the project, ticket, run
+and current claim time; merged evidence from other runs is never substituted. Missing/stale evidence and
+agent claims are explicitly distinguished from independently captured observations.
+
+Results live in `JevPostRunObservations`, separate from initial qualification. Each terminal execution
+snapshot (id plus ending timestamp) has its own durable observation, including when a manual retry reuses
+an execution id. Successful snapshots are not recomputed on unrelated ticket edits. If evidence arrives
+late, a snapshot without evidence may refresh once. Failed requests use the existing five-minute backoff.
+The ticket shows the source column, actual workflow destination, JEV suggestion, confidence, distribution,
+execution/run ids, missing-evidence notice and historical-context marker when the ticket has changed.
+
+`JevPostRunJourneyTests` uses an ephemeral debug port and isolated data. It runs the real column engine
+with a fixture dispatcher and TypeSafe handler, enables post-run observation through the UI, verifies
+that normal routing reaches Review while JEV suggests Todo, then checks for 32 seconds that no additional
+execution or transition occurs. It uses the same `KITTYCLAW_JEV_DEBUG_E2E=1` opt-in as the initial journey.

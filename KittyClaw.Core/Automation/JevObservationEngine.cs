@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 namespace KittyClaw.Core.Automation;
 
 public sealed class JevObservationEngine(ProjectService projects, ColumnProcessorService processors,
-    TicketService tickets, JevQualificationService qualification,
+    TicketService tickets, ColumnExecutionService executions, JevQualificationService qualification,
     ILogger<JevObservationEngine> logger, StartupWorkGate startupGate) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -18,10 +18,25 @@ public sealed class JevObservationEngine(ProjectService projects, ColumnProcesso
             {
                 foreach (var project in (await projects.ListProjectsAsync()).Where(p => !p.IsPaused))
                 {
-                    foreach (var processor in (await processors.ListAsync(project.Slug)).Where(p => p.Enabled && p.JevObservationOnly))
+                    foreach (var processor in (await processors.ListAsync(project.Slug)).Where(p => p.Enabled && (p.JevObservationOnly || p.JevPostRunObservation)))
                     {
                         await using var db = projects.GetProjectDb(project.Slug);
                         var destinations = await db.BoardColumns.AsNoTracking().ToListAsync(stoppingToken);
+                        if (processor.JevPostRunObservation && !processor.JevObservationOnly)
+                        {
+                            // Initialize the existing execution schema, then scan only executions ending after opt-in.
+                            await executions.ListAsync(project.Slug);
+                            var completed = await db.ColumnExecutions.AsNoTracking()
+                                .Where(e => e.ProcessorId == processor.Id && e.EndedAt >= processor.JevPostRunObservationSince &&
+                                    e.RunId != null && (e.Status == KittyClaw.Core.Models.ColumnExecutionStatus.Completed || e.Status == KittyClaw.Core.Models.ColumnExecutionStatus.Failed || e.Status == KittyClaw.Core.Models.ColumnExecutionStatus.Cancelled))
+                                .OrderBy(e => e.EndedAt).ToListAsync(stoppingToken);
+                            foreach (var execution in completed)
+                            {
+                                var ticket = await tickets.GetTicketAsync(project.Slug, execution.TicketId);
+                                if (ticket is not null) await qualification.ObserveAsync(project.Slug, processor, ticket, destinations, stoppingToken, execution);
+                            }
+                            continue;
+                        }
                         foreach (var summary in (await tickets.ListTicketsAsync(project.Slug)).Where(t => t.ColumnId == processor.ColumnId))
                         {
                             var ticket = await tickets.GetTicketAsync(project.Slug, summary.Id);
