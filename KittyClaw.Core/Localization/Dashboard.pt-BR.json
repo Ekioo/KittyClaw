@@ -1,8 +1,8 @@
 {
   "Dashboard": "Painel",
   "KanbanView": "Kanban",
-  "DashboardEmpty": "Ainda não há tiles no painel.",
-  "DashboardEmptyHint": "Crie pastas de tile no diretório .dashboard/ do seu workspace para exibi-los aqui.",
+  "DashboardEmpty": "Crie seu primeiro bloco",
+  "DashboardEmptyHint": "Clique em “Adicionar bloco” e descreva o que deseja acompanhar. Você poderá revisar a proposta antes de criar.",
   "DashboardNoTiles": "Sem tiles no painel.",
   "DashboardNoTilesHint": "Clique em \"+ Adicionar tile\" na barra de ferramentas para adicionar tiles.",
   "AddTile": "+ Adicionar tile",
@@ -70,5 +70,9 @@
   "GuidanceDecide": "Revisar e decidir",
   "GuidanceTickets": "tickets",
   "GuidanceRuns": "execuções",
-  "GuidanceResults": "resultados"
+  "GuidanceResults": "resultados",
+  "DashboardExamplesHint": "Escolha um exemplo para preencher sua solicitação:",
+  "DashboardExampleTickets": "Crie um bloco de rosca com a quantidade de tickets deste projeto por coluna.",
+  "DashboardExampleGit": "Crie um bloco com os commits Git por dia nos últimos 7 dias.",
+  "DashboardExampleSummary": "Crie um bloco Markdown resumindo o projeto a partir do README."
 }

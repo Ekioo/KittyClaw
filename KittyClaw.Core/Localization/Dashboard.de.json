@@ -1,8 +1,8 @@
 {
   "Dashboard": "Armaturenbrett",
   "KanbanView": "Kanban",
-  "DashboardEmpty": "Noch keine Dashboard-Kacheln.",
-  "DashboardEmptyHint": "Erstellen Sie Kachelordner im .dashboard/-Verzeichnis Ihres Arbeitsbereichs, um sie hier anzuzeigen.",
+  "DashboardEmpty": "Erstellen Sie Ihre erste Kachel",
+  "DashboardEmptyHint": "Klicken Sie auf „Kachel hinzufügen“ und beschreiben Sie, was Sie verfolgen möchten. Prüfen Sie den Vorschlag vor der Erstellung.",
   "DashboardNoTiles": "Keine Kacheln auf dem Armaturenbrett.",
   "DashboardNoTilesHint": "Klicken Sie in der Symbolleiste auf „+ Kachel hinzufügen“, um Kacheln hinzuzufügen.",
   "AddTile": "+ Kachel hinzufügen",
@@ -53,5 +53,9 @@
   "TileConfigAccept": "Akzeptieren",
   "GuidanceStepReady": "Schritt 1 von 3 · Bereit", "GuidanceStepRunning": "Schritt 2 von 3 · Läuft", "GuidanceStepRecoverable": "Aktion erforderlich · Fortsetzen möglich", "GuidanceStepCompleted": "Schritt 3 von 3 · Ergebnis bereit",
   "GuidanceReadyTitle": "Ihr erstes Ergebnis beginnt hier", "GuidanceReadyMessage": "Ihr Board ist bereit. Öffnen Sie das Board, um Ihr erstes Ticket gemäß dem konfigurierten Workflow zu erstellen oder zu starten.", "GuidanceRunningTitle": "Ihr erstes Ergebnis wird vorbereitet", "GuidanceRunningMessage": "Der erste Lauf bearbeitet das Ticket. Verfolgen Sie den Fortschritt auf dem Board.", "GuidanceRecoverableTitle": "Der Lauf muss erneut versucht werden", "GuidanceRecoverableMessage": "Der ausgewählte Anbieter konnte nicht abschließen. Prüfen Sie den Fehler auf dem Board und versuchen Sie es erneut.", "GuidanceRecoverableHint": "Ticket und Fortschritt bleiben erhalten.", "GuidanceCompletedTitle": "Ihr erstes Ergebnis ist bereit", "GuidanceCompletedMessage": "Prüfen Sie das Ergebnis und genehmigen Sie es oder fordern Sie eine Änderung an.",
-  "GuidanceStart": "Im Board starten", "GuidanceFollowRun": "Lauf verfolgen", "GuidanceRetry": "Im Board erneut versuchen", "GuidanceDecide": "Prüfen und entscheiden", "GuidanceTickets": "Tickets", "GuidanceRuns": "Läufe", "GuidanceResults": "Ergebnisse"
+  "GuidanceStart": "Im Board starten", "GuidanceFollowRun": "Lauf verfolgen", "GuidanceRetry": "Im Board erneut versuchen", "GuidanceDecide": "Prüfen und entscheiden", "GuidanceTickets": "Tickets", "GuidanceRuns": "Läufe", "GuidanceResults": "Ergebnisse",
+  "DashboardExamplesHint": "Wählen Sie ein Beispiel als Vorlage für Ihre Anfrage:",
+  "DashboardExampleTickets": "Erstelle eine Ringdiagramm-Kachel mit der Ticketanzahl dieses Projekts pro Spalte.",
+  "DashboardExampleGit": "Erstelle eine Kachel mit der Anzahl der Git-Commits pro Tag in den letzten 7 Tagen.",
+  "DashboardExampleSummary": "Erstelle eine Markdown-Kachel, die das Projekt anhand seiner README zusammenfasst."
 }

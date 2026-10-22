@@ -5,6 +5,8 @@ A free-form, tile-based dashboard view that complements the Kanban board. Each t
 
 The first-use guidance banner is shown only while the project has no tickets, runs, or dashboard tiles. Once activity exists, the activity summary replaces the banner regardless of activation-event history. The guidance directs users to the configured workflow without promising automatic provider selection or fallback.
 
+The empty dashboard invites users to **Add tile** and offers clickable examples (tickets by column, recent Git activity, and a README summary). Examples open the creation chat with an editable request; sending it generates a proposal that must be reviewed before creation.
+
 ## Folder-per-tile layout
 
 Each tile owns a dedicated subfolder under `.dashboard/`:

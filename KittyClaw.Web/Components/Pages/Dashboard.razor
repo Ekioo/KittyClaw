@@ -9,6 +9,7 @@
 @using KittyClaw.Core.Services
 @using KittyClaw.Web.Services
 @inject ProjectService ProjectService
+@inject TicketService TicketService
 @inject IHttpClientFactory HttpFactory
 @inject DashboardService DashboardService
 @inject AgentRunner AgentRunner
@@ -70,20 +71,20 @@ else
             </section>
         }
 
-        @if (_tiles.Count == 0 && _availableSlugs.Count == 0)
+        @if (_tiles.Count == 0)
         {
-            <div class="dashboard-empty">
+            <div class="dashboard-empty" data-testid="dashboard-empty">
                 <div class="dashboard-empty-icon">&#128202;</div>
                 <div class="dashboard-empty-title">@L["DashboardEmpty"]</div>
                 <div class="dashboard-empty-hint">@L["DashboardEmptyHint"]</div>
-            </div>
-        }
-        else if (_tiles.Count == 0)
-        {
-            <div class="dashboard-empty">
-                <div class="dashboard-empty-icon">&#128202;</div>
-                <div class="dashboard-empty-title">@L["DashboardNoTiles"]</div>
-                <div class="dashboard-empty-hint">@L["DashboardNoTilesHint"]</div>
+                <button class="tile-config-accept" @onclick="OpenTileChat" data-testid="dashboard-create-tile">@L["AddTile"]</button>
+                <p class="dashboard-empty-hint">@L["DashboardExamplesHint"]</p>
+                <div class="dashboard-empty-examples">
+                    @foreach (var key in TileExampleKeys)
+                    {
+                        <button class="dashboard-example" @onclick="() => OpenTileChatWithPrompt(L[key])">@L[key]</button>
+                    }
+                </div>
             </div>
         }
         else
@@ -621,14 +622,7 @@ else
 
     private async Task LoadActivityAsync()
     {
-        var http = HttpFactory.CreateClient();
-        http.BaseAddress = new Uri(Navigation.BaseUri);
-        try
-        {
-            var tickets = await http.GetFromJsonAsync<List<TicketSummary>>($"/api/projects/{Slug}/tickets");
-            _ticketCount = tickets?.Count ?? 0;
-        }
-        catch { _ticketCount = 0; }
+        _ticketCount = (await TicketService.ListTicketsAsync(Slug)).Count;
         var runs = RunsState.AllForProject(Slug).ToList();
         _ticketCount = Math.Max(_ticketCount,
             runs.Where(r => r.TicketId.HasValue).Select(r => r.TicketId).Distinct().Count());
@@ -739,6 +733,8 @@ else
     // Built once from the TileTemplate catalogue so the chat assistant always knows the full
     // set — adding a new template only requires a new entry in TileTemplate.Description.
     private static readonly string TileChatSystemPrompt = BuildTileChatSystemPrompt();
+    private static readonly string[] TileExampleKeys =
+        ["DashboardExampleTickets", "DashboardExampleGit", "DashboardExampleSummary"];
 
     private static string BuildTileChatSystemPrompt()
     {
@@ -748,7 +744,7 @@ else
         return $$"""
             You are a dashboard tile creation assistant for KittyClaw.
 
-            A dashboard tile is a result file in .dashboard/ paired with a YAML sidecar `<file>.yaml`
+            A dashboard tile is a folder .dashboard/<slug>/ with an output file and a tile.yaml sidecar
             that describes how to render it and (optionally) how it is refreshed on a schedule.
 
             **Content pipeline**: script (optional) → prompt (optional) → render.
@@ -800,12 +796,19 @@ else
 
     private void OpenTileChat()
     {
+        _configEditingSlug = null;
         _chatAgentName = $"tile-chat-{Guid.NewGuid():N}"[..20];
         _chatMessages.Clear();
         _chatInput = "";
         _chatError = null;
         _chatLoading = false;
         _chatOpen = true;
+    }
+
+    private void OpenTileChatWithPrompt(string prompt)
+    {
+        OpenTileChat();
+        _chatInput = prompt;
     }
 
     private void CloseTileChat() => _chatOpen = false;
@@ -1034,12 +1037,13 @@ else
         _availableSlugs = DashboardService.GetAvailableSlugs(_workspace);
         _tiles = await DashboardService.GetTilesAsync(Slug, _workspace);
         _sidecars[tileSlug] = sidecar;
-        _contentCache[tileSlug] = "";
         _tileConfigOpen = false;
+        await LoadActivityAsync();
 
-        var (scriptFile, _) = DashboardService.FindScript(_workspace, tileSlug);
-        var hasContent = scriptFile is not null || !string.IsNullOrWhiteSpace(sidecar.Prompt);
-        if (hasContent && sidecar.Refresh > 0)
+        _contentCache[tileSlug] = await DashboardService.ReadOutputAsync(_workspace, tileSlug);
+
+        // Initial content is needed even when scheduled refresh is disabled.
+        if (!string.IsNullOrWhiteSpace(sidecar.Prompt))
             _ = RefreshTileWithAiAsync(tileSlug, sidecar);
     }
 

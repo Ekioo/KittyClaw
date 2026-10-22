@@ -1,8 +1,8 @@
 {
   "Dashboard": "ダッシュボード",
   "KanbanView": "看板",
-  "DashboardEmpty": "まだダッシュボードタイルはありません。",
-  "DashboardEmptyHint": "ワークスペースの\\.dashboard\\/. ディレクトリ内にタイルフォルダを作成して表示します。",
+  "DashboardEmpty": "最初のタイルを作成しましょう",
+  "DashboardEmptyHint": "「タイルを追加」をクリックし、表示したい内容を説明してください。作成前に提案を確認できます。",
   "DashboardNoTiles": "ダッシュボードにタイルがありません。",
   "DashboardNoTilesHint": "ツールバーの「+ タイル追加」をクリックしてタイルを追加します。",
   "AddTile": "+ タイルを追加",
@@ -70,5 +70,9 @@
   "GuidanceDecide": "確認して決定",
   "GuidanceTickets": "チケット",
   "GuidanceRuns": "実行",
-  "GuidanceResults": "結果"
+  "GuidanceResults": "結果",
+  "DashboardExamplesHint": "例を選ぶとリクエストが入力されます：",
+  "DashboardExampleTickets": "このプロジェクトの列別チケット数をドーナツグラフのタイルにしてください。",
+  "DashboardExampleGit": "過去7日間の日別Gitコミット数を表示するタイルを作成してください。",
+  "DashboardExampleSummary": "READMEをもとにプロジェクトを要約するMarkdownタイルを作成してください。"
 }
