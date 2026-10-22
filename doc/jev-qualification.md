@@ -306,3 +306,15 @@ criteria, and approves another ticket through to Done with historical evidence r
 ### Ticket presentation
 
 JEV panels lead with a short verdict, criteria checklist or recommended profile, and the next owner action. Proofs, technical diagnostics, probabilities, and past decisions are collapsed by default. Rejection and acceptance overrides reveal a reason field only when needed. Column options live together under the JEV assistance disclosure.
+
+### Live work review journey
+
+`JevLiveWorkReviewJourneyTests` repeats the profile and acceptance UI journey against the real
+TypeSafe API using the locally detected key. Opt in with `KITTYCLAW_JEV_LIVE_E2E=1` and filter
+`FullyQualifiedName~JevLiveWorkReviewJourneyTests`. It uses isolated debug data and an ephemeral
+port. Agent providers are replaced with an executor that runs four actual Python unittest checks,
+including an intentional failure for the correction case. JEV selects between two authorized
+profiles and judges the real process exit status and test counts. The test checks both manual
+holds, applied model/skills, evidence references, owner correction feedback, acceptance to Done,
+and retained history. Screenshots and raw verification output stay under the test's debug folder;
+the local credential is neither copied into that folder nor logged.
