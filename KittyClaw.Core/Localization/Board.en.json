@@ -1,4 +1,6 @@
 {
+  "CardActiveRunTooltip": "Open the running agent: {0}",
+  "CardLastRunTooltip": "View the last run: {0} · {1}",
   "TicketCurrentColumn": "Column",
   "SortMenuTitle": "Sort tickets",
   "SortManual": "Manual (drag & drop)",
@@ -143,7 +145,6 @@
   "ProcessorModelHelp": "Model used by the column agent. Automatic uses the project's local model when configured, otherwise the default model of the selected provider.",
   "ProcessorModelAutomatic": "Automatic (project or provider default)",
   "ProcessorModelCustom": "(saved custom model)",
-  "ProcessorPromptHint": "Detailed instructions appended after the mission, before skills and the result contract.",
   "ProcessorTicketOrder": "Ticket order",
   "ProcessorTicketOrderHelp": "Determines which eligible ticket KittyClaw selects first when several tickets are waiting in the column.",
   "ProcessorMaxAttempts": "Maximum attempts",
@@ -236,7 +237,6 @@
   "ColumnNoSchedules": "No scheduled task for this column.",
   "ScheduleNameHelp": "Name shown in the interface and used as the author in ticket activity.",
   "ScheduleCron": "Cron expression",
-  "ScheduleCronHelp": "Five-field cron schedule: minute, hour, day of month, month and day of week.",
   "ScheduleCalendar": "Schedule",
   "ScheduleCalendarHelp": "Choose a readable frequency, days and times. KittyClaw stores the equivalent cron schedule internally.",
   "ScheduleTimezone": "Time zone",

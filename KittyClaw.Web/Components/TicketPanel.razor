@@ -406,7 +406,7 @@
                                     <small><time datetime="@BrowserLocalDateTime.UtcIso(item.At)" data-local-date-time data-local-date-time-locale="@L.Lang">@BrowserLocalDateTime.UtcFallback(item.At)</time></small>
                                     @if (_editingCommentId != item.Id)
                                     {
-                                        <button class="icon-btn pencil-btn" title="Modifier" @onclick="() => StartEditComment(item.Id!.Value, item.Text)">&#9998;</button>
+                                        <button class="icon-btn pencil-btn" title="@L["Edit"]" @onclick="() => StartEditComment(item.Id!.Value, item.Text)">&#9998;</button>
                                     }
                                 </div>
                                 <div class="markdown">@((MarkupString)Markdown.ToHtml(item.Text, _mdPipeline))</div>

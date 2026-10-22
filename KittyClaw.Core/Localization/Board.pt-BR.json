@@ -1,4 +1,6 @@
 {
+  "CardActiveRunTooltip": "Abrir o agente em execução: {0}",
+  "CardLastRunTooltip": "Ver a última execução: {0} · {1}",
   "SortMenuTitle": "Ordenar tickets",
   "SortManual": "Manual (arraste e solte)",
   "SortByTitle": "Título",
@@ -142,7 +144,6 @@
   "ProcessorModelHelp": "Model usado pelo agente de coluna. Automatico usa o modelo local do projeto quando configurado, caso contrário, o modelo padrão fornecido.",
   "ProcessorModelAutomatic": "Automatico (padrão do projeto ou provedor)",
   "ProcessorModelCustom": "(modelo personalizado salvo)",
-  "ProcessorPromptHint": "Instruções detalhadas anexadas após a missão, antes das habilidades e contrato de resultado.",
   "ProcessorTicketOrder": "Ordem de tíquetes",
   "ProcessorTicketOrderHelp": "Determina qual tíquete elegível KittyClaw seleciona primeiro quando vários tíquetes estão aguardando na coluna.",
   "ProcessorMaxAttempts": "Tentativas máximas",
@@ -235,7 +236,6 @@
   "ColumnNoSchedules": "Nenhuma tarefa agendada para essa coluna.",
   "ScheduleNameHelp": "Nome exibido na interface e usado como autor nas atividades da tarefa.",
   "ScheduleCron": "Expressão cron",
-  "ScheduleCronHelp": "Cronograma de cinco campos: minuto, hora, dia do mês, mês e dia da semana.",
   "ScheduleCalendar": "Agendamento",
   "ScheduleCalendarHelp": "Escolha uma frequência legível, dias e horários. KittyClaw armazena o cronograma equivalente internamente.",
   "ScheduleTimezone": "Fuso horário",

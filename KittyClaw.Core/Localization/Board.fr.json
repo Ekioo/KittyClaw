@@ -1,4 +1,6 @@
 {
+  "CardActiveRunTooltip": "Ouvrir l'agent en cours : {0}",
+  "CardLastRunTooltip": "Voir la dernière exécution : {0} · {1}",
   "TicketCurrentColumn": "Colonne",
   "SortMenuTitle": "Trier les tickets",
   "SortManual": "Manuel (glisser-déposer)",
@@ -143,7 +145,6 @@
   "ProcessorModelHelp": "Modèle utilisé par l’agent de la colonne. Automatique utilise le modèle local du projet s’il est configuré, sinon le modèle par défaut du fournisseur choisi.",
   "ProcessorModelAutomatic": "Automatique (projet ou fournisseur)",
   "ProcessorModelCustom": "(modèle personnalisé enregistré)",
-  "ProcessorPromptHint": "Instructions détaillées ajoutées à la mission, avant les skills et le contrat de résultat.",
   "ProcessorTicketOrder": "Ordre des tickets",
   "ProcessorTicketOrderHelp": "Détermine quel ticket éligible KittyClaw sélectionne en premier lorsque plusieurs tickets attendent dans la colonne.",
   "ProcessorMaxAttempts": "Nombre maximal de tentatives",
@@ -236,7 +237,6 @@
   "ColumnNoSchedules": "Aucune tâche planifiée pour cette colonne.",
   "ScheduleNameHelp": "Nom affiché dans l’interface et utilisé comme auteur dans l’activité des tickets.",
   "ScheduleCron": "Expression cron",
-  "ScheduleCronHelp": "Calendrier cron à cinq champs : minute, heure, jour du mois, mois et jour de la semaine.",
   "ScheduleCalendar": "Planification",
   "ScheduleCalendarHelp": "Choisissez une fréquence, des jours et des heures lisibles. KittyClaw enregistre le cron équivalent en interne.",
   "ScheduleTimezone": "Fuseau horaire",

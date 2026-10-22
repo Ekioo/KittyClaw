@@ -1,4 +1,6 @@
 {
+  "CardActiveRunTooltip": "実行中のエージェントを開く: {0}",
+  "CardLastRunTooltip": "前回の実行を表示: {0} · {1}",
   "SortMenuTitle": "チケットをソート",
   "SortManual": "手動（ドラッグ＆ドロップ）",
   "SortByTitle": "タイトル",
@@ -142,7 +144,6 @@
   "ProcessorModelHelp": "列エージェントが使用するモデル。自動ではプロジェクトのローカルモデルを使用し、それが設定されていない場合は選択プロバイダーのデフォルトモデルを使用。",
   "ProcessorModelAutomatic": "自動（プロジェクトまたはプロバイダーのデフォルト）",
   "ProcessorModelCustom": "(保存されたカスタムモデル)",
-  "ProcessorPromptHint": "ミッション後に詳細な指示が追加されます。スキルと結果契約の前に表示されます。",
   "ProcessorTicketOrder": "チケット順序",
   "ProcessorTicketOrderHelp": "複数のチケットが列に待機している場合、KittyClaw が最初に選択するチケットを決定します。",
   "ProcessorMaxAttempts": "最大試行回数",
@@ -235,7 +236,6 @@
   "ColumnNoSchedules": "この列にはスケジュールタスクがありません。",
   "ScheduleNameHelp": "インターフェースで表示される名前と、チケット活動での著者として使用されます。",
   "ScheduleCron": "クロン式",
-  "ScheduleCronHelp": "五分野のクロンスケジュール: 分, 時, 日, 月, 曜日。",
   "ScheduleCalendar": "スケジュール",
   "ScheduleCalendarHelp": "読みやすい頻度、日時を選択します。 KittyClaw は内部で等価なクロンスケジュールを保存します。",
   "ScheduleTimezone": "タイムゾーン",

@@ -127,14 +127,14 @@
                             <div class="processor-draft-notice" role="status">@L["ProcessorDraftNotice"]</div>
                         }
                         <details class="jev-settings jev-disclosure" data-testid="jev-settings">
-                            <summary>@L["JevSettings"]</summary>
-                        <label class="workflow-check"><input type="checkbox" data-testid="jev-acceptance-mode" @bind="_jevAcceptanceValidation" @bind:after="AcceptanceModeChanged" disabled="@(!_jevAvailability.Available && !_jevAcceptanceValidation)" /> @L["JevAcceptanceMode"]</label>
+                            <summary title="@L["JevSettingsHelp"]">@L["JevSettings"]</summary>
+                        <label class="workflow-check"><input type="checkbox" data-testid="jev-acceptance-mode" @bind="_jevAcceptanceValidation" @bind:after="AcceptanceModeChanged" disabled="@(!_jevAvailability.Available && !_jevAcceptanceValidation)" /> <FieldHelp Label="@L["JevAcceptanceMode"]" Help="@L["JevAcceptanceHelp"]" /></label>
                         <p class="settings-hint">@L["JevAcceptanceHelp"]</p>
                         @if (_jevAcceptanceValidation)
                         {
                             <label>@L["JevColumnCriteria"]<textarea class="settings-input workflow-textarea" data-testid="jev-column-criteria" @bind="_jevCriteriaText"></textarea></label>
                         }
-                        <label class="workflow-check"><input type="checkbox" data-testid="jev-profile-mode" @bind="_jevExecutionSelection" @bind:after="SelectionModeChanged" disabled="@(_jevAcceptanceValidation || (!_jevAvailability.Available && !_jevExecutionSelection))" /> @L["JevProfileMode"]</label>
+                        <label class="workflow-check"><input type="checkbox" data-testid="jev-profile-mode" @bind="_jevExecutionSelection" @bind:after="SelectionModeChanged" disabled="@(_jevAcceptanceValidation || (!_jevAvailability.Available && !_jevExecutionSelection))" /> <FieldHelp Label="@L["JevProfileMode"]" Help="@L["JevProfileHelp"]" /></label>
                         @if (_jevExecutionSelection)
                         {
                             <p class="settings-hint">@L["JevProfileHelp"]</p>
@@ -156,16 +156,16 @@
                             }
                             <button class="settings-browse" data-testid="jev-add-profile" @onclick="AddJevProfile">@L["JevAddProfile"]</button>
                         }
-                        <label class="workflow-check"><input type="checkbox" @bind="_jevObservationOnly" disabled="@(_jevAcceptanceValidation || _jevExecutionSelection || (!_jevAvailability.Available && !_jevObservationOnly))" /> @L["JevObservationMode"]</label>
+                        <label class="workflow-check"><input type="checkbox" @bind="_jevObservationOnly" disabled="@(_jevAcceptanceValidation || _jevExecutionSelection || (!_jevAvailability.Available && !_jevObservationOnly))" /> <FieldHelp Label="@L["JevObservationMode"]" Help="@L["JevObservationHelp"]" /></label>
                         <p class="settings-hint">@L["JevObservationHelp"]</p>
-                        <label class="workflow-check"><input type="checkbox" @bind="_jevPostRunObservation" disabled="@(_jevAcceptanceValidation || (!_jevAvailability.Available && !_jevPostRunObservation))" /> @L["JevPostRunMode"]</label>
+                        <label class="workflow-check"><input type="checkbox" @bind="_jevPostRunObservation" disabled="@(_jevAcceptanceValidation || (!_jevAvailability.Available && !_jevPostRunObservation))" /> <FieldHelp Label="@L["JevPostRunMode"]" Help="@L["JevPostRunHelp"]" /></label>
                         <p class="settings-hint">@L["JevPostRunHelp"]</p>
                         @if (_jevObservationOnly || _jevPostRunObservation)
                         {
-                        <label class="workflow-check"><input type="checkbox" data-testid="jev-automatic-routing" @bind="_jevAutomaticRouting" disabled="@(!_jevObservationOnly && !_jevPostRunObservation)" /> @L["JevAutomaticRouting"]</label>
+                        <label class="workflow-check"><input type="checkbox" data-testid="jev-automatic-routing" @bind="_jevAutomaticRouting" disabled="@(!_jevObservationOnly && !_jevPostRunObservation)" /> <FieldHelp Label="@L["JevAutomaticRouting"]" Help="@L["JevAutomaticRoutingHelp"]" /></label>
                         @if (_jevAutomaticRouting)
                         {
-                        <label>@L["JevConfidenceThreshold"]<input class="settings-input" type="number" min="0" max="100" step="1" data-testid="jev-confidence-threshold" @bind="_jevConfidencePercent" disabled="@(!_jevAutomaticRouting)" /></label>
+                        <label><FieldHelp Label="@L["JevConfidenceThreshold"]" Help="@L["JevAutomaticRoutingHelp"]" /><input class="settings-input" type="number" min="0" max="100" step="1" data-testid="jev-confidence-threshold" @bind="_jevConfidencePercent" disabled="@(!_jevAutomaticRouting)" /></label>
                         }
                         <p class="settings-hint">@L["JevAutomaticRoutingHelp"]</p>
                         }
