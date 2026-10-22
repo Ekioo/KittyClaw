@@ -45,7 +45,7 @@ else
     </div>
 
     <div class="dashboard-view">
-        @if (_guidance is not null)
+        @if (_guidance is not null && !_hasRealActivity)
         {
             <section class="dashboard-guidance dashboard-guidance--@_guidance.Stage.ToString().ToLowerInvariant()"
                      data-testid="dashboard-guidance" data-stage="@_guidance.Stage.ToString().ToLowerInvariant()">
@@ -570,8 +570,9 @@ else
         _tiles = await DashboardService.GetTilesAsync(Slug, _workspace);
         _guidance = await GuidanceService.LoadAsync(Slug);
         await LoadActivityAsync();
-        await GuidanceService.RecordAsync(Slug, _guidance.JourneyId, "dashboard_guidance_viewed");
-        if (_guidance.HasFirstResult && _hasRealActivity)
+        if (!_hasRealActivity)
+            await GuidanceService.RecordAsync(Slug, _guidance.JourneyId, "dashboard_guidance_viewed");
+        if (_hasRealActivity)
             await GuidanceService.RecordAsync(Slug, _guidance.JourneyId, "guidance_replaced_by_activity");
         await LoadOllamaModelsAsync();
 
@@ -613,7 +614,7 @@ else
     {
         _guidance = await GuidanceService.LoadAsync(Slug);
         await LoadActivityAsync();
-        if (_guidance.HasFirstResult && _hasRealActivity)
+        if (_hasRealActivity)
             await GuidanceService.RecordAsync(Slug, _guidance.JourneyId, "guidance_replaced_by_activity");
         StateHasChanged();
     }
@@ -640,7 +641,7 @@ else
 
     private async Task OpenSettings()
     {
-        if (_guidance is not null && !_guidance.HasFirstResult)
+        if (_guidance is not null && !_hasRealActivity && !_guidance.HasFirstResult)
             await GuidanceService.RecordAsync(Slug, _guidance.JourneyId, "settings_opened_before_first_result");
         Navigation.NavigateTo($"/board/{Slug}/settings");
     }

@@ -3,6 +3,8 @@
 ## Purpose
 A free-form, tile-based dashboard view that complements the Kanban board. Each tile displays content read from the project's `.dashboard/` folder. Users and agents can add, edit, remove, move, and resize tiles; layout is persisted per project so it survives restarts. Agents write files directly into tile folders; the dashboard discovers them automatically.
 
+The first-use guidance banner is shown only while the project has no tickets, runs, or dashboard tiles. Once activity exists, the activity summary replaces the banner regardless of activation-event history. The guidance directs users to the configured workflow without promising automatic provider selection or fallback.
+
 ## Folder-per-tile layout
 
 Each tile owns a dedicated subfolder under `.dashboard/`:
