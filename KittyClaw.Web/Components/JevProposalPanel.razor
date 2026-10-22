@@ -1,5 +1,6 @@
 @using KittyClaw.Core.Services
 @inject JevQualificationService Qualification
+@inject LocalizationService L
 @inject TicketService Tickets
 @inject ColumnProcessorService Processors
 @inject ProjectService Projects
@@ -20,6 +21,22 @@
         {
             <p>Suggested destination: <strong>@_proposal.Destinations.GetValueOrDefault(_proposal.Choice ?? "", "None")</strong></p>
             <p>Confidence: @_proposal.Confidence?.ToString("P0")</p>
+            @if (_proposal.Triage is { } triage)
+            {
+                <div data-testid="jev-triage">
+                    <p>@L["JevRequestType"]: <strong>@L[$"JevType{triage.RequestType.Choice}"]</strong> · @L["JevConfidence"]: @triage.RequestType.Confidence.ToString("P0")</p>
+                    <p>@L["JevComplexity"]: <strong>@L[$"JevComplexity{triage.Complexity.Choice}"]</strong> · @L["JevConfidence"]: @triage.Complexity.Confidence.ToString("P0")</p>
+                    <p>@L["JevClarificationProbability"]: <strong>@triage.ClarificationProbability.ToString("P0")</strong></p>
+                    <small class="settings-hint">@L["JevTriageHint"]</small>
+                    <details>
+                        <summary>@L["JevTriageProbabilities"]</summary>
+                        @foreach (var option in triage.RequestType.Probabilities.OrderByDescending(p => p.Value))
+                        { <p>@L[$"JevType{option.Key}"]: @option.Value.ToString("P1")</p> }
+                        @foreach (var option in triage.Complexity.Probabilities.OrderByDescending(p => p.Value))
+                        { <p>@L[$"JevComplexity{option.Key}"]: @option.Value.ToString("P1")</p> }
+                    </details>
+                </div>
+            }
             <details>
                 <summary>Destination probabilities</summary>
                 @foreach (var option in _proposal.Probabilities.OrderByDescending(p => p.Value))
@@ -28,7 +45,11 @@
                 }
             </details>
         }
-        <p class="settings-hint">@_proposal.Model · @_proposal.ObservedAt.ToLocalTime().ToString("g")</p>
+        @if (_proposal.Usage is { } usage)
+        {
+            <p class="settings-hint" data-testid="jev-usage">@L["JevTokens"]: @usage.InputTokens / @usage.OutputTokens · @_proposal.DurationMs ms</p>
+        }
+        <p class="settings-hint">@_proposal.QuestionVersion · @_proposal.Model · @_proposal.ObservedAt.ToLocalTime().ToString("g")</p>
     </section>
 }
 

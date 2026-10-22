@@ -388,5 +388,21 @@
   "JevSecretHelp": "The saved key is encrypted and never shown again. Priority: project key, KittyClaw key, then TYPESAFE_API_KEY from the machine environment.",
   "JevSourcekittyclaw": "Using the encrypted key saved in KittyClaw.",
   "JevSourceenvironment": "Using TYPESAFE_API_KEY detected in the machine environment.",
-  "JevSaveError": "The key could not be saved or removed. Check that the system secret vault is available."
+  "JevSaveError": "The key could not be saved or removed. Check that the system secret vault is available.",
+  "JevRequestType": "Request type",
+  "JevConfidence": "Confidence",
+  "JevComplexity": "Complexity",
+  "JevClarificationProbability": "Probability that owner clarification is needed",
+  "JevTriageHint": "Model estimates only. These observations do not change ticket fields or launch any action.",
+  "JevTriageProbabilities": "Triage probabilities",
+  "JevTokens": "Input / output tokens",
+  "JevTypeproblem": "Problem or incident",
+  "JevTypenew_work": "New work",
+  "JevTypeimprovement": "Improvement or maintenance",
+  "JevTypequestion": "Question or investigation",
+  "JevTypeother": "Other or unknown",
+  "JevComplexitysimple": "Simple",
+  "JevComplexitymoderate": "Moderate",
+  "JevComplexitycomplex": "Complex",
+  "JevComplexityunknown": "Unknown"
 }

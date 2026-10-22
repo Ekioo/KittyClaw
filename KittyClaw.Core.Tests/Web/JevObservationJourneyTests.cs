@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using KittyClaw.Core.Services;
+using KittyClaw.Core.Tests.Helpers;
 using KittyClaw.Web.Api;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -124,7 +125,10 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
             await Expect(proposal).ToContainTextAsync("Suggested destination: Review", new() { Timeout = 60000 });
             await Expect(proposal).ToContainTextAsync("Confidence: 90");
             await Expect(page.GetByTestId("ticket-worktree-error")).Not.ToBeVisibleAsync();
-            await proposal.Locator("summary").ClickAsync();
+            await Expect(page.GetByTestId("jev-triage")).ToContainTextAsync("Problem");
+            await Expect(page.GetByTestId("jev-triage")).ToContainTextAsync("Moderate");
+            await Expect(page.GetByTestId("jev-triage")).ToContainTextAsync("15");
+            await proposal.Locator("details").Last.Locator("summary").ClickAsync();
             await Expect(proposal).ToContainTextAsync("95");
             await Expect(proposal).ToContainTextAsync("jev-debug-fixture");
             await proposal.ScrollIntoViewIfNeededAsync();
@@ -216,8 +220,8 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
             {
                 Content = JsonContent.Create(new
                 {
-                    model = "jev-debug-fixture", answers = new { routing = new { type = "choice", choice = selected,
-                        confidence = 0.9, probabilities = new Dictionary<string, double> { [selected] = 0.95, ["none"] = 0.05 } } }
+                    model = "jev-debug-fixture", answers = JevResponseFixture.Answers(selected),
+                    usage = new { input_tokens = 450, output_tokens = 70 }
                 })
             };
         }

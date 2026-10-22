@@ -388,5 +388,21 @@
   "JevSecretHelp": "La clé est chiffrée et ne sera plus affichée. Priorité : clé du projet, clé KittyClaw, puis TYPESAFE_API_KEY dans l’environnement de la machine.",
   "JevSourcekittyclaw": "Utilise la clé chiffrée enregistrée dans KittyClaw.",
   "JevSourceenvironment": "Utilise TYPESAFE_API_KEY détectée dans l’environnement de la machine.",
-  "JevSaveError": "Impossible d’enregistrer ou de supprimer la clé. Vérifiez la disponibilité du coffre de secrets système."
+  "JevSaveError": "Impossible d’enregistrer ou de supprimer la clé. Vérifiez la disponibilité du coffre de secrets système.",
+  "JevRequestType": "Type de demande",
+  "JevConfidence": "Confiance",
+  "JevComplexity": "Complexité",
+  "JevClarificationProbability": "Probabilité qu’une clarification du propriétaire soit nécessaire",
+  "JevTriageHint": "Estimations du modèle uniquement. Ces observations ne modifient pas les champs du ticket et ne déclenchent aucune action.",
+  "JevTriageProbabilities": "Probabilités du triage",
+  "JevTokens": "Tokens en entrée / sortie",
+  "JevTypeproblem": "Problème ou incident",
+  "JevTypenew_work": "Nouveau travail",
+  "JevTypeimprovement": "Amélioration ou maintenance",
+  "JevTypequestion": "Question ou investigation",
+  "JevTypeother": "Autre ou indéterminé",
+  "JevComplexitysimple": "Simple",
+  "JevComplexitymoderate": "Modérée",
+  "JevComplexitycomplex": "Complexe",
+  "JevComplexityunknown": "Indéterminée"
 }
