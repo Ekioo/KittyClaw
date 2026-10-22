@@ -1,3 +1,5 @@
+using System.Globalization;
+using KittyClaw.Core.Automation;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -175,6 +177,87 @@ public sealed class JevLiveWorkReviewJourneyTests(ITestOutputHelper output)
             await page.ReloadAsync(); await Expect(page.GetByTestId("jev-work-history")).ToContainTextAsync("All four verification tests");
             await Expect(page.GetByTestId("jev-work-history")).ToContainTextAsync("Verified");
             Assert.Equal(2, factory.Dispatcher.Models.Count); Assert.Empty(errors);
+            var projects = factory.Services.GetRequiredService<ProjectService>();
+            var costTracker = factory.Services.GetRequiredService<CostTracker>();
+            var project = (await projects.GetProjectAsync(slug))!;
+            var workspacePath = projects.ResolveWorkspacePath(project);
+            var entries = costTracker.LogFiles(workspacePath).SelectMany(File.ReadLines)
+                .Select(line => JsonSerializer.Deserialize<CostLogEntry>(line)!).Where(e => e.Source == "jev").ToList();
+            Assert.Equal(4, entries.Count);
+            Assert.All(entries, e => { Assert.True(e.CostKnown); Assert.True(e.CostEstimated); Assert.Equal(project.Slug, e.ProjectSlug); Assert.Equal(source.PipelineId, e.PipelineId); });
+            var model = Assert.Single(entries.Select(e => e.Model).Distinct());
+            var inputTokens = entries.Sum(e => (long)e.InputTokens);
+            var outputTokens = entries.Sum(e => (long)e.OutputTokens);
+            var jevUsd = entries.Sum(e => e.UsdCost);
+            Assert.True(inputTokens > 0); Assert.True(outputTokens > 0);
+            Assert.Equal(inputTokens * .042m / 1_000_000m, jevUsd);
+            var expected = new JevCostSummary(4, inputTokens, outputTokens, jevUsd);
+            var costs = factory.Services.GetRequiredService<CostReportService>();
+            var day = DateOnly.FromDateTime(DateTime.Now);
+            await costs.RefreshAsync();
+            Assert.Equal(expected, Assert.Single((await costs.GetReportAsync(new(day, day))).Projects).Jev);
+            Assert.Equal(jevUsd, (await costs.GetReportAsync(new(day, day))).TotalUsd);
+
+            // Non-JEV control records make model/project/pipeline exclusion observable in the UI.
+            var control = await projects.CreateProjectAsync("Cost filter control");
+            costTracker.LogRun(workspacePath, new(DateTime.UtcNow, "Cost filter fixture", second.Id,
+                "control-agent-model", 10, 10, 0, 0, 1m, 1, 0, ProjectSlug: slug, PipelineId: source.PipelineId, RunId: "cost-control-one"));
+            costTracker.LogRun(projects.ResolveWorkspacePath(control), new(DateTime.UtcNow, "Cost filter fixture", null,
+                "control-agent-model", 10, 10, 0, 0, 2m, 1, 0, ProjectSlug: control.Slug, RunId: "cost-control-two"));
+            await costs.RefreshAsync();
+            var allCosts = await costs.GetReportAsync(new(day, day));
+            Assert.Equal(3m + jevUsd, allCosts.TotalUsd);
+            var selectedCosts = await costs.GetReportAsync(new(day, day, new HashSet<string> { slug }, $"{slug}:{source.PipelineId}", model));
+            Assert.Equal(expected, Assert.Single(selectedCosts.Projects).Jev); Assert.Equal(jevUsd, selectedCosts.TotalUsd);
+            Assert.Empty((await costs.GetReportAsync(new(day.AddDays(-2), day.AddDays(-1)))).Projects);
+            var usdText = jevUsd.ToString("$0.000000", CultureInfo.InvariantCulture);
+            await page.GotoAsync(new Uri(http.BaseAddress!, "/costs").ToString());
+            await Expect(page.Locator(".cost-project-cost-card")).ToHaveCountAsync(2);
+            await Expect(page.GetByTestId("cost-visible-total")).ToContainTextAsync("$3.00");
+            for (var attempt = 0; attempt < 20; attempt++)
+            {
+                await page.Locator(".cost-model").SelectOptionAsync(model);
+                if ((await page.GetByTestId("cost-visible-total").InnerTextAsync()).Contains(usdText)) break;
+                await Task.Delay(250);
+            }
+            await Expect(page.GetByTestId("cost-visible-total")).ToContainTextAsync(usdText);
+            await Expect(page.Locator(".cost-model")).ToHaveValueAsync(model);
+            var summary = page.GetByTestId("jev-cost-summary");
+            await Expect(summary).ToContainTextAsync("JEV · 4 calls");
+            await Expect(summary).ToContainTextAsync(inputTokens.ToString("N0", CultureInfo.CurrentCulture));
+            await Expect(summary).ToContainTextAsync(outputTokens.ToString("N0", CultureInfo.CurrentCulture));
+            await Expect(summary).ToContainTextAsync(usdText);
+            await page.ScreenshotAsync(new() { Path = Path.Combine(data, "live-jev-costs-model.png"), FullPage = true });
+
+            await page.Locator(".cost-model").SelectOptionAsync("");
+            await Expect(page.Locator(".cost-project-cost-card")).ToHaveCountAsync(2);
+            await page.Locator(".cost-project-picker > summary").ClickAsync();
+            await page.Locator(".cost-project-option").Filter(new() { HasText = project.Name }).Locator("input").CheckAsync();
+            await page.Locator(".cost-project-picker > summary").ClickAsync();
+            await Expect(page.Locator(".cost-project-cost-card")).ToHaveCountAsync(1);
+            await Expect(page.GetByTestId("cost-visible-total")).ToContainTextAsync("$1.00");
+            await Expect(summary).ToContainTextAsync("4 calls");
+            await page.Locator(".cost-pipeline").SelectOptionAsync($"{slug}:{source.PipelineId}");
+            await Expect(summary).ToContainTextAsync("4 calls");
+            await page.Locator(".cost-model").SelectOptionAsync(model);
+            await Expect(page.GetByTestId("cost-visible-total")).ToContainTextAsync(usdText);
+            await page.ScreenshotAsync(new() { Path = Path.Combine(data, "live-jev-costs-all-filters.png"), FullPage = true });
+            await page.Locator(".cost-to").FillAsync(day.AddDays(-1).ToString("yyyy-MM-dd"));
+            await page.Locator(".cost-to").PressAsync("Tab");
+            await Expect(page.Locator(".cost-empty")).ToBeVisibleAsync();
+            await page.Locator(".cost-to").FillAsync(day.ToString("yyyy-MM-dd"));
+            await page.Locator(".cost-to").PressAsync("Tab");
+            await Expect(summary).ToContainTextAsync("4 calls");
+            await Expect(page.GetByTestId("cost-visible-total")).ToContainTextAsync(usdText);
+            await costs.RefreshAsync();
+            Assert.Equal(expected, Assert.Single((await costs.GetReportAsync(new(day, day, Model: model))).Projects).Jev);
+            var restartedCosts = new CostReportService(projects, factory.Services.GetRequiredService<PipelineService>(), factory.Services.GetRequiredService<TicketService>());
+            Assert.Equal(expected, Assert.Single((await restartedCosts.GetReportAsync(new(day, day, Model: model))).Projects).Jev);
+            Assert.Empty(errors);
+            var verification = new { api = "live", model, calls = 4, inputTokens, outputTokens, estimatedUsd = jevUsd,
+                filters = new[] { "project", "pipeline", "model", "date" }, duplicateAfterRefresh = false };
+            await File.WriteAllTextAsync(Path.Combine(data, "live-costs-verification.json"), JsonSerializer.Serialize(verification, new JsonSerializerOptions { WriteIndented = true }));
+            output.WriteLine("LIVE COSTS PASS: " + JsonSerializer.Serialize(verification));
             output.WriteLine($"PASS: manually approved model/skills used per ticket, criteria held for owner review, missing criteria and verified evidence shown, corrections routed with feedback, accepted ticket reached Done. Debug data: {data}");
         }
         finally
