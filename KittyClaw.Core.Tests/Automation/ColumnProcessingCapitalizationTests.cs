@@ -25,7 +25,7 @@ public sealed class ColumnProcessingCapitalizationTests : IDisposable
         const string lesson = "Read the recovered canonical index before the next business run starts.";
         Assert.Equal(MemoryCapitalizationStatus.Succeeded,
             (await memory.CapitalizeAsync(project.Slug, column.Id, "first-run", [lesson])).Status);
-        var dispatcher = new ColumnAgentDispatcher(null!, projects, skills, processors);
+        var dispatcher = new ColumnAgentDispatcher(null!, projects, skills, processors, null!);
 
         var nextProfile = await dispatcher.BuildProfileAsync(project.Slug, processor);
 

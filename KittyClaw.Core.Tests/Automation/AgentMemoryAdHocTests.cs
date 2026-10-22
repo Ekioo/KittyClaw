@@ -119,6 +119,83 @@ public sealed class AgentMemoryAdHocTests
     }
 
     [Fact]
+    public void AdHocConsolidation_PreservesProjectQuotaFallbackWhenMemberModelIsPrimary()
+    {
+        var (target, fallback) = AgentMemoryHandler.ResolveAdHocModelTargets(
+            "claude:claude-opus-5",
+            "codex:gpt-5.6-sol",
+            localModel: null,
+            localModelBaseUrl: null);
+
+        Assert.Equal(CliProvider.Claude, target.Provider);
+        Assert.Equal("claude-opus-5", target.Model);
+        Assert.NotNull(fallback);
+        Assert.Equal(CliProvider.Codex, fallback.Provider);
+        Assert.Equal("gpt-5.6-sol", fallback.Model);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("claude:claude-opus-5")]
+    [InlineData("CLAUDE:CLAUDE-OPUS-5")]
+    public void AdHocConsolidation_DoesNotRetryWithoutADistinctProjectFallback(string? projectFallback)
+    {
+        var (target, fallback) = AgentMemoryHandler.ResolveAdHocModelTargets(
+            "claude:claude-opus-5",
+            projectFallback,
+            localModel: "local-default",
+            localModelBaseUrl: "http://localhost:11434");
+
+        Assert.Equal(CliProvider.Claude, target.Provider);
+        Assert.Equal("claude-opus-5", target.Model);
+        Assert.Null(fallback);
+    }
+
+    [Fact]
+    public void AdHocConsolidation_DoesNotRetryEquivalentResolvedTarget()
+    {
+        var (target, fallback) = AgentMemoryHandler.ResolveAdHocModelTargets(
+            "claude:claude-opus-5",
+            "claude-opus-5",
+            localModel: null,
+            localModelBaseUrl: null);
+
+        Assert.Equal(CliProvider.Claude, target.Provider);
+        Assert.Equal("claude-opus-5", target.Model);
+        Assert.Null(fallback);
+    }
+
+    [Fact]
+    public void AdHocConsolidation_IgnoresInvalidFallbackWithoutReplacingValidMemberTarget()
+    {
+        var (target, fallback) = AgentMemoryHandler.ResolveAdHocModelTargets(
+            "claude:claude-opus-5",
+            "not-a-routable-model",
+            localModel: null,
+            localModelBaseUrl: null);
+
+        Assert.Equal(CliProvider.Claude, target.Provider);
+        Assert.Equal("claude-opus-5", target.Model);
+        Assert.Null(fallback);
+    }
+
+    [Fact]
+    public void AdHocConsolidation_UsesProjectFallbackAsPrimaryWhenMemberModelIsAbsent()
+    {
+        var (target, fallback) = AgentMemoryHandler.ResolveAdHocModelTargets(
+            memberModel: null,
+            projectFallback: "claude:claude-sonnet-4-6",
+            localModel: "local-default",
+            localModelBaseUrl: "http://localhost:11434");
+
+        Assert.Equal(CliProvider.Claude, target.Provider);
+        Assert.Equal("claude-sonnet-4-6", target.Model);
+        Assert.Null(fallback);
+    }
+
+    [Fact]
     public async Task Service_DefersActiveChatRunThenProcessesTheSameSegment()
     {
         using var tmp = new TempDir();
@@ -172,6 +249,61 @@ public sealed class AgentMemoryAdHocTests
         Assert.Empty(await chats.ListMemoryCandidatesAsync(project.Slug, now.AddMinutes(4), now.AddMinutes(4)));
         Assert.Equal("1", RunGit(workspace, "rev-list", "--count", "--grep=chore(memory): programmer", "HEAD").Trim());
         Assert.Equal(string.Empty, RunGit(workspace, "status", "--porcelain", "--", ".agents/programmer/memory").Trim());
+    }
+
+    [Fact]
+    public async Task SuccessfulWorktreeConsolidation_UsesAndFinalizesItsExistingMaintenanceRoute()
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("adhoc-memory-worktree-success");
+        var workspace = projects.ResolveWorkspacePath(project);
+        var members = new MemberService(projects);
+        await members.CreateMemberAsync(project.Slug, "Programmer");
+        Directory.CreateDirectory(Path.Combine(workspace, ".agents", "programmer", "memory"));
+        await File.WriteAllTextAsync(
+            Path.Combine(workspace, ".agents", "programmer", "memory", "MEMORY.md"), "# Memory\n");
+        await File.WriteAllTextAsync(Path.Combine(workspace, ".agents", "memory-consolidation.md"),
+            "Consolidate. <!--scenario:memory-update-->");
+        RunGit(workspace, "init");
+        RunGit(workspace, "config", "user.email", "tests@kittyclaw.local");
+        RunGit(workspace, "config", "user.name", "KittyClaw Tests");
+        RunGit(workspace, "add", ".agents");
+        RunGit(workspace, "commit", "-m", "baseline");
+        RunGit(workspace, "branch", "-M", "integration");
+        await projects.UpdateProjectAsync(project.Slug, null, worktreesEnabled: true,
+            integrationBranch: "integration");
+
+        var tickets = new TicketService(projects, members);
+        var worktrees = new TicketWorktreeService(projects, tickets);
+        var queue = new WorktreeMergeQueueService(projects, worktrees);
+        var router = new DurableWriteRouter(projects, worktrees, queue);
+        var chats = new ChatService(projects);
+        var runs = new AgentRunRegistry();
+        var sessions = new SessionRegistry();
+        var handler = new AgentMemoryHandler(tickets, members, projects,
+            new AgentRunner(sessions, runs, new RunConcurrencyGate(1), NullLogger<AgentRunner>.Instance),
+            sessions, NullLogger.Instance, router);
+        var service = new ChatMemoryConsolidationService(projects, chats, members, runs, handler,
+            NullLogger<ChatMemoryConsolidationService>.Instance, router);
+        await chats.AppendAsync(project.Slug, "programmer", "user", "Remember this durable lesson");
+
+        await service.ProcessOnceAsync(DateTime.UtcNow.AddMinutes(16))
+            .WaitAsync(TimeSpan.FromSeconds(15));
+
+        Assert.Empty(await chats.ListMemoryCandidatesAsync(
+            project.Slug, DateTime.UtcNow.AddMinutes(17), DateTime.UtcNow.AddMinutes(17)));
+        var pending = Assert.Single(await queue.ListAsync(project.Slug));
+        Assert.Equal(WorktreeMergeStatus.Pending, pending.Status);
+        Assert.Empty(RunGit(pending.WorktreePath, "status", "--porcelain"));
+
+        var integrated = await queue.ProcessNextAsync(project.Slug, CancellationToken.None);
+        Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        // Integration only advances the durable tip; the local checkout catches up on sync.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await queue.SynchronizeNextAsync(project.Slug, CancellationToken.None))!.SyncStatus);
+        Assert.True(File.Exists(Path.Combine(
+            workspace, ".agents", "programmer", "memory", "routing.md")));
     }
 
     [Fact]

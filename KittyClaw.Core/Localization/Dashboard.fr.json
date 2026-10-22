@@ -50,5 +50,8 @@
   "TileConfigModelHint": "Laisser vide pour le mod\u00e8le par d\u00e9faut du projet",
   "TileConfigDetectedOutput": "Fichier de sortie (d\u00e9tect\u00e9)",
   "TileConfigRevise": "R\u00e9viser",
-  "TileConfigAccept": "Accepter"
+  "TileConfigAccept": "Accepter",
+  "GuidanceStepReady": "Étape 1 sur 3 · Prêt", "GuidanceStepRunning": "Étape 2 sur 3 · En cours", "GuidanceStepRecoverable": "Action requise · Vous pouvez continuer", "GuidanceStepCompleted": "Étape 3 sur 3 · Résultat prêt",
+  "GuidanceReadyTitle": "Votre premier résultat commence ici", "GuidanceReadyMessage": "Votre tableau est prêt. Lancez le premier ticket ; KittyClaw choisira automatiquement un provider disponible.", "GuidanceRunningTitle": "Votre premier résultat est en préparation", "GuidanceRunningMessage": "Le premier run traite le ticket. Vous pouvez le suivre sans configurer les modèles ni les automatisations.", "GuidanceRecoverableTitle": "Le run nécessite une nouvelle tentative", "GuidanceRecoverableMessage": "Le provider sélectionné n’a pas pu terminer. Revenez au tableau pour réessayer ; un fallback disponible sera utilisé si possible.", "GuidanceRecoverableHint": "Votre ticket et votre progression sont conservés.", "GuidanceCompletedTitle": "Votre premier résultat est prêt", "GuidanceCompletedMessage": "Vérifiez le résultat puis prenez la décision finale : l’approuver ou demander une modification.",
+  "GuidanceStart": "Commencer depuis le tableau", "GuidanceFollowRun": "Suivre le run", "GuidanceRetry": "Réessayer depuis le tableau", "GuidanceDecide": "Vérifier et décider", "GuidanceTickets": "tickets", "GuidanceRuns": "runs", "GuidanceResults": "résultats"
 }

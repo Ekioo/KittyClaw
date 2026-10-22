@@ -43,6 +43,9 @@ public sealed class RunAgentDurableWorktreeIntegrationTests : IDisposable
         var integrated = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
         Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        // Integration only advances the durable tip; the local checkout catches up on sync.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None))!.SyncStatus);
         Assert.Equal("durable", (await File.ReadAllTextAsync(
             Path.Combine(fixture.Repository, "generated", "result.txt"))).Trim());
         Assert.Empty(Git(request.WorktreePath, "status", "--porcelain=v1"));

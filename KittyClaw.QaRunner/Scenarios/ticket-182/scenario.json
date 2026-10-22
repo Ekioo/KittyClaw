@@ -1,0 +1,23 @@
+{
+  "setup": [
+    { "type": "createTemporaryDirectory", "saveAs": "validGitPath", "initializeGit": true }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/" },
+    { "type": "wait", "ms": 1200 },
+    { "type": "click", "selector": ".unified-page-header > .settings-primary" },
+    { "type": "fill", "selector": "#new-project-name", "value": "First ticket journey" },
+    { "type": "fill", "selector": "#repository-path", "value": "{validGitPath}" },
+    { "type": "fill", "selector": "#first-objective", "value": "Add searchable release notes" },
+    { "type": "click", "selector": "#validate-repository" },
+    { "type": "assertValue", "selector": "#first-ticket-title", "expected": "Add searchable release notes" },
+    { "type": "fill", "selector": "#first-ticket-context", "value": "Readers cannot currently find changes across releases." },
+    { "type": "screenshot", "name": "first-ticket-edited", "description": "Editable first-ticket summary after a lightweight correction" },
+    { "type": "click", "selector": "#confirm-first-ticket" },
+    { "type": "wait", "ms": 1200 },
+    { "type": "assertVisible", "selector": ".migration-wizard:visible" },
+    { "type": "assertJson", "path": "/api/projects/first-ticket-journey/tickets/1", "jsonPath": "title", "expected": "Add searchable release notes" },
+    { "type": "assertJson", "path": "/api/projects/first-ticket-journey/tickets/1", "jsonPath": "createdBy", "expected": "owner" }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

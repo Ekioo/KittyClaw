@@ -31,5 +31,22 @@
   "SortByName": "名前で並べ替え",
   "SortByCreationDate": "作成日で並べ替え",
   "SortByLastModified": "最終更新日で並べ替え",
-  "SortProjectsTitle": "プロジェクトの並び替え"
+  "SortProjectsTitle": "プロジェクトの並び替え",
+  "RepositoryIntakeIntro": "既存の Git リポジトリを選び、最初の目標を記述してください。KittyClaw が続行前に検証します。",
+  "FirstObjective": "最初の目標",
+  "FirstObjectiveHint": "KittyClaw が最初に達成を支援すべき有用な成果は何ですか?",
+  "ValidateRepository": "検証して続行",
+  "RepositoryPathMissing": "このフォルダーは存在しません。既存のリポジトリを選択してください。",
+  "RepositoryPathInvalid": "システムフォルダー以外の絶対パスを選択してください。",
+  "RepositoryNotGit": "このフォルダーは Git リポジトリではありません。Git メタデータを含むリポジトリを選択してください。",
+  "RepositoryNotWritable": "KittyClaw はこのリポジトリに書き込めません。フォルダーの権限を確認して再試行してください。",
+  "FirstTicketDraftTitle": "最初のチケットを確認",
+  "FirstTicketDraftIntro": "KittyClaw が目標を実行可能なチケットに変換しました。必要に応じて調整して続行してください。",
+  "FirstTicketTitle": "タイトル",
+  "FirstTicketContext": "コンテキスト",
+  "FirstTicketOutcome": "期待される成果",
+  "FirstTicketCriteria": "受け入れ基準",
+  "FirstTicketContinue": "チケットを作成して続行",
+  "FirstRunProviderTitle": "最初の実行を準備",
+  "FirstRunProviderRetry": "プロバイダーを再確認"
 }

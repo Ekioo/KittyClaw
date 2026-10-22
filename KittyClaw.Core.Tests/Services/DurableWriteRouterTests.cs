@@ -224,6 +224,42 @@ public sealed class DurableWriteRouterTests
     }
 
     [Fact]
+    public async Task CodeVariableNamedLikeASecret_IsAllowedAndStaged()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var route = await fixture.Router.ResolveAsync(fixture.Slug, null, ["scripts"]);
+        var directory = Path.Combine(route.RootPath, "scripts");
+        Directory.CreateDirectory(directory);
+        await File.WriteAllTextAsync(Path.Combine(directory, "reauth.mjs"),
+            "const body = { client_secret: clientSecretV2, access_token: accessToken };\n");
+
+        var result = await fixture.Router.ValidateAndStageAsync(route);
+
+        Assert.Equal(DurableWriteValidationStatus.Ready, result.Status);
+        Assert.Empty(result.SecretPaths);
+        Assert.Equal("scripts/reauth.mjs",
+            Git(route.RootPath, "diff", "--cached", "--name-only").Trim().Replace('\\', '/'));
+    }
+
+    [Theory]
+    [InlineData("client_secret: 'literalSecretValue'")]
+    [InlineData("access_token=abcdefgh12345678")]
+    public async Task LiteralAndProbableTokenValues_RemainBlocked(string content)
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var route = await fixture.Router.ResolveAsync(fixture.Slug, null, ["scripts"]);
+        var directory = Path.Combine(route.RootPath, "scripts");
+        Directory.CreateDirectory(directory);
+        await File.WriteAllTextAsync(Path.Combine(directory, "reauth.mjs"), content);
+
+        var result = await fixture.Router.ValidateAndStageAsync(route);
+
+        Assert.Equal(DurableWriteValidationStatus.SecretBlocked, result.Status);
+        Assert.Single(result.SecretPaths);
+        Assert.Empty(Git(route.RootPath, "diff", "--cached", "--name-only"));
+    }
+
+    [Fact]
     public async Task WholeWorkspaceRoute_StagesProjectChanges_ButRejectsLocalOnlyControlData()
     {
         using var fixture = await Fixture.CreateAsync();
@@ -305,6 +341,9 @@ public sealed class DurableWriteRouterTests
         var integrated = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
         Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        // Integration only advances the durable tip; the local checkout catches up on sync.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None))!.SyncStatus);
         Assert.True(File.Exists(Path.Combine(fixture.Repository, ".agents", "programmer", "memory", "MEMORY.md")));
         Assert.True(Directory.Exists(route.RootPath));
         Assert.Empty(Git(route.RootPath, "status", "--porcelain"));
@@ -327,6 +366,9 @@ public sealed class DurableWriteRouterTests
 
         Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
         Assert.Equal(WorktreeMergeCheckpoint.Merge, integrated.Checkpoint);
+        // Integration only advances the durable tip; the local checkout catches up on sync.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await restarted.SynchronizeNextAsync(fixture.Slug, CancellationToken.None))!.SyncStatus);
         Assert.True(File.Exists(Path.Combine(fixture.Repository, ".agents", "programmer", "memory", "MEMORY.md")));
         Assert.Null(await restarted.ProcessNextAsync(fixture.Slug, CancellationToken.None));
         fixture.Queue!.ReleaseMaintenanceWrite(route.QueueRequestId!.Value);
@@ -360,6 +402,9 @@ public sealed class DurableWriteRouterTests
         var integrated = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
         Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        // Integration only advances the durable tip; the local checkout catches up on sync.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None))!.SyncStatus);
         Assert.Contains("Late recovered lesson.",
             await File.ReadAllTextAsync(Path.Combine(fixture.Repository, ".agents", "programmer", "memory", "MEMORY.md")));
     }
@@ -382,7 +427,7 @@ public sealed class DurableWriteRouterTests
     }
 
     [Fact]
-    public async Task UncommittedMaintenanceWrite_IsPreservedAndReportedAfterRestart()
+    public async Task UncommittedSafeMaintenanceWrite_IsCheckpointedAndIntegratedAfterRestart()
     {
         using var fixture = await Fixture.CreateAsync(withQueue: true);
         var route = await fixture.Router.ResolveAsync(fixture.Slug, null, [".agents/programmer/memory"]);
@@ -391,14 +436,135 @@ public sealed class DurableWriteRouterTests
         await File.WriteAllTextAsync(memory, "# Preserved after interruption\n");
 
         var restarted = new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees);
-        Assert.Null(await restarted.ProcessNextAsync(fixture.Slug, CancellationToken.None));
+        var completed = await restarted.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
         var request = Assert.Single(await restarted.ListAsync(fixture.Slug));
-        Assert.Equal(WorktreeMergeStatus.NeedsReview, request.Status);
-        Assert.Contains("preserved uncommitted changes", request.Error, StringComparison.Ordinal);
-        Assert.True(File.Exists(memory));
-        Assert.NotNull(await restarted.GetAlertSummaryAsync(fixture.Slug));
+        Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
+        Assert.Equal(WorktreeMergeStatus.Completed, request.Status);
+        // Integration only advances the durable tip; the local checkout catches up on sync.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await restarted.SynchronizeNextAsync(fixture.Slug, CancellationToken.None))!.SyncStatus);
+        Assert.Contains("Preserved after interruption",
+            await File.ReadAllTextAsync(Path.Combine(
+                fixture.Repository, ".agents", "programmer", "memory", "MEMORY.md")));
+        Assert.Empty(Git(route.RootPath, "status", "--porcelain"));
+        var restartedAgain = new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees);
+        Assert.Null(await restartedAgain.ProcessNextAsync(fixture.Slug, CancellationToken.None));
+        Assert.Equal(WorktreeMergeStatus.Completed,
+            Assert.Single(await restartedAgain.ListAsync(fixture.Slug)).Status);
         fixture.Queue!.ReleaseMaintenanceWrite(route.QueueRequestId!.Value);
+    }
+
+    [Fact]
+    public async Task NextInteractiveWrite_RecoversSafeUncommittedMaintenanceChanges()
+    {
+        using var fixture = await Fixture.CreateAsync(withQueue: true);
+        var interrupted = await fixture.Router.ResolveAsync(
+            fixture.Slug, null, [".agents/programmer/memory"]);
+        var memory = Path.Combine(
+            interrupted.RootPath, ".agents", "programmer", "memory", "MEMORY.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(memory)!);
+        await File.WriteAllTextAsync(memory, "# Preserved after interruption\n");
+        await fixture.Router.PreserveExecutionAsync(
+            fixture.Slug, interrupted, "preserved uncommitted changes");
+
+        var recovered = await fixture.Router.TryResolveWorkspaceAsync(fixture.Slug);
+        Assert.NotNull(recovered);
+        var validation = await fixture.Router.CommitAndQueueAsync(
+            fixture.Slug, recovered!, "chore(chat): recover interrupted durable write");
+        var queued = Assert.Single(await fixture.Queue!.ListAsync(fixture.Slug));
+
+        Assert.Equal(DurableWriteValidationStatus.Ready, validation.Status);
+        Assert.Equal(WorktreeMergeStatus.Pending, queued.Status);
+        Assert.Empty(Git(recovered!.RootPath, "status", "--porcelain"));
+
+        var integrated = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        // Integration only advances the durable tip; the local checkout catches up on sync.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None))!.SyncStatus);
+        Assert.Contains("Preserved after interruption",
+            await File.ReadAllTextAsync(Path.Combine(
+                fixture.Repository, ".agents", "programmer", "memory", "MEMORY.md")));
+    }
+
+    [Fact]
+    public async Task NextInteractiveWrite_RequeuesCleanDivergentMaintenanceHistory()
+    {
+        using var fixture = await Fixture.CreateAsync(withQueue: true);
+        var initial = await fixture.Router.ResolveAsync(
+            fixture.Slug, null, [".agents/programmer/memory"]);
+        var memory = Path.Combine(
+            initial.RootPath, ".agents", "programmer", "memory", "MEMORY.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(memory)!);
+        await File.WriteAllTextAsync(memory, "# Initial memory\n");
+        await fixture.Router.CommitAndQueueAsync(
+            fixture.Slug, initial, "chore(memory): initial");
+        Assert.Equal(WorktreeMergeStatus.Completed,
+            (await fixture.Queue!.ProcessNextAsync(fixture.Slug, CancellationToken.None))!.Status);
+        // Catch the local checkout up to the first integration before committing the external
+        // change, so `main-only` sits on top of the integrated tip instead of diverging from it.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None))!.SyncStatus);
+
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "main-only.txt"), "main\n");
+        Git(fixture.Repository, "add", "main-only.txt");
+        Git(fixture.Repository, "commit", "-m", "main change");
+        await File.AppendAllTextAsync(memory, "Maintenance lesson.\n");
+        Git(initial.RootPath, "add", ".agents/programmer/memory/MEMORY.md");
+        Git(initial.RootPath, "commit", "-m", "maintenance change");
+
+        var recovered = await fixture.Router.TryResolveWorkspaceAsync(fixture.Slug);
+        Assert.NotNull(recovered);
+        var validation = await fixture.Router.CommitAndQueueAsync(
+            fixture.Slug, recovered!, "chore(chat): recover divergent maintenance history");
+        var queued = Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+
+        Assert.Equal(DurableWriteValidationStatus.Ready, validation.Status);
+        Assert.Equal(WorktreeMergeStatus.Pending, queued.Status);
+
+        var integrated = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        // Integration only advances the durable tip; the local checkout catches up on sync.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None))!.SyncStatus);
+        Assert.True(File.Exists(Path.Combine(fixture.Repository, "main-only.txt")));
+        Assert.Contains("Maintenance lesson",
+            await File.ReadAllTextAsync(Path.Combine(
+                fixture.Repository, ".agents", "programmer", "memory", "MEMORY.md")));
+    }
+
+    [Fact]
+    public async Task NextInteractiveWrite_QuarantinesLocalOnlyInterruptedChangesAndContinues()
+    {
+        using var fixture = await Fixture.CreateAsync(withQueue: true);
+        var interrupted = await fixture.Router.TryResolveWorkspaceAsync(fixture.Slug);
+        Assert.NotNull(interrupted);
+        var localOnly = Path.Combine(
+            interrupted!.RootPath, ".agents", "channel", "tmp", "transport.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(localOnly)!);
+        await File.WriteAllTextAsync(localOnly, "ephemeral\n");
+        await fixture.Router.PreserveExecutionAsync(
+            fixture.Slug, interrupted, "preserved local-only changes");
+
+        var resumed = await fixture.Router.TryResolveWorkspaceAsync(fixture.Slug);
+        Assert.NotNull(resumed);
+        Assert.Equal(interrupted.RootPath, resumed!.RootPath);
+        Assert.False(File.Exists(Path.Combine(
+            resumed.RootPath, ".agents", "channel", "tmp", "transport.txt")));
+
+        var rows = await fixture.Queue!.ListAsync(fixture.Slug);
+        var quarantined = Assert.Single(rows,
+            row => row.Status == WorktreeMergeStatus.Quarantined);
+        var replacement = Assert.Single(rows,
+            row => row.Status == WorktreeMergeStatus.CommitPending);
+        Assert.NotEqual(quarantined.Id, replacement.Id);
+        Assert.Contains("changes that require review", quarantined.Error, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(
+            quarantined.WorktreePath, ".agents", "channel", "tmp", "transport.txt")));
+
+        await fixture.Router.CommitAndQueueAsync(
+            fixture.Slug, resumed, "chore(chat): continue after quarantine");
     }
 
     private sealed class Fixture : IDisposable

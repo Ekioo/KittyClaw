@@ -197,6 +197,38 @@ public sealed class ScheduledTicketTests
     }
 
     [Fact]
+    public async Task ScheduleTicketAsync_PreservesDistinctWakesForTwoMigratedTicketsInSamePipeline()
+    {
+        using var tmp = new TempDir();
+        var (projects, svc, slug) = BuildSut(tmp);
+        var pipelines = new PipelineService(projects);
+        var columns = new ColumnService(projects);
+        var pipeline = await pipelines.CreateAsync(slug, "Production éditoriale");
+        var waiting = await columns.CreateColumnAsync(
+            slug, "Programmé", pipelineId: pipeline.Id, role: KittyClaw.Core.Models.ColumnRole.Waiting);
+        var ready = await columns.CreateColumnAsync(slug, "À produire", pipelineId: pipeline.Id);
+        var first = await svc.CreateTicketAsync(
+            slug, "Lot 1 migré", status: ready.Name, pipelineId: pipeline.Id, columnId: ready.Id);
+        var second = await svc.CreateTicketAsync(
+            slug, "Lot 2 migré", status: ready.Name, pipelineId: pipeline.Id, columnId: ready.Id);
+        var firstFireAt = new DateTime(2026, 10, 11, 7, 0, 0, DateTimeKind.Utc);
+        var secondFireAt = new DateTime(2026, 10, 26, 7, 0, 0, DateTimeKind.Utc);
+
+        await svc.ScheduleTicketAsync(slug, first.Id, firstFireAt, ready.Name, "programmer");
+        await svc.ScheduleTicketAsync(slug, second.Id, secondFireAt, ready.Name, "programmer");
+
+        var persistedFirst = await svc.GetTicketAsync(slug, first.Id);
+        var persistedSecond = await svc.GetTicketAsync(slug, second.Id);
+
+        Assert.Equal(waiting.Id, persistedFirst!.ColumnId);
+        Assert.Equal(firstFireAt, persistedFirst.FireAt);
+        Assert.Equal(ready.Name, persistedFirst.ScheduleTarget);
+        Assert.Equal(waiting.Id, persistedSecond!.ColumnId);
+        Assert.Equal(secondFireAt, persistedSecond.FireAt);
+        Assert.Equal(ready.Name, persistedSecond.ScheduleTarget);
+    }
+
+    [Fact]
     public async Task ProcessorSchedule_InArbitrarilyNamedWaitingColumn_IsDueAndPromoted()
     {
         using var tmp = new TempDir();

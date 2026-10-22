@@ -242,6 +242,39 @@ public sealed class TicketDependencyApiTests
     }
 
     [Fact]
+    public async Task ListTickets_ExistingDependencyAfterBlockerMovesToSuccess_CountDropsToZeroAndDetailIsPreserved()
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("resolved-dependency-summary-test");
+        var members = new MemberService(projects);
+        var tickets = new TicketService(projects, members);
+        var pipelines = new PipelineService(projects);
+        var columns = new ColumnService(projects);
+        var delivery = await pipelines.CreateAsync(project.Slug, "Delivery");
+        var delivered = await columns.CreateColumnAsync(project.Slug, "Livré",
+            pipelineId: delivery.Id, role: ColumnRole.Success);
+        var blocker = await tickets.CreateTicketAsync(project.Slug, "Blocker");
+        var blocked = await tickets.CreateTicketAsync(project.Slug, "Blocked");
+        await tickets.AddDependencyAsync(project.Slug, blocked.Id, blocker.Id);
+
+        var beforeTransition = await tickets.ListTicketsAsync(project.Slug);
+        Assert.Equal(1, beforeTransition.Single(t => t.Id == blocked.Id).UnresolvedBlockerCount);
+
+        await tickets.UpdateTicketAsync(project.Slug, blocker.Id, author: "test",
+            pipelineId: delivery.Id, columnId: delivered.Id, status: "Livré");
+
+        var afterTransition = await tickets.ListTicketsAsync(project.Slug);
+        var blockedSummary = afterTransition.Single(t => t.Id == blocked.Id);
+        var blockedDetail = await tickets.GetTicketAsync(project.Slug, blocked.Id);
+
+        Assert.Equal(0, blockedSummary.UnresolvedBlockerCount);
+        var dependency = Assert.Single(blockedDetail!.BlockedBy);
+        Assert.Equal(blocker.Id, dependency.TicketId);
+        Assert.Equal(ColumnRole.Success, dependency.ColumnRole);
+    }
+
+    [Fact]
     public async Task AddDependency_NoCycle_Succeeds()
     {
         // A ← B ← C, then A ← C is fine (diamond, not a cycle)

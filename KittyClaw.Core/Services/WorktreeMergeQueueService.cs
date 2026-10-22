@@ -19,11 +19,17 @@ public enum WorktreeMergeStatus
     CommitPending = 5,
     ValidationRequired = 6,
     NeedsReview = 7,
-    BlockedByExternalChanges = 8
+    BlockedByExternalChanges = 8,
+    Quarantined = 9
 }
 
 public enum WorktreeMergeJobKind { Ticket = 0, Maintenance = 1 }
 public enum WorktreeMergeCheckpoint { Preparation = 0, Writing = 1, Validation = 2, Commit = 3, Waiting = 4, Rebase = 5, Merge = 6 }
+public enum LocalCheckoutSyncStatus
+{
+    NotRequired = 0, Pending = 1, Processing = 2, Completed = 3, Conflict = 4,
+    Diverged = 5, CheckoutMissing = 6, ConcurrentChanges = 7, CleanupPending = 8
+}
 
 public sealed record WorktreeMergeRequest(
     long Id, int TicketId, int RootTicketId, string WorktreePath, string SourceBranch,
@@ -31,20 +37,40 @@ public sealed record WorktreeMergeRequest(
     string? SourceCommit, string? IntegratedCommit, string? Error, string? ConflictFiles,
     WorktreeMergeJobKind JobKind = WorktreeMergeJobKind.Ticket,
     WorktreeMergeCheckpoint Checkpoint = WorktreeMergeCheckpoint.Preparation,
-    DateTime? LocalIntegratedAt = null, DateTime? RemotePublishedAt = null);
+    DateTime? LocalIntegratedAt = null, DateTime? RemotePublishedAt = null,
+    LocalCheckoutSyncStatus SyncStatus = LocalCheckoutSyncStatus.NotRequired,
+    string? SyncTargetCommit = null, string? SyncBackupRef = null,
+    string? SyncError = null, string? SyncConflictFiles = null, DateTime? SyncUpdatedAt = null)
+{
+    public bool HasSynchronizationLag => Status == WorktreeMergeStatus.Completed
+        && SyncStatus != LocalCheckoutSyncStatus.Completed;
+}
 
 public sealed record WorktreeMergeAlertSummary(
     int ActiveCount, WorktreeMergeStatus MostSevereStatus, DateTime OldestUpdatedAt);
 
-/// <summary>Durable, per-project serialized integration queue for canonical ticket worktrees.</summary>
+/// <summary>
+/// Durable, per-project serialized integration queue for canonical ticket worktrees.
+/// The integration phase advances a per-target integration tip (<c>refs/kittyclaw/integration/&lt;target&gt;</c>)
+/// through a dedicated detached-HEAD integration worktree and never mutates the primary checkout;
+/// advancing the local checkout to the tip is a separate synchronization concern.
+/// </summary>
 public sealed partial class WorktreeMergeQueueService(
     ProjectService projects,
     TicketWorktreeService worktrees,
     WorktreeFinalizationCoordinator? finalization = null,
     AgentRunRegistry? runs = null,
-    Action<string, string>? beforeFastForward = null)
+    Action<string, string>? beforeFastForward = null,
+    Action<string>? beforeLocalSync = null,
+    Action<string>? beforeLocalSyncCompletion = null,
+    Action<string>? afterSyncCompletionPersisted = null,
+    PrimaryCheckoutActivityRegistry? primaryCheckoutActivity = null)
 {
     private const int MaxTargetAdvanceRetries = 3;
+    private const string DivergedTipError =
+        "The target branch received external commits that are not part of the integration tip. "
+        + "Reconcile the target branch with the integration tip (for example merge the integration tip ref "
+        + "into the target branch), then resume; integration is paused until the divergence is resolved.";
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> ProjectGates =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<long, byte> _activeMaintenanceWrites = new();
@@ -75,6 +101,21 @@ public sealed partial class WorktreeMergeQueueService(
         await MigrationGate.RunOnceAsync(db, "worktree-merge-queue-v2-active-states", static d =>
             d.Database.ExecuteSqlRawAsync("""
                 DROP INDEX IF EXISTS IX_WorktreeMergeQueue_ActiveRoot;
+                UPDATE WorktreeMergeQueue AS candidate
+                SET Status = 4,
+                    UpdatedAt = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                    Error = CASE
+                        WHEN Error IS NULL OR Error = '' THEN 'Superseded duplicate integration preserved during queue migration.'
+                        ELSE Error || char(10) || 'Superseded duplicate integration preserved during queue migration.'
+                    END
+                WHERE Status <> 4
+                  AND EXISTS (
+                      SELECT 1
+                      FROM WorktreeMergeQueue AS newer
+                      WHERE newer.RootTicketId = candidate.RootTicketId
+                        AND newer.Status <> 4
+                        AND newer.Id > candidate.Id
+                  );
                 CREATE UNIQUE INDEX IX_WorktreeMergeQueue_ActiveRoot
                     ON WorktreeMergeQueue(RootTicketId) WHERE Status <> 4;
                 """));
@@ -86,6 +127,44 @@ public sealed partial class WorktreeMergeQueueService(
                 "ALTER TABLE WorktreeMergeQueue ADD COLUMN Checkpoint INTEGER NOT NULL DEFAULT 0",
                 "ALTER TABLE WorktreeMergeQueue ADD COLUMN LocalIntegratedAt TEXT NULL",
                 "ALTER TABLE WorktreeMergeQueue ADD COLUMN RemotePublishedAt TEXT NULL"
+            })
+            {
+                try { await d.Database.ExecuteSqlRawAsync(sql); }
+                catch (SqliteException ex) when (ex.SqliteErrorCode == 1 && ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase)) { }
+            }
+        });
+        await MigrationGate.RunOnceAsync(db, "worktree-merge-queue-v4-quarantine", static d =>
+            d.Database.ExecuteSqlRawAsync($"""
+                DROP INDEX IF EXISTS IX_WorktreeMergeQueue_ActiveRoot;
+                UPDATE WorktreeMergeQueue AS candidate
+                SET Status = {(int)WorktreeMergeStatus.Completed},
+                    UpdatedAt = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                    Error = CASE
+                        WHEN Error IS NULL OR Error = '' THEN 'Superseded duplicate integration preserved during queue migration.'
+                        ELSE Error || char(10) || 'Superseded duplicate integration preserved during queue migration.'
+                    END
+                WHERE Status NOT IN ({(int)WorktreeMergeStatus.Completed}, {(int)WorktreeMergeStatus.Quarantined})
+                  AND EXISTS (
+                      SELECT 1
+                      FROM WorktreeMergeQueue AS newer
+                      WHERE newer.RootTicketId = candidate.RootTicketId
+                        AND newer.Status NOT IN ({(int)WorktreeMergeStatus.Completed}, {(int)WorktreeMergeStatus.Quarantined})
+                        AND newer.Id > candidate.Id
+                  );
+                CREATE UNIQUE INDEX IX_WorktreeMergeQueue_ActiveRoot
+                    ON WorktreeMergeQueue(RootTicketId)
+                    WHERE Status NOT IN ({(int)WorktreeMergeStatus.Completed}, {(int)WorktreeMergeStatus.Quarantined});
+                """));
+        await MigrationGate.RunOnceAsync(db, "worktree-merge-queue-v5-local-sync", static async d =>
+        {
+            foreach (var sql in new[]
+            {
+                "ALTER TABLE WorktreeMergeQueue ADD COLUMN SyncStatus INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE WorktreeMergeQueue ADD COLUMN SyncTargetCommit TEXT NULL",
+                "ALTER TABLE WorktreeMergeQueue ADD COLUMN SyncBackupRef TEXT NULL",
+                "ALTER TABLE WorktreeMergeQueue ADD COLUMN SyncError TEXT NULL",
+                "ALTER TABLE WorktreeMergeQueue ADD COLUMN SyncConflictFiles TEXT NULL",
+                "ALTER TABLE WorktreeMergeQueue ADD COLUMN SyncUpdatedAt TEXT NULL"
             })
             {
                 try { await d.Database.ExecuteSqlRawAsync(sql); }
@@ -126,7 +205,7 @@ public sealed partial class WorktreeMergeQueueService(
             if (!inspected.IsDirty
                 && string.IsNullOrWhiteSpace(inspected.Error)
                 && head.ExitCode == 0
-                && IsAncestor(repository, head.Output.Trim(), project.IntegrationBranch))
+                && IsIntegratedCommit(repository, head.Output.Trim(), project.IntegrationBranch))
             {
                 var recoveryAt = DateTime.UtcNow;
                 var sourceCommit = head.Output.Trim();
@@ -219,6 +298,10 @@ public sealed partial class WorktreeMergeQueueService(
         var request = await ReadByRootAsync(db, int.MinValue);
         if (request is not { JobKind: WorktreeMergeJobKind.Maintenance })
             return 0;
+        // A quarantined row deliberately keeps its dirty worktree for human review; recovering it
+        // here would demote the quarantine to a generic review state and lose its reason.
+        if (request.Status == WorktreeMergeStatus.Quarantined)
+            return 0;
         if (_activeMaintenanceWrites.ContainsKey(request.Id))
             return 0;
         if (!Directory.Exists(request.WorktreePath))
@@ -245,7 +328,7 @@ public sealed partial class WorktreeMergeQueueService(
 
         var sourceCommit = head.Output.Trim();
         var repository = projects.ResolveRepositoryPath(project);
-        if (IsAncestor(repository, sourceCommit, project.IntegrationBranch!))
+        if (IsIntegratedCommit(repository, sourceCommit, project.IntegrationBranch!))
         {
             if (request.Status == WorktreeMergeStatus.Completed &&
                 string.Equals(request.IntegratedCommit, sourceCommit, StringComparison.Ordinal))
@@ -276,6 +359,21 @@ public sealed partial class WorktreeMergeQueueService(
     public async Task<WorktreeMergeRequest> PrepareMaintenanceAsync(
         string projectSlug, string worktreePath, string sourceBranch, CancellationToken ct)
     {
+        var gate = ProjectGates.GetOrAdd(projectSlug, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            return await PrepareMaintenanceCoreAsync(projectSlug, worktreePath, sourceBranch, ct);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task<WorktreeMergeRequest> PrepareMaintenanceCoreAsync(
+        string projectSlug, string worktreePath, string sourceBranch, CancellationToken ct)
+    {
         ct.ThrowIfCancellationRequested();
         var project = await projects.GetProjectAsync(projectSlug)
             ?? throw new InvalidOperationException($"Project '{projectSlug}' does not exist.");
@@ -284,8 +382,10 @@ public sealed partial class WorktreeMergeQueueService(
         await using var db = projects.GetProjectDb(projectSlug);
         await EnsureTableAsync(db);
         const int maintenanceRoot = int.MinValue;
-        var existing = await ReadByRootAsync(db, maintenanceRoot);
-        if (existing is not null)
+        // A quarantine insert creates a newer row for the same root; reading only the latest row
+        // would shadow the single active request and make the insert below violate the unique index.
+        var existing = await ReadActiveMaintenanceAsync(db) ?? await ReadByRootAsync(db, maintenanceRoot);
+        if (existing is not null && existing.Status != WorktreeMergeStatus.Quarantined)
         {
             if (existing.Status == WorktreeMergeStatus.Completed)
             {
@@ -304,16 +404,68 @@ public sealed partial class WorktreeMergeQueueService(
         }
         var now = DateTime.UtcNow;
         var baselineCommit = RunGit(worktreePath, ["rev-parse", "HEAD"]).Output.Trim();
-        await db.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO WorktreeMergeQueue
-                (TicketId, RootTicketId, WorktreePath, SourceBranch, TargetBranch, Status, CreatedAt, UpdatedAt, SourceCommit, JobKind, Checkpoint)
-            VALUES ({0}, {maintenanceRoot}, {worktreePath}, {sourceBranch}, {project.IntegrationBranch},
-                {(int)WorktreeMergeStatus.CommitPending}, {now}, {now}, {baselineCommit},
-                {(int)WorktreeMergeJobKind.Maintenance}, {(int)WorktreeMergeCheckpoint.Writing})
-            """);
-        var created = (await ReadByRootAsync(db, maintenanceRoot))!;
+        try
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO WorktreeMergeQueue
+                    (TicketId, RootTicketId, WorktreePath, SourceBranch, TargetBranch, Status, CreatedAt, UpdatedAt, SourceCommit, JobKind, Checkpoint)
+                VALUES ({0}, {maintenanceRoot}, {worktreePath}, {sourceBranch}, {project.IntegrationBranch},
+                    {(int)WorktreeMergeStatus.CommitPending}, {now}, {now}, {baselineCommit},
+                    {(int)WorktreeMergeJobKind.Maintenance}, {(int)WorktreeMergeCheckpoint.Writing})
+                """);
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
+        {
+            // A preparation outside this process gate won the insert; adopt its active request.
+            var concurrent = await ReadActiveMaintenanceAsync(db);
+            if (concurrent is not { JobKind: WorktreeMergeJobKind.Maintenance })
+                throw;
+            _activeMaintenanceWrites.TryAdd(concurrent.Id, 0);
+            return concurrent;
+        }
+        var created = (await ReadActiveMaintenanceAsync(db))!;
         _activeMaintenanceWrites.TryAdd(created.Id, 0);
         return created;
+    }
+
+    public async Task QuarantineMaintenanceAsync(
+        string projectSlug,
+        string originalPath,
+        string quarantinePath,
+        string quarantineBranch,
+        string reason)
+    {
+        var project = await projects.GetProjectAsync(projectSlug)
+            ?? throw new InvalidOperationException($"Project '{projectSlug}' does not exist.");
+        await using var db = projects.GetProjectDb(projectSlug);
+        await EnsureTableAsync(db);
+        const int maintenanceRoot = int.MinValue;
+        var existing = await ReadByRootAsync(db, maintenanceRoot);
+        var now = DateTime.UtcNow;
+        if (existing is { JobKind: WorktreeMergeJobKind.Maintenance }
+            && string.Equals(existing.WorktreePath, originalPath, StringComparison.OrdinalIgnoreCase))
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE WorktreeMergeQueue SET WorktreePath = {quarantinePath},
+                    SourceBranch = {quarantineBranch}, Status = {(int)WorktreeMergeStatus.Quarantined},
+                    Checkpoint = {(int)WorktreeMergeCheckpoint.Validation}, Error = {reason},
+                    ConflictFiles = NULL, UpdatedAt = {now}
+                WHERE Id = {existing.Id}
+                """);
+            _activeMaintenanceWrites.TryRemove(existing.Id, out _);
+            return;
+        }
+
+        var head = RunGit(quarantinePath, ["rev-parse", "HEAD"], false).Output.Trim();
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO WorktreeMergeQueue
+                (TicketId, RootTicketId, WorktreePath, SourceBranch, TargetBranch, Status,
+                 CreatedAt, UpdatedAt, SourceCommit, JobKind, Checkpoint, Error)
+            VALUES ({0}, {maintenanceRoot}, {quarantinePath}, {quarantineBranch},
+                {project.IntegrationBranch!}, {(int)WorktreeMergeStatus.Quarantined},
+                {now}, {now}, {head}, {(int)WorktreeMergeJobKind.Maintenance},
+                {(int)WorktreeMergeCheckpoint.Validation}, {reason})
+            """);
     }
 
     public async Task MarkMaintenanceReadyAsync(string projectSlug, long requestId, string sourceCommit)
@@ -352,7 +504,7 @@ public sealed partial class WorktreeMergeQueueService(
 
         var repository = projects.ResolveRepositoryPath(project);
         if (string.IsNullOrWhiteSpace(project.IntegrationBranch)
-            || !IsAncestor(repository, sourceCommit, project.IntegrationBranch))
+            || !IsIntegratedCommit(repository, sourceCommit, project.IntegrationBranch))
         {
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Pending},
@@ -413,6 +565,13 @@ public sealed partial class WorktreeMergeQueueService(
         return await ReadAllAsync(command);
     }
 
+    public async Task<WorktreeMergeRequest?> GetAsync(string projectSlug, long requestId)
+    {
+        await using var db = projects.GetProjectDb(projectSlug);
+        await EnsureTableAsync(db);
+        return await ReadByIdAsync(db, requestId);
+    }
+
     public async Task<WorktreeMergeAlertSummary?> GetAlertSummaryAsync(string projectSlug)
     {
         var active = (await ListAsync(projectSlug))
@@ -434,12 +593,9 @@ public sealed partial class WorktreeMergeQueueService(
             // A host may stop after claiming. Replaying the same row is safe because integration is verified by ancestry.
             await db.Database.ExecuteSqlRawAsync("UPDATE WorktreeMergeQueue SET Status = 0, Error = 'Recovered after interruption' WHERE Status = 1");
             await ReconcileInterruptedMaintenanceAsync(db);
-            var request = await ReadNextAsync(db, WorktreeMergeStatus.Pending)
-                ?? await ReadNextAsync(db, WorktreeMergeStatus.BlockedByExternalChanges);
+            var request = await ReadNextAvailableAsync(db, projectSlug, WorktreeMergeStatus.Pending)
+                ?? await ReadNextAvailableAsync(db, projectSlug, WorktreeMergeStatus.BlockedByExternalChanges);
             if (request is null) return null;
-            if (request.JobKind == WorktreeMergeJobKind.Ticket
-                && await IsBusyAsync(projectSlug, request.RootTicketId))
-                return null;
             await SetStateAsync(db, request.Id, WorktreeMergeStatus.Processing, WorktreeMergeCheckpoint.Preparation);
             return await IntegrateAsync(projectSlug, request, continueRebase: false, ct);
         }
@@ -452,19 +608,52 @@ public sealed partial class WorktreeMergeQueueService(
             .Where(row => !_activeMaintenanceWrites.ContainsKey(row.Id));
         foreach (var request in interrupted)
         {
-            var dirty = RunGit(request.WorktreePath, ["status", "--porcelain"]).Output;
-            if (!string.IsNullOrWhiteSpace(dirty))
+            var preparation = PrepareInterruptedMaintenanceWorktree(request.WorktreePath);
+            if (preparation.Error is not null)
             {
                 await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
-                    "Maintenance writing was interrupted with preserved uncommitted changes; review and commit them before resuming.", null);
+                    preparation.Error, null);
+                continue;
+            }
+
+            if (preparation.HasChanges)
+            {
+                RunGit(request.WorktreePath, ["add", "-A"]);
+                var commit = RunGit(request.WorktreePath,
+                    ["commit", "-m", "Recover interrupted maintenance write"], false);
+                if (commit.ExitCode != 0)
+                {
+                    await MarkAsync(db, request.Id, WorktreeMergeStatus.CommitPending,
+                        $"Recovered files could not be checkpointed: {commit.Error.Trim()}", null);
+                    continue;
+                }
+
+                var recoveredHead = RunGit(request.WorktreePath, ["rev-parse", "HEAD"]).Output.Trim();
+                await db.Database.ExecuteSqlInterpolatedAsync($"""
+                    UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Pending},
+                        Checkpoint = {(int)WorktreeMergeCheckpoint.Waiting}, SourceCommit = {recoveredHead},
+                        Error = 'Recovered and checkpointed interrupted maintenance write',
+                        UpdatedAt = {DateTime.UtcNow}
+                    WHERE Id = {request.Id}
+                    """);
                 continue;
             }
 
             var head = RunGit(request.WorktreePath, ["rev-parse", "HEAD"]).Output.Trim();
             if (string.Equals(head, request.SourceCommit, StringComparison.Ordinal))
             {
-                await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
-                    "Maintenance writing was interrupted before a new commit was created; the worktree was preserved.", null);
+                var integrated = IsIntegratedCommit(request.WorktreePath, head, request.TargetBranch);
+                await db.Database.ExecuteSqlInterpolatedAsync($"""
+                    UPDATE WorktreeMergeQueue SET Status = {(int)(integrated
+                            ? WorktreeMergeStatus.Completed : WorktreeMergeStatus.Pending)},
+                        Checkpoint = {(int)(integrated
+                            ? WorktreeMergeCheckpoint.Merge : WorktreeMergeCheckpoint.Waiting)},
+                        IntegratedCommit = {(integrated ? head : null)},
+                        LocalIntegratedAt = {(integrated ? DateTime.UtcNow : null)},
+                        Error = {(integrated ? "Recovered interrupted no-op maintenance write" : "Recovered interrupted maintenance checkpoint")},
+                        UpdatedAt = {DateTime.UtcNow}
+                    WHERE Id = {request.Id}
+                    """);
                 continue;
             }
 
@@ -488,7 +677,8 @@ public sealed partial class WorktreeMergeQueueService(
             var request = await ReadByIdAsync(db, requestId);
             if (request is null || request.Status is not (WorktreeMergeStatus.Conflict or WorktreeMergeStatus.Failed
                 or WorktreeMergeStatus.BlockedByExternalChanges or WorktreeMergeStatus.NeedsReview
-                or WorktreeMergeStatus.CommitPending or WorktreeMergeStatus.ValidationRequired))
+                or WorktreeMergeStatus.CommitPending or WorktreeMergeStatus.ValidationRequired
+                or WorktreeMergeStatus.Quarantined))
                 return null;
             if (request.JobKind == WorktreeMergeJobKind.Ticket
                 && await IsBusyAsync(projectSlug, request.RootTicketId))
@@ -510,42 +700,40 @@ public sealed partial class WorktreeMergeQueueService(
         var repository = projects.ResolveRepositoryPath(project);
         try
         {
-            if (!IsClean(repository))
-                return await MarkAsync(db, request.Id, WorktreeMergeStatus.BlockedByExternalChanges,
-                    "The target branch checkout has local changes. Runs can continue, but integration is paused until those external changes are resolved.", null);
-            var checkedOut = RunGit(repository, ["branch", "--show-current"]).Output.Trim();
-            if (!string.Equals(checkedOut, request.TargetBranch, StringComparison.Ordinal))
-                throw new InvalidOperationException($"Integration checkout is on '{checkedOut}', expected '{request.TargetBranch}'.");
-
             var worktreeIsRegistered = IsRegisteredWorktree(repository, request.WorktreePath);
+            var target = ResolveIntegrationTarget(repository, request.TargetBranch);
             if (request.JobKind == WorktreeMergeJobKind.Ticket && worktreeIsRegistered)
             {
                 var unresolved = ConflictFiles(request.WorktreePath);
-                if (unresolved.Length > 0)
+                var rebaseInProgress = IsRebaseInProgress(request.WorktreePath);
+                if (unresolved.Length > 0 && !rebaseInProgress)
                     return await MarkAsync(db, request.Id, WorktreeMergeStatus.Conflict,
                         "The ticket worktree contains unresolved Git conflicts. Resolve and stage every conflict before resuming; no finalization commit was created.",
                         string.Join('\n', unresolved));
-                var markerFiles = ConflictMarkerFiles(request.WorktreePath, request.TargetBranch);
-                if (markerFiles.Length > 0)
-                    return await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
-                        "Files containing unresolved conflict markers were preserved. Remove the markers and verify the intended content before resuming: "
-                        + string.Join(", ", markerFiles), string.Join('\n', markerFiles));
-                var preparation = PrepareTicketWorktree(request);
-                if (preparation.Error is not null)
-                    return await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
-                        preparation.Error, null);
-                if (preparation.HasChanges)
+                if (!rebaseInProgress)
                 {
-                    RunGit(request.WorktreePath, ["add", "-A"]);
-                    var commit = RunGit(request.WorktreePath,
-                        ["commit", "-m", $"Finalize ticket #{request.RootTicketId} worktree"], false);
-                    if (commit.ExitCode != 0)
-                        return await MarkAsync(db, request.Id, WorktreeMergeStatus.CommitPending,
-                            $"Validated changes could not be committed: {commit.Error.Trim()}", null);
-                    if (!IsClean(request.WorktreePath))
+                    var markerFiles = ConflictMarkerFiles(request.WorktreePath, target.TipCommit);
+                    if (markerFiles.Length > 0)
                         return await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
-                            "The finalization commit did not capture the complete worktree; cleanup was stopped.", null);
-                    request = request with { SourceCommit = null };
+                            "Files containing unresolved conflict markers were preserved. Remove the markers and verify the intended content before resuming: "
+                            + string.Join(", ", markerFiles), string.Join('\n', markerFiles));
+                    var preparation = PrepareTicketWorktree(request);
+                    if (preparation.Error is not null)
+                        return await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
+                            preparation.Error, null);
+                    if (preparation.HasChanges)
+                    {
+                        RunGit(request.WorktreePath, ["add", "-A"]);
+                        var commit = RunGit(request.WorktreePath,
+                            ["commit", "-m", $"Finalize ticket #{request.RootTicketId} worktree"], false);
+                        if (commit.ExitCode != 0)
+                            return await MarkAsync(db, request.Id, WorktreeMergeStatus.CommitPending,
+                                $"Validated changes could not be committed: {commit.Error.Trim()}", null);
+                        if (!IsClean(request.WorktreePath))
+                            return await MarkAsync(db, request.Id, WorktreeMergeStatus.NeedsReview,
+                                "The finalization commit did not capture the complete worktree; cleanup was stopped.", null);
+                        request = request with { SourceCommit = null };
+                    }
                 }
             }
 
@@ -556,10 +744,21 @@ public sealed partial class WorktreeMergeQueueService(
                 request = request with { SourceCommit = sourceHead };
             }
 
+            // An already-integrated source is proven by ancestry against the integration tip (or the
+            // target branch itself when an operator merged externally) and only needs cleanup, which
+            // never mutates any checkout's files.
             var alreadyIntegrated = !string.IsNullOrWhiteSpace(request.SourceCommit)
-                && IsAncestor(repository, request.SourceCommit!, request.TargetBranch);
+                && IsIntegrated(repository, request.SourceCommit!, request.TargetBranch, target);
             if (!alreadyIntegrated)
             {
+                // Integration advances only the integration tip through the dedicated detached-HEAD
+                // worktree, so a dirty primary checkout never pauses it. Divergence, however, means
+                // the target branch holds external commits the tip does not: advancing the tip past
+                // them could publish an integration that can never fast-forward the local checkout.
+                if (target.Diverged)
+                    return await MarkAsync(db, request.Id, WorktreeMergeStatus.BlockedByExternalChanges,
+                        DivergedTipError, null);
+
                 if (!worktreeIsRegistered)
                     return await MarkAsync(db, request.Id, WorktreeMergeStatus.Failed,
                         "The source worktree is no longer registered and its last known commit is not integrated; cleanup was stopped.", null);
@@ -569,17 +768,25 @@ public sealed partial class WorktreeMergeQueueService(
                     await SetStateAsync(db, request.Id, WorktreeMergeStatus.Processing, WorktreeMergeCheckpoint.Rebase);
                     var unresolved = ConflictFiles(request.WorktreePath);
                     if (unresolved.Length > 0)
-                        return await MarkAsync(db, request.Id, WorktreeMergeStatus.Conflict,
-                            "Resolve and stage all conflict files before resuming.", string.Join('\n', unresolved));
-                    if (IsRebaseInProgress(request.WorktreePath))
+                    {
+                        var resumed = CompleteMemoryOnlyRebase(request.WorktreePath,
+                            new GitResult(1, "", "The rebase still contains unresolved conflicts."));
+                        if (resumed.ExitCode != 0)
+                            return await MarkGitFailureAsync(db, request, resumed);
+                    }
+                    else if (IsRebaseInProgress(request.WorktreePath))
                     {
                         var continued = RunGit(request.WorktreePath, ["-c", "core.editor=true", "rebase", "--continue"], false);
                         if (continued.ExitCode != 0)
+                            continued = CompleteMemoryOnlyRebase(request.WorktreePath, continued);
+                        if (continued.ExitCode != 0)
                             return await MarkGitFailureAsync(db, request, continued);
                     }
-                    else if (!IsAncestor(repository, request.TargetBranch, request.SourceBranch))
+                    else if (!IsAncestor(repository, target.TipCommit, request.SourceBranch))
                     {
-                        var rebased = RunGit(request.WorktreePath, ["rebase", request.TargetBranch], false);
+                        var rebased = RunGit(request.WorktreePath, ["rebase", target.TipCommit], false);
+                        if (rebased.ExitCode != 0)
+                            rebased = CompleteMemoryOnlyRebase(request.WorktreePath, rebased);
                         if (rebased.ExitCode != 0)
                             return await MarkGitFailureAsync(db, request, rebased);
                     }
@@ -590,12 +797,30 @@ public sealed partial class WorktreeMergeQueueService(
                     await SetSourceCommitAsync(db, request.Id, sourceCommit);
                     request = request with { SourceCommit = sourceCommit };
                     await SetStateAsync(db, request.Id, WorktreeMergeStatus.Processing, WorktreeMergeCheckpoint.Rebase);
-                    if (!IsAncestor(repository, request.TargetBranch, request.SourceBranch))
+                    if (!IsAncestor(repository, target.TipCommit, request.SourceBranch))
                     {
-                        var rebased = RunGit(request.WorktreePath, ["rebase", request.TargetBranch], false);
+                        var rebased = RunGit(request.WorktreePath, ["rebase", target.TipCommit], false);
+                        if (rebased.ExitCode != 0)
+                            rebased = CompleteMemoryOnlyRebase(request.WorktreePath, rebased);
                         if (rebased.ExitCode != 0)
                             return await MarkGitFailureAsync(db, request, rebased);
                     }
+                }
+
+                // A resumed rebase may have started against an older tip. The tip can legitimately
+                // advance while the request waits for conflict resolution, so prove ancestry again
+                // before attempting the fast-forward and catch up when necessary.
+                target = ResolveIntegrationTarget(repository, request.TargetBranch);
+                if (target.Diverged)
+                    return await MarkAsync(db, request.Id, WorktreeMergeStatus.BlockedByExternalChanges,
+                        DivergedTipError, null);
+                if (!IsAncestor(repository, target.TipCommit, request.SourceBranch))
+                {
+                    var catchUpRebase = RunGit(request.WorktreePath, ["rebase", target.TipCommit], false);
+                    if (catchUpRebase.ExitCode != 0)
+                        catchUpRebase = CompleteMemoryOnlyRebase(request.WorktreePath, catchUpRebase);
+                    if (catchUpRebase.ExitCode != 0)
+                        return await MarkGitFailureAsync(db, request, catchUpRebase);
                 }
 
                 var rebasedCommit = RunGit(request.WorktreePath, ["rev-parse", "HEAD"]).Output.Trim();
@@ -603,43 +828,70 @@ public sealed partial class WorktreeMergeQueueService(
                 {
                     ct.ThrowIfCancellationRequested();
                     await SetStateAsync(db, request.Id, WorktreeMergeStatus.Processing, WorktreeMergeCheckpoint.Merge);
-                    var targetBeforeMerge = RunGit(repository, ["rev-parse", request.TargetBranch]).Output.Trim();
                     beforeFastForward?.Invoke(repository, request.TargetBranch);
-                    var ff = RunGit(repository, ["merge", "--ff-only", request.SourceBranch], false);
+                    var integrationWorktree = EnsureIntegrationWorktree(repository, slug, target.TipCommit);
+                    var ff = RunGit(integrationWorktree, ["merge", "--ff-only", rebasedCommit], false);
+                    string failure;
                     if (ff.ExitCode == 0)
-                        break;
+                    {
+                        // The target branch may receive external commits while the fast-forward is
+                        // validated; re-resolving before publishing keeps them ahead of the new tip.
+                        // The compare-and-swap then rejects a tip moved by a concurrent process.
+                        var latest = ResolveIntegrationTarget(repository, request.TargetBranch);
+                        if (!latest.Diverged && string.Equals(latest.TipCommit, target.TipCommit, StringComparison.Ordinal))
+                        {
+                            var published = RunGit(repository,
+                                ["update-ref", target.TipRef, rebasedCommit, target.RefValue ?? ""], false);
+                            if (published.ExitCode == 0)
+                                break;
+                            failure = published.Error;
+                        }
+                        else
+                            failure = "The integration target advanced while the fast-forward was validated.";
+                    }
+                    else
+                        failure = ff.Error;
 
-                    var targetAfterFailure = RunGit(repository, ["rev-parse", request.TargetBranch]).Output.Trim();
+                    var refreshed = ResolveIntegrationTarget(repository, request.TargetBranch);
+                    if (refreshed.Diverged)
+                        return await MarkAsync(db, request.Id, WorktreeMergeStatus.BlockedByExternalChanges,
+                            DivergedTipError, null);
                     if (attempt >= MaxTargetAdvanceRetries - 1
-                        || string.Equals(targetBeforeMerge, targetAfterFailure, StringComparison.Ordinal))
-                        throw new InvalidOperationException(ff.Error.Trim());
+                        || (string.Equals(refreshed.TipCommit, target.TipCommit, StringComparison.Ordinal)
+                            && string.Equals(refreshed.RefValue, target.RefValue, StringComparison.Ordinal)))
+                        throw new InvalidOperationException(failure.Trim());
 
+                    target = refreshed;
                     await SetStateAsync(db, request.Id, WorktreeMergeStatus.Processing, WorktreeMergeCheckpoint.Rebase);
-                    var retryRebase = RunGit(request.WorktreePath, ["rebase", request.TargetBranch], false);
+                    var retryRebase = RunGit(request.WorktreePath, ["rebase", target.TipCommit], false);
+                    if (retryRebase.ExitCode != 0)
+                        retryRebase = CompleteMemoryOnlyRebase(request.WorktreePath, retryRebase);
                     if (retryRebase.ExitCode != 0)
                         return await MarkGitFailureAsync(db, request, retryRebase);
                     rebasedCommit = RunGit(request.WorktreePath, ["rev-parse", "HEAD"]).Output.Trim();
                 }
-                if (!IsAncestor(repository, rebasedCommit, request.TargetBranch))
-                    throw new InvalidOperationException($"Commit {rebasedCommit} is not reachable from {request.TargetBranch}.");
+                if (!IsIntegratedCommit(repository, rebasedCommit, request.TargetBranch))
+                    throw new InvalidOperationException($"Commit {rebasedCommit} is not reachable from the integration tip of {request.TargetBranch}.");
                 await SetSourceCommitAsync(db, request.Id, rebasedCommit);
                 request = request with { SourceCommit = rebasedCommit };
             }
 
-            var integrated = request.SourceCommit ?? RunGit(repository, ["rev-parse", request.TargetBranch]).Output.Trim();
-            if (!IsAncestor(repository, integrated, request.TargetBranch))
-                throw new InvalidOperationException($"Commit {integrated} is not reachable from {request.TargetBranch}; cleanup was stopped.");
+            var integrated = request.SourceCommit
+                ?? ResolveIntegrationTarget(repository, request.TargetBranch).TipCommit;
+            if (!IsIntegratedCommit(repository, integrated, request.TargetBranch))
+                throw new InvalidOperationException($"Commit {integrated} is not reachable from the integration tip of {request.TargetBranch}; cleanup was stopped.");
+            var removeAfterIntegration = request.JobKind == WorktreeMergeJobKind.Ticket
+                || request.Status == WorktreeMergeStatus.Quarantined;
             var registeredForCleanup = IsRegisteredWorktree(repository, request.WorktreePath);
             if (registeredForCleanup && !IsClean(request.WorktreePath))
                 throw new InvalidOperationException("The source worktree has local changes; cleanup was stopped.");
-            if (request.JobKind == WorktreeMergeJobKind.Ticket
-                && registeredForCleanup)
+            if (removeAfterIntegration && registeredForCleanup)
             {
                 var removed = RunGit(repository, ["worktree", "remove", request.WorktreePath], false);
                 if (removed.ExitCode != 0 && IsRegisteredWorktree(repository, request.WorktreePath))
                     throw new InvalidOperationException($"The source worktree could not be detached: {removed.Error.Trim()}");
             }
-            if (request.JobKind == WorktreeMergeJobKind.Ticket
+            if (removeAfterIntegration
                 && RunGit(repository, ["show-ref", "--verify", "--quiet", $"refs/heads/{request.SourceBranch}"], false).ExitCode == 0)
             {
                 // Integration was proven above against the configured target. A stale upstream tracking
@@ -648,12 +900,15 @@ public sealed partial class WorktreeMergeQueueService(
                 if (deleted.ExitCode != 0 && ResolveSourceHead(repository, request.SourceBranch) is not null)
                     throw new InvalidOperationException($"The integrated source branch could not be deleted: {deleted.Error.Trim()}");
             }
-            if (request.JobKind == WorktreeMergeJobKind.Ticket)
+            if (removeAfterIntegration)
                 RemoveEmptyResidualDirectory(request.WorktreePath);
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Completed},
                     Checkpoint = {(int)WorktreeMergeCheckpoint.Merge}, IntegratedCommit = {integrated},
-                    LocalIntegratedAt = {DateTime.UtcNow}, Error = NULL, ConflictFiles = NULL, UpdatedAt = {DateTime.UtcNow}
+                    LocalIntegratedAt = {DateTime.UtcNow}, Error = NULL, ConflictFiles = NULL,
+                    SyncStatus = {(int)LocalCheckoutSyncStatus.Pending}, SyncTargetCommit = {integrated},
+                    SyncError = NULL, SyncConflictFiles = NULL, SyncUpdatedAt = {DateTime.UtcNow},
+                    UpdatedAt = {DateTime.UtcNow}
                 WHERE Id = {request.Id}
                 """);
             return (await ReadByIdAsync(db, request.Id))!;
@@ -664,8 +919,277 @@ public sealed partial class WorktreeMergeQueueService(
         }
     }
 
+    /// <summary>
+    /// Reconciles one integrated commit into the configured local checkout. Integration and later
+    /// jobs never wait on this step: a conflict remains on its own durable row with a recoverable ref.
+    /// </summary>
+    public async Task<WorktreeMergeRequest?> SynchronizeNextAsync(string projectSlug, CancellationToken ct)
+    {
+        var gate = ProjectGates.GetOrAdd(projectSlug, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            await using var db = projects.GetProjectDb(projectSlug);
+            await EnsureTableAsync(db);
+            await db.Database.ExecuteSqlRawAsync($"UPDATE WorktreeMergeQueue SET SyncStatus = {(int)LocalCheckoutSyncStatus.Pending}, SyncError = 'Recovered local synchronization after interruption' WHERE SyncStatus = {(int)LocalCheckoutSyncStatus.Processing}");
+            var request = await ReadNextSyncAsync(db);
+            if (request is null) return null;
+            var project = await projects.GetProjectAsync(projectSlug);
+            if (project is null) return null;
+            var repository = projects.ResolveRepositoryPath(project);
+            return await SynchronizeAsync(db, request, repository, ct);
+        }
+        finally { gate.Release(); }
+    }
+
+    private async Task<WorktreeMergeRequest> SynchronizeAsync(
+        TodoDbContext db, WorktreeMergeRequest request, string repository, CancellationToken ct)
+    {
+        if (request.SyncStatus == LocalCheckoutSyncStatus.CleanupPending)
+            return await CompleteSyncAsync(db, request.Id, request.SyncTargetCommit!, request.SyncBackupRef, repository);
+
+        if (!Directory.Exists(repository) || RunGit(repository, ["rev-parse", "--show-toplevel"], false).ExitCode != 0)
+            return await MarkSyncAsync(db, request.Id, LocalCheckoutSyncStatus.CheckoutMissing,
+                "The configured local checkout is absent. Integration is safe; restore or reconfigure the checkout, then retry synchronization.", null,
+                request.SyncTargetCommit ?? request.IntegratedCommit ?? "unknown", request.SyncBackupRef);
+        var target = ResolveIntegrationTarget(repository, request.TargetBranch);
+        var desired = target.TipCommit; // always catch up to the newest successful integration
+
+        var branch = RunGit(repository, ["branch", "--show-current"], false).Output.Trim();
+        if (!string.Equals(branch, request.TargetBranch, StringComparison.Ordinal))
+            return await MarkSyncAsync(db, request.Id, LocalCheckoutSyncStatus.Diverged,
+                $"The local checkout is on branch '{branch}', not '{request.TargetBranch}'. Check out the target branch and retry synchronization.", null, desired, request.SyncBackupRef);
+        var localHead = RunGit(repository, ["rev-parse", "HEAD"]).Output.Trim();
+        var alreadyAtDesired = string.Equals(localHead, desired, StringComparison.Ordinal);
+        if (alreadyAtDesired && string.IsNullOrWhiteSpace(request.SyncBackupRef))
+            return await CompleteSyncAsync(db, request.Id, desired, request.SyncBackupRef, repository);
+        if (!alreadyAtDesired && !IsAncestor(repository, localHead, desired))
+            return await MarkSyncAsync(db, request.Id, LocalCheckoutSyncStatus.Diverged,
+                $"Local commits diverge from integration commit {desired}. Reconcile the commits manually; the integrated result remains available at {target.TipRef}.", null, desired, request.SyncBackupRef);
+
+        await SetSyncProcessingAsync(db, request.Id, desired);
+        // Everything below may mutate the local checkout (stash, fast-forward, stash apply).
+        // Register the window so a concurrent agent run's boundary check can classify the
+        // resulting fingerprint drift as a coordinated KittyClaw change, not agent activity.
+        using var coordinatedMutation = primaryCheckoutActivity?.BeginCoordinatedMutation(repository);
+        var backupRef = request.SyncBackupRef;
+        if (string.IsNullOrWhiteSpace(backupRef) && !IsClean(repository))
+        {
+            var marker = $"KittyClaw local synchronization #{request.Id}";
+            var stashed = RunGit(repository, ["stash", "push", "--include-untracked", "--message", marker], false);
+            if (stashed.ExitCode != 0)
+                return await MarkSyncAsync(db, request.Id, LocalCheckoutSyncStatus.ConcurrentChanges,
+                    $"Local changes could not be saved safely: {stashed.Error.Trim()}", null, desired, null);
+            var stashCommit = RunGit(repository, ["rev-parse", "stash@{0}"], false);
+            if (stashCommit.ExitCode != 0)
+                return await MarkSyncAsync(db, request.Id, LocalCheckoutSyncStatus.ConcurrentChanges,
+                    "Local changes were moved to Git's stash but the durable backup could not be identified. Recover the newest stash before retrying.", null, desired, null);
+            backupRef = $"refs/kittyclaw/sync-backups/{request.Id}";
+            RunGit(repository, ["update-ref", backupRef, stashCommit.Output.Trim()]);
+            await SetSyncBackupAsync(db, request.Id, backupRef);
+            RunGit(repository, ["stash", "drop", "stash@{0}"]);
+        }
+
+        beforeLocalSync?.Invoke(repository);
+        ct.ThrowIfCancellationRequested();
+        if (!IsClean(repository))
+            return await MarkSyncAsync(db, request.Id, LocalCheckoutSyncStatus.ConcurrentChanges,
+                "The local checkout changed after its backup was captured. The new files were left untouched; retry after external writes stop.", null, desired, backupRef);
+
+        if (!alreadyAtDesired)
+        {
+            var ff = RunGit(repository, ["merge", "--ff-only", desired], false);
+            if (ff.ExitCode != 0)
+                return await MarkSyncAsync(db, request.Id, LocalCheckoutSyncStatus.ConcurrentChanges,
+                    $"The local checkout could not be advanced safely: {ff.Error.Trim()}", null, desired, backupRef);
+        }
+
+        if (!string.IsNullOrWhiteSpace(backupRef))
+        {
+            var restored = RunGit(repository, ["stash", "apply", "--index", backupRef], false);
+            if (restored.ExitCode != 0)
+            {
+                var conflicts = ConflictFiles(repository);
+                return await MarkSyncAsync(db, request.Id, LocalCheckoutSyncStatus.Conflict,
+                    $"The integrated checkout is current, but saved local work conflicted while being restored. Resolve the listed files; the complete backup remains at {backupRef}.",
+                    conflicts.Length == 0 ? null : string.Join('\n', conflicts), desired, backupRef);
+            }
+        }
+
+        var completedState = CaptureCheckoutState(repository);
+        beforeLocalSyncCompletion?.Invoke(repository);
+        ct.ThrowIfCancellationRequested();
+        var finalState = CaptureCheckoutState(repository);
+        var finalHead = RunGit(repository, ["rev-parse", "HEAD"], false).Output.Trim();
+        if (!string.Equals(completedState, finalState, StringComparison.Ordinal)
+            || !string.Equals(finalHead, desired, StringComparison.Ordinal))
+            return await MarkSyncAsync(db, request.Id, LocalCheckoutSyncStatus.ConcurrentChanges,
+                $"The local checkout files, index, branch, or HEAD changed while synchronization was completing. The external change and recoverable backup at {backupRef ?? "the current checkout"} were preserved; reconcile HEAD with {desired}, then retry after external writes stop.",
+                null, desired, backupRef);
+        return await CompleteSyncAsync(db, request.Id, desired, backupRef, repository);
+    }
+
+    private static string CaptureCheckoutState(string repository)
+    {
+        using var hash = System.Security.Cryptography.IncrementalHash.CreateHash(
+            System.Security.Cryptography.HashAlgorithmName.SHA256);
+        var visibleFiles = RunGit(repository,
+            ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], false).Output;
+        foreach (var relative in visibleFiles.Split('\0', StringSplitOptions.RemoveEmptyEntries)
+                     .OrderBy(path => path, StringComparer.Ordinal))
+        {
+            hash.AppendData(System.Text.Encoding.UTF8.GetBytes(relative));
+            try
+            {
+                var file = Path.Combine(repository, relative);
+                using var stream = File.Open(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                var buffer = new byte[81920];
+                int read;
+                while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+                    hash.AppendData(buffer, 0, read);
+            }
+            catch (IOException)
+            {
+                hash.AppendData(System.Text.Encoding.UTF8.GetBytes("<concurrent-io>"));
+            }
+        }
+        hash.AppendData(System.Text.Encoding.UTF8.GetBytes(RunGit(repository, ["write-tree"], false).Output));
+        hash.AppendData(System.Text.Encoding.UTF8.GetBytes(RunGit(repository, ["symbolic-ref", "--quiet", "HEAD"], false).Output));
+        hash.AppendData(System.Text.Encoding.UTF8.GetBytes(RunGit(repository, ["rev-parse", "HEAD"], false).Output));
+        return Convert.ToHexString(hash.GetHashAndReset());
+    }
+
+    public async Task<WorktreeMergeRequest?> RetrySynchronizationAsync(string projectSlug, long requestId, CancellationToken ct)
+    {
+        var gate = ProjectGates.GetOrAdd(projectSlug, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            await using var db = projects.GetProjectDb(projectSlug);
+            await EnsureTableAsync(db);
+            var request = await ReadByIdAsync(db, requestId);
+            if (request is null || request.SyncStatus is not (LocalCheckoutSyncStatus.Conflict
+                or LocalCheckoutSyncStatus.Diverged or LocalCheckoutSyncStatus.CheckoutMissing
+                or LocalCheckoutSyncStatus.ConcurrentChanges)) return null;
+            var project = await projects.GetProjectAsync(projectSlug);
+            if (project is null) return null;
+            var repository = projects.ResolveRepositoryPath(project);
+            // Completing in place is only safe while the reconciled work is still visible in the
+            // working tree. A checkout reset clean to the target must take the full path below so
+            // the durable backup is re-applied instead of silently deleted.
+            if (request.SyncStatus == LocalCheckoutSyncStatus.Conflict && Directory.Exists(repository)
+                && ConflictFiles(repository).Length == 0
+                && !IsClean(repository)
+                && string.Equals(RunGit(repository, ["rev-parse", "HEAD"], false).Output.Trim(), request.SyncTargetCommit, StringComparison.Ordinal))
+                return await CompleteSyncAsync(db, request.Id, request.SyncTargetCommit!, request.SyncBackupRef, repository);
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET SyncStatus = {(int)LocalCheckoutSyncStatus.Pending}, SyncError = 'Local synchronization retry requested', SyncUpdatedAt = {DateTime.UtcNow} WHERE Id = {requestId}");
+            request = (await ReadByIdAsync(db, requestId))!;
+            return await SynchronizeAsync(db, request, repository, ct);
+        }
+        finally { gate.Release(); }
+    }
+
+    private async Task<WorktreeMergeRequest> CompleteSyncAsync(TodoDbContext db, long id, string desired, string? backupRef, string repository)
+    {
+        var now = DateTime.UtcNow;
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET SyncStatus = {(int)LocalCheckoutSyncStatus.CleanupPending}, SyncTargetCommit = {desired}, SyncError = NULL, SyncConflictFiles = NULL, SyncUpdatedAt = {now}, UpdatedAt = {now} WHERE Id = {id}");
+        afterSyncCompletionPersisted?.Invoke(repository);
+        if (!string.IsNullOrWhiteSpace(backupRef))
+        {
+            var deleted = RunGit(repository, ["update-ref", "-d", backupRef], false);
+            if (deleted.ExitCode != 0)
+            {
+                var error = $"The local work was restored, but its recoverable backup could not be cleaned up: {deleted.Error.Trim()}. Retry cleanup; the checkout is already synchronized.";
+                await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET SyncError = {error}, SyncUpdatedAt = {DateTime.UtcNow}, UpdatedAt = {DateTime.UtcNow} WHERE Id = {id}");
+                return (await ReadByIdAsync(db, id))!;
+            }
+        }
+        now = DateTime.UtcNow;
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET SyncStatus = {(int)LocalCheckoutSyncStatus.Completed}, SyncTargetCommit = {desired}, SyncBackupRef = NULL, SyncError = NULL, SyncConflictFiles = NULL, SyncUpdatedAt = {now}, UpdatedAt = {now} WHERE Id = {id}");
+        return (await ReadByIdAsync(db, id))!;
+    }
+
+    private static async Task<WorktreeMergeRequest> MarkSyncAsync(TodoDbContext db, long id, LocalCheckoutSyncStatus status, string error, string? conflicts, string target, string? backupRef)
+    {
+        var now = DateTime.UtcNow;
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET SyncStatus = {(int)status}, SyncTargetCommit = {target}, SyncBackupRef = {backupRef}, SyncError = {error}, SyncConflictFiles = {conflicts}, SyncUpdatedAt = {now}, UpdatedAt = {now} WHERE Id = {id}");
+        return (await ReadByIdAsync(db, id))!;
+    }
+
+    private static Task SetSyncProcessingAsync(TodoDbContext db, long id, string target) =>
+        db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET SyncStatus = {(int)LocalCheckoutSyncStatus.Processing}, SyncTargetCommit = {target}, SyncUpdatedAt = {DateTime.UtcNow} WHERE Id = {id}");
+
+    private static Task SetSyncBackupAsync(TodoDbContext db, long id, string backupRef) =>
+        db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET SyncBackupRef = {backupRef}, SyncUpdatedAt = {DateTime.UtcNow} WHERE Id = {id}");
+
     private static bool IsAncestor(string repository, string commit, string target) =>
         RunGit(repository, ["merge-base", "--is-ancestor", commit, target], false).ExitCode == 0;
+
+    /// <summary>
+    /// Durable ref recording how far integrations have advanced for a target branch. It is never a
+    /// checked-out branch, so publishing it cannot desynchronize any checkout; the local checkout
+    /// catches up during the separate synchronization step.
+    /// </summary>
+    public static string IntegrationTipRef(string targetBranch) => $"refs/kittyclaw/integration/{targetBranch}";
+
+    private sealed record IntegrationTarget(string TipRef, string? RefValue, string TipCommit, bool Diverged);
+
+    private static IntegrationTarget? TryResolveIntegrationTarget(string gitPath, string targetBranch)
+    {
+        var head = RunGit(gitPath, ["rev-parse", "--verify", $"refs/heads/{targetBranch}"], false);
+        if (head.ExitCode != 0) return null;
+        var targetHead = head.Output.Trim();
+        var tipRef = IntegrationTipRef(targetBranch);
+        var recorded = RunGit(gitPath, ["rev-parse", "--verify", tipRef], false);
+        var refValue = recorded.ExitCode == 0 ? recorded.Output.Trim() : null;
+        if (refValue is null || string.Equals(refValue, targetHead, StringComparison.Ordinal)
+            || IsAncestor(gitPath, refValue, targetHead))
+            return new(tipRef, refValue, targetHead, false);
+        if (IsAncestor(gitPath, targetHead, refValue))
+            return new(tipRef, refValue, refValue, false);
+        return new(tipRef, refValue, refValue, true);
+    }
+
+    private static IntegrationTarget ResolveIntegrationTarget(string gitPath, string targetBranch) =>
+        TryResolveIntegrationTarget(gitPath, targetBranch)
+        ?? throw new InvalidOperationException($"The integration branch '{targetBranch}' does not exist.");
+
+    private static bool IsIntegrated(string gitPath, string commit, string targetBranch, IntegrationTarget target) =>
+        IsAncestor(gitPath, commit, target.TipCommit) || IsAncestor(gitPath, commit, targetBranch);
+
+    private static bool IsIntegratedCommit(string gitPath, string commit, string targetBranch) =>
+        TryResolveIntegrationTarget(gitPath, targetBranch) is { } target
+        && IsIntegrated(gitPath, commit, targetBranch, target);
+
+    /// <summary>
+    /// The dedicated per-project integration worktree. It always rides a detached HEAD so it never
+    /// claims branch ownership, and it only ever materializes commits that are already durable,
+    /// so resetting it to the current tip can never destroy the sole copy of any change.
+    /// </summary>
+    private static string EnsureIntegrationWorktree(string repository, string projectSlug, string tipCommit)
+    {
+        var parent = Directory.GetParent(repository)?.FullName
+            ?? throw new InvalidOperationException($"Repository '{repository}' has no parent directory.");
+        var repositoryName = Path.GetFileName(Path.TrimEndingDirectorySeparator(repository));
+        var path = Path.GetFullPath(Path.Combine(parent, $"{repositoryName}.worktrees", $"integration-{SafeName(projectSlug)}"));
+        if (IsRegisteredWorktree(repository, path) && !Directory.Exists(path))
+            RunGit(repository, ["worktree", "prune"], false);
+        if (!IsRegisteredWorktree(repository, path))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            RunGit(repository, ["worktree", "add", "--detach", path, tipCommit]);
+            return path;
+        }
+        var headRef = RunGit(path, ["rev-parse", "--abbrev-ref", "HEAD"]).Output.Trim();
+        if (!string.Equals(headRef, "HEAD", StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                $"The integration worktree '{path}' unexpectedly has branch '{headRef}' checked out; remove the worktree before resuming.");
+        RunGit(path, ["reset", "--hard", tipCommit]);
+        return path;
+    }
+
+    private static string SafeName(string value) =>
+        new(value.ToLowerInvariant().Select(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' ? c : '-').ToArray());
 
     private static bool IsRebaseInProgress(string worktreePath)
     {
@@ -765,12 +1289,7 @@ public sealed partial class WorktreeMergeQueueService(
                 if (File.Exists(fullPath)) File.Delete(fullPath);
                 continue;
             }
-            if (entry.StartsWith("??", StringComparison.Ordinal) && !IsDurableMemory(path))
-            {
-                blocked.Add(path + " (unexpected untracked path)");
-                continue;
-            }
-            if (ContainsProbableSecret(fullPath))
+            if (ProbableSecretScanner.ContainsProbableSecret(fullPath))
             {
                 blocked.Add(path + " (possible secret content)");
                 continue;
@@ -782,13 +1301,44 @@ public sealed partial class WorktreeMergeQueueService(
             : new(hasChanges, "Unexpected or potentially sensitive files were preserved and require review: " + string.Join(", ", blocked));
     }
 
-    private static bool IsDurableMemory(string path)
+    private static WorktreePreparation PrepareInterruptedMaintenanceWorktree(string worktreePath)
     {
-        var segments = path.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
-        return segments.Length >= 4
-            && segments[0].Equals(".agents", StringComparison.OrdinalIgnoreCase)
-            && segments.Skip(1).Take(segments.Length - 2)
-                .Any(segment => segment.Equals("memory", StringComparison.OrdinalIgnoreCase));
+        var status = RunGit(worktreePath,
+            ["status", "--porcelain", "-z", "--untracked-files=all"], false);
+        if (status.ExitCode != 0)
+            return new(false,
+                $"Interrupted maintenance worktree could not be inspected: {status.Error.Trim()}");
+
+        var blocked = new List<string>();
+        var hasChanges = false;
+        foreach (var entry in status.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (entry.Length < 4) continue;
+            var path = entry[3..].Replace('\\', '/');
+            var fullPath = Path.GetFullPath(Path.Combine(worktreePath, path));
+            if (!fullPath.StartsWith(Path.GetFullPath(worktreePath) + Path.DirectorySeparatorChar,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                blocked.Add(path + " (outside worktree)");
+                continue;
+            }
+            if (entry.StartsWith("??", StringComparison.Ordinal) && IsRecognizedTemporary(path))
+            {
+                if (File.Exists(fullPath)) File.Delete(fullPath);
+                continue;
+            }
+            if (IsSensitive(path) || ProbableSecretScanner.ContainsProbableSecret(fullPath))
+            {
+                blocked.Add(path + " (local-only or potentially sensitive)");
+                continue;
+            }
+            hasChanges = true;
+        }
+
+        return blocked.Count == 0
+            ? new(hasChanges, null)
+            : new(hasChanges,
+                "Interrupted maintenance files require quarantine: " + string.Join(", ", blocked));
     }
 
     private static bool IsRecognizedTemporary(string path)
@@ -812,15 +1362,8 @@ public sealed partial class WorktreeMergeQueueService(
             || name.EndsWith(".key", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool ContainsProbableSecret(string path) => File.Exists(path)
-        && new FileInfo(path).Length <= 1024 * 1024
-        && SecretContentRegex().IsMatch(File.ReadAllText(path));
-
     [GeneratedRegex(@"/(transcripts?|prompts?|sessions?|traces?|secrets?)/|/(\.env|credentials?[^/]*)/|\.(pem|key)/$", RegexOptions.IgnoreCase)]
     private static partial Regex LocalOnlyPathRegex();
-
-    [GeneratedRegex("(?i)(api[_-]?key|access[_-]?token|client[_-]?secret|password|private[_-]?key)\\s*[:=]\\s*['\\\"]?[A-Za-z0-9_\\-/+=]{8,}")]
-    private static partial Regex SecretContentRegex();
 
     private sealed record WorktreePreparation(bool HasChanges, string? Error);
 
@@ -837,6 +1380,7 @@ public sealed partial class WorktreeMergeQueueService(
     private static int Severity(WorktreeMergeStatus status) => status switch
     {
         WorktreeMergeStatus.Conflict => 5,
+        WorktreeMergeStatus.Quarantined => 5,
         WorktreeMergeStatus.NeedsReview => 4,
         WorktreeMergeStatus.Failed => 4,
         WorktreeMergeStatus.BlockedByExternalChanges => 3,
@@ -849,10 +1393,97 @@ public sealed partial class WorktreeMergeQueueService(
     private static string[] ConflictFiles(string path) => RunGit(path, ["diff", "--name-only", "--diff-filter=U"], false)
         .Output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
 
-    private static string[] ConflictMarkerFiles(string worktreePath, string targetBranch)
+    private static GitResult CompleteMemoryOnlyRebase(string worktreePath, GitResult failure)
+    {
+        for (var attempt = 0; attempt < 100 && failure.ExitCode != 0; attempt++)
+        {
+            var conflicts = ConflictFiles(worktreePath);
+            if (conflicts.Length == 0 || conflicts.Any(path => !IsAppendOnlyProcessorMemory(path)))
+                return failure;
+            if (!TryResolveAppendOnlyMemoryConflicts(worktreePath, conflicts))
+                return failure;
+
+            failure = RunGit(worktreePath,
+                ["-c", "core.editor=true", "rebase", "--continue"], false);
+        }
+
+        return failure;
+    }
+
+    private static bool IsAppendOnlyProcessorMemory(string path) => Regex.IsMatch(
+        path.Replace('\\', '/'),
+        @"^\.agents/processors/column-\d+/memory/(?:MEMORY\.md|pipeline-lessons\.md)$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static bool TryResolveAppendOnlyMemoryConflicts(string worktreePath, IReadOnlyList<string> conflicts)
+    {
+        var temporaryDirectory = Path.Combine(Path.GetTempPath(), $"KittyClaw-memory-merge-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(temporaryDirectory);
+        try
+        {
+            for (var index = 0; index < conflicts.Count; index++)
+            {
+                var relativePath = conflicts[index].Replace('\\', '/');
+                var oursPath = Path.Combine(temporaryDirectory, $"{index}-ours.md");
+                var baselinePath = Path.Combine(temporaryDirectory, $"{index}-base.md");
+                var theirsPath = Path.Combine(temporaryDirectory, $"{index}-theirs.md");
+                if (!TryWriteGitOutputToFile(worktreePath, ["show", $":2:{relativePath}"], oursPath)
+                    || !TryWriteGitOutputToFile(worktreePath, ["show", $":3:{relativePath}"], theirsPath))
+                    return false;
+                if (!TryWriteGitOutputToFile(worktreePath, ["show", $":1:{relativePath}"], baselinePath))
+                    File.WriteAllBytes(baselinePath, []);
+
+                var merged = RunGit(worktreePath,
+                    ["merge-file", "--union", oursPath, baselinePath, theirsPath], false);
+                if (merged.ExitCode != 0 || ContainsConflictMarkers(oursPath))
+                    return false;
+
+                var destination = Path.GetFullPath(Path.Combine(worktreePath, relativePath));
+                var root = Path.GetFullPath(worktreePath) + Path.DirectorySeparatorChar;
+                if (!destination.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                    return false;
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                File.Copy(oursPath, destination, true);
+                if (RunGit(worktreePath, ["add", "--", relativePath], false).ExitCode != 0)
+                    return false;
+            }
+
+            return true;
+        }
+        finally
+        {
+            Directory.Delete(temporaryDirectory, true);
+        }
+    }
+
+    private static bool TryWriteGitOutputToFile(
+        string worktreePath, IReadOnlyList<string> arguments, string destination)
+    {
+        var info = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = worktreePath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (var argument in arguments) info.ArgumentList.Add(argument);
+        using var process = Process.Start(info) ?? throw new InvalidOperationException("Git could not be started.");
+        using (var output = File.Create(destination))
+            process.StandardOutput.BaseStream.CopyTo(output);
+        _ = process.StandardError.ReadToEnd();
+        if (!process.WaitForExit(30_000))
+        {
+            process.Kill(true);
+            throw new InvalidOperationException("Git command timed out.");
+        }
+        return process.ExitCode == 0;
+    }
+
+    private static string[] ConflictMarkerFiles(string worktreePath, string integrationTip)
     {
         var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var committed = RunGit(worktreePath, ["diff", "--name-only", "-z", $"{targetBranch}...HEAD"], false);
+        var committed = RunGit(worktreePath, ["diff", "--name-only", "-z", $"{integrationTip}...HEAD"], false);
         foreach (var path in committed.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
             candidates.Add(path.Replace('\\', '/'));
         var status = RunGit(worktreePath, ["status", "--porcelain", "-z", "--untracked-files=all"], false);
@@ -915,12 +1546,44 @@ public sealed partial class WorktreeMergeQueueService(
     private static Task SetSourceCommitAsync(TodoDbContext db, long id, string commit) =>
         db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET SourceCommit = {commit}, UpdatedAt = {DateTime.UtcNow} WHERE Id = {id}");
 
-    private static Task<WorktreeMergeRequest?> ReadNextAsync(TodoDbContext db, WorktreeMergeStatus status) =>
-        ReadSingleAsync(db, "SELECT * FROM WorktreeMergeQueue WHERE Status = $status ORDER BY Id LIMIT 1", ("$status", (int)status));
+    private async Task<WorktreeMergeRequest?> ReadNextAvailableAsync(
+        TodoDbContext db, string projectSlug, WorktreeMergeStatus status)
+    {
+        var connection = (SqliteConnection)db.Database.GetDbConnection();
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT * FROM WorktreeMergeQueue WHERE Status = $status ORDER BY Id";
+        command.Parameters.AddWithValue("$status", (int)status);
+        foreach (var request in await ReadAllAsync(command))
+        {
+            if (request.JobKind != WorktreeMergeJobKind.Ticket
+                || !await IsBusyAsync(projectSlug, request.RootTicketId))
+                return request;
+        }
+        return null;
+    }
     private static Task<WorktreeMergeRequest?> ReadByIdAsync(TodoDbContext db, long id) =>
         ReadSingleAsync(db, "SELECT * FROM WorktreeMergeQueue WHERE Id = $id", ("$id", id));
     private static Task<WorktreeMergeRequest?> ReadByRootAsync(TodoDbContext db, int root) =>
         ReadSingleAsync(db, "SELECT * FROM WorktreeMergeQueue WHERE RootTicketId = $root ORDER BY Id DESC LIMIT 1", ("$root", root));
+
+    private static async Task<WorktreeMergeRequest?> ReadNextSyncAsync(TodoDbContext db)
+    {
+        var connection = (SqliteConnection)db.Database.GetDbConnection();
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT * FROM WorktreeMergeQueue WHERE SyncStatus IN ($pending, $cleanup) ORDER BY CASE SyncStatus WHEN $cleanup THEN 0 ELSE 1 END, Id LIMIT 1";
+        command.Parameters.AddWithValue("$pending", (int)LocalCheckoutSyncStatus.Pending);
+        command.Parameters.AddWithValue("$cleanup", (int)LocalCheckoutSyncStatus.CleanupPending);
+        return (await ReadAllAsync(command)).SingleOrDefault();
+    }
+
+    // The partial unique index guarantees at most one such row; SingleOrDefault asserts it.
+    private static Task<WorktreeMergeRequest?> ReadActiveMaintenanceAsync(TodoDbContext db) =>
+        ReadSingleAsync(db, $"""
+            SELECT * FROM WorktreeMergeQueue WHERE RootTicketId = $root
+                AND Status NOT IN ({(int)WorktreeMergeStatus.Completed}, {(int)WorktreeMergeStatus.Quarantined})
+            """, ("$root", int.MinValue));
 
     private static async Task<List<WorktreeMergeRequest>> ListMaintenanceWritesAwaitingCommitAsync(TodoDbContext db)
     {
@@ -962,7 +1625,11 @@ public sealed partial class WorktreeMergeQueueService(
             GetNullable(reader, "Error"), GetNullable(reader, "ConflictFiles"),
             (WorktreeMergeJobKind)reader.GetInt32(reader.GetOrdinal("JobKind")),
             (WorktreeMergeCheckpoint)reader.GetInt32(reader.GetOrdinal("Checkpoint")),
-            GetNullableDateTime(reader, "LocalIntegratedAt"), GetNullableDateTime(reader, "RemotePublishedAt")));
+            GetNullableDateTime(reader, "LocalIntegratedAt"), GetNullableDateTime(reader, "RemotePublishedAt"),
+            (LocalCheckoutSyncStatus)reader.GetInt32(reader.GetOrdinal("SyncStatus")),
+            GetNullable(reader, "SyncTargetCommit"), GetNullable(reader, "SyncBackupRef"),
+            GetNullable(reader, "SyncError"), GetNullable(reader, "SyncConflictFiles"),
+            GetNullableDateTime(reader, "SyncUpdatedAt")));
         return rows;
     }
 

@@ -15,10 +15,24 @@
             <header class="decision-brief-header">
                 <div class="decision-brief-verdict">
                     <span class="decision-brief-verdict-icon">@VerdictIcon(_brief.Verdict)</span>
-                    <strong>@L[$"DecisionVerdict{_brief.Verdict}"]</strong>
+                    <span>
+                        <small>@L["BriefTechnicalResult"]</small>
+                        <strong>@L[$"DecisionVerdict{_brief.Verdict}"]</strong>
+                    </span>
                 </div>
                 <small class="decision-brief-captured">@_brief.CapturedAt.ToString("g")</small>
             </header>
+
+            <dl class="decision-brief-context">
+                <div>
+                    <dt>@L["BriefTicketStatus"]</dt>
+                    <dd>@(CurrentColumn?.Name ?? L["BriefUnavailable"])</dd>
+                </div>
+                <div>
+                    <dt>@L["BriefOwnerAction"]</dt>
+                    <dd>@(CurrentColumn?.Role == ColumnRole.OwnerAction ? L["BriefOwnerActionRequired"] : L["BriefOwnerActionNotRequired"])</dd>
+                </div>
+            </dl>
 
             <div class="decision-brief-metrics">
                 <span>@_brief.FilesChanged @L["BriefFilesChanged"]</span>
@@ -45,6 +59,32 @@
                     <span class="brief-metric--fail">@L["BriefRepoDirty"]</span>
                 }
             </div>
+
+            <details class="decision-brief-files">
+                <summary>@L.Get("BriefDeliveredFileCount", _brief.FilesChanged)</summary>
+                @if (_brief.ChangedFiles.Count > 0)
+                {
+                    <ul>
+                        @foreach (var file in _brief.ChangedFiles)
+                        {
+                            <li>
+                                <code>@file.Path</code>
+                                <span>@file.Kind · @L.Get("BriefFileProvenance", file.Provenance.Source, file.Provenance.Provider, file.Provenance.RunId)</span>
+                            </li>
+                        }
+                    </ul>
+                }
+                else
+                {
+                    <p>@L["BriefNoDeliveredFiles"]</p>
+                }
+            </details>
+
+            <dl class="decision-brief-repository">
+                <div><dt>@L["BriefBranch"]</dt><dd><code>@ValueOrUnavailable(_brief.RepositoryBranch)</code></dd></div>
+                <div><dt>@L["BriefCommit"]</dt><dd><code>@ValueOrUnavailable(_brief.RepositoryCommitSha)</code></dd></div>
+                <div><dt>@L["BriefComparisonBase"]</dt><dd><code>@ValueOrUnavailable(_brief.RepositoryBaseCommitSha)</code></dd></div>
+            </dl>
 
             @if (_brief.Findings.Count > 0)
             {
@@ -197,4 +237,7 @@
         DecisionVerdict.Fix => "⚠",
         _ => "✗",
     };
+
+    private string ValueOrUnavailable(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? L["BriefUnavailable"] : value;
 }

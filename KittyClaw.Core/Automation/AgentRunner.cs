@@ -82,6 +82,12 @@ public sealed class AgentRunContext
     public string? InlineSkillContent { get; init; }
     public string? PresetRunId { get; init; }
 
+    /// <summary>For column-processor dispatches: the owner comment that actually triggered this
+    /// execution, when there is one. A ticket resume must only announce owner feedback when this
+    /// is set — a plain session resume (retry, fresh execution reusing the ticket session) used
+    /// to fabricate "The owner has posted feedback" without any owner comment (#1497/#1508).</summary>
+    public int? TriggerOwnerCommentId { get; init; }
+
     /// <summary>Returns a copy of this context suitable for auto-replaying steer messages in the same run, with ExtraContext replaced and non-repeatable fields cleared.</summary>
     internal AgentRunContext WithChatReplay(string steerText) => new AgentRunContext
     {
@@ -102,6 +108,7 @@ public sealed class AgentRunContext
         FallbackTarget = FallbackTarget,
         ExtraContext = steerText,
         InlineSkillContent = InlineSkillContent,
+        TriggerOwnerCommentId = TriggerOwnerCommentId,
         SessionScope = SessionScope,
         // A replay can race the provider's session finalization. Preserve the normal
         // expired-resume recovery so a late steer starts a fresh turn instead of changing
@@ -139,6 +146,7 @@ public sealed class AgentRunContext
         FallbackTarget = null,
         ExtraContext = ExtraContext,
         InlineSkillContent = InlineSkillContent,
+        TriggerOwnerCommentId = TriggerOwnerCommentId,
         SessionScope = SessionScope,
         RetryOnResumeFailure = RetryOnResumeFailure,
         PersistSession = PersistSession,
@@ -200,8 +208,9 @@ public sealed class AgentRunner
     private readonly ProjectSecretVault? _projectSecrets;
     private readonly DurableWriteRouter? _durableWrites;
     private readonly ProjectService? _projects;
+    private readonly PrimaryCheckoutActivityRegistry? _primaryCheckoutActivity;
 
-    public AgentRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<AgentRunner> logger, AppSettingsService? appSettings = null, BoundaryObservationService? boundaryObserver = null, TicketWorktreeService? worktrees = null, RtkIntegrationService? rtk = null, ProjectSecretVault? projectSecrets = null, DurableWriteRouter? durableWrites = null, ProjectService? projects = null)
+    public AgentRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<AgentRunner> logger, AppSettingsService? appSettings = null, BoundaryObservationService? boundaryObserver = null, TicketWorktreeService? worktrees = null, RtkIntegrationService? rtk = null, ProjectSecretVault? projectSecrets = null, DurableWriteRouter? durableWrites = null, ProjectService? projects = null, PrimaryCheckoutActivityRegistry? primaryCheckoutActivity = null)
     {
         _sessions = sessions;
         _runs = runs;
@@ -214,12 +223,61 @@ public sealed class AgentRunner
         _projectSecrets = projectSecrets;
         _durableWrites = durableWrites;
         _projects = projects;
+        _primaryCheckoutActivity = primaryCheckoutActivity;
     }
 
-    public async Task<AgentRun> RunAsync(AgentRunContext ctx, CancellationToken ct)
+    public Task<AgentRun> RunAsync(AgentRunContext ctx, CancellationToken ct)
     {
-        if (_projects is not null && await _projects.GetProjectAsync(ctx.ProjectSlug) is { } project)
-            ctx.BoundaryEnforcement = project.BoundaryEnforcement;
+        // The run must be registered before the first await: callers return the run id to the
+        // UI as soon as this method yields, and the drawer/stream endpoints resolve it through
+        // the registry. Registering after async preparation (project lookup, worktree
+        // resolution) made those lookups race and report "Run not found".
+        var run = CreateAndRegisterRun(ctx);
+        return ExecuteRegisteredAsync(run, ctx, ct);
+    }
+
+    private AgentRun CreateAndRegisterRun(AgentRunContext ctx)
+    {
+        var run = new AgentRun
+        {
+            RunId = ctx.PresetRunId ?? Guid.NewGuid().ToString("N"),
+            ProjectSlug = ctx.ProjectSlug,
+            TicketId = ctx.TicketId,
+            AgentName = ctx.AgentName,
+            SkillFile = ctx.SkillFile,
+            ConcurrencyGroup = string.IsNullOrEmpty(ctx.ConcurrencyGroup) ? ctx.AgentName : ctx.ConcurrencyGroup,
+            StartedAt = DateTime.UtcNow,
+            Model = ctx.Target.Model,
+            ChatTarget = ctx.ChatTarget,
+            InputImagePaths = ctx.ImagePaths ?? [],
+            InputImageHashes = (ctx.ImagePaths ?? [])
+                .Select(path => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant())
+                .ToArray(),
+            LockTimeoutMinutes = ctx.LockTimeoutMinutes,
+        };
+        if (ctx.OnEventHook is not null) run.OnEvent += ctx.OnEventHook;
+        if (_boundaryObserver is not null) run.OnEvent += ev => _boundaryObserver.Observe(run, ev);
+        _boundaryObserver?.RecordRun(run);
+        _runs.Register(run);
+        return run;
+    }
+
+    private async Task<AgentRun> ExecuteRegisteredAsync(AgentRun run, AgentRunContext ctx, CancellationToken ct)
+    {
+        try
+        {
+            if (_projects is not null && await _projects.GetProjectAsync(ctx.ProjectSlug) is { } project)
+                ctx.BoundaryEnforcement = project.BoundaryEnforcement;
+        }
+        catch (Exception ex)
+        {
+            // Preparation failures must surface on the already-registered run: most callers
+            // fire-and-forget this task, so a thrown exception would be an invisible failure.
+            _logger.LogError(ex, "Run preparation failed for {Agent} run={RunId}", ctx.AgentName, run.RunId);
+            try { run.Push(new StreamEvent(DateTime.UtcNow, "error", $"Run preparation failed: {ex.Message}")); } catch { /* subscriber may throw */ }
+            _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
+            return run;
+        }
 
         var route = ctx.DurableWriteRoute;
         if (route is null && _durableWrites is not null &&
@@ -240,7 +298,7 @@ public sealed class AgentRunner
             }
         }
 
-        var run = await RunCoreAsync(ctx, ct);
+        await RunCoreAsync(run, ctx, ct);
         if (route is null || ctx.DurableWriteRouteTransferred)
             return run;
 
@@ -285,30 +343,8 @@ public sealed class AgentRunner
         return run;
     }
 
-    private async Task<AgentRun> RunCoreAsync(AgentRunContext ctx, CancellationToken ct)
+    private async Task<AgentRun> RunCoreAsync(AgentRun run, AgentRunContext ctx, CancellationToken ct)
     {
-        var run = new AgentRun
-        {
-            RunId = ctx.PresetRunId ?? Guid.NewGuid().ToString("N"),
-            ProjectSlug = ctx.ProjectSlug,
-            TicketId = ctx.TicketId,
-            AgentName = ctx.AgentName,
-            SkillFile = ctx.SkillFile,
-            ConcurrencyGroup = string.IsNullOrEmpty(ctx.ConcurrencyGroup) ? ctx.AgentName : ctx.ConcurrencyGroup,
-            StartedAt = DateTime.UtcNow,
-            Model = ctx.Target.Model,
-            ChatTarget = ctx.ChatTarget,
-            InputImagePaths = ctx.ImagePaths ?? [],
-            InputImageHashes = (ctx.ImagePaths ?? [])
-                .Select(path => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant())
-                .ToArray(),
-            LockTimeoutMinutes = ctx.LockTimeoutMinutes,
-        };
-        if (ctx.OnEventHook is not null) run.OnEvent += ctx.OnEventHook;
-        if (_boundaryObserver is not null) run.OnEvent += ev => _boundaryObserver.Observe(run, ev);
-        _boundaryObserver?.RecordRun(run);
-        _runs.Register(run);
-
         if (!string.IsNullOrWhiteSpace(ctx.ExecutionWorkspaceError))
         {
             run.Push(new StreamEvent(DateTime.UtcNow, "error", ctx.ExecutionWorkspaceError));
@@ -319,6 +355,8 @@ public sealed class AgentRunner
         SemaphoreSlim? worktreeExecutionGate = null;
         string? primaryRepositoryPath = null;
         string? primaryRepositoryState = null;
+        var primaryStateCapturedAt = DateTime.UtcNow;
+        List<StreamEvent>? primaryToolActivity = null;
         try
         {
             if (_worktrees is not null && ctx.TicketId is int ticketId)
@@ -328,7 +366,19 @@ public sealed class AgentRunner
                 {
                     ctx.ExecutionWorkspacePath = worktree.Path;
                     primaryRepositoryPath = worktree.RepositoryPath;
+                    primaryStateCapturedAt = DateTime.UtcNow;
                     primaryRepositoryState = await CaptureRepositoryStateAsync(primaryRepositoryPath, ct);
+                    // The run buffer is a bounded ring: evidence for the end-of-run attribution is
+                    // collected live so a long run cannot age it out before the final check.
+                    var evidenceLog = new List<StreamEvent>();
+                    var evidenceRoot = primaryRepositoryPath;
+                    primaryToolActivity = evidenceLog;
+                    run.OnEvent += ev =>
+                    {
+                        if (ev.Kind == "tool_use"
+                            && PrimaryCheckoutChangeAttribution.MentionsPrimaryRepository(ev.Detail, evidenceRoot))
+                            lock (evidenceLog) evidenceLog.Add(ev);
+                    };
                     run.Push(new StreamEvent(DateTime.UtcNow, "worktree",
                         $"Using worktree {worktree.Path} on branch {worktree.Branch} for root ticket #{worktree.RootTicketId}"));
                 }
@@ -590,19 +640,9 @@ public sealed class AgentRunner
             if (attempt.FallbackReason == FallbackReason.Quota && attempt.Exit != 0)
                 run.HitQuota = true;
 
-            if (primaryRepositoryPath is not null
-                && !string.Equals(primaryRepositoryState,
-                    await CaptureRepositoryStateAsync(primaryRepositoryPath, CancellationToken.None),
-                    StringComparison.Ordinal))
-            {
-                run.Push(new StreamEvent(DateTime.UtcNow, "error",
-                    $"Worktree boundary violation: the primary repository '{primaryRepositoryPath}' changed during the ticket run."));
-                _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
-            }
-            else
-            {
-                _runs.Complete(run.RunId, attempt.Exit == 0 ? AgentRunStatus.Completed : AgentRunStatus.Failed, attempt.Exit);
-            }
+            CompletePrimaryBoundaryVerdict(run, attempt.Exit, primaryRepositoryPath,
+                primaryRepositoryState, primaryStateCapturedAt, primaryToolActivity,
+                await TryCaptureFinalRepositoryStateAsync(primaryRepositoryPath));
             AppendDebugLog(ctx, $"FINISHED {ctx.AgentName} run={run.RunId} exit={attempt.Exit}");
 
             // Auto-continue: when a chat run ends with undelivered steer messages, fire a
@@ -669,8 +709,100 @@ public sealed class AgentRunner
             _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
             slot.Dispose();
             CleanupImageTempFiles(ctx);
+            CleanupImageTempFiles(ctx, run.DrainTemporarySteerImagePaths());
             worktreeExecutionGate?.Release();
         }
+    }
+
+    private async Task<(string? State, string? Error)> TryCaptureFinalRepositoryStateAsync(string? repositoryPath)
+    {
+        if (repositoryPath is null) return (null, null);
+        try
+        {
+            return (await CaptureRepositoryStateAsync(repositoryPath, CancellationToken.None), null);
+        }
+        catch (Exception ex)
+        {
+            // Inspection can fail transiently (e.g. the synchronization step holds a Git lock).
+            // An unverifiable state is not evidence of an agent write.
+            return (null, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Completes the run after attributing any primary-repository fingerprint drift. Drift is a
+    /// boundary violation only when the agent's own tool stream declares a write into the primary
+    /// checkout; a drift that overlaps a coordinated KittyClaw synchronization window, or whose
+    /// origin cannot be determined, is reported without failing the run and without imputing the
+    /// change to the agent.
+    /// </summary>
+    private void CompletePrimaryBoundaryVerdict(
+        AgentRun run, int? exit, string? primaryRepositoryPath, string? initialState,
+        DateTime initialStateCapturedAt, List<StreamEvent>? toolActivity,
+        (string? State, string? Error) finalCapture)
+    {
+        void CompleteFromProviderResult() =>
+            _runs.Complete(run.RunId, exit == 0 ? AgentRunStatus.Completed : AgentRunStatus.Failed, exit);
+
+        if (primaryRepositoryPath is null || initialState is null)
+        {
+            CompleteFromProviderResult();
+            return;
+        }
+
+        if (finalCapture.Error is not null)
+        {
+            run.Push(new StreamEvent(DateTime.UtcNow, "warning",
+                $"The primary repository '{primaryRepositoryPath}' could not be re-inspected at run end: " +
+                $"{finalCapture.Error} The run outcome is based on the provider result only."));
+            CompleteFromProviderResult();
+            return;
+        }
+
+        if (string.Equals(initialState, finalCapture.State, StringComparison.Ordinal))
+        {
+            CompleteFromProviderResult();
+            return;
+        }
+
+        var changedPaths = PrimaryCheckoutChangeAttribution.ChangedPaths(initialState, finalCapture.State!);
+        var changedSummary = changedPaths.Count == 0
+            ? "(paths not identified)"
+            : string.Join(", ", changedPaths.Take(10)) + (changedPaths.Count > 10 ? ", …" : "");
+        StreamEvent? evidence = null;
+        if (toolActivity is not null)
+            lock (toolActivity)
+                evidence = toolActivity.FirstOrDefault(ev =>
+                    PrimaryCheckoutChangeAttribution.IsAgentWriteEvidence(
+                        ev.Text, ev.Detail, primaryRepositoryPath, changedPaths));
+
+        if (evidence is not null)
+        {
+            var detail = (evidence.Detail ?? "").ReplaceLineEndings(" ");
+            if (detail.Length > 160) detail = detail[..160] + "…";
+            run.Push(new StreamEvent(DateTime.UtcNow, "error",
+                $"Worktree boundary violation: the agent's tool activity wrote to the primary repository " +
+                $"'{primaryRepositoryPath}' during the ticket run. Evidence: {evidence.Text} {detail}. " +
+                $"Changed paths: {changedSummary}."));
+            _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
+            return;
+        }
+
+        if (_primaryCheckoutActivity?.HasCoordinatedMutationSince(primaryRepositoryPath, initialStateCapturedAt) == true)
+        {
+            run.Push(new StreamEvent(DateTime.UtcNow, "worktree",
+                $"The primary repository '{primaryRepositoryPath}' was updated by KittyClaw's local checkout " +
+                $"synchronization during the run (changed paths: {changedSummary}); the change is not attributed to the agent."));
+            CompleteFromProviderResult();
+            return;
+        }
+
+        run.Push(new StreamEvent(DateTime.UtcNow, "warning",
+            $"The primary repository '{primaryRepositoryPath}' changed during the ticket run without any agent " +
+            $"tool activity referencing it (changed paths: {changedSummary}). The change is treated as external " +
+            $"and is not attributed to the agent; review recent external tooling or manual edits before relying " +
+            $"on the primary checkout."));
+        CompleteFromProviderResult();
     }
 
     private static async Task<string> CaptureRepositoryStateAsync(
@@ -1258,9 +1390,21 @@ public sealed class AgentRunner
             return $"{languageReminder}{handoff}\n\n{userMsg}{imagesBlock}";
         }
 
-        // Automation resume on a ticket: ping the agent that the owner posted new feedback.
+        // Automation resume on a ticket. Column-processor resumes only announce owner feedback
+        // when an owner comment actually triggered the execution: a plain session resume (retry,
+        // fresh execution reusing the ticket session) used to fabricate "The owner has posted
+        // feedback" without any owner comment and sent agents chasing phantom feedback
+        // (#1497/#1508). Legacy automation resumes keep the historical wording — their
+        // ticketCommentAdded triggers carry their own author filter.
         if (isResume && ctx.TicketId is not null)
-            return $"The owner has posted feedback on ticket #{ctx.TicketId}: {SpotlightTicketField(ctx.TicketTitle)}\n{TicketUntrustedNotice}\nRead ALL owner comments on this ticket and address them.";
+        {
+            if (ctx.SessionScope != "column-processor")
+                return $"The owner has posted feedback on ticket #{ctx.TicketId}: {SpotlightTicketField(ctx.TicketTitle)}\n{TicketUntrustedNotice}\nRead ALL owner comments on this ticket and address them.";
+            var resumeContext = string.IsNullOrWhiteSpace(ctx.ExtraContext) ? "" : $"\n\n{ctx.ExtraContext}";
+            if (ctx.TriggerOwnerCommentId is int ownerCommentId)
+                return $"The owner has posted feedback (comment #{ownerCommentId}) on ticket #{ctx.TicketId}: {SpotlightTicketField(ctx.TicketTitle)}\n{TicketUntrustedNotice}\nRead ALL owner comments on this ticket and address them.{resumeContext}";
+            return $"Execution resumed on ticket #{ctx.TicketId}: {SpotlightTicketField(ctx.TicketTitle)}\n{TicketUntrustedNotice}\nNo owner feedback triggered this resume. Re-read the current ticket state via the API, finish the column mission for this ticket, and return the result contract JSON from the column profile.{resumeContext}";
+        }
 
         var prefix = await BuildPreambleAsync(ctx, uiLanguage, ct);
 
@@ -1288,9 +1432,14 @@ public sealed class AgentRunner
 
     private void CleanupImageTempFiles(AgentRunContext ctx)
     {
-        if (ctx.ImagePaths is null || ctx.ImagePaths.Count == 0) return;
+        CleanupImageTempFiles(ctx, ctx.ImagePaths);
+    }
+
+    private void CleanupImageTempFiles(AgentRunContext ctx, IReadOnlyList<string>? paths)
+    {
+        if (paths is null || paths.Count == 0) return;
         var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var p in ctx.ImagePaths)
+        foreach (var p in paths)
         {
             try
             {

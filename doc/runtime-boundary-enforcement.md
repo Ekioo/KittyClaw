@@ -17,6 +17,8 @@ Runtime boundary enforcement stops protected provider actions before their exter
 - `POST /api/projects/{slug}/approvals/gate?runId={runId}` receives provider hook events before and after effects.
 - Every run reloads the project's enforcement mode before dispatch. `Enforce` installs the native hook adapter when every protected boundary is enforceable, or fails before provider spawn when the runtime is observation-only.
 
+Local-checkout synchronization is an orchestrator-owned Git operation, not a provider action. Its mutation window is registered so boundary drift reporting identifies it as coordinated KittyClaw activity instead of attributing it to the running agent. Synchronization failures remain visible independently from the already durable integration; see [Local checkout synchronization recovery](./local-checkout-sync-recovery.md).
+
 ## Capability matrix
 
 The five protected boundary classes are repository push or pull-request mutation, publication or deployment, a new outbound destination, secret access, and destructive local operation.

@@ -29,6 +29,15 @@ public class AgentStreamPumpMaxTurnsTests : IDisposable
             {"type":"result","subtype":"error_max_turns","is_error":true,"duration_ms":42,"num_turns":5}
             {"_meta":{"exit":1}}
             """);
+        File.WriteAllText(
+            Path.Combine(_scenariosDir, "resumed-task-notification.ndjson"),
+            """
+            {"type":"system","subtype":"init","session_id":"{{session_id}}","model":"mock"}
+            {"type":"result","subtype":"success","is_error":false,"result":"","origin":{"kind":"task-notification"}}
+            {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"{\"outcome\":\"delivered\",\"skillsUsed\":[],\"summary\":\"Done.\"}"}]}}
+            {"type":"result","subtype":"success","is_error":false,"result":"{\"outcome\":\"delivered\"}"}
+            {"_meta":{"exit":0}}
+            """);
     }
 
     public void Dispose() => Directory.Delete(_scenariosDir, recursive: true);
@@ -87,6 +96,25 @@ public class AgentStreamPumpMaxTurnsTests : IDisposable
         var run = await RunWithScenario(workspace, project.Slug, "max-turns");
 
         Assert.DoesNotContain(run.SnapshotBuffer(), e => e.Kind == "result");
+    }
+
+    [Fact]
+    public async Task ResumedTaskNotification_DoesNotMasqueradeAsTerminalResult()
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("pump-resumed-notification");
+        var workspace = projects.ResolveWorkspacePath(project);
+        Directory.CreateDirectory(workspace);
+
+        TestSkillBuilder.Create(workspace, "test-agent", scenario: "resumed-task-notification");
+
+        var run = await RunWithScenario(workspace, project.Slug, "resumed-task-notification");
+        var events = run.SnapshotBuffer();
+
+        Assert.Single(events, e => e.Kind == "result");
+        Assert.Contains(events, e => e.Kind == "system" &&
+            e.Text.Contains("task-notification", StringComparison.Ordinal));
     }
 
     // ── Helper ───────────────────────────────────────────────────────────────

@@ -8,6 +8,64 @@ namespace KittyClaw.Core.Tests.Services;
 public sealed class WorktreeMergeQueueServiceTests
 {
     [Fact]
+    public async Task GetAsync_ReturnsOneRequestAndItsSynchronizationCheckpoint()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        var queued = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None);
+
+        var request = await fixture.Queue.GetAsync(fixture.Slug, queued.Id);
+
+        Assert.NotNull(request);
+        Assert.Equal(WorktreeMergeStatus.Completed, request.Status);
+        Assert.Equal(LocalCheckoutSyncStatus.Completed, request.SyncStatus);
+        Assert.False(request.HasSynchronizationLag);
+        Assert.False(string.IsNullOrWhiteSpace(request.IntegratedCommit));
+        Assert.Equal(request.IntegratedCommit, request.SyncTargetCommit);
+        Assert.Null(await fixture.Queue.GetAsync(fixture.Slug, long.MaxValue));
+    }
+
+    [Fact]
+    public async Task LegacyDuplicateActiveRows_ArePreservedWithoutBlockingMigration()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        await using (var db = fixture.Projects.GetProjectDb(fixture.Slug))
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE WorktreeMergeQueue (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    TicketId INTEGER NOT NULL,
+                    RootTicketId INTEGER NOT NULL,
+                    WorktreePath TEXT NOT NULL,
+                    SourceBranch TEXT NOT NULL,
+                    TargetBranch TEXT NOT NULL,
+                    Status INTEGER NOT NULL,
+                    CreatedAt TEXT NOT NULL,
+                    UpdatedAt TEXT NOT NULL,
+                    SourceCommit TEXT NULL,
+                    IntegratedCommit TEXT NULL,
+                    Error TEXT NULL,
+                    ConflictFiles TEXT NULL
+                );
+                INSERT INTO WorktreeMergeQueue
+                    (TicketId, RootTicketId, WorktreePath, SourceBranch, TargetBranch, Status, CreatedAt, UpdatedAt)
+                VALUES
+                    (41, 41, 'old', 'old-branch', 'integration', 5, '2026-01-01', '2026-01-01'),
+                    (41, 41, 'new', 'new-branch', 'integration', 5, '2026-01-02', '2026-01-02');
+                """);
+        }
+
+        var rows = await fixture.Queue.ListAsync(fixture.Slug);
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(WorktreeMergeStatus.Completed, rows[0].Status);
+        Assert.Contains("Superseded duplicate integration", rows[0].Error);
+        Assert.Equal(WorktreeMergeStatus.CommitPending, rows[1].Status);
+    }
+
+    [Fact]
     public async Task Success_FastForwardsThenProvesCommitBeforeCleanup()
     {
         using var fixture = await Fixture.CreateAsync();
@@ -19,7 +77,7 @@ public sealed class WorktreeMergeQueueServiceTests
         Assert.Equal(request.Id, result!.Id);
         Assert.Equal(WorktreeMergeStatus.Completed, result.Status);
         Assert.False(string.IsNullOrWhiteSpace(result.IntegratedCommit));
-        Assert.Equal(0, Git(fixture.Repository, false, "merge-base", "--is-ancestor", result.IntegratedCommit!, "integration").ExitCode);
+        Assert.True(TipContains(fixture.Repository, result.IntegratedCommit!));
         Assert.False(Directory.Exists(request.WorktreePath));
         Assert.NotEqual(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet", $"refs/heads/{request.SourceBranch}").ExitCode);
         var replay = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
@@ -38,7 +96,8 @@ public sealed class WorktreeMergeQueueServiceTests
         var result = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
         Assert.Equal(WorktreeMergeStatus.Completed, result!.Status);
-        Assert.True(File.Exists(Path.Combine(fixture.Repository, "nested.txt")));
+        Assert.True(ExistsAtTip(fixture.Repository, "nested.txt"));
+        Assert.False(File.Exists(Path.Combine(fixture.Repository, "nested.txt")));
         Assert.False(File.Exists(Path.Combine(fixture.Workspace, "nested.txt")));
         Assert.Equal(outerHead, Git(fixture.Workspace, true, "rev-parse", "HEAD").Output.Trim());
     }
@@ -63,42 +122,101 @@ public sealed class WorktreeMergeQueueServiceTests
     }
 
     [Fact]
-    public async Task DirtyCheckout_IsPreservedAndClassified()
+    public async Task DirtyPrimaryCheckout_NoLongerBlocksIntegrationAndIsPreserved()
     {
         using var fixture = await Fixture.CreateAsync();
+        var tracked = Path.Combine(fixture.Repository, "tracked.txt");
+        await File.WriteAllTextAsync(tracked, "committed");
+        Git(fixture.Repository, true, "add", "tracked.txt");
+        Git(fixture.Repository, true, "commit", "-m", "tracked baseline");
         var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
         var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        await File.WriteAllTextAsync(tracked, "local modification");
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "staged.txt"), "staged");
+        Git(fixture.Repository, true, "add", "staged.txt");
         await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "keep.txt"), "keep");
+        var before = CheckoutFingerprint(fixture.Repository);
 
         var result = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
-        Assert.Equal(WorktreeMergeStatus.BlockedByExternalChanges, result!.Status);
-        Assert.Contains("local changes", result.Error);
-        Assert.True(File.Exists(Path.Combine(fixture.Repository, "keep.txt")));
-        Assert.True(Directory.Exists(request.WorktreePath));
+        Assert.Equal(WorktreeMergeStatus.Completed, result!.Status);
+        Assert.True(TipContains(fixture.Repository, result.IntegratedCommit!));
+        Assert.True(ExistsAtTip(fixture.Repository, "feature.txt"));
+        Assert.Equal(before, CheckoutFingerprint(fixture.Repository));
+        Assert.Equal("local modification", await File.ReadAllTextAsync(tracked));
+        Assert.Equal("staged", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "staged.txt")));
+        Assert.Equal("keep", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "keep.txt")));
+        Assert.False(Directory.Exists(request.WorktreePath));
     }
 
     [Fact]
-    public async Task DirtyTargetCheckout_BecomesVisibleAndResumesAfterExternalChangesAreResolved()
+    public async Task DirtyPrimaryCheckout_DoesNotPreventCheckpointingSafeTicketFiles()
     {
         using var fixture = await Fixture.CreateAsync();
         var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
         var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
-        var external = Path.Combine(fixture.Repository, "external.txt");
-        await File.WriteAllTextAsync(external, "external");
+        var isolated = Path.Combine(request.WorktreePath, "recovered.txt");
+        await File.WriteAllTextAsync(isolated, "recovered");
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "external.txt"), "external");
+
+        var result = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, result!.Status);
+        Assert.Equal("recovered", ShowAtTip(fixture.Repository, "recovered.txt").Trim());
+        Assert.False(File.Exists(Path.Combine(fixture.Repository, "recovered.txt")));
+        Assert.True(File.Exists(Path.Combine(fixture.Repository, "external.txt")));
+    }
+
+    [Fact]
+    public async Task DivergedTargetBranch_BecomesVisibleAndResumesAfterReconciliation()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var firstTicket = await fixture.CreateCommittedTicketAsync("first.txt", "first");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, firstTicket, CancellationToken.None);
+        Assert.Equal(WorktreeMergeStatus.Completed,
+            (await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None))!.Status);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "external.txt"), "external");
+        Git(fixture.Repository, true, "add", "external.txt");
+        Git(fixture.Repository, true, "commit", "-m", "external target commit");
+        var secondTicket = await fixture.CreateCommittedTicketAsync("second.txt", "second");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, secondTicket, CancellationToken.None);
 
         var blocked = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
         var summary = await fixture.Queue.GetAlertSummaryAsync(fixture.Slug);
 
         Assert.Equal(WorktreeMergeStatus.BlockedByExternalChanges, blocked!.Status);
+        Assert.Contains("divergence", blocked.Error);
         Assert.Equal(1, summary!.ActiveCount);
         Assert.Equal(WorktreeMergeStatus.BlockedByExternalChanges, summary.MostSevereStatus);
-        File.Delete(external);
+        Git(fixture.Repository, true, "merge", "--no-edit", TipRef);
 
         var completed = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
         Assert.Equal(request.Id, completed!.Id);
         Assert.Equal(WorktreeMergeStatus.Completed, completed.Status);
+        Assert.True(ExistsAtTip(fixture.Repository, "first.txt"));
+        Assert.True(ExistsAtTip(fixture.Repository, "second.txt"));
+        Assert.True(ExistsAtTip(fixture.Repository, "external.txt"));
+    }
+
+    [Fact]
+    public async Task AlreadyIntegratedCleanWorktree_IsCleanedUpDespiteDirtyTargetCheckout()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        Git(fixture.Repository, true, "merge", "--ff-only", request.SourceBranch);
+        var external = Path.Combine(fixture.Repository, "external.txt");
+        await File.WriteAllTextAsync(external, "external");
+
+        var result = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, result!.Status);
+        Assert.Equal(0, Git(fixture.Repository, false, "merge-base", "--is-ancestor", result.IntegratedCommit!, "integration").ExitCode);
+        Assert.False(Directory.Exists(request.WorktreePath));
+        Assert.NotEqual(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet", $"refs/heads/{request.SourceBranch}").ExitCode);
+        Assert.Equal("external", await File.ReadAllTextAsync(external));
+        Assert.Equal("?? external.txt", Git(fixture.Repository, true, "status", "--porcelain").Output.Trim());
     }
 
     [Fact]
@@ -114,7 +232,8 @@ public sealed class WorktreeMergeQueueServiceTests
         var result = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
         Assert.Equal(WorktreeMergeStatus.Completed, result!.Status);
-        Assert.Equal("preserve", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "staged.txt")));
+        Assert.Equal("preserve", ShowAtTip(fixture.Repository, "staged.txt"));
+        Assert.False(File.Exists(Path.Combine(fixture.Repository, "staged.txt")));
         Assert.False(Directory.Exists(request.WorktreePath));
     }
 
@@ -132,8 +251,8 @@ public sealed class WorktreeMergeQueueServiceTests
         var result = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
         Assert.Equal(WorktreeMergeStatus.Completed, result!.Status);
-        Assert.Equal("durable lesson", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, ".agents", "programmer", "memory", "lesson.md")));
-        Assert.False(File.Exists(Path.Combine(fixture.Repository, "scratch.tmp")));
+        Assert.Equal("durable lesson", ShowAtTip(fixture.Repository, ".agents/programmer/memory/lesson.md"));
+        Assert.False(ExistsAtTip(fixture.Repository, "scratch.tmp"));
     }
 
     [Fact]
@@ -154,29 +273,55 @@ public sealed class WorktreeMergeQueueServiceTests
     }
 
     [Fact]
-    public async Task UnexpectedUntrackedFile_RequiresReviewWithoutCommitAndResumesAfterRemoval()
+    public async Task CodeVariableNamedLikeASecret_IsFinalizedAndIntegrated()
     {
         using var fixture = await Fixture.CreateAsync();
         var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
         var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
-        var headBeforeReview = Git(request.WorktreePath, true, "rev-parse", "HEAD").Output.Trim();
+        var script = Path.Combine(request.WorktreePath, "reauth.mjs");
+        await File.WriteAllTextAsync(script,
+            "const body = { client_secret: clientSecretV2, access_token: accessToken };\n");
+
+        var result = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, result!.Status);
+        Assert.Equal("const body = { client_secret: clientSecretV2, access_token: accessToken };",
+            ShowAtTip(fixture.Repository, "reauth.mjs").TrimEnd());
+        Assert.False(Directory.Exists(request.WorktreePath));
+    }
+
+    [Theory]
+    [InlineData("client_secret: \"literalSecretValue\"")]
+    [InlineData("access_token=abcdefgh12345678")]
+    public async Task LiteralAndProbableTokenValues_BlockFinalization(string content)
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        var script = Path.Combine(request.WorktreePath, "reauth.mjs");
+        await File.WriteAllTextAsync(script, content);
+
+        var result = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.NeedsReview, result!.Status);
+        Assert.Contains("possible secret content", result.Error);
+        Assert.True(File.Exists(script));
+        Assert.True(Directory.Exists(request.WorktreePath));
+    }
+
+    [Fact]
+    public async Task SafeUntrackedFile_IsCheckpointedIntegratedAndCleanedUp()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
         var unexpected = Path.Combine(request.WorktreePath, "keep.txt");
         await File.WriteAllTextAsync(unexpected, "preserve for review");
 
-        var review = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
-
-        Assert.Equal(WorktreeMergeStatus.NeedsReview, review!.Status);
-        Assert.Contains("unexpected untracked path", review.Error);
-        Assert.Equal(headBeforeReview, Git(request.WorktreePath, true, "rev-parse", "HEAD").Output.Trim());
-        Assert.Contains("?? keep.txt", Git(request.WorktreePath, true, "status", "--short").Output);
-        Assert.True(File.Exists(unexpected));
-        Assert.True(Directory.Exists(request.WorktreePath));
-        Assert.Equal(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet", $"refs/heads/{request.SourceBranch}").ExitCode);
-
-        File.Delete(unexpected);
-        var completed = await fixture.Queue.ResumeAsync(fixture.Slug, request.Id, CancellationToken.None);
+        var completed = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
         Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
+        Assert.Equal("preserve for review", ShowAtTip(fixture.Repository, "keep.txt"));
         Assert.False(Directory.Exists(request.WorktreePath));
         Assert.NotEqual(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet", $"refs/heads/{request.SourceBranch}").ExitCode);
     }
@@ -246,10 +391,41 @@ public sealed class WorktreeMergeQueueServiceTests
         Assert.Equal(Path.GetFullPath(legacyPath), Path.GetFullPath(pending.WorktreePath));
         Assert.Equal($"ticket/{child.Id}", pending.SourceBranch);
         Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
-        Assert.Equal("preserve me", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "legacy-child.txt")));
+        Assert.Equal("preserve me", ShowAtTip(fixture.Repository, "legacy-child.txt"));
         Assert.False(Directory.Exists(legacyPath));
         Assert.NotEqual(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet",
             $"refs/heads/ticket/{child.Id}").ExitCode);
+    }
+
+    [Fact]
+    public async Task StartupRecovery_RepeatedRestartsStayIdempotent()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("terminal.txt", "terminal");
+        var first = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        Assert.Equal(WorktreeMergeStatus.Completed,
+            (await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None))!.Status);
+        var leftBehind = (await fixture.Worktrees.ResolveAsync(fixture.Slug, ticket, CancellationToken.None))!;
+        await fixture.Tickets.MoveTicketAsync(fixture.Slug, ticket, "Done", "test");
+
+        await fixture.Queue.RecoverTerminalWorktreesAsync(fixture.Slug, CancellationToken.None);
+        var requeued = Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+        await fixture.Queue.RecoverTerminalWorktreesAsync(fixture.Slug, CancellationToken.None);
+        var afterRestart = Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+        var completed = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        var recoveredAfterCleanup =
+            await fixture.Queue.RecoverTerminalWorktreesAsync(fixture.Slug, CancellationToken.None);
+        var final = Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+
+        Assert.Equal(first.Id, requeued.Id);
+        Assert.Equal(WorktreeMergeStatus.Pending, requeued.Status);
+        Assert.Equal(requeued, afterRestart);
+        Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
+        Assert.Equal(0, recoveredAfterCleanup);
+        Assert.Equal(WorktreeMergeStatus.Completed, final.Status);
+        Assert.False(Directory.Exists(leftBehind.Path));
+        Assert.NotEqual(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet",
+            $"refs/heads/{leftBehind.Branch}").ExitCode);
     }
 
     [Fact]
@@ -265,12 +441,12 @@ public sealed class WorktreeMergeQueueServiceTests
 
         Assert.Equal(1, recovered);
         Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
-        Assert.True(File.Exists(Path.Combine(fixture.Repository, "terminal.txt")));
+        Assert.True(ExistsAtTip(fixture.Repository, "terminal.txt"));
         Assert.False(Directory.Exists(completed.WorktreePath));
     }
 
     [Fact]
-    public async Task RecoveryAfterWorktreesAreDisabled_PreservesUnsafeTerminalAndIgnoresNonTerminalWorktree()
+    public async Task RecoveryAfterWorktreesAreDisabled_RecoversSafeTerminalAndIgnoresNonTerminalWorktree()
     {
         using var fixture = await Fixture.CreateAsync();
         var terminalTicket = await fixture.CreateCommittedTicketAsync("terminal.txt", "terminal");
@@ -282,12 +458,12 @@ public sealed class WorktreeMergeQueueServiceTests
         await fixture.Projects.UpdateProjectAsync(fixture.Slug, null, worktreesEnabled: false);
 
         var recovered = await fixture.Queue.RecoverTerminalWorktreesAsync(fixture.Slug, CancellationToken.None);
-        var review = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        var completed = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
         Assert.Equal(1, recovered);
-        Assert.Equal(WorktreeMergeStatus.NeedsReview, review!.Status);
-        Assert.True(File.Exists(Path.Combine(terminalWorktree.Path, "keep.txt")));
-        Assert.True(Directory.Exists(terminalWorktree.Path));
+        Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
+        Assert.Equal("unexpected", ShowAtTip(fixture.Repository, "keep.txt"));
+        Assert.False(Directory.Exists(terminalWorktree.Path));
         Assert.True(Directory.Exists(nonTerminalWorktree.Path));
         Assert.DoesNotContain(await fixture.Queue.ListAsync(fixture.Slug), row => row.RootTicketId == nonTerminalTicket);
     }
@@ -308,6 +484,27 @@ public sealed class WorktreeMergeQueueServiceTests
         Assert.Equal(1, await queue.RecoverTerminalWorktreesAsync(fixture.Slug, CancellationToken.None));
         Assert.Equal(WorktreeMergeStatus.Completed,
             (await queue.ProcessNextAsync(fixture.Slug, CancellationToken.None))!.Status);
+    }
+
+    [Fact]
+    public async Task BusyTicket_DoesNotBlockTheNextIndependentIntegration()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var firstTicket = await fixture.CreateCommittedTicketAsync("first.txt", "first");
+        var secondTicket = await fixture.CreateCommittedTicketAsync("second.txt", "second");
+        var first = await fixture.Queue.EnqueueAsync(fixture.Slug, firstTicket, CancellationToken.None);
+        var second = await fixture.Queue.EnqueueAsync(fixture.Slug, secondTicket, CancellationToken.None);
+        var coordinator = new WorktreeFinalizationCoordinator();
+        var queue = new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees, coordinator);
+
+        WorktreeMergeRequest? completed;
+        using (coordinator.Enter(fixture.Slug, first.RootTicketId))
+            completed = await queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(second.Id, completed!.Id);
+        Assert.Equal(WorktreeMergeStatus.Completed, completed.Status);
+        Assert.Equal(WorktreeMergeStatus.Pending,
+            (await queue.ListAsync(fixture.Slug)).Single(row => row.Id == first.Id).Status);
     }
 
     [Fact]
@@ -337,7 +534,7 @@ public sealed class WorktreeMergeQueueServiceTests
         var completed = await fixture.Queue.ResumeAsync(fixture.Slug, request.Id, CancellationToken.None);
 
         Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
-        Assert.Equal("resolved\n", (await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "shared.txt"))).Replace("\r\n", "\n"));
+        Assert.Equal("resolved\n", ShowAtTip(fixture.Repository, "shared.txt").Replace("\r\n", "\n"));
     }
 
     [Fact]
@@ -370,7 +567,145 @@ public sealed class WorktreeMergeQueueServiceTests
         var completed = await fixture.Queue.ResumeAsync(fixture.Slug, request.Id, CancellationToken.None);
 
         Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
-        Assert.Equal("resolved\n", (await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "shared.txt"))).Replace("\r\n", "\n"));
+        Assert.Equal("resolved\n", ShowAtTip(fixture.Repository, "shared.txt").Replace("\r\n", "\n"));
+    }
+
+    [Fact]
+    public async Task AppendOnlyProcessorMemoryConflict_IsUnionMergedAndIntegrated()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var relativePath = Path.Combine(".agents", "processors", "column-12", "memory", "MEMORY.md");
+        var targetPath = Path.Combine(fixture.Repository, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+        await File.WriteAllTextAsync(targetPath, "# Mémoire — été\n");
+        Git(fixture.Repository, true, "add", relativePath);
+        Git(fixture.Repository, true, "commit", "-m", "memory base");
+
+        var ticket = await fixture.CreateTicketAsync();
+        var worktree = (await fixture.Worktrees.ResolveAsync(fixture.Slug, ticket, CancellationToken.None))!;
+        await File.AppendAllTextAsync(Path.Combine(worktree.Path, relativePath), "\n- leçon ticket : déjà vérifiée\n");
+        Git(worktree.Path, true, "add", relativePath);
+        Git(worktree.Path, true, "commit", "-m", "ticket memory");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+
+        await File.AppendAllTextAsync(targetPath, "\n- leçon cible : intégrité préservée\n");
+        Git(fixture.Repository, true, "add", relativePath);
+        Git(fixture.Repository, true, "commit", "-m", "target memory");
+
+        var completed = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
+        var merged = ShowAtTip(fixture.Repository, relativePath);
+        Assert.Contains("- leçon ticket : déjà vérifiée", merged);
+        Assert.Contains("- leçon cible : intégrité préservée", merged);
+        Assert.DoesNotContain("<<<<<<<", merged);
+        Assert.True(merged.Length < 1024);
+        Assert.False(Directory.Exists(request.WorktreePath));
+    }
+
+    [Fact]
+    public async Task ExistingAppendOnlyProcessorMemoryConflict_IsResolvedOnResume()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var relativePath = Path.Combine(".agents", "processors", "column-12", "memory", "MEMORY.md");
+        var targetPath = Path.Combine(fixture.Repository, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+        await File.WriteAllTextAsync(targetPath, "# Memory\n");
+        Git(fixture.Repository, true, "add", relativePath);
+        Git(fixture.Repository, true, "commit", "-m", "memory base");
+        var ticket = await fixture.CreateTicketAsync();
+        var worktree = (await fixture.Worktrees.ResolveAsync(fixture.Slug, ticket, CancellationToken.None))!;
+        await File.AppendAllTextAsync(Path.Combine(worktree.Path, relativePath), "\n- ticket lesson\n");
+        Git(worktree.Path, true, "add", relativePath);
+        Git(worktree.Path, true, "commit", "-m", "ticket memory");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        await File.AppendAllTextAsync(targetPath, "\n- target lesson\n");
+        Git(fixture.Repository, true, "add", relativePath);
+        Git(fixture.Repository, true, "commit", "-m", "target memory");
+        Assert.NotEqual(0, Git(worktree.Path, false, "rebase", "integration").ExitCode);
+        await using (var db = fixture.Projects.GetProjectDb(fixture.Slug))
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Conflict}, Checkpoint = {(int)WorktreeMergeCheckpoint.Rebase} WHERE Id = {request.Id}");
+
+        var completed = await fixture.Queue.ResumeAsync(fixture.Slug, request.Id, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
+        var merged = ShowAtTip(fixture.Repository, relativePath);
+        Assert.Contains("- ticket lesson", merged);
+        Assert.Contains("- target lesson", merged);
+        Assert.False(Directory.Exists(request.WorktreePath));
+    }
+
+    [Fact]
+    public async Task ExistingMemoryConflict_CatchesUpWhenTargetAdvancedWhileWaiting()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var relativePath = Path.Combine(".agents", "processors", "column-12", "memory", "MEMORY.md");
+        var targetPath = Path.Combine(fixture.Repository, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+        await File.WriteAllTextAsync(targetPath, "# Memory\n");
+        Git(fixture.Repository, true, "add", relativePath);
+        Git(fixture.Repository, true, "commit", "-m", "memory base");
+        var ticket = await fixture.CreateTicketAsync();
+        var worktree = (await fixture.Worktrees.ResolveAsync(fixture.Slug, ticket, CancellationToken.None))!;
+        await File.AppendAllTextAsync(Path.Combine(worktree.Path, relativePath), "\n- ticket lesson\n");
+        Git(worktree.Path, true, "add", relativePath);
+        Git(worktree.Path, true, "commit", "-m", "ticket memory");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        await File.AppendAllTextAsync(targetPath, "\n- target lesson\n");
+        Git(fixture.Repository, true, "add", relativePath);
+        Git(fixture.Repository, true, "commit", "-m", "target memory");
+        Assert.NotEqual(0, Git(worktree.Path, false, "rebase", "integration").ExitCode);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "later.txt"), "later target advance");
+        Git(fixture.Repository, true, "add", "later.txt");
+        Git(fixture.Repository, true, "commit", "-m", "advance target while conflict waits");
+        await using (var db = fixture.Projects.GetProjectDb(fixture.Slug))
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET Status = {(int)WorktreeMergeStatus.Conflict}, Checkpoint = {(int)WorktreeMergeCheckpoint.Rebase} WHERE Id = {request.Id}");
+
+        var completed = await fixture.Queue.ResumeAsync(fixture.Slug, request.Id, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
+        Assert.True(File.Exists(Path.Combine(fixture.Repository, "later.txt")));
+        Assert.True(ExistsAtTip(fixture.Repository, "later.txt"));
+        var merged = ShowAtTip(fixture.Repository, relativePath);
+        Assert.Contains("- ticket lesson", merged);
+        Assert.Contains("- target lesson", merged);
+        Assert.False(Directory.Exists(request.WorktreePath));
+    }
+
+    [Fact]
+    public async Task MixedMemoryAndCodeConflicts_RemainEntirelyManual()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var memory = Path.Combine(".agents", "processors", "column-12", "memory", "pipeline-lessons.md");
+        var code = "shared.txt";
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(fixture.Repository, memory))!);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, memory), "memory base\n");
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, code), "code base\n");
+        Git(fixture.Repository, true, "add", memory, code);
+        Git(fixture.Repository, true, "commit", "-m", "mixed base");
+
+        var ticket = await fixture.CreateTicketAsync();
+        var worktree = (await fixture.Worktrees.ResolveAsync(fixture.Slug, ticket, CancellationToken.None))!;
+        await File.WriteAllTextAsync(Path.Combine(worktree.Path, memory), "ticket memory\n");
+        await File.WriteAllTextAsync(Path.Combine(worktree.Path, code), "ticket code\n");
+        Git(worktree.Path, true, "add", memory, code);
+        Git(worktree.Path, true, "commit", "-m", "ticket mixed changes");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, memory), "target memory\n");
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, code), "target code\n");
+        Git(fixture.Repository, true, "add", memory, code);
+        Git(fixture.Repository, true, "commit", "-m", "target mixed changes");
+
+        var conflict = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Conflict, conflict!.Status);
+        Assert.Contains(memory.Replace('\\', '/'), conflict.ConflictFiles);
+        Assert.Contains(code, conflict.ConflictFiles);
+        var unresolved = Git(request.WorktreePath, true, "diff", "--name-only", "--diff-filter=U").Output;
+        Assert.Contains(memory.Replace('\\', '/'), unresolved);
+        Assert.Contains(code, unresolved);
+        Assert.True(Directory.Exists(request.WorktreePath));
     }
 
     [Fact]
@@ -397,7 +732,7 @@ public sealed class WorktreeMergeQueueServiceTests
         var completed = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
         Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
-        Assert.Equal("resolved merge\n", (await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "shared.txt"))).Replace("\r\n", "\n"));
+        Assert.Equal("resolved merge\n", ShowAtTip(fixture.Repository, "shared.txt").Replace("\r\n", "\n"));
         Assert.False(Directory.Exists(request.WorktreePath));
     }
 
@@ -467,7 +802,7 @@ public sealed class WorktreeMergeQueueServiceTests
         Assert.Equal(WorktreeMergeStatus.Pending, second.Status);
         Assert.Equal(second.Id, completed!.Id);
         Assert.Equal(WorktreeMergeStatus.Completed, completed.Status);
-        Assert.Equal("durable lesson", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "memory.md")));
+        Assert.Equal("durable lesson", ShowAtTip(fixture.Repository, "memory.md"));
         Assert.False(Directory.Exists(worktree.Path));
     }
 
@@ -492,7 +827,7 @@ public sealed class WorktreeMergeQueueServiceTests
         Assert.Equal(WorktreeMergeStatus.Pending, second.Status);
         Assert.Equal(second.Id, completed!.Id);
         Assert.Equal(WorktreeMergeStatus.Completed, completed.Status);
-        Assert.Equal("preserve me", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, relativeMemory)));
+        Assert.Equal("preserve me", ShowAtTip(fixture.Repository, relativeMemory));
         Assert.False(Directory.Exists(worktree.Path));
     }
 
@@ -511,7 +846,7 @@ public sealed class WorktreeMergeQueueServiceTests
 
         Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
         Assert.NotEqual(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet", $"refs/heads/{request.SourceBranch}").ExitCode);
-        Assert.True(File.Exists(Path.Combine(fixture.Repository, "tracked.txt")));
+        Assert.True(ExistsAtTip(fixture.Repository, "tracked.txt"));
     }
 
     [Fact]
@@ -547,7 +882,91 @@ public sealed class WorktreeMergeQueueServiceTests
 
         Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
         Assert.Equal(actualHead, completed.IntegratedCommit);
-        Assert.Equal("late commit", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "maintenance.txt")));
+        Assert.Equal("late commit", ShowAtTip(fixture.Repository, "maintenance.txt"));
+    }
+
+    [Fact]
+    public async Task PrepareMaintenance_ConcurrentCallsReuseTheSameActiveRequest()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var worktreePath = Path.Combine(fixture.Root.Path, "maintenance-worktree");
+        Git(fixture.Repository, true, "worktree", "add", "-b", "maintenance/test", worktreePath, "integration");
+        var queues = Enumerable.Range(0, 8)
+            .Select(_ => new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees))
+            .ToArray();
+        var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var preparations = queues.Select(async queue =>
+        {
+            await start.Task;
+            return await queue.PrepareMaintenanceAsync(
+                fixture.Slug, worktreePath, "maintenance/test", CancellationToken.None);
+        }).ToArray();
+        start.SetResult();
+
+        var requests = await Task.WhenAll(preparations);
+
+        Assert.Single(requests.Select(request => request.Id).Distinct());
+        Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+        Assert.All(requests, request => Assert.Equal(WorktreeMergeStatus.CommitPending, request.Status));
+    }
+
+    [Fact]
+    public async Task PrepareMaintenance_ConcurrentCallsAfterQuarantineCreateASingleActiveRequest()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var quarantinePath = Path.Combine(fixture.Root.Path, "maintenance-quarantine");
+        Git(fixture.Repository, true, "worktree", "add", "-b", "recovery/maintenance-test", quarantinePath, "integration");
+        await fixture.Queue.QuarantineMaintenanceAsync(
+            fixture.Slug, Path.Combine(fixture.Root.Path, "maintenance-worktree"),
+            quarantinePath, "recovery/maintenance-test",
+            "Interrupted maintenance files require quarantine: transport.txt");
+        var worktreePath = Path.Combine(fixture.Root.Path, "maintenance-worktree");
+        Git(fixture.Repository, true, "worktree", "add", "-b", "maintenance/test", worktreePath, "integration");
+        var queues = Enumerable.Range(0, 8)
+            .Select(_ => new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees))
+            .ToArray();
+        var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var preparations = queues.Select(async queue =>
+        {
+            await start.Task;
+            return await queue.PrepareMaintenanceAsync(
+                fixture.Slug, worktreePath, "maintenance/test", CancellationToken.None);
+        }).ToArray();
+        start.SetResult();
+
+        var requests = await Task.WhenAll(preparations);
+
+        Assert.Single(requests.Select(request => request.Id).Distinct());
+        Assert.All(requests, request => Assert.Equal(WorktreeMergeStatus.CommitPending, request.Status));
+        var rows = await fixture.Queue.ListAsync(fixture.Slug);
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(WorktreeMergeStatus.Quarantined, rows[0].Status);
+        Assert.Contains("require quarantine", rows[0].Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PrepareMaintenance_ReturnsTheActiveRequestShadowedByANewerQuarantineRow()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var worktreePath = Path.Combine(fixture.Root.Path, "maintenance-worktree");
+        Git(fixture.Repository, true, "worktree", "add", "-b", "maintenance/test", worktreePath, "integration");
+        var active = await fixture.Queue.PrepareMaintenanceAsync(
+            fixture.Slug, worktreePath, "maintenance/test", CancellationToken.None);
+        var quarantinePath = Path.Combine(fixture.Root.Path, "maintenance-quarantine");
+        Git(fixture.Repository, true, "worktree", "add", "-b", "recovery/maintenance-test", quarantinePath, "integration");
+        await fixture.Queue.QuarantineMaintenanceAsync(
+            fixture.Slug, Path.Combine(fixture.Root.Path, "unrelated-worktree"),
+            quarantinePath, "recovery/maintenance-test",
+            "Interrupted maintenance files require quarantine: transport.txt");
+
+        var reused = await fixture.Queue.PrepareMaintenanceAsync(
+            fixture.Slug, worktreePath, "maintenance/test", CancellationToken.None);
+
+        Assert.Equal(active.Id, reused.Id);
+        Assert.Equal(WorktreeMergeStatus.CommitPending, reused.Status);
+        Assert.Equal(2, (await fixture.Queue.ListAsync(fixture.Slug)).Count);
     }
 
     [Fact]
@@ -576,7 +995,52 @@ public sealed class WorktreeMergeQueueServiceTests
         var completed = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
         Assert.Equal(WorktreeMergeStatus.Completed, completed!.Status);
-        Assert.Equal("preserved", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "late.txt")));
+        Assert.Equal("preserved", ShowAtTip(fixture.Repository, "late.txt"));
+    }
+
+    [Fact]
+    public async Task Recovery_LeavesAQuarantinedMaintenanceWorktreeUntouched()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var quarantinePath = Path.Combine(fixture.Root.Path, "maintenance-quarantine");
+        Git(fixture.Repository, true, "worktree", "add", "-b", "recovery/maintenance-test", quarantinePath, "integration");
+        await File.WriteAllTextAsync(Path.Combine(quarantinePath, "transport.txt"), "local-only payload");
+        await fixture.Queue.QuarantineMaintenanceAsync(
+            fixture.Slug, Path.Combine(fixture.Root.Path, "maintenance-worktree"),
+            quarantinePath, "recovery/maintenance-test",
+            "Interrupted maintenance files require quarantine: transport.txt");
+
+        var recovered = await fixture.Queue.RecoverTerminalWorktreesAsync(fixture.Slug, CancellationToken.None);
+        var row = Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+
+        Assert.Equal(0, recovered);
+        Assert.Equal(WorktreeMergeStatus.Quarantined, row.Status);
+        Assert.Contains("require quarantine", row.Error, StringComparison.Ordinal);
+        Assert.Equal("local-only payload",
+            await File.ReadAllTextAsync(Path.Combine(quarantinePath, "transport.txt")));
+    }
+
+    [Fact]
+    public async Task Resume_IntegratesAReviewedQuarantinedMaintenanceWorktree()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var quarantinePath = Path.Combine(fixture.Root.Path, "maintenance-quarantine");
+        Git(fixture.Repository, true, "worktree", "add", "-b", "recovery/maintenance-test", quarantinePath, "integration");
+        await File.WriteAllTextAsync(Path.Combine(quarantinePath, "transport.txt"), "reviewed payload");
+        Git(quarantinePath, true, "add", "transport.txt");
+        Git(quarantinePath, true, "commit", "-m", "preserve reviewed maintenance payload");
+        await fixture.Queue.QuarantineMaintenanceAsync(
+            fixture.Slug, Path.Combine(fixture.Root.Path, "maintenance-worktree"),
+            quarantinePath, "recovery/maintenance-test",
+            "Interrupted maintenance files require quarantine: transport.txt");
+        var quarantined = Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
+
+        var completed = await fixture.Queue.ResumeAsync(fixture.Slug, quarantined.Id, CancellationToken.None);
+
+        Assert.NotNull(completed);
+        Assert.Equal(WorktreeMergeStatus.Completed, completed.Status);
+        Assert.Equal("reviewed payload", ShowAtTip(fixture.Repository, "transport.txt"));
+        Assert.False(Directory.Exists(quarantinePath));
     }
 
     [Fact]
@@ -622,7 +1086,9 @@ public sealed class WorktreeMergeQueueServiceTests
         Assert.True(advanced);
         Assert.Equal(request.Id, completed!.Id);
         Assert.Equal(WorktreeMergeStatus.Completed, completed.Status);
-        Assert.True(File.Exists(Path.Combine(fixture.Repository, "candidate.txt")));
+        Assert.True(ExistsAtTip(fixture.Repository, "candidate.txt"));
+        Assert.True(ExistsAtTip(fixture.Repository, "concurrent.txt"));
+        Assert.False(File.Exists(Path.Combine(fixture.Repository, "candidate.txt")));
         Assert.True(File.Exists(Path.Combine(fixture.Repository, "concurrent.txt")));
     }
 
@@ -692,7 +1158,10 @@ public sealed class WorktreeMergeQueueServiceTests
         var result = await restarted.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
         Assert.Equal(WorktreeMergeStatus.Completed, result!.Status);
-        Assert.Equal(0, Git(fixture.Repository, false, "merge-base", "--is-ancestor", result.IntegratedCommit!, "integration").ExitCode);
+        if (checkpoint == WorktreeMergeCheckpoint.Merge)
+            Assert.Equal(0, Git(fixture.Repository, false, "merge-base", "--is-ancestor", result.IntegratedCommit!, "integration").ExitCode);
+        else
+            Assert.True(TipContains(fixture.Repository, result.IntegratedCommit!));
         Assert.False(Directory.Exists(request.WorktreePath));
         Assert.Null(await restarted.ProcessNextAsync(fixture.Slug, CancellationToken.None));
     }
@@ -711,6 +1180,452 @@ public sealed class WorktreeMergeQueueServiceTests
 
         var published = Assert.Single(await fixture.Queue.ListAsync(fixture.Slug));
         Assert.NotNull(published.RemotePublishedAt);
+    }
+
+    [Fact]
+    public async Task Integration_LeavesThePrimaryCheckoutFingerprintUntouched()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        var before = CheckoutFingerprint(fixture.Repository);
+
+        var result = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, result!.Status);
+        Assert.Equal(before, CheckoutFingerprint(fixture.Repository));
+        Assert.Equal(TipCommit(fixture.Repository), result.IntegratedCommit);
+        Assert.True(ExistsAtTip(fixture.Repository, "feature.txt"));
+        Assert.False(File.Exists(Path.Combine(fixture.Repository, "feature.txt")));
+    }
+
+    [Fact]
+    public async Task LocalSync_CleanCheckoutFastForwardsToIntegratedTip()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        var integrated = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        var synced = await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(LocalCheckoutSyncStatus.Completed, synced!.SyncStatus);
+        Assert.Equal(integrated!.IntegratedCommit, Git(fixture.Repository, true, "rev-parse", "HEAD").Output.Trim());
+        Assert.Equal("feature", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "feature.txt")));
+    }
+
+    [Fact]
+    public async Task LocalSync_RegistersACoordinatedMutationWindow()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var registry = new PrimaryCheckoutActivityRegistry();
+        var since = DateTime.UtcNow;
+        var activeDuringSync = false;
+        var queue = new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees,
+            beforeLocalSyncCompletion: repository =>
+                activeDuringSync = registry.HasCoordinatedMutationSince(repository, DateTime.UtcNow),
+            primaryCheckoutActivity: registry);
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        await queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        await queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        // Integration itself never mutates the local checkout, so no window may be recorded yet.
+        Assert.False(registry.HasCoordinatedMutationSince(fixture.Repository, since));
+
+        var synced = await queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(LocalCheckoutSyncStatus.Completed, synced!.SyncStatus);
+        Assert.True(activeDuringSync);
+        Assert.True(registry.HasCoordinatedMutationSince(fixture.Repository, since));
+        Assert.False(registry.HasCoordinatedMutationSince(fixture.Repository, DateTime.UtcNow.AddMinutes(1)));
+    }
+
+    [Fact]
+    public async Task LocalSync_NonConflictingTrackedStagedAndUntrackedWorkIsRestoredExactly()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "tracked.txt"), "base");
+        Git(fixture.Repository, true, "add", "tracked.txt");
+        Git(fixture.Repository, true, "commit", "-m", "tracked baseline");
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "tracked.txt"), "staged");
+        Git(fixture.Repository, true, "add", "tracked.txt");
+        await File.AppendAllTextAsync(Path.Combine(fixture.Repository, "tracked.txt"), " and unstaged");
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "local.txt"), "untracked");
+
+        var synced = await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(LocalCheckoutSyncStatus.Completed, synced!.SyncStatus);
+        Assert.Contains("MM tracked.txt", Git(fixture.Repository, true, "status", "--porcelain").Output);
+        Assert.Contains("?? local.txt", Git(fixture.Repository, true, "status", "--porcelain").Output);
+        Assert.Equal("staged and unstaged", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "tracked.txt")));
+    }
+
+    [Fact]
+    public async Task LocalSync_ConflictKeepsRecoverableBackupAndDoesNotBlockLaterIntegration()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "shared.txt"), "base");
+        Git(fixture.Repository, true, "add", "shared.txt");
+        Git(fixture.Repository, true, "commit", "-m", "shared baseline");
+        var first = await fixture.CreateCommittedTicketAsync("shared.txt", "integrated");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, first, CancellationToken.None);
+        await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "shared.txt"), "local");
+
+        var conflict = await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(LocalCheckoutSyncStatus.Conflict, conflict!.SyncStatus);
+        Assert.Contains("shared.txt", conflict.SyncConflictFiles!);
+        Assert.NotNull(conflict.SyncBackupRef);
+        Assert.Equal(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet", conflict.SyncBackupRef!).ExitCode);
+        Git(fixture.Repository, true, "reset", "--merge");
+        var second = await fixture.CreateCommittedTicketAsync("later.txt", "later");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, second, CancellationToken.None);
+        var later = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        Assert.Equal(WorktreeMergeStatus.Completed, later!.Status);
+    }
+
+    [Fact]
+    public async Task LocalSync_ConflictDiscardedByHardResetRestoresBackupBeforeCompletion()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "shared.txt"), "base");
+        Git(fixture.Repository, true, "add", "shared.txt");
+        Git(fixture.Repository, true, "commit", "-m", "shared baseline");
+        var first = await fixture.CreateCommittedTicketAsync("shared.txt", "integrated");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, first, CancellationToken.None);
+        await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "shared.txt"), "local");
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "note.txt"), "preserved");
+        var conflict = await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None);
+        Assert.Equal(LocalCheckoutSyncStatus.Conflict, conflict!.SyncStatus);
+        Git(fixture.Repository, true, "reset", "--hard", conflict.SyncTargetCommit!);
+        Git(fixture.Repository, true, "clean", "-fd");
+        var second = await fixture.CreateCommittedTicketAsync("shared.txt", "local");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, second, CancellationToken.None);
+        await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        var restoredBeforeCleanup = false;
+        var retryQueue = new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees,
+            afterSyncCompletionPersisted: repository => restoredBeforeCleanup =
+                File.Exists(Path.Combine(repository, "note.txt"))
+                && Git(repository, false, "show-ref", "--verify", "--quiet", conflict.SyncBackupRef!).ExitCode == 0);
+
+        var retried = await retryQueue.RetrySynchronizationAsync(fixture.Slug, conflict.Id, CancellationToken.None);
+
+        Assert.Equal(LocalCheckoutSyncStatus.Completed, retried!.SyncStatus);
+        Assert.True(restoredBeforeCleanup);
+        Assert.Equal("preserved", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "note.txt")));
+        Assert.Null(retried.SyncBackupRef);
+        Assert.NotEqual(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet", conflict.SyncBackupRef!).ExitCode);
+    }
+
+    [Fact]
+    public async Task LocalSync_ConflictResolvedInPlaceCompletesWithoutReapplyingBackup()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "shared.txt"), "base");
+        Git(fixture.Repository, true, "add", "shared.txt");
+        Git(fixture.Repository, true, "commit", "-m", "shared baseline");
+        var ticket = await fixture.CreateCommittedTicketAsync("shared.txt", "integrated");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "shared.txt"), "local");
+        var conflict = await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None);
+        Assert.Equal(LocalCheckoutSyncStatus.Conflict, conflict!.SyncStatus);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "shared.txt"), "resolved in place");
+        Git(fixture.Repository, true, "add", "shared.txt");
+
+        var retried = await new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees)
+            .RetrySynchronizationAsync(fixture.Slug, conflict.Id, CancellationToken.None);
+
+        Assert.Equal(LocalCheckoutSyncStatus.Completed, retried!.SyncStatus);
+        Assert.Equal("resolved in place", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "shared.txt")));
+        Assert.Null(retried.SyncBackupRef);
+        Assert.NotEqual(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet", conflict.SyncBackupRef!).ExitCode);
+    }
+
+    [Fact]
+    public async Task LocalSync_DivergentLocalCommitIsPreservedAndActionable()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "local-commit.txt"), "local");
+        Git(fixture.Repository, true, "add", "local-commit.txt");
+        Git(fixture.Repository, true, "commit", "-m", "local divergent commit");
+        var localHead = Git(fixture.Repository, true, "rev-parse", "HEAD").Output.Trim();
+
+        var result = await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(LocalCheckoutSyncStatus.Diverged, result!.SyncStatus);
+        Assert.Equal(localHead, Git(fixture.Repository, true, "rev-parse", "HEAD").Output.Trim());
+        Assert.Contains("Reconcile", result.SyncError, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LocalSync_UntrackedCollisionKeepsBothCopiesRecoverable()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("collision.txt", "integrated");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "collision.txt"), "local untracked");
+
+        var result = await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(LocalCheckoutSyncStatus.Conflict, result!.SyncStatus);
+        Assert.NotNull(result.SyncBackupRef);
+        Assert.Equal("integrated", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "collision.txt")));
+        Assert.Equal("local untracked", Git(fixture.Repository, true, "show", $"{result.SyncBackupRef}^3:collision.txt").Output);
+    }
+
+    [Fact]
+    public async Task LocalSync_RestoresDurableBackupAfterCrashFollowingFastForward()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        var integrated = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "local.txt"), "preserved");
+        Git(fixture.Repository, true, "stash", "push", "--include-untracked", "--message", "simulated sync backup");
+        var stash = Git(fixture.Repository, true, "rev-parse", "stash@{0}").Output.Trim();
+        var backupRef = $"refs/kittyclaw/sync-backups/{integrated!.Id}";
+        Git(fixture.Repository, true, "update-ref", backupRef, stash);
+        Git(fixture.Repository, true, "stash", "drop", "stash@{0}");
+        Git(fixture.Repository, true, "merge", "--ff-only", integrated.IntegratedCommit!);
+        await using (var db = fixture.Projects.GetProjectDb(fixture.Slug))
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET SyncStatus = {(int)LocalCheckoutSyncStatus.Processing}, SyncBackupRef = {backupRef} WHERE Id = {integrated.Id}");
+
+        var result = await new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees)
+            .SynchronizeNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(LocalCheckoutSyncStatus.Completed, result!.SyncStatus);
+        Assert.Equal("preserved", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "local.txt")));
+        Assert.NotEqual(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet", backupRef).ExitCode);
+    }
+
+    [Fact]
+    public async Task LocalSync_RecoversProcessingCheckpointAndCatchesNewestIntegration()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var first = await fixture.CreateCommittedTicketAsync("first.txt", "first");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, first, CancellationToken.None);
+        var row = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        await using (var db = fixture.Projects.GetProjectDb(fixture.Slug))
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET SyncStatus = {(int)LocalCheckoutSyncStatus.Processing} WHERE Id = {row!.Id}");
+        var second = await fixture.CreateCommittedTicketAsync("second.txt", "second");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, second, CancellationToken.None);
+        var newest = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        var recovered = await new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees)
+            .SynchronizeNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(LocalCheckoutSyncStatus.Completed, recovered!.SyncStatus);
+        Assert.Equal(newest!.IntegratedCommit, Git(fixture.Repository, true, "rev-parse", "HEAD").Output.Trim());
+        Assert.True(File.Exists(Path.Combine(fixture.Repository, "second.txt")));
+    }
+
+    [Fact]
+    public async Task LocalSync_ConcurrentWriteAfterBackupIsLeftUntouchedForRetry()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        var queue = new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees,
+            beforeLocalSync: repository => File.WriteAllText(Path.Combine(repository, "concurrent.txt"), "external"));
+
+        var result = await queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(LocalCheckoutSyncStatus.ConcurrentChanges, result!.SyncStatus);
+        Assert.Equal("external", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "concurrent.txt")));
+        Assert.False(File.Exists(Path.Combine(fixture.Repository, "feature.txt")));
+    }
+
+    [Fact]
+    public async Task LocalSync_ConcurrentWriteAfterRestorePreservesBackupAndRemainsRetryable()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "local.txt"), "preserved");
+        var queue = new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees,
+            beforeLocalSyncCompletion: repository =>
+                File.WriteAllText(Path.Combine(repository, "concurrent.txt"), "external"));
+
+        var result = await queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(LocalCheckoutSyncStatus.ConcurrentChanges, result!.SyncStatus);
+        Assert.Equal("external", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "concurrent.txt")));
+        Assert.Equal("preserved", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "local.txt")));
+        Assert.NotNull(result.SyncBackupRef);
+        Assert.Equal(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet", result.SyncBackupRef!).ExitCode);
+
+        File.Delete(Path.Combine(fixture.Repository, "concurrent.txt"));
+        Git(fixture.Repository, true, "reset", "--hard");
+        Git(fixture.Repository, true, "clean", "-fd");
+        var retried = await new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees)
+            .RetrySynchronizationAsync(fixture.Slug, result.Id, CancellationToken.None);
+
+        Assert.Equal(LocalCheckoutSyncStatus.Completed, retried!.SyncStatus);
+        Assert.Equal("preserved", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "local.txt")));
+        Assert.NotEqual(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet", result.SyncBackupRef!).ExitCode);
+    }
+
+    [Fact]
+    public async Task LocalSync_ConcurrentCommitWithSameTreePreservesHeadAndBackupUntilRetry()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "local.txt"), "preserved");
+        string? concurrentCommit = null;
+        var queue = new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees,
+            beforeLocalSyncCompletion: repository =>
+            {
+                Git(repository, true, "commit", "--allow-empty", "-m", "concurrent local commit");
+                concurrentCommit = Git(repository, true, "rev-parse", "HEAD").Output.Trim();
+            });
+
+        var result = await queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(LocalCheckoutSyncStatus.ConcurrentChanges, result!.SyncStatus);
+        Assert.Equal(concurrentCommit, Git(fixture.Repository, true, "rev-parse", "HEAD").Output.Trim());
+        Assert.Equal("preserved", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "local.txt")));
+        Assert.NotNull(result.SyncBackupRef);
+        Assert.Equal(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet", result.SyncBackupRef!).ExitCode);
+
+        Git(fixture.Repository, true, "reset", "--hard", result.SyncTargetCommit!);
+        Git(fixture.Repository, true, "clean", "-fd");
+        var retried = await new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees)
+            .RetrySynchronizationAsync(fixture.Slug, result.Id, CancellationToken.None);
+
+        Assert.Equal(LocalCheckoutSyncStatus.Completed, retried!.SyncStatus);
+        Assert.Equal(result.SyncTargetCommit, Git(fixture.Repository, true, "rev-parse", "HEAD").Output.Trim());
+        Assert.Equal("preserved", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "local.txt")));
+        Assert.NotEqual(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet", result.SyncBackupRef!).ExitCode);
+    }
+
+    [Fact]
+    public async Task LocalSync_RestartAfterDurableCompletionBeforeBackupCleanupFinishesIdempotently()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "local.txt"), "preserved");
+        var interrupted = new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees,
+            afterSyncCompletionPersisted: _ => throw new IOException("simulated interruption before backup cleanup"));
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            interrupted.SynchronizeNextAsync(fixture.Slug, CancellationToken.None));
+
+        var checkpoint = (await fixture.Queue.GetForTicketAsync(fixture.Slug, ticket)).Request;
+        Assert.Equal(LocalCheckoutSyncStatus.CleanupPending, checkpoint!.SyncStatus);
+        Assert.NotNull(checkpoint.SyncBackupRef);
+        Assert.Equal("preserved", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "local.txt")));
+        Assert.Equal(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet", checkpoint.SyncBackupRef!).ExitCode);
+
+        var recovered = await new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees)
+            .SynchronizeNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(LocalCheckoutSyncStatus.Completed, recovered!.SyncStatus);
+        Assert.Null(recovered.SyncBackupRef);
+        Assert.Equal("preserved", await File.ReadAllTextAsync(Path.Combine(fixture.Repository, "local.txt")));
+        Assert.NotEqual(0, Git(fixture.Repository, false, "show-ref", "--verify", "--quiet", checkpoint.SyncBackupRef!).ExitCode);
+        Assert.Null(await new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees)
+            .SynchronizeNextAsync(fixture.Slug, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task LocalSync_MissingCheckoutKeepsIntegrationSuccessful()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.CreateCommittedTicketAsync("feature.txt", "feature");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, ticket, CancellationToken.None);
+        var integrated = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+        var moved = fixture.Repository + "-offline";
+        Directory.Move(fixture.Repository, moved);
+        try
+        {
+            var result = await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None);
+            Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+            Assert.Equal(LocalCheckoutSyncStatus.CheckoutMissing, result!.SyncStatus);
+            Assert.Contains("absent", result.SyncError, StringComparison.Ordinal);
+        }
+        finally { Directory.Move(moved, fixture.Repository); }
+    }
+
+    [Fact]
+    public async Task CrashBetweenFastForwardAndTipPublication_IsResumedIdempotently()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var firstTicket = await fixture.CreateCommittedTicketAsync("first.txt", "first");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, firstTicket, CancellationToken.None);
+        Assert.Equal(WorktreeMergeStatus.Completed,
+            (await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None))!.Status);
+        var tipBeforeCrash = TipCommit(fixture.Repository);
+        var secondTicket = await fixture.CreateCommittedTicketAsync("second.txt", "second");
+        var request = await fixture.Queue.EnqueueAsync(fixture.Slug, secondTicket, CancellationToken.None);
+        var worktree = (await fixture.Worktrees.ResolveAsync(fixture.Slug, secondTicket, CancellationToken.None))!;
+        // Reproduce the crash window: the source is rebased and the integration worktree already
+        // fast-forwarded, but the process stopped before the tip ref was published.
+        Git(worktree.Path, true, "rebase", TipRef);
+        var rebased = Git(worktree.Path, true, "rev-parse", "HEAD").Output.Trim();
+        var integrationWorktree = Directory.EnumerateDirectories(
+            Path.Combine(Path.GetDirectoryName(fixture.Repository)!, $"{Path.GetFileName(fixture.Repository)}.worktrees"),
+            "integration-*").Single();
+        Git(integrationWorktree, true, "merge", "--ff-only", rebased);
+        await using (var db = fixture.Projects.GetProjectDb(fixture.Slug))
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE WorktreeMergeQueue SET Status = 1, Checkpoint = {(int)WorktreeMergeCheckpoint.Merge} WHERE Id = {request.Id}");
+        Assert.Equal(tipBeforeCrash, TipCommit(fixture.Repository));
+
+        var restarted = new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees);
+        var result = await restarted.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, result!.Status);
+        Assert.Equal(rebased, result.IntegratedCommit);
+        Assert.Equal(rebased, TipCommit(fixture.Repository));
+        Assert.False(Directory.Exists(request.WorktreePath));
+        Assert.Null(await restarted.ProcessNextAsync(fixture.Slug, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ConcurrentIntegrations_AcrossProjectsSharingOneRepository_AdvanceTheSharedTip()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var projectB = await fixture.Projects.CreateProjectAsync("merge-queue-b");
+        await fixture.Projects.UpdateProjectAsync(projectB.Slug, fixture.Workspace);
+        await fixture.Projects.UpdateProjectAsync(projectB.Slug, null, worktreesEnabled: true, integrationBranch: "integration");
+        var ticketsB = new TicketService(fixture.Projects, new MemberService(fixture.Projects));
+        var worktreesB = new TicketWorktreeService(fixture.Projects, ticketsB);
+        var queueB = new WorktreeMergeQueueService(fixture.Projects, worktreesB);
+        // Offset project B ticket ids so the two projects use distinct worktree folders and branches.
+        await ticketsB.CreateTicketAsync(projectB.Slug, "Offset ticket");
+        var ticketA = await fixture.CreateCommittedTicketAsync("from-a.txt", "from project a");
+        var ticketB = (await ticketsB.CreateTicketAsync(projectB.Slug, "Concurrent candidate")).Id;
+        var worktreeB = (await worktreesB.ResolveAsync(projectB.Slug, ticketB, CancellationToken.None))!;
+        await File.WriteAllTextAsync(Path.Combine(worktreeB.Path, "from-b.txt"), "from project b");
+        Git(worktreeB.Path, true, "add", "from-b.txt");
+        Git(worktreeB.Path, true, "commit", "-m", "from project b");
+        await fixture.Queue.EnqueueAsync(fixture.Slug, ticketA, CancellationToken.None);
+        await queueB.EnqueueAsync(projectB.Slug, ticketB, CancellationToken.None);
+        var before = CheckoutFingerprint(fixture.Repository);
+
+        var runA = Task.Run(() => fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None));
+        var runB = Task.Run(() => queueB.ProcessNextAsync(projectB.Slug, CancellationToken.None));
+        var results = await Task.WhenAll(runA, runB);
+
+        Assert.All(results, result => Assert.Equal(WorktreeMergeStatus.Completed, result!.Status));
+        Assert.True(ExistsAtTip(fixture.Repository, "from-a.txt"));
+        Assert.True(ExistsAtTip(fixture.Repository, "from-b.txt"));
+        Assert.Equal(before, CheckoutFingerprint(fixture.Repository));
     }
 
     private sealed class Fixture : IDisposable
@@ -763,9 +1678,32 @@ public sealed class WorktreeMergeQueueServiceTests
         public void Dispose() => Root.Dispose();
     }
 
+    private const string TipRef = "refs/kittyclaw/integration/integration";
+
+    private static string TipCommit(string repository) =>
+        Git(repository, true, "rev-parse", TipRef).Output.Trim();
+
+    private static bool TipContains(string repository, string commit) =>
+        Git(repository, false, "merge-base", "--is-ancestor", commit, TipRef).ExitCode == 0;
+
+    private static bool ExistsAtTip(string repository, string relativePath) =>
+        Git(repository, false, "cat-file", "-e", $"{TipRef}:{relativePath.Replace('\\', '/')}").ExitCode == 0;
+
+    private static string ShowAtTip(string repository, string relativePath) =>
+        Git(repository, true, "show", $"{TipRef}:{relativePath.Replace('\\', '/')}").Output;
+
+    private static (string Head, string TargetBranch, string Status) CheckoutFingerprint(string repository) => (
+        Git(repository, true, "rev-parse", "HEAD").Output.Trim(),
+        Git(repository, true, "rev-parse", "refs/heads/integration").Output.Trim(),
+        Git(repository, true, "status", "--porcelain", "--untracked-files=all").Output);
+
     private static (int ExitCode, string Output, string Error) Git(string path, bool success, params string[] args)
     {
-        var info = new ProcessStartInfo("git") { WorkingDirectory = path, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        var info = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = path, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false,
+            StandardOutputEncoding = System.Text.Encoding.UTF8, StandardErrorEncoding = System.Text.Encoding.UTF8
+        };
         foreach (var arg in args) info.ArgumentList.Add(arg);
         using var process = Process.Start(info)!;
         var output = process.StandardOutput.ReadToEnd();

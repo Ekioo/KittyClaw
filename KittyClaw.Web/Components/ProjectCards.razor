@@ -141,6 +141,7 @@
 
     private static string IntegrationAlertClass(KittyClaw.Core.Services.WorktreeMergeAlertSummary alert) =>
         alert.MostSevereStatus is KittyClaw.Core.Services.WorktreeMergeStatus.Conflict
+            or KittyClaw.Core.Services.WorktreeMergeStatus.Quarantined
             or KittyClaw.Core.Services.WorktreeMergeStatus.Failed
             or KittyClaw.Core.Services.WorktreeMergeStatus.NeedsReview
             ? "project-card-integration-alert--danger"

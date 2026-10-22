@@ -1,0 +1,34 @@
+{
+  "browserLocale": "fr-FR",
+  "browserTimeZone": "Europe/Paris",
+  "setup": [
+    { "type": "createProject", "name": "qa-ticket-313" },
+    {
+      "type": "createTicket",
+      "project": "qa-ticket-313",
+      "title": "Local activity timestamps",
+      "status": "Todo"
+    },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/qa-ticket-313/tickets/{ticketId}/comments",
+      "body": { "content": "Comment timestamp rendered in the browser time zone", "author": "qa-runner" }
+    }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-ticket-313/ticket/{ticketId}" },
+    { "type": "wait", "ms": 750 },
+    { "type": "assertVisible", "selector": ".ticket-panel" },
+    { "type": "assertCount", "selector": ".timeline-comment time[data-local-date-time]", "expected": "1" },
+    { "type": "assertCount", "selector": ".timeline-event time[data-local-date-time]", "expected": "1" },
+    { "type": "assertDateTimeLocale", "selector": ".timeline-comment time[data-local-date-time]", "expected": "en" },
+    { "type": "assertDateTimeLocale", "selector": ".timeline-event time[data-local-date-time]", "expected": "en" },
+    {
+      "type": "screenshot",
+      "name": "activity-local-time",
+      "description": "The activity event and comment display browser-localized, locale-aware timestamps."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

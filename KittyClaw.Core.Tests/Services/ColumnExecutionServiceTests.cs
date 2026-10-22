@@ -174,6 +174,34 @@ public sealed class ColumnExecutionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Scheduled_completion_from_waiting_column_uses_source_when_route_is_omitted()
+    {
+        var project = await _projects.CreateProjectAsync("Waiting self schedule");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Dependencies");
+        var waiting = await _columns.CreateColumnAsync(project.Slug, "En attente", pipelineId: pipeline.Id,
+            role: ColumnRole.Waiting);
+        var ready = await _columns.CreateColumnAsync(project.Slug, "Prêt", pipelineId: pipeline.Id);
+        var abandoned = await _columns.CreateColumnAsync(project.Slug, "Abandonné", pipelineId: pipeline.Id,
+            role: ColumnRole.Failure);
+        var processor = await SaveProcessor(project.Slug, waiting.Id, abandoned.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Blocked work", status: waiting.Name,
+            pipelineId: pipeline.Id, columnId: waiting.Id);
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+        var fireAt = DateTime.UtcNow.AddHours(1);
+
+        await _executions.CompleteAsync(project.Slug, execution!, processor,
+            new ColumnAgentResult("scheduled", [], "Still blocked.", fireAt, ready.Name), "column-agent");
+        var scheduled = await _tickets.GetTicketAsync(project.Slug, ticket.Id);
+        var attempt = Assert.Single(await _executions.ListAsync(project.Slug, ticket.Id));
+
+        Assert.Equal(waiting.Id, scheduled!.ColumnId);
+        Assert.Equal(fireAt, scheduled.FireAt);
+        Assert.Equal(ready.Name, scheduled.ScheduleTarget);
+        Assert.Equal(ColumnExecutionStatus.Completed, attempt.Status);
+        Assert.Null(await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow.AddHours(2)));
+    }
+
+    [Fact]
     public async Task Scheduled_completion_to_a_non_waiting_column_is_rejected()
     {
         var project = await _projects.CreateProjectAsync("Invalid scheduled destination");
@@ -380,6 +408,56 @@ public sealed class ColumnExecutionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Retry_still_runs_when_only_the_runs_own_comment_advanced_the_ticket()
+    {
+        var project = await _projects.CreateProjectAsync("Own comment retry");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: pipeline.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Done", pipelineId: pipeline.Id, role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, target.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Delivered then rejected", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var first = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+        await _tickets.AddCommentAsync(project.Slug, ticket.Id, "Livraison : travail terminé.", "content-creator");
+        await _executions.FailAttemptAsync(project.Slug, first!, processor,
+            "Skills obligatoires non exécutés : demo-skill.", processor.Name);
+
+        var retry = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow.AddMinutes(1));
+
+        Assert.NotNull(retry);
+        Assert.Equal(first!.Id, retry.Id);
+        Assert.Equal(ColumnExecutionStatus.Running, retry.Status);
+        Assert.Equal(2, retry.Attempt);
+        Assert.Null(retry.ContextRejectionReason);
+        Assert.Equal("Skills obligatoires non exécutés : demo-skill.", retry.PreviousAttemptError);
+    }
+
+    [Fact]
+    public async Task Retry_is_cancelled_when_owner_commented_after_the_runs_own_comment()
+    {
+        var project = await _projects.CreateProjectAsync("Owner comment during run");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: pipeline.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Done", pipelineId: pipeline.Id, role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, target.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Owner interjects", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var first = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+        await _tickets.AddCommentAsync(project.Slug, ticket.Id, "Livraison : travail terminé.", "content-creator");
+        await _tickets.AddCommentAsync(project.Slug, ticket.Id, "Changez l'approche.", "owner");
+        await _executions.FailAttemptAsync(project.Slug, first!, processor, "timeout", processor.Name);
+
+        var replacement = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow.AddMinutes(1));
+
+        Assert.NotNull(replacement);
+        Assert.NotEqual(first!.Id, replacement.Id);
+        var cancelled = Assert.Single(await _executions.ListAsync(project.Slug, ticket.Id),
+            execution => execution.Id == first.Id);
+        Assert.Equal(ColumnExecutionStatus.Cancelled, cancelled.Status);
+        Assert.Equal("stale_trigger_context", cancelled.ContextRejectionReason);
+    }
+
+    [Fact]
     public async Task Parent_waits_for_blocking_children_then_becomes_eligible()
     {
         var project = await _projects.CreateProjectAsync("Children");
@@ -436,6 +514,38 @@ public sealed class ColumnExecutionServiceTests : IDisposable
         Assert.False(resumed.AgentCompleted);
         Assert.Null(resumed.AgentResult);
         Assert.Equal(MemoryCapitalizationStatus.Pending, resumed.CapitalizationStatus);
+    }
+
+    [Fact]
+    public async Task Waiting_parent_resumes_when_a_blocking_child_reaches_failure()
+    {
+        var project = await _projects.CreateProjectAsync("Failed blocking child");
+        var parentPipeline = await _pipelines.CreateAsync(project.Slug, "Parent flow");
+        var childPipeline = await _pipelines.CreateAsync(project.Slug, "Child flow");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: parentPipeline.Id);
+        var target = await _columns.CreateColumnAsync(project.Slug, "Done", pipelineId: parentPipeline.Id, role: ColumnRole.Success);
+        var childWork = await _columns.CreateColumnAsync(project.Slug, "Work", pipelineId: childPipeline.Id);
+        var childFailed = await _columns.CreateColumnAsync(project.Slug, "Rejected", pipelineId: childPipeline.Id, role: ColumnRole.Failure);
+        var processor = await SaveProcessor(project.Slug, source.Id, target.Id);
+        var parent = await _tickets.CreateTicketAsync(project.Slug, "Parent", status: source.Name,
+            pipelineId: parentPipeline.Id, columnId: source.Id);
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+        var child = await _tickets.CreateTicketAsync(project.Slug, "Child", status: childWork.Name,
+            parentId: parent.Id, pipelineId: childPipeline.Id, columnId: childWork.Id, blocksParent: true);
+
+        var waitingResult = new ColumnAgentResult("wait_for_children", []);
+        await _executions.SaveAgentResultAsync(project.Slug, execution!, waitingResult);
+        await _executions.SetCapitalizationAsync(project.Slug, execution!, MemoryCapitalizationStatus.Succeeded);
+        await _executions.CompleteAsync(project.Slug, execution!, processor, waitingResult, "column-agent");
+        await _tickets.UpdateTicketAsync(project.Slug, child.Id, status: childFailed.Name);
+
+        var resumed = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+
+        Assert.NotNull(resumed);
+        Assert.Equal(execution!.Id, resumed.Id);
+        Assert.Equal(parent.Id, resumed.TicketId);
+        Assert.False(resumed.AgentCompleted);
+        Assert.Null(resumed.AgentResult);
     }
 
     [Fact]
@@ -701,6 +811,41 @@ public sealed class ColumnExecutionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Paraphrased_summaries_without_durable_evidence_do_not_bypass_the_loop_guard()
+    {
+        var project = await _projects.CreateProjectAsync("Loop paraphrase filtering");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Main");
+        var drafting = await _columns.CreateColumnAsync(project.Slug, "Drafting", pipelineId: pipeline.Id);
+        var review = await _columns.CreateColumnAsync(project.Slug, "Review", pipelineId: pipeline.Id);
+        var writer = await SaveProcessor(project.Slug, drafting.Id, review.Id);
+        var reviewer = await SaveProcessor(project.Slug, review.Id, drafting.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Paraphrased loop", status: drafting.Name,
+            pipelineId: pipeline.Id, columnId: drafting.Id);
+        var now = DateTime.UtcNow;
+
+        for (var cycle = 1; cycle <= 3; cycle++)
+        {
+            var draft = await _executions.ClaimNextAsync(project.Slug, writer, now.AddMinutes(cycle * 20 - 20));
+            Assert.NotNull(draft);
+            await _executions.CompleteAsync(project.Slug, draft!, writer,
+                new ColumnAgentResult("needs_review", [], $"Draft verdict wording {cycle}"), writer.Name);
+            if (cycle == 3) break;
+
+            var reviewRun = await _executions.ClaimNextAsync(project.Slug, reviewer, now.AddMinutes(cycle * 20 - 10));
+            Assert.NotNull(reviewRun);
+            await _executions.CompleteAsync(project.Slug, reviewRun!, reviewer,
+                new ColumnAgentResult("changes_requested", [], $"Review verdict wording {cycle}"), reviewer.Name);
+        }
+
+        var blockedReview = await _executions.ClaimNextAsync(project.Slug, reviewer, now.AddMinutes(50));
+        var history = await _executions.ListAsync(project.Slug, ticket.Id);
+
+        Assert.Null(blockedReview);
+        var protection = Assert.Single(history, execution => execution.Outcome == "routing_loop");
+        Assert.Contains("repeated_transition_without_material_evidence", protection.LoopDiagnosticJson);
+    }
+
+    [Fact]
     public async Task New_validation_diagnostic_or_human_evidence_is_persisted_as_progress()
     {
         var project = await _projects.CreateProjectAsync("Diagnostic and evidence progress");
@@ -860,6 +1005,66 @@ public sealed class ColumnExecutionServiceTests : IDisposable
         Assert.Equal(ColumnExecutionStatus.Retrying, attempt.Status);
         Assert.Equal("stale_ticket_context", attempt.ContextRejectionReason);
         Assert.DoesNotContain(unchanged.Activities, activity => activity.Text.Contains("terminé"));
+    }
+
+    [Fact]
+    public async Task Approved_success_accepts_run_window_control_comment_as_consumed_ticket_version()
+    {
+        var project = await _projects.CreateProjectAsync("Run-window control comment");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Editorial delivery");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Control", pipelineId: pipeline.Id);
+        var success = await _columns.CreateColumnAsync(project.Slug, "Published", pipelineId: pipeline.Id,
+            role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, success.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Approved integration", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+
+        var control = await _tickets.AddCommentAsync(project.Slug, ticket.Id,
+            "Control approved with verified delivery evidence", "fact-checker");
+        var consumedVersion = (await _tickets.GetTicketAsync(project.Slug, ticket.Id))!.UpdatedAt;
+
+        await _executions.CompleteAsync(project.Slug, execution!, processor,
+            new ColumnAgentResult("approved", [], "Integration verified", Evidence:
+                new ColumnResultEvidence(consumedVersion)), processor.Name);
+
+        var completed = Assert.Single(await _executions.ListAsync(project.Slug, ticket.Id));
+        var routed = await _tickets.GetTicketAsync(project.Slug, ticket.Id);
+        Assert.NotNull(control);
+        Assert.Equal(ColumnExecutionStatus.Completed, completed.Status);
+        Assert.Null(completed.ContextRejectionReason);
+        Assert.Equal(consumedVersion, completed.ConsumedTicketUpdatedAt);
+        Assert.Equal(success.Id, routed!.ColumnId);
+        Assert.Equal(ColumnRole.Success,
+            (await _columns.ListColumnsAsync(project.Slug, pipeline.Id)).Single(column => column.Id == routed.ColumnId).Role);
+    }
+
+    [Fact]
+    public async Task Approved_success_accepts_explicit_utc_evidence_for_sqlite_unspecified_timestamp()
+    {
+        var project = await _projects.CreateProjectAsync("UTC evidence timestamp");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Editorial delivery");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Control", pipelineId: pipeline.Id);
+        var success = await _columns.CreateColumnAsync(project.Slug, "Published", pipelineId: pipeline.Id,
+            role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, success.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Approved integration", status: source.Name,
+            pipelineId: pipeline.Id, columnId: source.Id);
+        var execution = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow);
+
+        await _tickets.AddCommentAsync(project.Slug, ticket.Id,
+            "Control approved with verified delivery evidence", "fact-checker");
+        var sqliteVersion = (await _tickets.GetTicketAsync(project.Slug, ticket.Id))!.UpdatedAt;
+        var explicitUtcVersion = DateTime.SpecifyKind(sqliteVersion, DateTimeKind.Utc);
+
+        await _executions.CompleteAsync(project.Slug, execution!, processor,
+            new ColumnAgentResult("approved", [], "Integration verified", Evidence:
+                new ColumnResultEvidence(explicitUtcVersion)), processor.Name);
+
+        var completed = Assert.Single(await _executions.ListAsync(project.Slug, ticket.Id));
+        Assert.Equal(ColumnExecutionStatus.Completed, completed.Status);
+        Assert.Null(completed.ContextRejectionReason);
+        Assert.Equal(success.Id, (await _tickets.GetTicketAsync(project.Slug, ticket.Id))!.ColumnId);
     }
 
     [Fact]

@@ -15,21 +15,37 @@ public sealed class TestInstance : IAsyncDisposable
     public int Port { get; }
     public string ApiUrl => $"http://localhost:{Port}";
     public string DataDir { get; }
+    public string? ProviderReadinessFile { get; private set; }
 
     private readonly Process _proc;
     private readonly bool _ownsDataDir;
+    private readonly System.Text.StringBuilder _stdout;
+    private readonly System.Text.StringBuilder _stderr;
 
-    private TestInstance(Process proc, int port, string dataDir, bool ownsDataDir)
+    private TestInstance(Process proc, int port, string dataDir, bool ownsDataDir,
+        System.Text.StringBuilder stdout, System.Text.StringBuilder stderr)
     {
         _proc = proc;
         Port = port;
         DataDir = dataDir;
         _ownsDataDir = ownsDataDir;
+        _stdout = stdout;
+        _stderr = stderr;
+    }
+
+    public string DiagnosticOutput
+    {
+        get
+        {
+            lock (_stdout) lock (_stderr)
+                return $"--- web stdout ---\n{_stdout}\n--- web stderr ---\n{_stderr}";
+        }
     }
 
     public static async Task<TestInstance> StartAsync(
         string webExePath,
         IReadOnlyDictionary<string, string>? environment = null,
+        ScenarioInstance? options = null,
         CancellationToken ct = default)
     {
         if (!File.Exists(webExePath))
@@ -75,9 +91,31 @@ public sealed class TestInstance : IAsyncDisposable
         // up to KittyClaw.ClaudeMock/bin/**/claude.exe. If neither resolves, leave the env var
         // unset and let the test instance fall back to whatever ResolveClaudeBinary() picks up,
         // surfacing the warning via stderr.
+        options ??= new ScenarioInstance();
         var mockClaude = FindMockClaude(webExePath);
         if (mockClaude is not null)
-            psi.Environment["KITTYCLAW_CLAUDE_BIN"] = mockClaude;
+        {
+            psi.Environment["KITTYCLAW_PROVIDER_ALLOWLIST"] = string.Join(',', options.Providers);
+            psi.Environment.Remove("KITTYCLAW_CLAUDE_BIN");
+            psi.Environment.Remove("KITTYCLAW_CODEX_BIN");
+            psi.Environment.Remove("KITTYCLAW_GROK_BIN");
+            foreach (var provider in options.Providers.Select(p => p.ToLowerInvariant()))
+            {
+                var variable = provider switch
+                {
+                    "claude" => "KITTYCLAW_CLAUDE_BIN",
+                    "codex" => "KITTYCLAW_CODEX_BIN",
+                    "grok" => "KITTYCLAW_GROK_BIN",
+                    _ => throw new InvalidOperationException($"Unsupported QA provider '{provider}'.")
+                };
+                psi.Environment[variable] = mockClaude;
+            }
+            psi.Environment["KITTYCLAW_MOCK_SCENARIO"] = options.MockScenario;
+            if (!string.IsNullOrWhiteSpace(options.UnavailableModel))
+                psi.Environment["KITTYCLAW_MOCK_UNAVAILABLE_MODEL"] = options.UnavailableModel;
+            if (options.ProvidersInitiallyUnavailable)
+                psi.Environment["KITTYCLAW_MOCK_READINESS_FILE"] = Path.Combine(dataDir, "qa-provider-ready");
+        }
 
         var proc = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start KittyClaw.Web for QA");
@@ -101,7 +139,10 @@ public sealed class TestInstance : IAsyncDisposable
             throw new InvalidOperationException($"KittyClaw.Web on port {port} did not become ready.\n{snippet}");
         }
 
-        return new TestInstance(proc, port, dataDir, ownsDataDir: true);
+        var instance = new TestInstance(proc, port, dataDir, ownsDataDir: true, stdoutBuf, stderrBuf);
+        if (options.ProvidersInitiallyUnavailable)
+            instance.ProviderReadinessFile = Path.Combine(dataDir, "qa-provider-ready");
+        return instance;
     }
 
     private static string? FindContentRoot(string webExePath)

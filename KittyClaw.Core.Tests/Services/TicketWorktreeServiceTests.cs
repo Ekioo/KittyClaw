@@ -234,7 +234,7 @@ public sealed class TicketWorktreeServiceTests
     }
 
     [Fact]
-    public async Task TicketRun_DetectsMemoryWriteInPrimaryRepository()
+    public async Task TicketRun_ExternalPrimaryChange_IsReportedWithoutFailingTheRun()
     {
         using var fixture = await Fixture.CreateAsync();
         var ticket = await fixture.Tickets.CreateTicketAsync(fixture.ProjectSlug, "Memory consolidation overlap");
@@ -273,8 +273,120 @@ public sealed class TicketWorktreeServiceTests
         await File.WriteAllTextAsync(memoryFile, "after");
         var run = await running.WaitAsync(TimeSpan.FromSeconds(30));
 
+        // An external write the agent never declared must not fail the run nor be imputed to it;
+        // it is surfaced as an actionable external-change warning naming the drifted path.
+        Assert.Equal(AgentRunStatus.Completed, run.Status);
+        Assert.DoesNotContain(run.SnapshotBuffer(), e => e.Text.Contains("Worktree boundary violation"));
+        var warning = Assert.Single(run.SnapshotBuffer(), e => e.Kind == "warning" && e.Text.Contains("not attributed to the agent"));
+        Assert.Contains("MEMORY.md", warning.Text);
+        Assert.Contains("external", warning.Text);
+    }
+
+    [Fact]
+    public async Task TicketRun_AgentDeclaredWriteInPrimaryRepository_FailsAsBoundaryViolation()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        var ticket = await fixture.Tickets.CreateTicketAsync(fixture.ProjectSlug, "Primary intrusion");
+        var scenarios = Path.Combine(fixture.Root.Path, "scenarios");
+        Directory.CreateDirectory(scenarios);
+        var intrusion = Path.Combine(fixture.Repository, "intrusion.txt");
+        var declaredPath = intrusion.Replace('\\', '/');
+        await File.WriteAllTextAsync(Path.Combine(scenarios, "worktree-intrusion.ndjson"), string.Join('\n',
+        [
+            "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"{{session_id}}\",\"model\":\"mock\"}",
+            "{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"Write\",\"input\":{\"file_path\":\"" + declaredPath + "\",\"content\":\"intruded\"}}]}}",
+            "{\"_meta\":{\"delay_ms\":1500}}",
+            "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":1500,\"num_turns\":1}",
+        ]));
+        TestSkillBuilder.Create(fixture.Repository, "worktree-intruder", scenario: "worktree-intrusion");
+        var launched = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var runner = new AgentRunner(new SessionRegistry(), new AgentRunRegistry(), new RunConcurrencyGate(1),
+            NullLogger<AgentRunner>.Instance, worktrees: fixture.Worktrees);
+
+        var running = runner.RunAsync(new AgentRunContext
+        {
+            ProjectSlug = fixture.ProjectSlug,
+            WorkspacePath = fixture.Repository,
+            AgentName = "worktree-intruder",
+            SkillFile = "worktree-intruder/SKILL.md",
+            TicketId = ticket.Id,
+            MaxTurns = 1,
+            Env = new Dictionary<string, string> { ["KITTYCLAW_MOCK_SCENARIOS_DIR"] = scenarios },
+            OnEventHook = e =>
+            {
+                if (e.Kind == "launch") launched.TrySetResult();
+            },
+        }, CancellationToken.None);
+        await launched.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        // Materialize the effect the scenario declared: the agent stream claims the Write and the
+        // primary checkout actually drifts on that exact path.
+        await File.WriteAllTextAsync(intrusion, "intruded");
+        var run = await running.WaitAsync(TimeSpan.FromSeconds(30));
+
         Assert.Equal(AgentRunStatus.Failed, run.Status);
-        Assert.Contains(run.SnapshotBuffer(), e => e.Text.Contains("Worktree boundary violation"));
+        var violation = Assert.Single(run.SnapshotBuffer(), e => e.Kind == "error" && e.Text.Contains("Worktree boundary violation"));
+        Assert.Contains("intrusion.txt", violation.Text);
+        Assert.Contains("Write", violation.Text);
+    }
+
+    [Fact]
+    public async Task TicketRun_LocalSyncDuringRun_DoesNotFailTheRun()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "shared.txt"), "base");
+        RunGit(fixture.Repository, "add", "shared.txt");
+        RunGit(fixture.Repository, "commit", "-m", "shared baseline");
+        var registry = new PrimaryCheckoutActivityRegistry();
+        var queue = new WorktreeMergeQueueService(fixture.Projects, fixture.Worktrees,
+            primaryCheckoutActivity: registry);
+        // Integrate a ticket that rewrites shared.txt while the local checkout keeps a divergent
+        // edit, so the synchronization step visibly mutates the primary checkout mid-run.
+        var integrated = await fixture.Tickets.CreateTicketAsync(fixture.ProjectSlug, "Integrated first");
+        var integratedWorktree = (await fixture.Worktrees.ResolveAsync(fixture.ProjectSlug, integrated.Id, CancellationToken.None))!;
+        await File.WriteAllTextAsync(Path.Combine(integratedWorktree.Path, "shared.txt"), "integrated");
+        RunGit(integratedWorktree.Path, "add", "shared.txt");
+        RunGit(integratedWorktree.Path, "commit", "-m", "integrated change");
+        await queue.EnqueueAsync(fixture.ProjectSlug, integrated.Id, CancellationToken.None);
+        await queue.ProcessNextAsync(fixture.ProjectSlug, CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Repository, "shared.txt"), "local");
+        var ticket = await fixture.Tickets.CreateTicketAsync(fixture.ProjectSlug, "Concurrent with sync");
+        var scenarios = Path.Combine(fixture.Root.Path, "scenarios");
+        Directory.CreateDirectory(scenarios);
+        await File.WriteAllTextAsync(Path.Combine(scenarios, "worktree-sync-delay.ndjson"), string.Join('\n',
+        [
+            "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"{{session_id}}\",\"model\":\"mock\"}",
+            "{\"_meta\":{\"delay_ms\":4000}}",
+            "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":4000,\"num_turns\":1}",
+        ]));
+        TestSkillBuilder.Create(fixture.Repository, "worktree-agent", scenario: "worktree-sync-delay");
+        var launched = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var runner = new AgentRunner(new SessionRegistry(), new AgentRunRegistry(), new RunConcurrencyGate(1),
+            NullLogger<AgentRunner>.Instance, worktrees: fixture.Worktrees, primaryCheckoutActivity: registry);
+
+        var running = runner.RunAsync(new AgentRunContext
+        {
+            ProjectSlug = fixture.ProjectSlug,
+            WorkspacePath = fixture.Repository,
+            AgentName = "worktree-agent",
+            SkillFile = "worktree-agent/SKILL.md",
+            TicketId = ticket.Id,
+            MaxTurns = 1,
+            Env = new Dictionary<string, string> { ["KITTYCLAW_MOCK_SCENARIOS_DIR"] = scenarios },
+            OnEventHook = e =>
+            {
+                if (e.Kind == "launch") launched.TrySetResult();
+            },
+        }, CancellationToken.None);
+        await launched.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        var synced = await queue.SynchronizeNextAsync(fixture.ProjectSlug, CancellationToken.None);
+        Assert.Equal(LocalCheckoutSyncStatus.Conflict, synced!.SyncStatus);
+        var run = await running.WaitAsync(TimeSpan.FromSeconds(60));
+
+        Assert.Equal(AgentRunStatus.Completed, run.Status);
+        Assert.DoesNotContain(run.SnapshotBuffer(), e => e.Text.Contains("Worktree boundary violation"));
+        var notice = Assert.Single(run.SnapshotBuffer(),
+            e => e.Kind == "worktree" && e.Text.Contains("local checkout synchronization"));
+        Assert.Contains("not attributed to the agent", notice.Text);
     }
 
     [Fact]
@@ -367,16 +479,18 @@ public sealed class TicketWorktreeServiceTests
         public string Repository { get; }
         public string Workspace { get; }
         public string ProjectSlug { get; }
+        public ProjectService Projects { get; }
         public TicketService Tickets { get; }
         public TicketWorktreeService Worktrees { get; }
 
-        private Fixture(TempDir root, string workspace, string repository, string projectSlug, TicketService tickets,
-            TicketWorktreeService worktrees)
+        private Fixture(TempDir root, string workspace, string repository, string projectSlug, ProjectService projects,
+            TicketService tickets, TicketWorktreeService worktrees)
         {
             Root = root;
             Workspace = workspace;
             Repository = repository;
             ProjectSlug = projectSlug;
+            Projects = projects;
             Tickets = tickets;
             Worktrees = worktrees;
         }
@@ -397,7 +511,8 @@ public sealed class TicketWorktreeServiceTests
             else
                 await projects.UpdateProjectAsync(project.Slug, null, worktreesEnabled: false);
             var tickets = new TicketService(projects, new MemberService(projects));
-            return new Fixture(root, workspace, repository, project.Slug, tickets, new TicketWorktreeService(projects, tickets));
+            return new Fixture(root, workspace, repository, project.Slug, projects, tickets,
+                new TicketWorktreeService(projects, tickets));
         }
 
         public void Dispose() => Root.Dispose();

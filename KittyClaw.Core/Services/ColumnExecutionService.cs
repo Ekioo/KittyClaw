@@ -13,8 +13,9 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
 {
     internal Func<Task>? BeforeSuccessCompareAndSwapAsync { get; set; }
     internal static readonly TimeSpan RoutingLoopWindow = TimeSpan.FromMinutes(10);
+    internal static readonly TimeSpan RoutingLoopEvidenceWindow = TimeSpan.FromHours(24);
     internal const string RoutingLoopError =
-        "Protection anti-boucle : cette transition a été répétée sans progrès observable dans les 10 dernières minutes.";
+        "Protection anti-boucle : cette transition a été répétée sans progrès durable observable.";
 
     private static async Task EnsureTableAsync(TodoDbContext db)
     {
@@ -111,8 +112,9 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             var childColumnIds = await db.Tickets
                 .Where(t => t.ParentId == candidate.TicketId && t.BlocksParent)
                 .Select(t => t.ColumnId).Distinct().ToListAsync();
-            var successCount = await db.BoardColumns.CountAsync(c => childColumnIds.Contains(c.Id) && c.Role == ColumnRole.Success);
-            if (successCount != childColumnIds.Count) continue;
+            var terminalCount = await db.BoardColumns.CountAsync(c => childColumnIds.Contains(c.Id)
+                && (c.Role == ColumnRole.Success || c.Role == ColumnRole.Failure));
+            if (terminalCount != childColumnIds.Count) continue;
             candidate.Status = ColumnExecutionStatus.Running;
             candidate.Attempt++;
             // The previous agent result is necessarily `wait_for_children`. Replaying that
@@ -153,7 +155,12 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                     // when it names the exact current version; any later mutation still rejects it.
                     || retry.AgentCompleted
                         && retry.AgentResult?.Evidence?.TicketUpdatedAt is DateTime consumedVersion
-                        && consumedVersion.ToUniversalTime() == ticket.UpdatedAt.ToUniversalTime());
+                        && consumedVersion.ToUniversalTime() == ticket.UpdatedAt.ToUniversalTime()
+                    // The agent's own delivery or progress comments during a failed attempt also
+                    // advance UpdatedAt. Cancelling the retry for that discarded completed business
+                    // work and re-triggered the ticket from scratch (#1497/#1508); only foreign
+                    // mutations — owner feedback, field edits — actually invalidate the context.
+                    || await AdvancedOnlyByRunCommentsAsync(db, retry, ticket));
             if (!triggerIsCurrent)
             {
                 retry.Status = ColumnExecutionStatus.Cancelled;
@@ -166,6 +173,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             retry.Status = ColumnExecutionStatus.Running;
             retry.Attempt++;
             retry.AvailableAt = null;
+            retry.PreviousAttemptError = retry.Error;
             retry.Error = null;
             await db.SaveChangesAsync();
             await retryTransaction.CommitAsync();
@@ -180,7 +188,12 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                 || e.Status == ColumnExecutionStatus.WaitingForChildren
                 || e.Status == ColumnExecutionStatus.Failed)
             .Select(e => e.TicketId);
-        var candidates = db.Tickets.Where(t => t.ColumnId == processor.ColumnId && !activeTicketIds.Contains(t.Id));
+        // A ticket with FireAt is parked durably until ScheduledPromotionService moves it to its
+        // wake target. Re-claiming it in the waiting column would turn every persisted schedule
+        // into a tight column-scan loop and eventually trip the routing-loop guard.
+        var candidates = db.Tickets.Where(t => t.ColumnId == processor.ColumnId
+            && t.FireAt == null
+            && !activeTicketIds.Contains(t.Id));
         candidates = processor.SelectionOrder switch
         {
             TicketSelectionOrder.PriorityThenPosition => candidates.OrderByDescending(t => t.Priority).ThenBy(t => t.SortOrder).ThenBy(t => t.CreatedAt),
@@ -201,8 +214,9 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                 selected = candidate;
                 break;
             }
-            var successful = await db.BoardColumns.CountAsync(c => blockingChildren.Contains(c.Id) && c.Role == ColumnRole.Success);
-            if (successful == blockingChildren.Count)
+            var terminal = await db.BoardColumns.CountAsync(c => blockingChildren.Contains(c.Id)
+                && (c.Role == ColumnRole.Success || c.Role == ColumnRole.Failure));
+            if (terminal == blockingChildren.Count)
             {
                 selected = candidate;
                 break;
@@ -217,7 +231,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         var recentCompleted = await db.ColumnExecutions.AsNoTracking()
             .Where(e => e.TicketId == selected.Id
                 && e.Status == ColumnExecutionStatus.Completed
-                && e.EndedAt >= now.Subtract(RoutingLoopWindow))
+                && e.EndedAt >= now.Subtract(RoutingLoopEvidenceWindow))
             .OrderByDescending(e => e.EndedAt)
             .ToListAsync();
         var recentProcessorIds = recentCompleted.Select(e => e.ProcessorId).Distinct().ToList();
@@ -234,11 +248,20 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         if (incoming is not null)
         {
             var comparable = incomingExecutions.Where(e => e.ProcessorId == incoming.ProcessorId)
-                .OrderByDescending(e => e.EndedAt).Take(2).ToList();
-            if (comparable.Count == 2
+                .OrderByDescending(e => e.EndedAt).Take(3).ToList();
+            var repeatedFingerprint = comparable.Count >= 2
+                && comparable[1].EndedAt >= now.Subtract(RoutingLoopWindow)
                 && !string.IsNullOrWhiteSpace(comparable[0].ProgressFingerprint)
                 && string.Equals(comparable[0].ProgressFingerprint, comparable[1].ProgressFingerprint,
-                    StringComparison.Ordinal))
+                    StringComparison.Ordinal);
+            // Summaries are useful diagnostics, but an agent can paraphrase the same verdict on
+            // every pass. After two complete round trips, require a durable progress signal
+            // (human/agent comment or completed action) before dispatching the same route again.
+            // This catches A -> B -> A ping-pong loops whose wording changes just enough to evade
+            // the exact-fingerprint guard.
+            var repeatedWithoutMaterialEvidence = comparable.Count == 3
+                && comparable.All(execution => !HasMaterialProgressSignal(execution.ProgressSignalsJson));
+            if (repeatedFingerprint || repeatedWithoutMaterialEvidence)
             {
                 var sourceProcessor = await db.ColumnProcessors.AsNoTracking()
                     .FirstOrDefaultAsync(p => p.Id == incoming.ProcessorId);
@@ -247,13 +270,17 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                     : await db.BoardColumns.AsNoTracking().FirstOrDefaultAsync(c => c.Id == sourceProcessor.ColumnId);
                 var diagnostic = new
                 {
-                    windowMinutes = RoutingLoopWindow.TotalMinutes,
+                    windowMinutes = repeatedFingerprint
+                        ? RoutingLoopWindow.TotalMinutes
+                        : RoutingLoopEvidenceWindow.TotalMinutes,
                     sourceColumnId = sourceProcessor?.ColumnId,
                     targetColumnId = processor.ColumnId,
                     comparedExecutionIds = comparable.Select(e => e.Id).ToArray(),
                     fingerprint = comparable[0].ProgressFingerprint,
                     signals = JsonSerializer.Deserialize<JsonElement>(comparable[0].ProgressSignalsJson),
-                    reason = "same_transition_and_progress_fingerprint"
+                    reason = repeatedFingerprint
+                        ? "same_transition_and_progress_fingerprint"
+                        : "repeated_transition_without_material_evidence"
                 };
                 var protectedExecution = new ColumnExecution
                 {
@@ -279,7 +306,8 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                     TicketId = selected.Id,
                     Author = processor.Name,
                     Text = $"protection anti-boucle : transition {transition} répétée sans progrès " +
-                        $"(fenêtre 10 min, exécutions {string.Join(", ", comparable.Select(e => e.Id))}, " +
+                        $"(fenêtre {(repeatedFingerprint ? RoutingLoopWindow : RoutingLoopEvidenceWindow).TotalMinutes:g} min, " +
+                        $"exécutions {string.Join(", ", comparable.Select(e => e.Id))}, " +
                         $"empreinte {comparable[0].ProgressFingerprint}); ticket maintenu dans {oldStatus}, reprise manuelle disponible",
                 });
                 await db.SaveChangesAsync();
@@ -311,6 +339,25 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             return null;
         }
         return execution;
+    }
+
+    /// <summary>True when the ticket's UpdatedAt advance is fully explained by non-owner
+    /// comments posted since this execution was claimed — i.e. the run's own delivery or
+    /// progress comments. Any owner comment in that window, or an UpdatedAt that does not
+    /// match the latest run comment (another field was edited afterwards), keeps the retry
+    /// stale. Same sub-second tolerance as the delivery-comment check in
+    /// ValidateSuccessContextAsync: the comment row and UpdatedAt are written microseconds
+    /// apart in the same save.</summary>
+    private static async Task<bool> AdvancedOnlyByRunCommentsAsync(
+        TodoDbContext db, ColumnExecution retry, Ticket ticket)
+    {
+        var runComments = await db.Comments.AsNoTracking()
+            .Where(comment => comment.TicketId == ticket.Id && comment.CreatedAt >= retry.ClaimedAt)
+            .OrderByDescending(comment => comment.CreatedAt)
+            .ToListAsync();
+        if (runComments.Count == 0) return false;
+        if (runComments.Any(comment => comment.Author == "owner")) return false;
+        return Math.Abs((ticket.UpdatedAt - runComments[0].CreatedAt).TotalSeconds) < 1;
     }
 
     private static int? ResolveHistoricalTarget(ColumnProcessor processor, string? outcome)
@@ -507,6 +554,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             return;
         }
 
+        var isScheduled = string.Equals(result.Outcome, "scheduled", StringComparison.OrdinalIgnoreCase);
         var route = processor.Routes.FirstOrDefault(r =>
             string.Equals(r.Outcome, result.Outcome, StringComparison.OrdinalIgnoreCase));
         var targetId = route?.TargetColumnId ?? processor.DefaultTargetColumnId;
@@ -521,9 +569,15 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         await ColumnService.EnsureBoardColumnsTableAsync(db);
         await TicketService.EnsureActivityTableAsync(db);
         await EnsureTableAsync(db);
+        var source = await db.BoardColumns.FindAsync(processor.ColumnId)
+            ?? throw new InvalidOperationException($"La colonne source #{processor.ColumnId} n'existe plus.");
+        // A waiting processor may legitimately ask to wake itself later even when its route table
+        // only declares business outcomes. Keep an explicit scheduled route authoritative, but do
+        // not send an otherwise valid scheduled result through the default failure destination.
+        if (isScheduled && route is null && source.Role == ColumnRole.Waiting)
+            targetId = source.Id;
         var target = await db.BoardColumns.FindAsync(targetId.Value)
             ?? throw new InvalidOperationException($"La colonne cible #{targetId} n'existe plus.");
-        var isScheduled = string.Equals(result.Outcome, "scheduled", StringComparison.OrdinalIgnoreCase);
         BoardColumn? wakeTarget = null;
         if (isScheduled)
         {
@@ -552,7 +606,6 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             ?? throw new InvalidOperationException($"Le ticket #{execution.TicketId} n’existe plus.");
         var row = await db.ColumnExecutions.FindAsync(execution.Id);
         if (row is null) return;
-        var source = await db.BoardColumns.FindAsync(processor.ColumnId);
         var oldStatus = ticket.Status;
         Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? successTransaction = null;
         if (target.Role == ColumnRole.Success)
@@ -687,7 +740,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
     {
         if (row.TriggerTicketUpdatedAt is null) return "ticket_refresh_failed";
         if (result.Evidence?.TicketUpdatedAt is DateTime consumedVersion
-            && consumedVersion.ToUniversalTime() != ticket.UpdatedAt.ToUniversalTime())
+            && NormalizeUtcInstant(consumedVersion) != NormalizeUtcInstant(ticket.UpdatedAt))
             return "stale_ticket_context";
         if (row.TriggerOwnerCommentId is not int ownerCommentId)
             return result.Evidence?.TicketUpdatedAt is DateTime
@@ -718,6 +771,15 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             return "stale_ticket_context";
         return null;
     }
+
+    private static DateTime NormalizeUtcInstant(DateTime value) => value.Kind switch
+    {
+        DateTimeKind.Utc => value,
+        DateTimeKind.Local => value.ToUniversalTime(),
+        // SQLite does not persist DateTimeKind. KittyClaw stores these timestamps as UTC,
+        // so a materialized Unspecified value must not be interpreted as machine-local time.
+        _ => DateTime.SpecifyKind(value, DateTimeKind.Utc),
+    };
 
     private static (string Fingerprint, string[] Signals) BuildProgress(
         ColumnAgentResult result, IReadOnlyCollection<string> completedActionIds,
@@ -752,6 +814,22 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         var author = NormalizeProgressText(comment.Author);
         if (author.Length == 0) return false;
         return author is not "automation" and not "system" and not "kittyclaw";
+    }
+
+    private static bool HasMaterialProgressSignal(string? progressSignalsJson)
+    {
+        if (string.IsNullOrWhiteSpace(progressSignalsJson)) return false;
+        try
+        {
+            var signals = JsonSerializer.Deserialize<string[]>(progressSignalsJson) ?? [];
+            return signals.Any(signal => signal.StartsWith("checkpoint:", StringComparison.Ordinal)
+                || signal.StartsWith("comment:", StringComparison.Ordinal));
+        }
+        catch (JsonException)
+        {
+            // Historical or corrupt diagnostics must not disable the bounded-cycle safeguard.
+            return false;
+        }
     }
 
     private sealed record ProgressComment(string Author, string Content);

@@ -31,5 +31,17 @@
   "SortByName": "Por nombre",
   "SortByCreationDate": "Por fecha de creación",
   "SortByLastModified": "Por última modificación",
-  "SortProjectsTitle": "Ordenar proyectos"
+  "SortProjectsTitle": "Ordenar proyectos",
+  "RepositoryIntakeIntro": "Elige un repositorio Git existente y describe tu primer objetivo. KittyClaw lo valida antes de continuar.",
+  "FirstObjective": "Primer objetivo",
+  "FirstObjectiveHint": "¿Qué primer resultado útil debe ayudarte a conseguir KittyClaw?",
+  "ValidateRepository": "Validar y continuar",
+  "RepositoryPathMissing": "Esta carpeta no existe. Elige un repositorio existente.",
+  "RepositoryPathInvalid": "Elige una ruta absoluta fuera de las carpetas del sistema.",
+  "RepositoryNotGit": "Esta carpeta no es un repositorio Git. Selecciona un repositorio que ya contenga metadatos Git.",
+  "RepositoryNotWritable": "KittyClaw no puede escribir en este repositorio. Comprueba los permisos e inténtalo de nuevo.",
+  "FirstTicketDraftTitle": "Revisa tu primer ticket", "FirstTicketDraftIntro": "KittyClaw convirtió tu objetivo en un ticket ejecutable. Ajústalo si es necesario y continúa.",
+  "FirstTicketTitle": "Título", "FirstTicketContext": "Contexto", "FirstTicketOutcome": "Resultado esperado",
+  "FirstTicketCriteria": "Criterios de aceptación", "FirstTicketContinue": "Crear ticket y continuar",
+  "FirstRunProviderTitle": "Preparar la primera ejecución", "FirstRunProviderRetry": "Comprobar proveedores de nuevo"
 }

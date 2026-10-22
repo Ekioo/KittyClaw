@@ -76,6 +76,11 @@ public static class DecisionBriefComposer
         if (evidence.Status is EvidenceStatus.Missing or EvidenceStatus.Stale or EvidenceStatus.Contradictory)
             return DecisionVerdict.Block;
 
+        // Partial evidence must never receive the global success treatment: it still
+        // contains claims that have not been replaced by observable artifacts.
+        if (evidence.Status == EvidenceStatus.Partial)
+            return DecisionVerdict.Fix;
+
         // Blocking findings: evidence is readable but failures require remediation.
         if (findings.Any(f => f.IsBlocking))
             return DecisionVerdict.Fix;

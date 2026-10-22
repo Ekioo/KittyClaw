@@ -258,14 +258,20 @@ public class TicketService
                 ColumnRole = x.ColumnId is int columnId && childRoles.TryGetValue(columnId, out var role) ? role : ColumnRole.Normal,
             }).ToList());
 
-        // Load unresolved blocker counts (blockers whose status is not "Done") for all returned tickets.
+        // Load unresolved blocker counts. Column roles are authoritative because each
+        // pipeline can use its own localized or business-specific terminal labels.
         await EnsureTicketDependenciesTableAsync(db);
         var ticketIds = allTickets.Select(t => t.Id).ToList();
+        var successColumnIds = await db.BoardColumns
+            .Where(c => c.Role == ColumnRole.Success)
+            .Select(c => c.Id)
+            .ToListAsync();
         var unresolvedCounts = ticketIds.Count > 0
             ? await db.TicketDependencies
                 .Where(d => ticketIds.Contains(d.BlockedTicketId))
-                .Join(db.Tickets, d => d.BlocksTicketId, t => t.Id, (d, t) => new { d.BlockedTicketId, t.Status })
-                .Where(x => x.Status != "Done")
+                .Join(db.Tickets, d => d.BlocksTicketId, t => t.Id,
+                    (d, t) => new { d.BlockedTicketId, t.ColumnId })
+                .Where(x => !x.ColumnId.HasValue || !successColumnIds.Contains(x.ColumnId.Value))
                 .GroupBy(x => x.BlockedTicketId)
                 .Select(g => new { BlockedId = g.Key, Count = g.Count() })
                 .ToDictionaryAsync(x => x.BlockedId, x => x.Count)
@@ -329,20 +335,34 @@ public class TicketService
         {
             ColumnRole = t.ColumnId is int columnId && subRoles.TryGetValue(columnId, out var role) ? role : ColumnRole.Normal,
         }).ToList();
-        ticket.BlockedBy = await (
+        var blockedBy = await (
             from d in db.TicketDependencies
             join t in db.Tickets on d.BlocksTicketId equals t.Id
             where d.BlockedTicketId == ticketId
             orderby d.Id
-            select new TicketDependencyInfo(d.Id, t.Id, t.Title, t.Status)
+            select new { DependencyId = d.Id, TicketId = t.Id, t.Title, t.Status, t.ColumnId }
         ).ToListAsync();
-        ticket.Blocks = await (
+        var blocks = await (
             from d in db.TicketDependencies
             join t in db.Tickets on d.BlockedTicketId equals t.Id
             where d.BlocksTicketId == ticketId
             orderby d.Id
-            select new TicketDependencyInfo(d.Id, t.Id, t.Title, t.Status)
+            select new { DependencyId = d.Id, TicketId = t.Id, t.Title, t.Status, t.ColumnId }
         ).ToListAsync();
+        var dependencyColumnIds = blockedBy.Concat(blocks)
+            .Where(t => t.ColumnId is not null).Select(t => t.ColumnId!.Value).Distinct().ToList();
+        var dependencyRoles = await db.BoardColumns.Where(c => dependencyColumnIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, c => c.Role);
+        ticket.BlockedBy = blockedBy.Select(t => new TicketDependencyInfo(t.DependencyId, t.TicketId, t.Title, t.Status)
+        {
+            ColumnRole = t.ColumnId is int columnId && dependencyRoles.TryGetValue(columnId, out var role)
+                ? role : ColumnRole.Normal,
+        }).ToList();
+        ticket.Blocks = blocks.Select(t => new TicketDependencyInfo(t.DependencyId, t.TicketId, t.Title, t.Status)
+        {
+            ColumnRole = t.ColumnId is int columnId && dependencyRoles.TryGetValue(columnId, out var role)
+                ? role : ColumnRole.Normal,
+        }).ToList();
         return ticket;
     }
 

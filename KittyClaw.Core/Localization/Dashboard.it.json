@@ -50,5 +50,8 @@
   "TileConfigModelHint": "Lascia vuoto per impostazione predefinita del progetto",
   "TileConfigDetectedOutput": "File di output (rilevato)",
   "TileConfigRevise": "Rivedere",
-  "TileConfigAccept": "Accettare"
+  "TileConfigAccept": "Accettare",
+  "GuidanceStepReady": "Passaggio 1 di 3 · Pronto", "GuidanceStepRunning": "Passaggio 2 di 3 · In corso", "GuidanceStepRecoverable": "Azione richiesta · Puoi continuare", "GuidanceStepCompleted": "Passaggio 3 di 3 · Risultato pronto",
+  "GuidanceReadyTitle": "Il tuo primo risultato inizia qui", "GuidanceReadyMessage": "La bacheca è pronta. Avvia il primo ticket e KittyClaw sceglierà automaticamente un provider disponibile.", "GuidanceRunningTitle": "Il primo risultato è in preparazione", "GuidanceRunningMessage": "La prima esecuzione sta elaborando il ticket senza configurare modelli o automazioni.", "GuidanceRecoverableTitle": "L’esecuzione richiede un altro tentativo", "GuidanceRecoverableMessage": "Il provider selezionato non ha terminato. Torna alla bacheca per riprovare.", "GuidanceRecoverableHint": "Il ticket e i progressi sono conservati.", "GuidanceCompletedTitle": "Il primo risultato è pronto", "GuidanceCompletedMessage": "Controlla il risultato e approvalo oppure richiedi una modifica.",
+  "GuidanceStart": "Inizia dalla bacheca", "GuidanceFollowRun": "Segui l’esecuzione", "GuidanceRetry": "Riprova dalla bacheca", "GuidanceDecide": "Controlla e decidi", "GuidanceTickets": "ticket", "GuidanceRuns": "esecuzioni", "GuidanceResults": "risultati"
 }

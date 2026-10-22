@@ -58,6 +58,22 @@ public sealed class DashboardModelRoutingTests
         Assert.Contains("output.Clear()", page);
     }
 
+    [Fact]
+    public void Both_dashboard_refresh_paths_share_a_bounded_ten_turn_policy()
+    {
+        var root = RepoRoot();
+        var service = File.ReadAllText(Path.Combine(
+            root, "KittyClaw.Core", "Services", "DashboardRefreshService.cs"));
+        var page = File.ReadAllText(Path.Combine(
+            root, "KittyClaw.Web", "Components", "Pages", "Dashboard.razor"));
+
+        Assert.Equal(10, DashboardRunPolicy.MaxTurns);
+        Assert.Contains("MaxTurns = DashboardRunPolicy.MaxTurns", service);
+        Assert.Contains("MaxTurns = DashboardRunPolicy.MaxTurns", page);
+        Assert.DoesNotContain("MaxTurns = 5", service);
+        Assert.DoesNotContain("MaxTurns = 5", page);
+    }
+
     private static string RepoRoot()
     {
         var directory = Directory.GetCurrentDirectory();

@@ -189,6 +189,13 @@ public class ColumnExecution
     public string? CapitalizationError { get; set; }
     public DateTime? CapitalizedAt { get; set; }
 
+    /// <summary>Error of the attempt this retry replaces, captured when the retry is claimed.
+    /// In-memory only: the claim and the dispatch happen in the same engine process, and the
+    /// dispatcher surfaces it so the resumed agent can correct the actual rejection instead of
+    /// guessing why it was re-run.</summary>
+    [NotMapped]
+    public string? PreviousAttemptError { get; set; }
+
     [NotMapped]
     public List<string> CompletedActionIds
     {

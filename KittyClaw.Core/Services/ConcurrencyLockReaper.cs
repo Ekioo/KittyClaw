@@ -20,6 +20,7 @@ namespace KittyClaw.Core.Services;
 /// </summary>
 public sealed class ConcurrencyLockReaper : BackgroundService
 {
+    internal const int DefaultInteractiveChatTimeoutMinutes = 30;
     private readonly AgentRunRegistry _runs;
     private readonly ILogger<ConcurrencyLockReaper> _logger;
 
@@ -55,20 +56,23 @@ public sealed class ConcurrencyLockReaper : BackgroundService
         var reaped = new List<AgentRun>();
         foreach (var run in _runs.AllActive())
         {
-            if (run.LockTimeoutMinutes is not int minutes || minutes <= 0) continue;
+            var minutes = run.LockTimeoutMinutes;
+            if (minutes is null && run.ConcurrencyGroup.StartsWith("chat:", StringComparison.OrdinalIgnoreCase))
+                minutes = DefaultInteractiveChatTimeoutMinutes;
+            if (minutes is not > 0) continue;
             var idle = now - run.LastActivityAt;
-            if (idle <= TimeSpan.FromMinutes(minutes)) continue;
+            if (idle <= TimeSpan.FromMinutes(minutes.Value)) continue;
 
             _logger.LogWarning(
                 "ConcurrencyLockReaper: run={RunId} agent={Agent} group={Group} idle {Idle:F1} min > timeout {Timeout} min — force-releasing lock",
-                run.RunId, run.AgentName, run.ConcurrencyGroup, idle.TotalMinutes, minutes);
+                run.RunId, run.AgentName, run.ConcurrencyGroup, idle.TotalMinutes, minutes.Value);
 
             // Emit a visible marker so the zombie is diagnosable in the run stream, then cancel to
             // kill the (possibly hung) subprocess tree, then complete to release the lock now.
             try
             {
                 run.Push(new StreamEvent(now, "error",
-                    $"Lock timeout: no activity for {idle.TotalMinutes:F0} min (limit {minutes} min) — run force-stopped to release the concurrency group"));
+                    $"Lock timeout: no activity for {idle.TotalMinutes:F0} min (limit {minutes.Value} min) — run force-stopped to release the concurrency group"));
             }
             catch { /* a throwing OnEvent subscriber must not stop reaping */ }
             try { run.Cancellation.Cancel(); } catch { /* best-effort */ }
