@@ -195,3 +195,27 @@ Blazor UI, and fake JEV/agent providers: it verifies the manual default, enables
 with a 100% threshold in the column dialog, observes automatic application and the destination
 agent, reloads the audit history, then proves an 80% proposal stays pending and can be rejected.
 It uses `KITTYCLAW_JEV_DEBUG_E2E=1`; it never calls the live TypeSafe API.
+
+## Live API verification of automatic routing
+
+`JevLiveAutomaticRoutingJourneyTests` is a separate paid opt-in journey using the real TypeSafe
+HTTPS transport and the key detected from the machine environment. It neither saves nor logs the
+key. It starts Kestrel on an ephemeral port with unique data under
+`%APPDATA%/KittyClaw-debug/jev-live-auto-*`, leaving existing debug and production instances alone.
+Agents remain simulated, with an actual deliberately failing command captured as verified process
+exit evidence. The shared live transport limits this journey to two requests and never alters a
+model response or confidence score.
+
+Through the column dialog, it enables automatic routing at 50%, verifies a real confidence strictly
+above 50% and the resulting Review → Todo transition with a persisted automatic audit. It then
+raises the threshold to 100% through the UI before creating a second ticket. That proposal must
+have confidence strictly below 100%; it remains in Review for at least 32 seconds, spanning two
+observation sweeps, with no decision, timestamp change or extra agent. Reloading retains the
+manual acceptance control. A model abstention or confidence outside these expected ranges fails
+the scenario rather than fabricating a response. Screenshots and isolated debug data are retained.
+
+```powershell
+$env:KITTYCLAW_JEV_LIVE_E2E = '1'
+dotnet test KittyClaw.Core.Tests --artifacts-path KittyClaw.Core.Tests/bin/jev-postrun-artifacts --filter FullyQualifiedName~JevLiveAutomaticRoutingJourneyTests
+Remove-Item Env:KITTYCLAW_JEV_LIVE_E2E
+```

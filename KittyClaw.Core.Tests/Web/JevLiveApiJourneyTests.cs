@@ -181,9 +181,9 @@ public sealed class JevLiveApiJourneyTests(ITestOutputHelper output)
         }
     }
 
-    private sealed class Factory : WebApplicationFactory<CreateProjectRequest>
+    internal sealed class Factory(int callBudget = 3) : WebApplicationFactory<CreateProjectRequest>
     {
-        public LiveHandler Handler { get; } = new();
+        public LiveHandler Handler { get; } = new(callBudget);
         public FixtureDispatcher Dispatcher { get; } = new();
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -199,14 +199,15 @@ public sealed class JevLiveApiJourneyTests(ITestOutputHelper output)
     }
 
     // Real transport with a strict call budget. Never logs credentials or request/response bodies.
-    private sealed class LiveHandler : DelegatingHandler
+    internal sealed class LiveHandler : DelegatingHandler
     {
         public int Count;
         public bool SawOwnerFeedback;
-        public LiveHandler() : base(new HttpClientHandler { AllowAutoRedirect = false }) { }
+        private readonly int _callBudget;
+        public LiveHandler(int callBudget) : base(new HttpClientHandler { AllowAutoRedirect = false }) { _callBudget = callBudget; }
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
-            if (Interlocked.Increment(ref Count) > 3)
+            if (Interlocked.Increment(ref Count) > _callBudget)
                 throw new InvalidOperationException("Live JEV test call budget exceeded.");
             Assert.Equal("https://api.typesafe.ai/v1/systemone", request.RequestUri!.AbsoluteUri);
             using var payload = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct));
@@ -222,7 +223,7 @@ public sealed class JevLiveApiJourneyTests(ITestOutputHelper output)
         }
     }
 
-    private sealed class FixtureDispatcher : IColumnAgentDispatcher
+    internal sealed class FixtureDispatcher : IColumnAgentDispatcher
     {
         public int Count;
         public string DataDir = null!;
