@@ -54,6 +54,26 @@ public sealed class ProjectWorktreeSettingsHttpTests : IClassFixture<ProjectWork
     }
 
     [Fact]
+    public async Task Patch_ExposesAndUpdatesAgentPermissionMode()
+    {
+        var create = await _client.PostAsJsonAsync("/api/projects",
+            new CreateProjectRequest("api-agent-permissions-" + Guid.NewGuid().ToString("N")));
+        create.EnsureSuccessStatusCode();
+        var created = await create.Content.ReadFromJsonAsync<JsonElement>();
+        var slug = created.GetProperty("slug").GetString();
+        Assert.Equal("Observe", created.GetProperty("boundaryEnforcement").GetString());
+
+        var patch = await _client.PatchAsJsonAsync($"/api/projects/{slug}",
+            new { boundaryEnforcement = "Enforce" });
+
+        patch.EnsureSuccessStatusCode();
+        var updated = await patch.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Enforce", updated.GetProperty("boundaryEnforcement").GetString());
+        var fetched = await _client.GetFromJsonAsync<JsonElement>($"/api/projects/{slug}");
+        Assert.Equal("Enforce", fetched.GetProperty("boundaryEnforcement").GetString());
+    }
+
+    [Fact]
     public async Task Patch_InvalidRepositoryReturnsBadRequest()
     {
         var create = await _client.PostAsJsonAsync("/api/projects", new CreateProjectRequest("api-invalid-worktrees"));

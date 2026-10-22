@@ -215,7 +215,7 @@ public class GrokSupportTests
 
     [Fact]
     public void FallbackCatalog_ContainsCurrentAndPreviousGrokBuildModels() =>
-        Assert.Equal(new[] { "grok-4.6", "grok-4.5" }, GrokCli.FallbackModels);
+        Assert.Equal(new[] { "grok-4.7", "grok-4.6", "grok-4.5" }, GrokCli.FallbackModels);
 
     [Fact]
     public void ParseModelList_EmptyOrGarbage_YieldsNothing()
@@ -495,6 +495,7 @@ public class GrokSupportTests
 
         Assert.Contains(run.SnapshotBuffer(), e => e.Kind == "fallback");
         Assert.Equal("grok-4.5", run.Model);
+        Assert.Equal(CliProvider.Grok, run.Provider);
         Assert.Equal(AgentRunStatus.Completed, run.Status);
 
         var claudeSession = sessions.GetSessionId(workspace, primaryKey, ticketId);

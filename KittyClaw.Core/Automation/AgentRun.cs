@@ -20,6 +20,7 @@ public sealed class AgentRun
     public string? WorkingDirectory { get; set; }
     public string? SessionId { get; set; }
     public string? Model { get; set; }
+    public CliProvider? Provider { get; set; }
     public string? ChatTarget { get; set; }
     /// <summary>Image references accepted for this run. Retained for QA observability after best-effort file cleanup.</summary>
     public IReadOnlyList<string> InputImagePaths { get; init; } = [];
@@ -127,6 +128,8 @@ public sealed class AgentRun
     }
 
     private readonly List<string> _pendingSteerMessages = new();
+    private readonly List<string> _temporarySteerImagePaths = new();
+    private bool _temporarySteerImageCleanupStarted;
     public IReadOnlyList<string> PendingSteerMessages => _pendingSteerMessages;
 
     // Grok (and any token-streamed provider) assembles assistant text across many small
@@ -162,6 +165,28 @@ public sealed class AgentRun
         {
             var result = _pendingSteerMessages.ToList();
             _pendingSteerMessages.Clear();
+            return result;
+        }
+    }
+
+    public bool TryAddTemporarySteerImagePaths(IEnumerable<string> paths)
+    {
+        lock (_logLock)
+        {
+            if (_temporarySteerImageCleanupStarted || Status != AgentRunStatus.Running)
+                return false;
+            _temporarySteerImagePaths.AddRange(paths);
+            return true;
+        }
+    }
+
+    public IReadOnlyList<string> DrainTemporarySteerImagePaths()
+    {
+        lock (_logLock)
+        {
+            _temporarySteerImageCleanupStarted = true;
+            var result = _temporarySteerImagePaths.ToList();
+            _temporarySteerImagePaths.Clear();
             return result;
         }
     }
@@ -204,6 +229,7 @@ public sealed class AgentRunSnapshot
     public DateTime? EndedAt { get; set; }
     public string? SessionId { get; set; }
     public string? Model { get; set; }
+    public CliProvider? Provider { get; set; }
     public string? ChatTarget { get; set; }
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public AgentRunStatus Status { get; set; }
@@ -258,6 +284,7 @@ public sealed class RunLogStore
             EndedAt = run.EndedAt,
             SessionId = run.SessionId,
             Model = run.Model,
+            Provider = run.Provider,
             ChatTarget = run.ChatTarget,
             Status = run.Status,
             ExitCode = run.ExitCode,
@@ -308,6 +335,7 @@ public sealed class RunLogStore
             };
             run.SessionId = snapshot.SessionId;
             run.Model = snapshot.Model;
+            run.Provider = snapshot.Provider;
             run.ChatTarget = snapshot.ChatTarget;
             run.Status = snapshot.Status;
             run.EndedAt = snapshot.EndedAt;
@@ -360,6 +388,7 @@ public sealed class RunLogStore
         };
         run.SessionId = snapshot.SessionId;
         run.Model = snapshot.Model;
+        run.Provider = snapshot.Provider;
         run.ChatTarget = snapshot.ChatTarget;
         run.Status = snapshot.Status;
         run.EndedAt = snapshot.EndedAt;

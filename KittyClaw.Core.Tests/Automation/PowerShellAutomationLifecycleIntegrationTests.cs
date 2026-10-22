@@ -72,6 +72,9 @@ public sealed class PowerShellAutomationLifecycleIntegrationTests : IDisposable
         var integrated = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
 
         Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        // Integration only advances the durable tip; the local checkout catches up on sync.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None))!.SyncStatus);
         Assert.Equal("durable", (await File.ReadAllTextAsync(
             Path.Combine(fixture.Repository, "generated", "result.txt"))).Trim());
         Assert.True(Directory.Exists(request.WorktreePath));
@@ -106,7 +109,7 @@ public sealed class PowerShellAutomationLifecycleIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task PowerShellWorkspacePreparationFailure_IsPersistedOnTheRun()
+    public async Task PowerShellWorkspacePreparation_RecoversSafeInterruptedChangesAndContinues()
     {
         var fixture = await CreateFixtureAsync();
         await fixture.Executor.ExecuteAutomationAsync(fixture.Runtime,
@@ -120,19 +123,31 @@ public sealed class PowerShellAutomationLifecycleIntegrationTests : IDisposable
 
         await fixture.Executor.ExecuteAutomationAsync(fixture.Runtime,
             Automation("Write-Output second"), new TriggerFiring(null, null, null), CancellationToken.None);
-        AgentRun? failed = null;
+        AgentRun? second = null;
         for (var i = 0; i < 200; i++)
         {
-            failed = fixture.Runs.AllForProject(fixture.Slug)
+            second = fixture.Runs.AllForProject(fixture.Slug)
                 .FirstOrDefault(run => !existingIds.Contains(run.RunId));
-            if (failed is not null && failed.Status != AgentRunStatus.Running) break;
+            if (second is not null && second.Status != AgentRunStatus.Running) break;
             await Task.Delay(50);
         }
 
-        Assert.NotNull(failed);
-        Assert.Equal(AgentRunStatus.Failed, failed.Status);
-        var error = Assert.Single(failed.SnapshotBuffer(), e => e.Kind == "error");
-        Assert.Contains("uncommitted changes", error.Text, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(second);
+        Assert.Equal(AgentRunStatus.Completed, second.Status);
+        var pending = await WaitForMergeRequestAsync(fixture.Queue, fixture.Slug,
+            WorktreeMergeStatus.Pending);
+        Assert.True(File.Exists(Path.Combine(
+            pending.WorktreePath, ".agents", "uncommitted.txt")));
+
+        var integrated = await fixture.Queue.ProcessNextAsync(fixture.Slug, CancellationToken.None);
+
+        Assert.Equal(WorktreeMergeStatus.Completed, integrated!.Status);
+        // Integration only advances the durable tip; the local checkout catches up on sync.
+        Assert.Equal(LocalCheckoutSyncStatus.Completed,
+            (await fixture.Queue.SynchronizeNextAsync(fixture.Slug, CancellationToken.None))!.SyncStatus);
+        Assert.Equal("dirty", await File.ReadAllTextAsync(
+            Path.Combine(fixture.Repository, ".agents", "uncommitted.txt")));
+        Assert.Empty(Git(pending.WorktreePath, "status", "--porcelain"));
         Assert.Equal(AgentRunStatus.Completed, first.Status);
     }
 

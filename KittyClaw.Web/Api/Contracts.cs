@@ -1,5 +1,7 @@
 ﻿using KittyClaw.Core.Models;
 
+using KittyClaw.Core.Automation;
+
 namespace KittyClaw.Web.Api;
 
 public record CreateProjectRequest(string Name);
@@ -70,10 +72,11 @@ public record UpdateProjectRequest(
     bool UpdateFallbackModel = false,
     bool? WorktreesEnabled = null,
     string? IntegrationBranch = null,
-    string? RepositoryPath = null);
+    string? RepositoryPath = null,
+    BoundaryEnforcementMode? BoundaryEnforcement = null);
 public record SaveLocalModelConfigRequest(string? LocalModelBaseUrl = null, string? LocalModelName = null);
 public record SaveRtkConfigRequest(bool Enabled);
-public record SteerRunRequest(string Text);
+public record SteerRunRequest(string Text, IReadOnlyList<ChatImageDto>? Images = null);
 public record BrowseFolderRequest(string? InitialPath = null);
 public record ChatImageDto(string DataUrl, string Mime, string Name, long SizeBytes);
 public record ChatStartRequest(string Message, string Target = "owner-chat", bool ForceNew = false, int? TicketId = null, IReadOnlyList<ChatImageDto>? Images = null, string? Model = null, bool ResumeInterrupted = false);

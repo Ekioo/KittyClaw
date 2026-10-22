@@ -240,6 +240,7 @@
     [Parameter] public string ProjectSlug { get; set; } = "";
     [Parameter] public bool IsProjectOnboarding { get; set; }
     [Parameter] public bool WorkspaceWasEmpty { get; set; }
+    [Parameter] public string InitialPurpose { get; set; } = "";
     [Parameter] public EventCallback OnClose { get; set; }
 
     private enum WizardStep { Questions, Intro, Pipelines, Pipeline, Review }
@@ -303,7 +304,8 @@
 
     protected override void OnInitialized()
     {
-        if (IsProjectOnboarding && WorkspaceWasEmpty)
+        _projectPurpose = InitialPurpose;
+        if (IsProjectOnboarding && (WorkspaceWasEmpty || !string.IsNullOrWhiteSpace(InitialPurpose)))
             _step = WizardStep.Questions;
     }
 

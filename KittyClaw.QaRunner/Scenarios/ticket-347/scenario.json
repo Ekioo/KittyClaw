@@ -1,0 +1,36 @@
+{
+  "setup": [
+    { "type": "createProject", "name": "qa-ticket-347" },
+    { "type": "createGitRepository", "name": "repositoryPath", "value": "integration" },
+    {
+      "type": "api",
+      "method": "PATCH",
+      "path": "/api/projects/qa-ticket-347",
+      "body": { "repositoryPath": "{repositoryPath}", "integrationBranch": "integration", "worktreesEnabled": true }
+    }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-ticket-347" },
+    { "type": "wait", "ms": 1000 },
+    { "type": "click", "selector": ".new-instruction-btn" },
+    { "type": "wait", "ms": 1500 },
+    { "type": "click", "selector": ".chat-target-item.claude-direct" },
+    { "type": "wait", "ms": 500 },
+    { "type": "fill", "selector": ".chat-input-area textarea", "value": "Bonjour, réponds-moi" },
+    { "type": "click", "selector": ".chat-input-area > button" },
+    { "type": "wait", "ms": 4000 },
+    { "type": "assertVisible", "selector": ".chat-message-user .chat-bubble" },
+    { "type": "assertText", "selector": ".chat-message-user .chat-bubble", "expected": "Bonjour, réponds-moi" },
+    { "type": "assertVisible", "selector": ".chat-message-assistant .chat-bubble" },
+    { "type": "assertText", "selector": ".chat-message-assistant .chat-bubble", "expected": "Hello from mock claude. Scenario=default." },
+    { "type": "assertCount", "selector": ".chat-message-error", "expected": "0" },
+    { "type": "assertCount", "selector": ".chat-message-diagnostic", "expected": "0" },
+    {
+      "type": "screenshot",
+      "name": "ticket-347-instruction-streams-without-run-not-found",
+      "selector": ".chat-drawer",
+      "description": "Nouvelle Instruction : le message est envoyé, la réponse de l’agent est diffusée dans le tiroir, aucun message « Run not found » ni erreur."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

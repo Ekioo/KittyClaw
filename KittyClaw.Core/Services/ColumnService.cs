@@ -1,11 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 using KittyClaw.Core.Data;
 using KittyClaw.Core.Models;
+using System.Collections.Concurrent;
 
 namespace KittyClaw.Core.Services;
 
 public class ColumnService
 {
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> InitializationGates =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly ProjectService _projectService;
     private readonly ColumnProcessorService? _processorService;
     private readonly ColumnScheduledTaskService? _scheduledTaskService;
@@ -31,6 +34,11 @@ public class ColumnService
 
     internal static async Task EnsureBoardColumnsTableAsync(TodoDbContext db)
     {
+        var dataSource = db.Database.GetDbConnection().DataSource;
+        var gate = InitializationGates.GetOrAdd(dataSource, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync();
+        try
+        {
         // Only the DDL is memoized: the seed/back-fill below is data-dependent (deleting the
         // Scheduled column must back-fill it on the next read) and must run on every call.
         await MigrationGate.RunOnceAsync(db, "board-columns-table", static d =>
@@ -106,6 +114,11 @@ public class ColumnService
             var legacyNames = new[] { "Backlog", "Todo", "InProgress", "Blocked", "Review", "Done" };
             if (legacyNames.All(name => names.Contains(name, StringComparer.OrdinalIgnoreCase)))
                 await EnsureScheduledColumnAsync(db, defaultPipeline.Id);
+        }
+        }
+        finally
+        {
+            gate.Release();
         }
     }
 

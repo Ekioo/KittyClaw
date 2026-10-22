@@ -1,0 +1,51 @@
+{
+  "environment": {
+    "KITTYCLAW_ENABLE_QA_ENDPOINTS": "1"
+  },
+  "setup": [
+    { "type": "createGitRepository", "name": "repositoryPath", "value": "integration" },
+    { "type": "commitGitFile", "workspacePath": "{repositoryPath}", "target": "integration", "name": "shared.txt", "text": "base value\n" },
+    { "type": "createProject", "name": "qa-ticket-376" },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-ticket-376/qa/language", "body": { "language": "fr" } },
+    { "type": "api", "method": "PATCH", "path": "/api/projects/qa-ticket-376", "body": { "worktreesEnabled": true, "integrationBranch": "integration", "repositoryPath": "{repositoryPath}" } },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-ticket-376/tickets", "body": { "title": "Synchronisation terminée", "createdBy": "qa-runner", "status": "Backlog" }, "extract": { "currentId": "id" } },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-ticket-376/tickets", "body": { "title": "Synchronisation en retard", "createdBy": "qa-runner", "status": "Backlog" }, "extract": { "lagId": "id" } },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-ticket-376/tickets", "body": { "title": "Conflit de synchronisation", "createdBy": "qa-runner", "status": "Backlog" }, "extract": { "conflictId": "id" } },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-ticket-376/worktree-merges", "body": { "ticketId": "{currentId}" }, "extract": { "currentRequestId": "id" } },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-ticket-376/worktree-merges", "body": { "ticketId": "{lagId}" }, "extract": { "lagRequestId": "id" } },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-ticket-376/worktree-merges", "body": { "ticketId": "{conflictId}" }, "extract": { "conflictRequestId": "id" } },
+    { "type": "commitGitFile", "workspacePath": "{repositoryPath}", "target": "ticket/{currentId}", "name": "current.txt", "text": "current\n" },
+    { "type": "commitGitFile", "workspacePath": "{repositoryPath}", "target": "ticket/{lagId}", "name": "lag.txt", "text": "lag\n" },
+    { "type": "commitGitFile", "workspacePath": "{repositoryPath}", "target": "ticket/{conflictId}", "name": "shared.txt", "text": "integrated value\n" }
+  ],
+  "actions": [
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-ticket-376/worktree-merges/process-next" },
+    { "type": "wait", "ms": 7000 },
+    { "type": "navigate", "url": "/board/qa-ticket-376/ticket/{currentId}" },
+    { "type": "assertText", "selector": "[data-testid='integration-status'] .worktree-state", "expected": "Intégré" },
+    { "type": "assertText", "selector": "[data-testid='synchronization-status'] .worktree-state", "expected": "À jour" },
+    { "type": "wait", "ms": 500 },
+    { "type": "screenshot", "name": "ticket-376-synchronization-current", "selector": "[data-testid='ticket-worktree-summary']", "description": "États distincts : intégration terminée et dossier local à jour." },
+
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-ticket-376/worktree-merges/process-next" },
+    { "type": "navigate", "url": "/board/qa-ticket-376/ticket/{lagId}" },
+    { "type": "assertText", "selector": "[data-testid='integration-status'] .worktree-state", "expected": "Intégré" },
+    { "type": "assertVisible", "selector": "[data-testid='synchronization-lag']" },
+    { "type": "wait", "ms": 500 },
+    { "type": "screenshot", "name": "ticket-376-synchronization-lag", "selector": "[data-testid='ticket-worktree-summary']", "description": "Le commit est intégré tandis que la synchronisation locale reste en attente." },
+    { "type": "wait", "ms": 7000 },
+
+    { "type": "writeWorkspaceFile", "workspacePath": "{repositoryPath}", "name": "shared.txt", "text": "local value\n" },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-ticket-376/worktree-merges/process-next" },
+    { "type": "wait", "ms": 7000 },
+    { "type": "api", "method": "POST", "path": "/api/projects/qa-ticket-376/qa/worktree-merges/{conflictRequestId}/synchronization", "body": { "status": "Conflict", "error": "Preserved local work must be reconciled.", "conflictFiles": "shared.txt" } },
+    { "type": "navigate", "url": "/board/qa-ticket-376/ticket/{conflictId}" },
+    { "type": "assertText", "selector": "[data-testid='integration-status'] .worktree-state", "expected": "Intégré" },
+    { "type": "assertText", "selector": "[data-testid='synchronization-status'] .worktree-state", "expected": "Conflit" },
+    { "type": "assertVisible", "selector": "[data-testid='synchronization-status'] .worktree-conflicts" },
+    { "type": "assertVisible", "selector": "[data-testid='retry-synchronization']" },
+    { "type": "wait", "ms": 500 },
+    { "type": "screenshot", "name": "ticket-376-synchronization-conflict", "selector": "[data-testid='ticket-worktree-summary']", "description": "Conflit local préservé avec fichiers concernés et action de reprise." }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

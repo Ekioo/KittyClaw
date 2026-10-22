@@ -12,14 +12,14 @@ public class ConcurrencyLockReaperTests
     private static ConcurrencyLockReaper MakeReaper(AgentRunRegistry runs) =>
         new(runs, NullLogger<ConcurrencyLockReaper>.Instance);
 
-    private static AgentRun MakeRun(int? lockTimeoutMinutes) => new()
+    private static AgentRun MakeRun(int? lockTimeoutMinutes, string concurrencyGroup = "imap-poller") => new()
     {
         RunId = Guid.NewGuid().ToString("N"),
         ProjectSlug = "p",
         TicketId = null,
         AgentName = "poller",
         SkillFile = "poller/SKILL.md",
-        ConcurrencyGroup = "imap-poller",
+        ConcurrencyGroup = concurrencyGroup,
         StartedAt = DateTime.UtcNow,
         LockTimeoutMinutes = lockTimeoutMinutes,
     };
@@ -66,6 +66,35 @@ public class ConcurrencyLockReaperTests
         var run = MakeRun(lockTimeoutMinutes: null);
         runs.Register(run);
         run.Push(new StreamEvent(DateTime.UtcNow.AddHours(-5), "assistant", "very stale but opted out"));
+
+        var reaped = MakeReaper(runs).Reap(DateTime.UtcNow);
+
+        Assert.Empty(reaped);
+        Assert.Equal(AgentRunStatus.Running, run.Status);
+    }
+
+    [Fact]
+    public void Reap_InteractiveChatWithoutExplicitTimeout_ReapsAfterDefaultTimeout()
+    {
+        var runs = new AgentRunRegistry();
+        var run = MakeRun(lockTimeoutMinutes: null, concurrencyGroup: "chat:p:lain");
+        runs.Register(run);
+        run.Push(new StreamEvent(DateTime.UtcNow.AddMinutes(-31), "assistant", "stale chat"));
+
+        var reaped = MakeReaper(runs).Reap(DateTime.UtcNow);
+
+        Assert.Single(reaped);
+        Assert.Equal(AgentRunStatus.Stopped, run.Status);
+        Assert.False(runs.HasActiveInGroup("p", "chat:p:lain"));
+    }
+
+    [Fact]
+    public void Reap_InteractiveChatWithoutExplicitTimeout_KeepsRecentRun()
+    {
+        var runs = new AgentRunRegistry();
+        var run = MakeRun(lockTimeoutMinutes: null, concurrencyGroup: "chat:p:lain");
+        runs.Register(run);
+        run.Push(new StreamEvent(DateTime.UtcNow.AddMinutes(-5), "assistant", "recent activity"));
 
         var reaped = MakeReaper(runs).Reap(DateTime.UtcNow);
 

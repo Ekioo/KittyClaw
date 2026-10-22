@@ -50,5 +50,8 @@
   "TileConfigModelHint": "Für Projektstandards leer lassen",
   "TileConfigDetectedOutput": "Ausgabedatei (erkannt)",
   "TileConfigRevise": "Überarbeiten",
-  "TileConfigAccept": "Akzeptieren"
+  "TileConfigAccept": "Akzeptieren",
+  "GuidanceStepReady": "Schritt 1 von 3 · Bereit", "GuidanceStepRunning": "Schritt 2 von 3 · Läuft", "GuidanceStepRecoverable": "Aktion erforderlich · Fortsetzen möglich", "GuidanceStepCompleted": "Schritt 3 von 3 · Ergebnis bereit",
+  "GuidanceReadyTitle": "Ihr erstes Ergebnis beginnt hier", "GuidanceReadyMessage": "Ihr Board ist bereit. Starten Sie das erste Ticket; KittyClaw wählt automatisch einen verfügbaren Anbieter.", "GuidanceRunningTitle": "Ihr erstes Ergebnis wird vorbereitet", "GuidanceRunningMessage": "Der erste Lauf bearbeitet das Ticket, ohne dass Modelle oder Automatisierungen konfiguriert werden müssen.", "GuidanceRecoverableTitle": "Der Lauf muss erneut versucht werden", "GuidanceRecoverableMessage": "Der ausgewählte Anbieter konnte nicht abschließen. Kehren Sie zum Board zurück und versuchen Sie es erneut.", "GuidanceRecoverableHint": "Ticket und Fortschritt bleiben erhalten.", "GuidanceCompletedTitle": "Ihr erstes Ergebnis ist bereit", "GuidanceCompletedMessage": "Prüfen Sie das Ergebnis und genehmigen Sie es oder fordern Sie eine Änderung an.",
+  "GuidanceStart": "Im Board starten", "GuidanceFollowRun": "Lauf verfolgen", "GuidanceRetry": "Im Board erneut versuchen", "GuidanceDecide": "Prüfen und entscheiden", "GuidanceTickets": "Tickets", "GuidanceRuns": "Läufe", "GuidanceResults": "Ergebnisse"
 }

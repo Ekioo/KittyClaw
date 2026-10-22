@@ -31,7 +31,7 @@ public static class GrokCli
     // Shown when `grok models` cannot be run or its output yields nothing parseable.
     // Keep the fallback aligned with recent Grok Build releases. The CLI's own discovery
     // takes precedence whenever it works, so older or account-specific ids remain available.
-    internal static readonly IReadOnlyList<string> FallbackModels = new[] { "grok-4.6", "grok-4.5" };
+    internal static readonly IReadOnlyList<string> FallbackModels = new[] { "grok-4.7", "grok-4.6", "grok-4.5" };
 
     private static Task<IReadOnlyList<string>>? _modelsTask;
 

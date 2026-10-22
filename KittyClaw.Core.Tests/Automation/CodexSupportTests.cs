@@ -61,11 +61,13 @@ public sealed class CodexSupportTests
     {
         Assert.Equal(
         [
+            "codex:gpt-6-astra",
+            "codex:gpt-6.1-sol",
+            "codex:gpt-6-sol",
+            "codex:gpt-6-luna",
             "codex:gpt-5.6-sol",
             "codex:gpt-5.6-terra",
             "codex:gpt-5.6-luna",
-            "codex:gpt-5.5",
-            "codex:gpt-5.4",
         ], CodexCli.Models);
     }
 

@@ -3,6 +3,7 @@ using KittyClaw.Core.Automation;
 using KittyClaw.Core.Automation.Triggers;
 using KittyClaw.Core.Services;
 using KittyClaw.Core.Tests.Helpers;
+using KittyClaw.Core.Tests.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using AutomationRule = KittyClaw.Core.Automation.Automation;
 
@@ -193,6 +194,71 @@ public class ConsolidateMemoryRoutingTests
         Assert.Equal("programmer@kittyclaw.local", RunGit(workspace, "log -1 --pretty=%ae"));
     }
 
+    [Fact]
+    public async Task PipelineConsolidation_WithWorktrees_QueuesMemoryWithoutDirtyingPrimaryCheckout()
+    {
+        using var tmp = new TempDir();
+        var repository = ProjectWorktreeSettingsTests.CreateRepository(tmp.Path, "integration");
+        TestSkillBuilder.Create(repository, "programmer", "default");
+        var agents = Path.Combine(repository, ".agents");
+        var memory = Path.Combine(agents, "programmer", "memory");
+        Directory.CreateDirectory(memory);
+        await File.WriteAllTextAsync(
+            Path.Combine(agents, "memory-consolidation.md"),
+            "# Consolidate {agentSlug}\n\n<!--scenario:memory-update-->");
+        await File.WriteAllTextAsync(Path.Combine(memory, "MEMORY.md"), "# Memory\n");
+        RunGit(repository, "add .agents");
+        RunGit(repository, "commit -m baseline-memory");
+
+        var projects = new ProjectService(Path.Combine(tmp.Path, "data"));
+        var project = (await projects.CreateProjectAsync("pipeline memory routing"))!;
+        await projects.UpdateProjectAsync(project.Slug, repository);
+        await projects.UpdateProjectAsync(project.Slug, null, worktreesEnabled: true,
+            integrationBranch: "integration");
+        var members = new MemberService(projects);
+        await members.CreateMemberAsync(project.Slug, "programmer");
+        var tickets = new TicketService(projects, members);
+        var sessions = new SessionRegistry(tmp.Path);
+        var runs = new AgentRunRegistry();
+        var cost = new CostTracker();
+        var runner = new AgentRunner(sessions, runs, new RunConcurrencyGate(4),
+            NullLogger<AgentRunner>.Instance);
+        var worktrees = new TicketWorktreeService(projects, tickets);
+        var queue = new WorktreeMergeQueueService(projects, worktrees);
+        var router = new DurableWriteRouter(projects, worktrees, queue);
+        var executor = new ActionExecutor(
+            tickets, members, new LabelService(projects), sessions, runs, runner, cost,
+            new LocalizationService(new AppSettingsService(tmp.Path)), projects,
+            new RunStateManager(runs, cost, tickets, NullLogger.Instance),
+            NullLogger.Instance, durableWrites: router);
+        var runtime = new ProjectRuntime(project.Slug)
+        {
+            Workspace = repository,
+            Config = new AutomationConfig { Automations = [] },
+        };
+        var primaryBefore = RunGit(repository, "rev-parse HEAD") + "\n" +
+            RunGit(repository, "status --porcelain --untracked-files=all");
+
+        await executor.ExecuteAutomationAsync(runtime, new AutomationRule
+        {
+            Id = "routed-memory",
+            Enabled = true,
+            Trigger = new StatusChangeTriggerSpec { From = "Todo", To = "Done" },
+            Actions = [new ConsolidateAgentMemoryActionSpec { Agent = "programmer", MaxTurns = 1 }],
+        }, new TriggerFiring(null, null, "Done"), CancellationToken.None);
+
+        var consolidation = await WaitForFinishedConsolidationAsync(runs, project.Slug);
+        var request = await WaitForPendingMergeAsync(queue, project.Slug);
+        var primaryAfter = RunGit(repository, "rev-parse HEAD") + "\n" +
+            RunGit(repository, "status --porcelain --untracked-files=all");
+
+        Assert.Equal(AgentRunStatus.Completed, consolidation.Status);
+        Assert.Equal(primaryBefore, primaryAfter);
+        Assert.True(File.Exists(Path.Combine(
+            request.WorktreePath, ".agents", "programmer", "memory", "routing.md")));
+        Assert.Contains("chore(memory): programmer", RunGit(request.WorktreePath, "log -1 --pretty=%s"));
+    }
+
     private static async Task RunConsolidationAsync(Harness harness, string? model)
     {
         var automation = new AutomationRule
@@ -218,6 +284,40 @@ public class ConsolidateMemoryRoutingTests
             await Task.Delay(50, cts.Token);
         }
         throw new TimeoutException("Consolidation run did not finish.");
+    }
+
+    private static async Task<AgentRun> WaitForFinishedConsolidationAsync(
+        AgentRunRegistry runs, string projectSlug)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        while (!cts.IsCancellationRequested)
+        {
+            var run = runs.AllForProject(projectSlug)
+                .FirstOrDefault(candidate => candidate.ConcurrencyGroup == "consolidate-programmer" &&
+                    candidate.Status != AgentRunStatus.Running);
+            if (run is not null) return run;
+            await Task.Delay(50, cts.Token);
+        }
+        throw new TimeoutException("Routed consolidation run did not finish.");
+    }
+
+    private static async Task<WorktreeMergeRequest> WaitForPendingMergeAsync(
+        WorktreeMergeQueueService queue, string projectSlug)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        try
+        {
+            while (!cts.IsCancellationRequested)
+            {
+                var request = (await queue.ListAsync(projectSlug)).SingleOrDefault();
+                if (request?.Status == WorktreeMergeStatus.Pending) return request;
+                await Task.Delay(50, cts.Token);
+            }
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested) { }
+        var current = (await queue.ListAsync(projectSlug)).SingleOrDefault();
+        throw new TimeoutException(
+            $"Memory merge request did not become pending; current={current?.Status}, error={current?.Error}.");
     }
 
     private static async Task<Harness> BuildAsync(string dataDir, string slug)

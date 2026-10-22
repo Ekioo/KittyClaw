@@ -20,5 +20,21 @@
   "ApprovalAuditHistory": "審査履歴 ({0})",
   "ApprovalDecisionAudit": "{0} によって · {1} · 範囲 {2} · 切替 {3}",
   "ApprovalReceiptAudit": "· {0} · {1} · 査証",
-  "ApprovalUntil": "まで {0}"
+  "ApprovalUntil": "{0} まで",
+  "AgentPermissionsTitle": "エージェントの権限", "AgentPermissionsNav": "権限", "AgentPermissionsOpen": "権限を開く", "AgentPermissionsConfigure": "保護を設定",
+  "AgentPermissionsSettingsHint": "KittyClaw が機密性の高い操作を監視するだけにするか、実行前に承認を必須にするかを選択します。", "AgentPermissionsMode": "保護レベル", "AgentPermissionsObserve": "ブロックせず監視", "AgentPermissionsEnforce": "承認を必須にする",
+  "AgentPermissionsObserveExplanation": "機密性の高い操作は診断用に記録されますが、一時停止されません。", "AgentPermissionsEnforceExplanation": "Claude Code は保護対象の操作前に一時停止し、判断を待ちます。非対応プロバイダーの実行は開始前にブロックされます。",
+  "AgentPermissionsCompatibleProvider": "有効な保護に対応", "AgentPermissionsOtherProviders": "Codex、Grok、Mistral、DeepSeek は監視できますが、操作前の信頼できる停止点を提供していません。",
+  "AgentPermissionsProtectionActive": "保護は有効です", "AgentPermissionsProtectionActiveHint": "Claude Code が公開、破壊的操作、シークレットへのアクセス、新しいネットワーク接続、リモート変更を行う前に KittyClaw が許可を求めます。",
+  "AgentPermissionsObservationOnly": "監視のみ", "AgentPermissionsObservationOnlyHint": "判断を待つ実行はありません。機密性の高い操作を実行前に止めるには、プロジェクト設定で保護を有効にしてください。",
+  "AgentPermissionsSummary": "権限の概要", "AgentPermissionsPending": "確認待ち", "AgentPermissionsHistory": "履歴", "AgentPermissionsNeedsYou": "判断が必要です", "AgentPermissionsPendingTitle": "確認するリクエスト", "AgentPermissionsPendingHint": "操作を許可または拒否するまで、エージェントは一時停止したままです。",
+  "AgentPermissionsNothingPending": "保留中の判断はありません", "AgentPermissionsNothingPendingHint": "エージェントは通常どおり続行できます。", "AgentPermissionsTraceability": "追跡可能性", "AgentPermissionsHistoryTitle": "履歴", "AgentPermissionsHistoryHint": "機密性の高い引数を平文で保存せず、判断と結果を整合性フィンガープリント付きで保持します。", "AgentPermissionsNoHistory": "このプロジェクトには過去の判断がありません。",
+  "AgentPermissionsTechnicalDetails": "技術的な詳細", "AgentPermissionsDecisionFailed": "判断を保存できませんでした: {0}", "AgentPermissionsPendingCount": "{0} 件の権限リクエストが保留中",
+  "ApprovalAllowForTicketHint": "このチケットで、同じ種類かつ同じリソースへの一致する操作を最大24時間許可します。", "ApprovalOperation": "コマンドまたはツール", "ApprovalEvidence": "引数のフィンガープリント", "ApprovalScopeTicket": "このチケット",
+  "ApprovalStatepending": "確認待ち", "ApprovalStateallowed": "許可済み", "ApprovalStateconsumed": "使用済み", "ApprovalStatedenied": "拒否済み", "ApprovalStateexpired": "期限切れ",
+  "ApprovalActionPushOrPullRequest": "リモートリポジトリを変更", "ApprovalActionPublishOrDeploy": "公開またはデプロイ", "ApprovalActionSecretAccess": "シークレットにアクセス", "ApprovalActionDestructiveOperation": "破壊的操作を実行", "ApprovalActionNewNetworkDestination": "新しい接続先にアクセス",
+  "ApprovalSummaryPushOrPullRequest": "エージェントがリモートリポジトリを変更しようとしています: {0}。", "ApprovalSummaryPublishOrDeploy": "エージェントが次へ公開またはデプロイしようとしています: {0}。", "ApprovalSummarySecretAccess": "エージェントがシークレットリソースにアクセスしようとしています: {0}。", "ApprovalSummaryDestructiveOperation": "エージェントが次に対して破壊的操作を実行しようとしています: {0}。", "ApprovalSummaryNewNetworkDestination": "エージェントが未登録のネットワーク接続先にアクセスしようとしています: {0}。",
+  "ApprovalDecisionAllowOnce": "一回のみ許可", "ApprovalDecisionAllowForTicket": "チケット単位の許可", "ApprovalDecisionDeny": "拒否",
+  "ApprovalReceiptAllowed": "許可", "ApprovalReceiptDenied": "拒否", "ApprovalReceiptExpired": "期限切れ", "ApprovalReceiptFailedClosed": "安全のためブロック", "ApprovalReceiptEffectSucceeded": "操作成功", "ApprovalReceiptEffectFailed": "操作失敗", "ApprovalReceiptUnknown": "結果不明",
+  "AgentPermissionsLoadFailed": "エージェント権限を読み込めませんでした: {0}"
 }

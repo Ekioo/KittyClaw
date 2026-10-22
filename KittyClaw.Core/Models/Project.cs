@@ -1,6 +1,7 @@
 namespace KittyClaw.Core.Models;
 
 using System.ComponentModel.DataAnnotations.Schema;
+using KittyClaw.Core.Automation;
 
 public class Project
 {
@@ -15,6 +16,7 @@ public class Project
     public string? LocalModelBaseUrl { get; set; }
     public string? LocalModelName { get; set; }
     public bool RtkEnabled { get; set; }
+    public BoundaryEnforcementMode BoundaryEnforcement { get; set; } = BoundaryEnforcementMode.Observe;
     public bool WorktreesEnabled { get; set; }
     public string? IntegrationBranch { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

@@ -5,6 +5,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using KittyClaw.Core.Data;
 using KittyClaw.Core.Models;
+using KittyClaw.Core.Automation;
 
 namespace KittyClaw.Core.Services;
 
@@ -55,6 +56,8 @@ public partial class ProjectService
             try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN LocalModelName TEXT NULL"); }
             catch { /* column already exists */ }
             try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN RtkEnabled INTEGER NOT NULL DEFAULT 0"); }
+            catch { /* column already exists */ }
+            try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN BoundaryEnforcement INTEGER NOT NULL DEFAULT 0"); }
             catch { /* column already exists */ }
             try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN WorktreesEnabled INTEGER NOT NULL DEFAULT 0"); }
             catch { /* column already exists */ }
@@ -181,7 +184,8 @@ public partial class ProjectService
         bool updateFallback = false,
         bool? worktreesEnabled = null,
         string? integrationBranch = null,
-        string? repositoryPath = null)
+        string? repositoryPath = null,
+        BoundaryEnforcementMode? boundaryEnforcement = null)
     {
         if (!string.IsNullOrWhiteSpace(workspacePath))
             ValidateWorkspacePath(workspacePath.Trim());
@@ -216,6 +220,8 @@ public partial class ProjectService
             project.IntegrationBranch = string.IsNullOrWhiteSpace(normalizedBranch) ? null : normalizedBranch;
         if (worktreesEnabled.HasValue)
             project.WorktreesEnabled = worktreesEnabled.Value;
+        if (boundaryEnforcement.HasValue)
+            project.BoundaryEnforcement = boundaryEnforcement.Value;
         if (updateFallback)
         {
             project.FallbackModel = string.IsNullOrWhiteSpace(fallbackModel) ? null : fallbackModel.Trim();

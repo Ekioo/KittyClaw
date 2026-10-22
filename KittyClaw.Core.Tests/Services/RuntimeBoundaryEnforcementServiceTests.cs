@@ -61,6 +61,42 @@ public sealed class RuntimeBoundaryEnforcementServiceTests
     }
 
     [Fact]
+    public async Task AllowForTicket_AppliesToLaterMatchingEffectsOnly()
+    {
+        using var temp = new TempDir();
+        var registry = new ApprovalRegistryService(new ProjectService(temp.Path));
+        var service = new RuntimeBoundaryEnforcementService(registry);
+        var first = Attempt(CliProvider.Claude, BoundaryActionClass.PushOrPullRequest);
+        await service.ExecuteAsync(first, _ => Task.CompletedTask);
+        var now = DateTime.UtcNow;
+        await registry.DecideAsync("project", new("ticket-grant", first.RequestId,
+            ApprovalDecisionKind.AllowForTicket, "owner", now, now.AddHours(1),
+            $"ticket:{first.TicketId}", "approved for this ticket", null));
+        var matching = first with { RequestId = "matching-request", DedupeKey = "matching-dedupe" };
+        var otherResource = first with
+        {
+            RequestId = "other-resource-request",
+            DedupeKey = "other-resource-dedupe",
+            ResourceCanonicalId = "other-resource"
+        };
+        var effects = 0;
+
+        var allowed = await service.ExecuteAsync(matching,
+            _ => { effects++; return Task.CompletedTask; });
+        var pending = await service.ExecuteAsync(otherResource,
+            _ => { effects++; return Task.CompletedTask; });
+
+        Assert.Equal(RuntimeBoundaryDisposition.EffectSucceeded, allowed.Disposition);
+        Assert.Equal(RuntimeBoundaryDisposition.Pending, pending.Disposition);
+        Assert.Equal(1, effects);
+        Assert.Equal("allowed", (await registry.QueryRequestsAsync("project", new()))
+            .Single(request => request.RequestId == matching.RequestId).State);
+        var receipt = Assert.Single(await registry.QueryReceiptsAsync("project", matching.RequestId),
+            item => item.Outcome == ApprovalReceiptOutcome.Allowed);
+        Assert.Equal("ticket-grant", receipt.DecisionId);
+    }
+
+    [Fact]
     public async Task AuthorizeAsync_FailsClosedWhenReceiptCannotBePersisted()
     {
         using var temp = new TempDir();

@@ -149,7 +149,7 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 - Live agent run drawer (SSE stream of provider output, steer + stop controls)
 - New-instruction chat drawer to send an ad-hoc prompt to an agent
 - Markdown rendering with `@mention`, `#id`, and `#{slug}:{id}` cross-project ticket reference support
-- Advanced search syntax: `#42`, `@owner`, `>date`, `priority:critical`, `label:bug`, `by:owner`
+- Advanced search syntax: `#42`, `@owner`, `>date`, `priority:critical`, `label:bug`, `by:owner`; global number searches also surface a nested ticket with its direct parent for context
 - Sub-tickets with parent/child relationships and progress tracking
 - Lossless, atomic ticket-tree transfers between projects through the REST API
 - Column management directly from the board (insert, duplicate, reorder, configure, and mark read)
@@ -253,6 +253,8 @@ Two things the AGPL does **not** touch (see [NOTICE.md](NOTICE.md)):
 ## More Projects & Contact
 
 → **Site + demo:** [kittyclaw.dev](https://kittyclaw.dev)
+
+→ **Community showcase:** [Projects using KittyClaw](doc/projects-using-kittyclaw.md)
 
 Check out my other projects at **[ekioo.com](https://ekioo.com)**.
 

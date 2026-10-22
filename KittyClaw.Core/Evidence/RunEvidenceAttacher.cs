@@ -61,8 +61,13 @@ public sealed class RunEvidenceAttacher : IHostedService
             }
 
             var workspacePath = _projects.ResolveWorkspacePath(project);
-            var routing = ModelRouting.Resolve(run.Model, project.LocalModelBaseUrl);
-            var providerName = RunEvidenceCapture.ProviderName(routing.Provider);
+            // Attribution must survive CLI removal or configuration changes after the run.
+            // Older persisted runs may not yet contain the dispatched provider.
+            var provider = run.Provider
+                ?? (Enum.TryParse<CliProvider>(run.CliVersion?.Provider, true, out var recordedProvider)
+                    ? recordedProvider
+                    : ModelRouting.Resolve(run.Model, project.LocalModelBaseUrl).Provider);
+            var providerName = RunEvidenceCapture.ProviderName(provider);
 
             var evidence = await RunEvidenceCapture.CaptureAsync(run, workspacePath, providerName);
             _store.MergeAndSave(evidence);

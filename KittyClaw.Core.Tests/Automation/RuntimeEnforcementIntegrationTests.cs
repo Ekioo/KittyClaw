@@ -16,6 +16,35 @@ namespace KittyClaw.Core.Tests.Automation;
 [Collection("MockClaude")]
 public sealed class RuntimeEnforcementIntegrationTests
 {
+    [Fact]
+    public async Task ProjectSetting_IsAppliedCentrallyToEveryAgentRun()
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("project-enforcement");
+        await projects.UpdateProjectAsync(project.Slug, null,
+            boundaryEnforcement: BoundaryEnforcementMode.Enforce);
+        var workspace = projects.ResolveWorkspacePath(project);
+        Directory.CreateDirectory(workspace);
+        var runner = new AgentRunner(new SessionRegistry(), new AgentRunRegistry(), new RunConcurrencyGate(1),
+            NullLogger<AgentRunner>.Instance, projects: projects);
+
+        var run = await runner.RunAsync(new AgentRunContext
+        {
+            ProjectSlug = project.Slug,
+            WorkspacePath = workspace,
+            AgentName = "test-agent",
+            SkillFile = "(inline)",
+            InlineSkillContent = "You are a test agent.",
+            MaxTurns = 1,
+            Provider = CliProvider.Codex,
+        }, CancellationToken.None);
+
+        Assert.Equal(AgentRunStatus.Failed, run.Status);
+        Assert.Contains(run.SnapshotBuffer(), entry =>
+            entry.Kind == "error" && entry.Text.Contains("Fail-closed", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData(CliProvider.Codex)]
     [InlineData(CliProvider.Grok)]

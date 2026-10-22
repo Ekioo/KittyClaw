@@ -1,0 +1,20 @@
+{
+  "instance": { "providers": ["grok"] },
+  "report": { "issue": "Grok clean-install journey", "settingsOpened": false },
+  "setup": [{ "type": "createTemporaryDirectory", "saveAs": "repositoryPath", "initializeGit": true }],
+  "actions": [
+    { "type": "navigate", "url": "/" }, { "type": "wait", "ms": 1200 },
+    { "type": "click", "selector": ".unified-page-header > .settings-primary" },
+    { "type": "fill", "selector": "#new-project-name", "value": "QA 187 Grok journey" },
+    { "type": "fill", "selector": "#repository-path", "value": "{repositoryPath}" },
+    { "type": "fill", "selector": "#first-objective", "value": "Deliver with Grok" },
+    { "type": "click", "selector": "#validate-repository" }, { "type": "wait", "ms": 1600 },
+    { "type": "click", "selector": "#confirm-first-ticket" }, { "type": "wait", "ms": 18000 },
+    { "type": "assertJson", "path": "/api/projects/qa-187-grok-journey/tickets/1", "jsonPath": "status", "expected": "Human decision" },
+    { "type": "assertJson", "path": "/api/activation/first-project", "jsonPath": "completedJourneys", "expected": "1" },
+    { "type": "navigate", "url": "/board/qa-187-grok-journey/dashboard" }, { "type": "wait", "ms": 1000 },
+    { "type": "assertVisible", "selector": "[data-testid='dashboard-primary-action']" },
+    { "type": "screenshot", "name": "qa-187-grok-human-decision", "description": "Grok journey completed at human decision" }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

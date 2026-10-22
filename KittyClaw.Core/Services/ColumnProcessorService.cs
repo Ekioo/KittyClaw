@@ -499,13 +499,58 @@ public sealed class ColumnProcessorService(
     {
         var project = await projects.GetProjectAsync(projectSlug)
             ?? throw new InvalidOperationException($"Le projet '{projectSlug}' n'existe pas.");
-        var memoryDir = Path.Combine(projects.ResolveWorkspacePath(project), ".agents", "processors", ColumnReference(processor.ColumnId), "memory");
-        Directory.CreateDirectory(memoryDir);
+        var workspace = projects.ResolveWorkspacePath(project);
+        var relativeMemoryDir = Path.Combine(".agents", "processors", ColumnReference(processor.ColumnId), "memory");
+        var primaryIndex = Path.Combine(workspace, relativeMemoryDir, "MEMORY.md");
+        DurableWriteRoute? route = null;
+        var root = workspace;
+        if (durableWrites is not null && project.WorktreesEnabled &&
+            !string.IsNullOrWhiteSpace(project.IntegrationBranch) &&
+            await MemoryRequiresWriteAsync(workspace, processor.ColumnId, primaryIndex))
+        {
+            route = await durableWrites.Value.ResolveAsync(projectSlug, null, [relativeMemoryDir]);
+            root = route.RootPath;
+        }
+
+        var memoryDir = Path.Combine(root, relativeMemoryDir);
         var index = Path.Combine(memoryDir, "MEMORY.md");
-        if (!File.Exists(index))
-            await File.WriteAllTextAsync(index, $"# {processor.Name} memory\n\nPersistent lessons for column #{processor.ColumnId}.\n");
-        await MigrateLegacyMemoryAsync(projects.ResolveWorkspacePath(project), processor.ColumnId, index);
+        try
+        {
+            Directory.CreateDirectory(memoryDir);
+            if (!File.Exists(index))
+                await File.WriteAllTextAsync(index, $"# {processor.Name} memory\n\nPersistent lessons for column #{processor.ColumnId}.\n");
+            await MigrateLegacyMemoryAsync(workspace, processor.ColumnId, index);
+        }
+        catch
+        {
+            if (route is not null)
+                await durableWrites!.Value.PreserveExecutionAsync(projectSlug, route,
+                    $"Processor memory migration failed for column {processor.ColumnId}.");
+            throw;
+        }
+
+        if (route is not null)
+        {
+            var validation = await durableWrites!.Value.CommitAndQueueAsync(projectSlug, route,
+                $"chore: migrate column {processor.ColumnId} memory");
+            if (validation.Status != DurableWriteValidationStatus.Ready)
+                throw new InvalidOperationException(validation.Error ??
+                    $"Processor memory migration durable write requires review ({validation.Status}).");
+        }
+
         return index;
+    }
+
+    private static async Task<bool> MemoryRequiresWriteAsync(string workspace, int columnId, string canonicalPath)
+    {
+        if (!File.Exists(canonicalPath)) return true;
+        var legacyPath = Path.Combine(workspace, ".agents", $"column-{columnId}", "memory.md");
+        if (!File.Exists(legacyPath)) return false;
+        var canonical = await File.ReadAllTextAsync(canonicalPath);
+        return (await File.ReadAllLinesAsync(legacyPath))
+            .Select(line => line.TrimEnd())
+            .Any(line => line.StartsWith("- ", StringComparison.Ordinal) &&
+                !canonical.Contains(line, StringComparison.Ordinal));
     }
 
     private static async Task MigrateLegacyMemoryAsync(string workspace, int columnId, string canonicalPath)

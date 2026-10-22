@@ -10,6 +10,7 @@ Capture structured evidence from agent runs and turn it into a concise, traceabl
 - `KittyClaw.Core/Evidence/DecisionBriefComposer.cs` and `TicketDecisionBrief.cs` — compose the canonical brief, findings, metrics, contributing run IDs, and requested decision.
 - `KittyClaw.Core/Evidence/EvidenceRecoveryAdvisor.cs` — recommends recapture or reconciliation for incomplete, stale, or contradictory evidence.
 - `KittyClaw.Web/Components/DecisionBriefPanel.razor` — displays the brief and records accept, correction, or stop actions in ticket history.
+- `KittyClaw.Core.Tests/Evidence/EvidenceBenchmarkSuiteTests.cs` — repeatable end-to-end benchmark suite measuring evidence capture on realistic tasks across the Claude, Codex, and Grok runner paths, including crash/restart and partial-evidence scenarios.
 
 ## Entry points
 - `GET /api/projects/{slug}/tickets/{id}/brief` returns the canonical brief for a ticket with captured evidence.

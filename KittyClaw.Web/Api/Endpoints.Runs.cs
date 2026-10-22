@@ -2,7 +2,9 @@ using System.Text;
 using System.Text.Json;
 using KittyClaw.Core.Automation;
 using KittyClaw.Core.Evidence;
+using KittyClaw.Core.Models;
 using KittyClaw.Core.Services;
+using Microsoft.EntityFrameworkCore;
 
 namespace KittyClaw.Web.Api;
 
@@ -42,6 +44,81 @@ public static partial class Endpoints
 
                 return Results.Ok(new { count = req.Count });
             }).ExcludeFromDescription();
+
+            api.MapPost("/projects/{slug}/qa/chat/active", (string slug, AgentRunRegistry reg) =>
+            {
+                var run = reg.Register(new AgentRun
+                {
+                    RunId = $"qa-chat-{Guid.NewGuid():N}",
+                    ProjectSlug = slug,
+                    TicketId = null,
+                    AgentName = "owner-chat",
+                    SkillFile = "qa",
+                    ConcurrencyGroup = $"chat:{slug}:owner-chat",
+                    StartedAt = DateTime.UtcNow,
+                    ChatTarget = "owner-chat",
+                });
+
+                return Results.Ok(new { runId = run.RunId });
+            }).ExcludeFromDescription();
+
+            api.MapPost("/projects/{slug}/qa/language", (QaSetLanguageRequest req, AppSettingsService settings) =>
+            {
+                settings.Language = req.Language;
+                return Results.Ok(new { language = settings.Language });
+            }).ExcludeFromDescription();
+
+            api.MapPost("/projects/{slug}/qa/worktree-merges/{requestId:long}/synchronization",
+                async (string slug, long requestId, QaSetSynchronizationRequest req,
+                    ProjectService projects, WorktreeMergeQueueService queue) =>
+                {
+                    if (!Enum.TryParse<LocalCheckoutSyncStatus>(req.Status, true, out var status))
+                        return Results.BadRequest(new { error = "A valid synchronization status is required" });
+                    await using var db = projects.GetProjectDb(slug);
+                    var changed = await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE WorktreeMergeQueue SET SyncStatus = {(int)status}, SyncError = {req.Error}, SyncConflictFiles = {req.ConflictFiles}, SyncUpdatedAt = {DateTime.UtcNow}, UpdatedAt = {DateTime.UtcNow} WHERE Id = {requestId}");
+                    return changed == 0 ? Results.NotFound() : Results.Ok(await queue.GetAsync(slug, requestId));
+                }).ExcludeFromDescription();
+
+            api.MapPost("/projects/{slug}/qa/tickets/{ticketId:int}/evidence",
+                (string slug, int ticketId, QaSeedEvidenceRequest req, EvidenceStore store) =>
+                {
+                    if (!Enum.TryParse<EvidenceStatus>(req.Status, ignoreCase: true, out var status))
+                        return Results.BadRequest(new { error = "A valid evidence status is required" });
+
+                    store.SaveTicket(new TicketEvidence
+                    {
+                        TicketId = ticketId.ToString(),
+                        ProjectSlug = slug,
+                        CapturedAt = req.CapturedAt ?? DateTime.UtcNow,
+                        Status = status,
+                        RunIds = ["qa-evidence"],
+                    });
+                    return Results.Ok(new { status = status.ToString() });
+                }).ExcludeFromDescription();
+
+            api.MapGet("/projects/{slug}/qa/tickets/{ticketId:int}/evidence/branch-diff",
+                (string slug, int ticketId, string branch, string commitSha, string baseCommitSha,
+                    string files, EvidenceStore store) =>
+                {
+                    var provenance = new EvidenceProvenance(
+                        "git-branch-diff", "qa", "qa-evidence", DateTime.UtcNow, EvidenceTrust.Verified);
+                    var evidence = new TicketEvidence
+                    {
+                        TicketId = ticketId.ToString(),
+                        ProjectSlug = slug,
+                        CapturedAt = DateTime.UtcNow,
+                        Status = EvidenceStatus.Complete,
+                        RunIds = ["qa-evidence"],
+                        RepositoryState = new RepositoryState(branch, commitSha, true, [], provenance)
+                        {
+                            BaseCommitSha = baseCommitSha,
+                        },
+                    };
+                    foreach (var path in files.Split('|', StringSplitOptions.RemoveEmptyEntries))
+                        evidence.ChangedFiles.Add(new ChangedFile(path, FileChangeKind.Added, null, provenance));
+                    store.SaveTicket(evidence);
+                    return Results.Ok(new { fileCount = evidence.ChangedFiles.Count });
+                }).ExcludeFromDescription();
 
             api.MapGet("/projects/{slug}/qa/runs/latest-input-images", (string slug, AgentRunRegistry reg) =>
             {
@@ -160,10 +237,28 @@ public static partial class Endpoints
             var run = reg.Get(runId);
             if (run is null || run.ProjectSlug != slug) return Results.NotFound();
             if (run.Status != AgentRunStatus.Running) return Results.BadRequest(new { error = "Run is not active." });
-            await run.SteeringQueue.Writer.WriteAsync(req.Text);
+            var (imagePaths, imageError) = await PersistChatImagesAsync(req.Images, "", $"{runId}-steer-{Guid.NewGuid():N}");
+            if (imageError is not null)
+                return Results.BadRequest(new { error = "image_rejected", reason = imageError });
+
+            var steerText = req.Text;
+            if (string.IsNullOrWhiteSpace(req.Text) && imagePaths is not { Count: > 0 })
+                return Results.BadRequest(new { error = "empty_steer" });
+            if (imagePaths is { Count: > 0 })
+            {
+                if (!run.TryAddTemporarySteerImagePaths(imagePaths))
+                {
+                    CleanupChatImageFiles(imagePaths);
+                    return Results.BadRequest(new { error = "Run is not active." });
+                }
+                steerText += "\n\n[Attached images]\n" + string.Join("\n", imagePaths.Select(path => $"- {path}"));
+            }
+            await run.SteeringQueue.Writer.WriteAsync(steerText);
             var targetModel = model ?? run.Model; // Use provided model or the run's current model
             if (!string.IsNullOrEmpty(run.ChatTarget))
-                await cs.AppendAsync(slug, run.ChatTarget, "inject", req.Text, targetModel);
+                await cs.AppendAsync(slug, run.ChatTarget, "inject", req.Text, targetModel, images: req.Images?
+                    .Select(i => new ChatMessageImage(i.DataUrl, i.Mime, i.Name, i.SizeBytes))
+                    .ToList());
             return Results.NoContent();
         }).WithTags("Runs");
 
@@ -239,6 +334,11 @@ public static partial class Endpoints
             return Results.Ok(new { runId = newRunId });
         }).WithTags("Runs");
     }
+
+    private sealed record QaSeedEvidenceRequest(string Status, DateTime? CapturedAt = null);
+
+    private sealed record QaSetLanguageRequest(string Language);
+    private sealed record QaSetSynchronizationRequest(string Status, string? Error, string? ConflictFiles);
 
     private sealed record QaSeedRunsRequest(IReadOnlyList<string> TicketIds, int Count);
 

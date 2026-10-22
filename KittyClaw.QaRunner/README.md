@@ -24,9 +24,15 @@ Args:
 
 Exit codes: `0` = PASS, `1` = FAIL, `2` = runtime error.
 
+Ticket 187 also provides `Scenarios/ticket-187/run-matrix.ps1`. It runs the clean-install
+journey with Claude, Codex, Grok, a failed Claude launch with Codex fallback, and a
+no-provider retry. The generated JSON records the issue, actual provider/fallback,
+settings-open state, repository-to-completed-run duration, final outcome, assertions,
+and screenshots for every isolated scenario.
+
 ## Design principle: API for setup, Playwright for visuals
 
-**Do all setup via `api` / shortcuts; reserve Playwright for the visual assertion only.**
+**Do all setup via `api` / shortcuts or disposable fixture actions; reserve Playwright for the visual assertion only.**
 
 If your test needs to create a ticket, assign it, and move it to a column before asserting something visual, do all of that with `createTicket` / `assignTicket` / `setStatus` actions — not with `click` / `fill` / `wait` chains. API calls are deterministic, instant, and don't break when a button is temporarily disabled or a dropdown hasn't rendered yet.
 
@@ -46,6 +52,8 @@ Example: testing "ticket detail shows assignee badge":
 
 ```json
 {
+  "browserLocale": "fr-FR",
+  "browserTimeZone": "Europe/Paris",
   "setup": [
     { "type": "createProject", "name": "qa-test" },
     { "type": "createTicket", "project": "qa-test", "title": "My ticket", "status": "Todo" },
@@ -59,6 +67,10 @@ Example: testing "ticket detail shows assignee badge":
   "verdict": { "passOn": "all-asserts-pass" }
 }
 ```
+
+`browserLocale` and `browserTimeZone` are optional. Use them when a visual
+assertion must prove locale or system-time-zone behavior independently of the
+machine running QA.
 
 ## Variable substitution
 
@@ -100,7 +112,9 @@ These run before Playwright starts. All of them are also valid inside `actions`.
 | `writeWorkspaceFile` | `workspacePath`, `name` (relative file), `text` | Writes a fixture file inside an isolated workspace. |
 | `createGitRepository` | optional `name` (variable), `value` (branch) | Creates an isolated committed Git repository and stores its path. |
 | `commitGitFile` | `workspacePath`, `target` (branch), `name` (file), `text` | Commits a deterministic fixture change in a registered worktree. |
+| `createTemporaryDirectory` | `saveAs`, optional `initializeGit` | Creates a unique disposable directory, exposes its path as `{saveAs}`, and removes it after the run. |
 | `togglePause`   | `project`                             | Toggles `IsPaused` on a project.                      |
+| `enableProviders` | none | Makes the configured mock providers available after an initial no-provider probe. |
 | `api`           | see below                             | Generic HTTP call.                                    |
 | `createTicket`  | see below                             | Creates a ticket; stores id in `{ticketId}`.          |
 | `assignTicket`  | see below                             | Assigns a ticket to a member.                         |
@@ -207,6 +221,7 @@ These require Playwright (run inside `actions`, after setup).
 | `assertValue`  | `selector`, `expected`                   | Asserts the current value of an input or select.                       |
 | `assertFocused`| `selector`                               | Asserts that the matching element owns keyboard focus.                 |
 | `assertAttribute`| `selector`, `property`, `expected`     | Asserts one DOM attribute exactly.                                    |
+| `assertDateTimeLocale` | `selector`, `expected` locale | Asserts a local-time element uses the requested UI locale and the browser time zone. |
 | `assertJson`   | `path`, `jsonPath`, `expected`           | GET `path`, extract `jsonPath` (dotted), assert equals `expected`.    |
 
 #### `assertJson`

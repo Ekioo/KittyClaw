@@ -444,6 +444,26 @@ public static partial class Endpoints
         return (paths, null);
     }
 
+    private static void CleanupChatImageFiles(IReadOnlyList<string> imagePaths)
+    {
+        foreach (var path in imagePaths)
+        {
+            try { File.Delete(path); }
+            catch { /* Best effort after a rejected steer. */ }
+        }
+        foreach (var directory in imagePaths.Select(Path.GetDirectoryName)
+                     .Where(path => !string.IsNullOrWhiteSpace(path))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                if (Directory.Exists(directory) && !Directory.EnumerateFileSystemEntries(directory).Any())
+                    Directory.Delete(directory);
+            }
+            catch { /* Best effort after a rejected steer. */ }
+        }
+    }
+
     private static void PersistChatEvent(ChatService cs, string slug, string target, StreamEvent ev)
     {
         // "inject" events are persisted directly by the steer endpoint — skip here to avoid double-write.

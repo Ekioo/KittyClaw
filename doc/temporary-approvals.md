@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Temporary approvals let an operator review a protected action with its resource, reason, scope, duration, provider, run, and ticket context. Decisions are limited to allow once, allow for the current ticket, or deny. Requests and decisions are persisted for audit, expire automatically, suppress material duplicates, and never create a global authorization by default.
+Agent permissions let an operator review a protected action with its resource, reason, scope, duration, provider, run, and ticket context. Projects default to observation and can enable required authorization from project settings. Decisions are limited to allow once, allow for the current ticket and matching action/resource for at most 24 hours, or deny. Requests, decisions, and effect receipts are persisted for audit without storing sensitive arguments in the operator view.
 
 ## Key components
 
@@ -10,14 +10,17 @@ Temporary approvals let an operator review a protected action with its resource,
 - `KittyClaw.Core/Services/ApprovalWorkflowService.cs` — correlates persisted requests and decisions with active runs.
 - `KittyClaw.Core/Automation/AgentRun.cs` — tracks the pending request and exposes the correlated wait/resume gate.
 - `KittyClaw.Core/Automation/ProcessApprovalGate.cs` — suspends the provider subprocess while approval is pending and fails closed when suspension is unavailable.
-- `KittyClaw.Web/Components/Pages/Approvals.razor` — displays pending requests, temporary decisions, and audit history.
+- `KittyClaw.Web/Components/Pages/Approvals.razor` — separates actionable requests from localized decision and effect history.
+- `KittyClaw.Web/Components/Pages/ProjectSettings.razor` — configures observation or required authorization and explains provider compatibility.
+- `KittyClaw.Web/Components/Pages/Board.razor` — displays the live count of pending permission requests.
 
 ## Entry points
 
 - `POST /api/projects/{slug}/approvals/requests` registers a request and pauses its matching active run.
 - `POST /api/projects/{slug}/approvals/decisions` records a temporary decision and resumes the matching run.
 - `GET /api/projects/{slug}/approvals/requests` and `/decisions` expose the consultable audit data.
-- The project navigation opens `/p/{slug}/approvals` for the approval queue and history.
+- Project settings persist the enforcement mode through `PATCH /api/projects/{slug}`.
+- The project navigation opens `/board/{slug}/approvals` for the pending queue and history.
 
 ## External dependencies
 

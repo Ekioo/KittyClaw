@@ -34,7 +34,9 @@ public sealed class RuntimeBoundaryEnforcementService(ApprovalRegistryService re
                 attempt.RunId, attempt.TicketId, attempt.AgentSlug, attempt.AttemptedAt, attempt.ExpiresAt,
                 "runtime-broker", attempt.ArgumentsHash, "pre-effect-adapter"));
 
-            var decision = ActiveDecision(await registry.QueryDecisionsAsync(attempt.ProjectSlug, request.RequestId));
+            var decision = ActiveDecision(await registry.QueryDecisionsAsync(attempt.ProjectSlug, request.RequestId))
+                ?? await registry.FindActiveTicketGrantAsync(attempt.ProjectSlug, attempt.TicketId,
+                    attempt.ActionClass.ToString(), attempt.ResourceCanonicalId, DateTime.UtcNow);
             if (decision is null) return new(RuntimeBoundaryDisposition.Pending, request.RequestId);
 
             var now = DateTime.UtcNow;
@@ -83,7 +85,9 @@ public sealed class RuntimeBoundaryEnforcementService(ApprovalRegistryService re
     /// process (pre-effect hook path). No-op when the attempt has no decision yet.</summary>
     public async Task RecordEffectOutcomeAsync(RuntimeBoundaryAttempt attempt, bool succeeded)
     {
-        var decision = ActiveDecision(await registry.QueryDecisionsAsync(attempt.ProjectSlug, attempt.RequestId));
+        var decision = ActiveDecision(await registry.QueryDecisionsAsync(attempt.ProjectSlug, attempt.RequestId))
+            ?? await registry.FindActiveTicketGrantAsync(attempt.ProjectSlug, attempt.TicketId,
+                attempt.ActionClass.ToString(), attempt.ResourceCanonicalId, DateTime.UtcNow);
         if (decision is null) return;
         await registry.AddReceiptAsync(attempt.ProjectSlug, Receipt(attempt, decision,
             succeeded ? ApprovalReceiptOutcome.EffectSucceeded : ApprovalReceiptOutcome.EffectFailed, DateTime.UtcNow));

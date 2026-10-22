@@ -1,0 +1,87 @@
+{
+  "environment": {
+    "KITTYCLAW_ENABLE_QA_ENDPOINTS": "1"
+  },
+  "setup": [
+    { "type": "createProject", "name": "qa-ticket-343" },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/qa-ticket-343/qa/language",
+      "body": { "language": "fr" }
+    },
+    {
+      "type": "api",
+      "method": "PATCH",
+      "path": "/api/projects/qa-ticket-343",
+      "body": { "boundaryEnforcement": "Enforce" }
+    },
+    {
+      "type": "createTicket",
+      "project": "qa-ticket-343",
+      "title": "Publier la prochaine version",
+      "status": "Todo"
+    },
+    {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/projects/qa-ticket-343/approvals/requests",
+      "body": {
+        "requestId": "qa-request-343",
+        "dedupeKey": "qa-dedupe-343",
+        "schemaVersion": 1,
+        "actionClass": "PublishOrDeploy",
+        "operation": "publish stable release",
+        "resourceKind": "deployment-target",
+        "resourceCanonicalId": "production",
+        "resourceDisplay": "la version stable",
+        "reason": "Publier la version validée.",
+        "riskSummary": "Cette action rendra la nouvelle version accessible aux utilisateurs.",
+        "scopeRequested": "deployment",
+        "durationRequestedSeconds": 600,
+        "providerName": "claude",
+        "providerCliVersion": "2.1.195",
+        "adapterVersion": "1",
+        "enforcementProfile": "strict",
+        "runId": "qa-run-343",
+        "ticketId": 1,
+        "agentSlug": "programmer",
+        "observedAt": "2026-08-23T01:00:00Z",
+        "expiresAt": "2030-08-23T01:00:00Z",
+        "toolName": "Bash",
+        "redactedArgumentsHash": "SHA256:0123456789abcdef0123456789abcdef",
+        "evidenceSource": "qa"
+      }
+    }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-ticket-343" },
+    { "type": "wait", "ms": 1200 },
+    { "type": "assertText", "selector": "[data-testid='pending-approval-badge']", "expected": "1" },
+    { "type": "navigate", "url": "/board/qa-ticket-343/approvals" },
+    { "type": "wait", "ms": 1200 },
+    { "type": "assertText", "selector": "[data-testid='approval-mode-summary'] strong", "expected": "Protection active" },
+    { "type": "assertText", "selector": "[data-testid='approval-pending-count']", "expected": "1" },
+    { "type": "assertText", "selector": ".approval-card--pending .approval-request-summary", "expected": "L’agent souhaite publier ou déployer vers : la version stable." },
+    { "type": "assertCount", "selector": ".approval-card--pending", "expected": "1" },
+    {
+      "type": "screenshot",
+      "name": "ticket-343-agent-permissions-pending",
+      "description": "Centre d’autorisations en français avec protection active et une demande lisible."
+    },
+    { "type": "click", "selector": ".approval-card--pending .approval-allow" },
+    { "type": "wait", "ms": 800 },
+    { "type": "assertText", "selector": "[data-testid='approval-pending-count']", "expected": "0" },
+    { "type": "assertCount", "selector": ".approval-history-card", "expected": "1" },
+    { "type": "navigate", "url": "/board/qa-ticket-343/settings" },
+    { "type": "wait", "ms": 1200 },
+    { "type": "assertValue", "selector": "[data-testid='boundary-enforcement-mode']", "expected": "Enforce" },
+    {
+      "type": "screenshot",
+      "name": "ticket-343-agent-permissions-setting",
+      "selector": "[data-testid='agent-permissions-settings']",
+      "description": "Réglage de protection du projet avec compatibilité fournisseur expliquée."
+    }
+  ],
+  "verdict": { "passOn": "all-asserts-pass" }
+}

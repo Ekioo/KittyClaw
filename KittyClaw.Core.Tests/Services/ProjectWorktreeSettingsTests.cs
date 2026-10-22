@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Data.Sqlite;
+using KittyClaw.Core.Automation;
 using KittyClaw.Core.Services;
 using KittyClaw.Core.Tests.Helpers;
 
@@ -7,6 +8,23 @@ namespace KittyClaw.Core.Tests.Services;
 
 public sealed class ProjectWorktreeSettingsTests
 {
+    [Fact]
+    public async Task AgentPermissions_DefaultToObserve_AndPersistEnforceMode()
+    {
+        using var temp = new TempDir();
+        var projects = new ProjectService(temp.Path);
+
+        var project = await projects.CreateProjectAsync("agent-permissions");
+        Assert.Equal(BoundaryEnforcementMode.Observe, project.BoundaryEnforcement);
+
+        await projects.UpdateProjectAsync(project.Slug, null,
+            boundaryEnforcement: BoundaryEnforcementMode.Enforce);
+
+        var reloaded = await new ProjectService(temp.Path).GetProjectAsync(project.Slug);
+        Assert.NotNull(reloaded);
+        Assert.Equal(BoundaryEnforcementMode.Enforce, reloaded.BoundaryEnforcement);
+    }
+
     [Fact]
     public async Task NewProject_DefaultsToWorktreesEnabled_AndCanBeDisabledExplicitly()
     {

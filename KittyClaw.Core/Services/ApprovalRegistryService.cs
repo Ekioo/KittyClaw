@@ -84,7 +84,23 @@ public sealed class ApprovalRegistryService(ProjectService projects)
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(IsolationLevel.Serializable);
         var decision = await ReadDecisionAsync(connection, transaction, input.DecisionId)
             ?? throw new InvalidOperationException("Approval decision not found.");
-        if (decision.RequestId != input.RequestId) throw new InvalidOperationException("Decision does not match request.");
+        if (decision.RequestId != input.RequestId)
+        {
+            var attemptedRequest = await GetRequestAsync(connection, input.RequestId, transaction)
+                ?? throw new InvalidOperationException("Approval request not found.");
+            var grantedRequest = await GetRequestAsync(connection, decision.RequestId, transaction)
+                ?? throw new InvalidOperationException("Approval grant request not found.");
+            var validTicketGrant = decision.Kind == ApprovalDecisionKind.AllowForTicket
+                && decision.Scope == $"ticket:{attemptedRequest.TicketId}"
+                && decision.ExpiresAt > input.StartedAt
+                && attemptedRequest.ProjectSlug == projectSlug
+                && attemptedRequest.ProjectSlug == grantedRequest.ProjectSlug
+                && attemptedRequest.TicketId == grantedRequest.TicketId
+                && attemptedRequest.ActionClass == grantedRequest.ActionClass
+                && attemptedRequest.ResourceCanonicalId == grantedRequest.ResourceCanonicalId;
+            if (!validTicketGrant)
+                throw new InvalidOperationException("Decision does not match request.");
+        }
         var receipt = await InsertReceiptAsync(connection, transaction, input);
         await transaction.CommitAsync();
         return receipt;
@@ -121,6 +137,29 @@ public sealed class ApprovalRegistryService(ProjectService projects)
         var result = new List<ApprovalDecisionRecord>();
         foreach (var id in ids) result.Add((await ReadDecisionAsync(connection, null, id))!);
         return result;
+    }
+
+    public async Task<ApprovalDecisionRecord?> FindActiveTicketGrantAsync(
+        string projectSlug, int ticketId, string actionClass, string resourceCanonicalId, DateTime at)
+    {
+        await using var connection = await OpenAsync(projectSlug);
+        var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT d.DecisionId
+            FROM ApprovalDecisions d
+            JOIN ApprovalRequests r ON r.RequestId=d.RequestId
+            WHERE r.ProjectSlug=$project AND r.TicketId=$ticket
+              AND r.ActionClass=$actionClass AND r.ResourceCanonicalId=$resource
+              AND d.Kind=$kind AND d.Scope=$scope AND d.ExpiresAt>$at
+              AND d.SupersededByDecisionId IS NULL
+            ORDER BY d.CreatedAt DESC LIMIT 1
+            """;
+        AddParameters(command,
+            ("$project", projectSlug), ("$ticket", ticketId), ("$actionClass", actionClass),
+            ("$resource", resourceCanonicalId), ("$kind", nameof(ApprovalDecisionKind.AllowForTicket)),
+            ("$scope", $"ticket:{ticketId}"), ("$at", ToDb(at)));
+        var id = await command.ExecuteScalarAsync() as string;
+        return id is null ? null : await ReadDecisionAsync(connection, null, id);
     }
 
     public async Task<IReadOnlyList<ApprovalReceiptRecord>> QueryReceiptsAsync(string projectSlug, string? requestId = null)
@@ -181,10 +220,32 @@ public sealed class ApprovalRegistryService(ProjectService projects)
     private static async Task<string> ResolveStateAsync(SqliteConnection c, SqliteTransaction? t, string id)
     {
         var cmd=c.CreateCommand(); cmd.Transaction=t; cmd.CommandText="SELECT Kind,ExpiresAt,ConsumedAt FROM ApprovalDecisions WHERE RequestId=$id AND SupersededByDecisionId IS NULL ORDER BY CreatedAt DESC LIMIT 1"; cmd.Parameters.AddWithValue("$id",id);
-        await using var r=await cmd.ExecuteReaderAsync(); if(!await r.ReadAsync()) return "pending";
-        if(FromDb(r.GetString(1))<=DateTime.UtcNow) return "expired";
-        if(!r.IsDBNull(2)) return "consumed";
-        return r.GetString(0)==nameof(ApprovalDecisionKind.Deny) ? "denied" : "allowed";
+        string? kind = null;
+        DateTime? expiresAt = null;
+        DateTime? consumedAt = null;
+        await using (var reader=await cmd.ExecuteReaderAsync())
+        {
+            if (await reader.ReadAsync())
+            {
+                kind = reader.GetString(0);
+                expiresAt = FromDb(reader.GetString(1));
+                consumedAt = reader.IsDBNull(2) ? null : FromDb(reader.GetString(2));
+            }
+        }
+        if (kind is not null)
+        {
+            if (expiresAt <= DateTime.UtcNow) return "expired";
+            if (consumedAt is not null) return "consumed";
+            return kind == nameof(ApprovalDecisionKind.Deny) ? "denied" : "allowed";
+        }
+
+        var receipt=c.CreateCommand(); receipt.Transaction=t;
+        receipt.CommandText="SELECT Outcome FROM ApprovalReceipts WHERE RequestId=$id ORDER BY Sequence DESC LIMIT 1";
+        receipt.Parameters.AddWithValue("$id",id);
+        var outcome=await receipt.ExecuteScalarAsync() as string;
+        return outcome is nameof(ApprovalReceiptOutcome.Denied) or nameof(ApprovalReceiptOutcome.Expired)
+            or nameof(ApprovalReceiptOutcome.FailedClosed) ? "denied"
+            : outcome is null ? "pending" : "allowed";
     }
 
     private static async Task<ApprovalDecisionRecord?> ReadDecisionAsync(SqliteConnection c, SqliteTransaction? t, string id)

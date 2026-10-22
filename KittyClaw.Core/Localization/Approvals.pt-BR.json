@@ -20,5 +20,21 @@
   "ApprovalAuditHistory": "Histórico de auditoria ({0})",
   "ApprovalDecisionAudit": "por {0} · {1} · escopo {2} · expira {3}",
   "ApprovalReceiptAudit": "· {0} · {1} · integridade",
-  "ApprovalUntil": "até {0}"
+  "ApprovalUntil": "até {0}",
+  "AgentPermissionsTitle": "Permissões dos agentes", "AgentPermissionsNav": "Permissões", "AgentPermissionsOpen": "Abrir permissões", "AgentPermissionsConfigure": "Configurar proteção",
+  "AgentPermissionsSettingsHint": "Escolha se o KittyClaw apenas observa ações sensíveis ou exige sua aprovação antes da execução.", "AgentPermissionsMode": "Nível de proteção", "AgentPermissionsObserve": "Observar sem bloquear", "AgentPermissionsEnforce": "Exigir autorização",
+  "AgentPermissionsObserveExplanation": "As ações sensíveis são registradas para diagnóstico, mas não são suspensas.", "AgentPermissionsEnforceExplanation": "O Claude Code pausa antes de cada ação protegida até sua decisão. Uma execução com provedor incompatível é bloqueada antes de iniciar.",
+  "AgentPermissionsCompatibleProvider": "A proteção ativa é compatível com", "AgentPermissionsOtherProviders": "Codex, Grok, Mistral e DeepSeek podem ser observados, mas não oferecem um ponto de interrupção confiável antes da ação.",
+  "AgentPermissionsProtectionActive": "Proteção ativa", "AgentPermissionsProtectionActiveHint": "O KittyClaw pede permissão antes de publicações, operações destrutivas, acesso a segredos, novos destinos de rede e alterações remotas feitas pelo Claude Code.",
+  "AgentPermissionsObservationOnly": "Somente observação", "AgentPermissionsObservationOnlyHint": "Nenhuma execução aguarda sua decisão. Ative a proteção nas configurações do projeto para bloquear ações sensíveis antes do efeito.",
+  "AgentPermissionsSummary": "Resumo das permissões", "AgentPermissionsPending": "para revisar", "AgentPermissionsHistory": "no histórico", "AgentPermissionsNeedsYou": "Sua decisão é necessária", "AgentPermissionsPendingTitle": "Solicitações para revisar", "AgentPermissionsPendingHint": "O agente permanece suspenso até você permitir ou negar a ação.",
+  "AgentPermissionsNothingPending": "Nenhuma decisão pendente", "AgentPermissionsNothingPendingHint": "Os agentes podem continuar normalmente.", "AgentPermissionsTraceability": "Rastreabilidade", "AgentPermissionsHistoryTitle": "Histórico", "AgentPermissionsHistoryHint": "Decisões e resultados são preservados com uma impressão de integridade, sem armazenar argumentos sensíveis em texto simples.", "AgentPermissionsNoHistory": "Nenhuma decisão anterior para este projeto.",
+  "AgentPermissionsTechnicalDetails": "Detalhes técnicos", "AgentPermissionsDecisionFailed": "Não foi possível salvar a decisão: {0}", "AgentPermissionsPendingCount": "{0} solicitação(ões) de permissão pendente(s)",
+  "ApprovalAllowForTicketHint": "Permite por até 24 horas ações correspondentes do mesmo tipo e recurso para este ticket.", "ApprovalOperation": "Comando ou ferramenta", "ApprovalEvidence": "Impressão dos argumentos", "ApprovalScopeTicket": "este ticket",
+  "ApprovalStatepending": "Para revisar", "ApprovalStateallowed": "Permitida", "ApprovalStateconsumed": "Usada", "ApprovalStatedenied": "Negada", "ApprovalStateexpired": "Expirada",
+  "ApprovalActionPushOrPullRequest": "Alterar um repositório remoto", "ApprovalActionPublishOrDeploy": "Publicar ou implantar", "ApprovalActionSecretAccess": "Acessar um segredo", "ApprovalActionDestructiveOperation": "Executar uma operação destrutiva", "ApprovalActionNewNetworkDestination": "Contatar um novo destino",
+  "ApprovalSummaryPushOrPullRequest": "O agente quer alterar um repositório remoto: {0}.", "ApprovalSummaryPublishOrDeploy": "O agente quer publicar ou implantar em: {0}.", "ApprovalSummarySecretAccess": "O agente quer acessar um recurso secreto: {0}.", "ApprovalSummaryDestructiveOperation": "O agente quer executar uma operação destrutiva em: {0}.", "ApprovalSummaryNewNetworkDestination": "O agente quer contatar um destino de rede ainda desconhecido: {0}.",
+  "ApprovalDecisionAllowOnce": "Permissão única", "ApprovalDecisionAllowForTicket": "Permissão para o ticket", "ApprovalDecisionDeny": "Negação",
+  "ApprovalReceiptAllowed": "Permitido", "ApprovalReceiptDenied": "Negado", "ApprovalReceiptExpired": "Expirado", "ApprovalReceiptFailedClosed": "Bloqueado por segurança", "ApprovalReceiptEffectSucceeded": "Ação concluída", "ApprovalReceiptEffectFailed": "Falha na ação", "ApprovalReceiptUnknown": "Resultado desconhecido",
+  "AgentPermissionsLoadFailed": "Não foi possível carregar as permissões dos agentes: {0}"
 }
