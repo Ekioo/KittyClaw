@@ -609,7 +609,11 @@ else
     }
 
     private void OnRunsStateChanged() => _ = InvokeAsync(RefreshGuidanceAsync);
-    private void OnTileGateStateChanged() => InvokeAsync(StateHasChanged);
+    private void OnTileGateStateChanged() => _ = InvokeAsync(async () =>
+    {
+        await LoadAllContentAsync();
+        StateHasChanged();
+    });
 
     private async Task RefreshGuidanceAsync()
     {
@@ -660,8 +664,7 @@ else
     {
         foreach (var tile in _tiles)
         {
-            if (!_sidecars.ContainsKey(tile.Slug))
-                _sidecars[tile.Slug] = await DashboardService.ReadSidecarAsync(_workspace, tile.Slug);
+            _sidecars[tile.Slug] = await DashboardService.ReadSidecarAsync(_workspace, tile.Slug);
             _lastRefreshedAt[tile.Slug] = await DashboardService.GetLastRefreshedAtAsync(Slug, tile.Slug);
 
             if (_sidecars[tile.Slug]?.Template == TileTemplate.Image)
@@ -669,8 +672,7 @@ else
                 _contentCache[tile.Slug] = "";
                 continue;
             }
-            if (!_contentCache.ContainsKey(tile.Slug))
-                _contentCache[tile.Slug] = await DashboardService.ReadOutputAsync(_workspace, tile.Slug);
+            _contentCache[tile.Slug] = await DashboardService.ReadOutputAsync(_workspace, tile.Slug);
         }
     }
 
@@ -685,8 +687,8 @@ else
                 _clockUtc = DateTime.UtcNow;
                 if (++ticks % 30 == 0)
                 {
-                    foreach (var tile in _tiles)
-                        _lastRefreshedAt[tile.Slug] = await DashboardService.GetLastRefreshedAtAsync(Slug, tile.Slug);
+                    // Also pick up direct file writes and durable writes integrated after a run ends.
+                    await LoadAllContentAsync();
                 }
                 StateHasChanged();
             });
@@ -700,7 +702,9 @@ else
 
         if (template == TileTemplate.Image)
         {
-            var url = $"/api/projects/{Slug}/dashboard/tiles/{Uri.EscapeDataString(tileSlug)}/output/raw";
+            var imagePath = DashboardService.FindOutputPath(_workspace, tileSlug);
+            var version = imagePath is null ? 0 : System.IO.File.GetLastWriteTimeUtc(imagePath).Ticks;
+            var url = $"/api/projects/{Slug}/dashboard/tiles/{Uri.EscapeDataString(tileSlug)}/output/raw?v={version}";
             builder.AddMarkupContent(0, $"<img class=\"tile-image\" src=\"{url}\" alt=\"{System.Web.HttpUtility.HtmlEncode(tileSlug)}\" />");
             return;
         }
