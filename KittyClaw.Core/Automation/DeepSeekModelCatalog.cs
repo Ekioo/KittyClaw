@@ -8,6 +8,8 @@ public static class DeepSeekModelCatalog
 
     public static readonly IReadOnlyList<string> Models =
     [
+        "deepseek:deepseek-v4-pro",
+        "deepseek:deepseek-flash",
         "deepseek:deepseek-v4-pro[1m]",
         "deepseek:deepseek-v4-flash",
     ];

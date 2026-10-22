@@ -4,6 +4,10 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+### Added
+
+- Updated provider model selectors with Claude Fable 5.1, Opus/Sonnet/Haiku 5.5, GPT-6 Astra/Sol/Luna, GPT-6.1 Sol, Grok 4.7 fallback discovery, and canonical DeepSeek Pro/Flash identifiers. Existing selections and defaults remain unchanged; availability depends on the provider account and installed CLI.
+
 ## [v0.18] — 2026-08-23
 
 Recoverable durable worktrees, safer automation lifecycles, progressive startup, and clearer operational state.

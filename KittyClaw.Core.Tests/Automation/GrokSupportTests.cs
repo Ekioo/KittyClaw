@@ -215,7 +215,7 @@ public class GrokSupportTests
 
     [Fact]
     public void FallbackCatalog_ContainsCurrentAndPreviousGrokBuildModels() =>
-        Assert.Equal(new[] { "grok-4.6", "grok-4.5" }, GrokCli.FallbackModels);
+        Assert.Equal(new[] { "grok-4.7", "grok-4.6", "grok-4.5" }, GrokCli.FallbackModels);
 
     [Fact]
     public void ParseModelList_EmptyOrGarbage_YieldsNothing()

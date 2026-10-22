@@ -6,16 +6,20 @@ namespace KittyClaw.Core.Tests.Automation;
 public sealed class DeepSeekSupportTests
 {
     [Fact]
-    public void Catalog_ContainsOnlyCurrentV4Models()
+    public void Catalog_ContainsCurrentModelsAndLegacyAliases()
     {
         Assert.Equal(
         [
+            "deepseek:deepseek-v4-pro",
+            "deepseek:deepseek-flash",
             "deepseek:deepseek-v4-pro[1m]",
             "deepseek:deepseek-v4-flash",
         ], DeepSeekModelCatalog.Models);
     }
 
     [Theory]
+    [InlineData("deepseek:deepseek-v4-pro", "deepseek-v4-pro")]
+    [InlineData("deepseek:deepseek-flash", "deepseek-flash")]
     [InlineData("deepseek:deepseek-v4-pro[1m]", "deepseek-v4-pro[1m]")]
     [InlineData("deepseek:deepseek-v4-flash", "deepseek-v4-flash")]
     public void Routing_UsesAnthropicCompatibleDeepSeekEnvironment(string selected, string resolved)
