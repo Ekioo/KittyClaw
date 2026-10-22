@@ -33,6 +33,8 @@ Windows users gain a self-contained installer with embedded runtimes and increme
 - Reload visible dashboard tiles after background refresh and improve their initial content and onboarding guidance.
 - Isolate ad-hoc memory fallback tests from installed Codex binaries.
 - Complete JEV and RTK translations in Spanish, German, Italian, Brazilian Portuguese, and Japanese.
+- Keep the update banner behind dialogs so it cannot intercept their controls.
+- Refresh QA scenarios for the current model catalog, global language settings, and viewport fields.
 
 ---
 

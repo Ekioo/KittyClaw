@@ -19,15 +19,15 @@
     { "type": "navigate", "url": "/board/qa-156-model-persistence/ticket/{ticketId}" },
     { "type": "wait", "ms": 1500 },
     { "type": "click", "selector": ".chat-with-agent-btn" },
-    { "type": "selectOption", "selector": ".chat-drawer-model-select", "value": "claude-fable-5" },
-    { "type": "assertValue", "selector": ".chat-drawer-model-select", "expected": "claude-fable-5" },
+    { "type": "selectOption", "selector": ".chat-drawer-model-select", "value": "claude-fable-5-1" },
+    { "type": "assertValue", "selector": ".chat-drawer-model-select", "expected": "claude-fable-5-1" },
     { "type": "click", "selector": ".chat-drawer .agent-close-btn" },
     { "type": "click", "selector": ".chat-with-agent-btn" },
-    { "type": "assertValue", "selector": ".chat-drawer-model-select", "expected": "claude-fable-5" },
+    { "type": "assertValue", "selector": ".chat-drawer-model-select", "expected": "claude-fable-5-1" },
     {
       "type": "screenshot",
       "name": "qa-156-model-restored",
-      "description": "The reopened New instruction drawer retains claude-fable-5."
+      "description": "The reopened New instruction drawer retains claude-fable-5-1."
     }
   ],
   "verdict": { "passOn": "all-asserts-pass" }
