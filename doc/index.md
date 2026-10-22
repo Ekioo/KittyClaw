@@ -29,7 +29,7 @@ For a high-level overview see the root [README.md](../README.md). For repo layou
 - [Runtime boundary enforcement](./runtime-boundary-enforcement.md) — provider-native pre-effect enforcement, fail-closed dispatch, and explicit runtime exclusions.
 - [Project template](./project-template.md) — embedded `ProjectTemplate/` files copied into each workspace on Initialize.
 - [REST API](./rest-api.md) — OpenAPI-driven endpoints under `/api`, with auto-generated Markdown docs.
-- [MCP server](./mcp.md) — embedded Streamable-HTTP endpoint at `/mcp`; seven board tools for any MCP client.
+- [MCP server](./mcp.md) — embedded Streamable-HTTP endpoint at `/mcp`; board, workflow, agent, approval and integration tools for any MCP client.
 - [Storage](./storage.md) — SQLite registry, per-project DBs, run logs, and workspace-side agent state.
 - [Project secrets vault](./project-secrets.md) — per-project write-only secrets, native encryption on Windows/macOS/Linux, subprocess-only injection, fail-closed behavior.
 - [Kanban UI](./kanban-ui.md) — Blazor Server board, ticket panel, agent run drawer.

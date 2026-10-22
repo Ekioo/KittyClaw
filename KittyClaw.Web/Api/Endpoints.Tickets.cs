@@ -50,30 +50,7 @@ public static partial class Endpoints
         .ProducesProblem(StatusCodes.Status409Conflict)
         .ProducesProblem(StatusCodes.Status400BadRequest);
 
-        api.MapPatch("/projects/{slug}/tickets/{id:int}", async (string slug, int id, UpdateTicketRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
-        {
-            // Every provided field — status included — is applied in ONE atomic write
-            // (kittyclaw-front#113 follow-up, backport analysis §2.2): agents hand a ticket
-            // off with a single {"status","assignedTo"} call and the automation engine can
-            // never observe the transition half-applied. ExpectedStatus mismatches map to 409.
-            try
-            {
-                var ticket = await ts.UpdateTicketAsync(slug, id, req.Title, req.Description, req.Author, req.Priority, req.AssignedTo, req.Status, req.ExpectedStatus, req.PipelineId, req.ColumnId, req.BlocksParent,
-                    enforceRouting: req.Status is not null || req.ColumnId is not null || req.PipelineId is not null);
-                if (ticket is not null && req.LabelIds is not null)
-                    await ts.SetTicketLabelsAsync(slug, id, req.LabelIds);
-                if (ticket is not null) notifier.NotifyProjectUpdated(slug);
-                return ticket is null ? Results.NotFound() : Results.Ok(ticket);
-            }
-            catch (TicketTransitionConflictException ex)
-            {
-                return Results.Conflict(new { error = ex.Message, actualStatus = ex.ActualStatus, expectedStatus = ex.ExpectedStatus });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
-        }).WithTags("Tickets")
+        api.MapPatch("/projects/{slug}/tickets/{id:int}", HandleUpdateTicket).WithTags("Tickets")
         .Produces<Ticket>()
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status404NotFound)
@@ -87,20 +64,7 @@ public static partial class Endpoints
         .Produces<Ticket>()
         .ProducesProblem(StatusCodes.Status404NotFound);
 
-        api.MapPost("/projects/{slug}/tickets/{id:int}/transfer", async (string slug, int id, TransferTicketRequest req, TicketTransferService transfers, BoardUpdateNotifier notifier) =>
-        {
-            try
-            {
-                var result = await transfers.TransferAsync(slug, id, req.TargetProject, req.Actor);
-                notifier.NotifyProjectUpdated(slug);
-                notifier.NotifyProjectUpdated(req.TargetProject);
-                return Results.Ok(result);
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
-        }).WithTags("Tickets")
+        api.MapPost("/projects/{slug}/tickets/{id:int}/transfer", HandleTransferTicket).WithTags("Tickets")
         .Produces<TicketTransferResult>()
         .ProducesProblem(StatusCodes.Status400BadRequest);
 
@@ -121,46 +85,19 @@ public static partial class Endpoints
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status404NotFound);
 
-        api.MapPatch("/projects/{slug}/tickets/{id:int}/schedule", async (string slug, int id, ScheduleTicketRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
-        {
-            try
-            {
-                var ticket = await ts.ScheduleTicketAsync(slug, id, req.FireAt, req.TargetStatus ?? "Todo", req.Author);
-                if (ticket is not null) notifier.NotifyProjectUpdated(slug);
-                return ticket is null ? Results.NotFound() : Results.Ok(ticket);
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
-        }).WithTags("Tickets")
+        api.MapPatch("/projects/{slug}/tickets/{id:int}/schedule", HandleScheduleTicket).WithTags("Tickets")
         .Produces<Ticket>()
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status404NotFound);
 
-        api.MapDelete("/projects/{slug}/tickets/{id:int}", async (string slug, int id, TicketService ts, BoardUpdateNotifier notifier) =>
-        {
-            var deleted = await ts.DeleteTicketAsync(slug, id);
-            if (deleted) notifier.NotifyProjectUpdated(slug);
-            return deleted ? Results.NoContent() : Results.NotFound();
-        }).WithTags("Tickets")
+        api.MapDelete("/projects/{slug}/tickets/{id:int}", HandleDeleteTicket).WithTags("Tickets")
         .Produces(StatusCodes.Status204NoContent)
         .ProducesProblem(StatusCodes.Status404NotFound);
 
         // Sub-tickets
-        api.MapPut("/projects/{slug}/tickets/{id:int}/parent", async (string slug, int id, SetParentRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
-        {
-            var ok = await ts.SetParentAsync(slug, id, req.ParentId);
-            if (ok) notifier.NotifyProjectUpdated(slug);
-            return ok ? Results.NoContent() : Results.BadRequest(new { error = "Impossible d'associer ce sous-ticket." });
-        }).WithTags("Tickets");
+        api.MapPut("/projects/{slug}/tickets/{id:int}/parent", HandleSetTicketParent).WithTags("Tickets");
 
-        api.MapDelete("/projects/{slug}/tickets/{id:int}/parent", async (string slug, int id, TicketService ts, BoardUpdateNotifier notifier) =>
-        {
-            var ok = await ts.UnparentAsync(slug, id);
-            if (ok) notifier.NotifyProjectUpdated(slug);
-            return ok ? Results.NoContent() : Results.NotFound();
-        }).WithTags("Tickets");
+        api.MapDelete("/projects/{slug}/tickets/{id:int}/parent", HandleRemoveTicketParent).WithTags("Tickets");
 
         // Comments
         api.MapPost("/projects/{slug}/tickets/{id:int}/comments", async (string slug, int id, AddCommentRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
@@ -178,59 +115,17 @@ public static partial class Endpoints
             }
         }).WithTags("Comments");
 
-        api.MapPatch("/projects/{slug}/tickets/{id:int}/comments/{commentId:int}", async (string slug, int id, int commentId, UpdateCommentRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
-        {
-            try
-            {
-                var ok = await ts.UpdateCommentAsync(slug, id, commentId, req.Content, req.Author ?? "owner");
-                if (ok) notifier.NotifyProjectUpdated(slug);
-                return ok ? Results.NoContent() : Results.NotFound();
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
-        }).WithTags("Comments");
+        api.MapPatch("/projects/{slug}/tickets/{id:int}/comments/{commentId:int}", HandleUpdateTicketComment).WithTags("Comments");
 
-        api.MapDelete("/projects/{slug}/tickets/{id:int}/comments/{commentId:int}", async (string slug, int id, int commentId, TicketService ts, BoardUpdateNotifier notifier) =>
-        {
-            var ok = await ts.DeleteCommentAsync(slug, id, commentId);
-            if (ok) notifier.NotifyProjectUpdated(slug);
-            return ok ? Results.NoContent() : Results.NotFound();
-        }).WithTags("Comments");
+        api.MapDelete("/projects/{slug}/tickets/{id:int}/comments/{commentId:int}", HandleDeleteTicketComment).WithTags("Comments");
 
         // Dependencies
-        api.MapPost("/projects/{slug}/tickets/{id:int}/dependencies", async (string slug, int id, AddDependencyRequest req, TicketService ts) =>
-        {
-            try
-            {
-                var dep = await ts.AddDependencyAsync(slug, id, req.BlockedById);
-                return Results.Created($"/api/projects/{slug}/tickets/{id}/dependencies/{dep.Id}", dep);
-            }
-            catch (DependencyValidationException ex)
-            {
-                return Results.UnprocessableEntity(new { error = ex.Message, reason = ex.Reason });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
-        }).WithTags("Dependencies")
+        api.MapPost("/projects/{slug}/tickets/{id:int}/dependencies", HandleAddTicketDependency).WithTags("Dependencies")
         .Produces<TicketDependency>(StatusCodes.Status201Created)
         .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
         .ProducesProblem(StatusCodes.Status400BadRequest);
 
-        api.MapDelete("/projects/{slug}/tickets/{id:int}/dependencies/{depId:int}", async (string slug, int id, int depId, TicketService ts) =>
-        {
-            var removed = await ts.RemoveDependencyAsync(slug, id, depId);
-            return removed
-                ? Results.NoContent()
-                : Results.NotFound(new
-                {
-                    error = "Dependency edge was not found for this ticket.",
-                    reason = "dependency_not_found"
-                });
-        }).WithTags("Dependencies")
+        api.MapDelete("/projects/{slug}/tickets/{id:int}/dependencies/{depId:int}", HandleRemoveTicketDependency).WithTags("Dependencies")
         .Produces(StatusCodes.Status204NoContent)
         .ProducesProblem(StatusCodes.Status404NotFound);
 
@@ -252,43 +147,175 @@ public static partial class Endpoints
 
     private static void MapTicketEvidence(RouteGroupBuilder api)
     {
-        api.MapGet("/projects/{slug}/tickets/{id:int}/evidence", async (string slug, int id, EvidenceStore store, TicketService ts) =>
-        {
-            var ticket = await ts.GetTicketAsync(slug, id);
-            if (ticket is null) return Results.NotFound();
-            var evidence = store.LoadTicket(slug, id.ToString());
-            if (evidence is null) return Results.NotFound();
-            EvidenceStore.ApplyStaleness(evidence, EvidenceStore.DefaultStalenessThreshold);
-            return Results.Ok(evidence);
-        }).WithTags("Evidence");
+        api.MapGet("/projects/{slug}/tickets/{id:int}/evidence", HandleGetTicketEvidence).WithTags("Evidence");
 
-        api.MapGet("/projects/{slug}/tickets/{id:int}/brief", async (string slug, int id, EvidenceStore store, TicketService ts) =>
-        {
-            var ticket = await ts.GetTicketAsync(slug, id);
-            if (ticket is null) return Results.NotFound();
-            var evidence = store.LoadTicket(slug, id.ToString());
-            if (evidence is null) return Results.NotFound();
-            EvidenceStore.ApplyStaleness(evidence, EvidenceStore.DefaultStalenessThreshold);
-            return Results.Ok(DecisionBriefComposer.Compose(evidence));
-        }).WithTags("Evidence");
+        api.MapGet("/projects/{slug}/tickets/{id:int}/brief", HandleGetTicketBrief).WithTags("Evidence");
     }
 
     private static void MapTicketReorder(RouteGroupBuilder api)
     {
-        api.MapPatch("/projects/{slug}/tickets/{id:int}/reorder", async (string slug, int id, ReorderTicketRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
-        {
-            try
-            {
-                await ts.ReorderTicketAsync(slug, id, req.Status, req.Index, enforceRouting: true);
-                notifier.NotifyProjectUpdated(slug);
-                return Results.NoContent();
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
-        }).WithTags("Tickets")
+        api.MapPatch("/projects/{slug}/tickets/{id:int}/reorder", HandleReorderTicket).WithTags("Tickets")
         .Produces(StatusCodes.Status204NoContent)
         .ProducesProblem(StatusCodes.Status400BadRequest);
+    }
+
+    // Shared application handlers used by REST endpoints and MCP tools.
+    internal static async Task<IResult> HandleUpdateTicket(string slug, int id, UpdateTicketRequest req, TicketService ts, BoardUpdateNotifier notifier)
+    {
+        // Every provided field — status included — is applied in ONE atomic write
+        // (kittyclaw-front#113 follow-up, backport analysis §2.2): agents hand a ticket
+        // off with a single {"status","assignedTo"} call and the automation engine can
+        // never observe the transition half-applied. ExpectedStatus mismatches map to 409.
+        try
+        {
+            var ticket = await ts.UpdateTicketAsync(slug, id, req.Title, req.Description, req.Author, req.Priority, req.AssignedTo, req.Status, req.ExpectedStatus, req.PipelineId, req.ColumnId, req.BlocksParent,
+                enforceRouting: req.Status is not null || req.ColumnId is not null || req.PipelineId is not null);
+            if (ticket is not null && req.LabelIds is not null)
+                await ts.SetTicketLabelsAsync(slug, id, req.LabelIds);
+            if (ticket is not null) notifier.NotifyProjectUpdated(slug);
+            return ticket is null ? Results.NotFound() : Results.Ok(ticket);
+        }
+        catch (TicketTransitionConflictException ex)
+        {
+            return Results.Conflict(new { error = ex.Message, actualStatus = ex.ActualStatus, expectedStatus = ex.ExpectedStatus });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
+    }
+
+    internal static async Task<IResult> HandleScheduleTicket(string slug, int id, ScheduleTicketRequest req, TicketService ts, BoardUpdateNotifier notifier)
+    {
+        try
+        {
+            var ticket = await ts.ScheduleTicketAsync(slug, id, req.FireAt, req.TargetStatus ?? "Todo", req.Author);
+            if (ticket is not null) notifier.NotifyProjectUpdated(slug);
+            return ticket is null ? Results.NotFound() : Results.Ok(ticket);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
+    }
+
+    internal static async Task<IResult> HandleDeleteTicket(string slug, int id, TicketService ts, BoardUpdateNotifier notifier)
+    {
+        var deleted = await ts.DeleteTicketAsync(slug, id);
+        if (deleted) notifier.NotifyProjectUpdated(slug);
+        return deleted ? Results.NoContent() : Results.NotFound();
+    }
+
+    internal static async Task<IResult> HandleSetTicketParent(string slug, int id, SetParentRequest req, TicketService ts, BoardUpdateNotifier notifier)
+    {
+        var ok = await ts.SetParentAsync(slug, id, req.ParentId);
+        if (ok) notifier.NotifyProjectUpdated(slug);
+        return ok ? Results.NoContent() : Results.BadRequest(new { error = "Impossible d'associer ce sous-ticket." });
+    }
+
+    internal static async Task<IResult> HandleRemoveTicketParent(string slug, int id, TicketService ts, BoardUpdateNotifier notifier)
+    {
+        var ok = await ts.UnparentAsync(slug, id);
+        if (ok) notifier.NotifyProjectUpdated(slug);
+        return ok ? Results.NoContent() : Results.NotFound();
+    }
+
+    internal static async Task<IResult> HandleAddTicketDependency(string slug, int id, AddDependencyRequest req, TicketService ts)
+    {
+        try
+        {
+            var dep = await ts.AddDependencyAsync(slug, id, req.BlockedById);
+            return Results.Created($"/api/projects/{slug}/tickets/{id}/dependencies/{dep.Id}", dep);
+        }
+        catch (DependencyValidationException ex)
+        {
+            return Results.UnprocessableEntity(new { error = ex.Message, reason = ex.Reason });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
+    }
+
+    internal static async Task<IResult> HandleRemoveTicketDependency(string slug, int id, int depId, TicketService ts)
+    {
+        var removed = await ts.RemoveDependencyAsync(slug, id, depId);
+        return removed
+            ? Results.NoContent()
+            : Results.NotFound(new
+            {
+                error = "Dependency edge was not found for this ticket.",
+                reason = "dependency_not_found"
+            });
+    }
+
+    internal static async Task<IResult> HandleUpdateTicketComment(string slug, int id, int commentId, UpdateCommentRequest req, TicketService ts, BoardUpdateNotifier notifier)
+    {
+        try
+        {
+            var ok = await ts.UpdateCommentAsync(slug, id, commentId, req.Content, req.Author ?? "owner");
+            if (ok) notifier.NotifyProjectUpdated(slug);
+            return ok ? Results.NoContent() : Results.NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
+    }
+
+    internal static async Task<IResult> HandleDeleteTicketComment(string slug, int id, int commentId, TicketService ts, BoardUpdateNotifier notifier)
+    {
+        var ok = await ts.DeleteCommentAsync(slug, id, commentId);
+        if (ok) notifier.NotifyProjectUpdated(slug);
+        return ok ? Results.NoContent() : Results.NotFound();
+    }
+
+    internal static async Task<IResult> HandleReorderTicket(string slug, int id, ReorderTicketRequest req, TicketService ts, BoardUpdateNotifier notifier)
+    {
+        try
+        {
+            await ts.ReorderTicketAsync(slug, id, req.Status, req.Index, enforceRouting: true);
+            notifier.NotifyProjectUpdated(slug);
+            return Results.NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
+    }
+
+    internal static async Task<IResult> HandleTransferTicket(string slug, int id, TransferTicketRequest req, TicketTransferService transfers, BoardUpdateNotifier notifier)
+    {
+        try
+        {
+            var result = await transfers.TransferAsync(slug, id, req.TargetProject, req.Actor);
+            notifier.NotifyProjectUpdated(slug);
+            notifier.NotifyProjectUpdated(req.TargetProject);
+            return Results.Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
+    }
+
+    internal static async Task<IResult> HandleGetTicketEvidence(string slug, int id, EvidenceStore store, TicketService ts)
+    {
+        var ticket = await ts.GetTicketAsync(slug, id);
+        if (ticket is null) return Results.NotFound();
+        var evidence = store.LoadTicket(slug, id.ToString());
+        if (evidence is null) return Results.NotFound();
+        EvidenceStore.ApplyStaleness(evidence, EvidenceStore.DefaultStalenessThreshold);
+        return Results.Ok(evidence);
+    }
+
+    internal static async Task<IResult> HandleGetTicketBrief(string slug, int id, EvidenceStore store, TicketService ts)
+    {
+        var ticket = await ts.GetTicketAsync(slug, id);
+        if (ticket is null) return Results.NotFound();
+        var evidence = store.LoadTicket(slug, id.ToString());
+        if (evidence is null) return Results.NotFound();
+        EvidenceStore.ApplyStaleness(evidence, EvidenceStore.DefaultStalenessThreshold);
+        return Results.Ok(DecisionBriefComposer.Compose(evidence));
     }
 }

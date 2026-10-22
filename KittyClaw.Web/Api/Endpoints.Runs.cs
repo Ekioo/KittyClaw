@@ -136,57 +136,17 @@ public static partial class Endpoints
             }).ExcludeFromDescription();
         }
 
-        api.MapGet("/projects/{slug}/runs", (string slug, AgentRunRegistry reg) =>
-            Results.Ok(reg.ActiveForProject(slug).Select(r => new
-            {
-                r.RunId, r.AgentName, r.SkillFile, r.TicketId, r.ConcurrencyGroup,
-                r.StartedAt, r.SessionId, r.WorkingDirectory, status = r.Status.ToString(),
-                r.CliVersion,
-                r.TotalTokens, r.TotalCostUsd, r.CostIsEstimated,
-            })))
+        api.MapGet("/projects/{slug}/runs", HandleListRuns)
             .WithTags("Runs");
 
         // Observability (feature #2, ticket #98): list the concurrency groups currently locked for a
         // project — i.e. groups that have at least one Running run. Without this a zombie lock (a hung
         // run that never completes) is invisible until KittyClaw restarts. The lock holder is the
         // earliest-started active run in the group (that is the one HasActiveInGroup keys on).
-        api.MapGet("/projects/{slug}/concurrency-groups", (string slug, AgentRunRegistry reg) =>
-            Results.Ok(reg.ActiveForProject(slug)
-                .GroupBy(r => r.ConcurrencyGroup)
-                .Select(g =>
-                {
-                    var holder = g.OrderBy(r => r.StartedAt).First();
-                    return new
-                    {
-                        group = g.Key,
-                        runId = holder.RunId,
-                        agentName = holder.AgentName,
-                        ticketId = holder.TicketId,
-                        lockedAt = holder.StartedAt,
-                        lastActivityAt = holder.LastActivityAt,
-                        lockTimeoutMinutes = holder.LockTimeoutMinutes,
-                        activeRuns = g.Count(),
-                    };
-                })
-                .OrderBy(x => x.group)))
+        api.MapGet("/projects/{slug}/concurrency-groups", HandleListConcurrencyGroups)
             .WithTags("Runs");
 
-        api.MapGet("/projects/{slug}/runs/{runId}", (string slug, string runId, AgentRunRegistry reg) =>
-        {
-            var run = reg.Get(runId);
-            if (run is null || run.ProjectSlug != slug) return Results.NotFound();
-            return Results.Ok(new
-            {
-                run.RunId, run.AgentName, run.SkillFile, run.TicketId, run.ConcurrencyGroup,
-                run.StartedAt, run.EndedAt, run.SessionId, run.ExitCode,
-                run.WorkingDirectory,
-                run.CliVersion,
-                status = run.Status.ToString(),
-                run.InputTokens, run.OutputTokens, run.CacheReadTokens, run.CacheWriteTokens,
-                run.TotalTokens, run.TotalCostUsd, run.CostIsEstimated,
-                events = run.SnapshotBuffer(),
-            });
-        }).WithTags("Runs");
+        api.MapGet("/projects/{slug}/runs/{runId}", HandleGetRun).WithTags("Runs");
 
         api.MapGet("/projects/{slug}/runs/{runId}/stream", async (string slug, string runId, string? since, HttpContext http, AgentRunRegistry reg, CancellationToken ct) =>
         {
@@ -232,107 +192,13 @@ public static partial class Endpoints
             finally { run.OnEvent -= handler; }
         }).WithTags("Runs");
 
-        api.MapPost("/projects/{slug}/runs/{runId}/steer", async (string slug, string runId, SteerRunRequest req, AgentRunRegistry reg, ChatService cs, string? model) =>
-        {
-            var run = reg.Get(runId);
-            if (run is null || run.ProjectSlug != slug) return Results.NotFound();
-            if (run.Status != AgentRunStatus.Running) return Results.BadRequest(new { error = "Run is not active." });
-            var (imagePaths, imageError) = await PersistChatImagesAsync(req.Images, "", $"{runId}-steer-{Guid.NewGuid():N}");
-            if (imageError is not null)
-                return Results.BadRequest(new { error = "image_rejected", reason = imageError });
+        api.MapPost("/projects/{slug}/runs/{runId}/steer", HandleSteerRun).WithTags("Runs");
 
-            var steerText = req.Text;
-            if (string.IsNullOrWhiteSpace(req.Text) && imagePaths is not { Count: > 0 })
-                return Results.BadRequest(new { error = "empty_steer" });
-            if (imagePaths is { Count: > 0 })
-            {
-                if (!run.TryAddTemporarySteerImagePaths(imagePaths))
-                {
-                    CleanupChatImageFiles(imagePaths);
-                    return Results.BadRequest(new { error = "Run is not active." });
-                }
-                steerText += "\n\n[Attached images]\n" + string.Join("\n", imagePaths.Select(path => $"- {path}"));
-            }
-            await run.SteeringQueue.Writer.WriteAsync(steerText);
-            var targetModel = model ?? run.Model; // Use provided model or the run's current model
-            if (!string.IsNullOrEmpty(run.ChatTarget))
-                await cs.AppendAsync(slug, run.ChatTarget, "inject", req.Text, targetModel, images: req.Images?
-                    .Select(i => new ChatMessageImage(i.DataUrl, i.Mime, i.Name, i.SizeBytes))
-                    .ToList());
-            return Results.NoContent();
-        }).WithTags("Runs");
+        api.MapPost("/projects/{slug}/runs/{runId}/stop", HandleStopRun).WithTags("Runs");
 
-        api.MapPost("/projects/{slug}/runs/{runId}/stop", async (string slug, string runId, AgentRunRegistry reg, CancellationToken ct) =>
-        {
-            var run = reg.Get(runId);
-            if (run is null || run.ProjectSlug != slug) return Results.NotFound();
-            await AutomationEngine.CancelAndWaitForRunsAsync([run], ct);
-            return Results.NoContent();
-        }).WithTags("Runs");
+        api.MapGet("/projects/{slug}/runs/{runId}/evidence", HandleGetRunEvidence).WithTags("Runs");
 
-        api.MapGet("/projects/{slug}/runs/{runId}/evidence", (string slug, string runId, EvidenceStore store, AgentRunRegistry reg) =>
-        {
-            var run = reg.Get(runId);
-            if (run is not null && run.ProjectSlug != slug) return Results.NotFound();
-            var evidence = store.LoadRun(slug, runId);
-            if (evidence is not null && !string.Equals(evidence.ProjectSlug, slug, StringComparison.Ordinal))
-                return Results.NotFound();
-            if (evidence is null) return Results.NotFound();
-            EvidenceStore.ApplyStaleness(evidence, EvidenceStore.DefaultStalenessThreshold);
-            return Results.Ok(evidence);
-        }).WithTags("Runs");
-
-        api.MapPost("/projects/{slug}/runs/{runId}/retry", async (string slug, string runId,
-            AgentRunRegistry reg, ProjectService ps, TicketService ts, AgentRunner runner) =>
-        {
-            var run = reg.Get(runId);
-            if (run is null || run.ProjectSlug != slug) return Results.NotFound();
-            if (run.Status == AgentRunStatus.Running)
-                return Results.BadRequest(new { error = "Run is still active." });
-            if (reg.HasActiveInGroup(slug, run.ConcurrencyGroup))
-                return Results.BadRequest(new { error = "An agent is already running in this group." });
-
-            var project = await ps.GetProjectAsync(slug);
-            if (project is null) return Results.NotFound();
-
-            string? ticketTitle = null, ticketStatus = null;
-            if (run.TicketId is int tid)
-            {
-                var ticket = await ts.GetTicketAsync(slug, tid);
-                ticketTitle = ticket?.Title;
-                ticketStatus = ticket?.Status;
-            }
-
-            var newRunId = Guid.NewGuid().ToString("N");
-            var routing = ModelRouting.Resolve(run.Model, project.LocalModelBaseUrl);
-            // Same cross-provider fallback resolution as ActionExecutor: an unusable fallback
-            // is dropped rather than failing the retry.
-            var fallbackModel = project.FallbackModel;
-            var fallbackRouting = fallbackModel is null ? null : ModelRouting.Resolve(fallbackModel, project.LocalModelBaseUrl);
-            if (fallbackRouting?.Error is not null) { fallbackModel = null; fallbackRouting = null; }
-            var target = routing.ToTarget(run.Model);
-            var fallbackTarget = fallbackModel is null || fallbackRouting is null
-                ? null
-                : fallbackRouting.ToTarget(fallbackModel);
-            var ctx = new AgentRunContext
-            {
-                ProjectSlug = slug,
-                WorkspacePath = ps.ResolveWorkspacePath(project),
-                AgentName = run.AgentName,
-                SkillFile = run.SkillFile,
-                TicketId = run.TicketId,
-                TicketTitle = ticketTitle,
-                TicketStatus = ticketStatus,
-                ConcurrencyGroup = run.ConcurrencyGroup,
-                Target = target,
-                FallbackTarget = fallbackTarget,
-                RetryOnResumeFailure = true,
-                PresetRunId = newRunId,
-                MaxRunDuration = TimeSpan.FromMinutes(30),
-            };
-            _ = runner.RunAsync(ctx, CancellationToken.None);
-            return Results.Ok(new { runId = newRunId });
-        }).WithTags("Runs");
+        api.MapPost("/projects/{slug}/runs/{runId}/retry", HandleRetryRun).WithTags("Runs");
     }
 
     private sealed record QaSeedEvidenceRequest(string Status, DateTime? CapturedAt = null);
@@ -353,5 +219,163 @@ public static partial class Endpoints
         var bytes = Encoding.UTF8.GetBytes(frame);
         await res.Body.WriteAsync(bytes, ct);
         await res.Body.FlushAsync(ct);
+    }
+
+    // Shared application handlers used by REST endpoints and MCP tools.
+    internal static IResult HandleListRuns(string slug, AgentRunRegistry reg,
+        bool? includeCompleted, int? ticketId, int? limit)
+    {
+        if (limit is < 1 or > 500)
+            return Results.BadRequest(new { error = "limit must be between 1 and 500." });
+        var runs = includeCompleted == true ? reg.AllForProject(slug) : reg.ActiveForProject(slug);
+        return Results.Ok(runs.Where(r => ticketId is null || r.TicketId == ticketId)
+            .OrderByDescending(r => r.StartedAt).Take(limit ?? int.MaxValue).Select(r => new
+        {
+            r.RunId, r.AgentName, r.SkillFile, r.TicketId, r.ConcurrencyGroup,
+            r.StartedAt, r.SessionId, r.WorkingDirectory, status = r.Status.ToString(),
+            r.CliVersion,
+            r.TotalTokens, r.TotalCostUsd, r.CostIsEstimated,
+        }));
+    }
+
+    internal static IResult HandleGetRun(string slug, string runId, AgentRunRegistry reg)
+    {
+        var run = reg.Get(runId);
+        if (run is null || run.ProjectSlug != slug) return Results.NotFound();
+        return Results.Ok(new
+        {
+            run.RunId, run.AgentName, run.SkillFile, run.TicketId, run.ConcurrencyGroup,
+            run.StartedAt, run.EndedAt, run.SessionId, run.ExitCode,
+            run.WorkingDirectory,
+            run.CliVersion,
+            status = run.Status.ToString(),
+            run.InputTokens, run.OutputTokens, run.CacheReadTokens, run.CacheWriteTokens,
+            run.TotalTokens, run.TotalCostUsd, run.CostIsEstimated,
+            events = run.SnapshotBuffer(),
+        });
+    }
+
+    internal static async Task<IResult> HandleSteerRun(string slug, string runId, SteerRunRequest req, AgentRunRegistry reg, ChatService cs, string? model)
+    {
+        var run = reg.Get(runId);
+        if (run is null || run.ProjectSlug != slug) return Results.NotFound();
+        if (run.Status != AgentRunStatus.Running) return Results.BadRequest(new { error = "Run is not active." });
+        var (imagePaths, imageError) = await PersistChatImagesAsync(req.Images, "", $"{runId}-steer-{Guid.NewGuid():N}");
+        if (imageError is not null)
+            return Results.BadRequest(new { error = "image_rejected", reason = imageError });
+
+        var steerText = req.Text;
+        if (string.IsNullOrWhiteSpace(req.Text) && imagePaths is not { Count: > 0 })
+            return Results.BadRequest(new { error = "empty_steer" });
+        if (imagePaths is { Count: > 0 })
+        {
+            if (!run.TryAddTemporarySteerImagePaths(imagePaths))
+            {
+                CleanupChatImageFiles(imagePaths);
+                return Results.BadRequest(new { error = "Run is not active." });
+            }
+            steerText += "\n\n[Attached images]\n" + string.Join("\n", imagePaths.Select(path => $"- {path}"));
+        }
+        await run.SteeringQueue.Writer.WriteAsync(steerText);
+        var targetModel = model ?? run.Model; // Use provided model or the run's current model
+        if (!string.IsNullOrEmpty(run.ChatTarget))
+            await cs.AppendAsync(slug, run.ChatTarget, "inject", req.Text, targetModel, images: req.Images?
+                .Select(i => new ChatMessageImage(i.DataUrl, i.Mime, i.Name, i.SizeBytes))
+                .ToList());
+        return Results.NoContent();
+    }
+
+    internal static async Task<IResult> HandleStopRun(string slug, string runId, AgentRunRegistry reg, CancellationToken ct)
+    {
+        var run = reg.Get(runId);
+        if (run is null || run.ProjectSlug != slug) return Results.NotFound();
+        await AutomationEngine.CancelAndWaitForRunsAsync([run], ct);
+        return Results.NoContent();
+    }
+
+    internal static async Task<IResult> HandleRetryRun(string slug, string runId,
+        AgentRunRegistry reg, ProjectService ps, TicketService ts, AgentRunner runner)
+    {
+        var run = reg.Get(runId);
+        if (run is null || run.ProjectSlug != slug) return Results.NotFound();
+        if (run.Status == AgentRunStatus.Running)
+            return Results.BadRequest(new { error = "Run is still active." });
+        if (reg.HasActiveInGroup(slug, run.ConcurrencyGroup))
+            return Results.BadRequest(new { error = "An agent is already running in this group." });
+
+        var project = await ps.GetProjectAsync(slug);
+        if (project is null) return Results.NotFound();
+
+        string? ticketTitle = null, ticketStatus = null;
+        if (run.TicketId is int tid)
+        {
+            var ticket = await ts.GetTicketAsync(slug, tid);
+            ticketTitle = ticket?.Title;
+            ticketStatus = ticket?.Status;
+        }
+
+        var newRunId = Guid.NewGuid().ToString("N");
+        var routing = ModelRouting.Resolve(run.Model, project.LocalModelBaseUrl);
+        // Same cross-provider fallback resolution as ActionExecutor: an unusable fallback
+        // is dropped rather than failing the retry.
+        var fallbackModel = project.FallbackModel;
+        var fallbackRouting = fallbackModel is null ? null : ModelRouting.Resolve(fallbackModel, project.LocalModelBaseUrl);
+        if (fallbackRouting?.Error is not null) { fallbackModel = null; fallbackRouting = null; }
+        var target = routing.ToTarget(run.Model);
+        var fallbackTarget = fallbackModel is null || fallbackRouting is null
+            ? null
+            : fallbackRouting.ToTarget(fallbackModel);
+        var ctx = new AgentRunContext
+        {
+            ProjectSlug = slug,
+            WorkspacePath = ps.ResolveWorkspacePath(project),
+            AgentName = run.AgentName,
+            SkillFile = run.SkillFile,
+            TicketId = run.TicketId,
+            TicketTitle = ticketTitle,
+            TicketStatus = ticketStatus,
+            ConcurrencyGroup = run.ConcurrencyGroup,
+            Target = target,
+            FallbackTarget = fallbackTarget,
+            RetryOnResumeFailure = true,
+            PresetRunId = newRunId,
+            MaxRunDuration = TimeSpan.FromMinutes(30),
+        };
+        _ = runner.RunAsync(ctx, CancellationToken.None);
+        return Results.Ok(new { runId = newRunId });
+    }
+
+    internal static IResult HandleGetRunEvidence(string slug, string runId, EvidenceStore store, AgentRunRegistry reg)
+    {
+        var run = reg.Get(runId);
+        if (run is not null && run.ProjectSlug != slug) return Results.NotFound();
+        var evidence = store.LoadRun(slug, runId);
+        if (evidence is not null && !string.Equals(evidence.ProjectSlug, slug, StringComparison.Ordinal))
+            return Results.NotFound();
+        if (evidence is null) return Results.NotFound();
+        EvidenceStore.ApplyStaleness(evidence, EvidenceStore.DefaultStalenessThreshold);
+        return Results.Ok(evidence);
+    }
+
+    internal static IResult HandleListConcurrencyGroups(string slug, AgentRunRegistry reg)
+    {
+        return Results.Ok(reg.ActiveForProject(slug)
+            .GroupBy(r => r.ConcurrencyGroup)
+            .Select(g =>
+            {
+                var holder = g.OrderBy(r => r.StartedAt).First();
+                return new
+                {
+                    group = g.Key,
+                    runId = holder.RunId,
+                    agentName = holder.AgentName,
+                    ticketId = holder.TicketId,
+                    lockedAt = holder.StartedAt,
+                    lastActivityAt = holder.LastActivityAt,
+                    lockTimeoutMinutes = holder.LockTimeoutMinutes,
+                    activeRuns = g.Count(),
+                };
+            })
+            .OrderBy(x => x.group));
     }
 }

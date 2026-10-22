@@ -162,7 +162,7 @@ if (!builder.Environment.IsDevelopment())
 if (OperatingSystem.IsWindows())
     builder.Services.AddSingleton<KittyClaw.Core.Platform.IFolderPicker, KittyClaw.Core.Platform.WindowsFolderPicker>();
 
-// Embedded MCP server (Streamable HTTP) at /mcp — 7 tools proxying the board services.
+// Embedded MCP server (Streamable HTTP) at /mcp, sharing application handlers with REST.
 // The transport is registered once, while access is gated dynamically below by the global
 // persisted setting. This lets the UI enable or disable MCP immediately without a restart.
 builder.Services.AddMcpServer(options => options.ServerInfo = new()
@@ -176,7 +176,8 @@ builder.Services.AddMcpServer(options => options.ServerInfo = new()
     WebsiteUrl = "https://kittyclaw.dev",
 })
     .WithHttpTransport()
-    .WithTools<KittyClaw.Web.Api.McpTools>(KittyClaw.Web.Api.McpTools.SerializerOptions);
+    .WithTools<KittyClaw.Web.Api.McpTools>(KittyClaw.Web.Api.McpTools.SerializerOptions)
+    .WithTools<KittyClaw.Web.Api.McpManagementTools>(KittyClaw.Web.Api.McpTools.SerializerOptions);
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {

@@ -18,9 +18,9 @@ namespace KittyClaw.Core.Tests.Api;
 /// Also covers the persisted global opt-in setting.
 /// </summary>
 [Collection("MCP endpoint environment")]
-public sealed class McpEndpointTests : IClassFixture<McpEndpointTests.ApiFactory>, IAsyncLifetime
+public sealed partial class McpEndpointTests : IClassFixture<McpEndpointTests.ApiFactory>, IAsyncLifetime
 {
-    private static readonly string[] V1Tools =
+    private static readonly string[] CoreTools =
     [
         "board_overview", "comment_ticket", "create_ticket",
         "get_ticket", "list_projects", "list_tickets", "move_ticket",
@@ -55,13 +55,13 @@ public sealed class McpEndpointTests : IClassFixture<McpEndpointTests.ApiFactory
     }
 
     [Fact]
-    public async Task ToolsList_ExposesExactlyTheSevenV1Tools()
+    public async Task ToolsList_ExposesCoreAndManagementTools()
     {
         var client = await ConnectAsync();
 
         var tools = await client.ListToolsAsync();
 
-        Assert.Equal(V1Tools, tools.Select(t => t.Name).Order().ToArray());
+        Assert.Equal(CoreTools.Concat(ManagementTools).Order(), tools.Select(t => t.Name).Order());
     }
 
     [Fact]

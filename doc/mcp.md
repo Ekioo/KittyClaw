@@ -1,7 +1,7 @@
 # MCP server
 
 ## Purpose
-Exposes the board over the [Model Context Protocol](https://modelcontextprotocol.io) so any MCP client — Claude Code, Claude Desktop, or anything speaking Streamable HTTP — can drive projects and tickets without knowing the REST API. The endpoint is embedded in `KittyClaw.Web`: no separate process or secondary port. It is disabled by default.
+Exposes project management and supervision over the [Model Context Protocol](https://modelcontextprotocol.io) so any MCP client — Claude Code, Claude Desktop, or anything speaking Streamable HTTP — can drive projects and tickets without knowing the REST API. The endpoint is embedded in `KittyClaw.Web`: no separate process or secondary port. It is disabled by default.
 
 ## Connecting
 
@@ -10,32 +10,67 @@ Exposes the board over the [Model Context Protocol](https://modelcontextprotocol
 claude mcp add --transport http kittyclaw http://localhost:5230/mcp
 ```
 
-That's it — the seven tools below appear in the client's tool list.
+The server exposes 76 tools. Reconnect clients after upgrading so they refresh their cached tool catalogue.
 
 ## Key components
-- `KittyClaw.Web/Api/McpTools.cs` — the v1 tool surface: seven thin proxies over the same services the REST API uses (`ProjectService`, `TicketService`, `ColumnService`, `MemberService`). Mutating tools notify `BoardUpdateNotifier` so the UI refreshes live, exactly like their REST counterparts.
+- `KittyClaw.Web/Api/McpTools.cs` supplies the seven backward-compatible board tools, including search, filters and pipeline-aware child creation.
+- `KittyClaw.Web/Api/McpManagementTools.cs` supplies 69 management and observability tools, calling REST application handlers and the automation store directly. Validations, conflicts, reloads and board notifications are shared.
+- `KittyClaw.Core.Tests/Api/McpManagementEndpointTests.cs` verifies schemas and workflows over isolated Streamable HTTP.
 - `KittyClaw.Web/Program.cs` — registers the server (`AddMcpServer().WithHttpTransport().WithTools<McpTools>()`), maps `/mcp`, and dynamically gates requests through the persisted global setting.
 - `KittyClaw.Web/Components/Pages/GlobalSettings.razor` — exposes the one-click global switch.
 - Official C# SDK: [`ModelContextProtocol.AspNetCore`](https://www.nuget.org/packages/ModelContextProtocol.AspNetCore) 2.1.0 — the SDK handles the protocol (Streamable HTTP transport, sessions, JSON-RPC, tool schemas); KittyClaw only supplies handlers.
 - `server.json` (repo root) — registry metadata for [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io), published with `mcp-publisher`.
 
-## Tools (v1)
+## Core board tools
 
 | Tool | Maps to | Notes |
 |---|---|---|
 | `list_projects` | `GET /api/projects` | Discover project slugs |
-| `list_tickets` | `GET /api/projects/{slug}/tickets` | Optional `status` / `assignee` filters |
+| `list_tickets` | `GET /api/projects/{slug}/tickets` | Optional status, assignee, search, priority, creator and parent filters |
 | `get_ticket` | `GET /api/projects/{slug}/tickets/{id}` | Full ticket incl. comments and activity |
 | `create_ticket` | `POST /api/projects/{slug}/tickets` | Defaults mirror REST: `Backlog`, `NiceToHave`, author `owner` |
 | `comment_ticket` | `POST .../tickets/{id}/comments` | |
 | `move_ticket` | `PATCH .../tickets/{id}/status` | Status must match a column name |
 | `board_overview` | `GET .../columns` + `GET .../members` | Columns (in order) + valid assignees |
 
-The v1 surface is deliberately frozen at these seven tools (ticket #217): no deletion, runs, automations, or agent-launch tools.
+## Management and observability tools
+
+The original seven tools keep their names and arguments. New management tools take `project` (a slug), resource IDs, and a typed `request` object for fields. The MCP schema describes nested request properties, enum values and defaults. For example:
+
+```json
+{"project":"my-project","id":42,"request":{"author":"owner","title":"Clarified scope","priority":"Required","assignedTo":"reviewer","status":"Review","expectedStatus":"InProgress"}}
+```
+
+| Area | Tools |
+|---|---|
+| Tickets | `update_ticket`, `schedule_ticket`, `delete_ticket`, `set_ticket_parent`, `remove_ticket_parent`, `add_ticket_dependency`, `remove_ticket_dependency`, `update_ticket_comment`, `delete_ticket_comment`, `reorder_ticket`, `transfer_ticket`, `get_ticket_evidence`, `get_ticket_brief` |
+| Projects | `create_project`, `get_project`, `update_project`, `toggle_project_pause`, `configure_local_model` |
+| Members | `create_member`, `update_member`, `delete_member` |
+| Columns | `list_columns`, `create_column`, `update_column`, `delete_column`, `reorder_column` |
+| Pipelines | `list_pipelines`, `create_pipeline`, `update_pipeline` |
+| ColumnProcessors | `get_column_processor`, `save_column_processor`, `delete_column_processor` |
+| ColumnExecutions | `list_column_executions`, `retry_column_execution`, `cancel_column_execution` |
+| Automations | `get_automations`, `disable_automation`, `delete_automation`, `get_ticket_automation_queue`, `save_automations` |
+| Runs | `list_runs`, `get_run`, `steer_run`, `stop_run`, `retry_run`, `get_run_evidence`, `list_concurrency_groups` |
+| Approvals | `list_approval_requests`, `list_approval_decisions`, `list_approval_receipts`, `decide_approval`, `get_runtime_capabilities` |
+| WorktreeMerges | `list_worktree_merges`, `get_worktree_merge`, `enqueue_worktree_merge`, `process_next_worktree_merge`, `resume_worktree_merge`, `retry_worktree_synchronization` |
+| Labels | `list_labels`, `create_label`, `update_label`, `delete_label`, `patch_ticket_labels` |
+| Skills | `list_project_skills`, `get_project_skill`, `create_project_skill`, `update_project_skill`, `delete_project_skill` |
+| Engine | `get_engine_health` |
+
+`get_run` includes buffered log events, token usage and cost. `list_runs` defaults to active runs; `includeCompleted: true` includes retained terminal runs, with optional `ticketId` and `limit` filters (1-500, default 100). Retention follows `AgentRunRegistry` and is not an archival search. Evidence remains readable through `get_run_evidence` when the run is no longer in memory.
+
+`save_automations` is an MCP-only writer using `AutomationStore` merge semantics and reloading the engine; it does not add an arbitrary-edit REST route. Read `get_automations` first and pass its `fileStamp` as `request.baseStamp`. The store preserves missing automations on divergence and reports `preservedIds` and `diverged`; with a matching stamp, omissions are intentional deletions. Trigger, condition and action objects use their existing `type` discriminators. A rejected reload is a tool error that explicitly reports that the file was saved and the previous runtime was retained.
+
+Read-only tools advertise read-only/idempotent hints. Deletions and mutations that replace state advertise destructive hints. Retry, processing, configuration and resume operations can launch agents or modify Git state; their descriptions state those effects. These hints are client guidance, not access control. Approval decisions must reflect explicit human authorization; MCP grants no additional identity or approval rights.
+
+Secrets, raw provider hook callbacks, approval receipt fabrication, dashboard editing, pipeline-kit file transfer and project deletion are outside this tool catalogue. They are not required for the project/ticket/workflow/run management surface.
+
 
 ## Conventions
 - Tool results are JSON with the same shape as the REST responses (camelCase, string enums) — an agent that knows `/api/docs` reads MCP payloads unchanged.
-- `author` fields default to `"owner"`, like the REST endpoints. Agents should pass their own name.
+- Original board tools default `author` to `"owner"`. Management request records follow REST required fields; pass `request.author` explicitly where required.
+- Shared handler HTTP errors become MCP tool errors with their status and JSON details (including transition conflicts); no-content success returns `{ "success": true, "statusCode": 204 }`.
 - Unknown project slugs return a real tool error pointing at `list_projects` (the REST layer would silently show an empty board).
 - Service validation errors (unknown column, empty comment, blocked-ticket saturation) surface verbatim as MCP tool errors.
 
