@@ -15,7 +15,7 @@ using static Microsoft.Playwright.Assertions;
 
 namespace KittyClaw.Core.Tests.Web;
 
-/// <summary>Opt-in real-browser journey against the isolated debug port; never contacts TypeSafe.</summary>
+/// <summary>Opt-in real-browser journey on an isolated ephemeral port; never contacts TypeSafe.</summary>
 public sealed class JevObservationJourneyTests(ITestOutputHelper output)
 {
     [DebugBrowserFact]
@@ -33,7 +33,7 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
         var changes = new Dictionary<string, string?>
         {
             ["KITTYCLAW_DATA_DIR"] = dataDir,
-            ["ASPNETCORE_URLS"] = "http://localhost:5232",
+            ["ASPNETCORE_URLS"] = "http://127.0.0.1:0",
             ["KITTYCLAW_CLAUDE_BIN"] = mock,
             ["KITTYCLAW_GROK_BIN"] = mock,
             ["KITTYCLAW_CODEX_BIN"] = mock,
@@ -44,9 +44,10 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
         try
         {
             await using var factory = new DebugFactory(dataDir);
-            factory.UseKestrel(5232);
+            factory.UseKestrel(0);
             using var http = factory.CreateClient();
-            Assert.Equal(5232, http.BaseAddress!.Port);
+            Assert.NotNull(http.BaseAddress);
+            var baseUrl = http.BaseAddress.ToString().TrimEnd('/');
             var created = await http.PostAsJsonAsync("/api/projects", new CreateProjectRequest("JEV observation journey"));
             created.EnsureSuccessStatusCode();
             var slug = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("slug").GetString()!;
@@ -86,7 +87,7 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
             page.Response += (_, response) => { if (response.Status >= 400) output.WriteLine($"HTTP {response.Status}: {response.Url}"); };
             try
             {
-            await page.GotoAsync("http://localhost:5232/settings");
+            await page.GotoAsync($"{baseUrl}/settings");
             await connected.Task.WaitAsync(TimeSpan.FromSeconds(20));
             var settings = page.GetByTestId("jev-settings");
             await Expect(settings.GetByTestId("jev-global-status")).ToContainTextAsync("JEV unavailable");
@@ -98,7 +99,7 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
             await Expect(settings.GetByTestId("jev-api-key")).ToHaveValueAsync("");
             Assert.Equal(0, factory.Handler.Count);
             await page.ScreenshotAsync(new() { Path = Path.Combine(dataDir, "00-jev-configured.png"), FullPage = true });
-            await page.GotoAsync($"http://localhost:5232/board/{slug}");
+            await page.GotoAsync($"{baseUrl}/board/{slug}");
             var sourceHeader = page.Locator(".column-header").Filter(new() { HasText = "Backlog" });
             // The prerendered header can be visible before Blazor has connected its circuit.
             for (var attempt = 0; attempt < 20 && !await page.Locator(".column-context-menu-configure").IsVisibleAsync(); attempt++)
@@ -121,7 +122,7 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
             var processor = await http.GetFromJsonAsync<ColumnProcessor>($"/api/projects/{slug}/columns/{source.Id}/processor", json);
             Assert.True(processor!.Enabled);
             Assert.True(processor.JevObservationOnly);
-            await page.GotoAsync($"http://localhost:5232/board/{slug}/ticket/{ticket!.Id}");
+            await page.GotoAsync($"{baseUrl}/board/{slug}/ticket/{ticket!.Id}");
             var proposal = page.GetByTestId("jev-proposal");
             await Expect(proposal).ToContainTextAsync("Suggested destination: Review", new() { Timeout = 60000 });
             await Expect(proposal).ToContainTextAsync("Confidence: 90");
@@ -147,7 +148,7 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
             Assert.Equal(0, executions.GetArrayLength());
             Assert.Equal(1, factory.Handler.Count);
             Assert.Empty(browserErrors);
-            output.WriteLine($"PASS: http://localhost:5232/board/{slug}/ticket/{ticket.Id}");
+            output.WriteLine($"PASS: {baseUrl}/board/{slug}/ticket/{ticket.Id}");
             output.WriteLine($"Data and screenshots retained at {dataDir}");
             output.WriteLine($"Ticket remained in {source.Name} (#{source.Id}); proposed {target.Name} (#{target.Id}); one mock API call; zero executions.");
             }
@@ -234,7 +235,7 @@ public sealed class DebugBrowserFactAttribute : FactAttribute
     public DebugBrowserFactAttribute()
     {
         if (Environment.GetEnvironmentVariable("KITTYCLAW_JEV_DEBUG_E2E") != "1")
-            Skip = "Opt-in debug browser journey: set KITTYCLAW_JEV_DEBUG_E2E=1. Requires free port 5232 and Playwright Chromium.";
+            Skip = "Opt-in debug browser journey: set KITTYCLAW_JEV_DEBUG_E2E=1. Requires Playwright Chromium.";
     }
 }
 
