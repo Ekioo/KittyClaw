@@ -55,5 +55,6 @@
   "ProviderOllamaConfiguration": "Installieren und starten Sie Ollama. Adresse und lokale Modelle werden anschließend pro Projekt konfiguriert.",
   "ProviderDeepSeekConfiguration": "DeepSeek V4 verwendet Claude Code über die Anthropic-kompatible API. Speichern Sie DEEPSEEK_API_KEY im Vault jedes Projekts.",
   "ProviderSharedClaudeCli": "Gemeinsamer Transport: Die Erkennung bestätigt Claude Code; der DeepSeek-Schlüssel bleibt projektspezifisch.",
-  "AgentProvidersDetectionNote": "Die Erkennung prüft das CLI, ohne Zugangsdaten zu lesen oder anzuzeigen. Projektspezifische Geheimnisse bleiben im Vault."
+  "AgentProvidersDetectionNote": "Die Erkennung prüft das CLI, ohne Zugangsdaten zu lesen oder anzuzeigen. Projektspezifische Geheimnisse bleiben im Vault.",
+  "RtkGlobalHelp": "Optionaler Optimierer für Shell-Ausgaben. Aktivieren Sie RTK separat in den Einstellungen jedes Projekts. Programmdatei überschreiben: KITTYCLAW_RTK_BIN."
 }
