@@ -142,7 +142,8 @@ public sealed class CodexSupportTests
         Assert.Equal(3, run.CacheReadTokens);
         Assert.Equal(4, run.OutputTokens);
         Assert.True(run.CostIsEstimated);
-        Assert.Equal(0.0001565m, run.TotalCostUsd);
+        // Seven uncached input tokens at $4/M, three cached at $0.4/M, four output at $20/M.
+        Assert.Equal(0.0001092m, run.TotalCostUsd);
     }
 
     [Fact]
