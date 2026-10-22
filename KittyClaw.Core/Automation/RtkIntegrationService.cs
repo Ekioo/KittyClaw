@@ -51,6 +51,12 @@ public sealed partial class RtkIntegrationService
             : new RtkIntegrationStatus(true, false, "unavailable", Reason: probe.Reason);
     }
 
+    public async Task<RtkIntegrationStatus> ProbeAvailabilityAsync(CancellationToken ct = default)
+    {
+        var probe = _probeOverride is null ? await ProbeAsync(ct, refresh: true) : await _probeOverride(ct);
+        return new RtkIntegrationStatus(false, probe.Available, "disabled", probe.Version, probe.Reason);
+    }
+
     internal static string AppendInstructions(string prompt, RtkIntegrationStatus? status)
     {
         if (status is not { Enabled: true, Available: true }) return prompt;
@@ -69,13 +75,13 @@ public sealed partial class RtkIntegrationService
             startInfo.Environment["RTK_TELEMETRY_DISABLED"] = "1";
     }
 
-    private static async Task<RtkProbeResult> ProbeAsync(CancellationToken ct)
+    private static async Task<RtkProbeResult> ProbeAsync(CancellationToken ct, bool refresh = false)
     {
         var binary = Environment.GetEnvironmentVariable("KITTYCLAW_RTK_BIN");
         if (string.IsNullOrWhiteSpace(binary)) binary = OperatingSystem.IsWindows() ? "rtk.exe" : "rtk";
 
         var now = DateTime.UtcNow;
-        if (ProbeCache.TryGetValue(binary, out var cached) && cached.ExpiresAt > now)
+        if (!refresh && ProbeCache.TryGetValue(binary, out var cached) && cached.ExpiresAt > now)
             return cached.Result;
 
         var result = await ProbeBinaryAsync(binary, ct);

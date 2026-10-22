@@ -153,3 +153,6 @@
     border: 1px solid var(--border, #333); margin-right: 0.4rem;
 }
 
+.provider-readiness-card[data-testid="jev-settings"] .settings-row { flex-wrap: wrap; }
+.provider-readiness-card[data-testid="jev-settings"] label { display: flex; flex-direction: column; gap: 0.4rem; }
+.provider-readiness-card[data-testid="jev-settings"] .settings-input { width: 100%; min-width: 0; box-sizing: border-box; }

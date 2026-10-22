@@ -2,8 +2,11 @@
 @inject JevConfigurationService Configuration
 @inject LocalizationService L
 
-<section class="settings-section" data-testid="jev-settings">
-    <h2>JEV / TypeSafe</h2>
+<article class="provider-readiness-card @(_status.Available ? "provider-ready" : "provider-missing")" data-testid="jev-settings">
+    <div class="provider-card-header">
+        <strong>JEV / TypeSafe</strong>
+        <span class="provider-status-pill @(_status.Available ? "ready" : "missing")">@L[_status.Available ? "ProviderDetected" : "ProviderNotDetected"]</span>
+    </div>
     <p class="settings-hint">@L["JevSettingsHelp"]</p>
     <p data-testid="jev-global-status">@L[_status.Available ? "JevAvailable" : "JevUnavailable"]</p>
     @if (_status.Source is not null)
@@ -20,7 +23,7 @@
     </div>
     <p class="settings-hint">@L["JevSecretHelp"]</p>
     @if (_error is not null) { <p role="status" class="settings-status-error">@_error</p> }
-</section>
+</article>
 
 @code {
     private JevAvailability _status = new(false, false, null);
@@ -33,10 +36,11 @@
         if (firstRender) { _interactiveReady = true; StateHasChanged(); }
     }
     protected override Task OnInitializedAsync() => RefreshAsync();
-    private async Task RefreshAsync()
+    public async Task RefreshAsync()
     {
         _status = await Configuration.GetAsync();
         _error = _status.Error;
+        await InvokeAsync(StateHasChanged);
     }
     private async Task SaveAsync() => await UpdateAsync(async () => await Configuration.SaveKeyAsync(_key));
     private async Task DeleteAsync() => await UpdateAsync(async () => await Configuration.DeleteKeyAsync());

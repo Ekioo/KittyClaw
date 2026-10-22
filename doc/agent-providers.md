@@ -24,3 +24,10 @@ project-specific secrets such as `DEEPSEEK_API_KEY` remain write-only in the pro
 
 Restart KittyClaw, or use **Check again** in Global settings, after changing `PATH` or a
 `KITTYCLAW_*_BIN` override.
+
+## Companion tools
+
+The same settings grid includes JEV / TypeSafe (availability and secure API-key configuration)
+and RTK (local executable detection and installation guide). **Check again** refreshes both
+tools as well as the provider CLIs. RTK remains opt-in in each project’s settings; its global
+card only checks availability, respecting `KITTYCLAW_RTK_BIN`.
