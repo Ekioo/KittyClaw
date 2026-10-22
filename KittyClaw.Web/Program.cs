@@ -131,6 +131,10 @@ builder.Services.AddSingleton(new KittyClaw.Core.Evidence.EvidenceStore(dataDir)
 builder.Services.AddHostedService<KittyClaw.Core.Evidence.RunEvidenceAttacher>();
 builder.Services.AddSingleton<AutomationEngine>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomationEngine>());
+builder.Services.AddSingleton(sp => new JevQualificationService(
+    sp.GetRequiredService<ProjectService>(), sp.GetRequiredService<ProjectSecretVault>(),
+    new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { MaxResponseContentBufferSize = 256 * 1024 }));
+builder.Services.AddHostedService<JevObservationEngine>();
 builder.Services.AddSingleton<ColumnProcessingEngine>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ColumnProcessingEngine>());
 builder.Services.AddSingleton<ColumnScheduledTaskEngine>();

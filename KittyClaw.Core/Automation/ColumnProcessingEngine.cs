@@ -120,6 +120,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
         if (project is null || project.IsPaused) return;
         foreach (var processor in await _processors.ListEnabledAsync(slug))
         {
+            if (processor.JevObservationOnly) continue;
             var key = $"{slug}:{processor.Id}";
             if (_activeProcessors.TryGetValue(key, out var active) && !active.IsCompleted) continue;
             _ownerFeedbackSignals.TryGetValue(slug, out var feedbackSignals);
@@ -140,6 +141,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
         string slug, ColumnProcessor processor, ColumnExecution execution,
         CancellationToken cancellationToken)
     {
+        if (processor.JevObservationOnly) return;
         IDisposable? finalizationLease = null;
         int? rootTicketId = null;
         try

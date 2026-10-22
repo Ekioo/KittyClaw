@@ -60,6 +60,8 @@ public sealed class ColumnProcessorService(
                 CREATE UNIQUE INDEX IF NOT EXISTS IX_ColumnProcessors_ColumnId
                     ON ColumnProcessors(ColumnId);
                 """));
+        await MigrationGate.RunOnceAsync(db, "column-processors-jev-v1", static d =>
+            MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN JevObservationOnly INTEGER NOT NULL DEFAULT 0"));
         await MigrationGate.RunOnceAsync(db, "column-processors-routing-v1", static async d =>
         {
             await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN SelectionOrder INTEGER NOT NULL DEFAULT 0");
@@ -90,7 +92,7 @@ public sealed class ColumnProcessorService(
     public async Task<List<ColumnProcessor>> ListEnabledAsync(string projectSlug)
     {
         var enabled = (await ListAsync(projectSlug)).Where(p => p.Enabled).ToList();
-        foreach (var processor in enabled)
+        foreach (var processor in enabled.Where(p => !p.JevObservationOnly))
             await EnsureMemoryAsync(projectSlug, processor);
         return enabled;
     }
@@ -104,7 +106,8 @@ public sealed class ColumnProcessorService(
         int? defaultTargetColumnId = null, int? technicalFailureColumnId = null,
         List<ColumnRoute>? routes = null, string? prompt = null,
         List<ColumnProcessorAction>? beforeActions = null,
-        List<ColumnProcessorAction>? afterActions = null)
+        List<ColumnProcessorAction>? afterActions = null,
+        bool? jevObservationOnly = null)
     {
         var gate = ProjectGates.GetOrAdd(projectSlug, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync();
@@ -123,6 +126,7 @@ public sealed class ColumnProcessorService(
                 Mission = mission,
                 Prompt = prompt ?? "",
                 Model = model,
+                JevObservationOnly = jevObservationOnly ?? (await db.ColumnProcessors.FirstOrDefaultAsync(p => p.ColumnId == columnId))?.JevObservationOnly ?? false,
                 Enabled = enabled,
                 MaxTurns = maxTurns,
                 SelectionOrder = selectionOrder,
@@ -151,7 +155,7 @@ public sealed class ColumnProcessorService(
             await WriteDefinitionAsync(projectSlug, normalized);
             var processor = await UpsertProjectionAsync(db, normalized, columnId);
             await db.SaveChangesAsync();
-            await EnsureMemoryAsync(projectSlug, processor);
+            if (!processor.JevObservationOnly) await EnsureMemoryAsync(projectSlug, processor);
             return processor;
         }
         finally
@@ -438,6 +442,7 @@ public sealed class ColumnProcessorService(
         processor.Mission = definition.Mission;
         processor.Prompt = definition.Prompt;
         processor.Model = definition.Model;
+        processor.JevObservationOnly = definition.JevObservationOnly;
         processor.Enabled = definition.Enabled;
         processor.MaxTurns = definition.MaxTurns;
         processor.SelectionOrder = definition.SelectionOrder;
@@ -576,6 +581,7 @@ public sealed class ColumnProcessorService(
         Mission = processor.Mission,
         Prompt = processor.Prompt,
         Model = processor.Model,
+        JevObservationOnly = processor.JevObservationOnly,
         Enabled = processor.Enabled,
         MaxTurns = processor.MaxTurns,
         SelectionOrder = processor.SelectionOrder,
@@ -658,6 +664,7 @@ public sealed class ColumnProcessorService(
         public string Prompt { get; set; } = "";
         public string? Model { get; set; }
         public bool Enabled { get; set; } = true;
+        public bool JevObservationOnly { get; set; }
         public int MaxTurns { get; set; } = 100;
         public TicketSelectionOrder SelectionOrder { get; set; } = TicketSelectionOrder.Position;
         public int MaxAttempts { get; set; } = 3;

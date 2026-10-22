@@ -95,6 +95,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
     public async Task<ColumnExecution?> ClaimNextAsync(string projectSlug, ColumnProcessor processor, DateTime now,
         IReadOnlyDictionary<int, int>? ownerFeedbackSignals = null)
     {
+        if (processor.JevObservationOnly) return null;
         await using var db = projects.GetProjectDb(projectSlug);
         await ColumnService.EnsureBoardColumnsTableAsync(db);
         await TicketService.EnsureActivityTableAsync(db);

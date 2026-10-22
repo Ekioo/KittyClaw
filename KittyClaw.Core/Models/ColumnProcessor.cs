@@ -15,6 +15,7 @@ public class ColumnProcessor
     public string Prompt { get; set; } = "";
     public string? Model { get; set; }
     public bool Enabled { get; set; } = true;
+    public bool JevObservationOnly { get; set; }
     public int MaxTurns { get; set; } = 100;
     public TicketSelectionOrder SelectionOrder { get; set; } = TicketSelectionOrder.Position;
     public int MaxAttempts { get; set; } = 3;

@@ -125,10 +125,14 @@
                         {
                             <div class="processor-draft-notice" role="status">@L["ProcessorDraftNotice"]</div>
                         }
+                        <label class="workflow-check"><input type="checkbox" @bind="_jevObservationOnly" /> JEV qualification — observation only</label>
+                        <p class="settings-hint">Proposes routing from the configured outcome routes and default destination. No agent, column actions or automatic moves. Add TYPESAFE_API_KEY to the project secrets. Ticket text and recent comments are sent to TypeSafe.</p>
                         <label class="workflow-check"><input type="checkbox" @bind="_enabled" /> <FieldHelp Label="@L["ProcessorEnabled"]" Help="@L["ProcessorEnabledHelp"]" /></label>
                         <label><FieldHelp Label="@L["Name"]" Help="@L["ProcessorNameHelp"]" /><input class="settings-input" @bind="_name" /></label>
                         <label><FieldHelp Label="@L["ProcessorMission"]" Help="@L["ProcessorMissionHelp"]" /><textarea class="settings-input workflow-textarea" @bind="_mission"></textarea></label>
                         <label><FieldHelp Label="@L["ProcessorPrompt"]" Help="@L["ProcessorPromptHelp"]" /><textarea class="settings-input workflow-textarea processor-prompt" @bind="_prompt"></textarea></label>
+                        @if (!_jevObservationOnly)
+                        {
                         <label><FieldHelp Label="@L["ProcessorModel"]" Help="@L["ProcessorModelHelp"]" />
                             <select @key="@($"{_model}#{AllModels.Count}")" value="@(_model ?? "")" @onchange="OnModelChanged">
                                 <option value="">@L["ProcessorModelAutomatic"]</option>
@@ -208,6 +212,7 @@
                             </div>
                         }
 
+                        }
                         @if (_processorExists)
                         {
                             <button class="processor-secondary-btn processor-remove-btn" @onclick="RemoveProcessorDraft">@L["ColumnRemoveProcessor"]</button>
@@ -334,6 +339,7 @@
     private bool _processorExists;
     private bool _processorDraft;
     private bool _removeProcessorOnSave;
+    private bool _jevObservationOnly;
     private bool _enabled = true;
     private string _activeTab = "general";
     private string _columnName = "";
@@ -450,6 +456,7 @@
         _prompt = processor?.Prompt ?? "";
         _model = processor?.Model;
         _enabled = processor?.Enabled ?? true;
+        _jevObservationOnly = processor?.JevObservationOnly ?? false;
         _maxTurns = processor?.MaxTurns ?? 100;
         _maxAttempts = processor?.MaxAttempts ?? 3;
         _retryBackoff = processor?.RetryBackoffSeconds ?? 60;
@@ -508,7 +515,8 @@
                     _selectionOrder, _maxAttempts, _retryBackoff, _defaultTargetId, _technicalFailureTargetId, routes,
                     prompt: _prompt,
                     beforeActions: _beforeActions.Select(action => action.ToModel()).ToList(),
-                    afterActions: _afterActions.Select(action => action.ToModel()).ToList());
+                    afterActions: _afterActions.Select(action => action.ToModel()).ToList(),
+                    jevObservationOnly: _jevObservationOnly);
             }
 
             await ScheduledTaskService.SaveColumnAsync(Slug, savedColumn.Id, _scheduledTasks);

@@ -1,0 +1,78 @@
+@using KittyClaw.Core.Services
+@inject JevQualificationService Qualification
+@inject TicketService Tickets
+@inject ColumnProcessorService Processors
+@inject ProjectService Projects
+@using Microsoft.EntityFrameworkCore
+@implements IAsyncDisposable
+
+@if (_proposal is not null)
+{
+    <section class="worktree-summary" data-testid="jev-proposal" aria-label="JEV qualification">
+        <strong>JEV — observation only</strong>
+        <p>Routing suggestion only. No workflow action was applied.</p>
+        @if (_stale) { <p class="settings-hint">This observation predates changes to the ticket or its column.</p> }
+        @if (_proposal.Error is not null)
+        {
+            <p role="status">@_proposal.Error</p>
+        }
+        else
+        {
+            <p>Suggested destination: <strong>@_proposal.Destinations.GetValueOrDefault(_proposal.Choice ?? "", "None")</strong></p>
+            <p>Confidence: @_proposal.Confidence?.ToString("P0")</p>
+            <details>
+                <summary>Destination probabilities</summary>
+                @foreach (var option in _proposal.Probabilities.OrderByDescending(p => p.Value))
+                {
+                    <p>@_proposal.Destinations.GetValueOrDefault(option.Key, option.Key): @option.Value.ToString("P1")</p>
+                }
+            </details>
+        }
+        <p class="settings-hint">@_proposal.Model · @_proposal.ObservedAt.ToLocalTime().ToString("g")</p>
+    </section>
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+    [Parameter] public int TicketId { get; set; }
+    private JevRoutingProposal? _proposal;
+    private bool _stale;
+    private readonly CancellationTokenSource _stop = new();
+    private Task? _poll;
+    protected override async Task OnParametersSetAsync()
+    {
+        await ReloadAsync();
+        _poll ??= PollAsync();
+    }
+    private async Task ReloadAsync()
+    {
+        _proposal = await Qualification.GetAsync(Slug, TicketId, _stop.Token);
+        var ticket = await Tickets.GetTicketAsync(Slug, TicketId);
+        _stale = false;
+        if (_proposal is not null)
+        {
+            var processor = await Processors.GetAsync(Slug, _proposal.SourceColumnId);
+            await using var db = Projects.GetProjectDb(Slug);
+            var columns = await db.BoardColumns.AsNoTracking().ToListAsync(_stop.Token);
+            _stale = ticket is null || processor is null || !processor.Enabled || !processor.JevObservationOnly ||
+                ticket.ColumnId != _proposal.SourceColumnId ||
+                JevQualificationService.Fingerprint(processor, ticket, columns) != _proposal.Fingerprint;
+        }
+    }
+    private async Task PollAsync()
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+            while (await timer.WaitForNextTickAsync(_stop.Token))
+                await InvokeAsync(async () => { await ReloadAsync(); StateHasChanged(); });
+        }
+        catch (OperationCanceledException) { }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        _stop.Cancel();
+        if (_poll is not null) await _poll;
+        _stop.Dispose();
+    }
+}
