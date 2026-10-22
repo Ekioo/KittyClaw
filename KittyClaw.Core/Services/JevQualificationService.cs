@@ -14,8 +14,10 @@ public sealed record JevRoutingProposal(string Fingerprint, int SourceColumnId, 
     Dictionary<string, string> Destinations, string? Error);
 
 /// <summary>Read-only semantic qualification. Never invokes workflow actions or changes tickets.</summary>
-public sealed class JevQualificationService(ProjectService projects, ProjectSecretVault vault, HttpClient client)
+public sealed class JevQualificationService(ProjectService projects, ProjectSecretVault vault, HttpClient client,
+    JevConfigurationService? configuration = null)
 {
+    private readonly JevConfigurationService _configuration = configuration ?? new(vault, projects.DataDir);
     public const string SecretName = "TYPESAFE_API_KEY";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -80,9 +82,9 @@ public sealed class JevQualificationService(ProjectService projects, ProjectSecr
         try
         {
             if (destinations.Count < 2) throw new InvalidOperationException("Configure an outcome route or default destination first.");
-            var secrets = await vault.ReadForInjectionAsync(slug, ct);
-            if (!secrets.TryGetValue(SecretName, out var key))
-                throw new InvalidOperationException("Add TYPESAFE_API_KEY to the project secrets.");
+            var key = await _configuration.ResolveKeyAsync(slug, ct);
+            if (string.IsNullOrWhiteSpace(key))
+                throw new InvalidOperationException("JEV is unavailable. Configure a TypeSafe API key in KittyClaw settings, project secrets or the machine environment.");
             if (stateJson.Length > 48000) throw new InvalidOperationException("Ticket context is too large for qualification (48,000 characters maximum).");
             using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.typesafe.ai/v1/systemone");
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);

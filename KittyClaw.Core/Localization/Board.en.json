@@ -376,5 +376,17 @@
   "WorktreeRetrySynchronization": "Retry local synchronization",
   "WorktreeResume": "Resume integration",
   "WorktreeRetry": "Retry processing",
-  "WorktreeLoadError": "Unable to load worktree state:"
+  "WorktreeLoadError": "Unable to load worktree state:",
+  "JevObservationMode": "JEV qualification — observation only",
+  "JevObservationHelp": "Proposes configured routing without agents, column actions or automatic moves. Ticket text and recent comments are sent to TypeSafe only when enabled.",
+  "JevAvailable": "JEV available: a TypeSafe key is configured.",
+  "JevUnavailable": "JEV unavailable: add a TypeSafe key in KittyClaw settings, project secrets or the machine environment.",
+  "JevSettingsHelp": "Optional structured decisions for column qualification. Configuring a key does not activate any column or call the API.",
+  "JevApiKey": "TypeSafe API key",
+  "JevRemoveKey": "Remove saved key",
+  "JevRefresh": "Detect again",
+  "JevSecretHelp": "The saved key is encrypted and never shown again. Priority: project key, KittyClaw key, then TYPESAFE_API_KEY from the machine environment.",
+  "JevSourcekittyclaw": "Using the encrypted key saved in KittyClaw.",
+  "JevSourceenvironment": "Using TYPESAFE_API_KEY detected in the machine environment.",
+  "JevSaveError": "The key could not be saved or removed. Check that the system secret vault is available."
 }

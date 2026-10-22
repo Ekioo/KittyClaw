@@ -11,7 +11,21 @@ and legacy automations retain their own configuration.
 
 In **Configure column → Processor**, enable **JEV qualification — observation only**.
 Set the mission and optional instructions, and configure outcome routes or a default destination
-in the Routing tab. Add `TYPESAFE_API_KEY` through the project's existing write-only secret vault.
+in the Routing tab. JEV is optional: the option is disabled until a credential is detected.
+Add a key in **Settings → JEV / TypeSafe**, set `TYPESAFE_API_KEY` in the machine environment,
+or add a project-specific override through the existing project secret vault.
+No JEV executable is required. Detection only checks local configuration; it does not validate
+credentials remotely, call TypeSafe, or activate processors automatically.
+
+Credential priority is project vault, KittyClaw settings, then machine environment. On Windows,
+the process, user and machine environment scopes are checked in that order, allowing detection
+of user variables added after KittyClaw started. Other platforms use the process environment.
+The global key is encrypted using the existing native secret protector and stored below
+`<data-dir>/integrations/secrets/typesafe.vault`. It is isolated from project vaults and is never
+injected into agent subprocesses. The settings UI exposes presence and source only, supports
+replacement and removal, clears the password input after saving, and never retrieves the value.
+A saved observation processor with missing credentials remains in observation mode with an
+unavailable diagnostic; it cannot silently fall back to an agent or move the ticket.
 The REST processor contract also accepts `jevObservationOnly`; omitting it preserves the saved mode.
 The flag is versioned in the authoritative `processor.json` and projected into SQLite.
 
@@ -46,7 +60,9 @@ activate routing in this implementation. No live TypeSafe call is needed by the 
 
 The opt-in `JevObservationJourneyTests` starts the real Blazor/Kestrel app on port 5232,
 uses an isolated Git repository and database below `%APPDATA%/KittyClaw-debug/jev-e2e-*`,
-and replaces only the TypeSafe HTTP client with a deterministic fixture. The project
+and replaces the TypeSafe HTTP client with a deterministic fixture while disabling host-key detection.
+Playwright saves a fake key through global settings, verifies the cleared password field and zero
+API calls before column activation. The project
 starts with its processor disabled; Playwright activates observation and the processor
 through the column dialog, then verifies the proposal in the ticket. It checks the ticket
 stays in its source column for 32 seconds, no column execution is created, and only one

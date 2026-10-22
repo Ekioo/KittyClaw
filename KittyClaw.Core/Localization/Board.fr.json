@@ -376,5 +376,17 @@
   "WorktreeRetrySynchronization": "Relancer la synchronisation locale",
   "WorktreeResume": "Reprendre la fusion",
   "WorktreeRetry": "Relancer le traitement",
-  "WorktreeLoadError": "Impossible de charger l’état du worktree :"
+  "WorktreeLoadError": "Impossible de charger l’état du worktree :",
+  "JevObservationMode": "Qualification JEV — observation uniquement",
+  "JevObservationHelp": "Propose un routage configuré sans agent, action de colonne ou déplacement automatique. Le texte du ticket et les commentaires récents sont transmis à TypeSafe uniquement après activation.",
+  "JevAvailable": "JEV disponible : une clé TypeSafe est configurée.",
+  "JevUnavailable": "JEV indisponible : ajoutez une clé TypeSafe dans les paramètres KittyClaw, les secrets du projet ou l’environnement de la machine.",
+  "JevSettingsHelp": "Décisions structurées optionnelles pour qualifier les tickets. Configurer une clé n’active aucune colonne et ne déclenche aucun appel API.",
+  "JevApiKey": "Clé API TypeSafe",
+  "JevRemoveKey": "Supprimer la clé enregistrée",
+  "JevRefresh": "Détecter à nouveau",
+  "JevSecretHelp": "La clé est chiffrée et ne sera plus affichée. Priorité : clé du projet, clé KittyClaw, puis TYPESAFE_API_KEY dans l’environnement de la machine.",
+  "JevSourcekittyclaw": "Utilise la clé chiffrée enregistrée dans KittyClaw.",
+  "JevSourceenvironment": "Utilise TYPESAFE_API_KEY détectée dans l’environnement de la machine.",
+  "JevSaveError": "Impossible d’enregistrer ou de supprimer la clé. Vérifiez la disponibilité du coffre de secrets système."
 }

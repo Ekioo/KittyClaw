@@ -42,7 +42,7 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
         foreach (var pair in changes) Environment.SetEnvironmentVariable(pair.Key, pair.Value);
         try
         {
-            await using var factory = new DebugFactory();
+            await using var factory = new DebugFactory(dataDir);
             factory.UseKestrel(5232);
             using var http = factory.CreateClient();
             Assert.Equal(5232, http.BaseAddress!.Port);
@@ -65,8 +65,6 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
                 new SaveColumnProcessorRequest("JEV qualifier", "Qualify incoming tickets and propose review.",
                     Enabled: false, DefaultTargetColumnId: target.Id));
             saved.EnsureSuccessStatusCode();
-            var secret = await http.PutAsJsonAsync($"/api/projects/{slug}/secrets/TYPESAFE_API_KEY", new { value = "debug-only-fake-key" });
-            secret.EnsureSuccessStatusCode();
             var newTicket = await http.PostAsJsonAsync($"/api/projects/{slug}/tickets",
                 new CreateTicketRequest("Review the JEV routing proposal", "owner", source.Name,
                     "This ticket is ready for review. It must remain in Backlog during observation.",
@@ -81,11 +79,24 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
             });
             var page = await context.NewPageAsync();
             var browserErrors = new List<string>();
+            var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             page.PageError += (_, error) => browserErrors.Add(error);
-            page.Console += (_, message) => output.WriteLine($"Browser {message.Type}: {message.Text}");
+            page.Console += (_, message) => { output.WriteLine($"Browser {message.Type}: {message.Text}"); if (message.Text.Contains("WebSocket connected")) connected.TrySetResult(); };
             page.Response += (_, response) => { if (response.Status >= 400) output.WriteLine($"HTTP {response.Status}: {response.Url}"); };
             try
             {
+            await page.GotoAsync("http://localhost:5232/settings");
+            await connected.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            var settings = page.GetByTestId("jev-settings");
+            await Expect(settings.GetByTestId("jev-global-status")).ToContainTextAsync("JEV unavailable");
+            await Expect(settings.GetByTestId("jev-api-key")).ToBeEnabledAsync();
+            await settings.GetByTestId("jev-api-key").FillAsync("debug-only-fake-key");
+            await settings.GetByTestId("jev-api-key").PressAsync("Tab");
+            await settings.GetByTestId("jev-save-key").ClickAsync();
+            await Expect(settings.GetByTestId("jev-global-status")).ToContainTextAsync("JEV available");
+            await Expect(settings.GetByTestId("jev-api-key")).ToHaveValueAsync("");
+            Assert.Equal(0, factory.Handler.Count);
+            await page.ScreenshotAsync(new() { Path = Path.Combine(dataDir, "00-jev-configured.png"), FullPage = true });
             await page.GotoAsync($"http://localhost:5232/board/{slug}");
             var sourceHeader = page.Locator(".column-header").Filter(new() { HasText = "Backlog" });
             // The prerendered header can be visible before Blazor has connected its circuit.
@@ -173,7 +184,7 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
         return directory!.FullName;
     }
 
-    private sealed class DebugFactory : WebApplicationFactory<CreateProjectRequest>
+    private sealed class DebugFactory(string dataDir) : WebApplicationFactory<CreateProjectRequest>
     {
         public FixtureHandler Handler { get; } = new();
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -181,9 +192,11 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
             builder.UseEnvironment("Development");
             builder.ConfigureTestServices(services =>
             {
+                services.RemoveAll<JevConfigurationService>();
+                services.AddSingleton(sp => new JevConfigurationService(sp.GetRequiredService<ProjectSecretVault>(), dataDir, () => null));
                 services.RemoveAll<JevQualificationService>();
                 services.AddSingleton(sp => new JevQualificationService(sp.GetRequiredService<ProjectService>(),
-                    sp.GetRequiredService<ProjectSecretVault>(), new HttpClient(Handler)));
+                    sp.GetRequiredService<ProjectSecretVault>(), new HttpClient(Handler), sp.GetRequiredService<JevConfigurationService>()));
             });
         }
     }

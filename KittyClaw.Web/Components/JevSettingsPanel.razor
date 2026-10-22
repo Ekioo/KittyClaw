@@ -1,0 +1,50 @@
+@using KittyClaw.Core.Services
+@inject JevConfigurationService Configuration
+@inject LocalizationService L
+
+<section class="settings-section" data-testid="jev-settings">
+    <h2>JEV / TypeSafe</h2>
+    <p class="settings-hint">@L["JevSettingsHelp"]</p>
+    <p data-testid="jev-global-status">@L[_status.Available ? "JevAvailable" : "JevUnavailable"]</p>
+    @if (_status.Source is not null)
+    {
+        <p class="settings-hint">@L[$"JevSource{_status.Source}"]</p>
+    }
+    <label>@L["JevApiKey"]
+        <input type="password" class="settings-input" autocomplete="new-password" @bind="_key" @bind:event="oninput" disabled="@(!_interactiveReady || _busy)" data-testid="jev-api-key" />
+    </label>
+    <div class="settings-row">
+        <button class="settings-primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_key))" @onclick="SaveAsync" data-testid="jev-save-key">@L["Save"]</button>
+        <button class="settings-browse" disabled="@(_busy || !_status.ConfiguredInKittyClaw)" @onclick="DeleteAsync" data-testid="jev-delete-key">@L["JevRemoveKey"]</button>
+        <button class="settings-browse" disabled="@_busy" @onclick="RefreshAsync">@L["JevRefresh"]</button>
+    </div>
+    <p class="settings-hint">@L["JevSecretHelp"]</p>
+    @if (_error is not null) { <p role="status" class="settings-status-error">@_error</p> }
+</section>
+
+@code {
+    private JevAvailability _status = new(false, false, null);
+    private string _key = "";
+    private string? _error;
+    private bool _busy;
+    private bool _interactiveReady;
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender) { _interactiveReady = true; StateHasChanged(); }
+    }
+    protected override Task OnInitializedAsync() => RefreshAsync();
+    private async Task RefreshAsync()
+    {
+        _status = await Configuration.GetAsync();
+        _error = _status.Error;
+    }
+    private async Task SaveAsync() => await UpdateAsync(async () => await Configuration.SaveKeyAsync(_key));
+    private async Task DeleteAsync() => await UpdateAsync(async () => await Configuration.DeleteKeyAsync());
+    private async Task UpdateAsync(Func<Task> update)
+    {
+        _busy = true;
+        try { await update(); await RefreshAsync(); }
+        catch (Exception) { _error = L["JevSaveError"]; }
+        finally { _key = ""; _busy = false; }
+    }
+}

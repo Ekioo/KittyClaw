@@ -5,6 +5,7 @@
 @using KittyClaw.Core.Services
 @using KittyClaw.Web.Services
 @inject ColumnProcessorService ProcessorService
+@inject JevConfigurationService JevConfiguration
 @inject ColumnScheduledTaskService ScheduledTaskService
 @inject ProjectSkillService SkillService
 @inject PipelineService PipelineService
@@ -125,8 +126,9 @@
                         {
                             <div class="processor-draft-notice" role="status">@L["ProcessorDraftNotice"]</div>
                         }
-                        <label class="workflow-check"><input type="checkbox" @bind="_jevObservationOnly" /> JEV qualification — observation only</label>
-                        <p class="settings-hint">Proposes routing from the configured outcome routes and default destination. No agent, column actions or automatic moves. Add TYPESAFE_API_KEY to the project secrets. Ticket text and recent comments are sent to TypeSafe.</p>
+                        <label class="workflow-check"><input type="checkbox" @bind="_jevObservationOnly" disabled="@(!_jevAvailability.Available && !_jevObservationOnly)" /> @L["JevObservationMode"]</label>
+                        <p class="settings-hint">@L["JevObservationHelp"]</p>
+                        <p class="settings-hint" data-testid="jev-availability">@L[_jevAvailability.Available ? "JevAvailable" : "JevUnavailable"]</p>
                         <label class="workflow-check"><input type="checkbox" @bind="_enabled" /> <FieldHelp Label="@L["ProcessorEnabled"]" Help="@L["ProcessorEnabledHelp"]" /></label>
                         <label><FieldHelp Label="@L["Name"]" Help="@L["ProcessorNameHelp"]" /><input class="settings-input" @bind="_name" /></label>
                         <label><FieldHelp Label="@L["ProcessorMission"]" Help="@L["ProcessorMissionHelp"]" /><textarea class="settings-input workflow-textarea" @bind="_mission"></textarea></label>
@@ -339,6 +341,7 @@
     private bool _processorExists;
     private bool _processorDraft;
     private bool _removeProcessorOnSave;
+    private JevAvailability _jevAvailability = new(false, false, null);
     private bool _jevObservationOnly;
     private bool _enabled = true;
     private string _activeTab = "general";
@@ -391,6 +394,7 @@
             foreach (var pipeline in _pipelines)
                 _pipelineColumns[pipeline.Id] = await ColumnService.ListColumnsAsync(Slug, pipeline.Id);
             _skills = await SkillService.ListAsync(Slug);
+            _jevAvailability = await JevConfiguration.GetAsync(Slug);
             await LoadModelsAsync();
 
             var source = Column ?? TemplateColumn;

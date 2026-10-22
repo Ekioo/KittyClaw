@@ -63,10 +63,11 @@ public sealed class JevQualificationTests
         var handler = new FakeHandler(board[1].Id);
         using var client = new HttpClient(handler);
         var service = new JevQualificationService(projects,
-            new ProjectSecretVault(temp.Path, new TestSecretProtector()), client);
+            new ProjectSecretVault(temp.Path, new TestSecretProtector()), client,
+            new JevConfigurationService(new ProjectSecretVault(temp.Path, new TestSecretProtector()), temp.Path, () => null, new TestSecretProtector()));
         await service.ObserveAsync(project.Slug, processor, ticket, board, CancellationToken.None);
         var proposal = await service.GetAsync(project.Slug, ticket.Id);
-        Assert.Contains("TYPESAFE_API_KEY", proposal!.Error);
+        Assert.Contains("JEV is unavailable", proposal!.Error);
         Assert.Null(proposal.Choice);
         Assert.Equal(0, handler.Count);
         Assert.Equal(board[0].Id, (await tickets.GetTicketAsync(project.Slug, ticket.Id))!.ColumnId);
