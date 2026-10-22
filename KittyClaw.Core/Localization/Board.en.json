@@ -419,5 +419,16 @@
   "JevSuggestedRoute": "Suggested destination",
   "JevRouteProbabilities": "Destination probabilities",
   "JevExecution": "Execution",
-  "JevRun": "Agent run"
+  "JevRun": "Agent run",
+  "JevDecisionAccepted": "Accepted — workflow destination approved",
+  "JevDecisionRejected": "Rejected",
+  "JevDecisionReason": "Reason (required to reject)",
+  "JevAcceptAndApply": "Accept and apply destination",
+  "JevReject": "Reject and requalify",
+  "JevAcceptanceEffect": "Acceptance applies this destination through the normal workflow. The destination processor may start. JEV never applies a route without your acceptance.",
+  "JevRejectionEffect": "This destination is excluded for this ticket context. JEV will consider your reason and propose another configured destination when one remains.",
+  "JevDecisionStale": "This proposal is out of date. A new proposal is required before applying a destination.",
+  "JevDecisionHistory": "JEV decision history",
+  "JevDecisionError": "The decision could not be saved. Reload the ticket and try again.",
+  "JevProposalNotice": "JEV proposes destinations. Your explicit acceptance applies a destination through the workflow."
 }

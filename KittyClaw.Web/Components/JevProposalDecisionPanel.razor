@@ -1,0 +1,51 @@
+@using KittyClaw.Core.Services
+@inject JevProposalDecisionService Decisions
+@inject LocalizationService L
+
+<div class="jev-decision-controls" data-testid="jev-proposal-decision">
+    @if (Decision is not null)
+    {
+        <p data-testid="jev-decision-result"><strong>@L[Decision.Accepted ? "JevDecisionAccepted" : "JevDecisionRejected"]</strong> · @Decision.Actor · @Decision.DecidedAt.ToLocalTime().ToString("g")</p>
+        @if (!string.IsNullOrWhiteSpace(Decision.Reason)) { <p>@Decision.Reason</p> }
+        @if (!Decision.Accepted) { <p class="settings-hint">@L["JevRejectionEffect"]</p> }
+    }
+    else if (Proposal.Error is null)
+    {
+        <label>@L["JevDecisionReason"]
+            <textarea class="settings-input" maxlength="2000" @bind="_reason" @bind:event="oninput" data-testid="jev-decision-reason"></textarea>
+        </label>
+        <div class="settings-row">
+            <button class="settings-primary" disabled="@(_busy || Stale || Proposal.Choice is null || !Proposal.Choice.StartsWith("column-"))" @onclick="() => DecideAsync(true)" data-testid="jev-accept">@L["JevAcceptAndApply"]</button>
+            <button class="settings-browse" disabled="@(_busy || string.IsNullOrWhiteSpace(_reason))" @onclick="() => DecideAsync(false)" data-testid="jev-reject">@L["JevReject"]</button>
+        </div>
+        <p class="settings-hint">@L["JevAcceptanceEffect"]</p>
+        @if (Stale) { <p class="settings-hint">@L["JevDecisionStale"]</p> }
+    }
+    @if (_error is not null) { <p role="status" class="settings-status-error">@_error</p> }
+</div>
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+    [Parameter] public int TicketId { get; set; }
+    [Parameter, EditorRequired] public JevRoutingProposal Proposal { get; set; } = default!;
+    [Parameter] public JevProposalDecision? Decision { get; set; }
+    [Parameter] public bool Stale { get; set; }
+    [Parameter] public EventCallback OnDecided { get; set; }
+    private string _reason = "";
+    private string? _error;
+    private bool _busy;
+    private async Task DecideAsync(bool accepted)
+    {
+        if (_busy) return;
+        _busy = true; _error = null;
+        try
+        {
+            await Decisions.DecideAsync(Slug, TicketId, JevDecisionStore.ProposalId(Proposal), accepted, _reason);
+            _reason = "";
+            await OnDecided.InvokeAsync();
+        }
+        catch (InvalidOperationException ex) { _error = ex.Message; }
+        catch (Exception) { _error = L["JevDecisionError"]; }
+        finally { _busy = false; }
+    }
+}

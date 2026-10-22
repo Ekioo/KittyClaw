@@ -46,7 +46,7 @@ without converting it into an automatic decision or inventing a free-text explan
 The ticket shows the estimates, Choice confidence and distributions, plus available input/output
 token usage and API duration. No ticket field, priority, assignee or route is changed by triage.
 Every required answer is validated before publishing the observation; a malformed triage answer
-cannot leave a seemingly valid routing proposal. Question version `qualification-v2` invalidates
+cannot leave a seemingly valid routing proposal. Question version `qualification-v3` invalidates
 the previous fingerprint so existing enabled observation columns are requalified once. Stored
 routing-only observations remain readable and are shown without fabricated triage until refreshed.
 Adding questions consumes tokens; batching avoids separate calls but does not make those questions free.
@@ -122,3 +122,36 @@ execution/run ids, missing-evidence notice and historical-context marker when th
 with a fixture dispatcher and TypeSafe handler, enables post-run observation through the UI, verifies
 that normal routing reaches Review while JEV suggests Todo, then checks for 32 seconds that no additional
 execution or transition occurs. It uses the same `KITTYCLAW_JEV_DEBUG_E2E=1` opt-in as the initial journey.
+
+## Human decisions with workflow effects
+
+Both qualification and post-run proposals expose **Accept and apply destination** and **Reject and
+requalify**. JEV itself still cannot move a ticket. Explicit owner acceptance applies the proposed
+column through `TicketService` and its existing manual-routing, assignment and scheduling rules.
+The normal destination processor may consequently start. If the ticket is already at that destination,
+acceptance records approval without replaying the transition or changing ticket freshness.
+
+`JevProposalDecisionService` validates the exact proposal revision, the ticket snapshot, current source
+routes and (for post-run proposals) the execution revision. A stale, missing, erroneous, superseded or
+`none` proposal cannot be applied. The current column's manual routing policy remains authoritative.
+Decision persistence, owner activity and the accepted transition share one SQLite transaction; status
+signals fire only after commit. An audit-write failure rolls back the move. Repeated acceptance is
+idempotent, while an opposite decision on an already-decided revision is rejected.
+
+Rejection requires a reason and does not move the ticket, update its timestamp, add an owner comment or
+raise agent-triggering events. Instead, rejected destinations are excluded from the next JEV request
+for that same ticket/column/execution snapshot, and the owner's reason is included as feedback. If
+alternatives remain, the existing observation sweep produces a replacement proposal. When no business
+destination remains, it stops calling TypeSafe until the ticket context changes. A changed ticket can
+be evaluated again; past decisions remain available in the audit history.
+
+`JevDecisionStore` keeps an immutable `JevProposalDecisions` record keyed by the SHA-256 identity of the
+complete proposal revision. It stores the exact proposal, accepted/rejected outcome, owner, UTC time,
+reason and applied destination. Refreshing a model result cannot rewrite a past human decision. The
+ticket shows the current decision and the full decision history. Only direct human UI actions invoke
+the decision service; no observation worker calls it.
+
+The debug post-run browser journey now also accepts a proposal, verifies that the ordinary destination
+agent runs, reloads the saved decision, then rejects another ticket's proposal and verifies that JEV
+suggests an alternative using the supplied reason without launching another agent. All providers in
+that journey are deterministic fixtures; real project data and production instances are not used.

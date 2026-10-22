@@ -419,5 +419,16 @@
   "JevSuggestedRoute": "Destination proposée",
   "JevRouteProbabilities": "Probabilités des destinations",
   "JevExecution": "Exécution",
-  "JevRun": "Exécution de l’agent"
+  "JevRun": "Exécution de l’agent",
+  "JevDecisionAccepted": "Acceptée — destination du workflow approuvée",
+  "JevDecisionRejected": "Rejetée",
+  "JevDecisionReason": "Motif (obligatoire pour rejeter)",
+  "JevAcceptAndApply": "Accepter et appliquer la destination",
+  "JevReject": "Rejeter et requalifier",
+  "JevAcceptanceEffect": "L’acceptation applique cette destination via le workflow normal. Le processeur de destination pourra démarrer. JEV n’applique aucun routage sans votre acceptation.",
+  "JevRejectionEffect": "Cette destination est exclue pour ce contexte de ticket. JEV prendra en compte votre motif et proposera une autre destination configurée s’il en reste une.",
+  "JevDecisionStale": "Cette proposition est périmée. Une nouvelle proposition est nécessaire avant d’appliquer une destination.",
+  "JevDecisionHistory": "Historique des décisions JEV",
+  "JevDecisionError": "Impossible d’enregistrer la décision. Rechargez le ticket et réessayez.",
+  "JevProposalNotice": "JEV propose des destinations. Votre acceptation explicite applique une destination via le workflow."
 }

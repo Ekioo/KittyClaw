@@ -1388,3 +1388,18 @@ select:focus-visible,
 .dep-add-btn:disabled { opacity: .4; cursor: default; }
 .dep-error { padding: .15rem 0; color: #f87171; font-size: .78rem; }
 
+
+.jev-decision-controls {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    padding-top: .65rem;
+    border-top: 1px solid var(--border);
+}
+.jev-decision-controls label { display: grid; gap: .4rem; }
+.jev-decision-controls textarea { width: 100%; min-height: 4.5rem; box-sizing: border-box; resize: vertical; }
+.jev-decision-controls .settings-row { display: flex; flex-wrap: wrap; gap: .5rem; }
+.jev-decision-history { display: block; }
+.jev-decision-history summary { font-weight: 600; cursor: pointer; }
+.jev-decision-history article { padding: .5rem 0; border-top: 1px solid var(--border); }

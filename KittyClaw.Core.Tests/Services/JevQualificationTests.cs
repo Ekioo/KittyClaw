@@ -54,7 +54,7 @@ public sealed class JevQualificationTests
         Assert.Equal(0.15, proposal.Triage.ClarificationProbability);
         Assert.Equal(100, proposal.Usage!.InputTokens);
         Assert.NotNull(proposal.DurationMs);
-        Assert.Equal("qualification-v2", proposal.QuestionVersion);
+        Assert.Equal("qualification-v3", proposal.QuestionVersion);
         Assert.Equal(source.Id, (await tickets.GetTicketAsync(project.Slug, ticket.Id))!.ColumnId);
         Assert.Equal(ticket.UpdatedAt, (await tickets.GetTicketAsync(project.Slug, ticket.Id))!.UpdatedAt);
         var restarted = new JevQualificationService(projects, vault, client);

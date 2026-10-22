@@ -1,5 +1,6 @@
 @using KittyClaw.Core.Services
 @inject JevQualificationService Qualification
+@inject JevDecisionStore Decisions
 @inject LocalizationService L
 @inject TicketService Tickets
 @inject ColumnProcessorService Processors
@@ -11,7 +12,7 @@
 {
     <section class="worktree-summary" data-testid="jev-proposal" aria-label="JEV qualification">
         <strong>JEV — observation only</strong>
-        <p>Routing suggestion only. No workflow action was applied.</p>
+        <p>@L["JevProposalNotice"]</p>
         @if (_stale) { <p class="settings-hint">This observation predates changes to the ticket or its column.</p> }
         @if (_proposal.Error is not null)
         {
@@ -49,6 +50,8 @@
         {
             <p class="settings-hint" data-testid="jev-usage">@L["JevTokens"]: @usage.InputTokens / @usage.OutputTokens · @_proposal.DurationMs ms</p>
         }
+        <JevProposalDecisionPanel @key="JevDecisionStore.ProposalId(_proposal)" Slug="@Slug" TicketId="@TicketId" Proposal="@_proposal"
+            Decision="@_decisions.FirstOrDefault(d => d.ProposalId == JevDecisionStore.ProposalId(_proposal))" Stale="@_stale" OnDecided="DecisionTakenAsync" />
         <p class="settings-hint">@_proposal.QuestionVersion · @_proposal.Model · @_proposal.ObservedAt.ToLocalTime().ToString("g")</p>
     </section>
 }
@@ -77,13 +80,38 @@
             </details>
         }
         <p class="settings-hint">@L["JevExecution"]: <code>@observation.ExecutionId</code> · @L["JevRun"]: <code>@observation.RunId</code></p>
+        <JevProposalDecisionPanel @key="JevDecisionStore.ProposalId(observation)" Slug="@Slug" TicketId="@TicketId" Proposal="@observation"
+            Decision="@_decisions.FirstOrDefault(d => d.ProposalId == JevDecisionStore.ProposalId(observation))"
+            Stale="@(_currentTicket?.UpdatedAt != observation.TicketUpdatedAt || _currentTicket?.ColumnId != observation.TicketColumnId)" OnDecided="DecisionTakenAsync" />
         <p class="settings-hint">@observation.ExecutionEndedAt?.ToLocalTime().ToString("g") · @observation.Model · @observation.ObservedAt.ToLocalTime().ToString("g")</p>
     </section>
+}
+
+@if (_decisions.Count > 0)
+{
+    <details class="worktree-summary jev-decision-history" data-testid="jev-decision-history">
+        <summary>@L["JevDecisionHistory"]</summary>
+        @foreach (var decision in _decisions)
+        {
+            <article>
+            <p>@L[decision.Accepted ? "JevDecisionAccepted" : "JevDecisionRejected"] · @decision.DecidedAt.ToLocalTime().ToString("g") · @decision.Actor</p>
+            <p>@decision.Proposal.Destinations.GetValueOrDefault(decision.Proposal.Choice ?? "", "none") · <code>@decision.ProposalId[..12]</code></p>
+            <p>@decision.Reason</p>
+            </article>
+        }
+    </details>
 }
 
 @code {
     [Parameter] public string Slug { get; set; } = "";
     [Parameter] public int TicketId { get; set; }
+    [Parameter] public EventCallback OnDecisionTaken { get; set; }
+    private List<JevProposalDecision> _decisions = [];
+    private async Task DecisionTakenAsync()
+    {
+        await ReloadAsync();
+        await OnDecisionTaken.InvokeAsync();
+    }
     private JevRoutingProposal? _proposal;
     private List<JevRoutingProposal> _postRun = [];
     private KittyClaw.Core.Models.Ticket? _currentTicket;
@@ -98,6 +126,7 @@
     }
     private async Task ReloadAsync()
     {
+        _decisions = await Decisions.ListAsync(Slug, TicketId, _stop.Token);
         _proposal = await Qualification.GetAsync(Slug, TicketId, _stop.Token);
         var ticket = await Tickets.GetTicketAsync(Slug, TicketId);
         _currentTicket = ticket;
@@ -115,7 +144,8 @@
             var columns = await db.BoardColumns.AsNoTracking().ToListAsync(_stop.Token);
             _stale = ticket is null || processor is null || !processor.Enabled || !processor.JevObservationOnly ||
                 ticket.ColumnId != _proposal.SourceColumnId ||
-                JevQualificationService.Fingerprint(processor, ticket, columns) != _proposal.Fingerprint;
+                JevQualificationService.Fingerprint(processor, ticket, columns,
+                    JevQualificationService.RejectionFeedback(_decisions, processor, ticket) is { Count: > 0 } feedback ? feedback : null) != _proposal.Fingerprint;
         }
     }
     private async Task PollAsync()

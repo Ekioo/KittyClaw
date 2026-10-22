@@ -18,7 +18,7 @@ namespace KittyClaw.Core.Tests.Web;
 public sealed class JevPostRunJourneyTests(ITestOutputHelper output)
 {
     [DebugBrowserFact]
-    public async Task Agent_runs_normally_then_Jev_proposes_a_different_route_without_applying_it()
+    public async Task Human_acceptance_runs_the_destination_processor_and_rejection_requalifies()
     {
         var data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "KittyClaw-debug", "jev-post-run-" + Guid.NewGuid().ToString("N"));
@@ -104,8 +104,53 @@ public sealed class JevPostRunJourneyTests(ITestOutputHelper output)
             Assert.Equal(1, factory.Handler.Count);
             var executions = (await http.GetFromJsonAsync<List<ColumnExecution>>($"/api/projects/{slug}/column-executions", json))!;
             Assert.Equal(ColumnExecutionStatus.Completed, Assert.Single(executions).Status);
+            // Explicit acceptance applies the proposed move and lets the ordinary destination processor run.
+            (await http.PutAsJsonAsync($"/api/projects/{slug}/columns/{suggestion.Id}/processor",
+                new SaveColumnProcessorRequest("Follow-up worker", "Handle the explicitly accepted ticket", DefaultTargetColumnId: actualTarget.Id))).EnsureSuccessStatusCode();
+            await proposal.GetByTestId("jev-accept").ClickAsync();
+            await Expect(page.GetByTestId("jev-decision-history")).ToContainTextAsync("Accepted");
+            var acceptedUntil = DateTime.UtcNow.AddSeconds(30);
+            while (factory.Dispatcher.Count < 2 && DateTime.UtcNow < acceptedUntil) await Task.Delay(100);
+            Assert.Equal(2, factory.Dispatcher.Count);
+            var acceptedTicket = (await http.GetFromJsonAsync<Ticket>($"/api/projects/{slug}/tickets/{ticket.Id}", json))!;
+            Assert.Contains(acceptedTicket.Activities, a => a.Author == "owner" && a.Text.Contains("Review → Todo"));
+            var reviews = factory.Services.GetRequiredService<JevDecisionStore>();
+            var acceptedReview = Assert.Single(await reviews.ListAsync(slug, ticket.Id));
+            Assert.True(acceptedReview.Accepted);
+            Assert.Equal(suggestion.Id, acceptedReview.AppliedTargetColumnId);
+            await page.ReloadAsync();
+            await Expect(page.GetByTestId("jev-decision-history")).ToContainTextAsync("Accepted");
+            await page.GetByTestId("jev-decision-history").Locator("summary").ClickAsync();
+            await page.GetByTestId("jev-decision-history").ScrollIntoViewIfNeededAsync();
+            await page.ScreenshotAsync(new() { Path = Path.Combine(data, "jev-accepted-history.png"), FullPage = true });
+
+            // A second ticket exercises functional rejection without launching another agent.
+            var secondResponse = await http.PostAsJsonAsync($"/api/projects/{slug}/tickets",
+                new CreateTicketRequest("Inspect a rejected proposal", "owner", source.Name,
+                    PipelineId: source.PipelineId, ColumnId: source.Id));
+            secondResponse.EnsureSuccessStatusCode();
+            var secondTicket = (await secondResponse.Content.ReadFromJsonAsync<Ticket>(json))!;
+            await page.GotoAsync(new Uri(http.BaseAddress!, $"/board/{slug}/ticket/{secondTicket.Id}").ToString());
+            proposal = page.GetByTestId("jev-post-run-proposal");
+            await Expect(proposal).ToContainTextAsync("Suggested destination: Todo", new() { Timeout = 60000 });
+            await proposal.GetByTestId("jev-decision-reason").FillAsync("Review evidence before returning to implementation");
+            await proposal.GetByTestId("jev-reject").ClickAsync();
+            await Expect(page.GetByTestId("jev-decision-history")).ToContainTextAsync("Rejected");
+            await Expect(proposal).ToContainTextAsync("Suggested destination: Review", new() { Timeout = 60000 });
+            await Expect(page.GetByTestId("jev-decision-history")).ToContainTextAsync("Review evidence before returning to implementation");
+            Assert.Equal(actualTarget.Id, (await http.GetFromJsonAsync<Ticket>($"/api/projects/{slug}/tickets/{secondTicket.Id}", json))!.ColumnId);
+            Assert.Equal(3, factory.Dispatcher.Count);
+            Assert.Equal(3, factory.Handler.Count);
+            var rejectedReview = Assert.Single(await reviews.ListAsync(slug, secondTicket.Id));
+            Assert.False(rejectedReview.Accepted);
+            Assert.Equal("Review evidence before returning to implementation", rejectedReview.Reason);
+            await page.ReloadAsync();
+            await Expect(page.GetByTestId("jev-decision-history")).ToContainTextAsync("Rejected");
+            await page.GetByTestId("jev-decision-history").Locator("summary").ClickAsync();
+            await page.GetByTestId("jev-decision-history").ScrollIntoViewIfNeededAsync();
+            await page.ScreenshotAsync(new() { Path = Path.Combine(data, "jev-rejected-and-requalified.png"), FullPage = true });
             Assert.Empty(errors);
-            output.WriteLine($"PASS: {http.BaseAddress} — normal agent route Review; JEV suggested Todo; no extra execution or transition.");
+            output.WriteLine($"PASS: {http.BaseAddress} — no automatic route; human acceptance started the destination processor; rejection produced an alternative with owner feedback.");
             output.WriteLine($"Screenshot and isolated debug data: {data}");
         }
         finally

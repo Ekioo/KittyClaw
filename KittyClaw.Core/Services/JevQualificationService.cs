@@ -27,7 +27,7 @@ public sealed class JevQualificationService(ProjectService projects, ProjectSecr
     public const string SecretName = "TYPESAFE_API_KEY";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    private async Task InitializeAsync(KittyClaw.Core.Data.TodoDbContext db) =>
+    internal static async Task InitializeAsync(KittyClaw.Core.Data.TodoDbContext db) =>
         await db.Database.ExecuteSqlRawAsync("""
             CREATE TABLE IF NOT EXISTS JevObservations (
                 TicketId INTEGER NOT NULL PRIMARY KEY, Payload TEXT NOT NULL
@@ -78,17 +78,17 @@ public sealed class JevQualificationService(ProjectService projects, ProjectSecr
         return result;
     }
 
-    private static object BuildState(ColumnProcessor processor, Ticket ticket, Dictionary<string, string> destinations) => new
+    private static object BuildState(ColumnProcessor processor, Ticket ticket, Dictionary<string, string> destinations, IReadOnlyList<JevRejectionFeedback>? feedback = null) => new
     {
-        ticket = new { ticket.Id, ticket.Title, ticket.Description, ticket.Priority, ticket.UpdatedAt,
+        ticket = new { ticket.Id, ticket.Title, ticket.Description, ticket.Priority, updatedAt = DateTime.SpecifyKind(ticket.UpdatedAt, DateTimeKind.Utc),
             comments = ticket.Comments.TakeLast(20).Select(c => new { c.Author, c.Content }) },
         mission = processor.Mission, instructions = processor.Prompt,
-        sourceColumnId = processor.ColumnId, destinations
+        sourceColumnId = processor.ColumnId, destinations, ownerFeedback = feedback
     };
 
-    public static string Fingerprint(ColumnProcessor processor, Ticket ticket, IEnumerable<BoardColumn> columns) =>
+    public static string Fingerprint(ColumnProcessor processor, Ticket ticket, IEnumerable<BoardColumn> columns, IReadOnlyList<JevRejectionFeedback>? feedback = null) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JevTriageQuestions.Version + ":" +
-            JsonSerializer.Serialize(BuildState(processor, ticket, BuildDestinations(processor, columns)), Json))));
+            JsonSerializer.Serialize(BuildState(processor, ticket, BuildDestinations(processor, columns), feedback), Json))));
 
     public async Task ObserveAsync(string slug, ColumnProcessor processor, Ticket ticket,
         IReadOnlyList<BoardColumn> columns, CancellationToken ct, ColumnExecution? afterExecution = null)
@@ -103,14 +103,20 @@ public sealed class JevQualificationService(ProjectService projects, ProjectSecr
             string.IsNullOrWhiteSpace(afterExecution.RunId) || afterExecution.EndedAt is null ||
             afterExecution.EndedAt < processor.JevPostRunObservationSince ||
             afterExecution.Status is not (ColumnExecutionStatus.Completed or ColumnExecutionStatus.Failed or ColumnExecutionStatus.Cancelled)) return;
+        var decisions = await new JevDecisionStore(projects).ListAsync(slug, ticket.Id, ct);
+        var feedback = RejectionFeedback(decisions, processor, ticket, afterExecution);
         var destinations = BuildDestinations(processor, columns);
+        foreach (var rejected in feedback)
+            if (rejected.RejectedChoice is not null && rejected.RejectedChoice != "none") destinations.Remove(rejected.RejectedChoice);
+        // No unreviewed business destination remains. Keep the rejected proposal visible until context changes.
+        if (feedback.Count > 0 && destinations.Count < 2) return;
         var evidence = afterExecution?.RunId is { } runId ? new EvidenceStore(projects.DataDir).LoadRun(slug, runId) : null;
         var evidenceMatches = evidence?.ProjectSlug == slug && evidence.TicketId == ticket.Id.ToString() && evidence.RunIds.Contains(afterExecution!.RunId!) && evidence.CapturedAt >= afterExecution.ClaimedAt;
         if (!evidenceMatches) evidence = null;
         if (evidence is not null) EvidenceStore.ApplyStaleness(evidence, EvidenceStore.DefaultStalenessThreshold);
-        object state = afterExecution is null ? BuildState(processor, ticket, destinations) : new
+        object state = afterExecution is null ? BuildState(processor, ticket, destinations, feedback.Count == 0 ? null : feedback) : new
         {
-            context = BuildState(processor, ticket, destinations),
+            context = BuildState(processor, ticket, destinations, feedback.Count == 0 ? null : feedback),
             execution = new { afterExecution.Id, afterExecution.RunId, afterExecution.Status, afterExecution.EndedAt,
                 afterExecution.Outcome, afterExecution.Summary, afterExecution.Error, afterExecution.TargetColumnId,
                 agentClaims = afterExecution.AgentResult },
@@ -121,14 +127,15 @@ public sealed class JevQualificationService(ProjectService projects, ProjectSecr
         };
         var stateJson = JsonSerializer.Serialize(state, Json);
         var version = afterExecution is null ? JevTriageQuestions.Version : "post-run-v1";
-        var fingerprint = afterExecution is null ? Fingerprint(processor, ticket, columns) :
+        var fingerprint = afterExecution is null ? Fingerprint(processor, ticket, columns, feedback.Count == 0 ? null : feedback) :
             Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(version + ":" + stateJson)));
         var previous = afterExecution is null ? await GetAsync(slug, ticket.Id, ct) :
             (await GetPostRunAsync(slug, ticket.Id, ct)).FirstOrDefault(p => p.ExecutionId == afterExecution.Id && p.ExecutionEndedAt == afterExecution.EndedAt);
         // Successful run observations are historical snapshots, not reclassifications on every ticket edit.
         // Allow one refresh if independently captured evidence arrives after the first observation.
         if (afterExecution is not null && previous?.Error is null && previous is not null &&
-            (previous.EvidenceAvailable || evidence is null)) return;
+            (previous.EvidenceAvailable || evidence is null) &&
+            !decisions.Any(d => !d.Accepted && d.ProposalId == JevDecisionStore.ProposalId(previous))) return;
         // Durable deduplication and bounded failure retries, including across server restarts.
         if (previous?.Fingerprint == fingerprint &&
             (previous.Error is null || previous.ObservedAt > DateTime.UtcNow.AddMinutes(-5))) return;
@@ -183,6 +190,7 @@ public sealed class JevQualificationService(ProjectService projects, ProjectSecr
             var error = ex is InvalidOperationException ? ex.Message : "JEV qualification failed. It will retry after five minutes.";
             proposal = new(fingerprint, processor.ColumnId, DateTime.UtcNow, null, null, null, [], destinations, error, QuestionVersion: version);
         }
+        proposal = proposal with { TicketUpdatedAt = ticket.UpdatedAt, TicketColumnId = ticket.ColumnId };
         if (afterExecution is not null) proposal = proposal with
         {
             ExecutionId = afterExecution.Id, RunId = afterExecution.RunId,
@@ -201,6 +209,14 @@ public sealed class JevQualificationService(ProjectService projects, ProjectSecr
         }
         await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO JevObservations (TicketId, Payload) VALUES ({ticket.Id}, {payload}) ON CONFLICT(TicketId) DO UPDATE SET Payload = excluded.Payload", ct);
     }
+
+    public static List<JevRejectionFeedback> RejectionFeedback(IEnumerable<JevProposalDecision> decisions,
+        ColumnProcessor processor, Ticket ticket, ColumnExecution? execution = null) => decisions
+        .Where(d => !d.Accepted && d.Proposal.SourceColumnId == processor.ColumnId &&
+            d.Proposal.TicketUpdatedAt == ticket.UpdatedAt && d.Proposal.TicketColumnId == ticket.ColumnId &&
+            d.Proposal.ExecutionId == execution?.Id && d.Proposal.ExecutionEndedAt == execution?.EndedAt)
+        .OrderBy(d => d.DecidedAt)
+        .Select(d => new JevRejectionFeedback(d.ProposalId, d.Proposal.Choice, d.Reason)).ToList();
 
     internal static JevChoiceAssessment ReadChoice(JsonElement answer, Dictionary<string, string> criteria)
     {

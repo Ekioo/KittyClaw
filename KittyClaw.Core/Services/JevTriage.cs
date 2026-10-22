@@ -6,7 +6,7 @@ public sealed record JevUsage(long InputTokens, long OutputTokens);
 
 internal static class JevTriageQuestions
 {
-    internal const string Version = "qualification-v2";
+    internal const string Version = "qualification-v3";
     internal static readonly Dictionary<string, string> RequestTypes = new()
     {
         ["problem"] = "Resolve a defect, incident, failure or unexpected behavior.",
