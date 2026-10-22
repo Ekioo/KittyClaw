@@ -69,6 +69,13 @@ public sealed class ColumnProcessorService(
             await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN JevAutomaticRouting INTEGER NOT NULL DEFAULT 0");
             await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN JevConfidenceThreshold REAL NOT NULL DEFAULT 0.9");
         });
+        await MigrationGate.RunOnceAsync(db, "column-processors-jev-work-v1", static async d =>
+        {
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN JevAcceptanceValidation INTEGER NOT NULL DEFAULT 0");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN JevExecutionSelection INTEGER NOT NULL DEFAULT 0");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN JevAcceptanceCriteriaJson TEXT NOT NULL DEFAULT '[]'");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN JevExecutionProfilesJson TEXT NOT NULL DEFAULT '[]'");
+        });
         await MigrationGate.RunOnceAsync(db, "column-processors-routing-v1", static async d =>
         {
             await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN SelectionOrder INTEGER NOT NULL DEFAULT 0");
@@ -99,7 +106,7 @@ public sealed class ColumnProcessorService(
     public async Task<List<ColumnProcessor>> ListEnabledAsync(string projectSlug)
     {
         var enabled = (await ListAsync(projectSlug)).Where(p => p.Enabled).ToList();
-        foreach (var processor in enabled.Where(p => !p.JevObservationOnly))
+        foreach (var processor in enabled.Where(p => !p.JevObservationOnly && !p.JevAcceptanceValidation))
             await EnsureMemoryAsync(projectSlug, processor);
         return enabled;
     }
@@ -115,7 +122,9 @@ public sealed class ColumnProcessorService(
         List<ColumnProcessorAction>? beforeActions = null,
         List<ColumnProcessorAction>? afterActions = null,
         bool? jevObservationOnly = null, bool? jevPostRunObservation = null,
-        bool? jevAutomaticRouting = null, double? jevConfidenceThreshold = null)
+        bool? jevAutomaticRouting = null, double? jevConfidenceThreshold = null,
+        bool? jevAcceptanceValidation = null, bool? jevExecutionSelection = null,
+        List<string>? jevAcceptanceCriteria = null, List<JevExecutionProfile>? jevExecutionProfiles = null)
     {
         var gate = ProjectGates.GetOrAdd(projectSlug, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync();
@@ -138,6 +147,10 @@ public sealed class ColumnProcessorService(
                 JevObservationOnly = jevObservationOnly ?? (await db.ColumnProcessors.FirstOrDefaultAsync(p => p.ColumnId == columnId))?.JevObservationOnly ?? false,
                 JevPostRunObservationSince = jevPostRunObservation is null ? previous?.JevPostRunObservationSince
                     : jevPostRunObservation.Value ? previous?.JevPostRunObservationSince ?? DateTime.UtcNow : null,
+                JevAcceptanceValidation = jevAcceptanceValidation ?? previous?.JevAcceptanceValidation ?? false,
+                JevExecutionSelection = jevExecutionSelection ?? previous?.JevExecutionSelection ?? false,
+                JevAcceptanceCriteria = jevAcceptanceCriteria ?? previous?.JevAcceptanceCriteria ?? [],
+                JevExecutionProfiles = jevExecutionProfiles ?? previous?.JevExecutionProfiles ?? [],
                 JevAutomaticRouting = jevAutomaticRouting ?? previous?.JevAutomaticRouting ?? false,
                 JevConfidenceThreshold = jevConfidenceThreshold ?? previous?.JevConfidenceThreshold ?? 0.9,
                 Enabled = enabled,
@@ -162,13 +175,20 @@ public sealed class ColumnProcessorService(
                 },
             };
             var normalized = await ValidateAndNormalizeAsync(projectSlug, db, definition, columnId);
+            if (normalized.JevAcceptanceValidation && previous is not null && !previous.JevAcceptanceValidation)
+            {
+                await ColumnExecutionService.EnsureTableAsync(db);
+                if (await db.ColumnExecutions.AnyAsync(e => e.ProcessorId == previous.Id &&
+                    (e.Status == ColumnExecutionStatus.Running || e.Status == ColumnExecutionStatus.Retrying || e.Status == ColumnExecutionStatus.WaitingForChildren)))
+                    throw new InvalidOperationException("Finish or cancel active executions before enabling acceptance validation in this column.");
+            }
 
             // The file is the source of truth. If the projection write fails, the next read
             // deterministically repairs SQLite from this successfully written definition.
             await WriteDefinitionAsync(projectSlug, normalized);
             var processor = await UpsertProjectionAsync(db, normalized, columnId);
             await db.SaveChangesAsync();
-            if (!processor.JevObservationOnly) await EnsureMemoryAsync(projectSlug, processor);
+            if (!processor.JevObservationOnly && !processor.JevAcceptanceValidation) await EnsureMemoryAsync(projectSlug, processor);
             return processor;
         }
         finally
@@ -388,6 +408,20 @@ public sealed class ColumnProcessorService(
             throw new InvalidOperationException("JEV confidence threshold must be between 0 and 1.");
         if (definition.JevAutomaticRouting && !definition.JevObservationOnly && definition.JevPostRunObservationSince is null)
             throw new InvalidOperationException("Enable JEV qualification or post-run proposals before automatic routing.");
+        if (definition.JevAcceptanceValidation && (definition.JevObservationOnly || definition.JevPostRunObservationSince is not null || definition.JevAutomaticRouting || definition.JevExecutionSelection))
+            throw new InvalidOperationException("Acceptance validation is a manual review column. Disable other JEV modes in this column.");
+        if (definition.JevExecutionSelection && definition.JevObservationOnly)
+            throw new InvalidOperationException("Execution profile selection requires an agent column.");
+        definition.JevAcceptanceCriteria = NormalizeStrings(definition.JevAcceptanceCriteria ?? []);
+        definition.JevExecutionProfiles ??= [];
+        if (definition.JevAcceptanceCriteria.Count > 20 || definition.JevAcceptanceCriteria.Any(c => c.Length > 2000))
+            throw new InvalidOperationException("Use at most 20 acceptance criteria, each limited to 2,000 characters.");
+        if (definition.JevExecutionProfiles.Count > 10 || (definition.JevExecutionSelection && definition.JevExecutionProfiles.Count == 0))
+            throw new InvalidOperationException("Configure between 1 and 10 execution profiles for JEV selection.");
+        if (definition.JevExecutionProfiles.Any(p => p is null || string.IsNullOrWhiteSpace(p.Name) || p.Name.Length > 100 || string.IsNullOrWhiteSpace(p.Model) || p.Model.Length > 200 || p.Description?.Length > 2000 || p.Skills is null) ||
+            definition.JevExecutionProfiles.Select(p => p.Name.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() != definition.JevExecutionProfiles.Count)
+            throw new InvalidOperationException("Execution profiles require unique names and an explicit model.");
+        definition.JevExecutionProfiles = definition.JevExecutionProfiles.Select(p => p with { Name = p.Name.Trim(), Model = p.Model.Trim(), Skills = NormalizeStrings(p.Skills), Description = (p.Description ?? "").Trim() }).ToList();
         definition.Name = definition.Name.Trim();
         definition.Mission = definition.Mission.Trim();
         definition.Prompt = definition.Prompt?.Trim() ?? "";
@@ -408,6 +442,11 @@ public sealed class ColumnProcessorService(
         if (unknownSkills.Count > 0)
             throw new InvalidOperationException($"Skills projet inconnus : {string.Join(", ", unknownSkills)}.");
 
+        var allowedSkills = definition.AvailableSkills.Concat(definition.RecommendedSkills).Concat(definition.RequiredSkills).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (definition.JevExecutionProfiles.SelectMany(p => p.Skills).Any(s => !allowedSkills.Contains(s) || !knownSkills.Contains(s)))
+            throw new InvalidOperationException("Execution profiles can only use this column's configured project skills.");
+        definition.JevExecutionProfiles = definition.JevExecutionProfiles.Select(p => p with
+        { Skills = NormalizeStrings(p.Skills.Concat(definition.RequiredSkills)) }).ToList();
         var targets = new List<int>();
         if (definition.Routing.Default is not null)
             targets.Add(ParseColumnReference(definition.Routing.Default, ColumnReference(columnId), "routing.default"));
@@ -463,6 +502,10 @@ public sealed class ColumnProcessorService(
         processor.Model = definition.Model;
         processor.JevObservationOnly = definition.JevObservationOnly;
         processor.JevAutomaticRouting = definition.JevAutomaticRouting;
+        processor.JevAcceptanceValidation = definition.JevAcceptanceValidation;
+        processor.JevExecutionSelection = definition.JevExecutionSelection;
+        processor.JevAcceptanceCriteria = definition.JevAcceptanceCriteria;
+        processor.JevExecutionProfiles = definition.JevExecutionProfiles;
         processor.JevConfidenceThreshold = definition.JevConfidenceThreshold;
         processor.JevPostRunObservationSince = definition.JevPostRunObservationSince;
         processor.Enabled = definition.Enabled;
@@ -605,6 +648,10 @@ public sealed class ColumnProcessorService(
         Model = processor.Model,
         JevObservationOnly = processor.JevObservationOnly,
         JevAutomaticRouting = processor.JevAutomaticRouting,
+        JevAcceptanceValidation = processor.JevAcceptanceValidation,
+        JevExecutionSelection = processor.JevExecutionSelection,
+        JevAcceptanceCriteria = processor.JevAcceptanceCriteria,
+        JevExecutionProfiles = processor.JevExecutionProfiles,
         JevConfidenceThreshold = processor.JevConfidenceThreshold,
         JevPostRunObservationSince = processor.JevPostRunObservationSince,
         Enabled = processor.Enabled,
@@ -691,6 +738,10 @@ public sealed class ColumnProcessorService(
         public bool Enabled { get; set; } = true;
         public bool JevObservationOnly { get; set; }
         public bool JevAutomaticRouting { get; set; }
+        public bool JevAcceptanceValidation { get; set; }
+        public bool JevExecutionSelection { get; set; }
+        public List<string> JevAcceptanceCriteria { get; set; } = [];
+        public List<JevExecutionProfile> JevExecutionProfiles { get; set; } = [];
         public double JevConfidenceThreshold { get; set; } = 0.9;
         public DateTime? JevPostRunObservationSince { get; set; }
         public int MaxTurns { get; set; } = 100;

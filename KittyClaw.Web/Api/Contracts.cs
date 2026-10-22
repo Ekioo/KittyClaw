@@ -33,7 +33,11 @@ public record SaveColumnProcessorRequest(
     bool? JevObservationOnly = null,
     bool? JevPostRunObservation = null,
     bool? JevAutomaticRouting = null,
-    double? JevConfidenceThreshold = null);
+    double? JevConfidenceThreshold = null,
+    bool? JevAcceptanceValidation = null,
+    bool? JevExecutionSelection = null,
+    List<string>? JevAcceptanceCriteria = null,
+    List<JevExecutionProfile>? JevExecutionProfiles = null);
 public record CreateTicketRequest(
     string Title, string CreatedBy, string Status, string Description = "",
     List<int>? LabelIds = null, TicketPriority Priority = TicketPriority.NiceToHave,

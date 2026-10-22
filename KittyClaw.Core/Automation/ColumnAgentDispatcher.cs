@@ -32,11 +32,9 @@ public sealed class ColumnAgentDispatcher(
         var inlineSkill = await BuildProfileAsync(projectSlug, processor);
         var effectiveModel = processor.Model ?? project.LocalModelName;
         var routing = ModelRouting.Resolve(effectiveModel, project.LocalModelBaseUrl);
-        var fallbackRouting = project.FallbackModel is null
-            ? null
-            : ModelRouting.Resolve(project.FallbackModel, project.LocalModelBaseUrl);
+        var fallbackRouting = ResolveFallback(project, execution);
         var target = routing.ToTarget(effectiveModel);
-        var fallback = fallbackRouting?.Error is null && project.FallbackModel is not null
+        var fallback = fallbackRouting is { Error: null } && project.FallbackModel is not null
             ? fallbackRouting!.ToTarget(project.FallbackModel)
             : null;
 
@@ -83,6 +81,11 @@ public sealed class ColumnAgentDispatcher(
             return new ColumnDispatchResult(run, null, error);
         return new ColumnDispatchResult(run, result, null);
     }
+
+    // A profile approval authorizes its explicit model, never an unrelated project fallback.
+    internal static ModelRouting.Resolution? ResolveFallback(Project project, ColumnExecution execution) =>
+        execution.JevExecutionProfileJson is not null || project.FallbackModel is null
+            ? null : ModelRouting.Resolve(project.FallbackModel, project.LocalModelBaseUrl);
 
     internal static string? FirstRunJourneyId(Ticket ticket)
     {

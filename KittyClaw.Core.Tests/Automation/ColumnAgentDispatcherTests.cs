@@ -6,6 +6,16 @@ namespace KittyClaw.Core.Tests.Automation;
 public sealed class ColumnAgentDispatcherTests
 {
     [Fact]
+    public void Approved_JEV_profile_prevents_silent_escalation_to_the_project_fallback()
+    {
+        var project = new Project { Name = "Profiles", Slug = "profiles", FallbackModel = "claude-sonnet-4-6" };
+        var execution = new ColumnExecution { Id = "approved" };
+        Assert.NotNull(ColumnAgentDispatcher.ResolveFallback(project, execution));
+        execution.JevExecutionProfileJson = "{}";
+        Assert.Null(ColumnAgentDispatcher.ResolveFallback(project, execution));
+    }
+
+    [Fact]
     public void Runtime_contract_reserves_ticket_routing_and_uses_canonical_memory_path()
     {
         var processor = new ColumnProcessor

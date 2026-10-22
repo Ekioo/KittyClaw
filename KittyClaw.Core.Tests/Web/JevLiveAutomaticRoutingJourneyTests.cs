@@ -75,6 +75,7 @@ public sealed class JevLiveAutomaticRoutingJourneyTests(ITestOutputHelper output
             await page.Locator(".column-context-menu-configure").ClickAsync();
             var dialog = page.GetByRole(AriaRole.Dialog);
             await dialog.Locator(".column-editor-tabs button").Nth(1).ClickAsync();
+            await dialog.GetByTestId("jev-settings").Locator("summary").First.ClickAsync();
             await dialog.GetByLabel("JEV routing proposals after agent runs").CheckAsync();
             await Expect(dialog.GetByTestId("jev-automatic-routing")).Not.ToBeCheckedAsync();
             await dialog.GetByTestId("jev-automatic-routing").CheckAsync();
@@ -145,6 +146,7 @@ public sealed class JevLiveAutomaticRoutingJourneyTests(ITestOutputHelper output
             await page.Locator(".column-context-menu-configure").ClickAsync();
             dialog = page.GetByRole(AriaRole.Dialog);
             await dialog.Locator(".column-editor-tabs button").Nth(1).ClickAsync();
+            await dialog.GetByTestId("jev-settings").Locator("summary").First.ClickAsync();
             await Expect(dialog.GetByTestId("jev-automatic-routing")).ToBeCheckedAsync();
             await dialog.GetByTestId("jev-confidence-threshold").FillAsync("100");
             await dialog.Locator(".processor-dialog-footer .settings-primary").ClickAsync();
@@ -178,6 +180,7 @@ public sealed class JevLiveAutomaticRoutingJourneyTests(ITestOutputHelper output
             var interactive = false;
             for (var attempt = 0; attempt < 5 && !interactive; attempt++)
             {
+                await proposal.GetByTestId("jev-routing-reason").Locator("summary").ClickAsync();
                 await proposal.GetByTestId("jev-decision-reason").FillAsync("Manual review pending; keep this ticket in Review.");
                 try
                 {

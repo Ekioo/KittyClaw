@@ -72,6 +72,7 @@ public sealed class JevPostRunJourneyTests(ITestOutputHelper output)
             await page.Locator(".column-context-menu-configure").ClickAsync();
             var dialog = page.GetByRole(AriaRole.Dialog);
             await dialog.Locator(".column-editor-tabs button").Nth(1).ClickAsync();
+            await dialog.GetByTestId("jev-settings").Locator("summary").First.ClickAsync();
             await dialog.GetByLabel("JEV routing proposals after agent runs").CheckAsync();
             await dialog.Locator("label.workflow-check").Filter(new() { HasText = "Enabled" }).Locator("input").CheckAsync();
             await dialog.Locator(".processor-dialog-footer .settings-primary").ClickAsync();
@@ -133,6 +134,7 @@ public sealed class JevPostRunJourneyTests(ITestOutputHelper output)
             await page.GotoAsync(new Uri(http.BaseAddress!, $"/board/{slug}/ticket/{secondTicket.Id}").ToString());
             proposal = page.GetByTestId("jev-post-run-proposal");
             await Expect(proposal).ToContainTextAsync("Suggested destination: Todo", new() { Timeout = 60000 });
+            await proposal.GetByTestId("jev-routing-reason").Locator("summary").ClickAsync();
             await proposal.GetByTestId("jev-decision-reason").FillAsync("Review evidence before returning to implementation");
             await proposal.GetByTestId("jev-reject").ClickAsync();
             await Expect(page.GetByTestId("jev-decision-history")).ToContainTextAsync("Rejected");

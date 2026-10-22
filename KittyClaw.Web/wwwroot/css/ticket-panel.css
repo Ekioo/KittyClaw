@@ -1403,3 +1403,34 @@ select:focus-visible,
 .jev-decision-history { display: block; }
 .jev-decision-history summary { font-weight: 600; cursor: pointer; }
 .jev-decision-history article { padding: .5rem 0; border-top: 1px solid var(--border); }
+
+.jev-work-review, .jev-profile-editor { display: block; }
+.jev-work-review label, .jev-profile-editor label { display: grid; gap: .4rem; margin: .5rem 0; }
+.jev-work-review textarea { width: 100%; min-height: 4.5rem; box-sizing: border-box; }
+.jev-work-review pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .85em; }
+.jev-work-review li { margin: .6rem 0; }
+.jev-work-review li a { display: block; }
+.jev-work-review article { border-top: 1px solid var(--border); padding: .5rem 0; }
+
+/* Compact JEV summaries keep decisions visible and supporting detail on demand. */
+.jev-card-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.jev-tag { display:inline-block; padding:3px 8px; border-radius:12px; background:var(--bg-secondary, #292b36); font-size:.75rem; }
+.jev-verdict { font-weight:600; margin:14px 0 8px; }
+.jev-checklist { list-style:none; padding:0; margin:8px 0 16px; }
+.jev-checklist li { display:flex; gap:10px; align-items:baseline; padding:7px 0; }
+.jev-checklist li > span:nth-child(2) { flex:1; }
+.jev-checklist small { opacity:.7; }
+.jev-check-icon { width:18px; text-align:center; font-weight:700; }
+.jev-disclosure { margin:12px 0; }
+.jev-disclosure > summary { cursor:pointer; font-weight:500; }
+.jev-disclosure article { padding:8px 0; border-bottom:1px solid var(--border-color, #454552); }
+.jev-disclosure pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:.75rem; }
+.jev-profile-choice { display:grid; gap:8px; margin:14px 0; }
+.jev-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.jev-confirmation { padding:12px 0; }
+.jev-actions { margin:12px 0; }
+.jev-technical { font-size:.8rem; opacity:.8; }
+.jev-settings { padding:12px; border:1px solid var(--border-color, #454552); border-radius:8px; }
+.jev-settings > summary { margin-bottom:8px; }
+
+.jev-disclosure article > small { display:block; margin:4px 0; }

@@ -9,7 +9,7 @@ using System.Text.RegularExpressions;
 namespace KittyClaw.Core.Services;
 
 /// <summary>Durable ticket claims and lifecycle for column processors.</summary>
-public sealed class ColumnExecutionService(ProjectService projects, TicketService tickets)
+public sealed class ColumnExecutionService(ProjectService projects, TicketService tickets, JevWorkReviewService? jevReviews = null)
 {
     internal Func<Task>? BeforeSuccessCompareAndSwapAsync { get; set; }
     internal static readonly TimeSpan RoutingLoopWindow = TimeSpan.FromMinutes(10);
@@ -90,12 +90,14 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN CapitalizationError TEXT NULL");
             await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN CapitalizedAt TEXT NULL");
         });
+        await MigrationGate.RunOnceAsync(db, "column-executions-jev-snapshot-v1", static d =>
+            MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN JevExecutionProfileJson TEXT NULL"));
     }
 
     public async Task<ColumnExecution?> ClaimNextAsync(string projectSlug, ColumnProcessor processor, DateTime now,
         IReadOnlyDictionary<int, int>? ownerFeedbackSignals = null)
     {
-        if (processor.JevObservationOnly) return null;
+        if (processor.JevObservationOnly || processor.JevAcceptanceValidation) return null;
         await using var db = projects.GetProjectDb(projectSlug);
         await ColumnService.EnsureBoardColumnsTableAsync(db);
         await TicketService.EnsureActivityTableAsync(db);
@@ -206,8 +208,14 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         // Read a small window: claimed or waiting parents must not stall later eligible work.
         var window = await candidates.Take(50).ToListAsync();
         Ticket? selected = null;
+        JevExecutionProfile? selectedProfile = null;
         foreach (var candidate in window)
         {
+            if (processor.JevExecutionSelection)
+            {
+                selectedProfile = jevReviews is null ? null : await jevReviews.ApprovedProfileAsync(projectSlug, processor, candidate);
+                if (selectedProfile is null) continue;
+            }
             var blockingChildren = await db.Tickets.Where(t => t.ParentId == candidate.Id && t.BlocksParent)
                 .Select(t => t.ColumnId).Distinct().ToListAsync();
             if (blockingChildren.Count == 0)
@@ -328,12 +336,24 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             Status = ColumnExecutionStatus.Running,
             ClaimedAt = now,
             TriggerTicketUpdatedAt = selected.UpdatedAt,
+            JevExecutionProfileJson = selectedProfile is null ? null : JsonSerializer.Serialize(selectedProfile),
             TriggerSignalType = triggerOwnerComment is null ? "column_scan" : "owner-feedback",
             TriggerOwnerCommentId = triggerOwnerComment?.Id,
             TriggerOwnerCommentCreatedAt = triggerOwnerComment?.CreatedAt,
         };
+        await using var claimTransaction = await db.Database.BeginTransactionAsync();
+        if (await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE Tickets SET UpdatedAt = UpdatedAt WHERE Id = {selected.Id} AND UpdatedAt = {selected.UpdatedAt} AND ColumnId = {processor.ColumnId}") != 1)
+            return null;
+        var currentProcessor = await db.ColumnProcessors.AsNoTracking().FirstOrDefaultAsync(p => p.Id == processor.Id);
+        if (currentProcessor is { JevAcceptanceValidation: true } || currentProcessor is { Enabled: false }) return null;
+        if (processor.JevExecutionSelection)
+        {
+            if (currentProcessor is null || !currentProcessor.JevExecutionSelection ||
+                JevWorkReviewService.Hash(new { currentProcessor.Mission, currentProcessor.Prompt, currentProcessor.JevExecutionProfiles, currentProcessor.RequiredSkills }) !=
+                JevWorkReviewService.Hash(new { processor.Mission, processor.Prompt, processor.JevExecutionProfiles, processor.RequiredSkills })) return null;
+        }
         db.ColumnExecutions.Add(execution);
-        try { await db.SaveChangesAsync(); }
+        try { await db.SaveChangesAsync(); await claimTransaction.CommitAsync(); }
         catch (DbUpdateException)
         {
             // Another engine worker won the unique active-ticket claim.

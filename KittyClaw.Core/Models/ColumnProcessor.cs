@@ -17,6 +17,20 @@ public class ColumnProcessor
     public bool Enabled { get; set; } = true;
     public bool JevObservationOnly { get; set; }
     public bool JevAutomaticRouting { get; set; }
+    public bool JevAcceptanceValidation { get; set; }
+    public bool JevExecutionSelection { get; set; }
+    [JsonIgnore] public string JevAcceptanceCriteriaJson { get; set; } = "[]";
+    [JsonIgnore] public string JevExecutionProfilesJson { get; set; } = "[]";
+    [NotMapped] public List<string> JevAcceptanceCriteria
+    {
+        get => Deserialize(JevAcceptanceCriteriaJson);
+        set => JevAcceptanceCriteriaJson = Serialize(value);
+    }
+    [NotMapped] public List<JevExecutionProfile> JevExecutionProfiles
+    {
+        get => JsonSerializer.Deserialize<List<JevExecutionProfile>>(JevExecutionProfilesJson) ?? [];
+        set => JevExecutionProfilesJson = JsonSerializer.Serialize(value);
+    }
     public double JevConfidenceThreshold { get; set; } = 0.9;
     public DateTime? JevPostRunObservationSince { get; set; }
     [NotMapped]
@@ -102,6 +116,8 @@ public class ColumnProcessor
         JsonSerializer.Serialize(values);
 }
 
+public sealed record JevExecutionProfile(string Name, string Model, List<string> Skills, string Description = "");
+
 public sealed record ProjectSkill(string Slug, string Name, string Description, string InstructionsPath);
 
 public sealed record ColumnRoute(string Outcome, int TargetColumnId);
@@ -184,6 +200,7 @@ public class ColumnExecution
     public string? CurrentActionId { get; set; }
     public bool AgentCompleted { get; set; }
     public string? AgentResultJson { get; set; }
+    public string? JevExecutionProfileJson { get; set; }
     public DateTime? TriggerTicketUpdatedAt { get; set; }
     public string TriggerSignalType { get; set; } = "column_scan";
     public int? TriggerOwnerCommentId { get; set; }

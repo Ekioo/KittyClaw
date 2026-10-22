@@ -136,6 +136,10 @@ builder.Services.AddSingleton(sp => new JevQualificationService(
     sp.GetRequiredService<ProjectService>(), sp.GetRequiredService<ProjectSecretVault>(),
     new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { MaxResponseContentBufferSize = 256 * 1024 },
     sp.GetRequiredService<JevConfigurationService>()));
+builder.Services.AddSingleton(sp => new JevWorkReviewService(sp.GetRequiredService<ProjectService>(),
+    sp.GetRequiredService<JevConfigurationService>(), new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { MaxResponseContentBufferSize = 256 * 1024 }));
+builder.Services.AddSingleton<JevWorkDecisionService>();
+builder.Services.AddHostedService<JevWorkReviewEngine>();
 builder.Services.AddSingleton<JevDecisionStore>();
 builder.Services.AddSingleton<JevProposalDecisionService>();
 builder.Services.AddHostedService<JevObservationEngine>();

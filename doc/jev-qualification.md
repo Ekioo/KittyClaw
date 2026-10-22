@@ -219,3 +219,90 @@ $env:KITTYCLAW_JEV_LIVE_E2E = '1'
 dotnet test KittyClaw.Core.Tests --artifacts-path KittyClaw.Core.Tests/bin/jev-postrun-artifacts --filter FullyQualifiedName~JevLiveAutomaticRoutingJourneyTests
 Remove-Item Env:KITTYCLAW_JEV_LIVE_E2E
 ```
+
+## Acceptance criteria validation
+
+A column can enable **JEV acceptance criteria validation** independently from routing qualification.
+Both new work-review options default to off. A validation column replaces its implicit agent and
+before/after actions with a manual review hold; it cannot combine this mode with routing observation,
+automatic JEV routing or execution-profile selection. Finish or cancel active column executions before
+enabling it. Configure the default destination for owner approval and an outcome route named
+`changes_requested` for corrections. Without that correction route, rejection records the review and
+keeps the ticket in the validation column until its context or configuration changes.
+
+Criteria are the union of shared column criteria (one per line) and Markdown task-checkbox text in
+the ticket description. Checked boxes are requirements, never proof of completion. At most twenty
+criteria of 2,000 characters each are accepted. No explicit criteria produces a visible diagnostic.
+The REST configuration fields are `jevAcceptanceValidation` and `jevAcceptanceCriteria`; omitted
+fields preserve the authoritative `processor.json` values and SQLite projection.
+
+`JevWorkReviewEngine` scans enabled work-review columns every fifteen seconds, excluding paused
+projects. `JevWorkReviewService` loads evidence for the latest terminal run linked to this ticket;
+when no run exists it can use the ticket evidence bundle. Project, ticket, run identity and capture
+freshness are checked. Each evidence item retains its provenance, timestamp and run id. Stale,
+contradictory, missing and agent-claimed evidence cannot support a verified criterion. Matching
+command exit/test counts, up to fifteen bounded file-diff excerpts and repository state are supplied;
+raw command strings and command output are excluded. Input is capped at 48,000 characters.
+
+One batched TypeSafe request asks two independent Choice questions per criterion: satisfied/unmet/
+insufficient, and the strongest reference from actual current verified evidence plus `none`.
+An absent reference downgrades the result to insufficient. An invented reference, malformed response
+or API error invalidates the complete result. Without usable evidence, all criteria are marked
+insufficient locally without spending an API call. The ticket shows each criterion, its status,
+available model confidence, evidence reference, all captured evidence and the count of unmet or
+unverified criteria. This identifies missing verification as well as missing behavior.
+
+Only owner actions apply outcomes. **Approve and continue** applies the configured default destination.
+Overriding any unmet/unverified criterion requires a reason. **Request corrections** requires a reason,
+applies the configured `changes_requested` route when present, and adds owner feedback listing the
+missing criteria for the next agent. Direct moves out of an enabled validation column through
+`TicketService` are held until this review action is taken. Approval/rejection, owner activity and
+any move/comment are committed atomically; audit failure rolls back the move. Duplicate decisions
+are idempotent; opposite decisions, stale ticket/configuration/evidence or active executions are rejected.
+There is no automatic acceptance mode or confidence threshold that bypasses owner approval.
+
+`JevWorkReviews` stores the current exact revision per ticket/column. `JevWorkDecisions` retains
+immutable decision snapshots, owner reason and applied destination. Both tables cascade with ticket
+deletion. The current review and historical decisions, including their evidence, remain visible in
+`JevWorkReviewPanel`. Changed inputs trigger another review; identical successful inputs are deduplicated
+and errors back off for five minutes. Local missing-evidence assessments do not fabricate model certainty.
+
+## Authorized model and skills profiles
+
+Agent columns can enable **JEV model and skills selection** and configure one to ten execution profiles
+with unique names, explicit models, descriptions and selected project skills. The model dropdown reuses
+the existing provider catalogs. Descriptions should state the work each profile is suited for.
+Profiles can reference only skills already configured in this column. Mandatory column skills are
+always included in each saved profile, decision snapshot and execution. REST fields are
+`jevExecutionSelection` and `jevExecutionProfiles`; omitted fields preserve existing values.
+
+JEV chooses one authorized profile or `none` in a closed-set Choice, based on ticket intent, complexity
+and column mission. It cannot invent a model or skill. The ticket shows the chosen model, skill set,
+profile description and confidence. **Approve profile and allow execution** records the owner's
+approval and lets the ordinary column engine claim that ticket. Until then, no agent or column action
+runs for that ticket; other approved tickets in the candidate window can still progress. Rejecting
+requires a reason, excludes that profile for the same context, and feeds the owner's reason into a new
+selection. Once alternatives are exhausted no further API call is made until the context changes.
+
+`ColumnExecutionService` validates approval against the current ticket/configuration and saves the
+profile in `ColumnExecution.JevExecutionProfileJson` under its atomic claim. `ColumnProcessingEngine`
+applies it to a private processor copy, preserving shared column defaults and required skills. The
+snapshot survives retries/restarts and is rechecked against the authorized profiles before work starts.
+The project fallback model is disabled for these approved profiles so execution cannot silently switch
+to an unapproved model. Removed profiles fail closed; resolve the profile configuration before retrying.
+Active executions do not trigger additional profile-selection requests from agent progress comments.
+Ticket edits before claiming revoke approval and require review of a new proposal. All profile choices
+and owner decisions remain in the ticket history after it moves to another column.
+
+`JevWorkReviewTests` covers evidence provenance/freshness, missing and invented references, checked
+checkboxes, owner overrides, correction feedback, stale contexts, deduplication, rollback, profile
+approval/claims and authorized skills. The opt-in `JevWorkReviewJourneyTests` exercises the real debug
+UI on an ephemeral port, with isolated data and deterministic JEV/agent fixtures. It enables both
+options through the column dialog, builds an authorized profile, proves both manual holds, verifies
+the effective model/skills while column defaults stay intact, requests corrections with the missing
+criteria, and approves another ticket through to Done with historical evidence retained. Use
+`KITTYCLAW_JEV_DEBUG_E2E=1`; no live TypeSafe or agent-provider calls are needed.
+
+### Ticket presentation
+
+JEV panels lead with a short verdict, criteria checklist or recommended profile, and the next owner action. Proofs, technical diagnostics, probabilities, and past decisions are collapsed by default. Rejection and acceptance overrides reveal a reason field only when needed. Column options live together under the JEV assistance disclosure.

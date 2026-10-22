@@ -31,7 +31,8 @@ public static partial class Endpoints
                 req.AvailableSkills, req.RecommendedSkills, req.RequiredSkills,
                 req.SelectionOrder, req.MaxAttempts, req.RetryBackoffSeconds,
                 req.DefaultTargetColumnId, req.TechnicalFailureColumnId, req.Routes, req.Prompt,
-                req.BeforeActions, req.AfterActions, req.JevObservationOnly, req.JevPostRunObservation, req.JevAutomaticRouting, req.JevConfidenceThreshold);
+                req.BeforeActions, req.AfterActions, req.JevObservationOnly, req.JevPostRunObservation, req.JevAutomaticRouting, req.JevConfidenceThreshold,
+                req.JevAcceptanceValidation, req.JevExecutionSelection, req.JevAcceptanceCriteria, req.JevExecutionProfiles);
             notifier.NotifyProjectUpdated(slug);
             return Results.Ok(processor);
         }
