@@ -19,11 +19,12 @@ public sealed record JevRoutingProposal(string Fingerprint, int SourceColumnId, 
     string QuestionVersion = "routing-v1", string? ExecutionId = null, string? RunId = null,
     DateTime? TicketUpdatedAt = null, int? TicketColumnId = null, int? ActualTargetColumnId = null,
     bool EvidenceAvailable = false, DateTime? ExecutionEndedAt = null, int? ExecutionAttempt = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ProcessorFingerprint = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ProcessorFingerprint = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CostRecordId = null);
 
 /// <summary>Read-only semantic qualification. Never invokes workflow actions or changes tickets.</summary>
 public sealed class JevQualificationService(ProjectService projects, ProjectSecretVault vault, HttpClient client,
-    JevConfigurationService? configuration = null)
+    JevConfigurationService? configuration = null, JevCostRecorder? costRecorder = null)
 {
     private readonly JevConfigurationService _configuration = configuration ?? new(vault, projects.DataDir);
     public const string SecretName = "TYPESAFE_API_KEY";
@@ -148,6 +149,7 @@ public sealed class JevQualificationService(ProjectService projects, ProjectSecr
         if (previous?.Fingerprint == fingerprint &&
             (previous.Error is null || previous.ObservedAt > DateTime.UtcNow.AddMinutes(-5))) return;
         JevRoutingProposal proposal;
+        string? costRecordId = null;
         try
         {
             if (destinations.Count < 2) throw new InvalidOperationException("Configure an outcome route or default destination first.");
@@ -174,6 +176,8 @@ public sealed class JevQualificationService(ProjectService projects, ProjectSecr
                 throw new InvalidOperationException($"TypeSafe returned HTTP {(int)response.StatusCode}.");
             using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(timeout.Token));
             var root = body.RootElement;
+            if (costRecorder is not null)
+                costRecordId = await costRecorder.RecordAsync(slug, ticket, afterExecution is null ? "qualification" : "post-run routing", root, elapsed.Elapsed.TotalSeconds);
             var answers = root.GetProperty("answers");
             var routing = ReadChoice(answers.GetProperty("routing"), destinations);
             var triage = afterExecution is not null ? null : new JevTriage(
@@ -198,7 +202,7 @@ public sealed class JevQualificationService(ProjectService projects, ProjectSecr
             var error = ex is InvalidOperationException ? ex.Message : "JEV qualification failed. It will retry after five minutes.";
             proposal = new(fingerprint, processor.ColumnId, DateTime.UtcNow, null, null, null, [], destinations, error, QuestionVersion: version);
         }
-        proposal = proposal with { TicketUpdatedAt = ticket.UpdatedAt, TicketColumnId = ticket.ColumnId,
+        proposal = proposal with { CostRecordId = costRecordId, TicketUpdatedAt = ticket.UpdatedAt, TicketColumnId = ticket.ColumnId,
             ProcessorFingerprint = RoutingConfigurationFingerprint(processor, columns) };
         if (afterExecution is not null) proposal = proposal with
         {

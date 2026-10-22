@@ -158,6 +158,35 @@ public sealed class JevWorkReviewJourneyTests(ITestOutputHelper output)
             await page.ReloadAsync(); await Expect(page.GetByTestId("jev-work-history")).ToContainTextAsync("Tests pass");
             await Expect(page.GetByTestId("jev-work-history")).ToContainTextAsync("Verified");
             Assert.Equal(2, factory.Dispatcher.Models.Count); Assert.Empty(errors);
+            var costs = factory.Services.GetRequiredService<CostReportService>();
+            var project = (await factory.Services.GetRequiredService<ProjectService>().GetProjectAsync(slug))!;
+            factory.Services.GetRequiredService<KittyClaw.Core.Automation.CostTracker>().LogRun(
+                factory.Services.GetRequiredService<ProjectService>().ResolveWorkspacePath(project),
+                new(DateTime.UtcNow, "Cost fixture", second.Id, "other-agent-model", 10, 10, 0, 0, 1m, 1, 0,
+                    ProjectSlug: slug, PipelineId: second.PipelineId, RunId: "cost-fixture-agent"));
+            await costs.RefreshAsync();
+            var day = DateOnly.FromDateTime(DateTime.Now);
+            var costReport = await costs.GetReportAsync(new(day, day));
+            var jev = Assert.Single(costReport.Projects).Jev!;
+            Assert.Equal(factory.Handler.Count, jev.Calls);
+            Assert.Equal(4, jev.Calls);
+            Assert.Equal(1.000168m, costReport.TotalUsd);
+            await page.GotoAsync(new Uri(http.BaseAddress!, "/costs").ToString());
+            await Expect(page.GetByTestId("jev-cost-summary")).ToContainTextAsync("JEV · 4 calls");
+            await Expect(page.GetByTestId("jev-cost-summary")).ToContainTextAsync("$0.000168");
+            await Expect(page.GetByTestId("cost-visible-total")).ToContainTextAsync("$1.00");
+            // The costs page can be prerendered before its new Blazor circuit is interactive.
+            for (var attempt = 0; attempt < 20; attempt++)
+            {
+                await page.Locator(".cost-model").SelectOptionAsync("jev-1.14.0");
+                if ((await page.GetByTestId("cost-visible-total").InnerTextAsync()).Contains("$0.000168")) break;
+                await Task.Delay(250);
+            }
+            await Expect(page.GetByTestId("cost-visible-total")).ToContainTextAsync("$0.000168");
+            await Expect(page.Locator(".cost-model")).ToHaveValueAsync("jev-1.14.0");
+            await Expect(page.GetByTestId("jev-cost-summary")).ToContainTextAsync("4 calls");
+            await page.ScreenshotAsync(new() { Path = Path.Combine(data, "jev-costs.png"), FullPage = true });
+            Assert.Empty(errors);
             output.WriteLine($"PASS: manually approved model/skills used per ticket, criteria held for owner review, missing criteria and verified evidence shown, corrections routed with feedback, accepted ticket reached Done. Debug data: {data}");
         }
         finally
@@ -180,7 +209,7 @@ public sealed class JevWorkReviewJourneyTests(ITestOutputHelper output)
                 services.RemoveAll<JevConfigurationService>();
                 services.AddSingleton(sp => new JevConfigurationService(sp.GetRequiredService<ProjectSecretVault>(), sp.GetRequiredService<ProjectService>().DataDir, environmentKey: () => null));
                 services.RemoveAll<JevWorkReviewService>();
-                services.AddSingleton(sp => new JevWorkReviewService(sp.GetRequiredService<ProjectService>(), sp.GetRequiredService<JevConfigurationService>(), new HttpClient(Handler)));
+                services.AddSingleton(sp => new JevWorkReviewService(sp.GetRequiredService<ProjectService>(), sp.GetRequiredService<JevConfigurationService>(), new HttpClient(Handler), sp.GetRequiredService<JevCostRecorder>()));
             });
         }
     }

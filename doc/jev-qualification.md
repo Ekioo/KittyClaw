@@ -318,3 +318,5 @@ profiles and judges the real process exit status and test counts. The test check
 holds, applied model/skills, evidence references, owner correction feedback, acceptance to Done,
 and retained history. Screenshots and raw verification output stay under the test's debug folder;
 the local credential is neither copied into that folder nor logged.
+
+API token usage and estimated JEV charges are included in [cost reporting](./cost-reporting.md).

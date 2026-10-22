@@ -23,7 +23,7 @@ public sealed record JevReviewContext(string Fingerprint, List<string> Criteria,
     List<JevExecutionProfile> Profiles, List<JevWorkDecision> Feedback);
 
 /// <summary>Read-only acceptance assessment and bounded execution profile selection. Human decisions live separately.</summary>
-public sealed class JevWorkReviewService(ProjectService projects, JevConfigurationService configuration, HttpClient client)
+public sealed class JevWorkReviewService(ProjectService projects, JevConfigurationService configuration, HttpClient client, JevCostRecorder? costRecorder = null)
 {
     internal static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly Dictionary<string, string> Statuses = new()
@@ -204,9 +204,12 @@ public sealed class JevWorkReviewService(ProjectService projects, JevConfigurati
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
                 request.Content = JsonContent.Create(new { model = "jev-latest", state, questions });
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(30));
+                var elapsed = System.Diagnostics.Stopwatch.StartNew();
                 using var response = await client.SendAsync(request, timeout.Token);
                 if (!response.IsSuccessStatusCode) throw new InvalidOperationException($"TypeSafe returned HTTP {(int)response.StatusCode}.");
                 using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(timeout.Token));
+                if (costRecorder is not null)
+                    await costRecorder.RecordAsync(slug, ticket, kind, body.RootElement, elapsed.Elapsed.TotalSeconds);
                 var answers = body.RootElement.GetProperty("answers");
                 if (kind == "acceptance")
                 {

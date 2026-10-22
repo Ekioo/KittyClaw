@@ -239,7 +239,7 @@ public sealed class JevWorkReviewTests
                 Options = question.Value.GetProperty("criteria").ToString();
                 answers[question.Name] = new { type = "choice", choice, confidence = 1, probabilities = keys.ToDictionary(k => k, k => k == choice ? 1.0 : 0.0) };
             }
-            Count++; return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { model = "jev-work-fixture", answers }) };
+            Count++; return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { model = "jev-1.14.0", answers, usage = new { input_tokens = 1000, output_tokens = 40 } }) };
         }
     }
 }

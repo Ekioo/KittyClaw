@@ -132,12 +132,13 @@ builder.Services.AddHostedService<KittyClaw.Core.Evidence.RunEvidenceAttacher>()
 builder.Services.AddSingleton<AutomationEngine>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomationEngine>());
 builder.Services.AddSingleton(sp => new JevConfigurationService(sp.GetRequiredService<ProjectSecretVault>(), dataDir));
+builder.Services.AddSingleton<JevCostRecorder>();
 builder.Services.AddSingleton(sp => new JevQualificationService(
     sp.GetRequiredService<ProjectService>(), sp.GetRequiredService<ProjectSecretVault>(),
     new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { MaxResponseContentBufferSize = 256 * 1024 },
-    sp.GetRequiredService<JevConfigurationService>()));
+    sp.GetRequiredService<JevConfigurationService>(), sp.GetRequiredService<JevCostRecorder>()));
 builder.Services.AddSingleton(sp => new JevWorkReviewService(sp.GetRequiredService<ProjectService>(),
-    sp.GetRequiredService<JevConfigurationService>(), new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { MaxResponseContentBufferSize = 256 * 1024 }));
+    sp.GetRequiredService<JevConfigurationService>(), new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { MaxResponseContentBufferSize = 256 * 1024 }, sp.GetRequiredService<JevCostRecorder>()));
 builder.Services.AddSingleton<JevWorkDecisionService>();
 builder.Services.AddHostedService<JevWorkReviewEngine>();
 builder.Services.AddSingleton<JevDecisionStore>();

@@ -8,7 +8,7 @@ namespace KittyClaw.Core.Automation;
 /// </summary>
 public static class ModelCostEstimator
 {
-    public const string RateCardVersion = "2026-08-19";
+    public const string RateCardVersion = "2026-10-22";
 
     public static bool TryEstimate(
         string? model,
@@ -31,6 +31,8 @@ public static class ModelCostEstimator
 
         Rates? rates = normalized.ToLowerInvariant() switch
         {
+            // https://docs.typesafe.ai/models, verified 2026-10-22: input only, output is free.
+            "jev-1.13.0" or "jev-1.14.0" => new(0.042m, 0m, 0m, 0m),
             "gpt-5.6-sol" => new(5m, 30m, 0.5m, 6.25m),
             "gpt-5.6-terra" => new(2.5m, 15m, 0.25m, 3.125m),
             "gpt-5.6-luna" => new(1m, 6m, 0.1m, 1.25m),

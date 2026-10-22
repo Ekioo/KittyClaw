@@ -33,5 +33,9 @@
   "RtkEstimatedValue": "推定値：",
   "RtkReduction": "削減",
   "RtkSavingsHelp": "このプロジェクトのRTKゲインレジストリから推定します。期間中のモデルレートが分かっている場合にのみ金額が表示されます。",
-  "RtkNoUsdEstimate": "ドル換算は推定できません"
+  "RtkNoUsdEstimate": "ドル換算は推定できません",
+  "JevCostCalls": "回の呼び出し",
+  "JevCostInput": "入力トークン",
+  "JevCostOutput": "出力トークン",
+  "JevCostUnpriced": "件の費用不明な呼び出し"
 }
