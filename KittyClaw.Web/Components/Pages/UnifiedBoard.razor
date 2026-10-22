@@ -17,6 +17,7 @@
 @inject LocalizationService L
 @inject KittyClaw.Web.Services.EscapeKeyStack EscapeStack
 @inject KittyClaw.Web.Services.AgentRunsState RunsState
+@inject KittyClaw.Web.Services.UpdateCheckService UpdateCheck
 @rendermode InteractiveServer
 @attribute [StreamRendering]
 @implements IDisposable
@@ -386,7 +387,7 @@ else
 <footer class="unified-footer">
     <TipOfTheDay />
     <div class="legal-notice">
-        KittyClaw · © 2026 <a href="https://ekioo.com" target="_blank" rel="noopener">Ekioo</a>
+        KittyClaw v@UpdateCheck.CurrentVersion · © 2026 <a href="https://ekioo.com" target="_blank" rel="noopener">Ekioo</a>
         · <a href="https://github.com/Ekioo/KittyClaw" target="_blank" rel="noopener">Source</a>
         · <a href="https://github.com/Ekioo/KittyClaw/blob/main/LICENSE" target="_blank" rel="noopener">AGPL-3.0-or-later</a>
     </div>
