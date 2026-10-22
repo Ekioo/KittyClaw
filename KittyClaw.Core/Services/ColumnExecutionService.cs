@@ -17,7 +17,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
     internal const string RoutingLoopError =
         "Protection anti-boucle : cette transition a été répétée sans progrès durable observable.";
 
-    private static async Task EnsureTableAsync(TodoDbContext db)
+    internal static async Task EnsureTableAsync(TodoDbContext db)
     {
         await MigrationGate.RunOnceAsync(db, "column-executions-v1", static d =>
             d.Database.ExecuteSqlRawAsync("""

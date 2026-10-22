@@ -128,6 +128,9 @@
                         }
                         <label class="workflow-check"><input type="checkbox" @bind="_jevObservationOnly" disabled="@(!_jevAvailability.Available && !_jevObservationOnly)" /> @L["JevObservationMode"]</label>
                         <p class="settings-hint">@L["JevObservationHelp"]</p>
+                        <label class="workflow-check"><input type="checkbox" data-testid="jev-automatic-routing" @bind="_jevAutomaticRouting" disabled="@(!_jevObservationOnly && !_jevPostRunObservation)" /> @L["JevAutomaticRouting"]</label>
+                        <label>@L["JevConfidenceThreshold"]<input class="settings-input" type="number" min="0" max="100" step="1" data-testid="jev-confidence-threshold" @bind="_jevConfidencePercent" disabled="@(!_jevAutomaticRouting)" /></label>
+                        <p class="settings-hint">@L["JevAutomaticRoutingHelp"]</p>
                         <p class="settings-hint" data-testid="jev-availability">@L[_jevAvailability.Available ? "JevAvailable" : "JevUnavailable"]</p>
                         <label class="workflow-check"><input type="checkbox" @bind="_enabled" /> <FieldHelp Label="@L["ProcessorEnabled"]" Help="@L["ProcessorEnabledHelp"]" /></label>
                         <label><FieldHelp Label="@L["Name"]" Help="@L["ProcessorNameHelp"]" /><input class="settings-input" @bind="_name" /></label>
@@ -346,6 +349,8 @@
     private JevAvailability _jevAvailability = new(false, false, null);
     private bool _jevObservationOnly;
     private bool _jevPostRunObservation;
+    private bool _jevAutomaticRouting;
+    private double _jevConfidencePercent = 90;
     private bool _enabled = true;
     private string _activeTab = "general";
     private string _columnName = "";
@@ -465,6 +470,8 @@
         _enabled = processor?.Enabled ?? true;
         _jevObservationOnly = processor?.JevObservationOnly ?? false;
         _jevPostRunObservation = processor?.JevPostRunObservation ?? false;
+        _jevAutomaticRouting = processor?.JevAutomaticRouting ?? false;
+        _jevConfidencePercent = (processor?.JevConfidenceThreshold ?? 0.9) * 100;
         _maxTurns = processor?.MaxTurns ?? 100;
         _maxAttempts = processor?.MaxAttempts ?? 3;
         _retryBackoff = processor?.RetryBackoffSeconds ?? 60;
@@ -525,7 +532,9 @@
                     beforeActions: _beforeActions.Select(action => action.ToModel()).ToList(),
                     afterActions: _afterActions.Select(action => action.ToModel()).ToList(),
                     jevObservationOnly: _jevObservationOnly,
-                    jevPostRunObservation: !_jevObservationOnly && _jevPostRunObservation);
+                    jevPostRunObservation: !_jevObservationOnly && _jevPostRunObservation,
+                    jevAutomaticRouting: (_jevObservationOnly || _jevPostRunObservation) && _jevAutomaticRouting,
+                    jevConfidenceThreshold: _jevConfidencePercent / 100);
             }
 
             await ScheduledTaskService.SaveColumnAsync(Slug, savedColumn.Id, _scheduledTasks);

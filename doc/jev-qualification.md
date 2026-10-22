@@ -1,15 +1,15 @@
-# JEV qualification in observation mode
+# JEV qualification and routing
 
 ## Purpose
 
 A column processor can opt into `JevObservationOnly`. This replaces normal agent processing
-for that column with a read-only routing suggestion. Agent dispatch, before/after actions,
-column execution claims, and automatic ticket moves are bypassed. Independent scheduled tasks
+for that column with a routing suggestion. Agent dispatch, before/after actions, and
+column execution claims are bypassed. Manual validation is the default; automatic routing is a separate opt-in. Independent scheduled tasks
 and legacy automations retain their own configuration.
 
 ## Configuration
 
-In **Configure column → Processor**, enable **JEV qualification — observation only**.
+In **Configure column → Processor**, enable **JEV qualification**.
 Set the mission and optional instructions, and configure outcome routes or a default destination
 in the Routing tab. JEV is optional: the option is disabled until a credential is detected.
 Add a key in **Settings → JEV / TypeSafe**, set `TYPESAFE_API_KEY` in the machine environment,
@@ -64,8 +64,8 @@ Adding questions consumes tokens; batching avoids separate calls but does not ma
   probability distribution, resolved model, timestamp or actionable configuration error. It marks
   observations stale when ticket inputs, routes or processor configuration change.
 
-Confidence describes the answer distribution, not a guarantee of correctness. No threshold can
-activate routing in this implementation. No live TypeSafe call is needed by the test suite:
+Confidence describes the answer distribution, not a guarantee of correctness. The optional routing
+policy uses this returned confidence, rather than the selected option’s probability. No live TypeSafe call is needed by the test suite:
 `JevQualificationTests` uses an injected HTTP handler and an isolated secret vault/database.
 
 ## External dependency
@@ -94,7 +94,7 @@ Remove-Item Env:KITTYCLAW_JEV_DEBUG_E2E
 
 ## Routing proposals after agent execution
 
-Regular agent columns can separately enable **JEV routing proposals after agent runs — observation only**.
+Regular agent columns can separately enable **JEV routing proposals after agent runs**.
 This mode is mutually exclusive with qualification-only processing. Normal agent execution, actions,
 validation and routing remain authoritative. JEV is scheduled in its own background sweep, so a timeout,
 missing key or malformed response cannot fail the agent execution or alter its workflow transition.
@@ -126,7 +126,7 @@ execution or transition occurs. It uses the same `KITTYCLAW_JEV_DEBUG_E2E=1` opt
 ## Human decisions with workflow effects
 
 Both qualification and post-run proposals expose **Accept and apply destination** and **Reject and
-requalify**. JEV itself still cannot move a ticket. Explicit owner acceptance applies the proposed
+requalify**. With the default manual policy, explicit owner acceptance applies the proposed
 column through `TicketService` and its existing manual-routing, assignment and scheduling rules.
 The normal destination processor may consequently start. If the ticket is already at that destination,
 acceptance records approval without replaying the transition or changing ticket freshness.
@@ -148,10 +148,50 @@ be evaluated again; past decisions remain available in the audit history.
 `JevDecisionStore` keeps an immutable `JevProposalDecisions` record keyed by the SHA-256 identity of the
 complete proposal revision. It stores the exact proposal, accepted/rejected outcome, owner, UTC time,
 reason and applied destination. Refreshing a model result cannot rewrite a past human decision. The
-ticket shows the current decision and the full decision history. Only direct human UI actions invoke
-the decision service; no observation worker calls it.
+ticket shows the current decision and the full decision history. Human UI actions invoke the manual decision path; the observation worker can invoke the separately
+checked automatic path only for columns that explicitly enable it.
 
 The debug post-run browser journey now also accepts a proposal, verifies that the ordinary destination
 agent runs, reloads the saved decision, then rejects another ticket's proposal and verifies that JEV
 suggests an alternative using the supplied reason without launching another agent. All providers in
 that journey are deterministic fixtures; real project data and production instances are not used.
+
+## Optional automatic routing
+
+In **Configure column → Processor**, enable **Apply JEV routes automatically** and set
+**Minimum JEV confidence (%)**. The checkbox defaults to off for new and existing processors;
+the initial threshold is 90%. Both qualification and post-run proposal modes support it. The
+REST fields are `jevAutomaticRouting` and `jevConfidenceThreshold` (finite number from 0 to 1,
+inclusive). Omitting either preserves its saved value. Both fields live in the authoritative
+`processor.json` and its SQLite projection; automatic routing requires an enabled JEV mode.
+
+After observing a ticket, `JevObservationEngine` attempts to apply an undecided proposal only
+when the column opted in. `JevProposalDecisionService` uses the same atomic ticket/audit path
+as human acceptance, with additional checks before and inside the transaction. Confidence must
+meet or exceed the current threshold. `none`, errors, stale ticket/execution/configuration
+snapshots, disabled processors, paused projects and already-decided revisions cannot route.
+An active, retrying or child-waiting column execution prevents automatic routing. The same
+automatic ticket/source/destination transition cannot repeat within ten minutes, which limits
+qualification-only routing loops; manual acceptance remains available. Existing ticket-routing,
+assignment and scheduling rules still apply. A successful move may start the destination processor.
+
+A proposal includes a fingerprint of its source mission, instructions and business destinations.
+Legacy proposals without this fingerprint remain available for manual review but cannot apply
+automatically. Changing routing policy or its threshold does not require another inference;
+changing the semantic routing context invalidates automatic application of the old result.
+Below-threshold and ineligible proposals remain visible for manual acceptance or rejection.
+
+Automatic decisions preserve the exact proposal and threshold with `automatic: true` and actor
+`JEV`, sharing the transaction with the move. The ticket displays the current source-column
+policy and distinguishes automatic application from owner decisions in both the current proposal
+and the durable history. Duplicate sweeps cannot replay the same decision. Audit failure rolls
+back the move and emits no status event.
+
+`JevProposalDecisionTests` covers opt-in/defaults, inclusive boundaries, manual override below the
+threshold, persistence with older clients, invalid values, stale/abstained/failed/rejected
+proposals, pause/disable, active executions and repeated transitions. The opt-in
+`JevAutomaticRoutingJourneyTests` uses isolated debug data and an ephemeral Kestrel port, real
+Blazor UI, and fake JEV/agent providers: it verifies the manual default, enables automatic routing
+with a 100% threshold in the column dialog, observes automatic application and the destination
+agent, reloads the audit history, then proves an 80% proposal stays pending and can be rejected.
+It uses `KITTYCLAW_JEV_DEBUG_E2E=1`; it never calls the live TypeSafe API.

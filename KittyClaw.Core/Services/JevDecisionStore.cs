@@ -8,10 +8,10 @@ using Microsoft.EntityFrameworkCore.Storage;
 namespace KittyClaw.Core.Services;
 
 public sealed record JevProposalDecision(string ProposalId, int TicketId, bool Accepted, DateTime DecidedAt,
-    string Actor, string? Reason, JevRoutingProposal Proposal, int? AppliedTargetColumnId);
+    string Actor, string? Reason, JevRoutingProposal Proposal, int? AppliedTargetColumnId, bool Automatic = false, double? ConfidenceThreshold = null);
 public sealed record JevRejectionFeedback(string ProposalId, string? RejectedChoice, string? Reason);
 
-/// <summary>Immutable human decisions retain the exact proposal revision, including after model refresh.</summary>
+/// <summary>Immutable routing decisions retain the exact proposal revision, including after model refresh.</summary>
 public sealed class JevDecisionStore(ProjectService projects)
 {
     internal static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -60,6 +60,18 @@ public sealed class JevDecisionStore(ProjectService projects)
         return null;
     }
 
+    internal static async Task<bool> HasRecentAutomaticTransitionAsync(TodoDbContext db, int ticketId, int sourceId, string choice)
+    {
+        var since = DateTime.UtcNow.AddMinutes(-10).ToString("O");
+        return await db.Database.SqlQuery<int>($"""
+            SELECT COUNT(*) AS Value FROM JevProposalDecisions WHERE TicketId = {ticketId}
+                AND json_extract(Payload, '$.automatic') = 1
+                AND json_extract(Payload, '$.proposal.sourceColumnId') = {sourceId}
+                AND json_extract(Payload, '$.proposal.choice') = {choice}
+                AND julianday(json_extract(Payload, '$.decidedAt')) >= julianday({since})
+            """).SingleAsync() > 0;
+    }
+
     internal static async Task SaveAsync(TodoDbContext db, JevProposalDecision decision)
     {
         var payload = JsonSerializer.Serialize(decision, Json);
@@ -67,7 +79,7 @@ public sealed class JevDecisionStore(ProjectService projects)
         db.ActivityEntries.Add(new()
         {
             TicketId = decision.TicketId, Author = decision.Actor, CreatedAt = decision.DecidedAt,
-            Text = $"JEV proposal {decision.ProposalId[..12]} {(decision.Accepted ? "accepted" : "rejected")}: {decision.Proposal.Destinations.GetValueOrDefault(decision.Proposal.Choice ?? "", "none")}." +
+            Text = (decision.Automatic ? "Automatic routing. " : "") + $"JEV proposal {decision.ProposalId[..12]} {(decision.Accepted ? "accepted" : "rejected")}: {decision.Proposal.Destinations.GetValueOrDefault(decision.Proposal.Choice ?? "", "none")}." +
                 (decision.Accepted ? " Applied through the normal workflow." : " Excluded from requalification of this ticket context.") +
                 (string.IsNullOrWhiteSpace(decision.Reason) ? "" : $" Reason: {decision.Reason}")
         });

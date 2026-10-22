@@ -91,16 +91,23 @@ public sealed class JevProposalDecisionTests
         Assert.Equal(f.Source.Id, (await f.Tickets.GetTicketAsync(f.Slug, f.Ticket.Id))!.ColumnId);
     }
 
-    [Fact]
-    public async Task Audit_failure_rolls_back_transition_and_emits_no_status_signal()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Audit_failure_rolls_back_transition_and_emits_no_status_signal(bool automatic)
     {
         using var f = await Fixture.CreateAsync();
+        if (automatic) await ConfigureAutomaticAsync(f, true, 0.9);
         var id = JevDecisionStore.ProposalId((await f.Qualification.GetAsync(f.Slug, f.Ticket.Id))!);
         await f.Store.ListAsync(f.Slug, f.Ticket.Id);
         await using (var db = f.Projects.GetProjectDb(f.Slug))
             await db.Database.ExecuteSqlRawAsync("CREATE TRIGGER fail_jev_review BEFORE INSERT ON JevProposalDecisions BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END");
         var signals = 0; f.Tickets.TicketStatusChanged += (_, _, _, _) => signals++;
-        await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => f.Decisions.DecideAsync(f.Slug, f.Ticket.Id, id, true));
+        await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(async () =>
+        {
+            if (automatic) await f.Decisions.TryApplyAutomaticallyAsync(f.Slug, f.Ticket.Id, id);
+            else await f.Decisions.DecideAsync(f.Slug, f.Ticket.Id, id, true);
+        });
         Assert.Equal(f.Source.Id, (await f.Tickets.GetTicketAsync(f.Slug, f.Ticket.Id))!.ColumnId);
         Assert.Equal(0, signals);
         Assert.Empty(await f.Store.ListAsync(f.Slug, f.Ticket.Id));
@@ -130,6 +137,151 @@ public sealed class JevProposalDecisionTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => f.Decisions.DecideAsync(f.Slug, current.Id, JevDecisionStore.ProposalId(alternate), true));
         Assert.Equal(f.First.Id, (await f.Tickets.GetTicketAsync(f.Slug, current.Id))!.ColumnId);
         Assert.Empty(await f.Store.ListAsync(f.Slug, current.Id));
+    }
+
+    [Theory]
+    [InlineData(false, 0.9, 1, false)]
+    [InlineData(true, 0.91, 0.9, false)]
+    [InlineData(true, 0.9, 0.9, true)]
+    [InlineData(true, 1, 1, true)]
+    [InlineData(true, 0, 0, true)]
+    public async Task Automatic_routing_requires_opt_in_and_inclusive_confidence_threshold(bool enabled, double threshold, double confidence, bool moves)
+    {
+        using var f = await Fixture.CreateAsync();
+        Assert.False(f.Processor.JevAutomaticRouting);
+        Assert.Equal(0.9, f.Processor.JevConfidenceThreshold);
+        await ConfigureAutomaticAsync(f, enabled, threshold);
+        var proposal = (await f.Qualification.GetAsync(f.Slug, f.Ticket.Id))!;
+        proposal = proposal with { Confidence = confidence,
+            Probabilities = proposal.Destinations.Keys.ToDictionary(k => k, k => k == proposal.Choice
+                ? (confidence * (proposal.Destinations.Count - 1) + 1) / proposal.Destinations.Count
+                : (1 - confidence) / proposal.Destinations.Count) };
+        await ReplaceProposalAsync(f, proposal);
+        var signals = 0; f.Tickets.TicketStatusChanged += (_, _, _, _) => signals++;
+        var result = await f.Decisions.TryApplyAutomaticallyAsync(f.Slug, f.Ticket.Id, JevDecisionStore.ProposalId(proposal));
+        Assert.Equal(moves ? f.First.Id : f.Source.Id, (await f.Tickets.GetTicketAsync(f.Slug, f.Ticket.Id))!.ColumnId);
+        Assert.Equal(moves ? 1 : 0, signals);
+        if (moves)
+        {
+            Assert.NotNull(result);
+            Assert.True(result.Automatic); Assert.Equal("JEV", result.Actor); Assert.Equal(threshold, result.ConfidenceThreshold);
+            Assert.Contains((await f.Tickets.GetTicketAsync(f.Slug, f.Ticket.Id))!.Activities, a => a.Author == "JEV" && a.Text.Contains("Automatic routing"));
+            Assert.Null(await f.Decisions.TryApplyAutomaticallyAsync(f.Slug, f.Ticket.Id, JevDecisionStore.ProposalId(proposal)));
+            Assert.Single(await f.Store.ListAsync(f.Slug, f.Ticket.Id)); Assert.Equal(1, signals);
+        }
+        else
+        {
+            Assert.Null(result); Assert.Empty(await f.Store.ListAsync(f.Slug, f.Ticket.Id));
+            // A threshold never prevents an explicit owner acceptance.
+            Assert.False((await f.Decisions.DecideAsync(f.Slug, f.Ticket.Id, JevDecisionStore.ProposalId(proposal), true)).Automatic);
+        }
+    }
+
+    [Theory]
+    [InlineData("stale")]
+    [InlineData("none")]
+    [InlineData("error")]
+    [InlineData("rejected")]
+    [InlineData("paused")]
+    [InlineData("disabled")]
+    [InlineData("context")]
+    [InlineData("legacy")]
+    [InlineData("active")]
+    public async Task Automatic_routing_leaves_ineligible_proposals_for_manual_review(string scenario)
+    {
+        using var f = await Fixture.CreateAsync();
+        await ConfigureAutomaticAsync(f, true, 0.9);
+        var proposal = (await f.Qualification.GetAsync(f.Slug, f.Ticket.Id))!;
+        if (scenario == "stale") await f.Tickets.UpdateTicketAsync(f.Slug, f.Ticket.Id, description: "New requirements");
+        if (scenario == "none") proposal = proposal with { Choice = "none" };
+        if (scenario == "error") proposal = proposal with { Error = "TypeSafe returned HTTP 500." };
+        if (scenario == "legacy") proposal = proposal with { ProcessorFingerprint = null };
+        await ReplaceProposalAsync(f, proposal);
+        var id = JevDecisionStore.ProposalId(proposal);
+        if (scenario == "rejected") await f.Decisions.DecideAsync(f.Slug, f.Ticket.Id, id, false, "Owner declines");
+        if (scenario == "paused") await f.Projects.TogglePauseAsync(f.Slug);
+        if (scenario == "disabled") await ConfigureAutomaticAsync(f, false, 0.9);
+        if (scenario == "context") await f.Processors.SaveAsync(f.Slug, f.Source.Id, "Qualifier", "A changed mission", null, true, 20, [], [], [],
+            routes: f.Processor.Routes, defaultTargetColumnId: f.Processor.DefaultTargetColumnId);
+        if (scenario == "active")
+        {
+            var executions = new ColumnExecutionService(f.Projects, f.Tickets); await executions.ListAsync(f.Slug);
+            await using var db = f.Projects.GetProjectDb(f.Slug);
+            db.ColumnExecutions.Add(new() { Id = "active", ProcessorId = f.Processor.Id, TicketId = f.Ticket.Id, Status = ColumnExecutionStatus.Running });
+            await db.SaveChangesAsync();
+        }
+        Assert.Null(await f.Decisions.TryApplyAutomaticallyAsync(f.Slug, f.Ticket.Id, id));
+        Assert.Equal(f.Source.Id, (await f.Tickets.GetTicketAsync(f.Slug, f.Ticket.Id))!.ColumnId);
+        Assert.DoesNotContain(await f.Store.ListAsync(f.Slug, f.Ticket.Id), d => d.Automatic);
+    }
+
+    [Fact]
+    public async Task Automatic_routing_does_not_repeat_a_recent_transition_after_the_ticket_returns()
+    {
+        using var f = await Fixture.CreateAsync(); await ConfigureAutomaticAsync(f, true, 0.9);
+        var proposal = (await f.Qualification.GetAsync(f.Slug, f.Ticket.Id))!;
+        Assert.NotNull(await f.Decisions.TryApplyAutomaticallyAsync(f.Slug, f.Ticket.Id, JevDecisionStore.ProposalId(proposal)));
+        var returned = (await f.Tickets.UpdateTicketAsync(f.Slug, f.Ticket.Id, columnId: f.Source.Id))!;
+        await f.Qualification.ObserveAsync(f.Slug, f.Processor, returned, f.Columns, CancellationToken.None);
+        proposal = (await f.Qualification.GetAsync(f.Slug, f.Ticket.Id))!;
+        Assert.Null(await f.Decisions.TryApplyAutomaticallyAsync(f.Slug, f.Ticket.Id, JevDecisionStore.ProposalId(proposal)));
+        Assert.Equal(f.Source.Id, (await f.Tickets.GetTicketAsync(f.Slug, f.Ticket.Id))!.ColumnId);
+        Assert.True((await f.Decisions.DecideAsync(f.Slug, f.Ticket.Id, JevDecisionStore.ProposalId(proposal), true)).Accepted);
+    }
+
+    [Fact]
+    public async Task Automatic_policy_persists_across_older_clients_and_rejects_invalid_thresholds()
+    {
+        using var f = await Fixture.CreateAsync(); await ConfigureAutomaticAsync(f, true, 0.95);
+        var oldClientSave = await f.Processors.SaveAsync(f.Slug, f.Source.Id, "Qualifier", "Qualify work", null, true, 20, [], [], [],
+            routes: f.Processor.Routes, defaultTargetColumnId: f.Processor.DefaultTargetColumnId);
+        Assert.True(oldClientSave.JevAutomaticRouting); Assert.Equal(0.95, oldClientSave.JevConfidenceThreshold);
+        var restarted = new ColumnProcessorService(f.Projects, new ProjectSkillService(f.Projects));
+        Assert.True((await restarted.GetAsync(f.Slug, f.Source.Id))!.JevAutomaticRouting);
+        Assert.False((await restarted.SaveAsync(f.Slug, f.Second.Id, "Other", "Work", null, false, 20, [], [], [])).JevAutomaticRouting);
+        foreach (var invalid in new[] { -0.01, 1.01, double.NaN, double.PositiveInfinity })
+            await Assert.ThrowsAsync<InvalidOperationException>(() => ConfigureAutomaticAsync(f, true, invalid));
+        Assert.Equal(0.95, (await restarted.GetAsync(f.Slug, f.Source.Id))!.JevConfidenceThreshold);
+    }
+
+    [Fact]
+    public async Task Legacy_proposal_identity_and_history_survive_the_optional_context_fingerprint()
+    {
+        using var f = await Fixture.CreateAsync();
+        var legacy = (await f.Qualification.GetAsync(f.Slug, f.Ticket.Id))! with { ProcessorFingerprint = null };
+        var payload = JsonSerializer.Serialize(legacy, JevDecisionStore.Json);
+        Assert.DoesNotContain("processorFingerprint", payload);
+        var originalId = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(payload)));
+        await ReplaceProposalAsync(f, legacy);
+        await f.Decisions.DecideAsync(f.Slug, f.Ticket.Id, originalId, false, "Keep the original review");
+        var reloaded = (await f.Qualification.GetAsync(f.Slug, f.Ticket.Id))!;
+        Assert.Equal(originalId, JevDecisionStore.ProposalId(reloaded));
+        Assert.Equal(originalId, Assert.Single(await f.Store.ListAsync(f.Slug, f.Ticket.Id)).ProposalId);
+    }
+
+    [Fact]
+    public async Task Concurrent_automatic_and_manual_acceptance_commit_only_one_transition_and_audit()
+    {
+        using var f = await Fixture.CreateAsync(); await ConfigureAutomaticAsync(f, true, 0.9);
+        var proposal = (await f.Qualification.GetAsync(f.Slug, f.Ticket.Id))!;
+        var id = JevDecisionStore.ProposalId(proposal);
+        var signals = 0; f.Tickets.TicketStatusChanged += (_, _, _, _) => signals++;
+        await Task.WhenAll(f.Decisions.TryApplyAutomaticallyAsync(f.Slug, f.Ticket.Id, id),
+            f.Decisions.DecideAsync(f.Slug, f.Ticket.Id, id, true));
+        Assert.Equal(f.First.Id, (await f.Tickets.GetTicketAsync(f.Slug, f.Ticket.Id))!.ColumnId);
+        Assert.Single(await f.Store.ListAsync(f.Slug, f.Ticket.Id)); Assert.Equal(1, signals);
+    }
+
+    private static async Task ConfigureAutomaticAsync(Fixture f, bool enabled, double threshold) =>
+        f.Processor = await f.Processors.SaveAsync(f.Slug, f.Source.Id, "Qualifier", "Qualify work", null, true, 20, [], [], [],
+            routes: f.Processor.Routes, defaultTargetColumnId: f.Processor.DefaultTargetColumnId,
+            jevAutomaticRouting: enabled, jevConfidenceThreshold: threshold);
+
+    private static async Task ReplaceProposalAsync(Fixture f, JevRoutingProposal proposal)
+    {
+        await using var db = f.Projects.GetProjectDb(f.Slug);
+        var payload = JsonSerializer.Serialize(proposal, JevDecisionStore.Json);
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE JevObservations SET Payload = {payload} WHERE TicketId = {f.Ticket.Id}");
     }
 
     private sealed class Fixture : IDisposable

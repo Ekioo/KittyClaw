@@ -16,6 +16,8 @@ public class ColumnProcessor
     public string? Model { get; set; }
     public bool Enabled { get; set; } = true;
     public bool JevObservationOnly { get; set; }
+    public bool JevAutomaticRouting { get; set; }
+    public double JevConfidenceThreshold { get; set; } = 0.9;
     public DateTime? JevPostRunObservationSince { get; set; }
     [NotMapped]
     public bool JevPostRunObservation => JevPostRunObservationSince.HasValue;

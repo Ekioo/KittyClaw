@@ -64,6 +64,11 @@ public sealed class ColumnProcessorService(
             MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN JevObservationOnly INTEGER NOT NULL DEFAULT 0"));
         await MigrationGate.RunOnceAsync(db, "column-processors-jev-post-run-v1", static d =>
             MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN JevPostRunObservationSince TEXT NULL"));
+        await MigrationGate.RunOnceAsync(db, "column-processors-jev-routing-v1", static async d =>
+        {
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN JevAutomaticRouting INTEGER NOT NULL DEFAULT 0");
+            await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN JevConfidenceThreshold REAL NOT NULL DEFAULT 0.9");
+        });
         await MigrationGate.RunOnceAsync(db, "column-processors-routing-v1", static async d =>
         {
             await MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN SelectionOrder INTEGER NOT NULL DEFAULT 0");
@@ -109,7 +114,8 @@ public sealed class ColumnProcessorService(
         List<ColumnRoute>? routes = null, string? prompt = null,
         List<ColumnProcessorAction>? beforeActions = null,
         List<ColumnProcessorAction>? afterActions = null,
-        bool? jevObservationOnly = null, bool? jevPostRunObservation = null)
+        bool? jevObservationOnly = null, bool? jevPostRunObservation = null,
+        bool? jevAutomaticRouting = null, double? jevConfidenceThreshold = null)
     {
         var gate = ProjectGates.GetOrAdd(projectSlug, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync();
@@ -132,6 +138,8 @@ public sealed class ColumnProcessorService(
                 JevObservationOnly = jevObservationOnly ?? (await db.ColumnProcessors.FirstOrDefaultAsync(p => p.ColumnId == columnId))?.JevObservationOnly ?? false,
                 JevPostRunObservationSince = jevPostRunObservation is null ? previous?.JevPostRunObservationSince
                     : jevPostRunObservation.Value ? previous?.JevPostRunObservationSince ?? DateTime.UtcNow : null,
+                JevAutomaticRouting = jevAutomaticRouting ?? previous?.JevAutomaticRouting ?? false,
+                JevConfidenceThreshold = jevConfidenceThreshold ?? previous?.JevConfidenceThreshold ?? 0.9,
                 Enabled = enabled,
                 MaxTurns = maxTurns,
                 SelectionOrder = selectionOrder,
@@ -376,6 +384,10 @@ public sealed class ColumnProcessorService(
 
         if (definition.JevObservationOnly && definition.JevPostRunObservationSince is not null)
             throw new InvalidOperationException("Choose either JEV qualification or post-run observation for this column.");
+        if (!double.IsFinite(definition.JevConfidenceThreshold) || definition.JevConfidenceThreshold < 0 || definition.JevConfidenceThreshold > 1)
+            throw new InvalidOperationException("JEV confidence threshold must be between 0 and 1.");
+        if (definition.JevAutomaticRouting && !definition.JevObservationOnly && definition.JevPostRunObservationSince is null)
+            throw new InvalidOperationException("Enable JEV qualification or post-run proposals before automatic routing.");
         definition.Name = definition.Name.Trim();
         definition.Mission = definition.Mission.Trim();
         definition.Prompt = definition.Prompt?.Trim() ?? "";
@@ -450,6 +462,8 @@ public sealed class ColumnProcessorService(
         processor.Prompt = definition.Prompt;
         processor.Model = definition.Model;
         processor.JevObservationOnly = definition.JevObservationOnly;
+        processor.JevAutomaticRouting = definition.JevAutomaticRouting;
+        processor.JevConfidenceThreshold = definition.JevConfidenceThreshold;
         processor.JevPostRunObservationSince = definition.JevPostRunObservationSince;
         processor.Enabled = definition.Enabled;
         processor.MaxTurns = definition.MaxTurns;
@@ -590,6 +604,8 @@ public sealed class ColumnProcessorService(
         Prompt = processor.Prompt,
         Model = processor.Model,
         JevObservationOnly = processor.JevObservationOnly,
+        JevAutomaticRouting = processor.JevAutomaticRouting,
+        JevConfidenceThreshold = processor.JevConfidenceThreshold,
         JevPostRunObservationSince = processor.JevPostRunObservationSince,
         Enabled = processor.Enabled,
         MaxTurns = processor.MaxTurns,
@@ -674,6 +690,8 @@ public sealed class ColumnProcessorService(
         public string? Model { get; set; }
         public bool Enabled { get; set; } = true;
         public bool JevObservationOnly { get; set; }
+        public bool JevAutomaticRouting { get; set; }
+        public double JevConfidenceThreshold { get; set; } = 0.9;
         public DateTime? JevPostRunObservationSince { get; set; }
         public int MaxTurns { get; set; } = 100;
         public TicketSelectionOrder SelectionOrder { get; set; } = TicketSelectionOrder.Position;

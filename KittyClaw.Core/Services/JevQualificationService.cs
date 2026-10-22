@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using KittyClaw.Core.Models;
 using KittyClaw.Core.Evidence;
 using Microsoft.EntityFrameworkCore;
@@ -17,7 +18,8 @@ public sealed record JevRoutingProposal(string Fingerprint, int SourceColumnId, 
     JevTriage? Triage = null, JevUsage? Usage = null, long? DurationMs = null,
     string QuestionVersion = "routing-v1", string? ExecutionId = null, string? RunId = null,
     DateTime? TicketUpdatedAt = null, int? TicketColumnId = null, int? ActualTargetColumnId = null,
-    bool EvidenceAvailable = false, DateTime? ExecutionEndedAt = null, int? ExecutionAttempt = null);
+    bool EvidenceAvailable = false, DateTime? ExecutionEndedAt = null, int? ExecutionAttempt = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ProcessorFingerprint = null);
 
 /// <summary>Read-only semantic qualification. Never invokes workflow actions or changes tickets.</summary>
 public sealed class JevQualificationService(ProjectService projects, ProjectSecretVault vault, HttpClient client,
@@ -77,6 +79,12 @@ public sealed class JevQualificationService(ProjectService projects, ProjectSecr
         result["none"] = "No destination fits, or the available evidence is insufficient.";
         return result;
     }
+
+    public static string RoutingConfigurationFingerprint(ColumnProcessor processor, IEnumerable<BoardColumn> columns) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+        {
+            processor.Mission, processor.Prompt, destinations = BuildDestinations(processor, columns)
+        }, Json))));
 
     private static object BuildState(ColumnProcessor processor, Ticket ticket, Dictionary<string, string> destinations, IReadOnlyList<JevRejectionFeedback>? feedback = null) => new
     {
@@ -190,7 +198,8 @@ public sealed class JevQualificationService(ProjectService projects, ProjectSecr
             var error = ex is InvalidOperationException ? ex.Message : "JEV qualification failed. It will retry after five minutes.";
             proposal = new(fingerprint, processor.ColumnId, DateTime.UtcNow, null, null, null, [], destinations, error, QuestionVersion: version);
         }
-        proposal = proposal with { TicketUpdatedAt = ticket.UpdatedAt, TicketColumnId = ticket.ColumnId };
+        proposal = proposal with { TicketUpdatedAt = ticket.UpdatedAt, TicketColumnId = ticket.ColumnId,
+            ProcessorFingerprint = RoutingConfigurationFingerprint(processor, columns) };
         if (afterExecution is not null) proposal = proposal with
         {
             ExecutionId = afterExecution.Id, RunId = afterExecution.RunId,

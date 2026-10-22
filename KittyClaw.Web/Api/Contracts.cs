@@ -31,7 +31,9 @@ public record SaveColumnProcessorRequest(
     List<ColumnProcessorAction>? BeforeActions = null,
     List<ColumnProcessorAction>? AfterActions = null,
     bool? JevObservationOnly = null,
-    bool? JevPostRunObservation = null);
+    bool? JevPostRunObservation = null,
+    bool? JevAutomaticRouting = null,
+    double? JevConfidenceThreshold = null);
 public record CreateTicketRequest(
     string Title, string CreatedBy, string Status, string Description = "",
     List<int>? LabelIds = null, TicketPriority Priority = TicketPriority.NiceToHave,

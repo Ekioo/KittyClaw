@@ -72,7 +72,7 @@ public sealed class JevPostRunJourneyTests(ITestOutputHelper output)
             await page.Locator(".column-context-menu-configure").ClickAsync();
             var dialog = page.GetByRole(AriaRole.Dialog);
             await dialog.Locator(".column-editor-tabs button").Nth(1).ClickAsync();
-            await dialog.GetByLabel("JEV routing proposals after agent runs — observation only").CheckAsync();
+            await dialog.GetByLabel("JEV routing proposals after agent runs").CheckAsync();
             await dialog.Locator("label.workflow-check").Filter(new() { HasText = "Enabled" }).Locator("input").CheckAsync();
             await dialog.Locator(".processor-dialog-footer .settings-primary").ClickAsync();
             await Expect(dialog).Not.ToBeVisibleAsync();

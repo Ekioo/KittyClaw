@@ -95,6 +95,7 @@ public sealed class JevPostRunObservationTests
     internal sealed class PostRunHandler : HttpMessageHandler
     {
         public int Count;
+        public double Confidence = 1;
         public JsonElement LastState;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
@@ -106,8 +107,8 @@ public sealed class JevPostRunObservationTests
             var selected = options.First(k => k != "none");
             Count++;
             return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { model = "jev-post-run-fixture",
-                answers = new { routing = new { type = "choice", choice = selected, confidence = 1,
-                    probabilities = options.ToDictionary(k => k, k => k == selected ? 1.0 : 0.0) } } }) };
+                answers = new { routing = new { type = "choice", choice = selected, confidence = Confidence,
+                    probabilities = options.ToDictionary(k => k, k => k == selected ? (Confidence * (options.Count - 1) + 1) / options.Count : (1 - Confidence) / options.Count) } } }) };
         }
     }
 }

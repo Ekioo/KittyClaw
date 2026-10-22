@@ -789,8 +789,8 @@ public class TicketService
             status, expectedStatus, pipelineId, columnId, blocksParent, enforceRouting, comment);
 
     internal Task<Ticket?> ApplyJevProposalAsync(string slug, int ticketId, int targetColumnId,
-        DateTime expectedUpdatedAt, Func<TodoDbContext, Ticket, Task> atomicDecision) =>
-        UpdateTicketCoreAsync(slug, ticketId, author: "owner", columnId: targetColumnId,
+        DateTime expectedUpdatedAt, Func<TodoDbContext, Ticket, Task> atomicDecision, string author = "owner") =>
+        UpdateTicketCoreAsync(slug, ticketId, author: author, columnId: targetColumnId,
             enforceRouting: true, expectedUpdatedAt: expectedUpdatedAt, atomicDecision: atomicDecision);
 
     private async Task<Ticket?> UpdateTicketCoreAsync(string projectSlug, int ticketId, string? title = null, string? description = null, string author = "owner", TicketPriority? priority = null, string? assignedTo = null, string? status = null, string? expectedStatus = null, int? pipelineId = null, int? columnId = null, bool? blocksParent = null, bool enforceRouting = false, string? comment = null, DateTime? expectedUpdatedAt = null,

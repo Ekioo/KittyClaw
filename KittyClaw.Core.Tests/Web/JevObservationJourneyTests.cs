@@ -110,7 +110,7 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
             var dialog = page.GetByRole(AriaRole.Dialog);
             await Expect(dialog).ToBeVisibleAsync();
             await dialog.Locator(".column-editor-tabs button").Nth(1).ClickAsync();
-            var observation = dialog.GetByLabel("JEV qualification — observation only");
+            var observation = dialog.GetByLabel("JEV qualification");
             await Expect(observation).Not.ToBeCheckedAsync();
             await observation.CheckAsync();
             await dialog.Locator("label.workflow-check").Filter(new() { HasText = "Enabled" }).Locator("input").CheckAsync();
