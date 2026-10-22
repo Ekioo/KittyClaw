@@ -117,6 +117,7 @@ public class AgentRunRegistryTests
         var staleRun = new AgentRun
         {
             RunId = "stale", ProjectSlug = "p", TicketId = null,
+            Provider = CliProvider.Grok,
             AgentName = "a", SkillFile = "a/SKILL.md",
             ConcurrencyGroup = "a", StartedAt = DateTime.UtcNow,
         };
@@ -128,6 +129,8 @@ public class AgentRunRegistryTests
 
         Assert.NotNull(loaded);
         Assert.Equal(AgentRunStatus.Stopped, loaded!.Status);
+        Assert.Equal(CliProvider.Grok, loaded.Provider);
+        Assert.Equal(CliProvider.Grok, Assert.Single(store.LoadAll()).Provider);
         Assert.NotNull(loaded.EndedAt);
     }
 

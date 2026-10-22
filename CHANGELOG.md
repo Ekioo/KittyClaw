@@ -4,14 +4,50 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.19] — 2026-10-22
+
+Recoverable integrations, clearer delivery evidence, project agent permissions, and current provider models.
+
+### Highlights
+
+Worktree integration now separates repository integration from synchronization of the local checkout. Queued changes are integrated in isolation, with durable recovery for interrupted writes, reviewed quarantines, duplicate queue entries, and late commits. Projects expose these states separately so a completed integration does not conceal pending local synchronization.
+
+Delivery evidence is more explicit and retains its provenance across retries and long runs. Dependency resolution uses column roles instead of the English status label "Done", including across pipelines. Project owners can configure observation or required authorization for protected agent actions; unsupported providers are blocked before launch when enforcement is enabled.
+
+New projects gain a guided first-ticket workflow, repository intake diagnostics, and activation metrics. Model selectors now offer current Claude, OpenAI, Grok, and DeepSeek models, with Sonnet 5.5 as the default for selections without an explicit override.
+
 ### Added
 
-- Updated provider model selectors with Claude Fable 5.1, Opus/Sonnet/Haiku 5.5, GPT-6 Astra/Sol/Luna, GPT-6.1 Sol, Grok 4.7 fallback discovery, and canonical DeepSeek Pro/Flash identifiers. Existing selections and defaults remain unchanged; availability depends on the provider account and installed CLI.
+- Project-level agent permission settings, a pending-request badge, and temporary approvals scoped to matching ticket actions and resources.
+- Separate integration and local-checkout synchronization states, with recovery documentation.
+- Guided first-ticket drafting, minimal workflow setup, provider readiness checks, repository intake state, and first-project activation metrics.
+- Nested ticket lookup by number, browser-local activity timestamps, and expanded repeatable evidence benchmarks.
+- Claude Fable 5.1, Opus/Sonnet/Haiku 5.5, GPT-6 Astra/Sol/Luna, GPT-6.1 Sol, Grok 4.7 fallback discovery, and canonical DeepSeek Pro/Flash identifiers. Availability depends on the account and installed CLI.
 
 ### Changed
 
-- Shortened model selectors by hiding superseded Claude generations, GPT-5.4/5.5 retired from Codex ChatGPT sign-in, and redundant DeepSeek aliases. Saved model identifiers still route unchanged.
-- Changed the default Claude model from Sonnet 4.6 to Sonnet 5.5 for selections without an explicit override.
+- Default Claude selections now use Sonnet 5.5. Selectors hide superseded Claude generations, GPT-5.4/5.5 retired from Codex ChatGPT sign-in, and redundant DeepSeek aliases; saved identifiers still route unchanged.
+- Workflow migration permits semantic column enrichment and inserted stages while preserving existing column identity and relative order.
+- Processor memory writes use recoverable worktrees; append-only memory conflicts can be merged while preserving original bytes.
+- The pinned build SDK is .NET 10.0.402.
+
+### Fixed
+
+- Preserve the dispatched provider in run snapshots and evidence attribution, including fallback attempts, instead of re-detecting installed CLIs after completion.
+- Resolve dependency gates and blocker counts by successful column role, including localized columns and dependencies across pipelines.
+- Recover interrupted maintenance writes, reviewed quarantines, partial cleanup, duplicate merge queue entries, and already-integrated worktrees without discarding pending changes.
+- Serialize maintenance preparation, checkpoint work before target blocking, respect project pause state, and attribute primary-checkout changes using observable activity.
+- Prevent Git worktree pipe deadlocks and preserve deterministic terminal worktree recovery across restarts.
+- Keep scheduled tickets in waiting columns, avoid claiming them prematurely, and resume parents after terminal child failure.
+- Register chat runs before asynchronous preparation, reap orphaned interactive runs, deliver injected images to active sessions, and preserve quota fallback during memory consolidation.
+- Route dashboard output writes through maintenance worktrees and retain explicit delivery evidence across bounded run logs.
+- Localize decision-brief diagnostics and restore translation-key parity across board bundles.
+
+### Known limitations
+
+- Git for Windows can reject deeply nested worktree paths with `'$GIT_DIR' too big`. Use a shorter repository or temporary-directory path; `core.longpaths` alone may not resolve this error.
+
+---
 
 ## [v0.18] — 2026-08-23
 

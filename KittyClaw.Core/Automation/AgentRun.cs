@@ -20,6 +20,7 @@ public sealed class AgentRun
     public string? WorkingDirectory { get; set; }
     public string? SessionId { get; set; }
     public string? Model { get; set; }
+    public CliProvider? Provider { get; set; }
     public string? ChatTarget { get; set; }
     /// <summary>Image references accepted for this run. Retained for QA observability after best-effort file cleanup.</summary>
     public IReadOnlyList<string> InputImagePaths { get; init; } = [];
@@ -228,6 +229,7 @@ public sealed class AgentRunSnapshot
     public DateTime? EndedAt { get; set; }
     public string? SessionId { get; set; }
     public string? Model { get; set; }
+    public CliProvider? Provider { get; set; }
     public string? ChatTarget { get; set; }
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public AgentRunStatus Status { get; set; }
@@ -282,6 +284,7 @@ public sealed class RunLogStore
             EndedAt = run.EndedAt,
             SessionId = run.SessionId,
             Model = run.Model,
+            Provider = run.Provider,
             ChatTarget = run.ChatTarget,
             Status = run.Status,
             ExitCode = run.ExitCode,
@@ -332,6 +335,7 @@ public sealed class RunLogStore
             };
             run.SessionId = snapshot.SessionId;
             run.Model = snapshot.Model;
+            run.Provider = snapshot.Provider;
             run.ChatTarget = snapshot.ChatTarget;
             run.Status = snapshot.Status;
             run.EndedAt = snapshot.EndedAt;
@@ -384,6 +388,7 @@ public sealed class RunLogStore
         };
         run.SessionId = snapshot.SessionId;
         run.Model = snapshot.Model;
+        run.Provider = snapshot.Provider;
         run.ChatTarget = snapshot.ChatTarget;
         run.Status = snapshot.Status;
         run.EndedAt = snapshot.EndedAt;

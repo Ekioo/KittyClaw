@@ -495,6 +495,7 @@ public class GrokSupportTests
 
         Assert.Contains(run.SnapshotBuffer(), e => e.Kind == "fallback");
         Assert.Equal("grok-4.5", run.Model);
+        Assert.Equal(CliProvider.Grok, run.Provider);
         Assert.Equal(AgentRunStatus.Completed, run.Status);
 
         var claudeSession = sessions.GetSessionId(workspace, primaryKey, ticketId);

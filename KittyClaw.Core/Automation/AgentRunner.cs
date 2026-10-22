@@ -248,6 +248,7 @@ public sealed class AgentRunner
             ConcurrencyGroup = string.IsNullOrEmpty(ctx.ConcurrencyGroup) ? ctx.AgentName : ctx.ConcurrencyGroup,
             StartedAt = DateTime.UtcNow,
             Model = ctx.Target.Model,
+            Provider = ctx.Target.Provider,
             ChatTarget = ctx.ChatTarget,
             InputImagePaths = ctx.ImagePaths ?? [],
             InputImageHashes = (ctx.ImagePaths ?? [])
@@ -992,6 +993,7 @@ public sealed class AgentRunner
         AgentRunContext ctx, AgentRun run, string skillContent,
         string sessionId, bool isResume, CancellationToken ct)
     {
+        run.Provider = ctx.Target.Provider;
         // Fail-closed dispatch policy, derived from the same enforceability source as the UI
         // claims: a provider without a pre-effect interception mechanism for every protected
         // boundary class must never spawn in Enforce mode. Placed here (not in RunAsync) so the

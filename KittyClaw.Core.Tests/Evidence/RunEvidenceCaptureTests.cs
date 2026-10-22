@@ -86,8 +86,14 @@ public sealed class RunEvidenceCaptureTests : IAsyncLifetime
         Assert.Equal(run.RunId, cmd.Provenance.RunId);
     }
 
-    [Fact]
-    public async Task RunEvidenceAttacher_AttachAsync_PersistsProjectScopedRunAndTicketBundles()
+    [Theory]
+    [InlineData(null, null, "claude")]
+    [InlineData(CliProvider.Grok, null, "grok")]
+    [InlineData(CliProvider.Codex, null, "codex")]
+    [InlineData(CliProvider.Grok, "claude", "grok")]
+    [InlineData(null, "grok", "grok")]
+    public async Task RunEvidenceAttacher_AttachAsync_PersistsProjectScopedRunAndTicketBundles(
+        CliProvider? provider, string? recordedProvider, string expectedProvider)
     {
         var projects = new ProjectService(Path.Combine(_tmp.Path, "data"));
         var project = await projects.CreateProjectAsync("Test Project");
@@ -106,6 +112,9 @@ public sealed class RunEvidenceCaptureTests : IAsyncLifetime
             ConcurrencyGroup = run.ConcurrencyGroup,
             StartedAt = run.StartedAt,
             Model = "claude-sonnet-4-6",
+            Provider = provider,
+            CliVersion = recordedProvider is null ? null
+                : new CliVersionMetadata(recordedProvider, "mock", "1", null, "ok", null, false),
             Status = AgentRunStatus.Completed,
             ExitCode = 0,
         };
@@ -118,6 +127,7 @@ public sealed class RunEvidenceCaptureTests : IAsyncLifetime
         Assert.NotNull(ticketEvidence);
         Assert.Equal(project.Slug, runEvidence!.ProjectSlug);
         Assert.All(runEvidence.CommandsRun, item => Assert.Equal(run.RunId, item.Provenance.RunId));
+        Assert.All(runEvidence.CommandsRun, item => Assert.Equal(expectedProvider, item.Provenance.Provider));
         Assert.Equal(run.RunId, Assert.Single(ticketEvidence!.RunIds));
     }
 
