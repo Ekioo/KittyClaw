@@ -92,6 +92,112 @@ select:focus-visible,
     line-height: 1.4;
     color: var(--text);
 }
+.ticket-properties-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1.25rem;
+    padding: 0.65rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+.ticket-properties-row > .ticket-column-row,
+.ticket-properties-row > .ticket-labels-row,
+.ticket-properties-row > .ticket-assignee-row,
+.ticket-properties-row > .ticket-schedule-row {
+    padding: 0;
+    border-bottom: none;
+    min-width: 0;
+    max-width: 100%;
+}
+.ticket-properties-row > .ticket-meta {
+    margin-left: auto;
+}
+.ticket-properties-row > div {
+    gap: 0.5rem;
+}
+.ticket-properties-row .ticket-column-badge,
+.ticket-properties-row .label-removable,
+.ticket-properties-row .ticket-assignee-row > .assignee-pill,
+.ticket-properties-row .label-autocomplete-input,
+.ticket-properties-row .schedule-add-btn {
+    box-sizing: border-box;
+    min-height: 28px;
+    border: 1px solid var(--border-strong);
+    border-radius: 7px;
+    font-size: 0.78rem;
+    line-height: 1.2;
+    padding: 0.3rem 0.55rem;
+}
+.ticket-properties-row .label-autocomplete-input,
+.ticket-properties-row .schedule-add-btn {
+    background: var(--surface2);
+    color: var(--text-muted);
+    border-style: dashed;
+}
+.ticket-properties-row .label-autocomplete-input:focus {
+    border-color: var(--accent);
+    border-style: solid;
+    color: var(--text);
+}
+.ticket-properties-row .schedule-add-btn:hover {
+    background: var(--surface3);
+    border-color: var(--border-strong);
+    color: var(--text);
+}
+.ticket-properties-row .ticket-assignee-row > .assignee-pill {
+    background: var(--surface2);
+    color: var(--text);
+}
+.ticket-properties-row .label-removable,
+.ticket-properties-row .ticket-assignee-row > .assignee-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.ticket-properties-row .label-remove-btn {
+    position: static;
+    transform: none;
+    opacity: 0.65;
+    color: inherit;
+    padding: 0;
+    width: 14px;
+    height: 14px;
+    background: transparent;
+}
+.ticket-properties-row .label-remove-btn:hover {
+    opacity: 1;
+}
+.ticket-properties-row .label-pill.label-removable {
+    background: color-mix(in srgb, var(--lc, var(--accent-info)) 18%, var(--surface2));
+    border-color: color-mix(in srgb, var(--lc, var(--accent-info)) 45%, var(--border));
+    color: var(--text);
+    text-shadow: none;
+}
+.ticket-properties-row .assignee-pill .label-remove-btn {
+    color: inherit;
+}
+.ticket-column-row {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.65rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+.ticket-column-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    background: var(--surface2);
+    color: var(--text);
+    font-size: 0.83rem;
+    font-weight: 600;
+}
 .header-actions {
     display: flex;
     align-items: center;
@@ -1282,3 +1388,49 @@ select:focus-visible,
 .dep-add-btn:disabled { opacity: .4; cursor: default; }
 .dep-error { padding: .15rem 0; color: #f87171; font-size: .78rem; }
 
+
+.jev-decision-controls {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    padding-top: .65rem;
+    border-top: 1px solid var(--border);
+}
+.jev-decision-controls label { display: grid; gap: .4rem; }
+.jev-decision-controls textarea { width: 100%; min-height: 4.5rem; box-sizing: border-box; resize: vertical; }
+.jev-decision-controls .settings-row { display: flex; flex-wrap: wrap; gap: .5rem; }
+.jev-decision-history { display: block; }
+.jev-decision-history summary { font-weight: 600; cursor: pointer; }
+.jev-decision-history article { padding: .5rem 0; border-top: 1px solid var(--border); }
+
+.jev-work-review, .jev-profile-editor { display: block; }
+.jev-work-review label, .jev-profile-editor label { display: grid; gap: .4rem; margin: .5rem 0; }
+.jev-work-review textarea { width: 100%; min-height: 4.5rem; box-sizing: border-box; }
+.jev-work-review pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .85em; }
+.jev-work-review li { margin: .6rem 0; }
+.jev-work-review li a { display: block; }
+.jev-work-review article { border-top: 1px solid var(--border); padding: .5rem 0; }
+
+/* Compact JEV summaries keep decisions visible and supporting detail on demand. */
+.jev-card-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.jev-tag { display:inline-block; padding:3px 8px; border-radius:12px; background:var(--bg-secondary, #292b36); font-size:.75rem; }
+.jev-verdict { font-weight:600; margin:14px 0 8px; }
+.jev-checklist { list-style:none; padding:0; margin:8px 0 16px; }
+.jev-checklist li { display:flex; gap:10px; align-items:baseline; padding:7px 0; }
+.jev-checklist li > span:nth-child(2) { flex:1; }
+.jev-checklist small { opacity:.7; }
+.jev-check-icon { width:18px; text-align:center; font-weight:700; }
+.jev-disclosure { margin:12px 0; }
+.jev-disclosure > summary { cursor:pointer; font-weight:500; }
+.jev-disclosure article { padding:8px 0; border-bottom:1px solid var(--border-color, #454552); }
+.jev-disclosure pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:.75rem; }
+.jev-profile-choice { display:grid; gap:8px; margin:14px 0; }
+.jev-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.jev-confirmation { padding:12px 0; }
+.jev-actions { margin:12px 0; }
+.jev-technical { font-size:.8rem; opacity:.8; }
+.jev-settings { padding:12px; border:1px solid var(--border-color, #454552); border-radius:8px; }
+.jev-settings > summary { margin-bottom:8px; }
+
+.jev-disclosure article > small { display:block; margin:4px 0; }

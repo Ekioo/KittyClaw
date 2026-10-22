@@ -109,6 +109,15 @@
                                 @if (project.Estimated) { <span class="estimated-marker" title="@L["EstimatedHelp"]" tabindex="0">~ @L["Estimated"]</span> }
                             </header>
                             <strong class="cost-project-total">@Usd(project.UsdCost)</strong>
+                            @if (project.Jev is { } jev)
+                            {
+                                <div class="cost-project-jev" data-testid="jev-cost-summary">
+                                    <strong>JEV · @jev.Calls @L["JevCostCalls"]</strong>
+                                    <span>@Tokens(jev.InputTokens) @L["JevCostInput"] · @Tokens(jev.OutputTokens) @L["JevCostOutput"]</span>
+                                    @if (jev.Calls > jev.UnpricedCalls) { <span>~ @JevUsd(jev.UsdCost)</span> }
+                                    @if (jev.UnpricedCalls > 0) { <span>@jev.UnpricedCalls @L["JevCostUnpriced"]</span> }
+                                </div>
+                            }
                             @if (project.RtkSavedTokens > 0)
                             {
                                 <div class="cost-project-rtk" title="@L["RtkSavingsHelp"]" tabindex="0">
@@ -206,7 +215,7 @@
         await Reload();
     }
 
-    private static string Usd(decimal value) => value.ToString("C", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+    private static string Usd(decimal value) => value.ToString(value is > 0 and < 0.01m ? "C6" : "C", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
     private static string Tokens(long value) => value.ToString("N0");
 
     private string RtkDetail(ProjectCostView project)
@@ -222,6 +231,7 @@
         return string.Join(" · ", parts);
     }
 
+    private static string JevUsd(decimal value) => value.ToString("$0.000000", System.Globalization.CultureInfo.InvariantCulture);
     private static string UsdSavings(decimal value) => value is > 0 and < 0.01m ? "< $0.01" : Usd(value);
 
     private string DayTitle(CostBucket day)
@@ -263,7 +273,7 @@
                 maxDailyStackedUsd,
                 project.RtkSavedTokens,
                 project.RtkInputTokens,
-                project.RtkEstimatedUsd);
+                project.RtkEstimatedUsd, project.Jev);
         })
         .ToArray();
 
@@ -275,6 +285,6 @@
         decimal MaxDailyStackedUsd,
         long RtkSavedTokens,
         long RtkInputTokens,
-        decimal? RtkEstimatedUsd);
+        decimal? RtkEstimatedUsd, JevCostSummary? Jev);
     private enum DatePreset { Last30Days, CurrentMonth, PreviousMonth, LastThreeMonths, CurrentYear }
 }

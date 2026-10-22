@@ -254,13 +254,13 @@ public sealed class CostReportServiceTests
         Assert.Equal(1_000, project.RtkSavedTokens);
         Assert.Equal(2_000, project.RtkInputTokens);
         Assert.Equal(4, project.RtkCommands);
-        Assert.Equal(0.005m, project.RtkEstimatedUsd);
+        Assert.Equal(0.004m, project.RtkEstimatedUsd);
 
         var restarted = new CostReportService(projects, new PipelineService(projects), tickets);
         var cached = Assert.Single((await restarted.GetReportAsync(
             new(day, day, new HashSet<string> { alpha.Slug }))).Projects);
         Assert.Equal(1_000, cached.RtkSavedTokens);
-        Assert.Equal(0.005m, cached.RtkEstimatedUsd);
+        Assert.Equal(0.004m, cached.RtkEstimatedUsd);
     }
 
     [Fact]

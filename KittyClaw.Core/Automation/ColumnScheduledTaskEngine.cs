@@ -14,7 +14,8 @@ public sealed class ColumnScheduledTaskEngine(
     ColumnScheduledTaskService schedules,
     ColumnActionExecutor actions,
     ILogger<ColumnScheduledTaskEngine> logger,
-    StartupWorkGate? startupGate = null) : BackgroundService
+    StartupWorkGate? startupGate = null,
+    AgentRunRegistry? runs = null) : BackgroundService
 {
     private readonly ConcurrentDictionary<string, Task> _active = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, List<(ColumnScheduledTask Task, ColumnScheduledTaskRun Run)>>
@@ -88,6 +89,7 @@ public sealed class ColumnScheduledTaskEngine(
     private async Task RunAsync(
         string slug, ColumnScheduledTask task, ColumnScheduledTaskRun run, CancellationToken token)
     {
+        using var updateLease = runs?.TrackExecution();
         string? error = null;
         try
         {

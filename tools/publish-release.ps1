@@ -10,7 +10,8 @@
 param(
     [string] $Tag,                    # defaults to the exact vX.Y.Z tag on HEAD
     [string] $Title,                  # defaults to "vX.Y — <changelog one-line summary>"
-    [string] $Configuration = 'Release'
+    [string] $Configuration = 'Release',
+    [string] $SignTemplate = $env:KITTYCLAW_SIGN_TEMPLATE
 )
 
 $ErrorActionPreference = 'Stop'
@@ -26,6 +27,30 @@ if (-not $Tag) {
 }
 if ($Tag -notmatch '^v(\d+)\.(\d+)\.(\d+)$') { throw "Tag '$Tag' does not match vX.Y.Z." }
 $shortVersion = "v$($Matches[1]).$($Matches[2])"   # CHANGELOG headings use vX.Y
+$releaseVersion = $Tag.TrimStart('v')
+if (-not $IsWindows) { throw 'Release packaging requires Windows to build the Velopack installer.' }
+
+# Seed a fresh staging directory with the previous full package so vpk can build a delta.
+# This happens before creating/modifying any public release; downloads never publish anything.
+$windowsOutput = Join-Path $repo ("publish-windows/release-" + [Guid]::NewGuid().ToString('N'))
+$baselinePackage = & (Join-Path $PSScriptRoot 'Get-WindowsReleaseBaseline.ps1') `
+    -Version $releaseVersion -OutputDir $windowsOutput
+& (Join-Path $PSScriptRoot 'build-windows-installer.ps1') -Version $releaseVersion `
+    -Configuration $Configuration -OutputDir $windowsOutput -SignTemplate $SignTemplate
+if ($baselinePackage -and -not (Test-Path -LiteralPath (Join-Path $windowsOutput "Ekioo.KittyClaw-$releaseVersion-delta.nupkg"))) {
+    throw 'A previous Windows package exists, but no incremental update was generated.'
+}
+
+# Each GitHub release owns its own full/delta assets. Older versions remain on their
+# original releases and are combined by GithubSource when constructing an update chain.
+$windowsFeedPath = Join-Path $windowsOutput 'releases.win.json'
+$windowsFeed = Get-Content -LiteralPath $windowsFeedPath -Raw | ConvertFrom-Json
+$windowsFeed.Assets = @($windowsFeed.Assets | Where-Object Version -eq $releaseVersion)
+$windowsFeed | ConvertTo-Json -Depth 20 -Compress | Set-Content -LiteralPath $windowsFeedPath -Encoding utf8
+$legacyFeedPath = Join-Path $windowsOutput 'RELEASES'
+$currentPackagePattern = ' ' + [Regex]::Escape("Ekioo.KittyClaw-$releaseVersion-full.nupkg") + ' '
+@(Get-Content -LiteralPath $legacyFeedPath | Where-Object { $_ -match $currentPackagePattern }) |
+    Set-Content -LiteralPath $legacyFeedPath -Encoding utf8
 
 # --- Build the zip ---------------------------------------------------------
 $stage = Join-Path ([System.IO.Path]::GetTempPath()) "kittyclaw-release-$Tag"
@@ -52,6 +77,7 @@ Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Compression
 Write-Host ("Zip ready: {0} ({1:N1} MB)" -f $zip, ((Get-Item $zip).Length / 1MB)) -ForegroundColor DarkGray
 
 # --- Create the release from the CHANGELOG entry (when missing) ------------
+$createdDraft = $false
 gh release view $Tag *> $null
 if ($LASTEXITCODE -ne 0) {
     $changelog = Get-Content (Join-Path $repo 'CHANGELOG.md') -Raw
@@ -67,14 +93,27 @@ if ($LASTEXITCODE -ne 0) {
     $notesFile = Join-Path ([System.IO.Path]::GetTempPath()) "kittyclaw-release-notes-$Tag.md"
     Set-Content $notesFile $notes
     Write-Host "Creating GitHub release $Tag ..." -ForegroundColor Cyan
-    gh release create $Tag --title $Title --notes-file $notesFile
+    gh release create $Tag --title $Title --notes-file $notesFile --draft
     if ($LASTEXITCODE -ne 0) { throw 'gh release create failed' }
+    $createdDraft = $true
 }
 else {
-    Write-Host "Release $Tag already exists; uploading the zip only." -ForegroundColor DarkGray
+    Write-Host "Release $Tag already exists; uploading release assets." -ForegroundColor DarkGray
 }
 
-gh release upload $Tag $zip --clobber
+$windowsAssets = @(Get-ChildItem -LiteralPath $windowsOutput -File | Where-Object {
+    $_.Name -in 'Ekioo.KittyClaw-win-Setup.exe', "Ekioo.KittyClaw-$releaseVersion-full.nupkg",
+        "Ekioo.KittyClaw-$releaseVersion-delta.nupkg", 'releases.win.json', 'RELEASES'
+} | ForEach-Object FullName)
+if (-not ($windowsAssets | Where-Object { $_ -like '*Setup.exe' }) -or
+    -not (Test-Path -LiteralPath (Join-Path $windowsOutput 'releases.win.json'))) {
+    throw 'Installer or update feed is missing.'
+}
+gh release upload $Tag $zip @windowsAssets --clobber
 if ($LASTEXITCODE -ne 0) { throw 'gh release upload failed' }
+if ($createdDraft) {
+    gh release edit $Tag --draft=false
+    if ($LASTEXITCODE -ne 0) { throw 'Could not publish the prepared release.' }
+}
 
 Write-Host "`nDone: https://github.com/Ekioo/KittyClaw/releases/tag/$Tag" -ForegroundColor Green

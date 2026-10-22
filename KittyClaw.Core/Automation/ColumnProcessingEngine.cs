@@ -25,6 +25,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
     private readonly WorktreeMergeQueueService? _mergeQueue;
     private readonly ILogger<ColumnProcessingEngine> _logger;
     private readonly StartupWorkGate? _startupGate;
+    private readonly AgentRunRegistry? _runs;
     private readonly ConcurrentDictionary<string, byte> _pendingProjects = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<int, int>> _ownerFeedbackSignals = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Task> _activeProcessors = new();
@@ -40,7 +41,8 @@ public sealed class ColumnProcessingEngine : BackgroundService
         TicketWorktreeService? worktrees = null,
         WorktreeFinalizationCoordinator? finalization = null,
         WorktreeMergeQueueService? mergeQueue = null,
-        StartupWorkGate? startupGate = null)
+        StartupWorkGate? startupGate = null,
+        AgentRunRegistry? runs = null)
     {
         _projects = projects;
         _tickets = tickets;
@@ -54,6 +56,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
         _finalization = finalization;
         _mergeQueue = mergeQueue;
         _startupGate = startupGate;
+        _runs = runs;
         _tickets.TicketStatusChanged += OnTicketChanged;
         _tickets.TicketCreated += OnTicketCreated;
         _tickets.TicketCommentAdded += OnTicketCommentAdded;
@@ -120,6 +123,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
         if (project is null || project.IsPaused) return;
         foreach (var processor in await _processors.ListEnabledAsync(slug))
         {
+            if (processor.JevObservationOnly || processor.JevAcceptanceValidation) continue;
             var key = $"{slug}:{processor.Id}";
             if (_activeProcessors.TryGetValue(key, out var active) && !active.IsCompleted) continue;
             _ownerFeedbackSignals.TryGetValue(slug, out var feedbackSignals);
@@ -140,10 +144,32 @@ public sealed class ColumnProcessingEngine : BackgroundService
         string slug, ColumnProcessor processor, ColumnExecution execution,
         CancellationToken cancellationToken)
     {
+        if (processor.JevObservationOnly || processor.JevAcceptanceValidation) return;
+        using var updateLease = _runs?.TrackExecution();
         IDisposable? finalizationLease = null;
         int? rootTicketId = null;
         try
         {
+            // Apply only this execution's approved snapshot, leaving the shared column definition intact.
+            if (execution.JevExecutionProfileJson is { } profileJson)
+            {
+                var profile = System.Text.Json.JsonSerializer.Deserialize<JevExecutionProfile>(profileJson)!;
+                var allowed = processor.JevExecutionProfiles.FirstOrDefault(p => JevWorkReviewService.Hash(p) == JevWorkReviewService.Hash(profile));
+                if (allowed is null)
+                {
+                    await _executions.FailAttemptAsync(slug, execution, processor, "The approved JEV execution profile is no longer authorized.", processor.Name);
+                    return;
+                }
+                processor = System.Text.Json.JsonSerializer.Deserialize<ColumnProcessor>(System.Text.Json.JsonSerializer.Serialize(processor))!;
+                processor.Model = profile.Model;
+                processor.AvailableSkills = profile.Skills.Union(processor.RequiredSkills, StringComparer.OrdinalIgnoreCase).ToList();
+                processor.RecommendedSkills = profile.Skills;
+            }
+            else if (processor.JevExecutionSelection)
+            {
+                await _executions.FailAttemptAsync(slug, execution, processor, "A manually approved JEV execution profile is required.", processor.Name);
+                return;
+            }
             if (_worktrees is not null && _finalization is not null)
             {
                 rootTicketId = await _worktrees.ResolveRootTicketIdAsync(slug, execution.TicketId);

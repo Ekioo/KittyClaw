@@ -8,40 +8,12 @@ public static partial class Endpoints
 {
     private static void MapPipelines(RouteGroupBuilder api)
     {
-        api.MapGet("/projects/{slug}/pipelines", async (string slug, PipelineService pipelines) =>
-            Results.Ok(await pipelines.ListAsync(slug)))
+        api.MapGet("/projects/{slug}/pipelines", HandleListPipelines).Produces<List<Pipeline>>()
             .WithTags("Pipelines");
 
-        api.MapPost("/projects/{slug}/pipelines", async (
-            string slug, CreatePipelineRequest req, PipelineService pipelines, BoardUpdateNotifier notifier) =>
-        {
-            try
-            {
-                var pipeline = await pipelines.CreateAsync(slug, req.Name);
-                notifier.NotifyProjectUpdated(slug);
-                return Results.Created($"/api/projects/{slug}/pipelines/{pipeline.Id}", pipeline);
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
-        }).WithTags("Pipelines");
+        api.MapPost("/projects/{slug}/pipelines", HandleCreatePipeline).WithTags("Pipelines");
 
-        api.MapPatch("/projects/{slug}/pipelines/{pipelineId:int}", async (
-            string slug, int pipelineId, UpdatePipelineRequest req,
-            PipelineService pipelines, BoardUpdateNotifier notifier) =>
-        {
-            try
-            {
-                var pipeline = await pipelines.UpdateAsync(slug, pipelineId, req.Name);
-                if (pipeline is not null) notifier.NotifyProjectUpdated(slug);
-                return pipeline is null ? Results.NotFound() : Results.Ok(pipeline);
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
-        }).WithTags("Pipelines");
+        api.MapPatch("/projects/{slug}/pipelines/{pipelineId:int}", HandleUpdatePipeline).WithTags("Pipelines");
 
         api.MapGet("/projects/{slug}/pipelines/{pipelineId:int}/export", async (
             string slug, int pipelineId, PipelineExportService exporter) =>
@@ -160,5 +132,40 @@ public static partial class Endpoints
         using var body = new MemoryStream();
         await request.Body.CopyToAsync(body);
         return body.Length == 0 ? null : body.ToArray();
+    }
+
+    // Shared application handlers used by REST endpoints and MCP tools.
+    internal static async Task<IResult> HandleListPipelines(string slug, PipelineService pipelines)
+    {
+        return Results.Ok(await pipelines.ListAsync(slug));
+    }
+
+    internal static async Task<IResult> HandleCreatePipeline(string slug, CreatePipelineRequest req, PipelineService pipelines, BoardUpdateNotifier notifier)
+    {
+        try
+        {
+            var pipeline = await pipelines.CreateAsync(slug, req.Name);
+            notifier.NotifyProjectUpdated(slug);
+            return Results.Created($"/api/projects/{slug}/pipelines/{pipeline.Id}", pipeline);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
+    }
+
+    internal static async Task<IResult> HandleUpdatePipeline(string slug, int pipelineId, UpdatePipelineRequest req,
+        PipelineService pipelines, BoardUpdateNotifier notifier)
+    {
+        try
+        {
+            var pipeline = await pipelines.UpdateAsync(slug, pipelineId, req.Name);
+            if (pipeline is not null) notifier.NotifyProjectUpdated(slug);
+            return pipeline is null ? Results.NotFound() : Results.Ok(pipeline);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
     }
 }

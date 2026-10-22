@@ -28,48 +28,57 @@ public static partial class Endpoints
             return Results.Ok(skills);
         }).WithTags("Automations");
 
-        api.MapGet("/projects/{slug}/project-skills", async (string slug, ProjectSkillService skills) =>
-            Results.Ok(await skills.ListAsync(slug)))
+        api.MapGet("/projects/{slug}/project-skills", HandleListProjectSkills).Produces<List<KittyClaw.Core.Models.ProjectSkill>>()
             .WithTags("Skills");
 
-        api.MapGet("/projects/{slug}/project-skills/{skillSlug}", async (
-            string slug, string skillSlug, ProjectSkillService skills) =>
-        {
-            try
-            {
-                var instructions = await skills.ReadInstructionsAsync(slug, skillSlug);
-                return instructions is null ? Results.NotFound() : Results.Ok(new { slug = skillSlug, instructions });
-            }
-            catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
-        }).WithTags("Skills");
+        api.MapGet("/projects/{slug}/project-skills/{skillSlug}", HandleGetProjectSkill).WithTags("Skills");
 
-        api.MapPost("/projects/{slug}/project-skills", async (
-            string slug, CreateProjectSkillRequest req, ProjectSkillService skills) =>
-        {
-            try
-            {
-                var skill = await skills.CreateAsync(slug, req.Name, req.Instructions, req.Description);
-                return Results.Created($"/api/projects/{slug}/project-skills/{skill.Slug}", skill);
-            }
-            catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
-        }).WithTags("Skills");
+        api.MapPost("/projects/{slug}/project-skills", HandleCreateProjectSkill).WithTags("Skills");
 
-        api.MapPatch("/projects/{slug}/project-skills/{skillSlug}", async (
-            string slug, string skillSlug, UpdateProjectSkillRequest req, ProjectSkillService skills) =>
-        {
-            try
-            {
-                var skill = await skills.UpdateAsync(slug, skillSlug, req.Name, req.Instructions, req.Description);
-                return skill is null ? Results.NotFound() : Results.Ok(skill);
-            }
-            catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
-        }).WithTags("Skills");
+        api.MapPatch("/projects/{slug}/project-skills/{skillSlug}", HandleUpdateProjectSkill).WithTags("Skills");
 
-        api.MapDelete("/projects/{slug}/project-skills/{skillSlug}", async (
-            string slug, string skillSlug, ProjectSkillService skills) =>
+        api.MapDelete("/projects/{slug}/project-skills/{skillSlug}", HandleDeleteProjectSkill).WithTags("Skills");
+    }
+
+    // Shared application handlers used by REST endpoints and MCP tools.
+    internal static async Task<IResult> HandleListProjectSkills(string slug, ProjectSkillService skills)
+    {
+        return Results.Ok(await skills.ListAsync(slug));
+    }
+
+    internal static async Task<IResult> HandleGetProjectSkill(string slug, string skillSlug, ProjectSkillService skills)
+    {
+        try
         {
-            try { return await skills.DeleteAsync(slug, skillSlug) ? Results.NoContent() : Results.NotFound(); }
-            catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
-        }).WithTags("Skills");
+            var instructions = await skills.ReadInstructionsAsync(slug, skillSlug);
+            return instructions is null ? Results.NotFound() : Results.Ok(new { slug = skillSlug, instructions });
+        }
+        catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    }
+
+    internal static async Task<IResult> HandleCreateProjectSkill(string slug, CreateProjectSkillRequest req, ProjectSkillService skills)
+    {
+        try
+        {
+            var skill = await skills.CreateAsync(slug, req.Name, req.Instructions, req.Description);
+            return Results.Created($"/api/projects/{slug}/project-skills/{skill.Slug}", skill);
+        }
+        catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    }
+
+    internal static async Task<IResult> HandleUpdateProjectSkill(string slug, string skillSlug, UpdateProjectSkillRequest req, ProjectSkillService skills)
+    {
+        try
+        {
+            var skill = await skills.UpdateAsync(slug, skillSlug, req.Name, req.Instructions, req.Description);
+            return skill is null ? Results.NotFound() : Results.Ok(skill);
+        }
+        catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    }
+
+    internal static async Task<IResult> HandleDeleteProjectSkill(string slug, string skillSlug, ProjectSkillService skills)
+    {
+        try { return await skills.DeleteAsync(slug, skillSlug) ? Results.NoContent() : Results.NotFound(); }
+        catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
     }
 }

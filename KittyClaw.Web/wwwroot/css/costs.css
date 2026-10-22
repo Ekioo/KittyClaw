@@ -154,3 +154,5 @@
     .costs-back-link,
     .cost-date-preset { transition: none; }
 }
+
+.cost-project-jev { display:flex; flex-wrap:wrap; gap:6px 12px; font-size:.8rem; margin:10px 0; }

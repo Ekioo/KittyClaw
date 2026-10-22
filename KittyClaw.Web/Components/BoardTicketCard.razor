@@ -36,14 +36,14 @@
             @if (activeRun is not null)
             {
                 <span class="agent-spinner"
-                      title="@activeRun.AgentName en cours"
+                      title="@L.Get("CardActiveRunTooltip", activeRun.AgentName)"
                       @onclick="() => OnOpenRunDrawer.InvokeAsync(activeRun.RunId)"
                       @onclick:stopPropagation></span>
             }
             else if (lastRun is not null)
             {
                 <button class="agent-log-btn agent-log-@lastRun.Status.ToString().ToLowerInvariant()"
-                        title="Voir le dernier run (@lastRun.AgentName · @lastRun.Status)"
+                        title="@L.Get("CardLastRunTooltip", lastRun.AgentName, lastRun.Status)"
                         @onclick="() => OnOpenRunDrawer.InvokeAsync(lastRun.RunId)"
                         @onclick:stopPropagation>log</button>
             }
@@ -87,7 +87,7 @@
         }
         @if (!string.IsNullOrEmpty(Ticket.AssignedTo))
         {
-            <span class="assignee-badge" title="@Ticket.AssignedTo">@MemberDisplayName(Ticket.AssignedTo)</span>
+            <span class="assignee-badge" title="@MemberDisplayName(Ticket.AssignedTo)">@MemberDisplayName(Ticket.AssignedTo)</span>
         }
         <small class="ticket-author">@Ticket.CreatedBy</small>
     </div>

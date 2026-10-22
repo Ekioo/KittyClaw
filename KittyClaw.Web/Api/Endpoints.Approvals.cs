@@ -13,16 +13,13 @@ public static partial class Endpoints
             await MapWrite(() => workflow.RegisterRequestAsync(slug, input)))
             .Produces<ApprovalRequestRecord>().ProducesProblem(StatusCodes.Status400BadRequest);
 
-        approvals.MapGet("/requests", async (string slug, string? runId, int? ticketId, string? provider, ApprovalRegistryService registry) =>
-            Results.Ok(await registry.QueryRequestsAsync(slug, new(runId, ticketId, provider))))
+        approvals.MapGet("/requests", HandleListApprovalRequests)
             .Produces<IReadOnlyList<ApprovalRequestRecord>>();
 
-        approvals.MapPost("/decisions", async (string slug, ApprovalDecisionInput input, ApprovalWorkflowService workflow) =>
-            await MapWrite(() => workflow.DecideAsync(slug, input)))
+        approvals.MapPost("/decisions", HandleDecideApproval)
             .Produces<ApprovalDecisionRecord>().ProducesProblem(StatusCodes.Status400BadRequest);
 
-        approvals.MapGet("/decisions", async (string slug, string? requestId, ApprovalRegistryService registry) =>
-            Results.Ok(await registry.QueryDecisionsAsync(slug, requestId)))
+        approvals.MapGet("/decisions", HandleListApprovalDecisions)
             .Produces<IReadOnlyList<ApprovalDecisionRecord>>();
 
         approvals.MapPost("/receipts", async (string slug, ApprovalReceiptInput input, ApprovalRegistryService registry) =>
@@ -33,8 +30,7 @@ public static partial class Endpoints
             await MapWrite(() => registry.ConsumeOnceAsync(slug, input)))
             .Produces<ApprovalReceiptRecord>().ProducesProblem(StatusCodes.Status400BadRequest);
 
-        approvals.MapGet("/receipts", async (string slug, string? requestId, ApprovalRegistryService registry) =>
-            Results.Ok(await registry.QueryReceiptsAsync(slug, requestId)))
+        approvals.MapGet("/receipts", HandleListApprovalReceipts)
             .Produces<IReadOnlyList<ApprovalReceiptRecord>>();
 
         // Pre-effect hook callback: the provider-native hook posts its raw payload here BEFORE the
@@ -51,7 +47,7 @@ public static partial class Endpoints
         // Enforceability source shared by UI claims and dispatch policy: which provider × boundary
         // pairs are actually intercepted pre-effect, and why the others are excluded.
         api.MapGet("/runtime-enforcement/capabilities",
-            () => Results.Ok(KittyClaw.Core.Automation.RuntimeEnforcementCapabilities.Catalogue))
+            HandleGetRuntimeCapabilities)
             .WithTags("Approvals")
             .Produces<IReadOnlyList<KittyClaw.Core.Automation.RuntimeEnforcementCapability>>();
     }
@@ -62,5 +58,31 @@ public static partial class Endpoints
         catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
         catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.SqliteErrorCode == 19)
         { return Results.BadRequest(new { error = "Approval record conflicts with existing immutable history." }); }
+    }
+
+    // Shared application handlers used by REST endpoints and MCP tools.
+    internal static async Task<IResult> HandleListApprovalRequests(string slug, string? runId, int? ticketId, string? provider, ApprovalRegistryService registry)
+    {
+        return Results.Ok(await registry.QueryRequestsAsync(slug, new(runId, ticketId, provider)));
+    }
+
+    internal static async Task<IResult> HandleListApprovalDecisions(string slug, string? requestId, ApprovalRegistryService registry)
+    {
+        return Results.Ok(await registry.QueryDecisionsAsync(slug, requestId));
+    }
+
+    internal static async Task<IResult> HandleListApprovalReceipts(string slug, string? requestId, ApprovalRegistryService registry)
+    {
+        return Results.Ok(await registry.QueryReceiptsAsync(slug, requestId));
+    }
+
+    internal static async Task<IResult> HandleDecideApproval(string slug, ApprovalDecisionInput input, ApprovalWorkflowService workflow)
+    {
+        return await MapWrite(() => workflow.DecideAsync(slug, input));
+    }
+
+    internal static IResult HandleGetRuntimeCapabilities()
+    {
+        return Results.Ok(KittyClaw.Core.Automation.RuntimeEnforcementCapabilities.Catalogue);
     }
 }

@@ -5,6 +5,7 @@ using KittyClaw.Core.Automation;
 namespace KittyClaw.Web.Api;
 
 public record CreateProjectRequest(string Name);
+public record SaveAutomationsRequest(AutomationConfig Config, string? BaseStamp = null);
 public record CreatePipelineRequest(string Name);
 public record UpdatePipelineRequest(string? Name = null);
 public record PipelineExportBlockedResponse(string Error, IReadOnlyList<PipelineExportFinding> Findings);
@@ -28,7 +29,15 @@ public record SaveColumnProcessorRequest(
     int? TechnicalFailureColumnId = null,
     List<ColumnRoute>? Routes = null,
     List<ColumnProcessorAction>? BeforeActions = null,
-    List<ColumnProcessorAction>? AfterActions = null);
+    List<ColumnProcessorAction>? AfterActions = null,
+    bool? JevObservationOnly = null,
+    bool? JevPostRunObservation = null,
+    bool? JevAutomaticRouting = null,
+    double? JevConfidenceThreshold = null,
+    bool? JevAcceptanceValidation = null,
+    bool? JevExecutionSelection = null,
+    List<string>? JevAcceptanceCriteria = null,
+    List<JevExecutionProfile>? JevExecutionProfiles = null);
 public record CreateTicketRequest(
     string Title, string CreatedBy, string Status, string Description = "",
     List<int>? LabelIds = null, TicketPriority Priority = TicketPriority.NiceToHave,

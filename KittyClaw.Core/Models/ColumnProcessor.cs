@@ -15,6 +15,26 @@ public class ColumnProcessor
     public string Prompt { get; set; } = "";
     public string? Model { get; set; }
     public bool Enabled { get; set; } = true;
+    public bool JevObservationOnly { get; set; }
+    public bool JevAutomaticRouting { get; set; }
+    public bool JevAcceptanceValidation { get; set; }
+    public bool JevExecutionSelection { get; set; }
+    [JsonIgnore] public string JevAcceptanceCriteriaJson { get; set; } = "[]";
+    [JsonIgnore] public string JevExecutionProfilesJson { get; set; } = "[]";
+    [NotMapped] public List<string> JevAcceptanceCriteria
+    {
+        get => Deserialize(JevAcceptanceCriteriaJson);
+        set => JevAcceptanceCriteriaJson = Serialize(value);
+    }
+    [NotMapped] public List<JevExecutionProfile> JevExecutionProfiles
+    {
+        get => JsonSerializer.Deserialize<List<JevExecutionProfile>>(JevExecutionProfilesJson) ?? [];
+        set => JevExecutionProfilesJson = JsonSerializer.Serialize(value);
+    }
+    public double JevConfidenceThreshold { get; set; } = 0.9;
+    public DateTime? JevPostRunObservationSince { get; set; }
+    [NotMapped]
+    public bool JevPostRunObservation => JevPostRunObservationSince.HasValue;
     public int MaxTurns { get; set; } = 100;
     public TicketSelectionOrder SelectionOrder { get; set; } = TicketSelectionOrder.Position;
     public int MaxAttempts { get; set; } = 3;
@@ -95,6 +115,8 @@ public class ColumnProcessor
     private static string SerializeActions(IEnumerable<ColumnProcessorAction> values) =>
         JsonSerializer.Serialize(values);
 }
+
+public sealed record JevExecutionProfile(string Name, string Model, List<string> Skills, string Description = "");
 
 public sealed record ProjectSkill(string Slug, string Name, string Description, string InstructionsPath);
 
@@ -178,6 +200,7 @@ public class ColumnExecution
     public string? CurrentActionId { get; set; }
     public bool AgentCompleted { get; set; }
     public string? AgentResultJson { get; set; }
+    public string? JevExecutionProfileJson { get; set; }
     public DateTime? TriggerTicketUpdatedAt { get; set; }
     public string TriggerSignalType { get; set; } = "column_scan";
     public int? TriggerOwnerCommentId { get; set; }

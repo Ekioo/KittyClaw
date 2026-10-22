@@ -1,0 +1,180 @@
+@using KittyClaw.Core.Services
+@using KittyClaw.Core.Models
+@using System.Text.RegularExpressions
+@inject JevWorkReviewService Reviews
+@inject JevWorkDecisionService Decisions
+@inject TicketService Tickets
+@inject ColumnProcessorService Processors
+@inject LocalizationService L
+@implements IAsyncDisposable
+
+@if (_processor is not null && (_processor.JevAcceptanceValidation || _processor.JevExecutionSelection))
+{
+    <section class="worktree-summary jev-work-review jev-card" data-testid="jev-work-review">
+        <div class="jev-card-heading"><strong>@L[_processor.JevAcceptanceValidation ? "JevAcceptanceHeading" : "JevProfileHeading"]</strong>@if (_review is null || !_history.Any(d => d.ReviewId == _review.Id)) { <span class="jev-tag">@L["JevManualTag"]</span> }</div>
+        @if (_review is null)
+        { <p class="settings-hint" role="status">@L["JevWorkPending"]</p> }
+        else
+        {
+            @if (_stale) { <p class="settings-hint" role="status">@L["JevRefreshNeeded"]</p> }
+            @if (_review.Error is not null) { <p role="status">@L["JevReviewUnavailable"]</p> }
+            @if (_review.Kind == "acceptance" && _review.Error is null)
+            {
+                <p class="jev-verdict" data-testid="jev-missing-criteria">@(_review.Criteria.Count > 0 && _review.Criteria.All(c => c.Status == "satisfied") ? L["JevReviewReady"] : string.Format(L["JevReviewIssues"], _review.Criteria.Count(c => c.Status != "satisfied")))</p>
+                <ul class="jev-checklist" data-testid="jev-criteria-results">
+                    @foreach (var criterion in _review.Criteria)
+                    {
+                        <li><span class="jev-check-icon">@(criterion.Status == "satisfied" ? "✓" : criterion.Status == "unmet" ? "!" : "?")</span><span>@criterion.Criterion</span><small>@L[$"JevStatus{criterion.Status}"]</small></li>
+                    }
+                </ul>
+                <details class="jev-disclosure" data-testid="jev-review-evidence">
+                    <summary>@L["JevCriterionEvidence"] (@_review.Evidence.Count)</summary>
+                    @foreach (var evidence in _review.Evidence)
+                    {
+                        <article>
+                            <p><strong>@ProofSummary(evidence)</strong> <small class="settings-hint">@L[evidence.Fresh && evidence.Trust == KittyClaw.Core.Evidence.EvidenceTrust.Verified ? "JevProofVerified" : "JevProofUnverified"]</small></p>
+                            @foreach (var criterion in _review.Criteria.Where(c => c.EvidenceId == evidence.Id)) { <small>@criterion.Criterion</small> }
+                            <details><summary>@L["JevTechnicalDetails"]</summary><pre>@evidence.Detail</pre><small>@evidence.Trust · @evidence.RunId · @evidence.CapturedAt.ToLocalTime().ToString("g")</small></details>
+                        </article>
+                    }
+                </details>
+            }
+            else if (_review.Profile is { } profile)
+            {
+                <div class="jev-profile-choice" data-testid="jev-selected-profile">
+                    <strong>@profile.Name</strong><span>@FriendlyModel(profile.Model)</span>
+                    @if (!string.IsNullOrWhiteSpace(profile.Description)) { <p class="settings-hint">@profile.Description</p> }
+                    <div class="jev-chips">@foreach (var skill in profile.Skills) { <span class="jev-tag">@skill</span> }</div>
+                </div>
+            }
+            else if (_review.Error is null) { <p>@L["JevProfileAbstention"]</p> }
+            @if (_history.FirstOrDefault(d => d.ReviewId == _review.Id) is { } decision)
+            { <p class="jev-decision-note" data-testid="jev-work-current-decision">✓ @L[decision.Accepted ? "JevWorkApproved" : "JevDecisionRejected"] · @decision.DecidedAt.ToLocalTime().ToString("g")</p> }
+            else if (_review.Error is null)
+            {
+                @if (_confirming)
+                {
+                    <div class="jev-confirmation">
+                        <label>@L[_intent ? "JevOverrideReason" : "JevCorrectionReason"]<textarea class="settings-input" data-testid="jev-work-reason" maxlength="2000" @bind="_reason" @bind:event="oninput"></textarea></label>
+                        <div class="settings-row"><button class="settings-primary" data-testid="jev-work-confirm" disabled="@(_busy || string.IsNullOrWhiteSpace(_reason))" @onclick="() => ApplyDecisionAsync(_intent)">@L["JevConfirm"]</button><button class="settings-browse" data-testid="jev-work-cancel" disabled="@_busy" @onclick="() => _confirming = false">@L["Cancel"]</button></div>
+                    </div>
+                }
+                else
+                {
+                    <div class="settings-row jev-actions">
+                        <button class="settings-primary" data-testid="jev-work-approve" disabled="@(_busy || _stale || _review.Kind == "profile" && _review.Profile is null)" @onclick="() => StartDecisionAsync(true)">@L[_review.Kind == "acceptance" ? "JevApproveCriteria" : "JevUseProfile"]</button>
+                        <button class="settings-browse" data-testid="jev-work-reject" disabled="@(_busy || _stale)" @onclick="() => StartDecisionAsync(false)">@L[_review.Kind == "acceptance" ? "JevRequestCorrections" : "JevChooseAnotherProfile"]</button>
+                    </div>
+                }
+            }
+            <details class="jev-disclosure jev-technical"><summary>@L["JevTechnicalDetails"]</summary>
+                <p>@_review.Model · @_review.ObservedAt.ToLocalTime().ToString("g")</p>
+                @if (_review.Profile is { } technicalProfile) { <p>@technicalProfile.Model · @_review.Confidence?.ToString("P0")</p> }
+                @foreach (var criterion in _review.Criteria) { <p>@criterion.Criterion · @criterion.Confidence.ToString("P0") · @criterion.EvidenceId</p> }
+                <p>@_review.Error</p>
+            </details>
+        }
+        @if (_error is not null) { <p class="settings-status-error" role="status">@L["JevDecisionError"]</p><details><summary>@L["JevTechnicalDetails"]</summary><p>@_error</p></details> }
+    </section>
+}
+@if (_history.Count > 0)
+{
+    <details class="worktree-summary jev-work-review jev-disclosure" data-testid="jev-work-history">
+        <summary>@L["JevWorkHistory"] (@_history.Count)</summary>
+        @foreach (var decision in _history)
+        {
+            <article>
+                <p><strong>@L[decision.Accepted ? "JevWorkApproved" : "JevDecisionRejected"]</strong> · @decision.DecidedAt.ToLocalTime().ToString("g")</p>
+                @if (decision.Review.Profile is { } selected) { <p>@selected.Name · @FriendlyModel(selected.Model)</p> }
+                @if (!string.IsNullOrWhiteSpace(decision.Reason)) { <p>@decision.Reason</p> }
+                <details><summary>@L["JevReviewDetails"]</summary>
+                    @foreach (var criterion in decision.Review.Criteria) { <p>@criterion.Criterion — @L[$"JevStatus{criterion.Status}"]</p> }
+                    @foreach (var evidence in decision.Review.Evidence) { <p>@ProofSummary(evidence) · @evidence.Trust</p><pre>@evidence.Detail</pre> }
+                    @if (decision.Review.Profile is { } details) { <p>@details.Model · @string.Join(", ", details.Skills)</p> }
+                </details>
+            </article>
+        }
+    </details>
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+    [Parameter] public int TicketId { get; set; }
+    [Parameter] public EventCallback OnDecided { get; set; }
+    private ColumnProcessor? _processor;
+    private JevWorkReview? _review;
+    private List<JevWorkDecision> _history = [];
+    private bool _stale, _busy, _confirming, _intent;
+    private int? _observedColumn;
+    private int? _observedTicket;
+    private string _reason = "";
+    private string? _error;
+    private readonly CancellationTokenSource _stop = new();
+    private Task? _poll;
+    protected override async Task OnParametersSetAsync()
+    { await ReloadAsync(); _poll ??= PollAsync(); }
+    private async Task ReloadAsync(bool notifyColumnChanges = false)
+    {
+        var slug = Slug; var ticketId = TicketId;
+        var ticket = await Tickets.GetTicketAsync(slug, ticketId);
+        var processor = ticket?.ColumnId is int column ? await Processors.GetAsync(slug, column) : null;
+        var review = processor is null ? null : await Reviews.GetAsync(slug, ticketId, processor.ColumnId);
+        var history = await Reviews.DecisionsAsync(slug, ticketId);
+        var stale = review is not null && (ticket is null || processor is null || !await Reviews.IsCurrentAsync(slug, processor, ticket, review));
+        if (Slug != slug || TicketId != ticketId) return;
+        var moved = ticket is not null && _observedTicket == ticketId && _observedColumn != ticket.ColumnId;
+        if (_observedTicket != ticketId || notifyColumnChanges)
+        { _observedTicket = ticketId; _observedColumn = ticket?.ColumnId; }
+        if (_review?.Id != review?.Id) { _reason = ""; _confirming = false; }
+        _processor = processor; _review = review; _history = history; _stale = stale;
+        if (notifyColumnChanges && moved && !_stop.IsCancellationRequested) await OnDecided.InvokeAsync();
+    }
+    private Task StartDecisionAsync(bool accepted)
+    {
+        if (!accepted || _review?.Kind == "acceptance" && _review.Criteria.Any(c => c.Status != "satisfied"))
+        { _intent = accepted; _confirming = true; _reason = ""; return Task.CompletedTask; }
+        return ApplyDecisionAsync(accepted);
+    }
+    private static string FriendlyModel(string model)
+    {
+        if (model.StartsWith("claude-", StringComparison.OrdinalIgnoreCase))
+        { var name = model.Split('-')[1]; return "Claude " + char.ToUpperInvariant(name[0]) + name[1..]; }
+        return model.Replace("codex:", "Codex · ", StringComparison.OrdinalIgnoreCase).Replace("mistral:", "Mistral · ", StringComparison.OrdinalIgnoreCase);
+    }
+    private string ProofSummary(JevReviewEvidence evidence)
+    {
+        if (evidence.Kind == "verification")
+        {
+            var counts = Regex.Match(evidence.Detail, @"tests passed: (\d+); tests failed: (\d+)");
+            if (counts.Success) return string.Format(L[counts.Groups[2].Value == "0" ? "JevProofPassed" : "JevProofFailed"], counts.Groups[counts.Groups[2].Value == "0" ? 1 : 2].Value);
+            return L["JevVerificationProof"];
+        }
+        if (evidence.Kind == "file") return evidence.Detail.Split('\n')[0];
+        return L["JevRepositoryProof"];
+    }
+    private async Task ApplyDecisionAsync(bool accepted)
+    {
+        if (_busy || _review is null) return;
+        _busy = true; _error = null;
+        try
+        {
+            await Decisions.DecideAsync(Slug, TicketId, _review.ColumnId, _review.Id, accepted, _reason);
+            _reason = ""; _confirming = false; await ReloadAsync(); await OnDecided.InvokeAsync();
+        }
+        catch (InvalidOperationException ex) { _error = ex.Message; }
+        catch (Exception) { _error = L["JevDecisionError"]; }
+        finally { _busy = false; }
+    }
+    private async Task PollAsync()
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+            while (await timer.WaitForNextTickAsync(_stop.Token))
+                await InvokeAsync(async () => { await ReloadAsync(notifyColumnChanges: true); StateHasChanged(); });
+        }
+        catch (OperationCanceledException) { }
+    }
+    public async ValueTask DisposeAsync()
+    { _stop.Cancel(); if (_poll is not null) await _poll; _stop.Dispose(); }
+}

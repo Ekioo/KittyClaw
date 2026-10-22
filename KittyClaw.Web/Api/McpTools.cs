@@ -10,9 +10,8 @@ using ModelContextProtocol.Server;
 namespace KittyClaw.Web.Api;
 
 /// <summary>
-/// MCP tool surface (v1) exposed at /mcp — seven thin proxies over the same services the
-/// REST API uses, so any MCP client (Claude Code, etc.) can drive the board. Deliberately
-/// scoped: no runs, automations or dashboards until the channel proves itself (ticket #217).
+/// Core board tools exposed at /mcp over the same services the REST API uses.
+/// Management and observability tools are supplied by McpManagementTools.
 /// Trust boundary is unchanged — the endpoint binds like the REST API (unauthenticated,
 /// localhost, self-hosted single machine). Enable it from KittyClaw's global settings.
 /// </summary>
@@ -45,10 +44,14 @@ public sealed class McpTools(
     public async Task<List<TicketSummary>> ListTickets(
         [Description("Project slug (see list_projects).")] string project,
         [Description("Optional column/status filter, e.g. Backlog, Todo, InProgress, Review, Done.")] string? status = null,
-        [Description("Optional assignee filter: a member slug (see board_overview).")] string? assignee = null)
+        [Description("Optional assignee filter: a member slug (see board_overview).")] string? assignee = null,
+        [Description("Optional title/description search.")] string? search = null,
+        [Description("Optional priority filter.")] TicketPriority? priority = null,
+        [Description("Optional creator filter.")] string? createdBy = null,
+        [Description("Optional parent ticket filter.")] int? parentId = null)
     {
         await RequireProjectAsync(project);
-        return await tickets.ListTicketsAsync(project, status, assignedTo: assignee);
+        return await tickets.ListTicketsAsync(project, status, priority, assignee, createdBy, search, parentId);
     }
 
     [McpServerTool(Name = "get_ticket", ReadOnly = true, Idempotent = true)]
@@ -71,7 +74,12 @@ public sealed class McpTools(
         [Description("Target column/status. Defaults to Backlog.")] string? status = null,
         [Description("Priority: Idea, NiceToHave, Required or Critical. Defaults to NiceToHave.")] TicketPriority? priority = null,
         [Description("Optional assignee: a member slug (see board_overview).")] string? assignee = null,
-        [Description("Author recorded as the ticket creator. Defaults to 'owner'.")] string? author = null)
+        [Description("Author recorded as the ticket creator. Defaults to 'owner'.")] string? author = null,
+        [Description("Optional parent ticket id.")] int? parentId = null,
+        [Description("Optional pipeline id from list_pipelines.")] int? pipelineId = null,
+        [Description("Optional target column id from list_columns.")] int? columnId = null,
+        [Description("Whether this child blocks parent completion.")] bool blocksParent = true,
+        [Description("Optional project label ids.")] List<int>? labelIds = null)
     {
         await RequireProjectAsync(project);
         try
@@ -79,7 +87,8 @@ public sealed class McpTools(
             var ticket = await tickets.CreateTicketAsync(
                 project, title, description ?? "", author ?? "owner",
                 status ?? "Backlog", priority: priority ?? TicketPriority.NiceToHave,
-                assignedTo: assignee);
+                assignedTo: assignee, parentId: parentId, pipelineId: pipelineId,
+                columnId: columnId, blocksParent: blocksParent, labelIds: labelIds);
             notifier.NotifyProjectUpdated(project);
             return ticket;
         }

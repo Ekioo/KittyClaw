@@ -8,6 +8,23 @@ namespace KittyClaw.Core.Tests.Web;
 public sealed class WorkflowMigrationPromptTests
 {
     [Fact]
+    public void Reconfiguration_application_uses_scoped_contract_instead_of_migration()
+    {
+        var plan = new WorkflowMigrationPlan
+        {
+            ExistingPipelineId = 42,
+            ChangeRequests = ["Change the review model"],
+            Pipelines = [new WorkflowMigrationPipeline { Name = "Delivery" }],
+        };
+        var prompt = WorkflowMigrationPlanner.BuildApplicationPrompt(plan, false);
+        Assert.Contains("Reconfigure existing pipeline #42", prompt);
+        Assert.Contains("Change the review model", prompt);
+        Assert.Contains("Preserve all unspecified processor settings", prompt);
+        Assert.Contains("Do not modify other pipelines or legacy automations", prompt);
+        Assert.DoesNotContain("Convert or explicitly retire every legacy", prompt);
+    }
+
+    [Fact]
     public void Migration_analysis_compacts_large_boards_below_the_cli_input_limit()
     {
         var pipeline = new Pipeline { Id = 1, Name = "Main", Slug = "main", IsDefault = true };

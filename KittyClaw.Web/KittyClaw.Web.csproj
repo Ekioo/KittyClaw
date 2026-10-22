@@ -20,6 +20,7 @@
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.1.0" />
     <!-- Pins the transitive SQLitePCLRaw bundle above 2.1.11 (CVE-2025-6965 / GHSA-2m69-gcr7-jv3q). -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+    <PackageReference Include="Velopack" Version="1.2.161" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -27,6 +28,35 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <!-- Blazor's browser bootstrap must also be restored for the Windows desktop target. -->
+    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
   </PropertyGroup>
+
+  <!-- Only installer builds need the Windows tray host. Source builds stay cross-platform. -->
+  <PropertyGroup Condition="'$(KittyClawWindowsInstaller)' == 'true'">
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <OutputType>WinExe</OutputType>
+    <ApplicationIcon>..\branding\KittyClaw.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(KittyClawWindowsInstaller)' == 'true'">
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <!-- .NET 10's _AddBlazorFrameworkStaticWebAssets target only runs for OutputType=Exe.
+       Our tray build is WinExe, so include the matching SDK package's scripts as linked
+       web content before the normal static-assets pipeline assigns paths/fingerprints. -->
+  <Target Name="IncludeWindowsBlazorBootstrap" BeforeTargets="AssignTargetPaths"
+          Condition="'$(KittyClawWindowsInstaller)' == 'true'">
+    <Error Condition="!Exists('$(BlazorFrameworkStaticWebAssetRoot)/blazor.web.js')"
+           Text="The matching ASP.NET Core browser assets package must be restored." />
+    <ItemGroup>
+      <Content Include="$(BlazorFrameworkStaticWebAssetRoot)/blazor.web.js"
+               Link="wwwroot/_framework/blazor.web.js" CopyToPublishDirectory="PreserveNewest" />
+      <Content Include="$(BlazorFrameworkStaticWebAssetRoot)/blazor.server.js"
+               Link="wwwroot/_framework/blazor.server.js" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
 
 </Project>

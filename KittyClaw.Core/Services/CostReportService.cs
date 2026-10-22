@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -19,6 +20,7 @@ public sealed record CostBucket(
     decimal EstimatedUsd = 0,
     long RtkSavedTokens = 0,
     decimal? RtkEstimatedUsd = null);
+public sealed record JevCostSummary(int Calls = 0, long InputTokens = 0, long OutputTokens = 0, decimal UsdCost = 0, int UnpricedCalls = 0);
 public sealed record CostProjectTotal(
     string ProjectSlug,
     string ProjectName,
@@ -27,11 +29,12 @@ public sealed record CostProjectTotal(
     long RtkSavedTokens = 0,
     long RtkInputTokens = 0,
     int RtkCommands = 0,
-    decimal? RtkEstimatedUsd = null);
+    decimal? RtkEstimatedUsd = null,
+    JevCostSummary? Jev = null);
 public sealed record CostReport(decimal TotalUsd, bool Estimated, IReadOnlyList<CostBucket> Daily, IReadOnlyList<CostProjectTotal> Projects);
 public sealed record CostReportOptions(IReadOnlyList<CostProjectOption> Projects, IReadOnlyList<CostPipelineOption> Pipelines, IReadOnlyList<CostModelOption> Models);
 
-internal sealed record CostSnapshotRow(DateOnly Day, string ProjectSlug, string ProjectName, string? PipelineKey, string Model, long InputTokens, decimal UsdCost, bool Estimated);
+internal sealed record CostSnapshotRow(DateOnly Day, string ProjectSlug, string ProjectName, string? PipelineKey, string Model, long InputTokens, decimal UsdCost, bool Estimated, JevCostSummary? Jev = null);
 internal sealed record RtkSavingsSnapshotRow(DateOnly Day, string ProjectSlug, string ProjectName, long InputTokens, long SavedTokens, int Commands);
 internal sealed record CostReportSnapshot(
     int Version,
@@ -46,7 +49,7 @@ internal sealed record CostReportSnapshot(
 /// </summary>
 public sealed class CostReportService
 {
-    private const int SnapshotVersion = 4;
+    private const int SnapshotVersion = 5;
     private const string UnknownPipelineSuffix = "unknown";
     private static readonly CostReportOptions EmptyOptions = new([], [], []);
     private static readonly CostReportSnapshot EmptySnapshot = new(SnapshotVersion, DateTime.MinValue, EmptyOptions, [], []);
@@ -167,12 +170,6 @@ public sealed class CostReportService
                     ?? (Directory.Exists(Path.Combine(workspace, ".agents", "channel"))
                         ? Directory.EnumerateFiles(Path.Combine(workspace, ".agents", "channel"), "cost-log*.jsonl").ToList()
                         : []);
-                if (costFiles.Count == 0)
-                {
-                    await Task.Yield();
-                    continue;
-                }
-
                 var entries = new List<CostLogEntry>();
                 foreach (var file in costFiles.OrderBy(x => x, StringComparer.Ordinal))
                 foreach (var line in File.ReadLines(file))
@@ -183,6 +180,14 @@ public sealed class CostReportService
                     if (entry is null || (entry.RunId is not null && !seenRuns.Add(entry.RunId))) continue;
                     entries.Add(entry);
                 }
+
+                foreach (var legacy in await ReadLegacyJevCostsAsync(project.Slug, cancellationToken))
+                    if (legacy.RunId is null || seenRuns.Add(legacy.RunId))
+                    {
+                        // Migrate recoverable usage once so later proposal refreshes cannot erase cost history.
+                        (_costTracker ?? new CostTracker()).LogRun(workspace, legacy);
+                        entries.Add(legacy);
+                    }
 
                 var legacyTicketIds = entries
                     .Where(entry => entry.PipelineId is null && entry.TicketId is not null)
@@ -211,7 +216,8 @@ public sealed class CostReportService
                         string.IsNullOrWhiteSpace(entry.Model) ? "default" : entry.Model,
                         entry.InputTokens,
                         entry.UsdCost,
-                        entry.CostEstimated));
+                        entry.CostEstimated,
+                        entry.Source == "jev" ? new(1, entry.InputTokens, entry.OutputTokens, entry.UsdCost, entry.CostKnown ? 0 : 1) : null));
                 }
 
                 if (hasUnknownPipeline)
@@ -232,7 +238,7 @@ public sealed class CostReportService
 
         // Estimated stays in the group key so daily reports can split measured from estimated cost.
         var compactRows = rows
-            .GroupBy(row => new { row.Day, row.ProjectSlug, row.ProjectName, row.PipelineKey, row.Model, row.Estimated })
+            .GroupBy(row => new { row.Day, row.ProjectSlug, row.ProjectName, row.PipelineKey, row.Model, row.Estimated, IsJev = row.Jev is not null })
             .Select(group => new CostSnapshotRow(
                 group.Key.Day,
                 group.Key.ProjectSlug,
@@ -241,7 +247,8 @@ public sealed class CostReportService
                 group.Key.Model,
                 group.Sum(row => row.InputTokens),
                 group.Sum(row => row.UsdCost),
-                group.Key.Estimated))
+                group.Key.Estimated,
+                SumJev(group.Select(row => row.Jev))))
             .OrderBy(row => row.Day)
             .ThenBy(row => row.ProjectName)
             .ToList();
@@ -267,6 +274,51 @@ public sealed class CostReportService
             .ThenBy(row => row.ProjectName)
             .ToList();
         return new(SnapshotVersion, DateTime.UtcNow, options, compactRows, compactRtkRows);
+    }
+
+    private async Task<IReadOnlyList<CostLogEntry>> ReadLegacyJevCostsAsync(string slug, CancellationToken ct)
+    {
+        var entries = new List<CostLogEntry>();
+        await using var db = _projects.GetProjectDb(slug);
+        await db.Database.OpenConnectionAsync(ct);
+        var connection = db.Database.GetDbConnection();
+        var tables = new HashSet<string>(StringComparer.Ordinal);
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT name FROM sqlite_master WHERE type = 'table'";
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct)) tables.Add(reader.GetString(0));
+        }
+        // Read only existing tables; reporting must not initialize JEV or issue API requests.
+        foreach (var table in new[] { "JevObservations", "JevPostRunObservations", "JevProposalDecisions" })
+        {
+            if (!tables.Contains(table)) continue;
+            await using var command = connection.CreateCommand();
+            command.CommandText = $"SELECT TicketId, Payload FROM {table}";
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                try
+                {
+                    using var document = JsonDocument.Parse(reader.GetString(1));
+                    var root = table == "JevProposalDecisions" ? document.RootElement.GetProperty("proposal") : document.RootElement;
+                    var proposal = root.Deserialize<JevRoutingProposal>(new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                    if (proposal is not { CostRecordId: null, Usage: { } usage } || string.IsNullOrWhiteSpace(proposal.Model)
+                        || usage.InputTokens is < 0 or > int.MaxValue || usage.OutputTokens is < 0 or > int.MaxValue) continue;
+                    var input = (int)usage.InputTokens; var output = (int)usage.OutputTokens;
+                    var priced = ModelCostEstimator.TryEstimate(proposal.Model, input, output, 0, 0, out var usd);
+                    entries.Add(new(proposal.ObservedAt, "JEV historical", reader.GetInt32(0), proposal.Model,
+                        input, output, 0, 0, usd, (proposal.DurationMs ?? 0) / 1000d, 0,
+                        CostEstimated: priced, ProjectSlug: slug, RunId: "jev-history-" + slug + "-" + JevDecisionStore.ProposalId(proposal),
+                        Source: "jev", CostKnown: priced));
+                }
+                catch (Exception ex) when (ex is JsonException or InvalidOperationException or KeyNotFoundException or FormatException)
+                {
+                    // A malformed historical observation must not hide the project's normal cost log.
+                }
+            }
+        }
+        return entries;
     }
 
     private async Task PersistSnapshotAsync(CostReportSnapshot snapshot, CancellationToken cancellationToken)
@@ -300,7 +352,7 @@ public sealed class CostReportService
             .ToList();
         var totalsByProject = rows.GroupBy(row => new { row.ProjectSlug, row.ProjectName })
             .Select(group => new CostProjectTotal(group.Key.ProjectSlug, group.Key.ProjectName,
-                group.Sum(row => row.UsdCost), group.Any(row => row.Estimated)))
+                group.Sum(row => row.UsdCost), group.Any(row => row.Estimated), Jev: SumJev(group.Select(row => row.Jev))))
             .ToDictionary(total => total.ProjectSlug, StringComparer.Ordinal);
 
         // RTK does not associate a gain entry with a KittyClaw pipeline or model. Hiding
@@ -325,7 +377,7 @@ public sealed class CostReportService
                     savedTokens,
                     inputTokens,
                     group.Sum(row => row.Commands),
-                    ratePerToken is decimal totalRate ? savedTokens * totalRate : null);
+                    ratePerToken is decimal totalRate ? savedTokens * totalRate : null, current?.Jev);
 
                 foreach (var saving in group)
                 {
@@ -355,7 +407,7 @@ public sealed class CostReportService
     {
         decimal weightedRates = 0;
         long pricedInputTokens = 0;
-        foreach (var row in rows.Where(row => row.ProjectSlug == projectSlug && row.InputTokens > 0))
+        foreach (var row in rows.Where(row => row.ProjectSlug == projectSlug && row.InputTokens > 0 && row.Jev is null))
         {
             if (!ModelCostEstimator.TryEstimate(row.Model, 1_000_000, 0, 0, 0, out var inputRate)) continue;
             weightedRates += inputRate * row.InputTokens;
@@ -365,6 +417,13 @@ public sealed class CostReportService
         return pricedInputTokens == 0
             ? null
             : weightedRates / pricedInputTokens / 1_000_000m;
+    }
+
+    private static JevCostSummary? SumJev(IEnumerable<JevCostSummary?> summaries)
+    {
+        var values = summaries.OfType<JevCostSummary>().ToList();
+        return values.Count == 0 ? null : new(values.Sum(v => v.Calls), values.Sum(v => v.InputTokens),
+            values.Sum(v => v.OutputTokens), values.Sum(v => v.UsdCost), values.Sum(v => v.UnpricedCalls));
     }
 
     private static string BuildReportCacheKey(CostReportFilter filter)

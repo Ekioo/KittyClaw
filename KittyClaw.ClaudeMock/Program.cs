@@ -53,6 +53,11 @@ if (scenario is null)
 var scenarioExit = ScenarioExitCode(scenario);
 if (args.FirstOrDefault() == "exec")
 {
+    // Explicit Codex NDJSON fixtures can replay planning results and file effects as well.
+    // Existing provider-neutral fixtures retain the canned processor result below.
+    if (scenario.Any(line => line.Contains("\"thread.started\"", StringComparison.Ordinal)))
+        return await ScenarioReplayer.ReplayAsync(scenario, sessionId, Directory.GetCurrentDirectory());
+
     Console.WriteLine("{\"type\":\"thread.started\",\"thread_id\":\"mock-codex-thread\"}");
     Console.WriteLine("{\"type\":\"turn.started\"}");
     if (scenarioExit != 0)

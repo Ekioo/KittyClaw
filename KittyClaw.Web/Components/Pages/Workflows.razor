@@ -53,6 +53,7 @@ else
             {
                 <div class="settings-row workflow-edit-row">
                     <input class="settings-input" @bind="_pipelineName" @bind:event="oninput" />
+                    <button class="settings-primary" data-testid="reconfigure-pipeline" @onclick="() => _showReconfigurationWizard = true">@L["WorkflowReconfigure"]</button>
                     <button class="settings-primary" @onclick="RenamePipelineAsync">@L["WorkflowRename"]</button>
                     <span class="settings-hint">@L["WorkflowStableKey"] <code>@_selectedPipeline.Slug</code></span>
                 </div>
@@ -91,6 +92,11 @@ else
     <WorkflowMigrationWizard ProjectSlug="@Slug" OnClose="() => _showMigrationWizard = false" />
 }
 
+@if (_showReconfigurationWizard)
+{
+    <WorkflowMigrationWizard ProjectSlug="@Slug" ExistingPipelineId="@_selectedPipelineId" OnClose="CloseReconfigurationAsync" />
+}
+
 @if (_showPipelineKit)
 {
     <PipelineKitDialog ProjectSlug="@Slug" PipelineId="@_selectedPipelineId" OnClose="() => _showPipelineKit = false" OnImported="PipelineImportedAsync" />
@@ -111,6 +117,13 @@ else
     private string _newPipelineName = "";
     private string? _message;
     private bool _isError;
+    private bool _showReconfigurationWizard;
+    private async Task CloseReconfigurationAsync()
+    {
+        _showReconfigurationWizard = false;
+        _pipelines = await PipelineService.ListAsync(Slug);
+        if (_selectedPipelineId is int id) await SelectPipelineAsync(id);
+    }
     private bool _showMigrationWizard;
     private bool _showPipelineKit;
 

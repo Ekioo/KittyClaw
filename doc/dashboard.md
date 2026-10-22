@@ -3,6 +3,10 @@
 ## Purpose
 A free-form, tile-based dashboard view that complements the Kanban board. Each tile displays content read from the project's `.dashboard/` folder. Users and agents can add, edit, remove, move, and resize tiles; layout is persisted per project so it survives restarts. Agents write files directly into tile folders; the dashboard discovers them automatically.
 
+The first-use guidance banner is shown only while the project has no tickets, runs, or dashboard tiles. Once activity exists, the activity summary replaces the banner regardless of activation-event history. The guidance directs users to the configured workflow without promising automatic provider selection or fallback.
+
+The empty dashboard invites users to **Add tile** and offers clickable examples (tickets by column, recent Git activity, and a README summary). Examples open the creation chat with an editable request; sending it generates a proposal that must be reviewed before creation.
+
 ## Folder-per-tile layout
 
 Each tile owns a dedicated subfolder under `.dashboard/`:
@@ -45,6 +49,8 @@ A tile folder without a sidecar is treated as a static tile; rendering falls bac
 **Startup migration**: `DashboardRefreshService` runs `DashboardService.MigrateAsync` after the HTTP host is accepting requests, converting legacy flat-file tiles (`<slug>.<ext>` + `<slug>.<ext>.yaml`) into the folder layout. `StartupWorkGate` keeps this migration and catch-up work behind the explicit host-start boundary.
 
 ## Key components
+The open dashboard reloads tile output and sidecars when the refresh queue changes, including when a background refresh completes. It also rereads them every 30 seconds to pick up direct file writes and delayed worktree integrations. Image URLs include the output file's modification timestamp so updated images bypass the browser cache.
+
 - `KittyClaw.Core/Services/DashboardService.cs` — reads tile folders under `.dashboard/`, persists tile layout (position, size) keyed by slug in the per-project SQLite DB, and exposes add/remove/move/resize/read/write/migrate operations. Path helpers: `GetTileDirPath`, `FindScript`, `FindOutputPath`, `GetAvailableSlugs`, `WriteOutputAsync`, `DeleteTileFolder`, `MigrateAsync`.
 - `KittyClaw.Core/Services/DashboardRefreshService.cs` — background service that polls tiles with a `refresh` sidecar field, enqueues them through `DashboardTileGate`, runs startup migration, and orchestrates the script-then-prompt pipeline before writing the output file.
 - `KittyClaw.Core/Services/DashboardTileGate.cs` — global singleton semaphore (size 1) that serializes all tile refreshes across all projects. Scheduling: oldest `lastFinishedAt` first; never-run tiles last; manual refreshes jump the queue. Deduplicates by `(slug, tileSlug)`. Persists `lastFinishedAt` to `registry.db`.

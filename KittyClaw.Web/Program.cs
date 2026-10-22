@@ -5,8 +5,23 @@ using KittyClaw.Core.Automation;
 using KittyClaw.Core.Services;
 using KittyClaw.Web.Api;
 using KittyClaw.Web.Components;
+using Velopack;
 
-var builder = WebApplication.CreateBuilder(args);
+// Installer hooks must exit before the web host or any data services are created.
+// Applying updates is explicit, so a second launch cannot update a running server.
+VelopackApp.Build()
+#if WINDOWS
+    .OnFirstRun(_ => KittyClaw.Web.Services.WindowsDesktopLifetime.ConfirmInstallation())
+#endif
+    .SetAutoApplyOnStartup(false).Run();
+
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+#if WINDOWS
+    ContentRootPath = AppContext.BaseDirectory,
+#endif
+});
 
 // Default to HTTP-only on :5230 when no URL config is provided. KittyClaw is a local-only
 // app with no HTTPS cert, so the framework default (HTTP + HTTPS dual binding on :5000/:5001)
@@ -33,6 +48,11 @@ if (string.IsNullOrEmpty(builder.Configuration["urls"]))
 var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 var dataDir = builder.Configuration["KITTYCLAW_DATA_DIR"]
     ?? Path.Combine(appData, "KittyClaw");
+#if WINDOWS
+using var desktop = builder.Configuration.GetValue("KITTYCLAW_DESKTOP", true)
+    ? new KittyClaw.Web.Services.WindowsDesktopLifetime(dataDir) : null;
+if (desktop is { IsFirstInstance: false }) return;
+#endif
 var legacyDataDir = Path.Combine(appData, "TodoApp");
 if (!Directory.Exists(dataDir) && Directory.Exists(legacyDataDir))
 {
@@ -131,6 +151,19 @@ builder.Services.AddSingleton(new KittyClaw.Core.Evidence.EvidenceStore(dataDir)
 builder.Services.AddHostedService<KittyClaw.Core.Evidence.RunEvidenceAttacher>();
 builder.Services.AddSingleton<AutomationEngine>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomationEngine>());
+builder.Services.AddSingleton(sp => new JevConfigurationService(sp.GetRequiredService<ProjectSecretVault>(), dataDir));
+builder.Services.AddSingleton<JevCostRecorder>();
+builder.Services.AddSingleton(sp => new JevQualificationService(
+    sp.GetRequiredService<ProjectService>(), sp.GetRequiredService<ProjectSecretVault>(),
+    new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { MaxResponseContentBufferSize = 256 * 1024 },
+    sp.GetRequiredService<JevConfigurationService>(), sp.GetRequiredService<JevCostRecorder>()));
+builder.Services.AddSingleton(sp => new JevWorkReviewService(sp.GetRequiredService<ProjectService>(),
+    sp.GetRequiredService<JevConfigurationService>(), new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { MaxResponseContentBufferSize = 256 * 1024 }, sp.GetRequiredService<JevCostRecorder>()));
+builder.Services.AddSingleton<JevWorkDecisionService>();
+builder.Services.AddHostedService<JevWorkReviewEngine>();
+builder.Services.AddSingleton<JevDecisionStore>();
+builder.Services.AddSingleton<JevProposalDecisionService>();
+builder.Services.AddHostedService<JevObservationEngine>();
 builder.Services.AddSingleton<ColumnProcessingEngine>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ColumnProcessingEngine>());
 builder.Services.AddSingleton<ColumnScheduledTaskEngine>();
@@ -148,6 +181,8 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<KittyClaw.Core.Ser
 builder.Services.AddHostedService<KittyClaw.Core.Services.ScheduledPromotionService>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.AgentRunsState>();
 builder.Services.AddHttpClient();
+builder.Services.AddSingleton<KittyClaw.Web.Services.IInstalledUpdateClient, KittyClaw.Web.Services.VelopackUpdateClient>();
+builder.Services.AddSingleton<KittyClaw.Web.Services.InstalledUpdateService>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.UpdateCheckService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<KittyClaw.Web.Services.UpdateCheckService>());
 // Anonymous daily usage heartbeat (see README "Telemetry" and doc/telemetry.md).
@@ -162,7 +197,7 @@ if (!builder.Environment.IsDevelopment())
 if (OperatingSystem.IsWindows())
     builder.Services.AddSingleton<KittyClaw.Core.Platform.IFolderPicker, KittyClaw.Core.Platform.WindowsFolderPicker>();
 
-// Embedded MCP server (Streamable HTTP) at /mcp — 7 tools proxying the board services.
+// Embedded MCP server (Streamable HTTP) at /mcp, sharing application handlers with REST.
 // The transport is registered once, while access is gated dynamically below by the global
 // persisted setting. This lets the UI enable or disable MCP immediately without a restart.
 builder.Services.AddMcpServer(options => options.ServerInfo = new()
@@ -176,7 +211,8 @@ builder.Services.AddMcpServer(options => options.ServerInfo = new()
     WebsiteUrl = "https://kittyclaw.dev",
 })
     .WithHttpTransport()
-    .WithTools<KittyClaw.Web.Api.McpTools>(KittyClaw.Web.Api.McpTools.SerializerOptions);
+    .WithTools<KittyClaw.Web.Api.McpTools>(KittyClaw.Web.Api.McpTools.SerializerOptions)
+    .WithTools<KittyClaw.Web.Api.McpManagementTools>(KittyClaw.Web.Api.McpTools.SerializerOptions);
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -290,4 +326,13 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
+#if WINDOWS
+desktop?.Attach(app);
+try { app.Run(); }
+catch (Exception ex) when (desktop is not null)
+{
+    desktop.ReportStartupFailure(ex);
+}
+#else
 app.Run();
+#endif

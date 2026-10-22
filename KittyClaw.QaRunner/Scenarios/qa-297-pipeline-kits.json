@@ -14,9 +14,9 @@
     { "type": "writeWorkspaceFile", "workspacePath": "{kitWorkspace}", "name": ".agents/skills/demo/SKILL.md", "text": "---\nname: demo\ndescription: divergent\n---\n\nExisting target skill must never be overwritten.\n" }
   ],
   "actions": [
-    { "type": "navigate", "url": "/board/qa-pipeline-kits/settings" },
+    { "type": "navigate", "url": "/settings" },
     { "type": "wait", "ms": 800 },
-    { "type": "selectOption", "selector": ".settings-section select.settings-input", "value": "fr" },
+    { "type": "selectOption", "selector": "select[aria-label='Language']", "value": "fr" },
     { "type": "wait", "ms": 400 },
     { "type": "navigate", "url": "/board/qa-pipeline-kits/workflows" },
     { "type": "wait", "ms": 800 },
@@ -50,7 +50,7 @@
     { "type": "click", "selector": "button[data-testid='pipeline-kit-export-tab']" },
     { "type": "click", "selector": "button[data-testid='pipeline-kit-import-tab']" },
 
-    { "type": "setViewport", "maxMs": 640, "ms": 1400 },
+    { "type": "setViewport", "width": 640, "height": 1400 },
     { "type": "setInputFile", "selector": ".pipeline-kit-drop input[type=file]", "value": "{safeKit}", "name": "portable-safe.kittyclaw-pipeline", "property": "application/zip" },
     { "type": "wait", "ms": 700 },
     { "type": "assertVisible", "selector": ".pipeline-kit-summary" },

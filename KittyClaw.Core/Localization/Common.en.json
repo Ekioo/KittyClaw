@@ -1,4 +1,5 @@
 {
+  "RtkGlobalHelp": "Optional shell output optimizer. Enable RTK separately in each project’s settings. Executable override: KITTYCLAW_RTK_BIN.",
   "Save": "Save",
   "Cancel": "Cancel",
   "Delete": "Delete",

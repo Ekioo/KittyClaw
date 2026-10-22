@@ -215,7 +215,11 @@ public sealed class DashboardTileGate : IDisposable
 
     private static void EnsureTable(SqliteConnection conn)
     {
+        // Older installations called the tile key fileName. Serialize schema inspection
+        // and the rename so concurrent refreshes cannot race, preserving all run history.
+        using var transaction = conn.BeginTransaction();
         using var cmd = conn.CreateCommand();
+        cmd.Transaction = transaction;
         cmd.CommandText = """
             CREATE TABLE IF NOT EXISTS dashboard_tile_runs (
                 slug TEXT NOT NULL,
@@ -225,6 +229,16 @@ public sealed class DashboardTileGate : IDisposable
             )
             """;
         cmd.ExecuteNonQuery();
+        cmd.CommandText = "PRAGMA table_info(dashboard_tile_runs)";
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var reader = cmd.ExecuteReader())
+            while (reader.Read()) columns.Add(reader.GetString(1));
+        if (columns.Contains("fileName") && !columns.Contains("tileSlug"))
+        {
+            cmd.CommandText = "ALTER TABLE dashboard_tile_runs RENAME COLUMN fileName TO tileSlug";
+            cmd.ExecuteNonQuery();
+        }
+        transaction.Commit();
     }
 
     private void NotifyStateChanged() => StateChanged?.Invoke();

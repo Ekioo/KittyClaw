@@ -3,8 +3,10 @@
 @using KittyClaw.Core.Services
 @inject AppSettingsService AppSettings
 @inject AgentCliReadinessService CliReadiness
+@inject RtkIntegrationService RtkIntegration
 @inject LocalizationService L
 @rendermode InteractiveServer
+@implements IDisposable
 
 <PageTitle>@L["GlobalSettingsTitle"] — KittyClaw</PageTitle>
 
@@ -14,6 +16,21 @@
 </div>
 
 <div class="settings-container">
+    <section class="settings-section" data-testid="language-global-settings">
+        <h2>@L["Language"]</h2>
+        <div class="settings-row">
+            <select aria-label="@L["Language"]" class="settings-input" style="max-width:200px" value="@L.Lang" @onchange="OnLangChanged">
+                <option value="fr">@L["LangFr"]</option>
+                <option value="en">@L["LangEn"]</option>
+                <option value="es">@L["LangEs"]</option>
+                <option value="de">@L["LangDe"]</option>
+                <option value="it">@L["LangIt"]</option>
+                <option value="pt-BR">@L["LangPtBr"]</option>
+                <option value="ja">@L["LangJa"]</option>
+            </select>
+        </div>
+    </section>
+
     <section class="settings-section" data-testid="agent-provider-settings">
         <div class="provider-section-heading">
             <div>
@@ -44,6 +61,18 @@
                     <a href="@provider.InstallUrl" target="_blank" rel="noopener">@L["ProviderInstallationGuide"] &nearr;</a>
                 </article>
             }
+            <JevSettingsPanel @ref="_jevPanel" />
+            <article class="provider-readiness-card @(_rtkStatus?.Available == true ? "provider-ready" : "provider-missing")" data-testid="rtk-global-settings">
+                <div class="provider-card-header">
+                    <strong>RTK</strong>
+                    <span class="provider-status-pill @(_rtkStatus?.Available == true ? "ready" : "missing")">
+                        @L[_rtkStatus?.Available == true ? "ProviderDetected" : "ProviderNotDetected"]
+                    </span>
+                </div>
+                <p>@L["RtkGlobalHelp"]</p>
+                <code>rtk @(_rtkStatus?.Version)</code>
+                <a href="https://github.com/rtk-ai/rtk" target="_blank" rel="noopener">@L["RtkInstall"] &nearr;</a>
+            </article>
         </div>
 
         <p class="provider-readiness-note">@L["AgentProvidersDetectionNote"]</p>
@@ -74,7 +103,14 @@
 </div>
 
 @code {
+    protected override void OnInitialized() => L.OnLanguageChanged += OnLanguageChanged;
+    private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
+    private void OnLangChanged(ChangeEventArgs e) => AppSettings.Language = (string?)e.Value ?? "fr";
+    public void Dispose() => L.OnLanguageChanged -= OnLanguageChanged;
+
     private CliReadiness _readiness = new(false, false, false, false, false, false);
+    private JevSettingsPanel? _jevPanel;
+    private RtkIntegrationStatus? _rtkStatus;
     private bool _checkingProviders;
     private bool _providerCheckStarted;
 
@@ -112,7 +148,12 @@
         await InvokeAsync(StateHasChanged);
         try
         {
-            _readiness = await CliReadiness.ProbeAsync();
+            var providers = CliReadiness.ProbeAsync();
+            var rtk = RtkIntegration.ProbeAvailabilityAsync();
+            var jev = _jevPanel?.RefreshAsync() ?? Task.CompletedTask;
+            await Task.WhenAll(providers, rtk, jev);
+            _readiness = await providers;
+            _rtkStatus = await rtk;
         }
         finally
         {

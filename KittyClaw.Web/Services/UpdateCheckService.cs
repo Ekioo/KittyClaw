@@ -11,12 +11,15 @@ public class UpdateCheckService : BackgroundService
     private readonly IHttpClientFactory _httpFactory;
     private readonly ILogger<UpdateCheckService> _logger;
     private string? _latestVersion;
+    private readonly InstalledUpdateService _installed;
 
-    public UpdateCheckService(AppSettingsService settings, IHttpClientFactory httpFactory, ILogger<UpdateCheckService> logger)
+    public UpdateCheckService(AppSettingsService settings, IHttpClientFactory httpFactory, ILogger<UpdateCheckService> logger,
+        InstalledUpdateService installed)
     {
         _settings = settings;
         _httpFactory = httpFactory;
         _logger = logger;
+        _installed = installed;
         CurrentVersion = ResolveCurrentVersion();
     }
 
@@ -46,6 +49,19 @@ public class UpdateCheckService : BackgroundService
 
     private async Task CheckIfDueAsync(CancellationToken ct)
     {
+        // Installed builds need the package feed, including pending downloads, on every
+        // process start. The legacy API throttle must not hide an actionable update.
+        if (_installed.IsSupported)
+        {
+            try
+            {
+                await _installed.CheckAsync();
+            }
+            catch (Exception ex) { _logger.LogDebug(ex, "Installed update check failed"); }
+            _latestVersion = _installed.AvailableVersion;
+            OnChange?.Invoke();
+            return;
+        }
         var last = _settings.UpdateCheckLastRun;
         if (last.HasValue && DateTime.UtcNow - last.Value < TimeSpan.FromHours(24)) return;
 

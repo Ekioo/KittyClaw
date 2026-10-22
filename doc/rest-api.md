@@ -24,6 +24,8 @@ Exposes the project, ticket, comment, member, label, column, and automation data
 - `POST /api/projects/{slug}/git/init` — runs `git init` strictly inside the configured workspace (no client-supplied path); see [per-ticket worktree workflow](./worktree-workflow.md#initializing-a-missing-repository). Returns `200` on creation, `409` if Git metadata already exists (directory or file `.git`), `400` for a missing/unconfigured workspace or unavailable git.
 - `POST /api/projects/{slug}/chat/start` accepts an optional `images` array (`ChatImageDto[]`). Each DTO carries `dataUrl` (base64 data URL), `mime`, `name`, and `sizeBytes`. Server-side: MIME allow-list (JPEG, PNG, GIF, WebP), 5 MB per-image cap, 5 images per turn cap, base64 decoded and persisted to `<workspace>/.agents/channel/tmp/chat-{runId}-{i}.{ext}` before being forwarded as `ImagePaths` to `AgentRunContext`. Invalid images return HTTP 400 `image_rejected`.
 
+- `GET /api/projects/{slug}/runs` accepts `includeCompleted`, `ticketId`, and `limit` (1-500 when specified; MCP defaults to 100); it returns active runs by default and retained terminal runs when requested.
+
 ## Conventions
 - `author` is **required** on every mutating endpoint; omitting it returns HTTP 400. Use `"owner"` for the human user, plain agent name (e.g. `"programmer"`) for AI agents.
 - Ticket statuses must match an existing column name in the project — fetch columns before moving tickets.

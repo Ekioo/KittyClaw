@@ -1,8 +1,8 @@
 ﻿{
   "Dashboard": "Tableau de bord",
   "KanbanView": "Kanban",
-  "DashboardEmpty": "Aucune tuile dans .dashboard/ pour l\u2019instant.",
-  "DashboardEmptyHint": "Cr\u00e9ez des dossiers de tuile dans le r\u00e9pertoire .dashboard/ de votre espace de travail pour les afficher ici.",
+  "DashboardEmpty": "Créez votre première tuile",
+  "DashboardEmptyHint": "Cliquez sur « Ajouter une tuile » et décrivez ce que vous souhaitez suivre. Vous pourrez vérifier la proposition avant de la créer.",
   "DashboardNoTiles": "Aucune tuile sur le tableau de bord.",
   "DashboardNoTilesHint": "Cliquez sur \u00ab\u00a0+ Ajouter une tuile\u00a0\u00bb dans la barre pour ajouter des tuiles.",
   "AddTile": "+ Ajouter une tuile",
@@ -52,6 +52,10 @@
   "TileConfigRevise": "R\u00e9viser",
   "TileConfigAccept": "Accepter",
   "GuidanceStepReady": "Étape 1 sur 3 · Prêt", "GuidanceStepRunning": "Étape 2 sur 3 · En cours", "GuidanceStepRecoverable": "Action requise · Vous pouvez continuer", "GuidanceStepCompleted": "Étape 3 sur 3 · Résultat prêt",
-  "GuidanceReadyTitle": "Votre premier résultat commence ici", "GuidanceReadyMessage": "Votre tableau est prêt. Lancez le premier ticket ; KittyClaw choisira automatiquement un provider disponible.", "GuidanceRunningTitle": "Votre premier résultat est en préparation", "GuidanceRunningMessage": "Le premier run traite le ticket. Vous pouvez le suivre sans configurer les modèles ni les automatisations.", "GuidanceRecoverableTitle": "Le run nécessite une nouvelle tentative", "GuidanceRecoverableMessage": "Le provider sélectionné n’a pas pu terminer. Revenez au tableau pour réessayer ; un fallback disponible sera utilisé si possible.", "GuidanceRecoverableHint": "Votre ticket et votre progression sont conservés.", "GuidanceCompletedTitle": "Votre premier résultat est prêt", "GuidanceCompletedMessage": "Vérifiez le résultat puis prenez la décision finale : l’approuver ou demander une modification.",
-  "GuidanceStart": "Commencer depuis le tableau", "GuidanceFollowRun": "Suivre le run", "GuidanceRetry": "Réessayer depuis le tableau", "GuidanceDecide": "Vérifier et décider", "GuidanceTickets": "tickets", "GuidanceRuns": "runs", "GuidanceResults": "résultats"
+  "GuidanceReadyTitle": "Votre premier résultat commence ici", "GuidanceReadyMessage": "Votre tableau est prêt. Ouvrez le tableau pour créer ou lancer votre premier ticket selon le workflow configuré.", "GuidanceRunningTitle": "Votre premier résultat est en préparation", "GuidanceRunningMessage": "Le premier run traite le ticket. Suivez sa progression depuis le tableau.", "GuidanceRecoverableTitle": "Le run nécessite une nouvelle tentative", "GuidanceRecoverableMessage": "Le provider sélectionné n’a pas pu terminer. Revenez au tableau pour examiner l’erreur et réessayer.", "GuidanceRecoverableHint": "Votre ticket et votre progression sont conservés.", "GuidanceCompletedTitle": "Votre premier résultat est prêt", "GuidanceCompletedMessage": "Vérifiez le résultat puis prenez la décision finale : l’approuver ou demander une modification.",
+  "GuidanceStart": "Commencer depuis le tableau", "GuidanceFollowRun": "Suivre le run", "GuidanceRetry": "Réessayer depuis le tableau", "GuidanceDecide": "Vérifier et décider", "GuidanceTickets": "tickets", "GuidanceRuns": "runs", "GuidanceResults": "résultats",
+  "DashboardExamplesHint": "Choisissez un exemple pour préremplir votre demande :",
+  "DashboardExampleTickets": "Crée une tuile en anneau montrant le nombre de tickets de ce projet par colonne.",
+  "DashboardExampleGit": "Crée une tuile montrant le nombre de commits Git par jour sur les 7 derniers jours.",
+  "DashboardExampleSummary": "Crée une tuile Markdown résumant le projet à partir de son README."
 }

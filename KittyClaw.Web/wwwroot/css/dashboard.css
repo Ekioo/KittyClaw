@@ -796,6 +796,35 @@
     line-height: 1.5;
 }
 
+.dashboard-empty-examples {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.6rem;
+    max-width: 780px;
+    padding: 0 1rem;
+}
+
+.dashboard-example {
+    flex: 1 1 210px;
+    padding: 0.8rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    text-align: left;
+    cursor: pointer;
+}
+
+.dashboard-example:hover,
+.dashboard-example:focus-visible {
+    border-color: var(--accent);
+    background: var(--surface2);
+}
+
 /* ── Tile chat panel ───────────────────────────────────────────────────────── */
 
 .tile-chat-overlay {
@@ -1130,7 +1159,7 @@
     left: 50%;
     bottom: 16px;
     transform: translateX(-50%);
-    z-index: 9000;
+    z-index: 800;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -1145,6 +1174,8 @@
 }
 .update-banner-icon { font-size: 16px; line-height: 1; }
 .update-banner-text { line-height: 1.35; }
+.update-banner .btn { flex-shrink: 0; }
+.update-banner [role="alert"] { color: var(--s-blocked); }
 .update-banner-text a { color: var(--accent, #6366f1); text-decoration: underline; font-weight: 600; }
 .update-banner-dismiss {
     margin-left: 6px;

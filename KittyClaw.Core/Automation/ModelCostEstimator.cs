@@ -8,7 +8,7 @@ namespace KittyClaw.Core.Automation;
 /// </summary>
 public static class ModelCostEstimator
 {
-    public const string RateCardVersion = "2026-08-19";
+    public const string RateCardVersion = "2026-10-22";
 
     public static bool TryEstimate(
         string? model,
@@ -28,10 +28,15 @@ public static class ModelCostEstimator
             normalized = normalized["mistral:".Length..];
         if (normalized.StartsWith("deepseek:", StringComparison.OrdinalIgnoreCase))
             normalized = normalized["deepseek:".Length..];
+        if (normalized.StartsWith("claude:", StringComparison.OrdinalIgnoreCase))
+            normalized = normalized["claude:".Length..];
 
         Rates? rates = normalized.ToLowerInvariant() switch
         {
-            "gpt-5.6-sol" => new(5m, 30m, 0.5m, 6.25m),
+            // https://docs.typesafe.ai/models, verified 2026-10-22: input only, output is free.
+            "jev-1.13.0" or "jev-1.14.0" => new(0.042m, 0m, 0m, 0m),
+            // https://developers.openai.com/api/docs/pricing (standard, 30-minute writes).
+            "gpt-5.6-sol" => new(4m, 20m, 0.4m, 5m),
             "gpt-5.6-terra" => new(2.5m, 15m, 0.25m, 3.125m),
             "gpt-5.6-luna" => new(1m, 6m, 0.1m, 1.25m),
             "gpt-5.5" => new(5m, 30m, 0.5m, 6.25m),
@@ -40,14 +45,23 @@ public static class ModelCostEstimator
             "grok-build-0.1" => new(1m, 2m, 0.2m, 1m),
             "mistral-medium-3.5" or "mistral-vibe-cli-latest" => new(1.5m, 7.5m, 0.15m, 1.5m),
             "devstral-small" or "devstral-small-latest" => new(0.1m, 0.3m, 0.01m, 0.1m),
-            "deepseek-v4-pro" or "deepseek-v4-pro[1m]" => new(1.74m, 3.48m, 0.145m, 0m),
-            "deepseek-v4-flash" => new(0.14m, 0.28m, 0.028m, 0m),
+            // https://api-docs.deepseek.com/quick_start/pricing/ (peak ceiling;
+            // usage summaries do not identify the time of each request).
+            "deepseek-v4-pro" or "deepseek-v4-pro[1m]" => new(1.32m, 3.96m, 0.044m, 1.32m),
+            "deepseek-flash" or "deepseek-v4-flash" => new(0.3m, 1.2m, 0.006m, 0.3m),
+            // https://platform.claude.com/docs/en/about-claude/pricing (5-minute writes).
+            "claude-fable-5-1" => new(10m, 50m, 0.25m, 12.5m),
+            "claude-opus-5-5" => new(4m, 20m, 0.2m, 5m),
+            "claude-sonnet-5-5" => new(2m, 10m, 0.1m, 2.5m),
+            "claude-haiku-5-5" => new(0.1m, 0.5m, 0.01m, 0.125m),
             _ => null,
         };
         if (rates is null) return false;
 
         // xAI doubles all token rates for requests whose context reaches 200k tokens.
         var inputContext = (long)inputTokens + cacheReadTokens + cacheWriteTokens;
+        if (normalized.Equals("claude-haiku-5-5", StringComparison.OrdinalIgnoreCase) && inputContext > 100_000)
+            rates = rates.Value.Scale(5m);
         if (normalized.StartsWith("grok-", StringComparison.OrdinalIgnoreCase) && inputContext >= 200_000)
             rates = rates.Value.Scale(2m);
 

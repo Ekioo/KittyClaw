@@ -784,7 +784,17 @@ public class TicketService
     /// when set, the update only applies if the ticket is still in that status —
     /// otherwise <see cref="TicketTransitionConflictException"/> (mapped to HTTP 409).
     /// </summary>
-    public async Task<Ticket?> UpdateTicketAsync(string projectSlug, int ticketId, string? title = null, string? description = null, string author = "owner", TicketPriority? priority = null, string? assignedTo = null, string? status = null, string? expectedStatus = null, int? pipelineId = null, int? columnId = null, bool? blocksParent = null, bool enforceRouting = false, string? comment = null)
+    public Task<Ticket?> UpdateTicketAsync(string projectSlug, int ticketId, string? title = null, string? description = null, string author = "owner", TicketPriority? priority = null, string? assignedTo = null, string? status = null, string? expectedStatus = null, int? pipelineId = null, int? columnId = null, bool? blocksParent = null, bool enforceRouting = false, string? comment = null)
+        => UpdateTicketCoreAsync(projectSlug, ticketId, title, description, author, priority, assignedTo,
+            status, expectedStatus, pipelineId, columnId, blocksParent, enforceRouting, comment);
+
+    internal Task<Ticket?> ApplyJevProposalAsync(string slug, int ticketId, int targetColumnId,
+        DateTime expectedUpdatedAt, Func<TodoDbContext, Ticket, Task> atomicDecision, string author = "owner", string? comment = null) =>
+        UpdateTicketCoreAsync(slug, ticketId, author: author, columnId: targetColumnId,
+            enforceRouting: true, expectedUpdatedAt: expectedUpdatedAt, atomicDecision: atomicDecision, comment: comment);
+
+    private async Task<Ticket?> UpdateTicketCoreAsync(string projectSlug, int ticketId, string? title = null, string? description = null, string author = "owner", TicketPriority? priority = null, string? assignedTo = null, string? status = null, string? expectedStatus = null, int? pipelineId = null, int? columnId = null, bool? blocksParent = null, bool enforceRouting = false, string? comment = null, DateTime? expectedUpdatedAt = null,
+        Func<TodoDbContext, Ticket, Task>? atomicDecision = null)
     {
         if (string.IsNullOrWhiteSpace(author))
             throw new InvalidOperationException("Le champ 'author' est requis.");
@@ -826,6 +836,9 @@ public class TicketService
             var source = ticket.ColumnId is int sourceColumnId
                 ? await db.BoardColumns.FindAsync(sourceColumnId)
                 : null;
+            if (atomicDecision is null && source is not null && _columnProcessors is not null &&
+                (await _columnProcessors.GetAsync(projectSlug, source.Id)) is { Enabled: true, JevAcceptanceValidation: true })
+                throw new InvalidOperationException("Review the JEV acceptance criteria in the ticket before moving it from this validation column.");
             await EnsureRoutingAllowsManualMoveAsync(projectSlug, db, source, destination, enforceRouting);
             ticket.Status = status!;
             ticket.ColumnId = destination!.Id;
@@ -922,8 +935,18 @@ public class TicketService
             };
             db.Comments.Add(addedComment);
         }
+        await using var decisionTransaction = atomicDecision is null ? null : await db.Database.BeginTransactionAsync();
+        if (atomicDecision is not null)
+        {
+            // Guard the read/validate/write gap before atomically recording a human JEV decision.
+            var originalColumn = db.Entry(ticket).Property(t => t.ColumnId).OriginalValue;
+            var matched = await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE Tickets SET UpdatedAt = UpdatedAt WHERE Id = {ticketId} AND UpdatedAt = {expectedUpdatedAt} AND ColumnId = {originalColumn}");
+            if (matched != 1) throw new InvalidOperationException("The ticket changed. Reload the proposal before accepting it.");
+            await atomicDecision(db, ticket);
+        }
         ticket.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
+        if (decisionTransaction is not null) await decisionTransaction.CommitAsync();
         // Signal AFTER commit: the engine can only ever observe the fully-written state.
         if (oldStatus is not null)
             TicketStatusChanged?.Invoke(projectSlug, ticketId, oldStatus, ticket.Status!);

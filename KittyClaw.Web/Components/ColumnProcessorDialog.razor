@@ -5,6 +5,7 @@
 @using KittyClaw.Core.Services
 @using KittyClaw.Web.Services
 @inject ColumnProcessorService ProcessorService
+@inject JevConfigurationService JevConfiguration
 @inject ColumnScheduledTaskService ScheduledTaskService
 @inject ProjectSkillService SkillService
 @inject PipelineService PipelineService
@@ -125,10 +126,57 @@
                         {
                             <div class="processor-draft-notice" role="status">@L["ProcessorDraftNotice"]</div>
                         }
+                        <details class="jev-settings jev-disclosure" data-testid="jev-settings">
+                            <summary title="@L["JevSettingsHelp"]">@L["JevSettings"]</summary>
+                        <label class="workflow-check"><input type="checkbox" data-testid="jev-acceptance-mode" @bind="_jevAcceptanceValidation" @bind:after="AcceptanceModeChanged" disabled="@(!_jevAvailability.Available && !_jevAcceptanceValidation)" /> <FieldHelp Label="@L["JevAcceptanceMode"]" Help="@L["JevAcceptanceHelp"]" /></label>
+                        <p class="settings-hint">@L["JevAcceptanceHelp"]</p>
+                        @if (_jevAcceptanceValidation)
+                        {
+                            <label>@L["JevColumnCriteria"]<textarea class="settings-input workflow-textarea" data-testid="jev-column-criteria" @bind="_jevCriteriaText"></textarea></label>
+                        }
+                        <label class="workflow-check"><input type="checkbox" data-testid="jev-profile-mode" @bind="_jevExecutionSelection" @bind:after="SelectionModeChanged" disabled="@(_jevAcceptanceValidation || (!_jevAvailability.Available && !_jevExecutionSelection))" /> <FieldHelp Label="@L["JevProfileMode"]" Help="@L["JevProfileHelp"]" /></label>
+                        @if (_jevExecutionSelection)
+                        {
+                            <p class="settings-hint">@L["JevProfileHelp"]</p>
+                            @foreach (var profile in _jevProfiles)
+                            {
+                                <div class="worktree-summary jev-profile-editor" @key="profile" data-testid="jev-profile-editor">
+                                    <label>@L["Name"]<input class="settings-input" @bind="profile.Name" /></label>
+                                    <label>@L["Description"]<input class="settings-input" @bind="profile.Description" /></label>
+                                    <label>@L["ProcessorModel"]<select class="settings-input" @bind="profile.Model">
+                                        @foreach (var model in AllModels) { <option value="@model">@model</option> }
+                                        @if (!AllModels.Contains(profile.Model)) { <option value="@profile.Model">@profile.Model</option> }
+                                    </select></label>
+                                    @foreach (var skill in _skills.Where(s => _availableSkills.Contains(s.Slug) || _recommendedSkills.Contains(s.Slug) || _requiredSkills.Contains(s.Slug)))
+                                    {
+                                        <label class="workflow-check"><input type="checkbox" checked="@(profile.Skills.Contains(skill.Slug) || _requiredSkills.Contains(skill.Slug))" disabled="@_requiredSkills.Contains(skill.Slug)" @onchange="e => ToggleProfileSkill(profile, skill.Slug, e.Value is true)" /> @skill.Name</label>
+                                    }
+                                    <button class="settings-browse" @onclick="() => _jevProfiles.Remove(profile)">@L["Delete"]</button>
+                                </div>
+                            }
+                            <button class="settings-browse" data-testid="jev-add-profile" @onclick="AddJevProfile">@L["JevAddProfile"]</button>
+                        }
+                        <label class="workflow-check"><input type="checkbox" @bind="_jevObservationOnly" disabled="@(_jevAcceptanceValidation || _jevExecutionSelection || (!_jevAvailability.Available && !_jevObservationOnly))" /> <FieldHelp Label="@L["JevObservationMode"]" Help="@L["JevObservationHelp"]" /></label>
+                        <p class="settings-hint">@L["JevObservationHelp"]</p>
+                        <label class="workflow-check"><input type="checkbox" @bind="_jevPostRunObservation" disabled="@(_jevAcceptanceValidation || (!_jevAvailability.Available && !_jevPostRunObservation))" /> <FieldHelp Label="@L["JevPostRunMode"]" Help="@L["JevPostRunHelp"]" /></label>
+                        <p class="settings-hint">@L["JevPostRunHelp"]</p>
+                        @if (_jevObservationOnly || _jevPostRunObservation)
+                        {
+                        <label class="workflow-check"><input type="checkbox" data-testid="jev-automatic-routing" @bind="_jevAutomaticRouting" disabled="@(!_jevObservationOnly && !_jevPostRunObservation)" /> <FieldHelp Label="@L["JevAutomaticRouting"]" Help="@L["JevAutomaticRoutingHelp"]" /></label>
+                        @if (_jevAutomaticRouting)
+                        {
+                        <label><FieldHelp Label="@L["JevConfidenceThreshold"]" Help="@L["JevAutomaticRoutingHelp"]" /><input class="settings-input" type="number" min="0" max="100" step="1" data-testid="jev-confidence-threshold" @bind="_jevConfidencePercent" disabled="@(!_jevAutomaticRouting)" /></label>
+                        }
+                        <p class="settings-hint">@L["JevAutomaticRoutingHelp"]</p>
+                        }
+                        <p class="settings-hint" data-testid="jev-availability">@L[_jevAvailability.Available ? "JevAvailable" : "JevUnavailable"]</p>
+                        </details>
                         <label class="workflow-check"><input type="checkbox" @bind="_enabled" /> <FieldHelp Label="@L["ProcessorEnabled"]" Help="@L["ProcessorEnabledHelp"]" /></label>
                         <label><FieldHelp Label="@L["Name"]" Help="@L["ProcessorNameHelp"]" /><input class="settings-input" @bind="_name" /></label>
                         <label><FieldHelp Label="@L["ProcessorMission"]" Help="@L["ProcessorMissionHelp"]" /><textarea class="settings-input workflow-textarea" @bind="_mission"></textarea></label>
                         <label><FieldHelp Label="@L["ProcessorPrompt"]" Help="@L["ProcessorPromptHelp"]" /><textarea class="settings-input workflow-textarea processor-prompt" @bind="_prompt"></textarea></label>
+                        @if (!_jevObservationOnly && !_jevAcceptanceValidation)
+                        {
                         <label><FieldHelp Label="@L["ProcessorModel"]" Help="@L["ProcessorModelHelp"]" />
                             <select @key="@($"{_model}#{AllModels.Count}")" value="@(_model ?? "")" @onchange="OnModelChanged">
                                 <option value="">@L["ProcessorModelAutomatic"]</option>
@@ -208,6 +256,7 @@
                             </div>
                         }
 
+                        }
                         @if (_processorExists)
                         {
                             <button class="processor-secondary-btn processor-remove-btn" @onclick="RemoveProcessorDraft">@L["ColumnRemoveProcessor"]</button>
@@ -334,6 +383,29 @@
     private bool _processorExists;
     private bool _processorDraft;
     private bool _removeProcessorOnSave;
+    private JevAvailability _jevAvailability = new(false, false, null);
+    private bool _jevAcceptanceValidation;
+    private bool _jevExecutionSelection;
+    private string _jevCriteriaText = "";
+    private List<JevProfileDraft> _jevProfiles = [];
+    private sealed class JevProfileDraft
+    {
+        public string Name { get; set; } = "";
+        public string Model { get; set; } = "";
+        public string Description { get; set; } = "";
+        public HashSet<string> Skills { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+    private void AddJevProfile() => _jevProfiles.Add(new() { Name = $"Profile {_jevProfiles.Count + 1}", Model = _model ?? ClaudeModels.First(), Skills = new(_requiredSkills, StringComparer.OrdinalIgnoreCase) });
+    private static void ToggleProfileSkill(JevProfileDraft profile, string skill, bool selected)
+    { if (selected) profile.Skills.Add(skill); else profile.Skills.Remove(skill); }
+    private void AcceptanceModeChanged()
+    { if (_jevAcceptanceValidation) { _jevObservationOnly = false; _jevPostRunObservation = false; _jevAutomaticRouting = false; _jevExecutionSelection = false; } }
+    private void SelectionModeChanged()
+    { if (_jevExecutionSelection) _jevObservationOnly = false; }
+    private bool _jevObservationOnly;
+    private bool _jevPostRunObservation;
+    private bool _jevAutomaticRouting;
+    private double _jevConfidencePercent = 90;
     private bool _enabled = true;
     private string _activeTab = "general";
     private string _columnName = "";
@@ -385,6 +457,7 @@
             foreach (var pipeline in _pipelines)
                 _pipelineColumns[pipeline.Id] = await ColumnService.ListColumnsAsync(Slug, pipeline.Id);
             _skills = await SkillService.ListAsync(Slug);
+            _jevAvailability = await JevConfiguration.GetAsync(Slug);
             await LoadModelsAsync();
 
             var source = Column ?? TemplateColumn;
@@ -450,6 +523,14 @@
         _prompt = processor?.Prompt ?? "";
         _model = processor?.Model;
         _enabled = processor?.Enabled ?? true;
+        _jevAcceptanceValidation = processor?.JevAcceptanceValidation ?? false;
+        _jevExecutionSelection = processor?.JevExecutionSelection ?? false;
+        _jevCriteriaText = string.Join("\n", processor?.JevAcceptanceCriteria ?? []);
+        _jevProfiles = processor?.JevExecutionProfiles.Select(p => new JevProfileDraft { Name = p.Name, Model = p.Model, Description = p.Description, Skills = new(p.Skills, StringComparer.OrdinalIgnoreCase) }).ToList() ?? [];
+        _jevObservationOnly = processor?.JevObservationOnly ?? false;
+        _jevPostRunObservation = processor?.JevPostRunObservation ?? false;
+        _jevAutomaticRouting = processor?.JevAutomaticRouting ?? false;
+        _jevConfidencePercent = (processor?.JevConfidenceThreshold ?? 0.9) * 100;
         _maxTurns = processor?.MaxTurns ?? 100;
         _maxAttempts = processor?.MaxAttempts ?? 3;
         _retryBackoff = processor?.RetryBackoffSeconds ?? 60;
@@ -508,7 +589,15 @@
                     _selectionOrder, _maxAttempts, _retryBackoff, _defaultTargetId, _technicalFailureTargetId, routes,
                     prompt: _prompt,
                     beforeActions: _beforeActions.Select(action => action.ToModel()).ToList(),
-                    afterActions: _afterActions.Select(action => action.ToModel()).ToList());
+                    afterActions: _afterActions.Select(action => action.ToModel()).ToList(),
+                    jevObservationOnly: _jevObservationOnly,
+                    jevPostRunObservation: !_jevObservationOnly && _jevPostRunObservation,
+                    jevAutomaticRouting: (_jevObservationOnly || _jevPostRunObservation) && _jevAutomaticRouting,
+                    jevConfidenceThreshold: _jevConfidencePercent / 100,
+                    jevAcceptanceValidation: _jevAcceptanceValidation,
+                    jevExecutionSelection: _jevExecutionSelection,
+                    jevAcceptanceCriteria: _jevCriteriaText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+                    jevExecutionProfiles: _jevProfiles.Select(p => new JevExecutionProfile(p.Name, p.Model, p.Skills.Union(_requiredSkills, StringComparer.OrdinalIgnoreCase).ToList(), p.Description)).ToList());
             }
 
             await ScheduledTaskService.SaveColumnAsync(Slug, savedColumn.Id, _scheduledTasks);

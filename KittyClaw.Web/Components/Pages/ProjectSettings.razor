@@ -8,7 +8,6 @@
 @inject NavigationManager Nav
 @inject IHttpClientFactory HttpFactory
 @inject LocalizationService L
-@inject AppSettingsService AppSettings
 @inject FirstProjectActivationMetricsService ActivationMetrics
 @rendermode InteractiveServer
 @implements IDisposable
@@ -27,21 +26,6 @@ else
     </div>
 
     <div class="settings-container">
-
-        <section class="settings-section">
-            <h2>@L["Language"]</h2>
-            <div class="settings-row">
-                <select class="settings-input" style="max-width:200px" value="@L.Lang" @onchange="OnLangChanged">
-                    <option value="fr">@L["LangFr"]</option>
-                    <option value="en">@L["LangEn"]</option>
-                    <option value="es">@L["LangEs"]</option>
-                    <option value="de">@L["LangDe"]</option>
-                    <option value="it">@L["LangIt"]</option>
-                    <option value="pt-BR">@L["LangPtBr"]</option>
-                    <option value="ja">@L["LangJa"]</option>
-                </select>
-            </div>
-        </section>
 
         <section class="settings-section" data-testid="worktree-settings">
             <h2>@L["WorktreeSettings"]</h2>
@@ -650,7 +634,6 @@ else
         _fallbackModel = e.Value?.ToString() ?? "";
 
     private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
-    private void OnLangChanged(ChangeEventArgs e) => AppSettings.Language = (string?)e.Value ?? "fr";
     public void Dispose() => L.OnLanguageChanged -= OnLanguageChanged;
 
     private async Task ReloadAllAsync()

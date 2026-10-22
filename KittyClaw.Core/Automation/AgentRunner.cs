@@ -232,8 +232,19 @@ public sealed class AgentRunner
         // UI as soon as this method yields, and the drawer/stream endpoints resolve it through
         // the registry. Registering after async preparation (project lookup, worktree
         // resolution) made those lookups race and report "Run not found".
-        var run = CreateAndRegisterRun(ctx);
-        return ExecuteRegisteredAsync(run, ctx, ct);
+        var lease = _runs.TrackExecution();
+        try
+        {
+            var run = CreateAndRegisterRun(ctx);
+            return ExecuteWithLeaseAsync(run, ctx, ct, lease);
+        }
+        catch { lease.Dispose(); throw; }
+    }
+
+    private async Task<AgentRun> ExecuteWithLeaseAsync(AgentRun run, AgentRunContext ctx,
+        CancellationToken ct, IDisposable lease)
+    {
+        using (lease) return await ExecuteRegisteredAsync(run, ctx, ct);
     }
 
     private AgentRun CreateAndRegisterRun(AgentRunContext ctx)

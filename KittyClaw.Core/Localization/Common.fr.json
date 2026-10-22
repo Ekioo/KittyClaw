@@ -1,4 +1,5 @@
 {
+  "RtkGlobalHelp": "Optimiseur facultatif des sorties de commandes. Activez RTK dans les paramètres de chaque projet. Binaire personnalisé : KITTYCLAW_RTK_BIN.",
   "Save": "Enregistrer",
   "Cancel": "Annuler",
   "Delete": "Supprimer",

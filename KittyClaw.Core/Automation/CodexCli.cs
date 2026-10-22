@@ -77,6 +77,30 @@ public static class CodexCli
             }
         }
 
+        return OperatingSystem.IsWindows()
+            ? ResolveDesktopBinary(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "OpenAI", "Codex", "bin"), IsUsableBinary)
+            : null;
+    }
+
+    /// <summary>The desktop app's CLI may not be in Explorer's inherited PATH.</summary>
+    internal static string? ResolveDesktopBinary(string root, Func<string, bool> probe)
+    {
+        if (!Directory.Exists(root)) return null;
+        try
+        {
+            var direct = Path.Combine(root, "codex.exe");
+            if (File.Exists(direct) && probe(direct)) return direct;
+            // Version directories have opaque names. Prefer the newest usable executable,
+            // and ignore incomplete update directories instead of reporting a false install.
+            foreach (var candidate in Directory.EnumerateDirectories(root)
+                         .Select(directory => new FileInfo(Path.Combine(directory, "codex.exe")))
+                         .Where(file => file.Exists)
+                         .OrderByDescending(file => file.LastWriteTimeUtc))
+                if (probe(candidate.FullName)) return candidate.FullName;
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
         return null;
     }
 

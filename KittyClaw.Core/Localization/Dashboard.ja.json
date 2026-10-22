@@ -1,8 +1,8 @@
 {
   "Dashboard": "ダッシュボード",
   "KanbanView": "看板",
-  "DashboardEmpty": "まだダッシュボードタイルはありません。",
-  "DashboardEmptyHint": "ワークスペースの\\.dashboard\\/. ディレクトリ内にタイルフォルダを作成して表示します。",
+  "DashboardEmpty": "最初のタイルを作成しましょう",
+  "DashboardEmptyHint": "「タイルを追加」をクリックし、表示したい内容を説明してください。作成前に提案を確認できます。",
   "DashboardNoTiles": "ダッシュボードにタイルがありません。",
   "DashboardNoTilesHint": "ツールバーの「+ タイル追加」をクリックしてタイルを追加します。",
   "AddTile": "+ タイルを追加",
@@ -56,11 +56,11 @@
   "GuidanceStepRecoverable": "対応が必要 · 続行できます",
   "GuidanceStepCompleted": "ステップ 3/3 · 結果の準備完了",
   "GuidanceReadyTitle": "最初の成果はここから始まります",
-  "GuidanceReadyMessage": "ボードの準備ができました。最初のチケットを開始してください。KittyClaw が利用可能なプロバイダーを自動的に選択します。",
+  "GuidanceReadyMessage": "ボードの準備ができました。ボードを開き、設定済みのワークフローに従って最初のチケットを作成または開始してください。",
   "GuidanceRunningTitle": "最初の成果を準備しています",
-  "GuidanceRunningMessage": "最初の実行がチケットを処理しています。モデルや自動化を設定せずに進行を確認できます。",
+  "GuidanceRunningMessage": "最初の実行でチケットを処理しています。ボードで進捗を確認できます。",
   "GuidanceRecoverableTitle": "実行にはもう一度の試行が必要です",
-  "GuidanceRecoverableMessage": "選択されたプロバイダーは完了できませんでした。ボードに戻って再試行してください。可能な場合は利用可能なフォールバックが使用されます。",
+  "GuidanceRecoverableMessage": "選択したプロバイダーは処理を完了できませんでした。ボードでエラーを確認し、再試行してください。",
   "GuidanceRecoverableHint": "チケットと進行状況は保持されています。",
   "GuidanceCompletedTitle": "最初の成果が完成しました",
   "GuidanceCompletedMessage": "結果を確認して最終判断をしてください: 承認するか、別の変更を依頼します。",
@@ -70,5 +70,9 @@
   "GuidanceDecide": "確認して決定",
   "GuidanceTickets": "チケット",
   "GuidanceRuns": "実行",
-  "GuidanceResults": "結果"
+  "GuidanceResults": "結果",
+  "DashboardExamplesHint": "例を選ぶとリクエストが入力されます：",
+  "DashboardExampleTickets": "このプロジェクトの列別チケット数をドーナツグラフのタイルにしてください。",
+  "DashboardExampleGit": "過去7日間の日別Gitコミット数を表示するタイルを作成してください。",
+  "DashboardExampleSummary": "READMEをもとにプロジェクトを要約するMarkdownタイルを作成してください。"
 }

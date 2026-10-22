@@ -1,8 +1,9 @@
 @rendermode InteractiveServer
 @implements IDisposable
 @inject KittyClaw.Web.Services.UpdateCheckService UpdateCheck
+@inject KittyClaw.Web.Services.InstalledUpdateService Installer
 
-@if (UpdateCheck.HasUpdate)
+@if (UpdateCheck.HasUpdate || (Installer.IsSupported && (Installer.IsReady || Installer.IsBusy || Installer.Error is not null || Installer.IsRestarting)))
 {
     <div class="update-banner" role="status">
         <span class="update-banner-icon">✨</span>
@@ -12,6 +13,29 @@
                target="_blank" rel="noopener">@UpdateCheck.LatestVersion</a>
             (current: @UpdateCheck.CurrentVersion)
         </span>
+        @if (Installer.IsSupported)
+        {
+            @if (Installer.IsRestarting)
+            {
+                <span>Restarting KittyClaw… This page will reconnect after the update.</span>
+            }
+            else if (Installer.IsBusy)
+            {
+                <span>Downloading update: @Installer.Progress%</span>
+            }
+            else if (Installer.IsReady)
+            {
+                <button type="button" class="btn btn-primary" @onclick="Installer.InstallAndRestart">Update and restart</button>
+            }
+            else
+            {
+                <button type="button" class="btn btn-primary" @onclick="Installer.DownloadAsync">Download update</button>
+            }
+            @if (Installer.Error is not null)
+            {
+                <span role="alert">@Installer.Error</span>
+            }
+        }
         <button type="button" class="update-banner-dismiss" @onclick="OnDismiss" aria-label="Dismiss">✕</button>
     </div>
 }
@@ -20,6 +44,7 @@
     protected override void OnInitialized()
     {
         UpdateCheck.OnChange += HandleChange;
+        Installer.OnChange += HandleChange;
     }
 
     private void HandleChange()
@@ -35,5 +60,6 @@
     public void Dispose()
     {
         UpdateCheck.OnChange -= HandleChange;
+        Installer.OnChange -= HandleChange;
     }
 }

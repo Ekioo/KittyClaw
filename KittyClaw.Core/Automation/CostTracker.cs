@@ -93,5 +93,7 @@ public sealed record CostLogEntry(
     bool CostEstimated = false,
     string? ProjectSlug = null,
     int? PipelineId = null,
-    string? RunId = null
+    string? RunId = null,
+    string? Source = null,
+    bool CostKnown = true
 );

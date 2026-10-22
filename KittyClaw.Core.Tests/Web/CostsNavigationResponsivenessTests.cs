@@ -149,4 +149,10 @@ public sealed class CostsNavigationResponsivenessTests
             directory = directory.Parent;
         return directory?.FullName ?? throw new DirectoryNotFoundException("Repository root not found.");
     }
+    [Fact]
+    public void Displayed_total_preserves_JEV_costs_below_one_cent()
+    {
+        Assert.Equal(.000168m, CostDisplayTotal.Sum([.000168m]));
+        Assert.Equal(.030168m, CostDisplayTotal.Sum([.034m, .000168m]));
+    }
 }
