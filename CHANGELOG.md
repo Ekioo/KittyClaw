@@ -4,6 +4,37 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.20] — 2026-10-23
+
+Optional JEV qualification, editable workflows, and self-contained Windows installation with incremental updates.
+
+### Highlights
+
+Projects can use optional JEV qualification to observe ticket routing, review completed work against acceptance criteria, and select execution profiles. Owners can approve proposed routes or enable automatic routing above a configured confidence threshold. JEV usage and estimated costs appear alongside provider costs.
+
+Windows users gain a self-contained installer with embedded runtimes and incremental update packages. The workflow assistant can edit existing pipelines while preserving their established identity and ordering.
+
+### Added
+
+- Optional JEV observation, structured ticket triage, post-run routing proposals, manual work reviews, and execution profiles.
+- Human approval and rejection of JEV routing proposals, plus optional confidence-gated automatic routing.
+- Encrypted JEV settings, local API-key detection, usage totals, and cost-page filters.
+- Self-contained Windows x64 installer, desktop and Start menu shortcuts, update feeds, and incremental update packaging.
+- Expanded MCP tools for project management and agent supervision, and an application version indicator in the board footer.
+
+### Changed
+
+- The workflow assistant supports editing existing pipelines.
+- Companion tools and language preferences share global settings; ticket properties use a more compact layout.
+- Refreshed branding, model cost estimates, and guidance for JEV and pipeline kits.
+
+### Fixed
+
+- Reload visible dashboard tiles after background refresh and improve their initial content and onboarding guidance.
+- Isolate ad-hoc memory fallback tests from installed Codex binaries.
+
+---
+
 ## [v0.19] — 2026-10-22
 
 Recoverable integrations, clearer delivery evidence, project agent permissions, and current provider models.
