@@ -1,5 +1,6 @@
 @using KittyClaw.Core.Models
 @using KittyClaw.Web.Services
+@inject WorkflowMigrationPlanner Planner
 @inject NavigationManager Navigation
 @inject LocalizationService L
 @implements IDisposable
@@ -8,7 +9,7 @@
 <section class="migration-wizard" role="dialog" aria-modal="true" aria-labelledby="migration-wizard-title" @onclick:stopPropagation>
     <header class="migration-wizard-header">
         <div>
-            <span class="migration-wizard-kicker">@L[IsProjectOnboarding ? "ProjectOnboardingKicker" : "MigrationWizardKicker"]</span>
+            <span class="migration-wizard-kicker">@ContextText("MigrationWizardKicker", "ProjectOnboardingKicker")</span>
             <h2 id="migration-wizard-title">@Title</h2>
         </div>
         <button class="agent-close-btn" @onclick="Close" disabled="@(_applicationStarted && _busy)" title="@L["Close"]">×</button>
@@ -106,7 +107,10 @@
                     var index = i;
                     var pipeline = _plan.Pipelines[i];
                     <article class="migration-pipeline-card">
-                        <button class="migration-card-remove" @onclick="() => RemovePipeline(index)" title="@L["MigrationWizardRemovePipeline"]">×</button>
+                        @if (!ExistingPipelineId.HasValue)
+                        {
+                            <button class="migration-card-remove" @onclick="() => RemovePipeline(index)" title="@L["MigrationWizardRemovePipeline"]">×</button>
+                        }
                         <div class="migration-pipeline-icon">⇢</div>
                         <input value="@pipeline.Name" @oninput="e => pipeline.Name = e.Value?.ToString() ?? string.Empty" aria-label="@L["MigrationWizardPipelineName"]" />
                         <p>@pipeline.Description</p>
@@ -119,6 +123,8 @@
                         <button class="migration-card-open" @onclick="() => OpenPipeline(index)">@L["MigrationWizardInspectPipeline"] →</button>
                     </article>
                 }
+                @if (!ExistingPipelineId.HasValue)
+                {
                 <article class="migration-pipeline-card migration-add-card">
                     @if (_addingPipeline)
                     {
@@ -130,6 +136,7 @@
                         <button @onclick="() => _addingPipeline = true"><span>＋</span>@L["MigrationWizardAddPipeline"]</button>
                     }
                 </article>
+                }
             </div>
             @PromptEditor("pipelines", null)
         }
@@ -170,7 +177,7 @@
         }
         else if (_plan is not null && _step == WizardStep.Review)
         {
-            <p class="migration-step-intro">@L["MigrationWizardReviewHint"]</p>
+            <p class="migration-step-intro">@ContextText("MigrationWizardReviewHint", "MigrationWizardReviewHint")</p>
             <div class="migration-review">
                 @foreach (var pipeline in _plan.Pipelines)
                 {
@@ -238,6 +245,7 @@
 
 @code {
     [Parameter] public string ProjectSlug { get; set; } = "";
+    [Parameter] public int? ExistingPipelineId { get; set; }
     [Parameter] public bool IsProjectOnboarding { get; set; }
     [Parameter] public bool WorkspaceWasEmpty { get; set; }
     [Parameter] public string InitialPurpose { get; set; } = "";
@@ -275,7 +283,7 @@
         _ when _migrationCompleted => ContextText("MigrationWizardCompletedTitle", "ProjectOnboardingCompletedTitle"),
         _ when _applicationStarted => ContextText("MigrationWizardApplyingTitle", "ProjectOnboardingApplyingTitle"),
         WizardStep.Questions => L["ProjectOnboardingQuestionsTitle"],
-        WizardStep.Pipelines => L["MigrationWizardPipelinesTitle"],
+        WizardStep.Pipelines => ContextText("MigrationWizardPipelinesTitle", "MigrationWizardPipelinesTitle"),
         WizardStep.Pipeline => CurrentPipeline?.Name ?? L["MigrationWizardPipelineTitle"],
         WizardStep.Review => ContextText("MigrationWizardReviewTitle", "ProjectOnboardingReviewTitle"),
         _ => L[IsProjectOnboarding ? "ProjectOnboardingTitle" : "MigrationWizardTitle"],
@@ -302,8 +310,16 @@
             ? L["MigrationWizardActivityReceived"]
             : L["MigrationWizardAgentThinking"];
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        if (ExistingPipelineId is int pipelineId)
+        {
+            _busy = true;
+            _step = WizardStep.Pipelines;
+            try { _plan = await Planner.LoadExistingPipelineAsync(ProjectSlug, pipelineId); }
+            catch { _error = L["MigrationWizardAnalysisFailed"]; }
+            finally { _busy = false; }
+        }
         _projectPurpose = InitialPurpose;
         if (IsProjectOnboarding && (WorkspaceWasEmpty || !string.IsNullOrWhiteSpace(InitialPurpose)))
             _step = WizardStep.Questions;
@@ -311,7 +327,7 @@
 
     private RenderFragment PromptEditor(string phase, int? pipelineIndex) => @<div class="migration-prompt-box">
         <span>✦</span>
-        <textarea placeholder="@L["MigrationWizardPromptPlaceholder"]" @bind="_refinement"></textarea>
+        <textarea placeholder="@L["MigrationWizardPromptPlaceholder"]" @bind="_refinement" @bind:event="oninput"></textarea>
         <button @onclick="() => RefineAsync(phase, pipelineIndex)" disabled="@(_busy || string.IsNullOrWhiteSpace(_refinement))">@L["MigrationWizardApplyRequest"]</button>
     </div>;
 
@@ -425,14 +441,14 @@
 
     private void RemovePipeline(int index)
     {
-        if (_plan is null || _plan.Pipelines.Count <= 1) return;
+        if (ExistingPipelineId.HasValue || _plan is null || _plan.Pipelines.Count <= 1) return;
         _plan.Pipelines.RemoveAt(index);
         _pipelineIndex = Math.Min(_pipelineIndex, _plan.Pipelines.Count - 1);
     }
 
     private void AddPipeline()
     {
-        if (_plan is null || string.IsNullOrWhiteSpace(_newPipelineName)) return;
+        if (ExistingPipelineId.HasValue || _plan is null || string.IsNullOrWhiteSpace(_newPipelineName)) return;
         _plan.Pipelines.Add(new WorkflowMigrationPipeline
         {
             Name = _newPipelineName.Trim(),
@@ -456,7 +472,23 @@
 
     private string RoleLabel(ColumnRole role) => L[$"WorkflowRole{role}"];
     private string ContextText(string migrationKey, string onboardingKey) =>
-        L[IsProjectOnboarding ? onboardingKey : migrationKey];
+        L[ExistingPipelineId.HasValue ? migrationKey switch
+        {
+            "MigrationWizardKicker" => "WorkflowReconfigureKicker",
+            "MigrationWizardProgress" => "WorkflowReconfigureProgress",
+            "MigrationWizardPipelinesTitle" => "WorkflowReconfigure",
+            "MigrationWizardReviewHint" => "WorkflowReconfigureReviewHint",
+            "MigrationWizardApplyingTitle" => "WorkflowReconfigureApplying",
+            "MigrationWizardApplying" => "WorkflowReconfigureApplying",
+            "MigrationWizardApplyingHint" => "WorkflowReconfigureApplyingHint",
+            "MigrationWizardProgressApplying" => "WorkflowReconfigureApplying",
+            "MigrationWizardAnalyzingHint" => "WorkflowReconfigureAnalyzingHint",
+            "MigrationWizardLaunch" => "WorkflowReconfigureApply",
+            "MigrationWizardReviewTitle" => "WorkflowReconfigure",
+            "MigrationWizardCompletedTitle" => "WorkflowReconfigureCompleted",
+            "MigrationWizardCompletedHint" => "WorkflowReconfigureCompletedHint",
+            _ => migrationKey,
+        } : IsProjectOnboarding ? onboardingKey : migrationKey];
     private Task LaunchMigrationAsync()
     {
         if (_plan is null || _busy || _applicationStarted) return Task.CompletedTask;

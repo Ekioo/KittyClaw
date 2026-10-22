@@ -36,6 +36,43 @@ public sealed class MockClaudeBinFixture : IDisposable
 [Collection("MockClaude")]
 public class AgentRunnerMockIntegrationTests
 {
+    [Theory]
+    [InlineData(0)]
+    [InlineData(7)]
+    public async Task CodexMock_ReplaysExplicitPlanningFixtureAndPreservesExitCode(int exitCode)
+    {
+        using var tmp = new TempDir();
+        var scenario = new[]
+        {
+            """{"type":"thread.started","thread_id":"mock-plan"}""",
+            """{"_meta":{"write_file":{"path":"applied.txt","content":"targeted change"}}}""",
+            """{"type":"item.completed","item":{"type":"agent_message","text":"custom workflow plan"}}""",
+            System.Text.Json.JsonSerializer.Serialize(new { _meta = new { exit = exitCode } }),
+        };
+        await File.WriteAllLinesAsync(Path.Combine(tmp.Path, "workflow-plan.ndjson"), scenario);
+        var start = new System.Diagnostics.ProcessStartInfo(ProcessLifecycleManager.ClaudeBinary)
+        {
+            WorkingDirectory = tmp.Path,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        start.ArgumentList.Add("exec");
+        start.Environment["KITTYCLAW_MOCK_SCENARIOS_DIR"] = tmp.Path;
+        start.Environment["KITTYCLAW_MOCK_SCENARIO"] = "workflow-plan";
+        using var process = System.Diagnostics.Process.Start(start)!;
+        process.StandardInput.Close();
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));
+        Assert.Equal(exitCode, process.ExitCode);
+        Assert.Contains("custom workflow plan", await output);
+        Assert.Equal("", await error);
+        Assert.Equal("targeted change", await File.ReadAllTextAsync(Path.Combine(tmp.Path, "applied.txt")));
+    }
+
     [Fact]
     public void ExplicitClaudeBinaryOverride_IsObservedAfterAnEarlierResolution()
     {

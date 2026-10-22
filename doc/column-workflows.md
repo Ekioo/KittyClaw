@@ -162,3 +162,5 @@ Ticket creation and update accept stable `pipelineId` and `columnId`. Ticket upd
 ## Compatibility
 
 Existing databases are migrated into a default `main` pipeline. Existing columns and tickets receive stable links, while legacy status strings and APIs continue to work. `.agents/automations.json`, polling triggers, cron/interval triggers, and legacy agent directories are not removed.
+
+Existing pipelines can be opened with **Edit with assistant** on the Workflows page. This starts from the selected pipeline’s current columns, supports natural-language refinements and a final review, and applies scoped changes while preserving unspecified configuration. This mode does not migrate legacy automations or reconfigure other pipelines.

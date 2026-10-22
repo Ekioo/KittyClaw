@@ -9,6 +9,8 @@ namespace KittyClaw.Web.Services;
 
 public sealed class WorkflowMigrationPlan
 {
+    public List<string> ChangeRequests { get; set; } = [];
+    public int? ExistingPipelineId { get; set; }
     public string Summary { get; set; } = "";
     public List<WorkflowMigrationPipeline> Pipelines { get; set; } = [];
     public List<string> Risks { get; set; } = [];
@@ -176,6 +178,9 @@ public sealed class WorkflowMigrationPlanner(
             }
 
             var plan = ParsePlan(string.Join("\n", assistantText));
+            plan.ExistingPipelineId = currentPlan?.ExistingPipelineId;
+            if (plan.ExistingPipelineId.HasValue)
+                plan.ChangeRequests = [.. currentPlan!.ChangeRequests, instruction!];
             Validate(plan);
             _jobs[jobId] = _jobs[jobId] with
             {
@@ -248,7 +253,7 @@ public sealed class WorkflowMigrationPlanner(
                 WorkspacePath = workspace,
                 AgentName = "workflow-migration-applier",
                 SkillFile = "(inline)",
-                InlineSkillContent = ApplicationInstructions,
+                InlineSkillContent = plan.ExistingPipelineId is null ? ApplicationInstructions : ReconfigurationInstructions,
                 ExtraContext = BuildApplicationPrompt(plan, isProjectOnboarding,
                     existingPipelines, existingColumns, existingAutomationConfig),
                 Target = target,
@@ -295,7 +300,7 @@ public sealed class WorkflowMigrationPlanner(
                     diagnostic ?? "The migration agent did not complete successfully.");
             }
 
-            if (!isProjectOnboarding)
+            if (!isProjectOnboarding && plan.ExistingPipelineId is null)
             {
                 var (legacyConfig, _, _) = await automations.LoadAsync(slug);
                 EnsureNoLegacyAutomations(legacyConfig);
@@ -545,9 +550,29 @@ public sealed class WorkflowMigrationPlanner(
         _ => new { type = action.UiTypeKey },
     };
 
+    public async Task<WorkflowMigrationPlan> LoadExistingPipelineAsync(string slug, int pipelineId)
+    {
+        var pipeline = (await pipelines.ListAsync(slug)).Single(p => p.Id == pipelineId);
+        var rows = await columns.ListColumnsAsync(slug, pipelineId);
+        return new WorkflowMigrationPlan
+        {
+            ExistingPipelineId = pipelineId,
+            Summary = pipeline.Name,
+            Pipelines = [new WorkflowMigrationPipeline
+            {
+                Name = pipeline.Name,
+                Columns = rows.OrderBy(c => c.SortOrder).Select(c => new WorkflowMigrationColumn
+                {
+                    Name = c.Name, Role = c.Role, UserGuidance = c.UserGuidance,
+                }).ToList(),
+            }],
+        };
+    }
+
     private static string BuildRefinementPrompt(WorkflowMigrationPlan plan, string instruction,
         (string Phase, int? PipelineIndex) refinement, string language) =>
         $"""
+        {(plan.ExistingPipelineId is int id ? $"RECONFIGURATION of existing pipeline #{id}. Inspect its current processors, actions, routes, schedules and skills through read-only project APIs before proposing changes. Preserve all configuration outside the user's request. Keep exactly this one pipeline in the plan. Never propose a replacement workflow or migration of legacy automations." : "")}
         Refine the current migration plan according to the user's request. Return the complete updated plan.
         Current wizard phase: {refinement.Phase}
         Current pipeline index: {refinement.PipelineIndex?.ToString() ?? "none"}
@@ -618,6 +643,8 @@ public sealed class WorkflowMigrationPlanner(
 
     private static void Validate(WorkflowMigrationPlan plan)
     {
+        if (plan.ExistingPipelineId.HasValue && plan.Pipelines.Count != 1)
+            throw new InvalidOperationException("Reconfiguration must contain exactly the selected pipeline.");
         if (plan.Pipelines.Count == 0)
             throw new InvalidOperationException("The proposed plan contains no pipeline.");
         if (plan.Pipelines.Any(pipeline => string.IsNullOrWhiteSpace(pipeline.Name) || pipeline.Columns.Count == 0))
@@ -704,6 +731,9 @@ public sealed class WorkflowMigrationPlanner(
         IReadOnlyCollection<BoardColumn>? existingColumns = null,
         AutomationConfig? legacyConfig = null)
     {
+        if (plan.ExistingPipelineId is int pipelineId)
+            return BuildReconfigurationPrompt(plan, pipelineId);
+
         existingPipelines ??= [];
         existingColumns ??= [];
         legacyConfig ??= new AutomationConfig();
@@ -813,6 +843,27 @@ public sealed class WorkflowMigrationPlanner(
         include explicit Success and Failure destinations. Every Waiting or OwnerAction column must
         have userGuidance that says whether to comment, which exact column validates, which exact
         column refuses, or why no manual action is required. Keep the plan concise and user-facing.
+        """;
+
+    internal static string BuildReconfigurationPrompt(WorkflowMigrationPlan plan, int pipelineId) => $"""
+        Reconfigure existing pipeline #{pipelineId} using this owner-approved plan:
+        {JsonSerializer.Serialize(plan, Json)}
+        Inspect the current pipeline, columns, processors, actions, routes, schedules, skills and
+        guidance before writing. Apply only the differences explicitly requested in the plan.
+        Preserve stable IDs for retained columns and the pipeline, including when renaming or
+        reordering them. Preserve all unspecified processor settings, prompts, models, actions,
+        routes, schedules, skills and memory. Never replace the entire workflow.
+        Do not modify other pipelines or legacy automations. Do not remap tickets unless required
+        by an explicitly approved column removal; move those tickets to a retained column in this
+        pipeline. Preserve completed tickets in terminal columns. Verify the resulting configuration
+        and ticket accessibility, then summarize the changes. Never call workflow-migrations endpoints.
+        """;
+
+    private const string ReconfigurationInstructions = """
+        You edit an existing KittyClaw pipeline after explicit owner approval. Read the live project
+        API documentation before making granular changes. Inspect existing configuration first.
+        Preserve everything outside the approved request, including legacy automations and other
+        pipelines. Never regenerate the workflow. Verify changes before reporting completion.
         """;
 
     private const string ApplicationInstructions = """
