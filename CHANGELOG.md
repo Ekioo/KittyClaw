@@ -4,6 +4,30 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.24] — 2026-10-23
+
+Authenticator QR enrollment, reliable processor sessions, and explicit JEV routing.
+
+### Highlights
+
+Authenticator enrollment now displays a QR code that can be scanned directly from a phone. Processor sessions follow column visits, preserving continuity within a visit while starting fresh after a column transition.
+
+Post-agent JEV routing is an explicit processor option, with clearer review modes and configuration guidance.
+
+### Added
+
+- QR code for authenticator enrollment, alongside the manual setup key.
+
+### Changed
+
+- Make post-agent JEV routing explicit and clarify review modes in processor configuration.
+
+### Fixed
+
+- Reuse processor sessions within the same column visit and start a fresh session after column transitions.
+
+---
+
 ## [v0.23] — 2026-10-23
 
 Secured local network access, clearer acceptance criteria, and reliable workflow recovery.
