@@ -4,13 +4,36 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.21] — 2026-10-23
+
+Background updates, clearer ticket qualification, mobile boards, and more reliable delivery workflows.
+
+### Highlights
+
+Installed Windows builds download updates in the background and keep installation and restart under owner control. The notification-area menu can check for updates on demand and report the result.
+
+Tickets gain acceptance criteria and optional processor assessments. JEV recommendations expose suggested destinations and actions more directly, with improved automatic routing and classic fallbacks. Boards adapt better to mobile screens and support sorting tickets by token usage.
+
 ### Added
 
 - A "Check for updates" action in the Windows notification-area icon menu, with background download and result notifications.
+- Ticket acceptance criteria and opt-in processor assessments.
+- Column ticket sorting by token count and full-width description-image covers on kanban cards.
 
 ### Changed
 
 - Installed Windows builds download available updates automatically in the background; installation and restart still require owner confirmation.
+- Clearer JEV recommendations and destination actions, improved automatic routing, and classic workflow fallbacks.
+- Improved mobile layouts, kanban column navigation, keyboard access, reduced-motion support, and dashboard tile controls.
+
+### Fixed
+
+- Prevent column processors from claiming tickets with unresolved dependencies.
+- Correct cost estimates and deduplicate usage reported by resumed Codex sessions.
+- Repair audited ticket-transfer, budget, and dashboard-worktree defects.
+- Complete localization across supported languages and align the API and MCP documentation with the implemented endpoints and tools.
+
+---
 
 ## [v0.20] — 2026-10-23
 
