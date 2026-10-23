@@ -116,6 +116,7 @@ public sealed class PortableProcessor
     public string? Model { get; set; }
     public bool Enabled { get; set; } = true;
     public bool EvaluateAcceptanceCriteria { get; set; }
+    public bool JevFallbackToAgent { get; set; } = true;
     public int MaxTurns { get; set; } = 100;
     public TicketSelectionOrder SelectionOrder { get; set; } = TicketSelectionOrder.Position;
     public int MaxAttempts { get; set; } = 3;

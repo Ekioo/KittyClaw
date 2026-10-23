@@ -29,12 +29,12 @@ and ensures a partially configured workflow cannot strand a ticket with no avail
 
 ## Processing lifecycle
 
-`ColumnProcessingEngine` is event-driven, with a low-frequency watchdog for delayed retries and configuration changes. For each enabled processor it:
+`ColumnProcessingEngine` is event-driven, with a low-frequency watchdog for delayed retries and configuration changes. This lifecycle applies to agent processing, including an explicitly enabled classic fallback from a JEV-only mode. See the [temporal option map](#temporal-column-editor) for entry rules and JEV-only branches. For an eligible enabled agent processor it:
 
 1. claims one eligible ticket using the configured order;
 2. creates a durable execution claim, protected by a unique active-ticket index;
 3. dispatches the generic column agent with its current mission, persistent memory, ticket context, and project skills;
-4. validates the structured outcome and required-skill report;
+4. validates and saves the structured outcome, required-skill report and requested acceptance assessments with evidence;
 5. runs the native memory-capitalization checkpoint;
 6. selects an outcome route (switch-like rule) or the default route;
 7. moves the ticket atomically to the target column, possibly in another pipeline.
@@ -137,11 +137,106 @@ technical-failure column. A failed execution can also be retried or cancelled th
 
 An agent outcome of `scheduled` must include `fireAt` and `scheduleTarget`. Its configured route must lead to a column with the `Waiting` role; validation uses that stable role rather than the column's editable display name. The wake target must name an existing column in the destination pipeline.
 
+## Temporal column editor
+
+The editor has **Identity**, **Ticket path**, and **Scheduled tasks** tabs. The ticket
+path uses numbered, expandable phases in execution order. Entry capacity and acceptance
+requirements always come first and apply independently of the processing mode.
+
+The second phase chooses one exclusive mode: **Do nothing more**, **Work by an agent**,
+**Automatic triage by JEV**, or **JEV evidence review, then owner decision**. Do nothing
+more disables the processor without deleting its definition; entry rules and independent
+scheduled tasks remain in effect. Hidden stages keep their last saved settings. Draft edits remain available while switching modes
+in the open editor, but only active stages contribute to a save; incomplete dormant drafts cannot block it.
+`ColumnProcessingState` defines modes, transitions and ordered active stages; the editor save projection
+uses that same state. Owner routing is distinct from general outcome routing.
+
+Agent processing then shows preparation (ticket order, optional JEV profile selection and
+before-actions), execution (mission, model, skills and limits), result/evidence recording,
+routing (classic outcome rules or JEV after the agent), and final actions. The conditional
+action timing is described below; the position of a hook is not an unconditional promise
+that its effects run before or after the agent. Technical retry settings follow the path.
+
+The two JEV-only modes show analysis followed by routing or owner decision instead.
+Their **Call an agent if JEV cannot conclude or is unavailable** option controls
+`jevFallbackToAgent`. Its agent settings and technical retry settings appear only when
+selected. Missing credentials, insufficient evidence/confidence and HTTP failures (including
+service budget exhaustion) follow the same policy. Without opt-in, no agent is claimed and
+the ticket remains in the column. JEV modes remain configurable without credentials.
+New processors created in this editor opt out; existing definitions and older API requests
+retain their previous fallback behavior. The option is preserved by processor.json, SQLite,
+REST/MCP saves and portable pipeline kit round trips.
+
+### Option map in configuration order
+
+This is the canonical temporal map for both the editor and pipeline-authoring agents.
+Names below are REST/MCP request fields; `processor.json` has its own file-backed
+routing/action structure. Read the live API before building a request.
+
+| Phase | Options | Effective time and dependencies |
+| --- | --- | --- |
+| Identity, outside execution | Column `name`, `color`, `role`, position, `userGuidance` | Describe the column and the owner's unblock action. Role is independent of mode. Preserve stable IDs on rename/reorder. |
+| 1. Allow entry | `maxTickets`, `capacityBlocking` | Checked before entry in every mode. Zero means unlimited; warning-only capacity is not an entry refusal. |
+| 1. Allow entry | `requireAcceptanceCriteria` | A non-empty structured criterion must already exist; no evaluation is performed. |
+| 1. Allow entry | `requireValidatedAcceptanceCriteria` | A non-empty checklist must already be entirely `PASS`. Implies criterion presence; produces no evidence or JEV owner approval. |
+| 2. Choose mode | Processor presence, `enabled`, `jevObservationOnly`, `jevAcceptanceValidation` | Select the exclusive branch before its dependent options. Do nothing more disables processing, not entry gates or independent schedules. |
+| 3. Prepare agent work | `selectionOrder` | Orders eligible agent claims after dependencies are resolved. In JEV-only modes, applies only when a fallback agent is enabled and needed. |
+| 3. Prepare agent work | `jevExecutionSelection`, `jevExecutionProfiles` | JEV chooses an authorized model/skills profile before dispatch. Profiles have a name, description, model and skills; required skills remain mandatory. Uncertainty/unavailability uses default model/skills. Incompatible with JEV-only modes. |
+| 3. Prepare agent work | Ordered `beforeActions` | Preliminary actions, subject to the success safeguards below. Preserve action IDs, action-specific fields, order and `failureTargetColumnId`. |
+| 4. Execute agent work | Processor `name`, `mission`, `prompt` | Define the agent and its task. In JEV-only modes mission/instructions also describe the JEV analysis; a successful analysis does not launch an agent. |
+| 4. Execute agent work | `model`, `availableSkills`, `recommendedSkills`, `requiredSkills`, `maxTurns` | Main or opted-in fallback agent settings. Null model inherits project/provider defaults. Profile selection overrides model/skills for a run without changing these defaults. |
+| 5. Record result/evidence | `evaluateAcceptanceCriteria` | Agent returns assessments for relevant existing criterion IDs in its final structured JSON. `PASS`, `FAIL`, `PARTIAL` require evidence. Save before routing, then capitalize lessons. Omitted criteria stay unchanged. Only applies when an agent runs. |
+| 6. Decide destination | `routes`, `defaultTargetColumnId` | Match saved outcomes, then use the default. Use stable destination IDs, possibly across pipelines, never self-routing. Declared destinations also constrain manual moves. |
+| 6. Decide destination | `jevAutomaticRouting` | Optional JEV choice after the saved agent result/evidence. If uncertain/unavailable, use classic outcome/default routing, not a second agent. Only business destinations are candidates. |
+| JEV analysis, before decision | `jevConfidenceThreshold` | Shared by enabled JEV features: API/file `0..1`, UI `0..100` percent. Below threshold invokes the appropriate fallback, not automatic acceptance. |
+| JEV triage branch: 3 → 4 | `jevObservationOnly`, mission/prompt, authorized routes/default | Historical observation flag means active automatic triage. A sufficiently certain result routes without agent work, criterion-report production or configured before/after actions. |
+| JEV review branch: 3 → 4 | `jevAcceptanceValidation`, `jevAcceptanceCriteria` | Examine existing verified evidence against column/ticket criteria, without running tests. A sufficiently certain review waits for the owner, even when all criteria are satisfied. |
+| JEV owner decision | Default destination, `changes_requested` route | Approval uses the default; corrections require a reason and use that route. Without it, rejection stays put. Neither approval nor override bypasses destination entry rules. |
+| 7. Finalize and leave | Ordered `afterActions`, action-specific failure destinations | Pending final actions run in order with the conditional timing below. Checkpointed actions are not repeated. |
+| JEV-only failure branch | `jevFallbackToAgent` | Explicit agent opt-in for BOTH triage and review. Insufficient evidence/confidence, missing credentials, service budget exhaustion and service errors use the same policy. False means no automatic agent and no automatic move. |
+| Technical recovery | `maxAttempts`, `retryBackoffSeconds`, `technicalFailureColumnId` | Bound technical agent retries with exponential backoff from the initial delay in seconds, then route exhausted failures when configured. Per-action failure handling remains distinct. Hidden values do not activate an agent when fallback is off. |
+| Independent scheduled tasks | `enabled`, name, calendar/`cron`, `timeZoneId`, `ticketScope`, ordered actions and per-action failure settings | Run without an agent on their calendar. Not ticket lifecycle phases; changing the processor mode or choosing Do nothing more does not disable them. Project pause still pauses scheduled execution. |
+
+### Exclusive modes and dependent options
+
+| Mode | Required active configuration | Following configuration |
+| --- | --- | --- |
+| Do nothing more | No processor, or `enabled=false` | Hide later processing phases; preserve stored processor values, entry gates and schedules. |
+| Work by an agent | `enabled=true`, `jevObservationOnly=false`, `jevAcceptanceValidation=false` | Preparation → execution → result/evidence → routing → finalization. Profile selection and post-agent JEV routing are independently optional. |
+| Automatic triage by JEV | `enabled=true`, `jevObservationOnly=true`, acceptance/profile/automatic-routing flags false | Ticket analysis → automatic routing. Agent phases exist only under the opted-in failure branch. |
+| JEV evidence review, then owner decision | `enabled=true`, `jevAcceptanceValidation=true`, observation/profile/automatic-routing flags false | Evidence analysis → owner decision. Agent phases exist only under the opted-in failure branch. |
+
+`jevPostRunObservation` is a legacy history feature, not an extra mode in this editor;
+do not enable it alongside a JEV-only mode. API saves are not uniformly PATCH operations:
+read and retain unspecified fields, including enabled state and hidden settings. Explicitly
+send `jevFallbackToAgent=false` for new JEV-only definitions unless an agent fallback is
+intended; older omitted values default to true. Preserve existing policies on unrelated updates.
+
+### Dependencies across columns and conditional action timing
+
+Entry gates precede all operations in a destination column. Do not require already-validated
+criteria in the very column expected to evaluate those unevaluated criteria. Require criterion
+presence in the work/verification column, enable agent assessment there, and place an all-`PASS`
+gate downstream. JEV review does not itself write agent criterion assessments; owner approval
+cannot bypass an all-`PASS` entry gate either.
+
+Before-actions normally run before the agent when no declared business destination has the
+`Success` role. Otherwise the engine defers them until the result is available. For a success
+outcome or an accepted automatic JEV routing proposal, the engine validates and records the
+transition before **pending** configured actions run. Other outcomes run deferred before-actions,
+then after-actions, then move. Already completed before-actions are checkpointed and not replayed.
+Action-specific failure destinations are recovery paths, not extra JEV business choices.
+
+`KittyClaw.Web/Services/ColumnWorkflowInstructions.cs` shares this contract with planning,
+application/reconfiguration turns and KittyClaw project chat. Plans describe each column in this
+order; approved changes reload and verify gates, mode, evidence timing, explicit fallback and
+independent schedules. `ProjectTemplate/**` remains application-neutral.
+
 ## Scheduled column tasks
 
 Columns can own durable cron tasks that execute an ordered action chain without launching an agent. Each run checkpoints completed actions in the project database so a host restart resumes only the unfinished portion. If the project starts paused, interrupted runs are recovered but held in memory; they resume after the project is unpaused, and newly due tasks are not claimed while it remains paused.
 
-`ColumnScheduledTaskService` persists definitions and run checkpoints. `ColumnScheduledTaskEngine` claims due work, recovers interrupted runs, and delegates actions to `ColumnActionExecutor`. Tasks are configured from the **Schedules** tab in the column configuration dialog.
+`ColumnScheduledTaskService` persists definitions and run checkpoints. `ColumnScheduledTaskEngine` claims due work, recovers interrupted runs, and delegates actions to `ColumnActionExecutor`. Tasks are configured from the **Scheduled tasks** tab in the column configuration dialog.
 
 ## Generic agents and project skills
 
@@ -178,7 +273,7 @@ This avoids coupling child completion to column names or to the parent's pipelin
 
 The board displays pipeline tabs and one pipeline at a time. Pipeline tabs include visible unread counts; hidden child tickets are not counted. During drag-and-drop, routing destinations are highlighted lightly while forbidden columns are subdued and do not expose an active drop target.
 
-Column configuration is intentionally local to the board. Right-click a header and choose **Configure column** to edit the column's identity, role, position, owner guidance, processor, ordered actions, scheduled tasks, and routing in one dialog. The same menu inserts or duplicates columns and marks the column read. The **Workflows** page remains the project-level overview for pipelines and reusable skills rather than duplicating every column editor.
+Column configuration is intentionally local to the board. Right-click a header and choose **Configure column** to edit the column's identity, role, position, owner guidance, ticket path and independent scheduled tasks in one dialog. The same menu inserts or duplicates columns and marks the column read. The **Workflows** page remains the project-level overview for pipelines and reusable skills rather than duplicating every column editor.
 
 The processor editor exposes models discovered from Claude, Grok, OpenAI Codex, Mistral Vibe, and the project's Ollama endpoint; model discovery is optional, and a previously saved custom value remains selectable when it is no longer advertised. Selecting **Automatic** clears the processor override.
 
@@ -206,4 +301,4 @@ Existing pipelines can be opened with **Edit with assistant** on the Workflows p
 
 ## Optional column capacity
 
-Each column has an optional `MaxTickets` (0 = unlimited) and `CapacityBlocking` (false = warning only), editable in the column settings General tab and through REST/MCP column requests. The board shows the configured capacity and a warning when reached, counting all tickets regardless of display filters. Warning mode permits new arrivals; blocking mode refuses creation and movement into that column at capacity. Editing, reordering within, and moving out remain available. SQLite triggers enforce blocking limits atomically across all writers. Existing columns have no limit. There is no project-wide blocked-ticket creation limit.
+Each column has an optional `MaxTickets` (0 = unlimited) and `CapacityBlocking` (false = warning only), editable in **Ticket path → Allow entry** and through REST/MCP column requests. The board shows the configured capacity and a warning when reached, counting all tickets regardless of display filters. Warning mode permits new arrivals; blocking mode refuses creation and movement into that column at capacity. Editing, reordering within, and moving out remain available. SQLite triggers enforce blocking limits atomically across all writers. Existing columns have no limit. There is no project-wide blocked-ticket creation limit.

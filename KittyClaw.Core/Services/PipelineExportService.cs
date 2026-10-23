@@ -244,6 +244,7 @@ public sealed partial class PipelineExportService(
             Model = processor.Model,
             Enabled = processor.Enabled,
             EvaluateAcceptanceCriteria = processor.EvaluateAcceptanceCriteria,
+            JevFallbackToAgent = processor.JevFallbackToAgent,
             MaxTurns = processor.MaxTurns,
             SelectionOrder = processor.SelectionOrder,
             MaxAttempts = processor.MaxAttempts,

@@ -62,6 +62,8 @@ public sealed class ColumnProcessorService(
                 """));
         await MigrationGate.RunOnceAsync(db, "column-processors-evaluate-acceptance-v1", static d =>
             MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN EvaluateAcceptanceCriteria INTEGER NOT NULL DEFAULT 0"));
+        await MigrationGate.RunOnceAsync(db, "column-processors-jev-fallback-v1", static d =>
+            MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN JevFallbackToAgent INTEGER NOT NULL DEFAULT 1"));
         await MigrationGate.RunOnceAsync(db, "column-processors-jev-v1", static d =>
             MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN JevObservationOnly INTEGER NOT NULL DEFAULT 0"));
         await MigrationGate.RunOnceAsync(db, "column-processors-jev-post-run-v1", static d =>
@@ -124,7 +126,7 @@ public sealed class ColumnProcessorService(
         bool? jevObservationOnly = null, bool? jevPostRunObservation = null,
         bool? jevAutomaticRouting = null, double? jevConfidenceThreshold = null,
         bool? jevAcceptanceValidation = null, bool? jevExecutionSelection = null,
-        List<string>? jevAcceptanceCriteria = null, List<JevExecutionProfile>? jevExecutionProfiles = null, bool? evaluateAcceptanceCriteria = null)
+        List<string>? jevAcceptanceCriteria = null, List<JevExecutionProfile>? jevExecutionProfiles = null, bool? evaluateAcceptanceCriteria = null, bool? jevFallbackToAgent = null)
     {
         var gate = ProjectGates.GetOrAdd(projectSlug, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync();
@@ -147,6 +149,7 @@ public sealed class ColumnProcessorService(
                 JevObservationOnly = jevObservationOnly ?? (await db.ColumnProcessors.FirstOrDefaultAsync(p => p.ColumnId == columnId))?.JevObservationOnly ?? false,
                 JevPostRunObservationSince = jevPostRunObservation is null ? previous?.JevPostRunObservationSince
                     : jevPostRunObservation.Value ? previous?.JevPostRunObservationSince ?? DateTime.UtcNow : null,
+                JevFallbackToAgent = jevFallbackToAgent ?? previous?.JevFallbackToAgent ?? true,
                 JevAcceptanceValidation = jevAcceptanceValidation ?? previous?.JevAcceptanceValidation ?? false,
                 EvaluateAcceptanceCriteria = evaluateAcceptanceCriteria ?? previous?.EvaluateAcceptanceCriteria ?? false,
                 JevExecutionSelection = jevExecutionSelection ?? previous?.JevExecutionSelection ?? false,
@@ -501,6 +504,7 @@ public sealed class ColumnProcessorService(
         processor.Model = definition.Model;
         processor.JevObservationOnly = definition.JevObservationOnly;
         processor.JevAutomaticRouting = definition.JevAutomaticRouting;
+        processor.JevFallbackToAgent = definition.JevFallbackToAgent;
         processor.JevAcceptanceValidation = definition.JevAcceptanceValidation;
         processor.EvaluateAcceptanceCriteria = definition.EvaluateAcceptanceCriteria;
         processor.JevExecutionSelection = definition.JevExecutionSelection;
@@ -652,6 +656,7 @@ public sealed class ColumnProcessorService(
         Model = processor.Model,
         JevObservationOnly = processor.JevObservationOnly,
         JevAutomaticRouting = processor.JevAutomaticRouting,
+        JevFallbackToAgent = processor.JevFallbackToAgent,
         JevAcceptanceValidation = processor.JevAcceptanceValidation,
         EvaluateAcceptanceCriteria = processor.EvaluateAcceptanceCriteria,
         JevExecutionSelection = processor.JevExecutionSelection,
@@ -743,6 +748,7 @@ public sealed class ColumnProcessorService(
         public bool Enabled { get; set; } = true;
         public bool JevObservationOnly { get; set; }
         public bool JevAutomaticRouting { get; set; }
+        public bool JevFallbackToAgent { get; set; } = true;
         public bool JevAcceptanceValidation { get; set; }
         public bool EvaluateAcceptanceCriteria { get; set; }
         public bool JevExecutionSelection { get; set; }

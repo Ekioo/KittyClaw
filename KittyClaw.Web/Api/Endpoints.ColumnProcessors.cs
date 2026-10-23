@@ -32,7 +32,7 @@ public static partial class Endpoints
                 req.SelectionOrder, req.MaxAttempts, req.RetryBackoffSeconds,
                 req.DefaultTargetColumnId, req.TechnicalFailureColumnId, req.Routes, req.Prompt,
                 req.BeforeActions, req.AfterActions, req.JevObservationOnly, req.JevPostRunObservation, req.JevAutomaticRouting, req.JevConfidenceThreshold,
-                req.JevAcceptanceValidation, req.JevExecutionSelection, req.JevAcceptanceCriteria, req.JevExecutionProfiles, req.EvaluateAcceptanceCriteria);
+                req.JevAcceptanceValidation, req.JevExecutionSelection, req.JevAcceptanceCriteria, req.JevExecutionProfiles, req.EvaluateAcceptanceCriteria, req.JevFallbackToAgent);
             notifier.NotifyProjectUpdated(slug);
             return Results.Ok(processor);
         }

@@ -814,7 +814,7 @@ public sealed class WorkflowMigrationPlanner(
 
     internal sealed record CompletedTicketSnapshot(int TicketId, int PipelineId, string Status, ColumnRole OriginalRole = ColumnRole.Success);
 
-    private const string PlannerInstructions = """
+    internal const string PlannerInstructions = """
         You are KittyClaw's read-only workflow planning agent. Never modify files, databases,
         tickets, automations, or project state during this planning turn. Infer genuinely distinct
         ticket lifecycles from either an existing workspace or a legacy board that mixed them into
@@ -843,7 +843,7 @@ public sealed class WorkflowMigrationPlanner(
         include explicit Success and Failure destinations. Every Waiting or OwnerAction column must
         have userGuidance that says whether to comment, which exact column validates, which exact
         column refuses, or why no manual action is required. Keep the plan concise and user-facing.
-        """;
+        """ + "\n\n" + ColumnWorkflowInstructions.TemporalConfiguration;
 
     internal static string BuildReconfigurationPrompt(WorkflowMigrationPlan plan, int pipelineId) => $"""
         Reconfigure existing pipeline #{pipelineId} using this owner-approved plan:
@@ -859,14 +859,14 @@ public sealed class WorkflowMigrationPlanner(
         and ticket accessibility, then summarize the changes. Never call workflow-migrations endpoints.
         """;
 
-    private const string ReconfigurationInstructions = """
+    internal const string ReconfigurationInstructions = """
         You edit an existing KittyClaw pipeline after explicit owner approval. Read the live project
         API documentation before making granular changes. Inspect existing configuration first.
         Preserve everything outside the approved request, including legacy automations and other
         pipelines. Never regenerate the workflow. Verify changes before reporting completion.
-        """;
+        """ + "\n\n" + ColumnWorkflowInstructions.TemporalConfiguration;
 
-    private const string ApplicationInstructions = """
+    internal const string ApplicationInstructions = """
         You are KittyClaw's workflow migration agent. The owner has explicitly approved the plan
         provided in the task. Apply it completely and safely inside the current KittyClaw project.
         Consult http://localhost:5230/api/docs before using the API. Prefer stable identifiers and
@@ -879,5 +879,5 @@ public sealed class WorkflowMigrationPlanner(
         automations, including disabled definitions. If that cannot be achieved safely, report failure
         instead of claiming completion. Verify API reloads, ticket accessibility, routing and scheduled
         work before reporting completion. End with a concise user-facing summary of changes and risks.
-        """;
+        """ + "\n\n" + ColumnWorkflowInstructions.TemporalConfiguration;
 }

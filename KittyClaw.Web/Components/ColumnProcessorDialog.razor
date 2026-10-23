@@ -4,6 +4,7 @@
 @using KittyClaw.Core.Models
 @using KittyClaw.Core.Services
 @using KittyClaw.Web.Services
+@using KittyClaw.Web.Api
 @inject ColumnProcessorService ProcessorService
 @inject JevConfigurationService JevConfiguration
 @inject ColumnScheduledTaskService ScheduledTaskService
@@ -34,13 +35,9 @@
         else
         {
             <nav class="column-editor-tabs" aria-label="@L["ColumnEditorSections"]">
-                <button class="@GeneralTabClass" @onclick="OpenGeneralTab">@L["ColumnGeneralTab"]</button>
-                <button class="@ProcessorTabClass" @onclick="OpenProcessorTab">
-                    @L["ColumnProcessorTab"] <span class="column-editor-tab-count @(_processorDraft ? "column-editor-tab-count--configured" : "")">@(_processorDraft ? 1 : 0)</span>
-                </button>
-                <button class="@ActionsTabClass" @onclick="OpenActionsTab">@L["ColumnActionsTab"] <span class="column-editor-tab-count">@(_beforeActions.Count + _afterActions.Count)</span></button>
+                <button class="@GeneralTabClass" @onclick="OpenGeneralTab">@L["ColumnIdentityTab"]</button>
+                <button class="@ProcessorTabClass" @onclick="OpenProcessorTab">@L["ColumnPathTab"]</button>
                 <button class="@SchedulesTabClass" @onclick="OpenSchedulesTab">@L["ColumnSchedulesTab"] <span class="column-editor-tab-count">@_scheduledTasks.Count</span></button>
-                <button class="@RoutingTabClass" @onclick="OpenRoutingTab">@L["ColumnRoutingTab"] <span class="column-editor-tab-count">@_routes.Count</span></button>
             </nav>
 
             <div class="processor-dialog-body">
@@ -71,18 +68,6 @@
                             </select>
                         </label>
                     </div>
-                    <div class="column-editor-grid">
-                        <label>@L["ColumnMaxTickets"]<input class="settings-input" type="number" min="0" @bind="_maxTickets" /></label>
-                        <label>@L["ColumnCapacityMode"]
-                            <select @bind="CapacityBlockingValue" aria-label="@L["ColumnCapacityMode"]">
-                                <option value="false">@L["ColumnCapacityWarning"]</option>
-                                <option value="true">@L["ColumnCapacityBlocking"]</option>
-                            </select>
-                        </label>
-                    </div>
-                    <p class="settings-hint">@L["ColumnCapacityHelp"]</p>
-                    <label class="workflow-check"><input type="checkbox" data-testid="require-acceptance-criteria" @bind="_requireAcceptanceCriteria" /> <FieldHelp Label="@L["ColumnRequireAcceptanceCriteria"]" Help="@L["ColumnRequireAcceptanceCriteriaHelp"]" /></label>
-                    <label class="workflow-check"><input type="checkbox" data-testid="require-validated-acceptance-criteria" @bind="_requireValidatedAcceptanceCriteria" /> <FieldHelp Label="@L["ColumnRequireValidatedAcceptanceCriteria"]" Help="@L["ColumnRequireValidatedAcceptanceCriteriaHelp"]" /></label>
                     <label class="column-guidance-field">
                         <FieldHelp Label="@L["ColumnUserGuidance"]" Help="@L["ColumnUserGuidanceHelp"]" />
                         <textarea class="settings-input workflow-textarea" @bind="_userGuidance"
@@ -123,34 +108,208 @@
                 }
                 else if (_activeTab == "processor")
                 {
-                    @if (!_processorDraft)
-                    {
-                        <div class="column-empty-state">
-                            <span class="column-empty-state-icon">○</span>
-                            <h3>@L["ColumnNoProcessorTitle"]</h3>
-                            <p class="settings-hint">@L["ColumnNoProcessorHint"]</p>
-                            <button class="settings-primary" @onclick="CreateProcessorDraft">@L["ColumnAddProcessor"]</button>
+                    <div class="column-timeline" data-testid="column-ticket-path">
+                        <ColumnEditorPhase Number="1" Title="@L["ColumnPhaseEntry"]" Hint="@L["ColumnPhaseEntryHint"]" TestId="column-entry-phase">
+                    <div class="workflow-grid">
+                        <label>@L["ColumnMaxTickets"]<input class="settings-input" type="number" min="0" @bind="_maxTickets" /></label>
+                        <label>@L["ColumnCapacityMode"]
+                            <select @bind="CapacityBlockingValue" aria-label="@L["ColumnCapacityMode"]">
+                                <option value="false">@L["ColumnCapacityWarning"]</option>
+                                <option value="true">@L["ColumnCapacityBlocking"]</option>
+                            </select>
+                        </label>
+                    </div>
+                    <p class="settings-hint">@L["ColumnCapacityHelp"]</p>
+                    <label class="workflow-check"><input type="checkbox" data-testid="require-acceptance-criteria" @bind="_requireAcceptanceCriteria" /> <FieldHelp Label="@L["ColumnRequireAcceptanceCriteria"]" Help="@L["ColumnRequireAcceptanceCriteriaHelp"]" /></label>
+                    <label class="workflow-check"><input type="checkbox" data-testid="require-validated-acceptance-criteria" @bind="_requireValidatedAcceptanceCriteria" /> <FieldHelp Label="@L["ColumnRequireValidatedAcceptanceCriteria"]" Help="@L["ColumnRequireValidatedAcceptanceCriteriaHelp"]" /></label>
+
+                        </ColumnEditorPhase>
+                        <ColumnEditorPhase Number="2" Title="@L["ColumnPhaseMode"]" Hint="@L["ColumnPhaseModeHint"]" TestId="column-mode-phase">
+                            <div class="column-mode-options" role="radiogroup" aria-label="@L["ColumnPhaseMode"]">
+                                @foreach (var mode in TreatmentModes)
+                                {
+                                    <label class="column-mode-option @(TreatmentMode == mode ? "column-mode-option--selected" : "")">
+                                        <input type="radio" name="@_modeGroup" value="@mode" checked="@(TreatmentMode == mode)" @onchange="() => SelectTreatmentMode(mode)" data-testid="@($"column-mode-{mode}")" />
+                                        <span><strong>@L[$"ColumnMode{mode}"]</strong><small>@L[$"ColumnMode{mode}Hint"]</small></span>
+                                    </label>
+                                }
+                            </div>
+                            <p class="settings-hint">@L["ColumnDormantDraftHint"]</p>
+                        </ColumnEditorPhase>
+                        @if (TreatmentMode != ColumnProcessingMode.None)
+                        {
+                            @if (!_processorExists)
+                            {
+                                <div class="processor-draft-notice" role="status">@L["ProcessorDraftNotice"]</div>
+                            }
+                            @if (IsJevOnlyMode)
+                            {
+                                <ColumnEditorPhase Number="3" Title="@L[_jevAcceptanceValidation ? "ColumnPhaseReview" : "ColumnPhaseTriage"]" Hint="@L[_jevAcceptanceValidation ? "ColumnPhaseReviewHint" : "ColumnPhaseTriageHint"]" TestId="column-jev-analysis-phase">
+                                    @AgentIdentityFields()
+                                    @JevConfidenceField()
+                                    <p class="settings-hint" data-testid="jev-availability">@L[_jevAvailability.Available ? "JevAvailable" : "ColumnJevUnavailableHint"]</p>
+                                    @if (_jevAcceptanceValidation)
+                                    {
+                                        <label>@L["JevColumnCriteria"]<textarea class="settings-input workflow-textarea" data-testid="jev-column-criteria" @bind="_jevCriteriaText"></textarea></label>
+                                    }
+                                </ColumnEditorPhase>
+                                <ColumnEditorPhase Number="4" Title="@L[_jevAcceptanceValidation ? "ColumnPhaseOwnerDecision" : "ColumnPhaseRouting"]" Hint="@L[_jevAcceptanceValidation ? "ColumnPhaseOwnerDecisionHint" : "ColumnPhaseRoutingHint"]" TestId="column-routing-phase">
+                                    @if (_jevAcceptanceValidation)
+                                    {
+                                        <label>@L["ColumnOwnerApprovalDestination"]<select @bind="_defaultTargetId">@ColumnOptions(true)</select></label>
+                                        <label>@L["ColumnOwnerCorrectionsDestination"]<select @bind="CorrectionsTargetId">@ColumnOptions(true)</select></label>
+                                        <p class="settings-hint">@L["ColumnOwnerDecisionHint"]</p>
+                                    }
+                                    else
+                                    {
+                                        @RoutingFields()
+                                    }
+                                </ColumnEditorPhase>
+                                <section class="column-fallback" data-testid="column-jev-fallback">
+                                    <label class="workflow-check"><input type="checkbox" data-testid="jev-fallback-to-agent" @bind="_jevFallbackToAgent" /> @L["ColumnJevFallback"]</label>
+                                    <p class="settings-hint">@L["ColumnJevFallbackHint"]</p>
+                                    @if (_jevFallbackToAgent)
+                                    {
+                                        <details class="column-fallback-settings" data-testid="column-fallback-settings">
+                                            <summary>@L["ColumnFallbackSettings"]</summary>
+                                            @AgentPhases(true)
+                                        </details>
+                                    }
+                                    else
+                                    {
+                                        <p class="column-phase-notice" data-testid="column-no-fallback">@L["ColumnJevNoFallback"]</p>
+                                    }
+                                </section>
+                            }
+                            else
+                            {
+                                @AgentPhases(false)
+                            }
+                            @if (_state.RunsAgent)
+                            {
+                                @RecoveryFields()
+                            }
+                        }
+                    </div>
+                }
+                else if (_activeTab == "schedules")
+                {
+                    <div class="processor-actions-heading scheduled-task-heading">
+                        <div>
+                            <h3>@L["ColumnSchedulesTitle"]</h3>
+                            <p class="settings-hint">@L["ColumnSchedulesHint"]</p>
                         </div>
-                    }
-                    else
+                        <button class="processor-secondary-btn" @onclick="AddScheduledTask">@L["ColumnAddSchedule"]</button>
+                    </div>
+                    @if (_scheduledTasks.Count == 0)
                     {
-                        @if (!_processorExists)
+                        <div class="column-empty-state compact"><span class="column-empty-state-icon">◷</span><p>@L["ColumnNoSchedules"]</p></div>
+                    }
+                    @foreach (var task in _scheduledTasks)
+                    {
+                        <article class="scheduled-task-card" @key="task.Id">
+                            <header>
+                                <label class="workflow-check"><input type="checkbox" @bind="task.Enabled" /> @L["Enabled"]</label>
+                                <button class="processor-secondary-btn" @onclick="() => _scheduledTasks.Remove(task)">@L["ProcessorRemove"]</button>
+                            </header>
+                            <div class="workflow-grid scheduled-task-fields">
+                                <label><FieldHelp Label="@L["Name"]" Help="@L["ScheduleNameHelp"]" /><input @bind="task.Name" /></label>
+                                <label><FieldHelp Label="@L["ScheduleTimezone"]" Help="@L["ScheduleTimezoneHelp"]" /><input @bind="task.TimeZoneId" /></label>
+                                <label><FieldHelp Label="@L["ScheduleTicketScope"]" Help="@L["ScheduleTicketScopeHelp"]" />
+                                    <select @bind="task.TicketScope">
+                                        <option value="@ScheduledTaskTicketScope.None">@L["ScheduleNoTicket"]</option>
+                                        <option value="@ScheduledTaskTicketScope.FirstTicket">@L["ScheduleFirstTicket"]</option>
+                                    </select>
+                                </label>
+                                <div class="scheduled-task-schedule">
+                                    <FieldHelp Label="@L["ScheduleCalendar"]" Help="@L["ScheduleCalendarHelp"]" />
+                                    <CronScheduleEditor Cron="@task.Cron" CronChanged="cron => task.Cron = cron" />
+                                </div>
+                            </div>
+                            @ScheduledActionSection(task)
+                        </article>
+                    }
+                }
+            </div>
+
+            <footer class="processor-dialog-footer">
+                <button class="processor-secondary-btn" @onclick="CloseAsync">@L["Cancel"]</button>
+                <button class="settings-primary" @onclick="SaveAsync" disabled="@(_saving || string.IsNullOrWhiteSpace(_columnName))">@(_saving ? "…" : L[IsCreating ? "CreateColumn" : "Save"])</button>
+            </footer>
+        }
+    </section>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public required string Slug { get; set; }
+    [Parameter] public BoardColumn? Column { get; set; }
+    [Parameter] public BoardColumn? TemplateColumn { get; set; }
+    [Parameter, EditorRequired] public int PipelineId { get; set; }
+    [Parameter] public int InsertIndex { get; set; } = -1;
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+
+    private static readonly ColumnProcessingMode[] TreatmentModes = Enum.GetValues<ColumnProcessingMode>();
+    private readonly string _modeGroup = $"column-treatment-{Guid.NewGuid():N}";
+    private ColumnProcessingState _state = new();
+    private ColumnProcessor? _savedProcessor;
+    private bool IsJevOnlyMode => _state.IsJevOnly;
+    private ColumnProcessingMode TreatmentMode => _state.Mode;
+    private void SelectTreatmentMode(ColumnProcessingMode mode)
+    {
+        if (!_processorDraft && mode != ColumnProcessingMode.None) CreateProcessorDraft();
+        _state = _state.TransitionTo(mode);
+    }
+    private int? CorrectionsTargetId
+    {
+        get => _routes.FirstOrDefault(r => r.Outcome.Equals("changes_requested", StringComparison.OrdinalIgnoreCase))?.TargetColumnId;
+        set
+        {
+            _routes.RemoveAll(r => r.Outcome.Equals("changes_requested", StringComparison.OrdinalIgnoreCase));
+            if (value is > 0) _routes.Add(new RouteDraft { Outcome = "changes_requested", TargetColumnId = value.Value });
+        }
+    }
+    private RenderFragment AgentIdentityFields() => @<div class="column-agent-identity">
+                        <label><FieldHelp Label="@L["Name"]" Help="@L["ProcessorNameHelp"]" /><input class="settings-input" @bind="_name" /></label>
+                        <label><FieldHelp Label="@L["ProcessorMission"]" Help="@L["ProcessorMissionHelp"]" /><textarea class="settings-input workflow-textarea" @bind="_mission"></textarea></label>
+                        <label><FieldHelp Label="@L["ProcessorPrompt"]" Help="@L["ProcessorPromptHelp"]" /><textarea class="settings-input workflow-textarea processor-prompt" @bind="_prompt"></textarea></label>
+
+    </div>;
+    private RenderFragment JevConfidenceField() => @<label><FieldHelp Label="@L["JevConfidenceThreshold"]" Help="@L["ColumnJevConfidenceHint"]" /><input class="settings-input" type="number" min="0" max="100" step="1" data-testid="jev-confidence-threshold" @bind="_jevConfidencePercent" /></label>;
+    private RenderFragment RoutingFields() => @<div class="column-routing-fields">
+                        <div class="workflow-grid">
+                            <label><FieldHelp Label="@L["ProcessorDefaultDestination"]" Help="@L["ProcessorDefaultDestinationHelp"]" />
+                                <select @bind="_defaultTargetId">@ColumnOptions(true)</select>
+                            </label>
+                        </div>
+                        @foreach (var route in _routes)
                         {
-                            <div class="processor-draft-notice" role="status">@L["ProcessorDraftNotice"]</div>
+                            <div class="settings-row route-row">
+                                <label class="route-field"><FieldHelp Label="@L["ProcessorOutcome"]" Help="@L["ProcessorOutcomeHelp"]" /><input placeholder="@L["ProcessorOutcomePlaceholder"]" @bind="route.Outcome" /></label>
+                                <span>&rarr;</span>
+                                <label class="route-field"><FieldHelp Label="@L["ProcessorRouteDestination"]" Help="@L["ProcessorRouteDestinationHelp"]" /><select @bind="route.TargetColumnId">@ColumnOptions(false)</select></label>
+                                <button class="processor-secondary-btn" @onclick="() => _routes.Remove(route)">@L["ProcessorRemove"]</button>
+                            </div>
                         }
-                        <label class="workflow-check"><input type="checkbox" data-testid="evaluate-acceptance-criteria" @bind="_evaluateAcceptanceCriteria" /> <FieldHelp Label="@L["ProcessorEvaluateAcceptance"]" Help="@L["ProcessorEvaluateAcceptanceHelp"]" /></label>
-                        <details class="jev-settings jev-disclosure" data-testid="jev-settings">
-                            <summary title="@L["JevSettingsHelp"]">@L["JevSettings"]</summary>
-                        <label class="workflow-check"><input type="checkbox" data-testid="jev-acceptance-mode" @bind="_jevAcceptanceValidation" @bind:after="AcceptanceModeChanged" disabled="@(!_jevAvailability.Available && !_jevAcceptanceValidation)" /> <FieldHelp Label="@L["JevAcceptanceMode"]" Help="@L["JevAcceptanceHelp"]" /></label>
-                        <p class="settings-hint">@L["JevAcceptanceHelp"]</p>
-                        @if (_jevAcceptanceValidation)
-                        {
-                            <label>@L["JevColumnCriteria"]<textarea class="settings-input workflow-textarea" data-testid="jev-column-criteria" @bind="_jevCriteriaText"></textarea></label>
-                        }
-                        <label class="workflow-check"><input type="checkbox" data-testid="jev-profile-mode" @bind="_jevExecutionSelection" @bind:after="SelectionModeChanged" disabled="@(_jevAcceptanceValidation || (!_jevAvailability.Available && !_jevExecutionSelection))" /> <FieldHelp Label="@L["JevProfileMode"]" Help="@L["JevProfileHelp"]" /></label>
-                        @if (_jevExecutionSelection)
-                        {
-                            <p class="settings-hint">@L["JevProfileHelp"]</p>
+                        <button class="processor-secondary-btn" @onclick="AddRoute">@L["ProcessorAddRoute"]</button>
+    </div>;
+    private RenderFragment AgentPhases(bool fallback) => @<div class="column-agent-phases" data-testid="@(fallback ? "column-fallback-agent" : "column-agent-phases")">
+        <ColumnEditorPhase Number="3" Title="@L["ColumnPhasePrepare"]" Hint="@L["ColumnPhasePrepareHint"]">
+                            <label><FieldHelp Label="@L["ProcessorTicketOrder"]" Help="@L["ProcessorTicketOrderHelp"]" />
+                                <select @bind="_selectionOrder">
+                                    @foreach (var order in Enum.GetValues<TicketSelectionOrder>())
+                                    {
+                                        <option value="@order">@SelectionOrderLabel(order)</option>
+                                    }
+                                </select>
+                            </label>
+
+            @if (!fallback)
+            {
+                <label class="workflow-check"><input type="checkbox" data-testid="jev-profile-mode" @bind="_jevExecutionSelection" /> <FieldHelp Label="@L["ColumnJevSelectProfile"]" Help="@L["JevProfileHelp"]" /></label>
+                @if (_jevExecutionSelection)
+                {
                             @foreach (var profile in _jevProfiles)
                             {
                                 <div class="worktree-summary jev-profile-editor" @key="profile" data-testid="jev-profile-editor">
@@ -168,24 +327,15 @@
                                 </div>
                             }
                             <button class="settings-browse" data-testid="jev-add-profile" @onclick="AddJevProfile">@L["JevAddProfile"]</button>
-                        }
-                        <label class="workflow-check"><input type="checkbox" @bind="_jevObservationOnly" disabled="@(_jevAcceptanceValidation || _jevExecutionSelection || (!_jevAvailability.Available && !_jevObservationOnly))" /> <FieldHelp Label="@L["JevObservationMode"]" Help="@L["JevObservationHelp"]" /></label>
-                        <p class="settings-hint">@L["JevObservationHelp"]</p>
-                        <label class="workflow-check"><input type="checkbox" data-testid="jev-automatic-routing-mode" @bind="_jevAutomaticRouting" disabled="@(_jevObservationOnly || _jevAcceptanceValidation || (!_jevAvailability.Available && !_jevAutomaticRouting))" /> <FieldHelp Label="@L["JevAutomaticRoutingMode"]" Help="@L["JevAutomaticRoutingHelp"]" /></label>
-                        <p class="settings-hint">@L["JevAutomaticRoutingHelp"]</p>
-                        @if (!_jevAcceptanceValidation)
-                        {
-                        <p class="settings-hint" data-testid="jev-automatic-routing">@L["JevRoutingAutomaticDefault"]</p>
-                        <label><FieldHelp Label="@L["JevConfidenceThreshold"]" Help="@L["JevRoutingAutomaticDefault"]" /><input class="settings-input" type="number" min="0" max="100" step="1" data-testid="jev-confidence-threshold" @bind="_jevConfidencePercent" /></label>
-                        }
-                        <p class="settings-hint" data-testid="jev-availability">@L[_jevAvailability.Available ? "JevAvailable" : "JevUnavailable"]</p>
-                        </details>
-                        <label class="workflow-check"><input type="checkbox" @bind="_enabled" /> <FieldHelp Label="@L["ProcessorEnabled"]" Help="@L["ProcessorEnabledHelp"]" /></label>
-                        <label><FieldHelp Label="@L["Name"]" Help="@L["ProcessorNameHelp"]" /><input class="settings-input" @bind="_name" /></label>
-                        <label><FieldHelp Label="@L["ProcessorMission"]" Help="@L["ProcessorMissionHelp"]" /><textarea class="settings-input workflow-textarea" @bind="_mission"></textarea></label>
-                        <label><FieldHelp Label="@L["ProcessorPrompt"]" Help="@L["ProcessorPromptHelp"]" /><textarea class="settings-input workflow-textarea processor-prompt" @bind="_prompt"></textarea></label>
-                        @if (!_jevObservationOnly && !_jevAcceptanceValidation)
-                        {
+
+                    @JevConfidenceField()
+                }
+            }
+            @ActionSection(_beforeActions, true)
+            <p class="settings-hint">@L["ColumnActionsSuccessTiming"]</p>
+        </ColumnEditorPhase>
+        <ColumnEditorPhase Number="4" Title="@L["ColumnPhaseExecute"]" Hint="@L["ColumnPhaseExecuteHint"]">
+            @if (!fallback) { @AgentIdentityFields() }
                         <label><FieldHelp Label="@L["ProcessorModel"]" Help="@L["ProcessorModelHelp"]" />
                             <select @key="@($"{_model}#{AllModels.Count}")" value="@(_model ?? "")" @onchange="OnModelChanged">
                                 <option value="">@L["ProcessorModelAutomatic"]</option>
@@ -232,19 +382,8 @@
                             </select>
                         </label>
 
-                        <div class="workflow-grid">
-                            <label><FieldHelp Label="@L["ProcessorTicketOrder"]" Help="@L["ProcessorTicketOrderHelp"]" />
-                                <select @bind="_selectionOrder">
-                                    @foreach (var order in Enum.GetValues<TicketSelectionOrder>())
-                                    {
-                                        <option value="@order">@SelectionOrderLabel(order)</option>
-                                    }
-                                </select>
-                            </label>
-                            <label><FieldHelp Label="@L["ProcessorMaxAttempts"]" Help="@L["ProcessorMaxAttemptsHelp"]" /><input type="number" min="1" @bind="_maxAttempts" /></label>
-                            <label><FieldHelp Label="@L["ProcessorRetryDelay"]" Help="@L["ProcessorRetryDelayHelp"]" /><input type="number" min="1" @bind="_retryBackoff" /></label>
+
                             <label><FieldHelp Label="@L["ProcessorTurnLimit"]" Help="@L["ProcessorTurnLimitHelp"]" /><input type="number" min="1" @bind="_maxTurns" /></label>
-                        </div>
 
                         <h3>@L["ProcessorSkills"]</h3>
                         <p class="settings-hint">@L["ProcessorSkillsHint"]</p>
@@ -264,137 +403,46 @@
                                 }
                             </div>
                         }
+        </ColumnEditorPhase>
+        <ColumnEditorPhase Number="5" Title="@L["ColumnPhaseResult"]" Hint="@L["ColumnPhaseResultHint"]">
+            <label class="workflow-check"><input type="checkbox" data-testid="evaluate-acceptance-criteria" @bind="_evaluateAcceptanceCriteria" /> <FieldHelp Label="@L["ProcessorEvaluateAcceptance"]" Help="@L["ProcessorEvaluateAcceptanceHelp"]" /></label>
+            @if (_evaluateAcceptanceCriteria) { <p class="column-phase-notice">@L["ColumnProofTiming"]</p> }
+            <p class="settings-hint">@L["ColumnResultMemoryHint"]</p>
+        </ColumnEditorPhase>
+        <ColumnEditorPhase Number="6" Title="@L["ColumnPhaseRouting"]" Hint="@L["ColumnPhaseRoutingHint"]">
+            @if (!fallback)
+            {
+                <label class="workflow-check"><input type="checkbox" data-testid="jev-automatic-routing-mode" @bind="_jevAutomaticRouting" /> @L["ColumnJevRouteAfterAgent"]</label>
+                @if (_jevAutomaticRouting) { @JevConfidenceField() <p class="settings-hint">@L["ColumnJevRoutingFallback"]</p> }
+            }
+            @RoutingFields()
+        </ColumnEditorPhase>
+        <ColumnEditorPhase Number="7" Title="@L["ColumnPhaseFinalize"]" Hint="@L["ColumnPhaseFinalizeHint"]">
+            @ActionSection(_afterActions, false)
+            <p class="settings-hint">@L["ColumnActionsSuccessTiming"]</p>
+        </ColumnEditorPhase>
+    </div>;
+    private RenderFragment RecoveryFields() => @<details class="column-recovery" data-testid="column-recovery">
+        <summary>@L["ColumnTechnicalRecovery"]</summary>
+        <div class="workflow-grid">
+                            <label><FieldHelp Label="@L["ProcessorMaxAttempts"]" Help="@L["ProcessorMaxAttemptsHelp"]" /><input type="number" min="1" @bind="_maxAttempts" /></label>
+                            <label><FieldHelp Label="@L["ProcessorRetryDelay"]" Help="@L["ProcessorRetryDelayHelp"]" /><input type="number" min="1" @bind="_retryBackoff" /></label>
 
-                        }
-                        @if (_processorExists)
-                        {
-                            <button class="processor-secondary-btn processor-remove-btn" @onclick="RemoveProcessorDraft">@L["ColumnRemoveProcessor"]</button>
-                        }
-                    }
-                }
-                else if (_activeTab == "actions")
-                {
-                    @if (!_processorDraft)
-                    {
-                        <div class="column-empty-state">
-                            <span class="column-empty-state-icon">○</span>
-                            <h3>@L["ColumnActionsNeedsProcessor"]</h3>
-                            <button class="settings-primary" @onclick="CreateProcessorAndOpenTab">@L["ColumnAddProcessor"]</button>
-                        </div>
-                    }
-                    else
-                    {
-                        <p class="settings-hint">@L["ColumnActionsHint"]</p>
-                        @ActionSection(_beforeActions, true)
-                        <div class="processor-agent-step" role="note">
-                            <span class="processor-agent-step-icon">◆</span>
-                            <div>
-                                <strong>@L["ColumnAgentStep"]</strong>
-                                <span>@L["ColumnAgentStepHint"]</span>
-                            </div>
-                        </div>
-                        @ActionSection(_afterActions, false)
-                    }
-                }
-                else if (_activeTab == "schedules")
-                {
-                    <div class="processor-actions-heading scheduled-task-heading">
-                        <div>
-                            <h3>@L["ColumnSchedulesTitle"]</h3>
-                            <p class="settings-hint">@L["ColumnSchedulesHint"]</p>
-                        </div>
-                        <button class="processor-secondary-btn" @onclick="AddScheduledTask">@L["ColumnAddSchedule"]</button>
-                    </div>
-                    @if (_scheduledTasks.Count == 0)
-                    {
-                        <div class="column-empty-state compact"><span class="column-empty-state-icon">◷</span><p>@L["ColumnNoSchedules"]</p></div>
-                    }
-                    @foreach (var task in _scheduledTasks)
-                    {
-                        <article class="scheduled-task-card" @key="task.Id">
-                            <header>
-                                <label class="workflow-check"><input type="checkbox" @bind="task.Enabled" /> @L["Enabled"]</label>
-                                <button class="processor-secondary-btn" @onclick="() => _scheduledTasks.Remove(task)">@L["ProcessorRemove"]</button>
-                            </header>
-                            <div class="workflow-grid scheduled-task-fields">
-                                <label><FieldHelp Label="@L["Name"]" Help="@L["ScheduleNameHelp"]" /><input @bind="task.Name" /></label>
-                                <label><FieldHelp Label="@L["ScheduleTimezone"]" Help="@L["ScheduleTimezoneHelp"]" /><input @bind="task.TimeZoneId" /></label>
-                                <label><FieldHelp Label="@L["ScheduleTicketScope"]" Help="@L["ScheduleTicketScopeHelp"]" />
-                                    <select @bind="task.TicketScope">
-                                        <option value="@ScheduledTaskTicketScope.None">@L["ScheduleNoTicket"]</option>
-                                        <option value="@ScheduledTaskTicketScope.FirstTicket">@L["ScheduleFirstTicket"]</option>
-                                    </select>
-                                </label>
-                                <div class="scheduled-task-schedule">
-                                    <FieldHelp Label="@L["ScheduleCalendar"]" Help="@L["ScheduleCalendarHelp"]" />
-                                    <CronScheduleEditor Cron="@task.Cron" CronChanged="cron => task.Cron = cron" />
-                                </div>
-                            </div>
-                            @ScheduledActionSection(task)
-                        </article>
-                    }
-                }
-                else
-                {
-                    @if (!_processorDraft)
-                    {
-                        <div class="column-empty-state">
-                            <span class="column-empty-state-icon">○</span>
-                            <h3>@L["ColumnRoutingNeedsProcessor"]</h3>
-                            <button class="settings-primary" @onclick="CreateProcessorAndOpenTab">@L["ColumnAddProcessor"]</button>
-                        </div>
-                    }
-                    else
-                    {
-                        <p class="settings-hint">@L["ColumnRoutingHint"]</p>
-                        <div class="workflow-grid">
-                            <label><FieldHelp Label="@L["ProcessorDefaultDestination"]" Help="@L["ProcessorDefaultDestinationHelp"]" />
-                                <select @bind="_defaultTargetId">@ColumnOptions(true)</select>
-                            </label>
                             <label><FieldHelp Label="@L["ProcessorFailureDestination"]" Help="@L["ProcessorFailureDestinationHelp"]" />
                                 <select @bind="_technicalFailureTargetId">@ColumnOptions(true)</select>
                             </label>
-                        </div>
-                        @foreach (var route in _routes)
-                        {
-                            <div class="settings-row route-row">
-                                <label class="route-field"><FieldHelp Label="@L["ProcessorOutcome"]" Help="@L["ProcessorOutcomeHelp"]" /><input placeholder="@L["ProcessorOutcomePlaceholder"]" @bind="route.Outcome" /></label>
-                                <span>&rarr;</span>
-                                <label class="route-field"><FieldHelp Label="@L["ProcessorRouteDestination"]" Help="@L["ProcessorRouteDestinationHelp"]" /><select @bind="route.TargetColumnId">@ColumnOptions(false)</select></label>
-                                <button class="processor-secondary-btn" @onclick="() => _routes.Remove(route)">@L["ProcessorRemove"]</button>
-                            </div>
-                        }
-                        <button class="processor-secondary-btn" @onclick="AddRoute">@L["ProcessorAddRoute"]</button>
-                    }
-                }
-            </div>
 
-            <footer class="processor-dialog-footer">
-                <button class="processor-secondary-btn" @onclick="CloseAsync">@L["Cancel"]</button>
-                <button class="settings-primary" @onclick="SaveAsync" disabled="@(_saving || string.IsNullOrWhiteSpace(_columnName))">@(_saving ? "…" : L[IsCreating ? "CreateColumn" : "Save"])</button>
-            </footer>
-        }
-    </section>
-</div>
-
-@code {
-    [Parameter, EditorRequired] public required string Slug { get; set; }
-    [Parameter] public BoardColumn? Column { get; set; }
-    [Parameter] public BoardColumn? TemplateColumn { get; set; }
-    [Parameter, EditorRequired] public int PipelineId { get; set; }
-    [Parameter] public int InsertIndex { get; set; } = -1;
-    [Parameter] public EventCallback OnClose { get; set; }
-    [Parameter] public EventCallback OnSaved { get; set; }
+        </div>
+    </details>;
 
     private bool IsCreating => Column is null;
     private bool _loading = true;
     private bool _saving;
     private bool _processorExists;
     private bool _processorDraft;
-    private bool _removeProcessorOnSave;
     private JevAvailability _jevAvailability = new(false, false, null);
-    private bool _jevAcceptanceValidation;
-    private bool _jevExecutionSelection;
+    private bool _jevAcceptanceValidation => _state.Mode == ColumnProcessingMode.Review;
+    private bool _jevExecutionSelection { get => _state.SelectProfile; set => _state = _state with { SelectProfile = value }; }
     private bool _evaluateAcceptanceCriteria;
     private string _jevCriteriaText = "";
     private List<JevProfileDraft> _jevProfiles = [];
@@ -408,15 +456,10 @@
     private void AddJevProfile() => _jevProfiles.Add(new() { Name = $"Profile {_jevProfiles.Count + 1}", Model = _model ?? ClaudeModels.First(), Skills = new(_requiredSkills, StringComparer.OrdinalIgnoreCase) });
     private static void ToggleProfileSkill(JevProfileDraft profile, string skill, bool selected)
     { if (selected) profile.Skills.Add(skill); else profile.Skills.Remove(skill); }
-    private void AcceptanceModeChanged()
-    { if (_jevAcceptanceValidation) { _jevObservationOnly = false; _jevAutomaticRouting = false; _jevExecutionSelection = false; } }
-    private void SelectionModeChanged()
-    { if (_jevExecutionSelection) _jevObservationOnly = false; }
-    private bool _jevObservationOnly;
-    private bool _jevAutomaticRouting;
+    private bool _jevFallbackToAgent { get => _state.FallbackToAgent; set => _state = _state with { FallbackToAgent = value }; }
+    private bool _jevAutomaticRouting { get => _state.RouteWithJev; set => _state = _state with { RouteWithJev = value }; }
     private double _jevConfidencePercent = 90;
-    private bool _enabled = true;
-    private string _activeTab = "general";
+    private string _activeTab = "processor";
     private string _columnName = "";
     private string _columnColor = "#5a6a80";
     private ColumnRole _columnRole;
@@ -494,6 +537,7 @@
             var processor = source is null ? null : await ProcessorService.GetAsync(Slug, source.Id);
             _processorExists = Column is not null && processor is not null;
             _processorDraft = processor is not null;
+            _savedProcessor = processor;
             ApplyProcessor(processor, source?.Name);
             if (TemplateColumn is not null && processor is not null)
                 _name = L.Get("ColumnCopyName", processor.Name);
@@ -540,18 +584,14 @@
 
     private void ApplyProcessor(ColumnProcessor? processor, string? sourceName)
     {
+        _state = ColumnProcessingState.From(processor);
         _name = processor?.Name ?? $"{sourceName ?? _columnName} processor";
         _mission = processor?.Mission ?? "Process the selected ticket and return a structured outcome.";
         _prompt = processor?.Prompt ?? "";
         _model = processor?.Model;
-        _enabled = processor?.Enabled ?? true;
-        _jevAcceptanceValidation = processor?.JevAcceptanceValidation ?? false;
-        _jevExecutionSelection = processor?.JevExecutionSelection ?? false;
         _evaluateAcceptanceCriteria = processor?.EvaluateAcceptanceCriteria ?? false;
         _jevCriteriaText = string.Join("\n", processor?.JevAcceptanceCriteria ?? []);
         _jevProfiles = processor?.JevExecutionProfiles.Select(p => new JevProfileDraft { Name = p.Name, Model = p.Model, Description = p.Description, Skills = new(p.Skills, StringComparer.OrdinalIgnoreCase) }).ToList() ?? [];
-        _jevObservationOnly = processor?.JevObservationOnly ?? false;
-        _jevAutomaticRouting = processor?.JevAutomaticRouting ?? false;
         _jevConfidencePercent = (processor?.JevConfidenceThreshold ?? 0.9) * 100;
         _maxTurns = processor?.MaxTurns ?? 100;
         _maxAttempts = processor?.MaxAttempts ?? 3;
@@ -573,6 +613,33 @@
             _escapeToken = EscapeStack.PushWithFocus(JS, () => InvokeAsync(CloseAsync));
         return Task.CompletedTask;
     }
+
+    private SaveColumnProcessorRequest? BuildProcessorRequest() => ColumnProcessorEditorSave.Build(_state, _savedProcessor,
+        new Dictionary<ColumnProcessingStage, Func<SaveColumnProcessorRequest, SaveColumnProcessorRequest>>
+        {
+            [ColumnProcessingStage.Definition] = request => request with { Name = _name, Mission = _mission, Prompt = _prompt },
+            [ColumnProcessingStage.Preparation] = request => request with { SelectionOrder = _selectionOrder,
+                BeforeActions = _beforeActions.Select(action => action.ToModel()).ToList() },
+            [ColumnProcessingStage.ProfileSelection] = request => request with { JevConfidenceThreshold = _jevConfidencePercent / 100,
+                JevExecutionProfiles = _jevProfiles.Select(p => new JevExecutionProfile(p.Name, p.Model,
+                    p.Skills.Union(_requiredSkills, StringComparer.OrdinalIgnoreCase).ToList(), p.Description)).ToList() },
+            [ColumnProcessingStage.Execution] = request => request with { Model = _model, MaxTurns = _maxTurns,
+                AvailableSkills = _availableSkills.ToList(), RecommendedSkills = _recommendedSkills.ToList(), RequiredSkills = _requiredSkills.ToList() },
+            [ColumnProcessingStage.Result] = request => request with { EvaluateAcceptanceCriteria = _evaluateAcceptanceCriteria },
+            [ColumnProcessingStage.JevAnalysis] = request => request with { JevConfidenceThreshold = _jevConfidencePercent / 100 },
+            [ColumnProcessingStage.ReviewCriteria] = request => request with { JevAcceptanceCriteria = _jevCriteriaText.Split('\n',
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList() },
+            [ColumnProcessingStage.OwnerRouting] = request => request with { DefaultTargetColumnId = _defaultTargetId,
+                Routes = ColumnProcessorEditorSave.OwnerRoutes(request.Routes, CorrectionsTargetId) },
+            [ColumnProcessingStage.Routing] = request => request with { DefaultTargetColumnId = _defaultTargetId,
+                Routes = _routes.Where(route => !string.IsNullOrWhiteSpace(route.Outcome) && route.TargetColumnId > 0)
+                    .Select(route => new ColumnRoute(route.Outcome, route.TargetColumnId)).ToList(),
+                JevConfidenceThreshold = _state.RouteWithJev && _state.Mode == ColumnProcessingMode.Agent
+                    ? _jevConfidencePercent / 100 : request.JevConfidenceThreshold },
+            [ColumnProcessingStage.Finalization] = request => request with { AfterActions = _afterActions.Select(action => action.ToModel()).ToList() },
+            [ColumnProcessingStage.Recovery] = request => request with { MaxAttempts = _maxAttempts,
+                RetryBackoffSeconds = _retryBackoff, TechnicalFailureColumnId = _technicalFailureTargetId }
+        });
 
     private async Task SaveAsync()
     {
@@ -598,29 +665,16 @@
                 await ColumnService.ReorderColumnAsync(Slug, savedColumn.Id, _positionIndex);
             }
 
-            if (_removeProcessorOnSave)
+            var processorRequest = BuildProcessorRequest();
+            if (processorRequest is { } request)
             {
-                await ProcessorService.DeleteAsync(Slug, savedColumn.Id);
-            }
-            else if (_processorDraft)
-            {
-                var routes = _routes.Where(route => !string.IsNullOrWhiteSpace(route.Outcome) && route.TargetColumnId > 0)
-                    .Select(route => new ColumnRoute(route.Outcome, route.TargetColumnId)).ToList();
-                await ProcessorService.SaveAsync(Slug, savedColumn.Id, _name, _mission, _model,
-                    _enabled, _maxTurns, _availableSkills.ToList(), _recommendedSkills.ToList(), _requiredSkills.ToList(),
-                    _selectionOrder, _maxAttempts, _retryBackoff, _defaultTargetId, _technicalFailureTargetId, routes,
-                    prompt: _prompt,
-                    beforeActions: _beforeActions.Select(action => action.ToModel()).ToList(),
-                    afterActions: _afterActions.Select(action => action.ToModel()).ToList(),
-                    jevObservationOnly: _jevObservationOnly,
-                    jevPostRunObservation: false,
-                    jevAutomaticRouting: !_jevObservationOnly && _jevAutomaticRouting,
-                    jevConfidenceThreshold: _jevConfidencePercent / 100,
-                    jevAcceptanceValidation: _jevAcceptanceValidation,
-                    jevExecutionSelection: _jevExecutionSelection,
-                    evaluateAcceptanceCriteria: _evaluateAcceptanceCriteria,
-                    jevAcceptanceCriteria: _jevCriteriaText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
-                    jevExecutionProfiles: _jevProfiles.Select(p => new JevExecutionProfile(p.Name, p.Model, p.Skills.Union(_requiredSkills, StringComparer.OrdinalIgnoreCase).ToList(), p.Description)).ToList());
+                await ProcessorService.SaveAsync(Slug, savedColumn.Id, request.Name, request.Mission, request.Model,
+                    request.Enabled, request.MaxTurns, request.AvailableSkills, request.RecommendedSkills, request.RequiredSkills,
+                    request.SelectionOrder, request.MaxAttempts, request.RetryBackoffSeconds, request.DefaultTargetColumnId,
+                    request.TechnicalFailureColumnId, request.Routes, request.Prompt, request.BeforeActions, request.AfterActions,
+                    request.JevObservationOnly, request.JevPostRunObservation, request.JevAutomaticRouting, request.JevConfidenceThreshold,
+                    request.JevAcceptanceValidation, request.JevExecutionSelection, request.JevAcceptanceCriteria,
+                    request.JevExecutionProfiles, request.EvaluateAcceptanceCriteria, request.JevFallbackToAgent);
             }
 
             await ScheduledTaskService.SaveColumnAsync(Slug, savedColumn.Id, _scheduledTasks);
@@ -657,38 +711,19 @@
         }
     }
 
-    private void RemoveProcessorDraft()
-    {
-        _removeProcessorOnSave = true;
-        _processorExists = false;
-        _processorDraft = false;
-        ApplyProcessor(null, _columnName);
-    }
-
     private void CreateProcessorDraft()
     {
-        _removeProcessorOnSave = false;
         _processorDraft = true;
         ApplyProcessor(null, _columnName);
-    }
-
-    private void CreateProcessorAndOpenTab()
-    {
-        CreateProcessorDraft();
-        _activeTab = "processor";
     }
 
     private string TabClass(string tab) => $"column-editor-tab {(_activeTab == tab ? "column-editor-tab--active" : "")}";
     private string GeneralTabClass => TabClass("general");
     private string ProcessorTabClass => TabClass("processor");
-    private string ActionsTabClass => TabClass("actions");
     private string SchedulesTabClass => TabClass("schedules");
-    private string RoutingTabClass => TabClass("routing");
     private void OpenGeneralTab() => _activeTab = "general";
     private void OpenProcessorTab() => _activeTab = "processor";
-    private void OpenActionsTab() => _activeTab = "actions";
     private void OpenSchedulesTab() => _activeTab = "schedules";
-    private void OpenRoutingTab() => _activeTab = "routing";
 
     private string PositionLabel(int index)
     {

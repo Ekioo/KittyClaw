@@ -38,7 +38,8 @@ public record SaveColumnProcessorRequest(
     bool? JevExecutionSelection = null,
     List<string>? JevAcceptanceCriteria = null,
     List<JevExecutionProfile>? JevExecutionProfiles = null,
-    bool? EvaluateAcceptanceCriteria = null);
+    bool? EvaluateAcceptanceCriteria = null,
+    bool? JevFallbackToAgent = null);
 public record CreateTicketRequest(
     string Title, string CreatedBy, string Status, string Description = "",
     List<int>? LabelIds = null, TicketPriority Priority = TicketPriority.NiceToHave,

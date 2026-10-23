@@ -21,6 +21,26 @@ Pipeline kits provide a portable `.kittyclaw-pipeline` ZIP format for exporting 
 
 Unknown format versions, path traversal, links, executable binaries, nested archives, duplicate paths, hash mismatches, and documented archive-limit violations are rejected before installation. Name and skill collisions are resolved by explicit rename or identical-content reuse; existing content is never overwritten. Embedded scripts, `executePowerShell`, and `httpRequest` each require owner approval, and imported processors remain disabled while an input, vault binding, prerequisite, or approval is missing. Kit content is never executed during analysis or installation. URL-based import is not supported.
 
+## Temporal configuration and portable options
+
+Review a pipeline kit in the same [temporal option order](column-workflows.md#temporal-column-editor)
+as a native column: entry requirements → mode → agent preparation/execution → assessments
+and evidence → routing/finalization, with recovery and independent schedules treated separately.
+A successful import does not prove that every source option is represented in the format.
+
+The current portable column preserves capacity and both criterion-entry gates. Its processor
+preserves enabled state, mission/prompt/model/skills, agent limits/retries, ordered actions,
+routing, `evaluateAcceptanceCriteria` and `jevFallbackToAgent`. Preserving a policy value does
+not select a JEV mode: `PortableProcessor` currently has no JEV triage/review mode flags,
+execution profiles, review criteria or confidence-threshold fields. It also does not contain
+independent scheduled-task definitions. For an approved workflow using those features, inspect
+and configure them through native APIs after import or report the remaining configuration;
+do not claim that an imported agent processor is an equivalent JEV-only lifecycle.
+
+Do not move an all-`PASS` entry requirement into the column that must first evaluate the
+criteria. Do not infer an agent fallback from a missing key or a successful kit installation.
+Read back each supported setting and preserve existing policies during later native updates.
+
 ## External dependencies
 
 - [Pipeline and column processing](./column-workflows.md) supplies the pipeline, column, processor, routing, and project-skill persistence services.

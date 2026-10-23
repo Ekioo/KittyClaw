@@ -30,7 +30,8 @@ For a non-empty workspace, KittyClaw analyzes its files and proposes pipelines a
 The proposal remains editable inside the wizard:
 
 - validate, add, or remove pipelines from the graphical overview;
-- review each pipeline's ordered columns and short operating description;
+- review each pipeline's ordered columns and descriptions of entry rules, processing mode,
+  execution/evidence, routing, optional fallback and independent schedules;
 - use the prompt field at any step to request a modification;
 - move backward without losing the proposal; and
 - review the complete workflow before selecting **Create the workflow**.
@@ -67,7 +68,23 @@ KittyClaw's project chat can inspect the live API documentation and modify the c
 
 > Adapt my Kanban to a publishing workflow. I want the columns Backlog, Writing, Editorial Review, Scheduled, and Published, in that order. Preserve existing tickets, choose distinct colors, and check automations that refer to old column names. Ask me before deleting anything or making an ambiguous move.
 
-Most column work no longer needs a chat instruction. Right-click a column header and choose **Configure column** to edit its name, color, role, position, owner guidance, processor, actions, scheduled tasks, and routing. Use **Insert before**, **Insert after**, or **Duplicate column** for structural changes while keeping the visual context of the board.
+Most column work no longer needs a chat instruction. Right-click a column header and choose
+**Configure column**. **Identity** holds its name, color, role, position and owner guidance;
+**Ticket path** presents entry rules, the exclusive processing mode and its following phases;
+**Scheduled tasks** holds independent calendar-driven actions. Use **Insert before**, **Insert after**, or **Duplicate column** for structural changes while keeping the visual context of the board.
+
+The plan and the editor use the same [temporal option map](column-workflows.md#temporal-column-editor).
+Entry rules always apply, even with **Do nothing more**. For both JEV-only modes choose
+explicitly whether an agent should take over if JEV is uncertain or unavailable; turning
+that fallback off leaves the ticket in place. Place all-`PASS` entry gates after the column
+that produces the assessments, rather than expecting a blocked ticket to evaluate itself.
+
+For a detailed pipeline change request, specify each column in this order:
+
+> For each column, describe the entry requirements, then the processing mode, the work and
+> evidence it must produce, and its destinations. State explicitly whether an agent may take
+> over if JEV cannot conclude or is unavailable. Keep independent schedules separate and
+> preserve unspecified settings when updating the existing pipeline.
 
 Routing is also the source of truth for allowed manual moves. A processor with declared destinations prevents users from dragging a ticket past required stages; a column with no routing remains unrestricted so an incomplete workflow cannot strand tickets. See [pipeline and column processing](./column-workflows.md).
 

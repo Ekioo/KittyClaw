@@ -8,7 +8,7 @@
 @inject LocalizationService L
 @implements IAsyncDisposable
 
-@if (_processor is not null && (_processor.JevAcceptanceValidation || _processor.JevExecutionSelection))
+@if (_processor is { Enabled: true } && (_processor.JevAcceptanceValidation || _processor.JevExecutionSelection))
 {
     <section class="worktree-summary jev-work-review jev-card" data-testid="jev-work-review">
         <div class="jev-card-heading"><strong>@L[_processor.JevAcceptanceValidation ? "JevAcceptanceHeading" : "JevProfileHeading"]</strong>@if (_review is null || !_history.Any(d => d.ReviewId == _review.Id)) { <span class="jev-tag">@L["JevManualTag"]</span> }</div>
@@ -18,7 +18,7 @@
         {
             @if (!_stale && !JevCertainty.Work(_review, _processor.JevConfidenceThreshold))
             {
-                <p role="status">@L["JevClassicFallback"]</p>
+                <p role="status">@L[_processor.JevAcceptanceValidation && !_processor.JevFallbackToAgent ? "ColumnJevNoFallback" : "JevClassicFallback"]</p>
                 <details class="jev-technical"><summary>@L["JevTechnicalDetails"]</summary><p>@_review.Error</p><p>@_review.Model · @_review.Confidence?.ToString("P0")</p></details>
             }
             else

@@ -9,21 +9,35 @@ and legacy automations retain their own configuration.
 
 ## Shared uncertainty fallback
 
-Every JEV mode uses the configured confidence threshold. Errors, missing credentials,
-abstentions, insufficient acceptance evidence and low-confidence answers resume the equivalent
-classic processing. Qualification-only columns run their normal agent and routing; execution
-profile selection uses the column's normal model and skills; acceptance validation uses the
-normal column processor and manual transition rules. A pending or stale observation is refreshed
+Every JEV mode uses the configured confidence threshold. For triage and acceptance-review
+columns, `jevFallbackToAgent` explicitly controls whether errors, missing credentials,
+service budget failures, abstentions, insufficient evidence and low-confidence answers may
+resume classic agent processing. When false, the ticket stays in the column with its
+JEV diagnostic and no agent is claimed. The editor defaults new processors to false;
+legacy definitions and omitted API updates preserve the existing behavior (true for older definitions).
+Profile selection uses the column's default model/skills when JEV cannot choose; post-agent
+routing uses the saved agent outcome and classic routes. Neither starts a second agent.
+The optional agent fallback in a JEV-only column uses its normal processor/actions/routing.
+A confident unmet criterion remains an owner decision, not a trigger for this fallback. A pending or stale observation is refreshed
 before making this choice. Confident negative acceptance judgments still require owner review.
 Fallback is recorded on the durable execution so retries keep the same classic behavior without
 changing the saved column configuration. Required skills and success-context checks still apply.
 
 ## Configuration
 
-In **Configure column → Processor**, enable **Triage column: JEV instead of an agent** only for an explicit triage column.
-For worker columns, leave triage disabled and enable **Let JEV route after the agent finishes** to route using the saved agent result.
+The [temporal option map](column-workflows.md#temporal-column-editor) defines each option's
+phase and compatible modes. Profile selection precedes agent dispatch; agent assessments
+and evidence are saved before post-agent routing. The two JEV-only modes instead follow
+analysis → routing or owner decision, with agent settings reserved for optional failure recovery.
+
+
+In **Configure column → Ticket path**, first configure the entry rules, then choose
+**Automatic triage by JEV** for an explicit triage column. For worker columns choose
+**Work by an agent** and enable **Let JEV choose the destination after the agent finishes**
+in the routing phase. **JEV evidence review, then owner decision** selects acceptance review.
 Set the mission and optional instructions, and configure outcome routes or a default destination
-in the Routing tab. JEV is optional: the option is disabled until a credential is detected.
+in the routing phase. JEV is optional; its modes remain configurable without credentials,
+and the selected fallback policy applies when the service is unavailable.
 Add a key in **Settings → JEV / TypeSafe**, set `TYPESAFE_API_KEY` in the machine environment,
 or add a project-specific override through the existing project secret vault.
 No JEV executable is required. Detection only checks local configuration; it does not validate
@@ -36,8 +50,9 @@ The global key is encrypted using the existing native secret protector and store
 `<data-dir>/integrations/secrets/typesafe.vault`. It is isolated from project vaults and is never
 injected into agent subprocesses. The settings UI exposes presence and source only, supports
 replacement and removal, clears the password input after saving, and never retrieves the value.
-A saved observation processor with missing credentials remains in observation mode with an
-unavailable diagnostic; it cannot silently fall back to an agent or move the ticket.
+A saved triage processor with missing credentials retains its selected mode and records an
+unavailable diagnostic. It can use an agent only when `jevFallbackToAgent=true`; otherwise
+the ticket stays in place without an automatic agent run or transition.
 The REST processor contract also accepts `jevObservationOnly`; omitting it preserves the saved mode.
 The flag is versioned in the authoritative `processor.json` and projected into SQLite.
 
@@ -216,8 +231,8 @@ enabling it. Configure the default destination for owner approval and an outcome
 `changes_requested` for corrections. Without that correction route, rejection records the review and
 keeps the ticket in the validation column until its context or configuration changes.
 
-Criteria are the union of shared column criteria (one per line) and Markdown task-checkbox text in
-the ticket description. Checked boxes are requirements, never proof of completion. At most twenty
+Criteria are the union of shared column criteria (one per line), structured ticket acceptance
+criteria, and Markdown task-checkbox text in the ticket description. Checked boxes are requirements, never proof of completion. At most twenty
 criteria of 2,000 characters each are accepted. No explicit criteria produces a visible diagnostic.
 The REST configuration fields are `jevAcceptanceValidation` and `jevAcceptanceCriteria`; omitted
 fields preserve the authoritative `processor.json` values and SQLite projection.

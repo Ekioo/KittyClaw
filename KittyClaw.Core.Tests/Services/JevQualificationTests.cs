@@ -70,8 +70,10 @@ public sealed class JevQualificationTests
         Assert.Null(await qualification.GetAsync(slug, ticket.Id));
     }
 
-    [Fact]
-    public async Task Qualification_without_a_usable_answer_claims_classic_processing_instead_of_holding()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Qualification_without_credentials_only_claims_an_agent_when_fallback_is_enabled(bool fallback)
     {
         using var temp = new TempDir();
         var projects = new ProjectService(temp.Path);
@@ -79,7 +81,7 @@ public sealed class JevQualificationTests
         var board = await new ColumnService(projects).ListColumnsAsync(slug);
         var processors = new ColumnProcessorService(projects, new ProjectSkillService(projects));
         var processor = await processors.SaveAsync(slug, board[0].Id, "Qualifier", "Qualify tickets", null,
-            true, 20, [], [], [], defaultTargetColumnId: board[1].Id, jevObservationOnly: true);
+            true, 20, [], [], [], defaultTargetColumnId: board[1].Id, jevObservationOnly: true, jevFallbackToAgent: fallback);
         var tickets = new TicketService(projects, new MemberService(projects));
         var ticket = await tickets.CreateTicketAsync(slug, "Needs normal processing", columnId: board[0].Id, pipelineId: board[0].PipelineId);
         var vault = new ProjectSecretVault(temp.Path, new TestSecretProtector());
@@ -90,8 +92,18 @@ public sealed class JevQualificationTests
         await qualification.ObserveAsync(slug, processor, ticket, board, CancellationToken.None);
         var executions = new ColumnExecutionService(projects, tickets, qualification: qualification);
         var execution = await executions.ClaimNextAsync(slug, processor, DateTime.UtcNow);
-        Assert.NotNull(execution);
-        Assert.True(execution.JevClassicFallback);
+        Assert.Equal(fallback, (await processors.GetAsync(slug, board[0].Id))!.JevFallbackToAgent);
+        if (fallback)
+        {
+            Assert.NotNull(execution);
+            Assert.True(execution.JevClassicFallback);
+        }
+        else
+        {
+            Assert.Null(execution);
+            Assert.Empty(await executions.ListAsync(slug, ticket.Id));
+            Assert.Equal(board[0].Id, (await tickets.GetTicketAsync(slug, ticket.Id))!.ColumnId);
+        }
         Assert.False(processor.WithoutJev().JevObservationOnly);
         Assert.Equal(0, handler.Count);
     }

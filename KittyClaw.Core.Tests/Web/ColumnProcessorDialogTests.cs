@@ -36,10 +36,10 @@ public sealed class ColumnProcessorDialogTests
         var settings = File.ReadAllText(Path.Combine(
             RepoRoot(), "KittyClaw.Web", "Components", "Pages", "ProjectSettings.razor"));
 
-        Assert.Contains("ColumnGeneralTab", dialog);
-        Assert.Contains("ColumnProcessorTab", dialog);
-        Assert.Contains("ColumnActionsTab", dialog);
-        Assert.Contains("ColumnRoutingTab", dialog);
+        Assert.Contains("ColumnIdentityTab", dialog);
+        Assert.Contains("ColumnPathTab", dialog);
+        Assert.Contains("ColumnPhaseFinalize", dialog);
+        Assert.Contains("ColumnPhaseRouting", dialog);
         Assert.Contains("_columnColor", dialog);
         Assert.Contains("_columnRole", dialog);
         Assert.Contains("_positionIndex", dialog);
@@ -147,8 +147,8 @@ public sealed class ColumnProcessorDialogTests
         Assert.Contains("ProcessorModelHelp", source);
         Assert.Contains("OnModelChanged", source);
         Assert.Contains("_model = processor?.Model", source);
-        Assert.Contains("_name, _mission, _model", source);
-        Assert.DoesNotContain("_name, _mission, null", source);
+        Assert.Contains("request.Name, request.Mission, request.Model", source);
+        Assert.DoesNotContain("request.Name, request.Mission, null", source);
 
         var help = File.ReadAllText(Path.Combine(
             RepoRoot(), "KittyClaw.Web", "Components", "FieldHelp.razor"));
@@ -289,16 +289,13 @@ public sealed class ColumnProcessorDialogTests
     }
 
     [Fact]
-    public void Configuration_tabs_show_collection_counts()
+    public void Independent_schedules_tab_shows_its_collection_count()
     {
         var dialog = File.ReadAllText(Path.Combine(
             RepoRoot(), "KittyClaw.Web", "Components", "ColumnProcessorDialog.razor"));
         var css = KittyClaw.Core.Tests.Helpers.AppCssHelper.ReadAll(RepoRoot());
 
-        Assert.Contains("@(_processorDraft ? 1 : 0)", dialog);
-        Assert.Contains("@(_beforeActions.Count + _afterActions.Count)", dialog);
         Assert.Contains("@_scheduledTasks.Count", dialog);
-        Assert.Contains("@_routes.Count", dialog);
         Assert.Contains(".column-editor-tab-count", css);
     }
 

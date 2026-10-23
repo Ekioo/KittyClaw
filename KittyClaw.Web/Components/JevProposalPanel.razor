@@ -1,4 +1,5 @@
 @using KittyClaw.Core.Services
+@using KittyClaw.Core.Models
 @using Microsoft.EntityFrameworkCore
 @inject JevQualificationService Qualification
 @inject JevDecisionStore Decisions
@@ -21,7 +22,7 @@
             <div data-testid="jev-proposal">
                 @if (_proposal.Error is not null)
                 {
-                    <p role="status">@L["JevClassicFallback"]</p>
+                    <p role="status">@L[_processor.JevObservationOnly && !_processor.JevFallbackToAgent ? "ColumnJevNoFallback" : "JevClassicFallback"]</p>
                 }
                 else if (JevCertainty.Routing(_proposal, _processor.JevConfidenceThreshold))
                 {
@@ -30,7 +31,7 @@
                     <JevProposalDecisionPanel @key="JevDecisionStore.ProposalId(_proposal)" Slug="@Slug" TicketId="@TicketId" Proposal="@_proposal" AcceptLabel="@L.Get("JevMoveTo", DestinationName(_proposal))" OnDecided="DecisionTakenAsync" />
                     </div>
                 }
-                else { <p role="status">@L["JevClassicFallback"]</p> }
+                else { <p role="status">@L[_processor.JevObservationOnly && !_processor.JevFallbackToAgent ? "ColumnJevNoFallback" : "JevClassicFallback"]</p> }
                 <details class="jev-disclosure jev-technical">
                     <summary>@L["JevTechnicalDetails"]</summary>
                     <p data-testid="jev-routing-policy">@(_automatic ? string.Format(L["JevAutomaticPolicy"], (_processor.JevConfidenceThreshold * 100).ToString("0.#")) : L["JevManualPolicy"])</p>
@@ -110,7 +111,7 @@
             ? JevQualificationService.RecommendationProcessor(configured, source, columns) : null;
         var activeExecution = (await Executions.ListAsync(Slug, TicketId)).Any(e =>
             e.Status is ColumnExecutionStatus.Running or ColumnExecutionStatus.Retrying or ColumnExecutionStatus.WaitingForChildren);
-        _eligible = (configured is null || configured.JevObservationOnly) && !activeExecution && _processor is { HasBusinessRouting: true, JevAcceptanceValidation: false } &&
+        _eligible = ColumnProcessingState.From(configured).RequestsAutomaticJev && !activeExecution && _processor is { HasBusinessRouting: true, JevAcceptanceValidation: false } &&
             columns.FirstOrDefault(c => c.Id == ticket?.ColumnId)?.Role is not (ColumnRole.Success or ColumnRole.Failure);
         _columnNames = columns.ToDictionary(c => c.Id, c => c.Name);
         var decisions = await Decisions.ListAsync(Slug, TicketId, _stopToken);
@@ -142,7 +143,7 @@
         {
             var ticket = await Tickets.GetTicketAsync(slug, ticketId);
             var processor = ticket?.ColumnId is int id ? await Processors.GetAsync(slug, id) : null;
-            if (ticket is null || processor is { JevObservationOnly: false }) return;
+            if (ticket is null || !ColumnProcessingState.From(processor).RequestsAutomaticJev) return;
             await using var db = Projects.GetProjectDb(slug);
             var columns = await db.BoardColumns.AsNoTracking().ToListAsync(_stopToken);
             if (columns.FirstOrDefault(c => c.Id == ticket.ColumnId) is not { } source) return;

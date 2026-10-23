@@ -48,7 +48,8 @@ existing evidence review and owner approval requirements.
 ## Processor-owned evaluation
 
 Each processor has an `evaluateAcceptanceCriteria` option, disabled by default. It is
-available in the column processor dialog, `processor.json`, REST/MCP save requests and
+available in **Configure column → Ticket path → Record the result and evidence**,
+`processor.json`, REST/MCP save requests and
 portable pipeline kits. Omitted values preserve the current setting in update requests;
 legacy definitions and new processors default to false.
 
@@ -75,7 +76,7 @@ freshness guards while making the updated assessments visible to the routing dec
 
 ## Required criteria on column entry
 
-Column settings → General exposes `RequireAcceptanceCriteria` (REST/MCP:
+**Configure column → Ticket path → Allow entry** exposes `RequireAcceptanceCriteria` (REST/MCP:
 `requireAcceptanceCriteria`), disabled by default. When enabled, a ticket must have
 at least one structured acceptance criterion with non-empty text to enter the column.
 Criterion status and evidence are not required. Markdown checkboxes in the description
@@ -87,6 +88,13 @@ at `PASS`. `NotEvaluated`, `FAIL`, `PARTIAL`, missing statuses and blank criteri
 block entry. This option implies presence even when `RequireAcceptanceCriteria` is off.
 It checks recorded statuses; it does not run an evaluation or require JEV owner approval.
 Both options default to off and are preserved in portable pipeline kits.
+
+Entry requirements apply in every processing mode, including **Do nothing more**. They
+are checked before the destination can evaluate anything. An agent that must assess
+unevaluated criteria therefore needs a criterion-presence gate, with an all-`PASS` gate
+in a downstream column if desired. JEV review uses existing evidence and does not itself
+write agent assessments; its owner approval cannot bypass that downstream gate. See the
+[temporal option map](column-workflows.md#temporal-column-editor) when designing a pipeline.
 
 SQLite insert and column-change triggers enforce these rules for all writers, including
 manual moves, automation, scheduling, creation, transfers and column deletion bulk moves.

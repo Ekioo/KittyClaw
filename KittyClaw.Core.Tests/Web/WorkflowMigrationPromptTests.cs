@@ -1,12 +1,45 @@
 using System.Text.Json;
 using KittyClaw.Core.Automation;
 using KittyClaw.Core.Models;
+using KittyClaw.Web.Api;
 using KittyClaw.Web.Services;
 
 namespace KittyClaw.Core.Tests.Web;
 
 public sealed class WorkflowMigrationPromptTests
 {
+    [Fact]
+    public void Planning_creation_and_reconfiguration_share_the_temporal_option_contract()
+    {
+        var contract = ColumnWorkflowInstructions.TemporalConfiguration;
+        Assert.All(new[]
+        {
+            WorkflowMigrationPlanner.PlannerInstructions,
+            WorkflowMigrationPlanner.ApplicationInstructions,
+            WorkflowMigrationPlanner.ReconfigurationInstructions,
+        }, instructions => Assert.EndsWith(contract, instructions));
+
+        // Every writable processor/column option must have temporal guidance, including
+        // legacy flags, so a new API option cannot silently bypass the planning contract.
+        foreach (var type in new[] { typeof(SaveColumnProcessorRequest), typeof(CreateColumnRequest), typeof(UpdateColumnRequest) })
+        foreach (var field in type.GetProperties())
+            Assert.Contains(field.Name, contract, StringComparison.OrdinalIgnoreCase);
+
+        Assert.True(contract.IndexOf("1. ENTRY", StringComparison.Ordinal) < contract.IndexOf("2. MODE", StringComparison.Ordinal));
+        Assert.Contains("Never require PASS at entry", contract);
+        Assert.Contains("explicitly send false", contract);
+        Assert.Contains("confident unmet criteria are not an uncertainty fallback", contract);
+        Assert.Contains("INDEPENDENT SCHEDULES", contract);
+        Assert.Contains("Do not launch live agents or make paid JEV calls", contract);
+    }
+
+    [Fact]
+    public void Project_chat_receives_the_same_pipeline_authoring_contract()
+    {
+        var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Api", "Endpoints.Chat.cs"));
+        Assert.Contains("sb.AppendLine(ColumnWorkflowInstructions.TemporalConfiguration)", source);
+    }
+
     [Fact]
     public void Reconfiguration_application_uses_scoped_contract_instead_of_migration()
     {

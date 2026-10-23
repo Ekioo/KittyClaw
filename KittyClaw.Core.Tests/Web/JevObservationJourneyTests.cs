@@ -282,6 +282,55 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
         }
     }
 
+    [DebugBrowserFact]
+    public async Task Opening_ticket_only_requests_jev_for_enabled_triage()
+    {
+        using var temp = new TempDir();
+        var previous = Environment.GetEnvironmentVariable("KITTYCLAW_DATA_DIR");
+        Environment.SetEnvironmentVariable("KITTYCLAW_DATA_DIR", temp.Path);
+        await File.WriteAllTextAsync(Path.Combine(temp.Path, "settings.json"), """{"OnboardingSeen":true,"Language":"en"}""");
+        try
+        {
+            await using var factory = new DebugFactory(temp.Path);
+            factory.UseKestrel(0);
+            using var http = factory.CreateClient();
+            var projects = factory.Services.GetRequiredService<ProjectService>();
+            var project = await projects.CreateProjectAsync("Automatic request guard");
+            await projects.TogglePauseAsync(project.Slug);
+            await factory.Services.GetRequiredService<JevConfigurationService>().SaveKeyAsync("debug-only-fake-key");
+            var columns = await factory.Services.GetRequiredService<ColumnService>().ListColumnsAsync(project.Slug);
+            var source = columns.First();
+            var target = columns.Last();
+            var created = await http.PostAsJsonAsync($"/api/projects/{project.Slug}/tickets",
+                new CreateTicketRequest("Request guard", "owner", source.Name, PipelineId: source.PipelineId, ColumnId: source.Id));
+            created.EnsureSuccessStatusCode();
+            var ticket = await created.Content.ReadFromJsonAsync<JsonElement>();
+            using var playwright = await Playwright.CreateAsync();
+            await using var browser = await playwright.Chromium.LaunchAsync(new() { Headless = true });
+            var page = await browser.NewPageAsync();
+            var url = new Uri(http.BaseAddress!, $"/board/{project.Slug}/ticket/{ticket.GetProperty("id").GetInt32()}").ToString();
+            async Task OpenWithoutRequestAsync()
+            {
+                await page.GotoAsync(url);
+                await Expect(page.Locator(".ticket-panel")).ToBeVisibleAsync();
+                await page.WaitForTimeoutAsync(1500);
+                await Expect(page.GetByTestId("jev-assistance")).ToHaveCountAsync(0);
+                Assert.Equal(0, factory.Handler.Count);
+            }
+            await OpenWithoutRequestAsync();
+            var processors = factory.Services.GetRequiredService<ColumnProcessorService>();
+            await processors.SaveAsync(project.Slug, source.Id, "Paused triage", "Route tickets", null,
+                false, 20, [], [], [], defaultTargetColumnId: target.Id, jevObservationOnly: true, jevFallbackToAgent: false);
+            await OpenWithoutRequestAsync();
+            await processors.SaveAsync(project.Slug, source.Id, "Active triage", "Route tickets", null,
+                true, 20, [], [], [], defaultTargetColumnId: target.Id, jevObservationOnly: true, jevFallbackToAgent: false);
+            await page.GotoAsync(url);
+            await Expect(page.GetByTestId("jev-proposal")).ToBeVisibleAsync();
+            Assert.True(factory.Handler.Count > 0);
+        }
+        finally { Environment.SetEnvironmentVariable("KITTYCLAW_DATA_DIR", previous); }
+    }
+
     private static async Task RunGitAsync(string directory, params string[] arguments)
     {
         var start = new System.Diagnostics.ProcessStartInfo("git")

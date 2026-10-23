@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using KittyClaw.Core.Automation;
 using KittyClaw.Core.Models;
 using KittyClaw.Core.Services;
+using KittyClaw.Web.Services;
 
 namespace KittyClaw.Web.Api;
 
@@ -276,6 +277,8 @@ public static partial class Endpoints
                 sb.AppendLine($"- PATCH {baseUrl}/api/projects/{slug}/tickets/{{id}}/status — move ticket (body: {{status, author}})");
                 sb.AppendLine($"- GET  {baseUrl}/api/projects/{slug}/columns — list columns");
                 sb.AppendLine($"- Full API doc: {baseUrl}/api/docs");
+                sb.AppendLine();
+                sb.AppendLine(ColumnWorkflowInstructions.TemporalConfiguration);
 
                 ctx = new AgentRunContext
                 {

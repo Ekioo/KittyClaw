@@ -11,6 +11,43 @@ namespace KittyClaw.Core.Tests.Services;
 
 public sealed class JevWorkReviewTests
 {
+    [Theory]
+    [InlineData(false, "insufficient")]
+    [InlineData(true, "insufficient")]
+    [InlineData(false, "uncertain")]
+    [InlineData(true, "uncertain")]
+    [InlineData(false, "unavailable")]
+    [InlineData(true, "unavailable")]
+    [InlineData(false, "missing-key")]
+    [InlineData(true, "missing-key")]
+    [InlineData(false, "budget")]
+    [InlineData(true, "budget")]
+    public async Task Acceptance_fallback_is_explicit_and_covers_uncertainty_and_service_failures(bool fallback, string scenario)
+    {
+        using var f = await Fixture.CreateAsync(configured: scenario != "missing-key");
+        f.Processor = await f.Processors.SaveAsync(f.Slug, f.Source.Id, "Reviewer", "Validate work", null,
+            true, 20, [], [], [], defaultTargetColumnId: f.Target.Id,
+            jevAcceptanceValidation: true, jevFallbackToAgent: fallback);
+        if (scenario != "insufficient") f.AddEvidence();
+        f.Handler.Confidence = scenario == "uncertain" ? .2 : 1;
+        f.Handler.Fail = scenario is "unavailable" or "budget";
+        f.Handler.FailureStatus = scenario == "budget" ? HttpStatusCode.PaymentRequired : HttpStatusCode.ServiceUnavailable;
+        await f.ObserveAsync();
+        Assert.False(JevCertainty.Work(await f.ReviewAsync(), f.Processor.JevConfidenceThreshold));
+        var reloaded = (await f.Processors.GetAsync(f.Slug, f.Source.Id))!;
+        Assert.Equal(fallback, reloaded.JevFallbackToAgent);
+        var executions = new ColumnExecutionService(f.Projects, f.Tickets, f.Reviews);
+        Assert.Equal(fallback, await executions.UsesClassicFallbackAsync(f.Slug, reloaded, f.Ticket));
+        var claim = await executions.ClaimNextAsync(f.Slug, reloaded, DateTime.UtcNow);
+        if (fallback) Assert.True(Assert.IsType<ColumnExecution>(claim).JevClassicFallback);
+        else
+        {
+            Assert.Null(claim);
+            Assert.Empty(await executions.ListAsync(f.Slug, f.Ticket.Id));
+            Assert.Equal(f.Source.Id, (await f.Tickets.GetTicketAsync(f.Slug, f.Ticket.Id))!.ColumnId);
+        }
+    }
+
     [Fact]
     public async Task Uncertain_acceptance_does_not_block_a_classic_manual_transition()
     {
@@ -232,7 +269,7 @@ public sealed class JevWorkReviewTests
         public BoardColumn Source = null!, Target = null!, Corrections = null!;
         public string Slug = "";
         public Handler Handler = new();
-        public static async Task<Fixture> CreateAsync(bool profile = false)
+        public static async Task<Fixture> CreateAsync(bool profile = false, bool configured = true)
         {
             var f = new Fixture(); f.Projects = new(f._temp.Path); f.Slug = (await f.Projects.CreateProjectAsync("JEV work review")).Slug;
             var columns = await new ColumnService(f.Projects).ListColumnsAsync(f.Slug);
@@ -247,7 +284,7 @@ public sealed class JevWorkReviewTests
                 jevExecutionProfiles: profile ? [new("Fast", "claude-haiku-4-5", [optional.Slug], "Simple work"), new("Deep", "claude-sonnet-4-6", [optional.Slug], "Complex work")] : []);
             f.Ticket = await f.Tickets.CreateTicketAsync(f.Slug, "Verify login", description: "- [x] Login works\n- [ ] Tests pass", columnId: f.Source.Id, pipelineId: f.Source.PipelineId);
             var vault = new ProjectSecretVault(f._temp.Path, new TestSecretProtector());
-            await vault.SetAsync(f.Slug, JevQualificationService.SecretName, "test-key");
+            if (configured) await vault.SetAsync(f.Slug, JevQualificationService.SecretName, "test-key");
             f._client = new(f.Handler);
             f.Reviews = new(f.Projects, new(vault, f._temp.Path, environmentKey: () => null, protector: new TestSecretProtector()), f._client);
             f.Decisions = new(f.Projects, f.Tickets, f.Processors, f.Reviews);
@@ -285,6 +322,7 @@ public sealed class JevWorkReviewTests
     {
         public double Confidence = 1;
         public bool Abstain, Fail;
+        public HttpStatusCode FailureStatus = HttpStatusCode.ServiceUnavailable;
         public int Count;
         public string Status = "satisfied";
         public string? Reference;
@@ -292,7 +330,7 @@ public sealed class JevWorkReviewTests
         public string Options = "";
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
-            if (Fail) return new(HttpStatusCode.ServiceUnavailable);
+            if (Fail) return new(FailureStatus);
             using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct));
             State = body.RootElement.GetProperty("state").Clone();
             var answers = new Dictionary<string, object>();

@@ -62,6 +62,14 @@ The original seven tools keep their names and arguments. New management tools ta
 | Skills | `list_project_skills`, `get_project_skill`, `create_project_skill`, `update_project_skill`, `delete_project_skill` |
 | Engine | `get_engine_health` |
 
+Pipeline and processor writers follow the [temporal option map](column-workflows.md#temporal-column-editor):
+set column-entry requirements before selecting a mode, request agent evidence before downstream
+routing/gates, and keep scheduled tasks independent. Read existing processor values before
+`save_column_processor`: not every omitted field behaves as a PATCH. Explicitly set
+`jevFallbackToAgent=false` on new JEV-only definitions unless an agent fallback is intended;
+preserve an existing policy during unrelated edits. The option applies to uncertainty,
+missing credentials, service budget failures and service errors in both JEV-only modes.
+
 `get_run` includes buffered log events, token usage and cost. `list_runs` defaults to active runs; `includeCompleted: true` includes retained terminal runs, with optional `ticketId` and `limit` filters (1-500, default 100). Retention follows `AgentRunRegistry` and is not an archival search. Evidence remains readable through `get_run_evidence` when the run is no longer in memory.
 
 `save_automations` is an MCP-only writer using `AutomationStore` merge semantics and reloading the engine; it does not add an arbitrary-edit REST route. Read `get_automations` first and pass its `fileStamp` as `request.baseStamp`. The store preserves missing automations on divergence and reports `preservedIds` and `diverged`; with a matching stamp, omissions are intentional deletions. Trigger, condition and action objects use their existing `type` discriminators. A rejected reload is a tool error that explicitly reports that the file was saved and the previous runtime was retained.

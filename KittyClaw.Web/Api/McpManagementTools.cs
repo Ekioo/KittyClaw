@@ -244,11 +244,11 @@ public sealed class McpManagementTools(IServiceProvider services, ProjectService
         ExecuteAsync(project, () => Endpoints.HandleGetColumnProcessor(project, columnId, services.GetRequiredService<ColumnProcessorService>()));
 
     [McpServerTool(Name = "save_column_processor", ReadOnly = false, Destructive = true, Idempotent = true)]
-    [Description("Configure a column processor, model, skills, routes, retries and actions. Enabled processors can dispatch agents.")]
+    [Description("Configure a column in temporal order: entry gates are separate column settings; choose disabled, agent, JEV triage or JEV evidence review, then configure its applicable preparation, execution, final assessments/evidence, routing and actions. JEV profile selection precedes dispatch; JEV post-agent routing follows the saved result. In both JEV-only modes explicitly choose jevFallbackToAgent for uncertainty or unavailability; new definitions should send false unless an agent fallback is intended. Read existing values and preserve unspecified settings on updates. Scheduled tasks remain independent. Enabled processors can dispatch agents.")]
     public Task<JsonElement> SaveColumnProcessor(
         [Description("Project slug from list_projects.")] string project,
         [Description("Column id from list_columns.")] int columnId,
-        [Description("Fields for this operation.")] SaveColumnProcessorRequest request) =>
+        [Description("Processor fields, including the exclusive mode flags and explicit JEV-only fallback policy. Preserve saved values when updating because omitted fields may have defaults.")] SaveColumnProcessorRequest request) =>
         ExecuteAsync(project, () => Endpoints.HandleSaveColumnProcessor(project, columnId, request, services.GetRequiredService<ColumnProcessorService>(), services.GetRequiredService<BoardUpdateNotifier>()));
 
     [McpServerTool(Name = "delete_column_processor", ReadOnly = false, Destructive = true, Idempotent = true)]

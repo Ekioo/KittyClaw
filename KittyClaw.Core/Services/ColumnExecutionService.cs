@@ -101,6 +101,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
 
     public async Task<bool> UsesClassicFallbackAsync(string slug, ColumnProcessor processor, Ticket ticket)
     {
+        if ((processor.JevObservationOnly || processor.JevAcceptanceValidation) && !processor.JevFallbackToAgent) return false;
         if (processor.JevObservationOnly && qualification is not null)
         {
             var proposal = await qualification.GetAsync(slug, ticket.Id);

@@ -1,0 +1,18 @@
+<section class="column-phase" data-phase="@Number" data-testid="@TestId">
+    <span class="column-phase-number" aria-hidden="true">@Number</span>
+    <details open="@InitiallyOpen">
+        <summary>
+            <span class="column-phase-title">@Title<span class="column-phase-hint">@Hint</span></span>
+        </summary>
+        <div class="column-phase-content">@ChildContent</div>
+    </details>
+</section>
+
+@code {
+    [Parameter] public int Number { get; set; }
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string? Hint { get; set; }
+    [Parameter] public bool InitiallyOpen { get; set; } = true;
+    [Parameter] public string? TestId { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

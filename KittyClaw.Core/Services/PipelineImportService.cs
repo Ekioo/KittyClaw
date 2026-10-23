@@ -370,7 +370,8 @@ public sealed partial class PipelineImportService(
                     processor.Routing.Routes.Select(route => new ColumnRoute(route.Outcome, columnIds[route.Target])).ToList(),
                     processor.Prompt,
                     MapActions(processor.BeforeActions), MapActions(processor.AfterActions),
-                    evaluateAcceptanceCriteria: processor.EvaluateAcceptanceCriteria);
+                    evaluateAcceptanceCriteria: processor.EvaluateAcceptanceCriteria,
+                    jevFallbackToAgent: processor.JevFallbackToAgent);
             }
             await FaultAsync("processors-installed");
 
