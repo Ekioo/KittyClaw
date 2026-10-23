@@ -106,8 +106,12 @@ public sealed class JevPostRunObservationTests
             var selected = options.First(k => k != "none");
             // The ticket panel also asks for a current-column recommendation independently of post-run history.
             if (questions.EnumerateObject().Count() > 1)
-                return new(HttpStatusCode.OK) { Content = JsonContent.Create(new {
-                    model = "jev-owner-fixture", answers = KittyClaw.Core.Tests.Helpers.JevResponseFixture.Answers(selected) }) };
+            {
+                var answers = JsonSerializer.SerializeToNode(KittyClaw.Core.Tests.Helpers.JevResponseFixture.Answers(selected))!;
+                answers["routing"] = JsonSerializer.SerializeToNode(new { type = "choice", choice = selected, confidence = 1.0,
+                    probabilities = options.ToDictionary(k => k, k => k == selected ? 1.0 : 0.0) });
+                return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { model = "jev-owner-fixture", answers }) };
+            }
             Count++;
             return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { model = "jev-post-run-fixture",
                 answers = new { routing = new { type = "choice", choice = selected, confidence = Confidence,
