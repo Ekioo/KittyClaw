@@ -130,8 +130,19 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         await TicketService.EnsureAgentUsageColumnsAsync(db);
         await EnsureTableAsync(db);
 
+        await TicketService.EnsureTicketDependenciesTableAsync(db);
+        // Match the legacy dispatch gate: only a Success column resolves a prerequisite.
+        // Filter before the selection window so waiting cards cannot starve eligible work.
+        var unresolvedTicketIds = db.TicketDependencies
+            .Join(db.Tickets, dependency => dependency.BlocksTicketId, ticket => ticket.Id,
+                (dependency, ticket) => new { dependency.BlockedTicketId, ticket.ColumnId })
+            .Where(item => !db.BoardColumns.Any(column => column.Id == item.ColumnId
+                && column.Role == ColumnRole.Success))
+            .Select(item => item.BlockedTicketId);
+
         var waiting = await db.ColumnExecutions
-            .Where(e => e.ProcessorId == processor.Id && e.Status == ColumnExecutionStatus.WaitingForChildren)
+            .Where(e => e.ProcessorId == processor.Id && e.Status == ColumnExecutionStatus.WaitingForChildren
+                && !unresolvedTicketIds.Contains(e.TicketId))
             .OrderBy(e => e.ClaimedAt).ToListAsync();
         foreach (var candidate in waiting)
         {
@@ -166,6 +177,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         await using var retryTransaction = await db.Database.BeginTransactionAsync();
         var retries = await db.ColumnExecutions
             .Where(e => e.ProcessorId == processor.Id && e.Status == ColumnExecutionStatus.Retrying
+                && !unresolvedTicketIds.Contains(e.TicketId)
                 && (e.AvailableAt == null || e.AvailableAt <= now))
             .OrderBy(e => e.AvailableAt).ThenBy(e => e.ClaimedAt)
             .ToListAsync();
@@ -219,6 +231,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         // into a tight column-scan loop and eventually trip the routing-loop guard.
         var candidates = db.Tickets.Where(t => t.ColumnId == processor.ColumnId
             && t.FireAt == null
+            && !unresolvedTicketIds.Contains(t.Id)
             && !activeTicketIds.Contains(t.Id));
         candidates = processor.SelectionOrder switch
         {
