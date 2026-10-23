@@ -7,8 +7,9 @@ Concepts are explained in exactly one place — other pages cross-link via relat
 For a high-level overview see the root [README.md](../README.md). For repo layout and conventions see [AGENTS.md](../AGENTS.md).
 
 The [2026-10-23 feature audit](../docs/audits/2026-10-23-feature-audit.md) records a
-historical inventory, usefulness/functionality/completion scores, and verification limits
-before the follow-up transfer and budget fixes.
+historical inventory, usefulness/functionality/completion scores, and verification limits,
+followed by verified fixes for transfers, budgets, dashboard worktrees, translations
+and API/MCP documentation.
 
 ## Features
 

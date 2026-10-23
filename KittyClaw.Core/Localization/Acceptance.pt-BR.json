@@ -7,5 +7,7 @@
   "CriterionEvidence": "Evidências",
   "CriterionText": "Critério",
   "CriterionNotEvaluated": "Não avaliado",
-  "RemoveEvidence": "Remover evidência"
+  "RemoveEvidence": "Remover evidência",
+  "ProcessorEvaluateAcceptance": "Avaliar os critérios de aceitação do ticket",
+  "ProcessorEvaluateAcceptanceHelp": "Pedir a este processador que avalie os critérios relevantes do ticket e anexe evidências. Os resultados são salvos antes do roteamento. Desativado por padrão."
 }

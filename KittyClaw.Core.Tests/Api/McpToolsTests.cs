@@ -8,7 +8,7 @@ using ModelContextProtocol;
 namespace KittyClaw.Core.Tests.Api;
 
 /// <summary>
-/// The 7 MCP tools (ticket #215) are thin proxies over the same services the REST API uses.
+/// Core board and acceptance-criteria MCP tools proxy the same services the REST API uses.
 /// These tests exercise the handlers directly against real services on a temp data dir:
 /// happy paths, the project-existence guard (the REST layer silently creates an empty db
 /// for unknown slugs — MCP agents get a real error instead), and the McpException wrapping

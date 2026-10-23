@@ -149,11 +149,11 @@ See [runtime enforcement](../../doc/runtime-boundary-enforcement.md).
 | Durable Git integration queue | 5 | 4 | 4 | Structured integration and recovery. |
 | Local checkout synchronization/recovery | 5 | 4 | 4 | Correct distinction between integrated commit and synchronized checkout. |
 | Project secret vault | 5 | 4 | 4 | Native encryption, write-only UI and subprocess injection. |
-| REST and generated OpenAPI docs | 5 | 4 | 4 | Broad surface; route-inventory test needs updating. |
+| REST and generated OpenAPI docs | 5 | 4 | 4 | Broad surface; outdated route-inventory test corrected in the documentation follow-up below. |
 | Embedded MCP server | 5 | 4 | 4 | Valuable agent-to-orchestrator integration. |
 | Engine health and queue diagnostics | 5 | 4 | 4 | Reduces unexplained silent stalls. |
 | Local storage and migrations | 5 | 4 | 4 | Fits individual local usage. |
-| Seven-language UI | 4 | 3 | 3 | Infrastructure exists; new strings lack complete coverage. |
+| Seven-language UI | 4 | 3 | 3 | Audit-time translation gaps corrected in the documentation follow-up below. |
 | Windows installer and tray lifetime | 5 | 4 | 4 | Substantially lowers installation friction. |
 | Updates coordinated with active work | 5 | 4 | 4 | Separates download from installation and protects active work. |
 | First-project activation metrics | 3 | 4 | 3 | Helps improve onboarding; does not prove present effectiveness. |
@@ -178,6 +178,7 @@ See [runtime enforcement](../../doc/runtime-boundary-enforcement.md).
 5. **Align docs, translations and tests.** README advertised seven MCP tools while code
    declared 78. The OpenAPI baseline lacked three acceptance-criteria routes.
    Localization key parity failed; examined mobile additions had English/French only.
+   The documentation follow-up below records the verified correction of these gaps.
 
 ## Verification limits
 
@@ -265,3 +266,43 @@ The repository data-policy scan and its six synthetic self-tests passed. The bro
 screenshot is explicitly ignored by Git; raw logs and temporary databases are not
 included in the report. This closes the specific HTTP 500 finding without claiming
 complete validation of every dashboard capability.
+
+## Localization, MCP and OpenAPI follow-up — 2026-10-23
+
+**Status: resolved and verified.** Commit `88f2b73` records the preceding transfer,
+budget and dashboard fixes. Historical audit scores remain unchanged.
+
+The localization inventory found 60 missing translations across Spanish, German,
+Italian, Brazilian Portuguese and Japanese: two acceptance-processor strings, six
+cost-reporting strings and four mobile-board strings per language. All were translated,
+including the five missing mobile bundles. The existing parity guard now passes for
+all 18 bundles, 1,443 reference keys and seven supported languages (126 resource files),
+checking key sets and format placeholders. Runtime language loading and the English
+fallback also pass. This establishes resource completeness; it is not a linguistic
+review or a visual review of every translated screen.
+
+The [README](../../README.md#mcp-server) now describes the current MCP management
+surface and its 78 tools. The [detailed catalogue](../../doc/mcp.md) documents all
+nine board/acceptance tools and 69 management/observability tools, including criterion
+creation, updates, evidence retention and deletion. A catalogue comparison found all
+78 declared tools documented with no missing or extra names. The existing real MCP
+client test was also updated to expect the two acceptance tools and confirms the
+complete catalogue over isolated Streamable HTTP.
+
+The explicit OpenAPI baseline now includes acceptance-criterion creation, update and
+deletion, with their expected `Tickets` tags. Exact route-set comparison is retained;
+the current live isolated specification matches all 132 expected operations. The REST
+acceptance-criteria round trip also verifies evidence, invalid input and deletion.
+
+Verification: **56 targeted tests passed, none failed or skipped**, covering resource
+parity/loading/fallback, route inventory/tags, endpoint smoke tests, generated OpenAPI
+documentation, MCP schemas/catalogue/workflows/guards and acceptance-criteria HTTP
+behavior. The test run rebuilt the affected projects without compiler errors. The
+repository data-policy scan and its six synthetic self-tests passed. These results
+do not claim a complete green product suite.
+
+Temporary isolated builds, test-data copies, screenshots and one-off diagnostic probes
+under `.artifacts/` were reviewed for cleanup. With no tracked files, external reparse
+points or active consumers, all 11,765 temporary files (3.52 GB) were removed to the
+Windows Recycle Bin. That directory is now excluded from Git; maintained regression
+tests and this report remain versioned.

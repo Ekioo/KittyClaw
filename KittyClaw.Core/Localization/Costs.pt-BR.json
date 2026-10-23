@@ -37,5 +37,11 @@
   "JevCostCalls": "chamadas",
   "JevCostInput": "tokens de entrada",
   "JevCostOutput": "tokens de saída",
-  "JevCostUnpriced": "chamadas com custo desconhecido"
+  "JevCostUnpriced": "chamadas com custo desconhecido",
+  "SubscriptionAmountUnknown": "Os dados de uso locais não incluem o valor real da assinatura, a moeda, os impostos nem os créditos adicionais.",
+  "UnpricedRunsHelp": "registros não podem ter seu custo calculado com segurança. Seu custo desconhecido é excluído do total.",
+  "SubscriptionDetected": "assinatura detectada",
+  "SubscriptionApiValue": "Equivalente em API para este uso:",
+  "ApiEquivalentTotal": "Valor do uso de tokens (tarifas da API)",
+  "ApiEquivalentHelp": "Valor de referência nas tarifas padrão de tokens da API, não uma fatura. Taxas de assinatura e créditos comprados são separados; a economia RTK representa um uso hipotético evitado."
 }

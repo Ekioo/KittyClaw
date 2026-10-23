@@ -7,5 +7,7 @@
   "CriterionEvidence": "Evidencias",
   "CriterionText": "Criterio",
   "CriterionNotEvaluated": "Sin evaluar",
-  "RemoveEvidence": "Eliminar evidencia"
+  "RemoveEvidence": "Eliminar evidencia",
+  "ProcessorEvaluateAcceptance": "Evaluar los criterios de aceptación del ticket",
+  "ProcessorEvaluateAcceptanceHelp": "Pedir a este procesador que evalúe los criterios pertinentes del ticket y adjunte evidencias. Los resultados se guardan antes del enrutamiento. Desactivado por defecto."
 }

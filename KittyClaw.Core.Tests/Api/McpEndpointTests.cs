@@ -22,8 +22,9 @@ public sealed partial class McpEndpointTests : IClassFixture<McpEndpointTests.Ap
 {
     private static readonly string[] CoreTools =
     [
-        "board_overview", "comment_ticket", "create_ticket",
+        "board_overview", "comment_ticket", "create_ticket", "delete_acceptance_criterion",
         "get_ticket", "list_projects", "list_tickets", "move_ticket",
+        "save_acceptance_criterion",
     ];
 
     private readonly ApiFactory _factory;

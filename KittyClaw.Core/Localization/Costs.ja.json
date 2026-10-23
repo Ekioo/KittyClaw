@@ -37,5 +37,11 @@
   "JevCostCalls": "回の呼び出し",
   "JevCostInput": "入力トークン",
   "JevCostOutput": "出力トークン",
-  "JevCostUnpriced": "件の費用不明な呼び出し"
+  "JevCostUnpriced": "件の費用不明な呼び出し",
+  "SubscriptionAmountUnknown": "実際のサブスクリプション料金、通貨、税金、追加クレジットは、ローカルの使用状況データでは確認できません。",
+  "UnpricedRunsHelp": "件の記録は費用を正確に算出できません。不明な費用は合計から除外されます。",
+  "SubscriptionDetected": "サブスクリプションを検出",
+  "SubscriptionApiValue": "この使用量のAPI換算額：",
+  "ApiEquivalentTotal": "トークン使用量の換算額（API料金）",
+  "ApiEquivalentHelp": "標準のAPIトークン料金による参考値であり、請求額ではありません。サブスクリプション料金と購入済みクレジットは別扱いです。RTKの節約額は、仮定に基づく使用回避分です。"
 }

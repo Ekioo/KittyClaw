@@ -10,10 +10,10 @@ Exposes project management and supervision over the [Model Context Protocol](htt
 claude mcp add --transport http kittyclaw http://localhost:5230/mcp
 ```
 
-The server exposes 76 tools. Reconnect clients after upgrading so they refresh their cached tool catalogue.
+The server exposes 78 tools. Reconnect clients after upgrading so they refresh their cached tool catalogue.
 
 ## Key components
-- `KittyClaw.Web/Api/McpTools.cs` supplies the seven backward-compatible board tools, including search, filters and pipeline-aware child creation.
+- `KittyClaw.Web/Api/McpTools.cs` supplies nine board and acceptance-criteria tools, including search, filters, pipeline-aware child creation and criteria with evidence. The original seven board tools remain available.
 - `KittyClaw.Web/Api/McpManagementTools.cs` supplies 69 management and observability tools, calling REST application handlers and the automation store directly. Validations, conflicts, reloads and board notifications are shared.
 - `KittyClaw.Core.Tests/Api/McpManagementEndpointTests.cs` verifies schemas and workflows over isolated Streamable HTTP.
 - `KittyClaw.Web/Program.cs` — registers the server (`AddMcpServer().WithHttpTransport().WithTools<McpTools>()`), maps `/mcp`, and dynamically gates requests through the persisted global setting.
@@ -27,11 +27,15 @@ The server exposes 76 tools. Reconnect clients after upgrading so they refresh t
 |---|---|---|
 | `list_projects` | `GET /api/projects` | Discover project slugs |
 | `list_tickets` | `GET /api/projects/{slug}/tickets` | Optional status, assignee, search, priority, creator and parent filters |
-| `get_ticket` | `GET /api/projects/{slug}/tickets/{id}` | Full ticket incl. comments and activity |
+| `get_ticket` | `GET /api/projects/{slug}/tickets/{id}` | Full ticket incl. comments, activity and acceptance criteria with evidence |
 | `create_ticket` | `POST /api/projects/{slug}/tickets` | Defaults mirror REST: `Backlog`, `NiceToHave`, author `owner` |
 | `comment_ticket` | `POST .../tickets/{id}/comments` | |
 | `move_ticket` | `PATCH .../tickets/{id}/status` | Status must match a column name |
 | `board_overview` | `GET .../columns` + `GET .../members` | Columns (in order) + valid assignees |
+| `save_acceptance_criterion` | `POST .../tickets/{id}/acceptance-criteria` or `PUT .../acceptance-criteria/{criterionId}` | Omit `criterionId` to add; pass it to update one criterion. Updates replace that criterion's evidence. |
+| `delete_acceptance_criterion` | `DELETE .../tickets/{id}/acceptance-criteria/{criterionId}` | Deletes one criterion and its evidence; returns a boolean |
+
+Acceptance-criteria tools take `project`, ticket `id` and, for updates/deletions, `criterionId`. `save_acceptance_criterion` takes a typed `criterion` object with text, status (`NotEvaluated`, `PASS`, `FAIL` or `PARTIAL`) and optional evidence. Read existing criteria through `get_ticket` and include their evidence when retaining it during an update. See [ticket acceptance criteria](acceptance-criteria.md) for evidence formats and validation.
 
 ## Management and observability tools
 

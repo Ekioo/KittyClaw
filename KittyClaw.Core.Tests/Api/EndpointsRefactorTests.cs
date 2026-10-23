@@ -7,13 +7,11 @@ using KittyClaw.Web.Api;
 namespace KittyClaw.Core.Tests.Api;
 
 /// <summary>
-/// Guard tests for ticket #158: split Endpoints.cs into per-domain partial-class files.
-/// Encodes the architect's contract:
-///   - Route inventory (path, verb) set must remain identical to the current 64-route baseline.
-///   - Each route keeps its existing OpenAPI tag.
+/// Guards the explicit REST contract and the per-domain endpoint organization.
+///   - Route inventory (path, verb) must match the reviewed baseline exactly.
+///   - Each documented route keeps its expected OpenAPI tag.
 ///   - Each domain still answers a representative request through the in-process host.
 ///   - Endpoints.cs becomes a thin orchestrator and per-domain partial files exist.
-/// Source-text assertions are RED on dev (monolith) and GREEN after the refactor.
 /// </summary>
 public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTests.ApiFactory>, IDisposable
 {
@@ -81,6 +79,9 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "DELETE /api/projects/{slug}/tickets/{id}",
         "PUT /api/projects/{slug}/tickets/{id}/parent",
         "DELETE /api/projects/{slug}/tickets/{id}/parent",
+        "POST /api/projects/{slug}/tickets/{id}/acceptance-criteria",
+        "PUT /api/projects/{slug}/tickets/{id}/acceptance-criteria/{criterionId}",
+        "DELETE /api/projects/{slug}/tickets/{id}/acceptance-criteria/{criterionId}",
         "POST /api/projects/{slug}/tickets/{id}/comments",
         "PATCH /api/projects/{slug}/tickets/{id}/comments/{commentId}",
         "DELETE /api/projects/{slug}/tickets/{id}/comments/{commentId}",
@@ -240,6 +241,9 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         ["DELETE /api/projects/{slug}/tickets/{id}"] = "Tickets",
         ["PUT /api/projects/{slug}/tickets/{id}/parent"] = "Tickets",
         ["DELETE /api/projects/{slug}/tickets/{id}/parent"] = "Tickets",
+        ["POST /api/projects/{slug}/tickets/{id}/acceptance-criteria"] = "Tickets",
+        ["PUT /api/projects/{slug}/tickets/{id}/acceptance-criteria/{criterionId}"] = "Tickets",
+        ["DELETE /api/projects/{slug}/tickets/{id}/acceptance-criteria/{criterionId}"] = "Tickets",
         ["POST /api/projects/{slug}/tickets/{id}/comments"] = "Comments",
         ["PATCH /api/projects/{slug}/tickets/{id}/comments/{commentId}"] = "Comments",
         ["DELETE /api/projects/{slug}/tickets/{id}/comments/{commentId}"] = "Comments",
@@ -481,7 +485,6 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
     }
 
     // ---------- Case 4: structural — Endpoints.cs is split into per-domain partial files ----------
-    // These two assertions are RED on dev (monolith 951 lines) and GREEN after refactor.
 
     [Fact]
     public void EndpointsFile_IsThinOrchestrator()

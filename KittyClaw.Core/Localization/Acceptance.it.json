@@ -7,5 +7,7 @@
   "CriterionEvidence": "Prove",
   "CriterionText": "Criterio",
   "CriterionNotEvaluated": "Non valutato",
-  "RemoveEvidence": "Rimuovi prova"
+  "RemoveEvidence": "Rimuovi prova",
+  "ProcessorEvaluateAcceptance": "Valuta i criteri di accettazione del ticket",
+  "ProcessorEvaluateAcceptanceHelp": "Chiedi a questo processore di valutare i criteri pertinenti del ticket e allegare prove. I risultati vengono salvati prima dell'instradamento. Disattivato per impostazione predefinita."
 }
