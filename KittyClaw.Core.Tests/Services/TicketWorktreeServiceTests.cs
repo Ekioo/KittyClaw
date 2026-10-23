@@ -9,6 +9,33 @@ namespace KittyClaw.Core.Tests.Services;
 [Collection("MockClaude")]
 public sealed class TicketWorktreeServiceTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Inspect_DistinguishesMissingRepositoryFromBrokenMetadata(bool brokenMetadata)
+    {
+        using var root = new TempDir();
+        var workspace = Path.Combine(root.Path, "workspace");
+        Directory.CreateDirectory(workspace);
+        var projects = new ProjectService(Path.Combine(root.Path, "data"));
+        var project = await projects.CreateProjectAsync("worktree-inspection");
+        await projects.UpdateProjectAsync(project.Slug, workspace);
+        Assert.True((await projects.GetProjectAsync(project.Slug))!.WorktreesEnabled);
+        var tickets = new TicketService(projects, new MemberService(projects));
+        var ticket = await tickets.CreateTicketAsync(project.Slug, "Root");
+        var service = new TicketWorktreeService(projects, tickets);
+        if (brokenMetadata)
+        {
+            await File.WriteAllTextAsync(Path.Combine(workspace, ".git"), "gitdir: missing-repository");
+            await Assert.ThrowsAsync<InvalidOperationException>(() => service.InspectAsync(project.Slug, ticket.Id));
+        }
+        else
+        {
+            Assert.Null(await service.InspectAsync(project.Slug, ticket.Id));
+            Assert.False(Directory.Exists(Path.Combine(workspace, ".git")));
+        }
+    }
+
     [Fact]
     public async Task RepeatedResolution_ReusesCanonicalPathAndBranch()
     {

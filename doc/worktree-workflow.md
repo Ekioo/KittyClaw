@@ -40,6 +40,8 @@ For compatibility, projects with no `RepositoryPath` keep the historical workspa
 
 When enabled, each ticket drawer shows the canonical root ticket, path and branch shared by the whole ticket family. Integration and local-checkout synchronization have separate panels and badges: the former shows source and integrated commits, while the latter shows its target commit, any lag or conflict files, and recovery guidance. Integration retry/resume and local synchronization retry are separate actions. When disabled, this panel is absent and the normal ticket flow is unchanged. See [Local checkout synchronization recovery](./local-checkout-sync-recovery.md) before manually changing a conflicted checkout or its backup ref.
 
+Before a project has a Git repository, ticket inspection returns no worktree state and the drawer omits the panel. This is an expected setup state even when worktrees are enabled by default. Missing directories, broken Git metadata (including `.git` files), and other Git failures remain loading errors; inspection never initializes a repository.
+
 ## Caveats
 
 - **Live host serves `main`, not the worktree.** The orchestrator (`KITTYCLAW_WEB_EXE`) runs the published stable, which reflects `main`. Agents that need to test their changes (`qa-tester` typically) must build the worktree themselves and pass the resulting binary to `KittyClaw.QaRunner --web-exe …`, not rely on `${KITTYCLAW_API_URL}` for verification.
