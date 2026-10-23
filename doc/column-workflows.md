@@ -50,27 +50,41 @@ requiring external intervention or an indispensable decision, rather than ordina
 
 ### Native processor-memory capitalization
 
-Native `MEMORY.md` and `pipeline-lessons.md` writes are checkpointed immediately in their
-own Git commit, including ticket-worktree writes and projects without worktrees. Replays
-and runs with no new lessons also checkpoint pending native memory changes. Preparing a
-processor recovers older uncommitted native memory files before dispatch. Commits use only
-these two paths, preserve unrelated index entries, and check for probable secrets. Workspaces
-without a Git repository retain file-based memory. Maintenance writes keep their normal
-integration-queue lifecycle.
+Processor lessons use a single canonical `.agents/processors/column-<column-id>/memory/MEMORY.md`.
+A bounded generated section holds the newest 50 normalized, deduplicated lessons with stable
+execution checkpoint markers. Handwritten memory outside that section is preserved. On the next
+capitalization, the former `pipeline-lessons.md` journal is merged into the canonical file before
+the known generated legacy file is removed. One atomic replacement makes a restart or retry
+idempotent without a derived index to repair. Unknown legacy content is retained for review.
 
-Every successful agent dispatch reaches a durable post-processing checkpoint before after-actions
-and business routing. The structured result carries a `lessons` array. An empty array is an explicit
-successful `NoChange`; concrete lessons are normalized, deduplicated and persisted under
-`.agents/processors/column-<column-id>/memory/`. The lightweight `MEMORY.md` index is injected into
-the next run, while `pipeline-lessons.md` contains the bounded detail (the newest 50 lessons).
+The structured business result (including lessons) is saved in SQLite before memory persistence.
+Memory publication is independent of business routing: a refused Git hook records `RetryRequired`
+and its error without consuming business attempts, overwriting the outcome, or selecting the
+technical-failure route. The card and ticket panel expose **Retry memory only**, including on
+historical completed or cancelled executions; this action never dispatches an agent or routes a
+ticket. Its durable status survives restarts. Concurrent recovery requests are serialized and a
+successful checkpoint is not executed again. Failed business processing, delayed retries and
+waiting parents also expose their state and explicit recovery actions on the card.
 
-Each execution exposes `CapitalizationStatus`, `CapitalizationError`, and `CapitalizedAt`. The topic
-file is the durable journal; each file replacement is atomic, and the injectable index is rebuilt from
-that journal whenever an existing checkpoint is replayed. A stop between topic and index replacement
-therefore repairs the index instead of accepting a partially committed checkpoint. Stable execution
-checkpoint markers make replay idempotent. If persistence fails or the host stops during this stage, the already saved agent result
-is retained and the execution becomes retryable; recovery resumes capitalization without dispatching
-the business agent again. Routing does not proceed silently past a failed checkpoint.
+Every KittyClaw memory write is checkpointed immediately, independently of business routing.
+This includes creating or migrating processor memory. Commits include only native memory paths,
+preserve unrelated staged files, check for probable secrets and execute the project's Git hooks.
+Ignored untracked memory stays local; already tracked memory remains versioned even if a later
+ignore rule matches it. KittyClaw never installs Git hooks for this feature. Processor discovery
+and unchanged memory reads do not retry outstanding commits: an external reservation must not
+prevent a whole project's processors from selecting their next ticket. Ticket worktree writes use the ticket
+route; maintenance writes retain their integration-queue lifecycle. Non-Git workspaces retain
+file-based memory.
+
+Manual column changes supersede old failed, delayed or waiting claims in the same save as the
+ticket move, preserving results, lessons, errors and action history. A running claim retains its
+unique reservation until the worker stops post-processing or startup recovery cancels the stale
+trigger. An away-and-back move cannot revive its old outcome. The next claim reads the latest
+owner comment from durable storage, even after restart, and the dispatch includes current
+comments plus previous deliveries as context. Agents are instructed to continue from delivered
+artifacts and existing reservations rather than repeat that work; old outcomes are never routing
+instructions. Non-success routing also checks the durable claim and ticket version under the
+SQLite write lock before committing a transition.
 
 For a `changes_requested` result, the engine finds the most recent completed execution that routed
 the ticket into the validating column and also records the feedback in that upstream processor's
@@ -173,6 +187,7 @@ Relevant endpoints include:
 - `GET /api/projects/{slug}/column-executions`
 - `POST /api/projects/{slug}/column-executions/{executionId}/retry`
 - `POST /api/projects/{slug}/column-executions/{executionId}/cancel`
+- `POST /api/projects/{slug}/column-executions/{executionId}/retry-memory` — persist saved lessons only
 
 Ticket creation and update accept stable `pipelineId` and `columnId`. Ticket update also accepts `blocksParent`.
 

@@ -1,0 +1,9 @@
+{
+  "RecoveryMemoryPending": "Memory needs saving",
+  "RecoveryRetryMemory": "Retry memory only",
+  "RecoveryFailed": "Processing failed",
+  "RecoveryRetrying": "Retry scheduled",
+  "RecoveryWaitingForChildren": "Waiting for children",
+  "RecoveryRetry": "Retry processing",
+  "RecoveryRelease": "Release claim and reassess"
+}

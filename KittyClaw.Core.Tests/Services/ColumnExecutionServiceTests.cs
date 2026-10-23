@@ -288,8 +288,8 @@ public sealed class ColumnExecutionServiceTests : IDisposable
         Assert.Null(retry);
         var cancelled = Assert.Single(await _executions.ListAsync(project.Slug, ticket.Id));
         Assert.Equal(ColumnExecutionStatus.Cancelled, cancelled.Status);
-        Assert.Equal("stale_trigger_context", cancelled.ContextRejectionReason);
-        Assert.Contains("quitté la colonne déclencheuse", cancelled.Error);
+        Assert.Equal("manual_transition", cancelled.ContextRejectionReason);
+        Assert.Equal("timeout", cancelled.Error);
         Assert.NotNull(cancelled.EndedAt);
         Assert.Null(cancelled.AvailableAt);
         Assert.Equal(1, cancelled.Attempt);

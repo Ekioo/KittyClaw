@@ -34,7 +34,7 @@ public sealed class ColumnProcessingCapitalizationTests : IDisposable
     }
 
     [Fact]
-    public async Task Failed_capitalization_is_observable_and_retries_without_redispatch_before_routing()
+    public async Task Failed_capitalization_routes_business_result_and_retries_memory_without_redispatch()
     {
         var projects = new ProjectService(_temp.Path);
         var project = await projects.CreateProjectAsync("Capitalization recovery");
@@ -66,14 +66,16 @@ public sealed class ColumnProcessingCapitalizationTests : IDisposable
             Assert.True(await WaitForAsync(async () =>
             {
                 var run = (await executions.ListAsync(project.Slug, ticket.Id)).SingleOrDefault();
-                return run is { Status: ColumnExecutionStatus.Retrying, AgentCompleted: true,
+                return run is { Status: ColumnExecutionStatus.Completed, AgentCompleted: true,
                     CapitalizationStatus: MemoryCapitalizationStatus.RetryRequired };
             }));
-            Assert.Equal(source.Id, (await tickets.GetTicketAsync(project.Slug, ticket.Id))!.ColumnId);
+            Assert.Equal(target.Id, (await tickets.GetTicketAsync(project.Slug, ticket.Id))!.ColumnId);
             Assert.Equal(1, dispatcher.Count);
 
             memory.Resume();
-            await Task.Delay(TimeSpan.FromMilliseconds(1100));
+            var saved = Assert.Single(await executions.ListAsync(project.Slug, ticket.Id));
+            Assert.True(await engine.RetryMemoryAsync(project.Slug, saved.Id));
+            Assert.False(await engine.RetryMemoryAsync(project.Slug, saved.Id));
             engine.Signal(project.Slug);
 
             Assert.True(await WaitForAsync(async () =>

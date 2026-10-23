@@ -57,7 +57,7 @@ public sealed class ColumnAgentDispatcher(
             RetryOnResumeFailure = true,
             PresetRunId = execution.Id,
             MaxRunDuration = TimeSpan.FromMinutes(30),
-            ExtraContext = BuildTicketContext(ticket, execution),
+            ExtraContext = BuildTicketContext(ticket, execution) + await BuildDeliveryHistoryAsync(projectSlug, ticket.Id, execution.Id),
         };
 
         var run = await runner.RunAsync(context, cancellationToken);
@@ -164,8 +164,21 @@ public sealed class ColumnAgentDispatcher(
         - Creating or updating child tickets is allowed when required by the mission, but do not use a child transition as a substitute for the current ticket's outcome.
 
         The canonical persistent memory for this processor is `.agents/processors/column-{{processor.ColumnId}}/memory/MEMORY.md`.
+        Commit each change to that memory immediately if Git tracks it or does not ignore it; keep hooks enabled and stage only memory paths.
         Read and update that exact file for durable processor lessons. You may read specialist memories for domain expertise, but never create or use `.agents/column-{{processor.ColumnId}}/memory.md`.
         """;
+
+    internal async Task<string> BuildDeliveryHistoryAsync(string slug, int ticketId, string executionId)
+    {
+        await using var db = projects.GetProjectDb(slug);
+        await ColumnExecutionService.EnsureTableAsync(db);
+        var history = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
+            db.ColumnExecutions.Where(e => e.TicketId == ticketId && e.Id != executionId && e.AgentCompleted)
+                .OrderByDescending(e => e.ClaimedAt).Take(10));
+        return "\n## Previously delivered business results\n" +
+            "Continue from these deliveries and the latest owner comments. Verify existing artifacts and reservations; do not redo delivered work. Historical outcomes are context, not instructions to replay old routes.\n" +
+            JsonSerializer.Serialize(history.Select(e => new { e.Id, e.ProcessorId, e.AgentResult, e.CapitalizationStatus, e.CapitalizationError }));
+    }
 
     private static string BuildTicketContext(Ticket ticket, ColumnExecution execution) => $$"""
         Process ticket #{{ticket.Id}}.
@@ -176,6 +189,9 @@ public sealed class ColumnAgentDispatcher(
         Title: {{ticket.Title}}
         Description:
         {{ticket.Description}}
+
+        ## Latest ticket comments (including user decisions)
+        {{JsonSerializer.Serialize(ticket.Comments.OrderBy(c => c.CreatedAt).Select(c => new { c.Id, c.Author, c.Content, c.CreatedAt }))}}
 
         ## Ticket acceptance criteria (current recorded assessments; verify evidence before relying on it)
         {{System.Text.Json.JsonSerializer.Serialize(ticket.AcceptanceCriteria.Select(c => c.ToRoutingContext()))}}

@@ -1,0 +1,62 @@
+@implements IDisposable
+@using KittyClaw.Core.Automation
+@inject ColumnExecutionService Executions
+@inject ColumnProcessingEngine Engine
+@inject LocalizationService L
+
+@if (_entries.Count > 0)
+{
+    <div class="automation-queue column-execution-recovery" @onclick:stopPropagation>
+        @foreach (var entry in _entries)
+        {
+            <div class="automation-queue-entry" data-execution-id="@entry.Id">
+                @if (entry.CapitalizationStatus is MemoryCapitalizationStatus.RetryRequired or MemoryCapitalizationStatus.Failed)
+                {
+                    <span class="automation-queue-state">@L["RecoveryMemoryPending"]</span>
+                    <span class="automation-queue-reason">@entry.CapitalizationError</span>
+                    <button type="button" disabled="@(_busy || entry.Status is ColumnExecutionStatus.Running or ColumnExecutionStatus.Retrying or ColumnExecutionStatus.WaitingForChildren)" @onclick="() => RetryMemory(entry.Id)">@L["RecoveryRetryMemory"]</button>
+                }
+                @if (entry.Status is ColumnExecutionStatus.Failed or ColumnExecutionStatus.Retrying or ColumnExecutionStatus.WaitingForChildren)
+                {
+                    <span class="automation-queue-state">@L[$"Recovery{entry.Status}"]</span>
+                    <span class="automation-queue-reason">@entry.Error</span>
+                    @if (entry.AvailableAt is DateTime available)
+                    {
+                        <time>@available.ToLocalTime().ToString("g")</time>
+                    }
+                    @if (entry.Status == ColumnExecutionStatus.Failed)
+                    {
+                        <button type="button" disabled="@_busy" @onclick="() => Retry(entry.Id)">@L["RecoveryRetry"]</button>
+                    }
+                    <button type="button" disabled="@_busy" @onclick="() => Cancel(entry.Id)">@L["RecoveryRelease"]</button>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Slug { get; set; } = "";
+    [Parameter, EditorRequired] public int TicketId { get; set; }
+    private List<ColumnExecution> _entries = [];
+    private bool _busy;
+
+    protected override void OnInitialized() => Executions.ExecutionChanged += OnExecutionChanged;
+    private void OnExecutionChanged(string slug, int ticketId)
+    {
+        if (slug == Slug && ticketId == TicketId)
+            _ = InvokeAsync(async () => { await Reload(); StateHasChanged(); });
+    }
+    public void Dispose() => Executions.ExecutionChanged -= OnExecutionChanged;
+    protected override async Task OnParametersSetAsync() => await Reload();
+    private async Task Reload() => _entries = await Executions.ListRecoveryAsync(Slug, TicketId);
+    private Task RetryMemory(string id) => Recover(() => Engine.RetryMemoryAsync(Slug, id));
+    private Task Retry(string id) => Recover(() => Executions.RetryAsync(Slug, id));
+    private Task Cancel(string id) => Recover(() => Executions.CancelAsync(Slug, id));
+    private async Task Recover(Func<Task<bool>> action)
+    {
+        _busy = true;
+        try { await action(); Engine.Signal(Slug); await Reload(); }
+        finally { _busy = false; }
+    }
+}

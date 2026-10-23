@@ -23,65 +23,71 @@ public class ColumnMemoryCapitalizationService(ProjectService projects, DurableW
         if (project is null) return new(MemoryCapitalizationStatus.Failed, 0, $"Project '{projectSlug}' not found.");
         var relativeMemoryDir = Path.Combine(".agents", "processors", $"column-{columnId}", "memory");
         var root = projects.ResolveWorkspacePath(project);
-        await ProcessorMemoryGit.CommitAsync(root, columnId, cancellationToken);
         DurableWriteRoute? route = null;
-        if (durableWrites is not null && project.WorktreesEnabled)
-        {
-            route = await durableWrites.ResolveAsync(projectSlug, ticketId, [relativeMemoryDir], cancellationToken);
-            root = route.RootPath;
-        }
-        var memoryDir = Path.Combine(root, ".agents", "processors",
-            $"column-{columnId}", "memory");
-        var topicPath = Path.Combine(memoryDir, "pipeline-lessons.md");
-        var indexPath = Path.Combine(memoryDir, "MEMORY.md");
-        var marker = $"<!-- checkpoint:{checkpointId} -->";
         var routeFinalized = false;
-
-        async Task<MemoryCapitalizationResult> PersistAsync(MemoryCapitalizationStatus status, int added)
-        {
-            if (route?.Kind == DurableWriteKind.Maintenance && durableWrites is not null)
-            {
-                routeFinalized = true;
-                var validation = await durableWrites.CommitAndQueueAsync(projectSlug, route,
-                    $"chore(memory): capitalize column {columnId} lessons", cancellationToken);
-                if (validation.Status != DurableWriteValidationStatus.Ready)
-                    return new(MemoryCapitalizationStatus.Failed, 0,
-                        validation.Error ?? "Durable memory changes require review before integration.");
-            }
-            else await ProcessorMemoryGit.CommitAsync(root, columnId, cancellationToken);
-            return new(status, added);
-        }
-
         await WriteLock.WaitAsync(cancellationToken);
         try
         {
-            if (normalized.Count == 0)
-                return await PersistAsync(MemoryCapitalizationStatus.NoChange, 0);
-            Directory.CreateDirectory(memoryDir);
-            var existing = File.Exists(topicPath) ? await File.ReadAllTextAsync(topicPath, cancellationToken) : "";
-            if (existing.Contains(marker, StringComparison.Ordinal))
+            if (durableWrites is not null && project.WorktreesEnabled)
             {
-                // The topic is the durable journal. A process may have stopped after replacing it
-                // but before replacing the injectable index, so every replay repairs the derived
-                // index before declaring the checkpoint complete.
-                await WriteIndexAsync(indexPath, ParseEntries(existing), cancellationToken);
-                return await PersistAsync(MemoryCapitalizationStatus.Succeeded, 0);
+                route = await durableWrites.ResolveAsync(projectSlug, ticketId, [relativeMemoryDir], cancellationToken);
+                root = route.RootPath;
+            }
+            var memoryDir = Path.Combine(root, ".agents", "processors",
+                $"column-{columnId}", "memory");
+            var topicPath = Path.Combine(memoryDir, "pipeline-lessons.md");
+            var indexPath = Path.Combine(memoryDir, "MEMORY.md");
+            var marker = $"<!-- checkpoint:{checkpointId} -->";
+
+            async Task<MemoryCapitalizationResult> PersistAsync(MemoryCapitalizationStatus status, int added)
+            {
+                if (route?.Kind == DurableWriteKind.Maintenance && durableWrites is not null)
+                {
+                    routeFinalized = true;
+                    var validation = await durableWrites.CommitAndQueueAsync(projectSlug, route,
+                        $"chore(memory): capitalize column {columnId} lessons", cancellationToken);
+                    if (validation.Status != DurableWriteValidationStatus.Ready)
+                        return new(MemoryCapitalizationStatus.Failed, 0,
+                            validation.Error ?? "Durable memory changes require review before integration.");
+                }
+                else await ProcessorMemoryGit.CommitAsync(root, columnId, cancellationToken);
+                return new(status, added);
             }
 
-            var entries = ParseEntries(existing);
-            var known = entries.Select(e => e.Text).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var added = normalized.Where(known.Add).Select(text => new Lesson(checkpointId, text)).ToList();
-            if (added.Count == 0)
+            if (normalized.Count == 0 && !File.Exists(topicPath))
                 return await PersistAsync(MemoryCapitalizationStatus.NoChange, 0);
+            Directory.CreateDirectory(memoryDir);
+            var canonical = File.Exists(indexPath) ? await File.ReadAllTextAsync(indexPath, cancellationToken) : "";
+            var legacy = File.Exists(topicPath) ? await File.ReadAllTextAsync(topicPath, cancellationToken) : "";
+            var entries = ParseEntries(canonical);
+            var known = entries.Select(e => e.Text).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            entries.AddRange(ParseEntries(legacy).Where(e => known.Add(e.Text)));
+            var added = normalized.Where(known.Add).Select(text => new Lesson(checkpointId, text)).ToList();
             entries.AddRange(added);
             entries = entries.TakeLast(MaximumLessons).ToList();
 
-            var topic = new StringBuilder("---\ntitle: Pipeline lessons\n---\n\n# Pipeline lessons\n\n");
+            // Preserve handwritten memory; replace only the generated section and the old
+            // derived index rows. One atomic canonical file removes the two-file crash gap.
+            const string section = "<!-- kittyclaw:pipeline-lessons -->";
+            const string sectionEnd = "<!-- /kittyclaw:pipeline-lessons -->";
+            var sectionStart = canonical.IndexOf(section, StringComparison.Ordinal);
+            var end = canonical.IndexOf(sectionEnd, StringComparison.Ordinal);
+            var suffix = end >= 0 ? canonical[(end + sectionEnd.Length)..] : "";
+            var custom = sectionStart >= 0 ? canonical[..sectionStart] : canonical;
+            custom = string.Join("\n", custom.Split('\n').Where(line =>
+                !line.StartsWith("[5] [Pipeline lesson](pipeline-lessons.md) — ", StringComparison.Ordinal)));
+            if (string.IsNullOrWhiteSpace(custom)) custom = "# Processor memory\n";
+            var content = new StringBuilder(custom.TrimEnd() + "\n\n" + section + "\n\n## Pipeline lessons\n\n");
             foreach (var entry in entries)
-                topic.AppendLine($"<!-- checkpoint:{entry.Checkpoint} -->\n- {entry.Text}\n");
-            await WriteAtomicallyAsync(topicPath, topic.ToString(), cancellationToken);
-            await WriteIndexAsync(indexPath, entries, cancellationToken);
-            return await PersistAsync(MemoryCapitalizationStatus.Succeeded, added.Count);
+                content.AppendLine($"<!-- checkpoint:{entry.Checkpoint} -->\n- {entry.Text}\n");
+            content.Append(sectionEnd).Append(suffix.Length > 0 ? suffix : "\n");
+            await WriteAtomicallyAsync(indexPath, content.ToString(), cancellationToken);
+            // Delete only the known generated legacy file after the canonical replacement.
+            // Unknown handwritten content remains available for manual review.
+            if (IsGeneratedLegacy(legacy)) File.Delete(topicPath);
+            var status = added.Count > 0 || canonical.Contains(marker, StringComparison.Ordinal) || legacy.Contains(marker, StringComparison.Ordinal)
+                ? MemoryCapitalizationStatus.Succeeded : MemoryCapitalizationStatus.NoChange;
+            return await PersistAsync(status, added.Count);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
@@ -93,6 +99,16 @@ public class ColumnMemoryCapitalizationService(ProjectService projects, DurableW
             if (route is not null && !routeFinalized && durableWrites is not null)
                 await durableWrites.PreserveExecutionAsync(projectSlug, route, "Processor memory write interrupted before commit.");
         }
+    }
+
+    private static bool IsGeneratedLegacy(string content)
+    {
+        if (content.Length == 0) return false;
+        var expected = new StringBuilder("---\ntitle: Pipeline lessons\n---\n\n# Pipeline lessons\n\n");
+        foreach (var entry in ParseEntries(content))
+            expected.AppendLine($"<!-- checkpoint:{entry.Checkpoint} -->\n- {entry.Text}\n");
+        static string CanonicalLines(string text) => string.Join("\n", text.Split('\n').Select(line => line.TrimEnd())).Trim();
+        return CanonicalLines(content) == CanonicalLines(expected.ToString());
     }
 
     private static string Normalize(string value) =>
@@ -114,15 +130,6 @@ public class ColumnMemoryCapitalizationService(ProjectService projects, DurableW
             }
         }
         return result;
-    }
-
-    private async Task WriteIndexAsync(
-        string indexPath, IReadOnlyList<Lesson> entries, CancellationToken cancellationToken)
-    {
-        var index = new StringBuilder("# Processor memory\n\n");
-        foreach (var entry in entries.Reverse())
-            index.AppendLine($"[5] [Pipeline lesson](pipeline-lessons.md) — {entry.Text}");
-        await WriteAtomicallyAsync(indexPath, index.ToString(), cancellationToken);
     }
 
     protected virtual async Task WriteAtomicallyAsync(

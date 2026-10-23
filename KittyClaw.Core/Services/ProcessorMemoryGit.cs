@@ -32,14 +32,20 @@ internal static class ProcessorMemoryGit
                 var path = relative + "/" + name;
                 var fullPath = Path.Combine(memory, name);
                 var tracked = await GitAsync(root, ["ls-files", "--", path], ct);
-                if (!File.Exists(fullPath) && string.IsNullOrWhiteSpace(tracked.Output)) continue;
+                if (string.IsNullOrWhiteSpace(tracked.Output))
+                {
+                    if (!File.Exists(fullPath)) continue;
+                    var ignored = await GitAsync(root, ["check-ignore", "--quiet", "--", path], ct);
+                    if (ignored.Code == 0) continue;
+                    if (ignored.Code != 1) EnsureSuccess(ignored);
+                }
                 if (ProbableSecretScanner.ContainsProbableSecret(fullPath))
                     throw new InvalidOperationException($"Processor memory requires review before commit: {path}");
                 paths.Add(path);
             }
             if (paths.Count == 0) return;
-            // These generated knowledge files are versioned even when a project ignores .agents.
-            var add = await GitAsync(root, ["add", "-f", "-A", "--", .. paths], ct);
+            // Respect ignored untracked memory. Already tracked files remain versioned.
+            var add = await GitAsync(root, ["add", "-A", "--", .. paths], ct);
             EnsureSuccess(add);
             var diff = await GitAsync(root, ["diff", "--cached", "--quiet", "--", .. paths], ct);
             if (diff.Code == 0) return;
@@ -47,7 +53,7 @@ internal static class ProcessorMemoryGit
             var identity = $"column-{columnId}";
             EnsureSuccess(await GitAsync(root,
                 ["-c", $"user.name={identity}", "-c", $"user.email={identity}@kittyclaw.local",
-                    "commit", "--only", "--no-verify", "-m", $"chore(memory): checkpoint column {columnId}", "--", .. paths], ct));
+                    "commit", "--only", "-m", $"chore(memory): checkpoint column {columnId}", "--", .. paths], ct));
         }
         finally { gate.Release(); }
     }

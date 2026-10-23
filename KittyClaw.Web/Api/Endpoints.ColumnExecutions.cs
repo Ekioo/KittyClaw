@@ -13,6 +13,14 @@ public static partial class Endpoints
 
         api.MapPost("/projects/{slug}/column-executions/{executionId}/retry", HandleRetryColumnExecution).WithTags("Pipelines");
 
+        api.MapPost("/projects/{slug}/column-executions/{executionId}/retry-memory", async (
+            string slug, string executionId, ColumnProcessingEngine engine, BoardUpdateNotifier notifier) =>
+        {
+            if (!await engine.RetryMemoryAsync(slug, executionId)) return Results.NotFound(new { error = "No recoverable memory checkpoint." }) as IResult;
+            notifier.NotifyProjectUpdated(slug);
+            return Results.Accepted();
+        }).WithTags("Pipelines");
+
         api.MapPost("/projects/{slug}/column-executions/{executionId}/cancel", HandleCancelColumnExecution).WithTags("Pipelines");
     }
 
