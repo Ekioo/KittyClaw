@@ -85,3 +85,15 @@ The open dashboard reloads tile output and sidecars when the refresh queue chang
 ## External dependencies
 - [Storage](./storage.md) — tile layout persisted in the per-project SQLite DB.
 - [REST API](./rest-api.md) — tile manipulation endpoints registered in `Endpoints.cs`.
+
+## Tile selection and editor keyboard behavior
+
+The tile selector above the canvas lists every tile, including tiles fully covered
+by another tile. Selecting a tile brings it to the foreground, scrolls it into view
+and focuses its first available action. Pointer activation and keyboard focus also
+activate tiles. This transient stacking order does not change persisted coordinates.
+
+The configuration editor registers with the shared Escape stack on every entry
+(edit or AI proposal), moves focus inside after render, and contains Tab navigation.
+Escape closes the topmost editor and restores the original trigger's focus. Save,
+cancel, revise and component disposal release the Escape registration.

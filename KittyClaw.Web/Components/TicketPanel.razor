@@ -33,9 +33,11 @@
         <div class="ticket-panel">
         <div class="ticket-panel-header">
             <div class="editable-field">
-                <div class="priority-dot-btn" @onclick="TogglePriorityPicker" title="@L["ChangePriority"]">
+                <button type="button" class="priority-dot-btn" @onclick="TogglePriorityPicker"
+                        title="@L["ChangePriority"]" aria-label="@L["ChangePriority"]"
+                        aria-expanded="@(_showPriorityPicker ? "true" : "false")">
                     <span class="priority-dot priority-@GetPriorityClass(_ticket.Priority)"></span>
-                </div>
+                </button>
                 @if (_showPriorityPicker)
                 {
                     <div class="priority-dropdown">

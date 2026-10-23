@@ -35,10 +35,11 @@
         <div class="ticket-card-meta">
             @if (activeRun is not null)
             {
-                <span class="agent-spinner"
+                <button type="button" class="agent-spinner"
+                      aria-label="@L.Get("CardActiveRunTooltip", activeRun.AgentName)"
                       title="@L.Get("CardActiveRunTooltip", activeRun.AgentName)"
                       @onclick="() => OnOpenRunDrawer.InvokeAsync(activeRun.RunId)"
-                      @onclick:stopPropagation></span>
+                      @onclick:stopPropagation></button>
             }
             else if (lastRun is not null)
             {
@@ -50,7 +51,8 @@
             <span class="ticket-id">#@Ticket.Id</span>
         </div>
     </div>
-    <span class="ticket-title">@Ticket.Title</span>
+    <button type="button" class="ticket-title ticket-open-btn" aria-label="@($"#{Ticket.Id} {Ticket.Title}")"
+            @onclick="OnClickHandler" @onclick:stopPropagation>@Ticket.Title</button>
     <AutomationQueueSummary Slug="@Slug" TicketId="@Ticket.Id" Compact="true" />
     @if (Ticket.Labels.Count > 0)
     {
@@ -63,7 +65,7 @@
     }
     @if (Ticket.SubTickets.Count > 0)
     {
-        <div class="sub-ticket-indicator" @onclick="OnEnterSubKanbanHandler" @onclick:stopPropagation title="@L["ViewSubTickets"]">
+        <button type="button" class="sub-ticket-indicator" aria-label="@L["ViewSubTickets"]" @onclick="OnEnterSubKanbanHandler" @onclick:stopPropagation title="@L["ViewSubTickets"]">
             <span class="sub-ticket-icon">&#128194;</span>
             @foreach (var subCol in Columns)
             {
@@ -73,7 +75,7 @@
                     <span class="sub-status-chip" style="--sc: @subCol.Color" title="@subCol.Name">@cnt</span>
                 }
             }
-        </div>
+        </button>
     }
     <div class="ticket-card-bottom">
         @if (Ticket.FireAt is not null)

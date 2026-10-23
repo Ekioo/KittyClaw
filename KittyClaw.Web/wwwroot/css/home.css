@@ -400,3 +400,16 @@
 .workflow-migration-card h2 { margin-bottom: .35rem; }
 .workflow-migration-card p { margin: 0; }
 
+
+.board-lane-toggle, .board-lane-toggle:hover {
+    display: inline-flex;
+    align-items: center;
+    gap: .6rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    white-space: normal;
+    text-align: left;
+}

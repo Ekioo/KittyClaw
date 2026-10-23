@@ -152,8 +152,14 @@ else
             <section @key="slug" class="board-lane @(collapsed ? "board-lane-collapsed" : "")">
                 <div class="board-lane-header" @onclick="() => ToggleLane(slug)"
                      title="@(collapsed ? L["UnifiedBoardExpandLane"] : L["UnifiedBoardCollapseLane"])">
-                    <span class="board-lane-caret">@(collapsed ? "▶" : "▼")</span>
-                    <h2 class="board-lane-title">@lane.Project.Name</h2>
+                    <h2 class="board-lane-title">
+                        <button type="button" class="board-lane-toggle"
+                                aria-expanded="@(collapsed ? "false" : "true")"
+                                @onclick="() => ToggleLane(slug)" @onclick:stopPropagation>
+                            <span class="board-lane-caret" aria-hidden="true">@(collapsed ? "▶" : "▼")</span>
+                            @lane.Project.Name
+                        </button>
+                    </h2>
                     <span class="board-lane-ticket-total">@VisibleTicketCount(lane)</span>
                     @if (lane.Project.IsPaused)
                     {

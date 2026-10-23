@@ -156,3 +156,16 @@ When adding a new template, mirror the conventions:
 - SVG charts use `viewBox` so they scale with the tile; no fixed pixel sizes.
 - No client-side JS dependency unless absolutely required (mermaid is the lone
   exception, lazy-loaded from CDN in `dashboard.js`).
+
+### Keyboard and motion preferences
+
+- Native buttons expose ticket opening, sub-ticket navigation, priority selection,
+  and project-lane expansion without relying on pointer events.
+- Hover-revealed actions must also appear on `:focus-within` and remain visible
+  on coarse pointers or devices without hover.
+- `css/motion.css`, loaded after the component styles, removes nonessential
+  movement for `prefers-reduced-motion: reduce` while preserving status text,
+  static loading indicators, focus rings, and color feedback. Scoped component
+  animations handle this preference in their own stylesheets.
+- Drag targets retain stable geometry. Dashboard drag previews use transforms;
+  persisted layout coordinates are committed only when the pointer is released.

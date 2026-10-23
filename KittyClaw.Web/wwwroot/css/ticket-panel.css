@@ -646,6 +646,8 @@ select:focus-visible,
 
 /* Priority dot button */
 .priority-dot-btn {
+    background: transparent;
+    border: 0;
     cursor: pointer;
     padding: 0.35rem;
     border-radius: 50%;
@@ -829,7 +831,7 @@ select:focus-visible,
     border: 1px dashed var(--border);
     background: transparent;
     color: var(--text);
-    transition: border-color 0.15s, width 0.15s;
+    transition: border-color 0.15s;
 }
 .label-autocomplete-input:focus {
     width: 160px;

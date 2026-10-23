@@ -1,4 +1,5 @@
 {
+  "DashboardTiles": "Dashboard tiles",
   "CardActiveRunTooltip": "Open the running agent: {0}",
   "CardLastRunTooltip": "View the last run: {0} · {1}",
   "TicketCurrentColumn": "Column",

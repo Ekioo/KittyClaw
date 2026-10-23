@@ -284,3 +284,8 @@
     max-width: 400px;
 }
 
+
+.project-card-wrap:focus-within .project-pause-btn { opacity: 1; }
+@media (hover: none), (pointer: coarse) {
+    .project-card-wrap .project-pause-btn { opacity: 1; }
+}

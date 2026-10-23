@@ -34,7 +34,7 @@
     &[open]
 
 {
-    animation: components-reconnect-modal-slideUp 1.5s cubic-bezier(.05, .89, .25, 1.02) 0.3s, components-reconnect-modal-fadeInOpacity 0.5s ease-in-out 0.3s;
+    animation: components-reconnect-modal-slideUp 0.2s cubic-bezier(0.23, 1, 0.32, 1), components-reconnect-modal-fadeInOpacity 0.2s ease-out;
     animation-fill-mode: both;
 }
 
@@ -154,4 +154,14 @@
         height: 80px;
         opacity: 0;
     }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #components-reconnect-modal, #components-reconnect-modal[open],
+    #components-reconnect-modal::backdrop, .components-rejoining-animation div {
+        animation: none;
+        transition: none;
+    }
+    #components-reconnect-modal[open] { opacity: 1; transform: none; }
+    .components-rejoining-animation div { opacity: .65; width: 60px; height: 60px; top: 10px; left: 10px; }
 }

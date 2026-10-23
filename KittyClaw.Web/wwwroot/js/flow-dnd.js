@@ -55,16 +55,15 @@ function startDrag(e) {
     const ghost = srcElement.cloneNode(true);
     ghost.classList.add("flow-dnd-ghost");
     ghost.style.position = "fixed";
-    ghost.style.left = rect.left + "px";
-    ghost.style.top = rect.top + "px";
+    ghost.style.left = "0";
+    ghost.style.top = "0";
     ghost.style.width = rect.width + "px";
     ghost.style.height = rect.height + "px";
     ghost.style.zIndex = "9999";
     ghost.style.pointerEvents = "none";
     ghost.style.opacity = "1";
     ghost.style.boxShadow = "0 10px 28px rgba(0,0,0,0.55)";
-    ghost.style.transform = "rotate(1.5deg) scale(1.02)";
-    ghost.style.transition = "transform 0.08s ease";
+    ghost.style.transform = `translate(${rect.left}px, ${rect.top}px)`;
     document.body.appendChild(ghost);
 
     state.ghost = ghost;
@@ -92,13 +91,10 @@ function onMouseMove(e) {
         startDrag(e);
     }
 
-    state.ghost.style.left = (e.clientX - state.offsetX) + "px";
-    state.ghost.style.top = (e.clientY - state.offsetY) + "px";
+    state.ghost.style.transform = `translate(${e.clientX - state.offsetX}px, ${e.clientY - state.offsetY}px)`;
 
     // Find the drop slot under the cursor.
-    state.ghost.style.visibility = "hidden";
     const under = document.elementFromPoint(e.clientX, e.clientY);
-    state.ghost.style.visibility = "";
     const slot = under?.closest(".flow-dnd-slot-active") ?? null;
     if (slot !== state.currentTarget) {
         state.currentTarget?.classList.remove("flow-dnd-slot-hover");

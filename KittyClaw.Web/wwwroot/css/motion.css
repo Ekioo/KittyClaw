@@ -1,0 +1,24 @@
+/* Preserve static state and color feedback while removing nonessential movement. */
+@media (prefers-reduced-motion: reduce) {
+    .agent-spinner, .project-card-agent-badge,
+    .chat-loading-spinner, .chat-bubble-loading,
+    .folder-picker-state .loading-spinner, .migration-spinner, .migration-button-spinner,
+    .migration-progress-track span, .migration-progress-pulse,
+    .trash-zone, .bottom-drop-zones, .drop-indicator {
+        animation: none;
+    }
+    .chat-bubble-loading { opacity: 1; }
+    .ticket-card { transition: border-color .15s; }
+    .ticket-card:active, .ticket-card.dragging { transform: none; }
+    .bottom-drop-zones .trash-zone-hover, .unparent-zone-hover { transform: none; }
+    .trash-zone-hover { transform: translateX(-50%); }
+    .trash-zone, .unparent-zone { transition: background .15s; }
+    .column-insert-btn { transition: opacity .15s; transform: translate(-50%, -50%); }
+    .column-insert-slot:hover .column-insert-btn,
+    .column-insert-btn:focus-visible { transform: translate(-50%, -50%); }
+    .chat-diagnostic-summary::after, .console-tool-summary::before,
+    .console-msg-summary::before, .tool-call-summary::before,
+    .workflow-settings .skill-editor summary::before, .tile-progress-fill, .tile-bar-fill,
+    .label-autocomplete-input { transition: none; }
+    .cost-date-preset:hover { transform: none; }
+}

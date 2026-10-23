@@ -1,6 +1,8 @@
 ﻿/* ─── Agent run spinner on ticket cards ───────────────────────────────── */
 .agent-spinner {
     display: inline-block;
+    padding: 0;
+    background: transparent;
     width: 14px;
     height: 14px;
     border: 2px solid #4a9eff44;

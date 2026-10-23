@@ -1,4 +1,5 @@
 {
+  "DashboardTiles": "Tuiles du tableau de bord",
   "CardActiveRunTooltip": "Ouvrir l'agent en cours : {0}",
   "CardLastRunTooltip": "Voir la dernière exécution : {0} · {1}",
   "TicketCurrentColumn": "Colonne",

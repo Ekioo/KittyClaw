@@ -302,3 +302,16 @@
     font-size: .62rem; font-weight: 700; line-height: 1.25; white-space: nowrap; flex-shrink: 0;
 }
 
+
+/* Native actions keep the card's compact appearance and shared focus ring. */
+.ticket-open-btn, .ticket-open-btn:hover {
+    display: block;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    font-weight: inherit;
+    text-align: left;
+    white-space: normal;
+}
+.sub-ticket-indicator { border: 0; background: transparent; color: var(--text-muted); font-weight: inherit; text-align: left; }
