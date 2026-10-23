@@ -19,6 +19,57 @@ namespace KittyClaw.Core.Tests.Web;
 public sealed class NetworkAccessTests
 {
     [Fact]
+    public async Task Six_digit_entry_submits_once_when_complete_and_supports_paste()
+    {
+        using var fixture = new Fixture(true);
+        var response = await fixture.Client.GetAsync("https://pc.test:5233/access");
+        var html = await response.Content.ReadAsStringAsync();
+        using var playwright = await Microsoft.Playwright.Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new() { Headless = true });
+        var page = await browser.NewPageAsync(new() { ViewportSize = new() { Width = 360, Height = 740 } });
+        await page.RouteAsync("https://pc.test:5233/**", route => route.FulfillAsync(new()
+        {
+            Body = html, ContentType = "text/html",
+            Headers = new Dictionary<string, string>
+            {
+                ["Content-Security-Policy"] = Assert.Single(response.Headers.GetValues("Content-Security-Policy"))
+            }
+        }));
+        foreach (var paste in new[] { false, true })
+        {
+            await page.GotoAsync("https://pc.test:5233/access");
+            await page.EvaluateAsync("""
+                () => {
+                    window.submissions = 0;
+                    document.querySelector('form').addEventListener('submit', e => {
+                        e.preventDefault(); window.submissions++;
+                    });
+                }
+                """);
+            Assert.Equal(6, await page.Locator(".enhanced .code-cells span").CountAsync());
+            var input = page.Locator("input[name=code]");
+            if (paste)
+                await input.EvaluateAsync("""
+                    input => {
+                        const data = new DataTransfer(); data.setData('text', '012 345');
+                        input.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+                    }
+                    """);
+            else
+            {
+                await input.PressSequentiallyAsync("01234");
+                Assert.Equal(0, await page.EvaluateAsync<int>("window.submissions"));
+                await input.PressSequentiallyAsync("5");
+            }
+            Assert.Equal("012345", await input.InputValueAsync());
+            Assert.Equal("012345", string.Concat(await page.Locator(".code-cells span").AllTextContentsAsync()));
+            Assert.Equal(1, await page.EvaluateAsync<int>("window.submissions"));
+            await input.DispatchEventAsync("input");
+            Assert.Equal(1, await page.EvaluateAsync<int>("window.submissions"));
+        }
+    }
+
+    [Fact]
     public async Task Full_host_applies_saved_network_settings_and_keeps_local_UI()
     {
         using var dir = new TempDir();
@@ -46,6 +97,13 @@ public sealed class NetworkAccessTests
             Assert.Contains("network-global-settings", await settings.Content.ReadAsStringAsync());
             Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"https://{Environment.MachineName}/access")).StatusCode);
             Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync($"https://{Environment.MachineName}/api/projects")).StatusCode);
+            // Phones use an interface IP and the explicit HTTPS port, not the machine name.
+            foreach (var address in factory.Services.GetRequiredService<NetworkAccessService>().Addresses)
+            {
+                var origin = new UriBuilder("https", address.ToString(), 5233).Uri;
+                Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(new Uri(origin, "/access"))).StatusCode);
+                Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync(new Uri(origin, "/api/projects"))).StatusCode);
+            }
             Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("https://evil.test/access")).StatusCode);
         }
         finally
@@ -184,6 +242,39 @@ public sealed class NetworkAccessTests
         using var rebound = new HttpRequestMessage(HttpMethod.Get, "http://evil.test/network-setup");
         rebound.Headers.Add("Test-Loopback", "true");
         Assert.Equal(HttpStatusCode.Forbidden, (await fixture.Client.SendAsync(rebound)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Incorrect_login_code_keeps_the_form_and_allows_retry()
+    {
+        using var fixture = new Fixture(true);
+        var login = await fixture.Client.GetAsync("https://pc.test:5233/access");
+        Assert.Equal("same-origin", Assert.Single(login.Headers.GetValues("Referrer-Policy")));
+        var html = await login.Content.ReadAsStringAsync();
+        var cookies = string.Join("; ", login.Headers.GetValues("Set-Cookie").Select(v => v.Split(';')[0]));
+        // A seven-digit value is always rejected by TOTP validation.
+        foreach (var code in new[] { "1234567", Code(fixture.Key!, DateTimeOffset.UtcNow) })
+        {
+            var csrf = WebUtility.HtmlDecode(Regex.Match(html, "name='__RequestVerificationToken' value='([^']+)'").Groups[1].Value);
+            Assert.NotEmpty(csrf);
+            using var post = new HttpRequestMessage(HttpMethod.Post, "https://pc.test:5233/access");
+            post.Headers.Add("Origin", "https://pc.test:5233");
+            post.Headers.Add("Cookie", cookies);
+            post.Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["__RequestVerificationToken"] = csrf, ["code"] = code
+            });
+            var response = await fixture.Client.SendAsync(post);
+            if (code.Length == 7)
+            {
+                Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+                html = await response.Content.ReadAsStringAsync();
+                Assert.Contains("role='alert'", html);
+                Assert.Contains("Invalid, expired or already used code", html);
+                Assert.Contains("<form", html);
+            }
+            else Assert.Equal(HttpStatusCode.Found, response.StatusCode);
+        }
     }
 
     [Fact]
