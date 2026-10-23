@@ -21,6 +21,7 @@ internal sealed class IsolatedBenchmarks : IDisposable
     internal string DataDirectory { get; } = Path.Combine(Path.GetTempPath(), "kittyclaw-perf-" + Guid.NewGuid().ToString("N"));
     internal List<AsyncWorkload> Workloads { get; } = [];
     internal List<string> ProjectSlugs { get; } = [];
+    internal List<string> ComplexProjectSlugs { get; } = [];
     private readonly Dictionary<string, string?> previousEnvironment = [];
     private BenchmarkFactory? factory;
     private HttpClient? client;
@@ -103,17 +104,126 @@ internal sealed class IsolatedBenchmarks : IDisposable
             AddGet($"api.search/{size}", $"/api/projects/{project.Slug}/tickets?search=000&status={Uri.EscapeDataString(column.Name)}");
             AddGet($"api.detail/{size}", $"/api/projects/{project.Slug}/tickets/{id}");
             AddGet($"api.columns/{size}", $"/api/projects/{project.Slug}/columns");
+            foreach (var (readers, writers) in new[] { (2, 1), (4, 2) })
+                Workloads.Add(new($"sqlite.concurrent/{size}/{readers}r-{writers}w",
+                    () => ConcurrentBatchAsync(projects, tickets, project.Slug, size, readers, writers)));
         }
-        Workloads.Add(new("sqlite.projects/2", async () =>
+        foreach (var size in new[] { 100, 1000 })
+            await AddComplexBoardAsync(projects, tickets, columns, size);
+        Workloads.Add(new("sqlite.projects/4", async () =>
         {
-            if ((await projects.ListProjectsAsync()).Count != 2) throw new InvalidDataException("Registry size changed.");
+            if ((await projects.ListProjectsAsync()).Count != 4) throw new InvalidDataException("Registry size changed.");
         }));
-        AddGet("api.projects/2", "/api/projects");
+        AddGet("api.projects/4", "/api/projects");
         // Exercise every route and validate status + complete JSON before starting measurements.
         foreach (var workload in Workloads) await workload.Operation();
     }
 
-    private void AddGet(string name, string path) => Workloads.Add(new(name, async () =>
+    private async Task AddComplexBoardAsync(ProjectService projects, TicketService tickets, ColumnService columns, int size)
+    {
+        var project = await projects.CreateProjectAsync($"Synthetic complex {size}");
+        ComplexProjectSlugs.Add(project.Slug);
+        var column = (await columns.ListColumnsAsync(project.Slug)).First();
+        var timestamp = DateTime.UnixEpoch;
+        await using (var db = projects.GetProjectDb(project.Slug))
+        {
+            var labels = Enumerable.Range(0, 12).Select(i => new Label { Name = $"Synthetic label {i}" }).ToArray();
+            var rows = Enumerable.Range(0, size).Select(i => new Ticket
+            {
+                Title = $"Complex ticket {i:D4}", Description = "Synthetic relational fixture",
+                PipelineId = column.PipelineId, ColumnId = column.Id, Status = column.Name,
+                SortOrder = i, CreatedAt = timestamp, UpdatedAt = timestamp,
+                Labels = Enumerable.Range(0, 3).Select(n => labels[(i + n) % labels.Length]).ToList(),
+                Comments = Enumerable.Range(0, 5).Select(n => new Comment
+                    { Content = $"Synthetic comment {n}", CreatedAt = timestamp.AddSeconds(n) }).ToList(),
+                Activities = Enumerable.Range(0, 3).Select(n => new ActivityEntry
+                    { Text = $"Synthetic activity {n}", CreatedAt = timestamp.AddSeconds(n) }).ToList(),
+            }).ToArray();
+            db.Tickets.AddRange(rows);
+            await db.SaveChangesAsync();
+            for (var i = 0; i < size; i++)
+            {
+                if (i % 5 != 0) rows[i].ParentId = rows[i - i % 5].Id;
+                // Parent groups form an acyclic chain of unresolved dependencies.
+                if (i % 5 == 0 && i > 0)
+                    db.TicketDependencies.Add(new TicketDependency
+                    { BlockedTicketId = rows[i].Id, BlocksTicketId = rows[i - 5].Id, CreatedAt = timestamp });
+            }
+            await db.SaveChangesAsync();
+        }
+        var board = await tickets.ListTicketsAsync(project.Slug);
+        var parent = board.First(t => t.ParentId is null && t.UnresolvedBlockerCount == 1);
+        var detail = await tickets.GetTicketAsync(project.Slug, parent.Id);
+        if (board.Count != size || parent.SubTickets.Count != 4 || detail?.Comments.Count != 5
+            || detail.Activities.Count != 3 || detail.Labels.Count != 3 || detail.BlockedBy.Count != 1)
+            throw new InvalidDataException("Incomplete complex board fixture.");
+        Workloads.Add(new($"sqlite.complex-board/{size}", async () =>
+        {
+            var result = await tickets.ListTicketsAsync(project.Slug);
+            if (result.Count != size || result.Count(t => t.SubTickets.Count == 4) != size / 5
+                || result.Count(t => t.UnresolvedBlockerCount == 1) != size / 5 - 1)
+                throw new InvalidDataException("Complex board relationships changed.");
+        }));
+        Workloads.Add(new($"sqlite.complex-detail/{size}", async () =>
+        {
+            var result = await tickets.GetTicketAsync(project.Slug, parent.Id);
+            if (result?.SubTickets.Count != 4 || result.BlockedBy.Count != 1 || result.Comments.Count != 5)
+                throw new InvalidDataException("Complex ticket relationships changed.");
+        }));
+        AddGet($"api.complex-board/{size}", $"/api/projects/{project.Slug}/tickets", root =>
+            root.GetArrayLength() == size && root.EnumerateArray().Count(t => t.GetProperty("subTickets").GetArrayLength() == 4) == size / 5);
+        AddGet($"api.complex-detail/{size}", $"/api/projects/{project.Slug}/tickets/{parent.Id}", root =>
+            root.GetProperty("subTickets").GetArrayLength() == 4 && root.GetProperty("blockedBy").GetArrayLength() == 1
+            && root.GetProperty("comments").GetArrayLength() == 5 && root.GetProperty("labels").GetArrayLength() == 3);
+    }
+
+    internal static async Task ConcurrentBatchAsync(ProjectService projects, TicketService tickets,
+        string slug, int size, int readers, int writers)
+    {
+        const int rounds = 4;
+        long[] before;
+        await using (var db = projects.GetProjectDb(slug))
+            before = await db.Tickets.OrderBy(t => t.Id).Take(writers).Select(t => t.AgentTokens).ToArrayAsync();
+        var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var ready = Enumerable.Range(0, readers + writers)
+            .Select(_ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).ToArray();
+        // SQLite async calls may complete synchronously: Task.Run plus a shared gate is
+        // intentional, to run separate connections on concurrent worker threads.
+        var workers = Enumerable.Range(0, readers + writers).Select(worker => Task.Run(async () =>
+        {
+            ready[worker].SetResult();
+            await start.Task;
+            for (var round = 0; round < rounds; round++)
+            {
+                if (worker < readers)
+                {
+                    if ((await tickets.ListTicketsAsync(slug)).Count != size)
+                        throw new InvalidDataException("Concurrent board read lost tickets.");
+                }
+                else
+                {
+                    var id = worker - readers + 1;
+                    await using var db = projects.GetProjectDb(slug);
+                    db.Database.SetCommandTimeout(5);
+                    var changed = await db.Tickets.Where(t => t.Id == id)
+                        .ExecuteUpdateAsync(set => set.SetProperty(t => t.AgentTokens, t => t.AgentTokens + 1));
+                    if (changed != 1) throw new InvalidDataException("Concurrent write did not update one row.");
+                }
+            }
+        })).ToArray();
+        await Task.WhenAll(ready.Select(r => r.Task));
+        start.SetResult();
+        // Drain all workers before verification, cleanup or the next measured batch.
+        await Task.WhenAll(workers);
+        await using (var db = projects.GetProjectDb(slug))
+        {
+            var after = await db.Tickets.OrderBy(t => t.Id).Take(writers).Select(t => t.AgentTokens).ToArrayAsync();
+            if (after.Length != writers || after.Where((value, i) => value != before[i] + rounds).Any())
+                throw new InvalidDataException("Concurrent batch lost committed writes.");
+        }
+    }
+
+    private void AddGet(string name, string path, Func<JsonElement, bool>? validate = null) => Workloads.Add(new(name, async () =>
     {
         using var response = await client!.GetAsync(path);
         if (response.StatusCode != HttpStatusCode.OK)
@@ -122,6 +232,8 @@ internal sealed class IsolatedBenchmarks : IDisposable
         using var body = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync());
         if (body.RootElement.ValueKind is not (JsonValueKind.Array or JsonValueKind.Object))
             throw new InvalidDataException($"{path}: invalid JSON response shape.");
+        if (validate is not null && !validate(body.RootElement))
+            throw new InvalidDataException($"{path}: incomplete relational response.");
     }));
 
     private void SetEnvironment(string name, string value)

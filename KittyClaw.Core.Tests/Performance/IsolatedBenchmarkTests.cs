@@ -16,10 +16,10 @@ public sealed class IsolatedBenchmarkTests
             directory = isolated.DataDirectory;
             await isolated.InitializeAsync();
             Assert.Equal(directory, Environment.GetEnvironmentVariable("KITTYCLAW_DATA_DIR"));
-            Assert.Equal(18, isolated.Workloads.Count);
-            Assert.Equal(18, isolated.Workloads.Select(w => w.Name).Distinct().Count());
+            Assert.Equal(30, isolated.Workloads.Count);
+            Assert.Equal(30, isolated.Workloads.Select(w => w.Name).Distinct().Count());
             var projects = new ProjectService(directory);
-            Assert.Equal(2, (await projects.ListProjectsAsync()).Count);
+            Assert.Equal(4, (await projects.ListProjectsAsync()).Count);
             foreach (var (slug, size) in isolated.ProjectSlugs.Zip(new[] { 100, 1000 }))
             {
                 await using var db = projects.GetProjectDb(slug);
@@ -31,6 +31,22 @@ public sealed class IsolatedBenchmarkTests
                 var second = await db.Tickets.AsNoTracking().OrderBy(t => t.Id).FirstAsync();
                 Assert.NotEqual(first.Description, second.Description);
                 Assert.Equal(size, await db.Tickets.CountAsync());
+                var concurrent = isolated.Workloads.Single(w => w.Name == $"sqlite.concurrent/{size}/4r-2w");
+                var tokensBefore = await db.Tickets.OrderBy(t => t.Id).Take(2).Select(t => t.AgentTokens).ToArrayAsync();
+                await concurrent.Operation();
+                var tokensAfter = await db.Tickets.OrderBy(t => t.Id).Take(2).Select(t => t.AgentTokens).ToArrayAsync();
+                Assert.Equal(tokensBefore.Select(t => t + 4), tokensAfter);
+                Assert.Equal(size, await db.Tickets.CountAsync());
+            }
+            foreach (var (slug, size) in isolated.ComplexProjectSlugs.Zip(new[] { 100, 1000 }))
+            {
+                await using var db = projects.GetProjectDb(slug);
+                Assert.Equal(size, await db.Tickets.CountAsync());
+                Assert.Equal(size * 4 / 5, await db.Tickets.CountAsync(t => t.ParentId != null));
+                Assert.Equal(size / 5 - 1, await db.TicketDependencies.CountAsync());
+                Assert.Equal(size * 5, await db.Comments.CountAsync());
+                Assert.Equal(size * 3, await db.ActivityEntries.CountAsync());
+                Assert.Equal(12, await db.Labels.CountAsync());
             }
         }
         Assert.False(Directory.Exists(directory));

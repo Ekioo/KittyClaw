@@ -9,7 +9,7 @@ return BenchmarkProgram.Run(args);
 
 internal static class BenchmarkProgram
 {
-    internal const string Suite = "core-io-v2";
+    internal const string Suite = "core-io-v3";
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
     private static object? sink;
 

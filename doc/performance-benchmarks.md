@@ -4,7 +4,7 @@
 and managed allocations for evidence status computation, decision brief composition,
 evidence JSON serialization, and Markdown rendering, with 100 and 1,000 items each.
 It also measures SQLite reads/writes and the main API read endpoints. The suite has
-26 scenarios in total. Fixtures are deterministic and created outside measured regions.
+38 scenarios in total. Fixtures are deterministic and created outside measured regions.
 No LLM, external network, user data, or live instance is used.
 
 ## SQLite and API isolation
@@ -18,23 +18,49 @@ and the desktop-off setting are explicit. No TCP listener is opened; the client 
 to the in-memory server and never uses ports 5230, 5231 or 5232. The factory reads its
 own live `/openapi/v1.json` to verify benchmark routes.
 
-Two projects contain 100 and 1,000 synthetic tickets, each with one comment, one activity
+Two simple projects contain 100 and 1,000 synthetic tickets, each with one comment, one activity
 and a shared label. Setup creates valid pipeline/column identities using real services.
 Every workload is exercised successfully before measurements. Startup, seeding and
-migrations are excluded: this measures warm steady-state access, without contention.
+migrations are excluded: this measures warm steady-state access. Two additional projects
+contain complex boards described below; registry scenarios therefore list four projects.
 
 | Scenario | Measured operation |
 | --- | --- |
-| `sqlite.projects/2` | Registry listing through `ProjectService` |
+| `sqlite.projects/4` | Registry listing through `ProjectService` |
 | `sqlite.board/{size}` | Ticket summary query through `TicketService`, including relationships |
 | `sqlite.detail/{size}` | Ticket detail with comments, activities and labels |
 | `sqlite.update/{size}` | Fresh context, tracked read and committed `SaveChangesAsync` |
-| `api.projects/2` | `GET /api/projects` |
+| `api.projects/4` | `GET /api/projects` |
 | `api.project/{size}` | `GET /api/projects/{slug}` |
 | `api.board/{size}` | `GET /api/projects/{slug}/tickets` |
 | `api.search/{size}` | Ticket list filtered by search text and status |
 | `api.detail/{size}` | `GET /api/projects/{slug}/tickets/{id}` |
 | `api.columns/{size}` | `GET /api/projects/{slug}/columns` |
+| `sqlite.concurrent/{size}/2r-1w` | Concurrent batch: two readers, one writer |
+| `sqlite.concurrent/{size}/4r-2w` | Concurrent batch: four readers, two writers |
+| `sqlite.complex-board/{size}` | Relational board through `TicketService` |
+| `sqlite.complex-detail/{size}` | Parent ticket with children and dependencies |
+| `api.complex-board/{size}` | Board endpoint with relationship validation |
+| `api.complex-detail/{size}` | Detail endpoint with relationship validation |
+
+Complex boards contain 100 or 1,000 tickets in groups of one parent and four children.
+Every ticket has five comments, three activities and three labels drawn from twelve
+shared labels. Parents form an acyclic chain of unresolved dependencies (19 or 199
+edges). Workloads verify child and blocker relationships, not only successful status codes.
+
+Concurrency batches use the simple boards, independent EF contexts/connections, and
+worker threads released through a shared start gate. Each worker performs four operations:
+readers load the full board, writers commit atomic token-counter increments on separate
+tickets in the same database. Writers contend on SQLite's database-level write lock.
+Every batch verifies all increments persisted, and read counts stayed intact. No extra
+application retry is added; lock timeouts or other exceptions fail the run. Write commands
+have a five-second timeout; readers retain the application's normal timeout. All workers
+finish before cleanup or the next batch. Row counts and relationship history stay bounded.
+
+For concurrent scenarios, **ns/op and B/op describe the entire batch**, including worker
+coordination and final integrity verification: 12 operations for 2r-1w, 24 for 4r-2w.
+They are not individual request latency or p95 statistics. Allocation counts include all
+worker threads. Scheduling and lock waits increase variability, especially on shared CI.
 
 Writes toggle a fixed-size description, keeping row counts and activity history bounded.
 API measurements include routing, service/database work, server JSON serialization,
@@ -73,7 +99,7 @@ Comparison fails when either median time or allocations increases by **more than
 baseline flags any new allocation. Missing scenarios and duplicate/invalid metrics
 are errors rather than silent passes. Change the suite identifier when fixtures or
 measurement methodology change, and regenerate both reports.
-The suite is now `core-io-v2`; old `core-v1` reports require regeneration.
+The suite is now `core-io-v3`; older reports require regeneration.
 
 ## CI
 
