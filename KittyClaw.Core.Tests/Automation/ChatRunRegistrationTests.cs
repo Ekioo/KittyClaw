@@ -89,9 +89,11 @@ public sealed class ChatRunRegistrationTests
         using var root = new TempDir();
         var projects = new ProjectService(Path.Combine(root.Path, "data"));
         var project = await projects.CreateProjectAsync("chat preparation failure");
-        // Budget validation must succeed before the non-Git workspace fails preparation.
-        await projects.UpdateProjectAsync(project.Slug, root.Path, worktreesEnabled: true,
+        var repository = ProjectWorktreeSettingsTests.CreateRepository(root.Path, "integration");
+        await projects.UpdateProjectAsync(project.Slug, repository, worktreesEnabled: true,
             integrationBranch: "integration");
+        // Invalidate an already-configured repository so validation succeeds but preparation fails.
+        Directory.Move(Path.Combine(repository, ".git"), Path.Combine(repository, "disabled-git"));
         var members = new MemberService(projects);
         var tickets = new TicketService(projects, members);
         var runs = new AgentRunRegistry();
@@ -105,7 +107,7 @@ public sealed class ChatRunRegistrationTests
         var ctx = new AgentRunContext
         {
             ProjectSlug = project.Slug,
-            WorkspacePath = root.Path,
+            WorkspacePath = repository,
             AgentName = "owner-chat",
             SkillFile = "chat",
             InlineSkillContent = "# Chat\n",
