@@ -1,124 +1,149 @@
 # Managed public instance access
 
-## Purpose and delivery status
+## Purpose and current delivery
 
-Give each opted-in KittyClaw installation a stable HTTPS address such as
-`https://kc-<random-instance-id>.kittyclaw.dev`, without router configuration or a
-Cloudflare account on the user's device. The desktop implementation establishes
-the origin trust boundary. A separate invitation-only provisioning Worker now lives
-in the KittyClaw-Front repository under remote-access-worker/; it includes the D1
-registry, ownership checks, quotas, tunnel/DNS reconciliation and permanent
-retirement. It is tested locally and not deployed. No cloudflared supervisor,
-activation UI, public DNS changes or Internet deployment is included yet.
+Each opted-in installation gets a stable address such as
+`https://kc-<installation-id>.kittyclaw.dev`. The desktop connector and local
+activation flow are implemented. The separate invitation-only provisioning Worker
+lives in the KittyClaw-Front repository under `remote-access-worker/`.
 
-## Implemented origin boundary
+The Worker is not deployed. Desktop tests replace the broker and connector with
+isolated fakes. No production tunnel, DNS record or public address has been created.
+A real Cloudflare/Android acceptance run remains required before beta publication.
 
-`RemoteTunnelOptions` and `RemoteTunnelMiddleware` in
-`KittyClaw.Web/Services/RemoteTunnelMiddleware.cs` define a disabled-by-default,
-loopback-only HTTP origin. Startup adds it independently of the existing local and
-LAN listeners. Example development configuration (not a public deployment):
+## Owner activation
 
-```json
-{
-  "RemoteTunnel": {
-    "Enabled": true,
-    "Port": 5234,
-    "Hostname": "kc-abcdef123456.kittyclaw.dev"
-  }
-}
-```
+Global settings links to `/remote-setup`, a server-rendered local-only page. Its
+mutations require antiforgery validation. Remote callers cannot activate, pause or
+read installation credentials through this page. The owner first associates the
+[network authenticator](./network-access.md), then enters a beta invitation and
+accepts Cloudflare transit. No Cloudflare account or API key is requested from the
+end user.
 
-The port must differ from all existing listeners. Startup validates the assigned
-hostname and adds exactly that host to host filtering. The dedicated listener
-requires a loopback peer, the exact public host and the default public HTTPS port.
-It marks the request before the existing authentication middleware, so localhost
-transport cannot grant local privileges. It represents an HTTPS edge explicitly;
-client-supplied forwarding headers do not establish trust. The connector must
-preserve the assigned public Host and target this port, never the trusted local
-UI/agent port.
+`RemoteAccessStore` persists a random installation ID and credential, protected with
+the existing network Data Protection provider, before making an allocation request.
+A failed or lost registration response can be retried with the same identity. The
+broker origin and dedicated port are bound to this identity; an accidental service
+change cannot forward the saved credential elsewhere. Registration validates the
+returned instance ID, exact HTTPS hostname and port.
 
-The existing enrollment, TOTP, session and revocation logic remains owned by
-[local network access](./network-access.md). Enrollment is required before the
-origin can serve a remote login. The setup page stays local-only. Public origin
-responses disable caching and indexing. API, MCP and OpenAPI paths are currently
-closed on this origin, including authenticated sessions. Browser-dependent API
-routes must be audited and selectively authorized before the browser UI is ready
-for a public beta. In particular, image upload, SSE and reconnect health checks
-need explicit decisions; blocking all APIs is an interim security boundary, not a
-finished remote UI.
+The first successful activation reserves the address and requests one restart to
+bind the dedicated origin. Later stop/resume operations retain the URL and require
+no restart while that origin is present. Stopping first closes the HTTP origin gate,
+then cancels the connector and revokes browser sessions. Session revocation preserves
+the authenticator but also signs out existing LAN sessions. Restarting a paused
+installation keeps the dedicated origin bound and closed so resume is immediate.
+Disabling the authenticator cancels the connector and prevents startup or resume.
 
-## Target control plane
+The setup page displays the public URL and its QR code, state, error explanation,
+and a refresh link. It never renders the installation credential or tunnel token.
 
-Use a Cloudflare Worker with D1 for registration and lifecycle metadata. Use one
-remotely managed Cloudflare Tunnel and one proxied DNS record per instance. Browser
-traffic flows through Cloudflare Tunnel, not through the provisioning Worker.
-The site at kittyclaw.dev remains separate. First-level `kc-*` names avoid requiring
-additional certificate coverage for nested subdomains.
+## Components and configuration
 
-An authenticated installation identity owns its hostname and tunnel. The global
-Cloudflare management credential stays in Worker secrets. Return only that
-installation's tunnel credential, protect it at rest and never log it or put it in
-process arguments. Design bootstrap, ownership verification and abuse controls
-before accepting anonymous registration; there must be no public endpoint that
-allocates unlimited tunnels or reissues credentials based only on a hostname.
+- `RemoteAccessStore`: encrypted `remote-access.json` ownership and opt-in state.
+- `RemoteAccessBroker`: bounded HTTPS requests, per-installation bearer identity,
+  no redirects, fixed response validation and safe user-facing error codes.
+- `RemoteAccessConnector`: hosted supervisor, activation, pause, restart detection,
+  reconnect backoff and permanent-error intervention.
+- `CloudflaredRuntime`: pinned binary download/integrity checks, hidden child
+  process, readiness polling, stream draining and shutdown.
+- `RemoteAccessSetupMiddleware`: local antiforgery-protected setup forms.
+- `RemoteTunnelMiddleware`: dedicated origin boundary and browser API exceptions.
+- Named `KittyClawLocal` HTTP client: existing server-side UI API calls use the
+  trusted local listener rather than the browser's public origin. Caller cookies
+  and installation credentials are never forwarded on these self-calls.
 
-Provisioning must use durable operation state and idempotency, with reconciliation
-for partial Cloudflare/DNS/database failures. Concurrent requests must not allocate
-duplicate names. Treat pending, active, suspended, retiring and deleted states
-explicitly. Disable must stop forwarding and disconnect active sessions; remote
-revocation and tunnel-token rotation must terminate existing connector sessions,
-not merely issue a replacement token. Retired hostnames must not be reassigned.
-Account for restored/cloned data directories and installation ownership recovery.
+The broker defaults to `https://remote-api.kittyclaw.dev` and can be overridden
+locally with `RemoteAccess:BrokerUrl` (a clean HTTPS origin). `RemoteTunnel:Port`
+selects the initial dedicated port, default 5234. It must differ from the primary
+and LAN listeners. Once registered, the saved port and assigned hostname define
+startup configuration. The legacy `RemoteTunnel:Enabled`/`Hostname` settings remain
+available for manually configured origin tests.
 
-## Remaining milestones
+As elsewhere in KittyClaw, `KITTYCLAW_DATA_DIR` isolates the registry and key files.
+Preserve `remote-access.json` and `network-keys/` together. Corrupt protected state
+fails startup rather than discarding installation ownership. Copying a data directory
+copies the identity; independent clones need a future ownership recovery flow.
 
-1. Validate the origin against real Kestrel and an isolated cloudflared tunnel;
-   exercise login, cookies, CSRF, origin checks and Blazor reconnection on Android.
-2. Audit browser API usage and define an authenticated remote allowlist. Prove
-   that automation and administrative APIs remain inaccessible. Assess the shared
-   registrable domain's same-site behavior; keep cookies host-only and validate
-   Origin for all relevant requests and WebSocket handshakes.
-3. Validate and deploy the Worker/D1 control plane from KittyClaw-Front, including
-   quotas, tunnel/DNS provisioning and permanent retirement. Expand the existing fake
-   Cloudflare API tests for retries, races, authorization and partial failures.
-4. Add a supervised connector client with a verified, pinned cloudflared binary,
-   protected token delivery, cancellation, bounded backoff and clean shutdown.
-   Verify supported platforms and redistribution licensing.
-5. Add local settings UI: opt-in, authentication enrollment, stable URL/QR,
-   connecting/online/offline/error states, disable and recovery. Never display an
-   online state based only on a running process.
-6. Run a limited invitation beta and measure connections, traffic, cost and
-   support load before general availability. Add operational alerts, backup and
-   recovery, retention, abuse handling and a fleet-wide emergency suspension path.
+## Connector lifecycle and integrity
 
-## Verification
+Managed assets are pinned to cloudflared **2026.10.3** with their upstream SHA-256
+digests compiled into `CloudflaredRuntime`. Windows x64, Linux x64/arm64 and macOS
+x64/arm64 are supported. Other platforms report an explicit unsupported state.
+The connector is fetched from the versioned Cloudflare GitHub release, bounded to
+128 MiB and verified before execution. Cached assets are verified again before
+being installed. macOS extraction accepts only the regular `cloudflared` entry.
+Unix executables have owner read/execute permissions.
 
-`RemoteTunnelTests` covers default-off configuration, invalid hostnames, listener
-separation, spoofed forwarding headers, disabled authentication, protected uploads
-and Blazor handshakes, denied agent surfaces and local-only enrollment. Existing
-`NetworkAccessTests` cover authentication and LAN behavior. Use isolated mock-backed
-instances for end-to-end work; never test against the user's main instance.
+`TUNNEL_TOKEN` carries the in-memory connector credential into the child
+environment. It is never included in command arguments, plaintext token files,
+application logs or UI. Upstream stdout/stderr are drained without logging.
+Auto-update is disabled so an upstream restart cannot bypass the pinned version.
 
-## External dependencies and capacity
+The metrics endpoint binds an ephemeral loopback port. `/ready` must return 200
+before the UI says connected. This confirms connector readiness, not a successful
+remote browser login. Readiness loss clears the online state. Unexpected exit or
+transient broker/network failure reconnects with bounded exponential backoff and
+jitter. Retired identities, ownership failures and unsupported platforms await
+owner intervention. Shutdown and pause cancel the attempt and kill the child tree.
 
-Cloudflare terminates public TLS and can process application traffic. Explain this
-in opt-in information. Do not describe the connection as end-to-end encrypted past
-Cloudflare. Revalidate these published limits before rollout and inspect the actual
-account/zone quotas:
+## Origin and browser protection
 
-- [Tunnels for Platforms](https://developers.cloudflare.com/tunnel/features/tunnels-for-platforms/):
-  1,000 included tunnels; additional capacity is currently $4.50/tunnel/month.
-  Inactive tunnels consume capacity too.
-- [DNS record quotas](https://developers.cloudflare.com/dns/manage-dns-records/):
-  recent Free zones generally have 200 records and Pro zones 3,500. Existing site
-  records consume part of the quota. Check this before selecting a beta limit.
-- [Universal SSL coverage](https://developers.cloudflare.com/ssl/edge-certificates/universal-ssl/limitations/):
-  ordinary full-zone coverage includes first-level subdomains.
-- [WebSockets](https://developers.cloudflare.com/network/websockets/):
-  edge restarts can interrupt connections; reconnect/keepalive must be tested.
-- [Tunnel provisioning API](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel-api/):
-  management permissions and required outbound connectivity.
+The origin listener is loopback-only, with an exact assigned public Host. Its port
+marks requests as remote before the existing network authentication middleware, so
+localhost transport cannot grant local privileges. It represents an explicitly
+configured HTTPS edge; forwarding headers do not establish trust. The Cloudflare
+ingress must preserve that Host and target this port, never the trusted agent port.
 
-Workers/D1, rate limiting, traffic restrictions and service terms require a separate
-operating-budget review. Included tunnel capacity does not imply an unlimited free
-hosted service. No cloud resources should be created from tests.
+Every allowed request still passes authenticator/session protection. API, MCP and
+OpenAPI paths remain denied except these browser requirements:
+
+- `GET /api/engine/health` for reconnect checks;
+- `GET /api/projects/<slug>/runs/<run-id>/stream` for authenticated SSE;
+- `POST /api/images` with the exact public Origin for browser uploads.
+
+Image requests with absent or cross-site Origin are denied even with a cookie.
+The existing gate also validates Origin on Blazor handshakes and other requests.
+Login pages use same-origin referrer policy so browser POSTs carry a usable Origin.
+The local setup path is denied to remote callers. Pausing denies new origin requests
+and revokes active remote transports even if a connector continues forwarding.
+
+Cloudflare terminates public TLS and processes application traffic. This is not
+end-to-end encryption past Cloudflare; the consent text describes Cloudflare transit.
+
+## Provisioning service and release gates
+
+The front repository's Worker README owns the broker API, D1 schema, invitation
+administration, quotas and resource lifecycle. Global Cloudflare credentials remain
+in Worker secrets; each desktop receives only its own tunnel credential. Registration
+is invitation-only. Durable state and exact resource lookups handle partial failures.
+Permanent retirement differs from desktop pause and retains a name tombstone.
+
+Before release, deploy the reviewed Worker/D1 configuration, add edge rate limits,
+inspect real quotas, verify remotely managed token rotation and forced connector
+termination, test live DNS/HTTPS readiness, and run Android/Blazor reconnect, SSE and
+upload journeys. Finish recovery for lost or cloned installation identities and
+establish fleet suspension, monitoring, backup and retention procedures.
+
+## Verification and authoritative references
+
+`RemoteAccessConnectorTests`, `RemoteTunnelTests` and `NetworkAccessTests` cover
+ownership persistence, validation, supervision, readiness, pause/resume, origin
+isolation, browser API exceptions, CSRF and session invalidation.
+`RemoteAccessJourneyTests` runs Edge/Chromium against real Kestrel on an ephemeral
+isolated port, with a fake broker and all hosted services removed. It enrolls the
+authenticator through the UI, activates, pauses and resumes the same URL, and checks
+desktop/mobile layouts. Enable it with `KITTYCLAW_REMOTE_DEBUG_E2E=1`; optionally set
+`KITTYCLAW_TEST_BROWSER_CHANNEL`. Screenshots stay under ignored `.artifacts/`.
+
+- [Pinned official release and asset digests](https://api.github.com/repos/cloudflare/cloudflared/releases/tags/2026.10.3).
+- [cloudflared arguments and environment variables](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/run-parameters/).
+- [Pinned readiness implementation](https://raw.githubusercontent.com/cloudflare/cloudflared/2026.10.3/metrics/readiness.go).
+- [cloudflared source and license](https://github.com/cloudflare/cloudflared).
+- [Tunnels for Platforms](https://developers.cloudflare.com/tunnel/features/tunnels-for-platforms/).
+- [DNS record quotas](https://developers.cloudflare.com/dns/manage-dns-records/).
+- [Universal SSL coverage](https://developers.cloudflare.com/ssl/edge-certificates/universal-ssl/limitations/).
+- [WebSockets and edge reconnect behavior](https://developers.cloudflare.com/network/websockets/).
+
+The service's included capacities do not imply unlimited free hosting. Confirm the
+current Cloudflare account quotas and operating budget before increasing beta size.

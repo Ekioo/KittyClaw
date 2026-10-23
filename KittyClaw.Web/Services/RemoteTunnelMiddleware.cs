@@ -24,7 +24,7 @@ public sealed record RemoteTunnelOptions(bool Enabled = false, int Port = 5234, 
 /// <summary>Marks the listener, never a client header, as the remote trust boundary.</summary>
 internal sealed class RemoteTunnelRequest;
 
-public sealed class RemoteTunnelMiddleware(RequestDelegate next, RemoteTunnelOptions options)
+public sealed class RemoteTunnelMiddleware(RequestDelegate next, RemoteTunnelOptions options, RemoteAccessStore? store = null)
 {
     public async Task InvokeAsync(HttpContext context)
     {
@@ -41,6 +41,11 @@ public sealed class RemoteTunnelMiddleware(RequestDelegate next, RemoteTunnelOpt
         }
 
         context.Features.Set(new RemoteTunnelRequest());
+        if (store?.Snapshot.Registered == true && !store.Snapshot.Enabled)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
         var peer = context.Connection.RemoteIpAddress;
         if (peer is null || !IPAddress.IsLoopback(peer.IsIPv4MappedToIPv6 ? peer.MapToIPv4() : peer)
             || !context.Request.Host.Host.Equals(options.Hostname, StringComparison.OrdinalIgnoreCase)
@@ -56,8 +61,15 @@ public sealed class RemoteTunnelMiddleware(RequestDelegate next, RemoteTunnelOpt
         context.Response.Headers.CacheControl = "no-store";
         context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
 
-        // The first release exposes the browser UI only. Agent APIs stay local.
-        if (context.Request.Path.StartsWithSegments("/api")
+        // Browser-only API exceptions still pass the session gate below. Image
+        // writes additionally require an exact Origin because the upload API
+        // deliberately has no antiforgery contract for local automation clients.
+        var browserApi = HttpMethods.IsGet(context.Request.Method) &&
+            (context.Request.Path == "/api/engine/health" || Regex.IsMatch(context.Request.Path.Value ?? "",
+                @"^/api/projects/[a-zA-Z0-9_-]+/runs/[a-zA-Z0-9_-]+/stream$"));
+        if (HttpMethods.IsPost(context.Request.Method) && context.Request.Path == "/api/images")
+            browserApi = context.Request.Headers.Origin == $"https://{options.Hostname}";
+        if (context.Request.Path.StartsWithSegments("/api") && !browserApi
             || context.Request.Path.StartsWithSegments("/mcp")
             || context.Request.Path.StartsWithSegments("/openapi"))
         {

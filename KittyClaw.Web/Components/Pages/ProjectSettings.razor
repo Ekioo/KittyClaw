@@ -644,8 +644,7 @@ else
 
     private HttpClient NewHttp()
     {
-        var h = HttpFactory.CreateClient();
-        h.BaseAddress = new Uri(Nav.BaseUri);
+        var h = HttpFactory.CreateClient("KittyClawLocal");
         return h;
     }
 

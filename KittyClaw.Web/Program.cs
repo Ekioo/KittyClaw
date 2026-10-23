@@ -87,7 +87,9 @@ if (networkAccess.Enabled)
     networkAccess.Listening = true;
 }
 // A tunnel origin has its own loopback port and never inherits local trust.
-var remoteTunnel = RemoteTunnelOptions.Read(builder.Configuration);
+var remoteAccessStore = new RemoteAccessStore(dataDir, networkProtection);
+builder.Services.AddSingleton(remoteAccessStore);
+var remoteTunnel = remoteAccessStore.OriginOptions(RemoteTunnelOptions.Read(builder.Configuration));
 builder.Services.AddSingleton(remoteTunnel);
 if (remoteTunnel.Enabled)
 {
@@ -101,6 +103,13 @@ if (remoteTunnel.Enabled)
         options.AllowedHosts = (options.AllowedHosts ?? Array.Empty<string>())
             .Append(remoteTunnel.Hostname).Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
 }
+builder.Services.AddSingleton(sp => new RemoteAccessBroker(
+    new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+    { MaxResponseContentBufferSize = 64 * 1024, Timeout = TimeSpan.FromSeconds(95) },
+    new Uri(builder.Configuration["RemoteAccess:BrokerUrl"] ?? "https://remote-api.kittyclaw.dev")));
+builder.Services.AddSingleton<ICloudflaredRuntime, CloudflaredRuntime>();
+builder.Services.AddSingleton<RemoteAccessConnector>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<RemoteAccessConnector>());
 builder.Services.AddSingleton(appSettings);
 builder.Services.AddSingleton(new KittyClaw.Core.Services.LocalizationService(appSettings));
 var projectSecretVault = new ProjectSecretVault(dataDir);
@@ -227,6 +236,13 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<KittyClaw.Core.Ser
 builder.Services.AddHostedService<KittyClaw.Core.Services.ScheduledPromotionService>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.AgentRunsState>();
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("KittyClawLocal", (sp, http) =>
+{
+    var server = sp.GetRequiredService<Microsoft.AspNetCore.Hosting.Server.IServer>();
+    var addresses = server.Features.Get<Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>()?.Addresses;
+    http.BaseAddress = LocalApiAddress.Resolve(addresses is { Count: > 0 } ? addresses
+        : (builder.Configuration["urls"] ?? "http://localhost:5230").Split(';'), remoteTunnel.Port);
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false });
 builder.Services.AddSingleton<KittyClaw.Web.Services.IInstalledUpdateClient, KittyClaw.Web.Services.VelopackUpdateClient>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.InstalledUpdateService>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.UpdateCheckService>();
@@ -285,6 +301,7 @@ var app = builder.Build();
 
 // Gate all remote traffic, including uploads, APIs, MCP and Blazor connections.
 app.UseMiddleware<RemoteTunnelMiddleware>();
+app.UseMiddleware<RemoteAccessSetupMiddleware>();
 app.UseMiddleware<NetworkAccessMiddleware>();
 
 // Configure the HTTP request pipeline.

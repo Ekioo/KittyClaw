@@ -1,3 +1,4 @@
+@inject IHttpClientFactory HttpFactory
 @using KittyClaw.Core.Automation
 @using KittyClaw.Web.Services
 @using Markdig
@@ -455,7 +456,7 @@
             return;
         }
 
-        using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+        using var http = HttpFactory.CreateClient("KittyClawLocal");
         try
         {
             var resp = await http.GetFromJsonAsync<TargetsResponse>($"/api/projects/{ProjectSlug}/chat/targets");
@@ -508,7 +509,7 @@
     private async Task FetchOllamaModelsAsync()
     {
         if (string.IsNullOrWhiteSpace(ProjectSlug)) return;
-        using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+        using var http = HttpFactory.CreateClient("KittyClawLocal");
         var ollamaTask = TryFetchModelsAsync(http, $"/api/projects/{ProjectSlug}/ollama-models", "ollama");
         var grokTask = TryFetchModelsAsync(http, "/api/grok-models", "grok");
         var codexTask = TryFetchModelsAsync(http, "/api/codex-models", "codex");
@@ -542,7 +543,7 @@
         string? latestMessageAt = null;
         try
         {
-            using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+            using var http = HttpFactory.CreateClient("KittyClawLocal");
             var escapedTarget = Uri.EscapeDataString(target.Slug);
             var modelTask = http.GetFromJsonAsync<ChatModelResponse>(
                 $"/api/projects/{ProjectSlug}/chat/model?target={escapedTarget}");
@@ -602,7 +603,7 @@
     {
         try
         {
-            using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+            using var http = HttpFactory.CreateClient("KittyClawLocal");
             var resp = await http.GetFromJsonAsync<ActiveResponse>(
                 $"/api/projects/{ProjectSlug}/chat/active?target={Uri.EscapeDataString(target.Slug)}");
             var runId = resp?.RunId;
@@ -659,7 +660,7 @@
         _streamingText = null;
         try
         {
-            using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+            using var http = HttpFactory.CreateClient("KittyClawLocal");
             var response = await http.DeleteAsync($"/api/projects/{ProjectSlug}/chat/session?target={Uri.EscapeDataString(_activeTarget.Slug)}");
             if (!response.IsSuccessStatusCode)
                 Logger.LogDebug("Chat session reset returned status {StatusCode} for project {ProjectSlug} target {TargetSlug}", (int)response.StatusCode, ProjectSlug, _activeTarget.Slug);
@@ -727,7 +728,7 @@
         var imagesPayload = sentImages
             .Select(p => new { dataUrl = p.DataUrl, mime = p.Mime, name = p.Name, sizeBytes = p.SizeBytes }).ToList();
 
-        using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+        using var http = HttpFactory.CreateClient("KittyClawLocal");
         _inputText = "";
         try
         {
@@ -804,7 +805,7 @@
 
         await StopStream();
 
-        using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+        using var http = HttpFactory.CreateClient("KittyClawLocal");
         try
         {
             var forceNew = _selectedModel != _sessionModel && _sessionModel is not null;
@@ -988,7 +989,7 @@
         var runId = msg.RunId ?? _activeRunId;
         msg.IsAnswered = true;
         StateHasChanged();
-        using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+        using var http = HttpFactory.CreateClient("KittyClawLocal");
         try
         {
             var response = await http.PostAsJsonAsync($"/api/projects/{ProjectSlug}/runs/{runId}/steer", new { text = answer });
@@ -1048,7 +1049,7 @@
         if (string.IsNullOrEmpty(runId)) return;
         try
         {
-            using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+            using var http = HttpFactory.CreateClient("KittyClawLocal");
             var response = await http.PostAsync($"/api/projects/{ProjectSlug}/runs/{runId}/stop", content: null);
             if (!response.IsSuccessStatusCode)
             {
