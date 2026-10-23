@@ -400,6 +400,8 @@ public class TicketService
         await EnsureAgentUsageColumnsAsync(db);
         await EnsureTicketDependenciesTableAsync(db);
         var ticket = await db.Tickets
+            // Avoid multiplying comments × activities × labels for history-heavy tickets.
+            .AsSplitQuery()
             .Include(t => t.Comments.OrderBy(c => c.CreatedAt))
             .Include(t => t.Activities.OrderBy(a => a.CreatedAt))
             .Include(t => t.Labels)
