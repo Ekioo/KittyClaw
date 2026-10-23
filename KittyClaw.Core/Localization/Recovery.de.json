@@ -1,0 +1,9 @@
+{
+  "RecoveryMemoryPending": "Speicher muss gesichert werden",
+  "RecoveryRetryMemory": "Nur Speicherung erneut versuchen",
+  "RecoveryFailed": "Verarbeitung fehlgeschlagen",
+  "RecoveryRetrying": "Wiederholung geplant",
+  "RecoveryWaitingForChildren": "Warten auf Unteraufgaben",
+  "RecoveryRetry": "Verarbeitung erneut versuchen",
+  "RecoveryRelease": "Reservierung freigeben und neu bewerten"
+}

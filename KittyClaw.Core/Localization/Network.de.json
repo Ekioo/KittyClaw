@@ -1,0 +1,19 @@
+{
+  "NetworkTitle": "Zugriff im lokalen Netzwerk",
+  "NetworkHint": "Öffne KittyClaw auf deinem Smartphone oder einem anderen Gerät mit einem Code aus deiner Authenticator-App. Ein Passwort ist nicht erforderlich.",
+  "NetworkConfigure": "Netzwerkzugriff einrichten",
+  "NetworkLocalSetup": "Richte den Zugriff über localhost auf diesem PC ein oder setze ihn zurück.",
+  "NetworkLogin": "Verbinden",
+  "NetworkLoginHint": "Gib den aktuellen sechsstelligen Code aus deiner Authenticator-App ein.",
+  "NetworkCode": "Authentifizierungscode",
+  "NetworkInvalidCode": "Der Code ist ungültig, abgelaufen oder wurde bereits verwendet. Warte auf einen neuen Code und versuche es erneut. Warte nach fünf Fehlversuchen eine Minute.",
+  "NetworkEnabled": "Der Netzwerkzugriff ist aktiviert. Verwende eine dieser Adressen auf deinem Smartphone.",
+  "NetworkRestart": "Der Schutz ist eingerichtet. Starte KittyClaw neu, um den HTTPS-Netzwerkdienst zu starten.",
+  "NetworkCertificate": "Die Verbindung verwendet ein auf diesem PC erzeugtes Zertifikat. Prüfe das Zertifikat beim ersten Besuch und vertraue ihm auf deinem Gerät. Deine Firewall muss den angezeigten HTTPS-Port im privaten Netzwerk zulassen.",
+  "NetworkDisable": "Zugriff deaktivieren und Authenticator zurücksetzen",
+  "NetworkEnroll": "Füge in deiner Authenticator-App ein Konto mit diesem Einrichtungsschlüssel hinzu (zeitbasiert, sechsstellig, alle 30 Sekunden) und gib den aktuellen Code ein.",
+  "NetworkOpenApp": "In einer Authenticator-App öffnen",
+  "NetworkEnable": "Code bestätigen und Netzwerkzugriff aktivieren",
+  "NetworkRecovery": "Wenn du deinen Authenticator verlierst, öffne diese Seite über localhost auf diesem PC, um den Zugriff zu deaktivieren und eine neue App zu verknüpfen. Dadurch werden auch bestehende Sitzungen widerrufen.",
+  "NetworkLogout": "Dieses Gerät trennen"
+}

@@ -1,0 +1,9 @@
+{
+  "RecoveryMemoryPending": "La memoria deve essere salvata",
+  "RecoveryRetryMemory": "Riprova solo il salvataggio della memoria",
+  "RecoveryFailed": "Elaborazione non riuscita",
+  "RecoveryRetrying": "Nuovo tentativo pianificato",
+  "RecoveryWaitingForChildren": "In attesa delle sottoattività",
+  "RecoveryRetry": "Riprova elaborazione",
+  "RecoveryRelease": "Rilascia la prenotazione e rivaluta"
+}
