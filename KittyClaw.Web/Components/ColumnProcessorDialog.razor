@@ -160,14 +160,10 @@
                         <p class="settings-hint">@L["JevObservationHelp"]</p>
                         <label class="workflow-check"><input type="checkbox" @bind="_jevPostRunObservation" disabled="@(_jevAcceptanceValidation || (!_jevAvailability.Available && !_jevPostRunObservation))" /> <FieldHelp Label="@L["JevPostRunMode"]" Help="@L["JevPostRunHelp"]" /></label>
                         <p class="settings-hint">@L["JevPostRunHelp"]</p>
-                        @if (_jevObservationOnly || _jevPostRunObservation)
+                        @if (!_jevAcceptanceValidation)
                         {
-                        <label class="workflow-check"><input type="checkbox" data-testid="jev-automatic-routing" @bind="_jevAutomaticRouting" disabled="@(!_jevObservationOnly && !_jevPostRunObservation)" /> <FieldHelp Label="@L["JevAutomaticRouting"]" Help="@L["JevAutomaticRoutingHelp"]" /></label>
-                        @if (_jevAutomaticRouting)
-                        {
-                        <label><FieldHelp Label="@L["JevConfidenceThreshold"]" Help="@L["JevAutomaticRoutingHelp"]" /><input class="settings-input" type="number" min="0" max="100" step="1" data-testid="jev-confidence-threshold" @bind="_jevConfidencePercent" disabled="@(!_jevAutomaticRouting)" /></label>
-                        }
-                        <p class="settings-hint">@L["JevAutomaticRoutingHelp"]</p>
+                        <p class="settings-hint" data-testid="jev-automatic-routing">@L["JevRoutingAutomaticDefault"]</p>
+                        <label><FieldHelp Label="@L["JevConfidenceThreshold"]" Help="@L["JevRoutingAutomaticDefault"]" /><input class="settings-input" type="number" min="0" max="100" step="1" data-testid="jev-confidence-threshold" @bind="_jevConfidencePercent" /></label>
                         }
                         <p class="settings-hint" data-testid="jev-availability">@L[_jevAvailability.Available ? "JevAvailable" : "JevUnavailable"]</p>
                         </details>

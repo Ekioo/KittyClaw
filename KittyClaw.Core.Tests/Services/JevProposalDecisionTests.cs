@@ -140,12 +140,12 @@ public sealed class JevProposalDecisionTests
     }
 
     [Theory]
-    [InlineData(false, 0.9, 1, false)]
+    [InlineData(false, 0.9, 1, true)]
     [InlineData(true, 0.91, 0.9, false)]
     [InlineData(true, 0.9, 0.9, true)]
     [InlineData(true, 1, 1, true)]
     [InlineData(true, 0, 0, true)]
-    public async Task Automatic_routing_requires_opt_in_and_inclusive_confidence_threshold(bool enabled, double threshold, double confidence, bool moves)
+    public async Task Configured_routes_are_automatic_with_an_inclusive_confidence_threshold(bool enabled, double threshold, double confidence, bool moves)
     {
         using var f = await Fixture.CreateAsync();
         Assert.False(f.Processor.JevAutomaticRouting);
@@ -200,7 +200,8 @@ public sealed class JevProposalDecisionTests
         var id = JevDecisionStore.ProposalId(proposal);
         if (scenario == "rejected") await f.Decisions.DecideAsync(f.Slug, f.Ticket.Id, id, false, "Owner declines");
         if (scenario == "paused") await f.Projects.TogglePauseAsync(f.Slug);
-        if (scenario == "disabled") await ConfigureAutomaticAsync(f, false, 0.9);
+        if (scenario == "disabled") await f.Processors.SaveAsync(f.Slug, f.Source.Id, "Qualifier", "Qualify", null, false, 20, [], [], [],
+            routes: f.Processor.Routes, defaultTargetColumnId: f.Processor.DefaultTargetColumnId);
         if (scenario == "context") await f.Processors.SaveAsync(f.Slug, f.Source.Id, "Qualifier", "A changed mission", null, true, 20, [], [], [],
             routes: f.Processor.Routes, defaultTargetColumnId: f.Processor.DefaultTargetColumnId);
         if (scenario == "active")

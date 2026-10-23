@@ -19,7 +19,7 @@ namespace KittyClaw.Core.Tests.Web;
 public sealed class JevObservationJourneyTests(ITestOutputHelper output)
 {
     [DebugBrowserFact]
-    public async Task Activate_observation_in_column_and_show_proposal_without_moving_ticket()
+    public async Task On_demand_recommendation_and_automatic_routes_keep_history_in_comment_timeline()
     {
         var json = new JsonSerializerOptions(JsonSerializerDefaults.Web)
         { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
@@ -115,22 +115,25 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
             var observation = dialog.GetByLabel("JEV qualification");
             await Expect(observation).Not.ToBeCheckedAsync();
             await observation.CheckAsync();
-            await dialog.Locator("label.workflow-check").Filter(new() { HasText = "Enabled" }).Locator("input").CheckAsync();
+            await dialog.GetByTestId("jev-confidence-threshold").FillAsync("90");
+            await dialog.Locator("label.workflow-check").Filter(new() { HasText = "Enabled" }).Locator("input").UncheckAsync();
             await page.ScreenshotAsync(new() { Path = Path.Combine(dataDir, "01-observation-enabled.png"), FullPage = true });
             await dialog.Locator(".processor-dialog-footer .settings-primary").ClickAsync();
             await Expect(dialog).Not.ToBeVisibleAsync();
             var processor = await http.GetFromJsonAsync<ColumnProcessor>($"/api/projects/{slug}/columns/{source.Id}/processor", json);
-            Assert.True(processor!.Enabled);
+            Assert.False(processor!.Enabled);
             Assert.True(processor.JevObservationOnly);
             await page.GotoAsync($"{baseUrl}/board/{slug}/ticket/{ticket!.Id}");
             var proposal = page.GetByTestId("jev-proposal");
+            await Expect(page.GetByTestId("jev-ask")).ToBeVisibleAsync();
+            await page.GetByTestId("jev-ask").ClickAsync();
             await Expect(proposal).ToContainTextAsync("Suggested destination: Review", new() { Timeout = 60000 });
+            await proposal.Locator("details > summary").First.ClickAsync();
             await Expect(proposal).ToContainTextAsync("Confidence: 90");
             await Expect(page.GetByTestId("ticket-worktree-error")).Not.ToBeVisibleAsync();
             await Expect(page.GetByTestId("jev-triage")).ToContainTextAsync("Problem");
             await Expect(page.GetByTestId("jev-triage")).ToContainTextAsync("Moderate");
             await Expect(page.GetByTestId("jev-triage")).ToContainTextAsync("15");
-            await proposal.Locator("details").Last.Locator("summary").ClickAsync();
             await Expect(proposal).ToContainTextAsync("95");
             await Expect(proposal).ToContainTextAsync("jev-debug-fixture");
             await proposal.ScrollIntoViewIfNeededAsync();
@@ -147,6 +150,28 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
             var executions = await http.GetFromJsonAsync<JsonElement>($"/api/projects/{slug}/column-executions");
             Assert.Equal(0, executions.GetArrayLength());
             Assert.Equal(1, factory.Handler.Count);
+            await proposal.GetByTestId("jev-accept").ClickAsync();
+            var history = page.GetByTestId("jev-history-entry");
+            await Expect(history).ToContainTextAsync("Accepted");
+            await Expect(page.GetByTestId("jev-proposal")).Not.ToBeVisibleAsync();
+            await Expect(page.GetByTestId("jev-post-run-proposal")).Not.ToBeVisibleAsync();
+            await page.ReloadAsync();
+            await Expect(page.GetByTestId("jev-history-entry")).ToContainTextAsync("Accepted");
+            await page.ScreenshotAsync(new() { Path = Path.Combine(dataDir, "03-jev-comment-history.png"), FullPage = true });
+
+            // Routing is automatic without the legacy opt-in flag. Only the threshold changes.
+            await http.PutAsJsonAsync($"/api/projects/{slug}/columns/{source.Id}/processor",
+                new SaveColumnProcessorRequest("JEV qualifier", "Qualify incoming tickets and propose review.",
+                    Enabled: true, DefaultTargetColumnId: target.Id, JevObservationOnly: true, JevConfidenceThreshold: .9));
+            var automaticResponse = await http.PostAsJsonAsync($"/api/projects/{slug}/tickets",
+                new CreateTicketRequest("Automatically choose the next step", "owner", source.Name,
+                    "Ready for review", PipelineId: source.PipelineId, ColumnId: source.Id));
+            automaticResponse.EnsureSuccessStatusCode();
+            var automaticTicket = (await automaticResponse.Content.ReadFromJsonAsync<Ticket>(json))!;
+            await page.GotoAsync($"{baseUrl}/board/{slug}/ticket/{automaticTicket.Id}");
+            await Expect(page.GetByTestId("jev-history-entry")).ToContainTextAsync("Automatically applied by JEV", new() { Timeout = 60000 });
+            Assert.Equal(target.Id, (await http.GetFromJsonAsync<Ticket>($"/api/projects/{slug}/tickets/{automaticTicket.Id}", json))!.ColumnId);
+            await page.ScreenshotAsync(new() { Path = Path.Combine(dataDir, "04-automatic-route-comment.png"), FullPage = true });
             Assert.Empty(browserErrors);
             output.WriteLine($"PASS: {baseUrl}/board/{slug}/ticket/{ticket.Id}");
             output.WriteLine($"Data and screenshots retained at {dataDir}");

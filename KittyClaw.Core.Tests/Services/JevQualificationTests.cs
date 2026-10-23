@@ -6,6 +6,71 @@ namespace KittyClaw.Core.Tests.Services;
 
 public sealed class JevQualificationTests
 {
+    [Fact]
+    public async Task Qualification_without_a_usable_answer_claims_classic_processing_instead_of_holding()
+    {
+        using var temp = new TempDir();
+        var projects = new ProjectService(temp.Path);
+        var slug = (await projects.CreateProjectAsync("Qualification fallback")).Slug;
+        var board = await new ColumnService(projects).ListColumnsAsync(slug);
+        var processors = new ColumnProcessorService(projects, new ProjectSkillService(projects));
+        var processor = await processors.SaveAsync(slug, board[0].Id, "Qualifier", "Qualify tickets", null,
+            true, 20, [], [], [], defaultTargetColumnId: board[1].Id, jevObservationOnly: true);
+        var tickets = new TicketService(projects, new MemberService(projects));
+        var ticket = await tickets.CreateTicketAsync(slug, "Needs normal processing", columnId: board[0].Id, pipelineId: board[0].PipelineId);
+        var vault = new ProjectSecretVault(temp.Path, new TestSecretProtector());
+        var handler = new FakeHandler(board[1].Id);
+        using var client = new HttpClient(handler);
+        var qualification = new JevQualificationService(projects, vault, client,
+            new JevConfigurationService(vault, temp.Path, () => null, new TestSecretProtector()));
+        await qualification.ObserveAsync(slug, processor, ticket, board, CancellationToken.None);
+        var executions = new ColumnExecutionService(projects, tickets, qualification: qualification);
+        var execution = await executions.ClaimNextAsync(slug, processor, DateTime.UtcNow);
+        Assert.NotNull(execution);
+        Assert.True(execution.JevClassicFallback);
+        Assert.False(processor.WithoutJev().JevObservationOnly);
+        Assert.Equal(0, handler.Count);
+    }
+
+    [Fact]
+    public async Task On_demand_recommendation_in_an_unconfigured_column_uses_only_allowed_manual_destinations()
+    {
+        using var temp = new TempDir();
+        var projects = new ProjectService(temp.Path);
+        var slug = (await projects.CreateProjectAsync("Owner recommendation")).Slug;
+        var board = await new ColumnService(projects).ListColumnsAsync(slug);
+        var source = board[0]; var target = board[1];
+        var context = JevQualificationService.RecommendationProcessor(null, source, board);
+        Assert.DoesNotContain(context.Routes, r => r.TargetColumnId == source.Id);
+        Assert.Contains(context.Routes, r => r.TargetColumnId == target.Id);
+        var tickets = new TicketService(projects, new MemberService(projects));
+        var ticket = await tickets.CreateTicketAsync(slug, "What should happen next?", columnId: source.Id, pipelineId: source.PipelineId);
+        var vault = new ProjectSecretVault(temp.Path, new TestSecretProtector());
+        await vault.SetAsync(slug, JevQualificationService.SecretName, "fixture-key");
+        using var client = new HttpClient(new RecommendationHandler(target.Id));
+        var qualification = new JevQualificationService(projects, vault, client);
+        await qualification.ObserveAsync(slug, context, ticket, board, CancellationToken.None);
+        var proposal = (await qualification.GetAsync(slug, ticket.Id))!;
+        Assert.Null(proposal.Error);
+        var processors = new ColumnProcessorService(projects, new ProjectSkillService(projects));
+        var decisions = new JevProposalDecisionService(projects, tickets, processors, new JevDecisionStore(projects));
+        Assert.Null(await decisions.TryApplyAutomaticallyAsync(slug, ticket.Id, JevDecisionStore.ProposalId(proposal)));
+        await decisions.DecideAsync(slug, ticket.Id, JevDecisionStore.ProposalId(proposal), true);
+        Assert.Equal(target.Id, (await tickets.GetTicketAsync(slug, ticket.Id))!.ColumnId);
+        Assert.Empty(await processors.ListAsync(slug));
+    }
+
+    private sealed class RecommendationHandler(int target) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            var body = System.Text.Json.Nodes.JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!;
+            var options = body["questions"]!["routing"]!["criteria"]!.AsObject().Select(p => p.Key);
+            var answers = System.Text.Json.JsonSerializer.SerializeToNode(JevResponseFixture.Answers($"column-{target}"))!;
+            answers["routing"]!["probabilities"] = System.Text.Json.JsonSerializer.SerializeToNode(options.ToDictionary(k => k, k => k == $"column-{target}" ? 1.0 : 0.0));
+            return new(HttpStatusCode.OK) { Content = new StringContent(new System.Text.Json.Nodes.JsonObject { ["model"] = "jev-fixture", ["answers"] = answers }.ToJsonString()) };
+        }
+    }
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -63,7 +128,7 @@ public sealed class JevQualificationTests
         processor.JevObservationOnly = false;
         ticket.Description = "Changed";
         await restarted.ObserveAsync(project.Slug, processor, ticket, board, CancellationToken.None);
-        Assert.Equal(1, handler.Count);
+        Assert.Equal(2, handler.Count);
     }
 
     [Fact]

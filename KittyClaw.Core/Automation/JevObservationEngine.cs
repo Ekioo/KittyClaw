@@ -36,21 +36,24 @@ public sealed class JevObservationEngine(ProjectService projects, ColumnProcesso
                                 if (ticket is not null)
                                 {
                                     await qualification.ObserveAsync(project.Slug, processor, ticket, destinations, stoppingToken, execution);
-                                    var proposal = (await qualification.GetPostRunAsync(project.Slug, ticket.Id, stoppingToken))
-                                        .FirstOrDefault(p => p.ExecutionId == execution.Id && p.ExecutionEndedAt == execution.EndedAt);
-                                    if (processor.JevAutomaticRouting && proposal is not null)
-                                        await decisions.TryApplyAutomaticallyAsync(project.Slug, ticket.Id, JevDecisionStore.ProposalId(proposal));
+                                    // Post-run snapshots are retained for the comment timeline.
+                                    // Live routing is decided before the execution transition.
                                 }
                             }
-                            continue;
                         }
+                        if (!processor.JevObservationOnly) continue;
                         foreach (var summary in (await tickets.ListTicketsAsync(project.Slug)).Where(t => t.ColumnId == processor.ColumnId))
                         {
+                            await executions.ListAsync(project.Slug);
+                            if (await db.ColumnExecutions.AnyAsync(e => e.TicketId == summary.Id && e.JevClassicFallback &&
+                                (e.Status == KittyClaw.Core.Models.ColumnExecutionStatus.Running || e.Status == KittyClaw.Core.Models.ColumnExecutionStatus.Retrying || e.Status == KittyClaw.Core.Models.ColumnExecutionStatus.WaitingForChildren), stoppingToken)) continue;
                             var ticket = await tickets.GetTicketAsync(project.Slug, summary.Id);
                             if (ticket?.ColumnId != processor.ColumnId) continue;
-                            await qualification.ObserveAsync(project.Slug, processor, ticket, destinations, stoppingToken);
+                            var previous = await qualification.GetAsync(project.Slug, ticket.Id, stoppingToken);
+                            var result = previous?.TicketUpdatedAt == ticket.UpdatedAt && previous.SourceColumnId == processor.ColumnId ? previous.RoutingResult : null;
+                            await qualification.ObserveAsync(project.Slug, processor, ticket, destinations, stoppingToken, routingResult: result);
                             var proposal = await qualification.GetAsync(project.Slug, ticket.Id, stoppingToken);
-                            if (processor.JevAutomaticRouting && proposal is not null)
+                            if (processor.UsesAutomaticJevRouting && proposal is not null)
                                 await decisions.TryApplyAutomaticallyAsync(project.Slug, ticket.Id, JevDecisionStore.ProposalId(proposal));
                         }
                     }

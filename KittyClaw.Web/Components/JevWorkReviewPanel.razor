@@ -16,6 +16,13 @@
         { <p class="settings-hint" role="status">@L["JevWorkPending"]</p> }
         else
         {
+            @if (!_stale && !JevCertainty.Work(_review, _processor.JevConfidenceThreshold))
+            {
+                <p role="status">@L["JevClassicFallback"]</p>
+                <details class="jev-technical"><summary>@L["JevTechnicalDetails"]</summary><p>@_review.Error</p><p>@_review.Model · @_review.Confidence?.ToString("P0")</p></details>
+            }
+            else
+            {
             @if (_stale) { <p class="settings-hint" role="status">@L["JevRefreshNeeded"]</p> }
             @if (_review.Error is not null) { <p role="status">@L["JevReviewUnavailable"]</p> }
             @if (_review.Kind == "acceptance" && _review.Error is null)
@@ -73,30 +80,11 @@
                 @foreach (var criterion in _review.Criteria) { <p>@criterion.Criterion · @criterion.Confidence.ToString("P0") · @criterion.EvidenceId</p> }
                 <p>@_review.Error</p>
             </details>
+            }
         }
         @if (_error is not null) { <p class="settings-status-error" role="status">@L["JevDecisionError"]</p><details><summary>@L["JevTechnicalDetails"]</summary><p>@_error</p></details> }
     </section>
 }
-@if (_history.Count > 0)
-{
-    <details class="worktree-summary jev-work-review jev-disclosure" data-testid="jev-work-history">
-        <summary>@L["JevWorkHistory"] (@_history.Count)</summary>
-        @foreach (var decision in _history)
-        {
-            <article>
-                <p><strong>@L[decision.Accepted ? "JevWorkApproved" : "JevDecisionRejected"]</strong> · @decision.DecidedAt.ToLocalTime().ToString("g")</p>
-                @if (decision.Review.Profile is { } selected) { <p>@selected.Name · @FriendlyModel(selected.Model)</p> }
-                @if (!string.IsNullOrWhiteSpace(decision.Reason)) { <p>@decision.Reason</p> }
-                <details><summary>@L["JevReviewDetails"]</summary>
-                    @foreach (var criterion in decision.Review.Criteria) { <p>@criterion.Criterion — @L[$"JevStatus{criterion.Status}"]</p> }
-                    @foreach (var evidence in decision.Review.Evidence) { <p>@ProofSummary(evidence) · @evidence.Trust</p><pre>@evidence.Detail</pre> }
-                    @if (decision.Review.Profile is { } details) { <p>@details.Model · @string.Join(", ", details.Skills)</p> }
-                </details>
-            </article>
-        }
-    </details>
-}
-
 @code {
     [Parameter] public string Slug { get; set; } = "";
     [Parameter] public int TicketId { get; set; }

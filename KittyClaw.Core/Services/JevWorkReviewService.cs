@@ -150,7 +150,8 @@ public sealed class JevWorkReviewService(ProjectService projects, JevConfigurati
     public async Task ObserveAsync(string slug, ColumnProcessor processor, Ticket ticket, CancellationToken ct)
     {
         if (!processor.Enabled || ticket.ColumnId != processor.ColumnId || (!processor.JevAcceptanceValidation && !processor.JevExecutionSelection)) return;
-        if (processor.JevExecutionSelection)
+        // A classic fallback owns its execution context until completion; progress comments
+        // must not reactivate JEV or spend more inference calls during that execution.
         {
             await using var activeDb = projects.GetProjectDb(slug); await ColumnExecutionService.EnsureTableAsync(activeDb);
             if (await activeDb.ColumnExecutions.AnyAsync(e => e.TicketId == ticket.Id &&
@@ -219,7 +220,7 @@ public sealed class JevWorkReviewService(ProjectService projects, JevConfigurati
                         var status = JevQualificationService.ReadChoice(answers.GetProperty($"criterion-{i}"), Statuses);
                         var reference = JevQualificationService.ReadChoice(answers.GetProperty($"evidence-{i}"), references);
                         results.Add(new(context.Criteria[i], reference.Choice == "none" ? "insufficient" : status.Choice,
-                            status.Confidence, reference.Choice == "none" ? null : reference.Choice));
+                            Math.Min(status.Confidence, reference.Confidence), reference.Choice == "none" ? null : reference.Choice));
                     }
                     review = review with { Criteria = results };
                 }

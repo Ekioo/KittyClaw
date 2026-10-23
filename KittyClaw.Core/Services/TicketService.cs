@@ -12,6 +12,7 @@ public class TicketService
     private readonly ProjectService _projectService;
     private readonly MemberService _memberService;
     private readonly ColumnProcessorService? _columnProcessors;
+    private readonly Lazy<JevWorkReviewService>? _jevReviews;
     private readonly SemaphoreSlim _scheduledPromotionLock = new(1, 1);
     private readonly AutomationStore? _automationStore;
     private readonly ILogger<TicketService>? _logger;
@@ -38,13 +39,14 @@ public class TicketService
         MemberService memberService,
         ColumnProcessorService? columnProcessors = null,
         AutomationStore? automationStore = null,
-        ILogger<TicketService>? logger = null)
+        ILogger<TicketService>? logger = null, Lazy<JevWorkReviewService>? jevReviews = null)
     {
         _projectService = projectService;
         _memberService = memberService;
         _columnProcessors = columnProcessors;
         _automationStore = automationStore;
         _logger = logger;
+        _jevReviews = jevReviews;
     }
 
     /// <summary>
@@ -837,8 +839,13 @@ public class TicketService
                 ? await db.BoardColumns.FindAsync(sourceColumnId)
                 : null;
             if (atomicDecision is null && source is not null && _columnProcessors is not null &&
-                (await _columnProcessors.GetAsync(projectSlug, source.Id)) is { Enabled: true, JevAcceptanceValidation: true })
-                throw new InvalidOperationException("Review the JEV acceptance criteria in the ticket before moving it from this validation column.");
+                (await _columnProcessors.GetAsync(projectSlug, source.Id)) is { Enabled: true, JevAcceptanceValidation: true } reviewProcessor)
+            {
+                var review = _jevReviews is null ? null : await _jevReviews.Value.GetAsync(projectSlug, ticket.Id, source.Id);
+                if (review is null || !await _jevReviews!.Value.IsCurrentAsync(projectSlug, reviewProcessor, ticket, review) ||
+                    JevCertainty.Work(review, reviewProcessor.JevConfidenceThreshold))
+                    throw new InvalidOperationException("Review the JEV acceptance criteria in the ticket before moving it from this validation column.");
+            }
             await EnsureRoutingAllowsManualMoveAsync(projectSlug, db, source, destination, enforceRouting);
             ticket.Status = status!;
             ticket.ColumnId = destination!.Id;

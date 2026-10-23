@@ -1,0 +1,19 @@
+@using KittyClaw.Core.Services
+@using KittyClaw.Web.Extensions
+@inject LocalizationService L
+
+<div class="timeline-comment jev-history-entry" data-testid="jev-work-history">
+    <div class="timeline-comment-header"><strong>JEV</strong><small><time datetime="@BrowserLocalDateTime.UtcIso(Decision.DecidedAt)" data-local-date-time data-local-date-time-locale="@L.Lang">@BrowserLocalDateTime.UtcFallback(Decision.DecidedAt)</time></small></div>
+    <p><strong>@L[Decision.Accepted ? "JevWorkApproved" : "JevDecisionRejected"]</strong> · @L[Decision.Kind == "acceptance" ? "JevAcceptanceHeading" : "JevProfileHeading"]</p>
+    @if (Decision.Review.Profile is { } profile) { <p>@profile.Name</p> }
+    @if (!string.IsNullOrWhiteSpace(Decision.Reason)) { <p>@Decision.Reason</p> }
+    <details class="jev-technical"><summary>@L["JevReviewDetails"]</summary>
+        @foreach (var criterion in Decision.Review.Criteria) { <p>@criterion.Criterion · @L[$"JevStatus{criterion.Status}"]</p> }
+        @foreach (var evidence in Decision.Review.Evidence) { <p>@evidence.Kind · @evidence.Trust</p><pre>@evidence.Detail</pre> }
+        @if (Decision.Review.Profile is { } selected) { <p>@selected.Model · @string.Join(", ", selected.Skills)</p> }
+    </details>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public JevWorkDecision Decision { get; set; } = default!;
+}

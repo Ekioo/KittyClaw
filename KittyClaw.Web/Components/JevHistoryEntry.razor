@@ -1,0 +1,38 @@
+@using KittyClaw.Core.Services
+@using KittyClaw.Web.Extensions
+@inject LocalizationService L
+
+<div class="timeline-comment jev-history-entry" data-testid="jev-history-entry">
+    <div class="timeline-comment-header">
+        <strong>JEV</strong>
+        <small><time datetime="@BrowserLocalDateTime.UtcIso(Decision?.DecidedAt ?? Proposal.ObservedAt)" data-local-date-time data-local-date-time-locale="@L.Lang">@BrowserLocalDateTime.UtcFallback(Decision?.DecidedAt ?? Proposal.ObservedAt)</time></small>
+    </div>
+    <p>
+        @if (Decision is not null)
+        {
+            <strong>@L[Decision.Automatic ? "JevDecisionAutomatic" : Decision.Accepted ? "JevDecisionAccepted" : "JevDecisionRejected"]</strong><span> · @Decision.Actor · </span>
+        }
+        @if (Proposal.Error is not null) { <span>@L["JevReviewUnavailable"]</span> }
+        else { <span>@L["JevSuggestedRoute"]: <strong>@Destination</strong></span> }
+    </p>
+    @if (!string.IsNullOrWhiteSpace(Decision?.Reason)) { <p>@Decision.Reason</p> }
+    <details class="jev-technical" data-testid="jev-decision-history">
+        <summary>@L["JevTechnicalDetails"]</summary>
+        <p>@Proposal.Model · @L["JevConfidence"]: @Proposal.Confidence?.ToString("P0")</p>
+        @if (Proposal.Error is not null) { <p>@Proposal.Error</p> }
+        @if (Decision?.Automatic == true) { <p>@L["JevDecisionThreshold"]: @Decision.ConfidenceThreshold?.ToString("P0")</p> }
+        @foreach (var option in Proposal.Probabilities.OrderByDescending(p => p.Value))
+        { <p>@Proposal.Destinations.GetValueOrDefault(option.Key, option.Key): @option.Value.ToString("P1")</p> }
+        @if (Proposal.ExecutionId is not null)
+        { <p>@L["JevExecution"]: @Proposal.ExecutionId · @L["JevRun"]: @Proposal.RunId</p> }
+    </details>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public JevRoutingProposal Proposal { get; set; } = default!;
+    [Parameter] public JevProposalDecision? Decision { get; set; }
+    [Parameter] public IReadOnlyList<BoardColumn> Columns { get; set; } = [];
+    private string Destination => Proposal.Choice?.StartsWith("column-") == true && int.TryParse(Proposal.Choice[7..], out var id)
+        ? Columns.FirstOrDefault(c => c.Id == id)?.Name ?? Proposal.Destinations.GetValueOrDefault(Proposal.Choice, L["JevNoRoute"])
+        : L["JevNoRoute"];
+}

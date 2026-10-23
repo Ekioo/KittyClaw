@@ -20,7 +20,8 @@ public sealed record JevRoutingProposal(string Fingerprint, int SourceColumnId, 
     DateTime? TicketUpdatedAt = null, int? TicketColumnId = null, int? ActualTargetColumnId = null,
     bool EvidenceAvailable = false, DateTime? ExecutionEndedAt = null, int? ExecutionAttempt = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ProcessorFingerprint = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CostRecordId = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CostRecordId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ColumnAgentResult? RoutingResult = null);
 
 /// <summary>Read-only semantic qualification. Never invokes workflow actions or changes tickets.</summary>
 public sealed class JevQualificationService(ProjectService projects, ProjectSecretVault vault, HttpClient client,
@@ -81,31 +82,47 @@ public sealed class JevQualificationService(ProjectService projects, ProjectSecr
         return result;
     }
 
+    public static ColumnProcessor RecommendationProcessor(ColumnProcessor? processor, BoardColumn source, IReadOnlyList<BoardColumn> columns)
+    {
+        var context = processor is null ? new ColumnProcessor { Name = source.Name, ColumnId = source.Id,
+            Mission = $"Help the owner choose the next step for this ticket in {source.Name}. {source.UserGuidance}" }
+            : JsonSerializer.Deserialize<ColumnProcessor>(JsonSerializer.Serialize(processor, Json), Json)!;
+        // Processor activation governs automatic execution, not the owner's ability to ask for help.
+        context.Enabled = true;
+        if (!context.HasBusinessRouting && !context.JevAcceptanceValidation)
+        {
+            var policy = ColumnRoutingPolicy.From(processor);
+            context.Routes = columns.Where(c => c.PipelineId == source.PipelineId && c.Id != source.Id && policy.Allows(source.Id, c.Id))
+                .Select(c => new ColumnRoute($"Continue in {c.Name}", c.Id)).ToList();
+        }
+        return context;
+    }
+
     public static string RoutingConfigurationFingerprint(ColumnProcessor processor, IEnumerable<BoardColumn> columns) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
         {
             processor.Mission, processor.Prompt, destinations = BuildDestinations(processor, columns)
         }, Json))));
 
-    private static object BuildState(ColumnProcessor processor, Ticket ticket, Dictionary<string, string> destinations, IReadOnlyList<JevRejectionFeedback>? feedback = null) => new
+    private static object BuildState(ColumnProcessor processor, Ticket ticket, Dictionary<string, string> destinations, IReadOnlyList<JevRejectionFeedback>? feedback = null, ColumnAgentResult? routingResult = null) => new
     {
         ticket = new { ticket.Id, ticket.Title, ticket.Description, ticket.Priority, updatedAt = DateTime.SpecifyKind(ticket.UpdatedAt, DateTimeKind.Utc),
             comments = ticket.Comments.TakeLast(20).Select(c => new { c.Author, c.Content }) },
         mission = processor.Mission, instructions = processor.Prompt,
-        sourceColumnId = processor.ColumnId, destinations, ownerFeedback = feedback
+        sourceColumnId = processor.ColumnId, destinations, ownerFeedback = feedback, agentClaims = routingResult
     };
 
-    public static string Fingerprint(ColumnProcessor processor, Ticket ticket, IEnumerable<BoardColumn> columns, IReadOnlyList<JevRejectionFeedback>? feedback = null) =>
+    public static string Fingerprint(ColumnProcessor processor, Ticket ticket, IEnumerable<BoardColumn> columns, IReadOnlyList<JevRejectionFeedback>? feedback = null, ColumnAgentResult? routingResult = null) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JevTriageQuestions.Version + ":" +
-            JsonSerializer.Serialize(BuildState(processor, ticket, BuildDestinations(processor, columns), feedback), Json))));
+            JsonSerializer.Serialize(BuildState(processor, ticket, BuildDestinations(processor, columns), feedback, routingResult), Json))));
 
     public async Task ObserveAsync(string slug, ColumnProcessor processor, Ticket ticket,
-        IReadOnlyList<BoardColumn> columns, CancellationToken ct, ColumnExecution? afterExecution = null)
+        IReadOnlyList<BoardColumn> columns, CancellationToken ct, ColumnExecution? afterExecution = null, ColumnAgentResult? routingResult = null)
     {
         if (!processor.Enabled) return;
         if (afterExecution is null)
         {
-            if (!processor.JevObservationOnly || ticket.ColumnId != processor.ColumnId) return;
+            if (processor.JevAcceptanceValidation || !processor.HasBusinessRouting || ticket.ColumnId != processor.ColumnId) return;
         }
         else if (!processor.JevPostRunObservation || processor.JevObservationOnly ||
             afterExecution.ProcessorId != processor.Id || afterExecution.TicketId != ticket.Id ||
@@ -123,7 +140,7 @@ public sealed class JevQualificationService(ProjectService projects, ProjectSecr
         var evidenceMatches = evidence?.ProjectSlug == slug && evidence.TicketId == ticket.Id.ToString() && evidence.RunIds.Contains(afterExecution!.RunId!) && evidence.CapturedAt >= afterExecution.ClaimedAt;
         if (!evidenceMatches) evidence = null;
         if (evidence is not null) EvidenceStore.ApplyStaleness(evidence, EvidenceStore.DefaultStalenessThreshold);
-        object state = afterExecution is null ? BuildState(processor, ticket, destinations, feedback.Count == 0 ? null : feedback) : new
+        object state = afterExecution is null ? BuildState(processor, ticket, destinations, feedback.Count == 0 ? null : feedback, routingResult) : new
         {
             context = BuildState(processor, ticket, destinations, feedback.Count == 0 ? null : feedback),
             execution = new { afterExecution.Id, afterExecution.RunId, afterExecution.Status, afterExecution.EndedAt,
@@ -136,7 +153,7 @@ public sealed class JevQualificationService(ProjectService projects, ProjectSecr
         };
         var stateJson = JsonSerializer.Serialize(state, Json);
         var version = afterExecution is null ? JevTriageQuestions.Version : "post-run-v1";
-        var fingerprint = afterExecution is null ? Fingerprint(processor, ticket, columns, feedback.Count == 0 ? null : feedback) :
+        var fingerprint = afterExecution is null ? Fingerprint(processor, ticket, columns, feedback.Count == 0 ? null : feedback, routingResult) :
             Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(version + ":" + stateJson)));
         var previous = afterExecution is null ? await GetAsync(slug, ticket.Id, ct) :
             (await GetPostRunAsync(slug, ticket.Id, ct)).FirstOrDefault(p => p.ExecutionId == afterExecution.Id && p.ExecutionEndedAt == afterExecution.EndedAt);
@@ -202,7 +219,7 @@ public sealed class JevQualificationService(ProjectService projects, ProjectSecr
             var error = ex is InvalidOperationException ? ex.Message : "JEV qualification failed. It will retry after five minutes.";
             proposal = new(fingerprint, processor.ColumnId, DateTime.UtcNow, null, null, null, [], destinations, error, QuestionVersion: version);
         }
-        proposal = proposal with { CostRecordId = costRecordId, TicketUpdatedAt = ticket.UpdatedAt, TicketColumnId = ticket.ColumnId,
+        proposal = proposal with { CostRecordId = costRecordId, RoutingResult = routingResult, TicketUpdatedAt = ticket.UpdatedAt, TicketColumnId = ticket.ColumnId,
             ProcessorFingerprint = RoutingConfigurationFingerprint(processor, columns) };
         if (afterExecution is not null) proposal = proposal with
         {

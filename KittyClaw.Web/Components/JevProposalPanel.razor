@@ -1,140 +1,75 @@
 @using KittyClaw.Core.Services
+@using Microsoft.EntityFrameworkCore
 @inject JevQualificationService Qualification
 @inject JevDecisionStore Decisions
 @inject LocalizationService L
 @inject TicketService Tickets
 @inject ColumnProcessorService Processors
 @inject ProjectService Projects
-@using Microsoft.EntityFrameworkCore
 @implements IAsyncDisposable
 
-@if (_proposal is not null)
+@if (_processor is { Enabled: true, HasBusinessRouting: true, JevAcceptanceValidation: false })
 {
-    <section class="worktree-summary" data-testid="jev-proposal" aria-label="JEV qualification">
-        <strong>@L["JevQualificationHeading"]</strong>
-
-        @if (_stale) { <p class="settings-hint">@L["JevRefreshNeeded"]</p> }
-        @if (_proposal.Error is not null)
+    <section class="jev-route-assistance" data-testid="jev-assistance" aria-label="@L["JevNextAction"]">
+        <div class="jev-card-heading">
+            <strong>@L["JevNextAction"]</strong>
+            <button class="settings-browse" disabled="@_busy" @onclick="RecommendAsync" data-testid="jev-ask">@L[_busy ? "JevThinking" : "JevAsk"]</button>
+        </div>
+        @if (_proposal is not null)
         {
-            <p role="status">@L["JevReviewUnavailable"]</p><details><summary>@L["JevTechnicalDetails"]</summary>@_proposal.Error</details>
-        }
-        else
-        {
-            <p>@L["JevSuggestedRoute"]: <strong>@DestinationName(_proposal)</strong></p>
-            <details class="jev-disclosure jev-technical"><summary>@L["JevTechnicalDetails"]</summary>
-            <p class="settings-hint" data-testid="jev-routing-policy">@RoutingPolicyText(_proposal.SourceColumnId)</p>
-            <p>@_proposal.Model · @_proposal.ObservedAt.ToLocalTime().ToString("g")</p>
-            <p>Confidence: @_proposal.Confidence?.ToString("P0")</p>
-            @if (_proposal.Triage is { } triage)
-            {
-                <div data-testid="jev-triage">
-                    <p>@L["JevRequestType"]: <strong>@L[$"JevType{triage.RequestType.Choice}"]</strong> · @L["JevConfidence"]: @triage.RequestType.Confidence.ToString("P0")</p>
-                    <p>@L["JevComplexity"]: <strong>@L[$"JevComplexity{triage.Complexity.Choice}"]</strong> · @L["JevConfidence"]: @triage.Complexity.Confidence.ToString("P0")</p>
-                    <p>@L["JevClarificationProbability"]: <strong>@triage.ClarificationProbability.ToString("P0")</strong></p>
-                    <small class="settings-hint">@L["JevTriageHint"]</small>
-                    <details>
-                        <summary>@L["JevTriageProbabilities"]</summary>
-                        @foreach (var option in triage.RequestType.Probabilities.OrderByDescending(p => p.Value))
-                        { <p>@L[$"JevType{option.Key}"]: @option.Value.ToString("P1")</p> }
-                        @foreach (var option in triage.Complexity.Probabilities.OrderByDescending(p => p.Value))
-                        { <p>@L[$"JevComplexity{option.Key}"]: @option.Value.ToString("P1")</p> }
-                    </details>
-                </div>
-            }
-            <details>
-                <summary>Destination probabilities</summary>
-                @foreach (var option in _proposal.Probabilities.OrderByDescending(p => p.Value))
+            <div data-testid="jev-proposal">
+                @if (_proposal.Error is not null)
                 {
-                    <p>@_proposal.Destinations.GetValueOrDefault(option.Key, option.Key): @option.Value.ToString("P1")</p>
+                    <p role="status">@L["JevClassicFallback"]</p>
                 }
-            </details>
-            </details>
+                else if (JevCertainty.Routing(_proposal, _processor.JevConfidenceThreshold))
+                {
+                    <p class="jev-verdict">@L["JevSuggestedRoute"]: <strong>@DestinationName(_proposal)</strong></p>
+                    <JevProposalDecisionPanel @key="JevDecisionStore.ProposalId(_proposal)" Slug="@Slug" TicketId="@TicketId" Proposal="@_proposal" OnDecided="DecisionTakenAsync" />
+                }
+                else { <p role="status">@L["JevClassicFallback"]</p> }
+                <details class="jev-disclosure jev-technical">
+                    <summary>@L["JevTechnicalDetails"]</summary>
+                    <p data-testid="jev-routing-policy">@(_automatic ? string.Format(L["JevAutomaticPolicy"], (_processor.JevConfidenceThreshold * 100).ToString("0.#")) : L["JevManualPolicy"])</p>
+                    <p>@_proposal.Model · @_proposal.ObservedAt.ToLocalTime().ToString("g") · @L["JevConfidence"]: @_proposal.Confidence?.ToString("P0")</p>
+                    @if (_proposal.Error is not null) { <p>@_proposal.Error</p> }
+                    @foreach (var option in _proposal.Probabilities.OrderByDescending(p => p.Value))
+                    { <p>@_proposal.Destinations.GetValueOrDefault(option.Key, option.Key): @option.Value.ToString("P1")</p> }
+                    @if (_proposal.Triage is { } triage)
+                    {
+                        <div data-testid="jev-triage">
+                            <p>@L["JevRequestType"]: @L[$"JevType{triage.RequestType.Choice}"]</p>
+                            <p>@L["JevComplexity"]: @L[$"JevComplexity{triage.Complexity.Choice}"]</p>
+                            <p>@L["JevClarificationProbability"]: @triage.ClarificationProbability.ToString("P0")</p>
+                        </div>
+                    }
+                    @if (_proposal.Usage is { } usage)
+                    { <p data-testid="jev-usage">@L["JevTokens"]: @usage.InputTokens / @usage.OutputTokens · @_proposal.DurationMs ms</p> }
+                </details>
+            </div>
         }
-        <details class="jev-disclosure jev-technical"><summary>@L["JevTokens"]</summary>
-        @if (_proposal.Usage is { } usage)
-        {
-            <p class="settings-hint" data-testid="jev-usage">@L["JevTokens"]: @usage.InputTokens / @usage.OutputTokens · @_proposal.DurationMs ms</p>
-        }
-        </details>
-        <JevProposalDecisionPanel @key="JevDecisionStore.ProposalId(_proposal)" Slug="@Slug" TicketId="@TicketId" Proposal="@_proposal"
-            Decision="@_decisions.FirstOrDefault(d => d.ProposalId == JevDecisionStore.ProposalId(_proposal))" Stale="@_stale" OnDecided="DecisionTakenAsync" />
+        @if (_error is not null) { <p class="settings-status-error" role="status">@_error</p> }
     </section>
-}
-
-
-@foreach (var observation in _postRun)
-{
-    <section class="worktree-summary" data-testid="jev-post-run-proposal" aria-label="@L["JevPostRunHeading"]">
-        <strong>@L["JevPostRunHeading"]</strong>
-        @if (observation.Error is not null)
-        { <p role="status">@L["JevReviewUnavailable"]</p><details><summary>@L["JevTechnicalDetails"]</summary>@observation.Error</details> }
-        else
-        {
-            <p>@L["JevSuggestedRoute"]: <strong>@DestinationName(observation)</strong></p>
-
-            <details>
-                <summary>@L["JevRouteProbabilities"]</summary>
-                @foreach (var option in observation.Probabilities.OrderByDescending(p => p.Value))
-                { <p>@observation.Destinations.GetValueOrDefault(option.Key, option.Key): @option.Value.ToString("P1")</p> }
-            </details>
-        }
-        <details class="jev-disclosure jev-technical"><summary>@L["JevTechnicalDetails"]</summary>
-        <p>@observation.Model · @observation.ObservedAt.ToLocalTime().ToString("g") · @observation.Confidence?.ToString("P0")</p>
-        <p class="settings-hint" data-testid="jev-routing-policy">@RoutingPolicyText(observation.SourceColumnId)</p>
-        <p>@L["JevSourceColumn"]: @_columnNames.GetValueOrDefault(observation.SourceColumnId, $"#{observation.SourceColumnId}")</p>
-        <p>@L["JevActualRoute"]: @(observation.ActualTargetColumnId is int target ? _columnNames.GetValueOrDefault(target, $"#{target}") : L["JevNoRoute"])</p>
-        @if (_currentTicket?.UpdatedAt != observation.TicketUpdatedAt || _currentTicket?.ColumnId != observation.TicketColumnId)
-        { <p class="settings-hint">@L["JevPostRunHistorical"]</p> }
-        <p class="settings-hint">@L[observation.EvidenceAvailable ? "JevEvidenceAvailable" : "JevEvidenceMissing"]</p>
-        <p class="settings-hint">@L["JevExecution"]: <code>@observation.ExecutionId</code> · @L["JevRun"]: <code>@observation.RunId</code></p>
-        </details>
-        <JevProposalDecisionPanel @key="JevDecisionStore.ProposalId(observation)" Slug="@Slug" TicketId="@TicketId" Proposal="@observation"
-            Decision="@_decisions.FirstOrDefault(d => d.ProposalId == JevDecisionStore.ProposalId(observation))"
-            Stale="@(_currentTicket?.UpdatedAt != observation.TicketUpdatedAt || _currentTicket?.ColumnId != observation.TicketColumnId)" OnDecided="DecisionTakenAsync" />
-    </section>
-}
-
-@if (_decisions.Count > 0)
-{
-    <details class="worktree-summary jev-decision-history" data-testid="jev-decision-history">
-        <summary>@L["JevDecisionHistory"]</summary>
-        @foreach (var decision in _decisions)
-        {
-            <article>
-            <p>@L[decision.Automatic ? "JevDecisionAutomatic" : decision.Accepted ? "JevDecisionAccepted" : "JevDecisionRejected"] · @decision.DecidedAt.ToLocalTime().ToString("g") · @decision.Actor</p>
-            <p>@decision.Proposal.Destinations.GetValueOrDefault(decision.Proposal.Choice ?? "", "none") · <code>@decision.ProposalId[..12]</code></p>
-            <p>@decision.Reason</p>
-            @if (decision.Automatic) { <p>@L["JevDecisionThreshold"]: @decision.ConfidenceThreshold?.ToString("P0")</p> }
-            </article>
-        }
-    </details>
 }
 
 @code {
+    [Parameter] public string Slug { get; set; } = "";
+    [Parameter] public int TicketId { get; set; }
+    [Parameter] public EventCallback OnDecisionTaken { get; set; }
+    private JevRoutingProposal? _proposal;
+    private KittyClaw.Core.Models.ColumnProcessor? _processor;
+    private Dictionary<int, string> _columnNames = [];
+    private bool _busy;
+    private bool _automatic;
+    private string? _error;
+    private readonly CancellationTokenSource _stop = new();
+    private Task? _poll;
+
     private string DestinationName(JevRoutingProposal proposal)
         => proposal.Choice?.StartsWith("column-") == true && int.TryParse(proposal.Choice[7..], out var id)
             ? _columnNames.GetValueOrDefault(id, proposal.Destinations.GetValueOrDefault(proposal.Choice, L["JevNoRoute"]))
             : L["JevNoRoute"];
-    [Parameter] public string Slug { get; set; } = "";
-    [Parameter] public int TicketId { get; set; }
-    [Parameter] public EventCallback OnDecisionTaken { get; set; }
-    private List<JevProposalDecision> _decisions = [];
-    private async Task DecisionTakenAsync()
-    {
-        await ReloadAsync();
-        await OnDecisionTaken.InvokeAsync();
-    }
-    private JevRoutingProposal? _proposal;
-    private List<JevRoutingProposal> _postRun = [];
-    private KittyClaw.Core.Models.Ticket? _currentTicket;
-    private Dictionary<int, string> _columnNames = [];
-    private bool _stale;
-    private Dictionary<int, KittyClaw.Core.Models.ColumnProcessor> _processors = [];
-    private string RoutingPolicyText(int columnId) => _processors.TryGetValue(columnId, out var processor) && processor.JevAutomaticRouting
-        ? string.Format(L["JevAutomaticPolicy"], (processor.JevConfidenceThreshold * 100).ToString("0.#"))
-        : L["JevManualPolicy"];
-    private readonly CancellationTokenSource _stop = new();
-    private Task? _poll;
+
     protected override async Task OnParametersSetAsync()
     {
         await ReloadAsync();
@@ -142,28 +77,47 @@
     }
     private async Task ReloadAsync()
     {
-        _processors = (await Processors.ListAsync(Slug)).ToDictionary(p => p.ColumnId);
-        _decisions = await Decisions.ListAsync(Slug, TicketId, _stop.Token);
-        _proposal = await Qualification.GetAsync(Slug, TicketId, _stop.Token);
         var ticket = await Tickets.GetTicketAsync(Slug, TicketId);
-        _currentTicket = ticket;
-        _postRun = await Qualification.GetPostRunAsync(Slug, TicketId, _stop.Token);
-        if (_postRun.Count > 0)
+        var configured = ticket?.ColumnId is int columnId ? await Processors.GetAsync(Slug, columnId) : null;
+        await using var db = Projects.GetProjectDb(Slug);
+        var columns = await db.BoardColumns.AsNoTracking().ToListAsync(_stop.Token);
+        _automatic = configured?.UsesAutomaticJevRouting ?? false;
+        _processor = columns.FirstOrDefault(c => c.Id == ticket?.ColumnId) is { } source
+            ? JevQualificationService.RecommendationProcessor(configured, source, columns) : null;
+        _columnNames = columns.ToDictionary(c => c.Id, c => c.Name);
+        var decisions = await Decisions.ListAsync(Slug, TicketId, _stop.Token);
+        var proposal = await Qualification.GetAsync(Slug, TicketId, _stop.Token);
+        var feedback = ticket is not null && _processor is not null ? JevQualificationService.RejectionFeedback(decisions, _processor, ticket) : [];
+        _proposal = proposal is not null && ticket is not null && _processor is { Enabled: true } &&
+            proposal.SourceColumnId == ticket.ColumnId &&
+            !decisions.Any(d => d.ProposalId == JevDecisionStore.ProposalId(proposal)) &&
+            proposal.Fingerprint == JevQualificationService.Fingerprint(_processor, ticket, columns, feedback.Count > 0 ? feedback : null, proposal.RoutingResult)
+                ? proposal : null;
+    }
+    private async Task RecommendAsync()
+    {
+        if (_busy) return;
+        _busy = true; _error = null;
+        try
         {
-            await using var namesDb = Projects.GetProjectDb(Slug);
-            _columnNames = await namesDb.BoardColumns.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.Name, _stop.Token);
-        }
-        _stale = false;
-        if (_proposal is not null)
-        {
-            var processor = await Processors.GetAsync(Slug, _proposal.SourceColumnId);
+            var ticket = await Tickets.GetTicketAsync(Slug, TicketId);
+            var processor = ticket?.ColumnId is int id ? await Processors.GetAsync(Slug, id) : null;
+            if (ticket is null) return;
             await using var db = Projects.GetProjectDb(Slug);
             var columns = await db.BoardColumns.AsNoTracking().ToListAsync(_stop.Token);
-            _stale = ticket is null || processor is null || !processor.Enabled || !processor.JevObservationOnly ||
-                ticket.ColumnId != _proposal.SourceColumnId ||
-                JevQualificationService.Fingerprint(processor, ticket, columns,
-                    JevQualificationService.RejectionFeedback(_decisions, processor, ticket) is { Count: > 0 } feedback ? feedback : null) != _proposal.Fingerprint;
+            if (columns.FirstOrDefault(c => c.Id == ticket.ColumnId) is not { } source) return;
+            processor = JevQualificationService.RecommendationProcessor(processor, source, columns);
+            await Qualification.ObserveAsync(Slug, processor, ticket, columns, _stop.Token);
+            await ReloadAsync();
         }
+        catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
+        catch (Exception) { _error = L["JevDecisionError"]; }
+        finally { _busy = false; }
+    }
+    private async Task DecisionTakenAsync()
+    {
+        await ReloadAsync();
+        await OnDecisionTaken.InvokeAsync();
     }
     private async Task PollAsync()
     {
@@ -171,7 +125,7 @@
         {
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
             while (await timer.WaitForNextTickAsync(_stop.Token))
-                await InvokeAsync(async () => { await ReloadAsync(); StateHasChanged(); });
+                await InvokeAsync(async () => { if (!_busy) { await ReloadAsync(); StateHasChanged(); } });
         }
         catch (OperationCanceledException) { }
     }

@@ -1434,3 +1434,8 @@ select:focus-visible,
 .jev-settings > summary { margin-bottom:8px; }
 
 .jev-disclosure article > small { display:block; margin:4px 0; }
+
+.jev-route-assistance { display: block; padding: .75rem 0; border-block: 1px solid var(--border); }
+.jev-route-assistance .jev-verdict { margin: .6rem 0; }
+.jev-route-assistance .jev-decision-controls { border: 0; padding: 0; margin: .5rem 0; }
+.jev-history-entry > p { margin: .4rem 0; }

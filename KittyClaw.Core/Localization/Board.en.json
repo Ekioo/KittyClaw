@@ -483,5 +483,10 @@
   "JevVerificationProof": "Verification result",
   "JevRepositoryProof": "Project changes",
   "JevSettings": "JEV assistance",
-  "JevConfirm": "Confirm"
+  "JevConfirm": "Confirm",
+  "JevNextAction": "JEV · Next step",
+  "JevAsk": "What should I do with this ticket?",
+  "JevThinking": "JEV is reviewing…",
+  "JevClassicFallback": "JEV has no sufficiently confident answer. Normal processing without JEV applies.",
+  "JevRoutingAutomaticDefault": "JEV automatically chooses and applies configured routes after processing when its confidence meets this threshold. Uncertain, abstained or unavailable JEV results use classic routing."
 }

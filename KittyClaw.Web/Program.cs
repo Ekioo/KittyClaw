@@ -70,7 +70,10 @@ builder.Services.AddSingleton(sp => new FirstRunProviderService(dataDir,
     sp.GetRequiredService<AgentCliReadinessService>()));
 builder.Services.AddSingleton(sp => new DashboardGuidanceService(dataDir));
 builder.Services.AddSingleton(new FirstProjectActivationMetricsService(dataDir));
-builder.Services.AddSingleton<TicketService>();
+builder.Services.AddSingleton(sp => new TicketService(sp.GetRequiredService<ProjectService>(),
+    sp.GetRequiredService<MemberService>(), sp.GetRequiredService<ColumnProcessorService>(),
+    sp.GetRequiredService<AutomationStore>(), sp.GetRequiredService<ILogger<TicketService>>(),
+    new Lazy<JevWorkReviewService>(sp.GetRequiredService<JevWorkReviewService>)));
 builder.Services.AddSingleton(sp => new FirstTicketDraftService(dataDir, sp.GetRequiredService<TicketService>()));
 builder.Services.AddSingleton(sp => new MinimalWorkflowService(dataDir,
     sp.GetRequiredService<PipelineService>(), sp.GetRequiredService<ColumnService>(),

@@ -17,6 +17,20 @@ public class ColumnProcessor
     public bool Enabled { get; set; } = true;
     public bool JevObservationOnly { get; set; }
     public bool JevAutomaticRouting { get; set; }
+    [NotMapped] public bool HasBusinessRouting => Routes.Count > 0 || DefaultTargetColumnId.HasValue;
+    [NotMapped] public bool UsesAutomaticJevRouting => Enabled && !JevClassicFallback && !JevAcceptanceValidation && HasBusinessRouting;
+    [NotMapped] public bool JevClassicFallback { get; set; }
+
+    public ColumnProcessor WithoutJev()
+    {
+        var copy = (ColumnProcessor)MemberwiseClone();
+        copy.JevClassicFallback = true;
+        copy.JevObservationOnly = false;
+        copy.JevAcceptanceValidation = false;
+        copy.JevExecutionSelection = false;
+        copy.JevPostRunObservationSince = null;
+        return copy;
+    }
     public bool JevAcceptanceValidation { get; set; }
     public bool JevExecutionSelection { get; set; }
     [JsonIgnore] public string JevAcceptanceCriteriaJson { get; set; } = "[]";
@@ -180,6 +194,7 @@ public enum MemoryCapitalizationStatus
 
 public class ColumnExecution
 {
+    public bool JevClassicFallback { get; set; }
     public required string Id { get; set; }
     public int ProcessorId { get; set; }
     public int TicketId { get; set; }
