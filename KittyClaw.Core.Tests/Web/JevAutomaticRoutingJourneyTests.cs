@@ -87,7 +87,7 @@ public sealed class JevAutomaticRoutingJourneyTests(ITestOutputHelper output)
             response.EnsureSuccessStatusCode();
             var ticket = (await response.Content.ReadFromJsonAsync<Ticket>(json))!;
             await page.GotoAsync(new Uri(http.BaseAddress!, $"/board/{slug}/ticket/{ticket.Id}").ToString());
-            var proposal = page.GetByTestId("jev-history-entry").First;
+            var proposal = page.GetByTestId("jev-history-entry").Filter(new() { HasText = "jev-post-run-fixture" }).First;
             await Expect(proposal).ToContainTextAsync("Suggested destination: Todo", new() { Timeout = 60000 });
             await Expect(page.GetByTestId("ticket-current-column")).ToContainTextAsync("Review");
             await proposal.Locator("summary").ClickAsync();
@@ -127,7 +127,7 @@ public sealed class JevAutomaticRoutingJourneyTests(ITestOutputHelper output)
             processor = await http.GetFromJsonAsync<ColumnProcessor>($"/api/projects/{slug}/columns/{source.Id}/processor", json);
             Assert.True(processor!.JevAutomaticRouting); Assert.Equal(1, processor.JevConfidenceThreshold);
             await page.GotoAsync(new Uri(http.BaseAddress!, $"/board/{slug}/ticket/{ticket.Id}").ToString());
-            await Expect(page.GetByTestId("jev-history-entry").First).ToContainTextAsync("Automatically applied by JEV", new() { Timeout = 45000 });
+            await Expect(page.GetByTestId("jev-history-entry").Filter(new() { HasText = "jev-post-run-fixture" }).First).ToContainTextAsync("Automatically applied by JEV", new() { Timeout = 45000 });
             var acceptedUntil = DateTime.UtcNow.AddSeconds(30);
             while (factory.Dispatcher.Count < 2 && DateTime.UtcNow < acceptedUntil) await Task.Delay(100);
             Assert.Equal(2, factory.Dispatcher.Count);
@@ -139,7 +139,7 @@ public sealed class JevAutomaticRoutingJourneyTests(ITestOutputHelper output)
             Assert.True(acceptedReview.Automatic); Assert.Equal(1, acceptedReview.ConfidenceThreshold);
             Assert.Equal(suggestion.Id, acceptedReview.AppliedTargetColumnId);
             await page.ReloadAsync();
-            await Expect(page.GetByTestId("jev-history-entry").First).ToContainTextAsync("Automatically applied by JEV", new() { Timeout = 45000 });
+            await Expect(page.GetByTestId("jev-history-entry").Filter(new() { HasText = "jev-post-run-fixture" }).First).ToContainTextAsync("Automatically applied by JEV", new() { Timeout = 45000 });
             await page.GetByTestId("jev-decision-history").Locator("summary").ClickAsync();
             await page.GetByTestId("jev-decision-history").ScrollIntoViewIfNeededAsync();
             await page.ScreenshotAsync(new() { Path = Path.Combine(data, "jev-accepted-history.png"), FullPage = true });
@@ -152,7 +152,7 @@ public sealed class JevAutomaticRoutingJourneyTests(ITestOutputHelper output)
             secondResponse.EnsureSuccessStatusCode();
             var secondTicket = (await secondResponse.Content.ReadFromJsonAsync<Ticket>(json))!;
             await page.GotoAsync(new Uri(http.BaseAddress!, $"/board/{slug}/ticket/{secondTicket.Id}").ToString());
-            proposal = page.GetByTestId("jev-history-entry").First;
+            proposal = page.GetByTestId("jev-history-entry").Filter(new() { HasText = "jev-post-run-fixture" }).First;
             await Expect(proposal).ToContainTextAsync("Suggested destination: Todo", new() { Timeout = 60000 });
             Assert.Equal(1, (await http.GetFromJsonAsync<ColumnProcessor>($"/api/projects/{slug}/columns/{source.Id}/processor", json))!.JevConfidenceThreshold);
             var lowConfidenceUntil = DateTime.UtcNow.AddSeconds(32);
@@ -163,12 +163,12 @@ public sealed class JevAutomaticRoutingJourneyTests(ITestOutputHelper output)
                 Assert.Empty(await reviews.ListAsync(slug, secondTicket.Id));
                 await Task.Delay(1000);
             }
-            var rejectedProposal = await factory.Services.GetRequiredService<JevQualificationService>().GetAsync(slug, secondTicket.Id);
+            var rejectedProposal = Assert.Single(await factory.Services.GetRequiredService<JevQualificationService>().GetPostRunAsync(slug, secondTicket.Id));
             await factory.Services.GetRequiredService<JevProposalDecisionService>().DecideAsync(slug, secondTicket.Id,
                 JevDecisionStore.ProposalId(rejectedProposal!), false, "Review evidence before returning to implementation");
             await page.ReloadAsync();
-            await Expect(page.GetByTestId("jev-history-entry").First).ToContainTextAsync("Rejected");
-            await Expect(page.GetByTestId("jev-history-entry").First).ToContainTextAsync("Review evidence before returning to implementation");
+            await Expect(page.GetByTestId("jev-history-entry").Filter(new() { HasText = "jev-post-run-fixture" }).First).ToContainTextAsync("Rejected");
+            await Expect(page.GetByTestId("jev-history-entry").Filter(new() { HasText = "jev-post-run-fixture" }).First).ToContainTextAsync("Review evidence before returning to implementation");
             Assert.Equal(actualTarget.Id, (await http.GetFromJsonAsync<Ticket>($"/api/projects/{slug}/tickets/{secondTicket.Id}", json))!.ColumnId);
             Assert.Equal(3, factory.Dispatcher.Count);
             Assert.Equal(2, factory.Handler.Count);
@@ -176,7 +176,7 @@ public sealed class JevAutomaticRoutingJourneyTests(ITestOutputHelper output)
             Assert.False(rejectedReview.Accepted);
             Assert.Equal("Review evidence before returning to implementation", rejectedReview.Reason);
             await page.ReloadAsync();
-            await Expect(page.GetByTestId("jev-history-entry").First).ToContainTextAsync("Rejected");
+            await Expect(page.GetByTestId("jev-history-entry").Filter(new() { HasText = "jev-post-run-fixture" }).First).ToContainTextAsync("Rejected");
             await page.GetByTestId("jev-decision-history").Locator("summary").ClickAsync();
             await page.GetByTestId("jev-decision-history").ScrollIntoViewIfNeededAsync();
             await page.ScreenshotAsync(new() { Path = Path.Combine(data, "jev-rejected-and-requalified.png"), FullPage = true });
