@@ -19,7 +19,7 @@ public class ColumnProcessor
     public bool JevObservationOnly { get; set; }
     public bool JevAutomaticRouting { get; set; }
     [NotMapped] public bool HasBusinessRouting => Routes.Count > 0 || DefaultTargetColumnId.HasValue;
-    [NotMapped] public bool UsesAutomaticJevRouting => Enabled && !JevClassicFallback && !JevAcceptanceValidation && HasBusinessRouting;
+    [NotMapped] public bool UsesAutomaticJevRouting => Enabled && (JevObservationOnly || JevAutomaticRouting) && !JevClassicFallback && !JevAcceptanceValidation && HasBusinessRouting;
     [NotMapped] public bool JevClassicFallback { get; set; }
 
     public ColumnProcessor WithoutJev()

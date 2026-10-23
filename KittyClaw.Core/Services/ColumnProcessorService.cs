@@ -407,8 +407,6 @@ public sealed class ColumnProcessorService(
             throw new InvalidOperationException("Choose either JEV qualification or post-run observation for this column.");
         if (!double.IsFinite(definition.JevConfidenceThreshold) || definition.JevConfidenceThreshold < 0 || definition.JevConfidenceThreshold > 1)
             throw new InvalidOperationException("JEV confidence threshold must be between 0 and 1.");
-        if (definition.JevAutomaticRouting && !definition.JevObservationOnly && definition.JevPostRunObservationSince is null)
-            throw new InvalidOperationException("Enable JEV qualification or post-run proposals before automatic routing.");
         if (definition.JevAcceptanceValidation && (definition.JevObservationOnly || definition.JevPostRunObservationSince is not null || definition.JevAutomaticRouting || definition.JevExecutionSelection))
             throw new InvalidOperationException("Acceptance validation is a manual review column. Disable other JEV modes in this column.");
         if (definition.JevExecutionSelection && definition.JevObservationOnly)

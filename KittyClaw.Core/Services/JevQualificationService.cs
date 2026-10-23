@@ -123,6 +123,9 @@ public sealed class JevQualificationService(ProjectService projects, ProjectSecr
         if (afterExecution is null)
         {
             if (processor.JevAcceptanceValidation || !processor.HasBusinessRouting || ticket.ColumnId != processor.ColumnId) return;
+            // Worker routing requires the completed agent result. Only explicit triage columns
+            // and owner assistance without a configured processor may qualify on arrival.
+            if (processor.Id > 0 && !processor.JevObservationOnly && routingResult is null) return;
         }
         else if (!processor.JevPostRunObservation || processor.JevObservationOnly ||
             afterExecution.ProcessorId != processor.Id || afterExecution.TicketId != ticket.Id ||
