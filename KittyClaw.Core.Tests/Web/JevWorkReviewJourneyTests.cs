@@ -139,7 +139,7 @@ public sealed class JevWorkReviewJourneyTests(ITestOutputHelper output)
             await panel.EvaluateAsync("element => element.scrollIntoView({block:'center'})");
             await page.ScreenshotAsync(new() { Path = Path.Combine(data, "criteria-evidence-and-missing.png"), FullPage = true });
             await panel.GetByTestId("jev-work-confirm").ClickAsync();
-            await Expect(page.GetByTestId("jev-work-history")).ToContainTextAsync("Rejected");
+            await Expect(page.GetByTestId("jev-work-history").Filter(new() { HasText = "Rejected" })).ToBeVisibleAsync();
             var corrected = (await http.GetFromJsonAsync<Ticket>($"/api/projects/{slug}/tickets/{ticket.Id}", json))!;
             Assert.Equal(todo.Id, corrected.ColumnId); Assert.Contains(corrected.Comments, c => c.Content.Contains("Login works") && c.Content.Contains("Tests pass"));
 
@@ -150,13 +150,13 @@ public sealed class JevWorkReviewJourneyTests(ITestOutputHelper output)
             await panel.GetByTestId("jev-work-approve").ClickAsync();
             await Expect(panel.GetByTestId("jev-missing-criteria")).ToContainTextAsync("Ready for your approval", new() { Timeout = 45000 });
             await panel.GetByTestId("jev-work-approve").ClickAsync();
-            await Expect(page.GetByTestId("jev-work-history")).ToContainTextAsync("Approved by owner");
+            await Expect(page.GetByTestId("jev-work-history").Filter(new() { HasText = "Work review" })).ToContainTextAsync("Approved by owner");
             var completionUntil = DateTime.UtcNow.AddSeconds(30);
             while (DateTime.UtcNow < completionUntil && (await http.GetFromJsonAsync<Ticket>($"/api/projects/{slug}/tickets/{second.Id}", json))!.ColumnId != done.Id)
                 await Task.Delay(100);
             Assert.Equal(done.Id, (await http.GetFromJsonAsync<Ticket>($"/api/projects/{slug}/tickets/{second.Id}", json))!.ColumnId);
-            await page.ReloadAsync(); await Expect(page.GetByTestId("jev-work-history")).ToContainTextAsync("Tests pass");
-            await Expect(page.GetByTestId("jev-work-history")).ToContainTextAsync("Verified");
+            await page.ReloadAsync(); await Expect(page.GetByTestId("jev-work-history").Filter(new() { HasText = "Work review" })).ToContainTextAsync("Tests pass");
+            await Expect(page.GetByTestId("jev-work-history").Filter(new() { HasText = "Work review" })).ToContainTextAsync("Verified");
             Assert.Equal(2, factory.Dispatcher.Models.Count); Assert.Empty(errors);
             var costs = factory.Services.GetRequiredService<CostReportService>();
             var project = (await factory.Services.GetRequiredService<ProjectService>().GetProjectAsync(slug))!;

@@ -32,6 +32,7 @@ Tickets gain acceptance criteria and optional processor assessments. JEV recomme
 - Correct cost estimates and deduplicate usage reported by resumed Codex sessions.
 - Repair audited ticket-transfer, budget, and dashboard-worktree defects.
 - Complete localization across supported languages and align the API and MCP documentation with the implemented endpoints and tools.
+- Recognize root-relative ticket cover images consistently on Windows and Linux.
 
 ---
 

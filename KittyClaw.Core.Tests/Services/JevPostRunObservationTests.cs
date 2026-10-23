@@ -102,9 +102,12 @@ public sealed class JevPostRunObservationTests
             using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct));
             LastState = body.RootElement.GetProperty("state").Clone();
             var questions = body.RootElement.GetProperty("questions");
-            Assert.Single(questions.EnumerateObject());
             var options = questions.GetProperty("routing").GetProperty("criteria").EnumerateObject().Select(p => p.Name).ToList();
             var selected = options.First(k => k != "none");
+            // The ticket panel also asks for a current-column recommendation independently of post-run history.
+            if (questions.EnumerateObject().Count() > 1)
+                return new(HttpStatusCode.OK) { Content = JsonContent.Create(new {
+                    model = "jev-owner-fixture", answers = KittyClaw.Core.Tests.Helpers.JevResponseFixture.Answers(selected) }) };
             Count++;
             return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { model = "jev-post-run-fixture",
                 answers = new { routing = new { type = "choice", choice = selected, confidence = Confidence,
