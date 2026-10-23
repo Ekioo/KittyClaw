@@ -229,7 +229,8 @@ public sealed class PipelineExportHttpTests : IClassFixture<PipelineExportHttpTe
             .GetProperty("columnId").GetInt32();
         Assert.NotEqual(sourceColumnId, importedSourceId);
         Assert.NotEqual(targetColumnId, importedTargetId);
-        var targetColumns = await _client.GetFromJsonAsync<JsonElement[]>($"/api/projects/{targetSlug}/columns");
+        var importedPipelineId = installed.GetProperty("pipelineId").GetInt32();
+        var targetColumns = await _client.GetFromJsonAsync<JsonElement[]>($"/api/projects/{targetSlug}/columns?pipelineId={importedPipelineId}");
         var importedSource = targetColumns!.Single(column => column.GetProperty("id").GetInt32() == importedSourceId);
         Assert.Equal(3, importedSource.GetProperty("maxTickets").GetInt32());
         Assert.True(importedSource.GetProperty("capacityBlocking").GetBoolean());

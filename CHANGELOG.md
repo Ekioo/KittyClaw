@@ -30,6 +30,7 @@ Ticket drafts preserve their title and description after failed creation and bro
 - Preserve ticket input and display errors when creation fails.
 - Enforce blocking column limits atomically for concurrent arrivals while permitting edits and departures.
 - Retry browser reconnection while the application restarts after an update.
+- Hide worktree details when the project has worktrees disabled, and display tickets before loading secondary details and Git state.
 
 ---
 

@@ -30,7 +30,7 @@
 @if (_ticket is not null)
 {
     <div class="ticket-modal-overlay">
-        <div class="ticket-panel">
+        <div class="ticket-panel" aria-busy="@(_detailsLoading ? "true" : "false")">
         <div class="ticket-panel-header">
             <div class="editable-field">
                 <button type="button" class="priority-dot-btn" @onclick="TogglePriorityPicker"
@@ -553,6 +553,7 @@
     private int? _mergePosition;
     private string? _worktreeLoadError;
     private bool _worktreeActionBusy;
+    private bool _detailsLoading;
 
     private bool _confirmDelete;
     private bool _editingTitle;
@@ -729,16 +730,33 @@
 
     private async Task LoadAsync()
     {
-        _ticket = await TicketService.GetTicketAsync(Slug, TicketId);
-        await LoadJevHistoryAsync();
-        _summaries = await TicketService.ListTicketsAsync(Slug);
-        _columns = _ticket is null ? [] : await ColumnService.ListColumnsAsync(Slug, _ticket.PipelineId);
-        _allLabels = await LabelService.ListLabelsAsync(Slug);
-        _allMembers = await MemberService.ListMembersAsync(Slug);
-        _processorNames = (await ProcessorService.ListAsync(Slug))
-            .ToDictionary(processor => processor.ColumnId, processor => processor.Name);
-        await LoadWorktreeAsync();
-        await RebuildPipelineAsync();
+        _detailsLoading = true;
+        try
+        {
+            _ticket = await TicketService.GetTicketAsync(Slug, TicketId);
+            if (_ticket is null) return;
+            // Show the ticket before loading ancillary history, processor files and Git state.
+            _worktreeState = null; _mergeRequest = null; _mergePosition = null; _worktreeLoadError = null;
+            StateHasChanged();
+            await Task.Yield();
+            var summaries = TicketService.ListTicketsAsync(Slug);
+            var columns = ColumnService.ListColumnsAsync(Slug, _ticket.PipelineId);
+            var labels = LabelService.ListLabelsAsync(Slug);
+            var members = MemberService.ListMembersAsync(Slug);
+            var slug = Slug;
+            var processors = Task.Run(() => ProcessorService.ListAsync(slug));
+            await Task.WhenAll(summaries, columns, labels, members, processors);
+            _summaries = await summaries;
+            _columns = await columns;
+            _allLabels = await labels;
+            _allMembers = await members;
+            _processorNames = (await processors)
+                .ToDictionary(processor => processor.ColumnId, processor => processor.Name);
+            await LoadJevHistoryAsync();
+            await LoadWorktreeAsync();
+            await RebuildPipelineAsync();
+        }
+        finally { _detailsLoading = false; }
     }
 
     /// <summary>Reload after a local mutation, then let the parent refresh its lists.</summary>
@@ -760,7 +778,10 @@
         _worktreeState = null; _mergeRequest = null; _mergePosition = null; _worktreeLoadError = null;
         try
         {
-            _worktreeState = await TicketWorktreeService.InspectAsync(Slug, TicketId);
+            if ((await ProjectService.GetProjectAsync(Slug))?.WorktreesEnabled != true) return;
+            var slug = Slug;
+            var ticketId = TicketId;
+            _worktreeState = await Task.Run(() => TicketWorktreeService.InspectAsync(slug, ticketId));
             if (_worktreeState is not null)
                 (_mergeRequest, _mergePosition) = await WorktreeMergeQueueService.GetForTicketAsync(Slug, TicketId);
         }
