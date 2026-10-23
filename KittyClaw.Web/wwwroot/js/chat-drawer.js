@@ -2,14 +2,21 @@ window.chatDrawerScrollToBottom = function (el) {
     if (el) el.scrollTop = el.scrollHeight;
 };
 
-// Block the default newline insertion when pressing Enter (without Shift) so the
-// browser doesn't append "\n" after our Send() handler clears the textarea — that
-// would re-fire oninput and restore the just-cleared text.
-window.chatDrawerInstallEnterGuard = function (el) {
-    if (!el || el.__enterGuardInstalled) return;
+// Handle submission locally: ordinary keystrokes do not need a server keydown event.
+// Send the current DOM value so Enter cannot submit an older server-side draft.
+window.chatDrawerInstallEnterGuard = function (el, dotnetRef) {
+    if (!el) return;
+    el.__enterDotnetRef = dotnetRef;
+    if (el.__enterGuardInstalled) return;
     el.__enterGuardInstalled = true;
     el.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' && !e.shiftKey) e.preventDefault();
+        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
+            e.preventDefault();
+            if (!e.repeat && !el.disabled && el.__enterDotnetRef) {
+                el.__enterDotnetRef.invokeMethodAsync('OnComposerEnter', el.value)
+                    .catch(() => console.warn('Chat submission could not reach the server.'));
+            }
+        }
     });
 };
 

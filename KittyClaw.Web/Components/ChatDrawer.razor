@@ -298,11 +298,9 @@
             }
             <div class="chat-input-area @(_loading ? "chat-input-area-thinking" : "")">
                 <textarea @ref="_inputRef"
-                          value="@_inputText"
-                          @oninput="OnInput"
+                          @bind="_inputText" @bind:event="oninput"
                           disabled="@_historyLoading"
-                          placeholder="@(_historyLoading ? L["ChatLoadingConversation"] : _loading ? L["ChatInjectPlaceholder"] : L["ChatPlaceholder"])"
-                          @onkeydown="OnKeyDown"></textarea>
+                          placeholder="@(_historyLoading ? L["ChatLoadingConversation"] : _loading ? L["ChatInjectPlaceholder"] : L["ChatPlaceholder"])"></textarea>
                 @if (_loading && !string.IsNullOrEmpty(_activeStreamId))
                 {
                     <div class="chat-input-actions">
@@ -694,7 +692,8 @@
         }
         if (_view == View.Conversation)
         {
-            try { await JS.InvokeVoidAsync("chatDrawerInstallEnterGuard", _inputRef); }
+            _dotnetRef ??= DotNetObjectReference.Create(this);
+            try { await JS.InvokeVoidAsync("chatDrawerInstallEnterGuard", _inputRef, _dotnetRef); }
             catch (Exception ex) { Logger.LogDebug(ex, "Chat enter guard installation failed for project {ProjectSlug}", ProjectSlug); }
             _dotnetRef ??= DotNetObjectReference.Create(this);
             try { await JS.InvokeVoidAsync("chatDrawerInstallPasteHandler", _inputRef, _dotnetRef); }
@@ -707,19 +706,20 @@
         catch (Exception ex) { Logger.LogDebug(ex, "Chat scroll update failed for project {ProjectSlug}", ProjectSlug); }
     }
 
-    private async Task OnKeyDown(KeyboardEventArgs e)
+    [JSInvokable]
+    public Task OnComposerEnter(string text) => InvokeAsync(async () =>
     {
-        if (e.Key == "Enter" && !e.ShiftKey)
-        {
-            if (_loading && !string.IsNullOrEmpty(_activeStreamId))
-                await Inject();
-            else
-                await Send();
-        }
-    }
+        if (_historyLoading) return;
+        _inputText = text;
+        if (_loading && !string.IsNullOrEmpty(_activeStreamId))
+            await Inject();
+        else
+            await Send();
+    });
 
     private async Task Inject()
     {
+        var draft = _inputText;
         var text = _inputText.Trim();
         if ((string.IsNullOrEmpty(text) && _pendingImages.Count == 0) || string.IsNullOrEmpty(_activeStreamId)) return;
         var sentImages = _pendingImages
@@ -728,6 +728,7 @@
             .Select(p => new { dataUrl = p.DataUrl, mime = p.Mime, name = p.Name, sizeBytes = p.SizeBytes }).ToList();
 
         using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+        _inputText = "";
         try
         {
             var resp = await http.PostAsJsonAsync(
@@ -735,26 +736,22 @@
                 new { text, images = imagesPayload });
             if (!resp.IsSuccessStatusCode)
             {
+                if (_inputText.Length == 0) _inputText = draft;
                 AddErrorMessage("Impossible d’envoyer l’instruction. Réessayez.");
                 Logger.LogWarning("Chat steer request failed for project {ProjectSlug} run {RunId} with status {StatusCode}", ProjectSlug, _activeStreamId, (int)resp.StatusCode);
                 return;
             }
             _messages.Add(new ChatMessage("inject", text, sentImages));
-            _inputText = "";
             _pendingImages.Clear();
             _pasteError = null;
         }
         catch (Exception ex)
         {
+            if (_inputText.Length == 0) _inputText = draft;
             AddErrorMessage("Impossible d’envoyer l’instruction. Réessayez.");
             Logger.LogWarning(ex, "Chat steer request failed for project {ProjectSlug} run {RunId}", ProjectSlug, _activeStreamId);
         }
         StateHasChanged();
-    }
-
-    private void OnInput(ChangeEventArgs e)
-    {
-        _inputText = e.Value?.ToString() ?? "";
     }
 
     [JSInvokable]
@@ -791,6 +788,7 @@
 
     private async Task Send()
     {
+        var draft = _inputText;
         var text = _inputText.Trim();
         if ((string.IsNullOrEmpty(text) && _pendingImages.Count == 0) || _loading || _activeTarget is null) return;
 
@@ -801,6 +799,7 @@
         var imagesPayload = sentImages
             .Select(p => new { dataUrl = p.DataUrl, mime = p.Mime, name = p.Name, sizeBytes = p.SizeBytes }).ToList();
         _loading = true;
+        _inputText = "";
         StateHasChanged();
 
         await StopStream();
@@ -813,6 +812,7 @@
                 new { message = text, target = _activeTarget.Slug, ticketId = TicketId, images = imagesPayload, model = _selectedModel, forceNew });
             if (!resp.IsSuccessStatusCode)
             {
+                if (_inputText.Length == 0) _inputText = draft;
                 AddErrorMessage("Impossible de démarrer la conversation. Réessayez.");
                 Logger.LogWarning("Chat start request failed for project {ProjectSlug} target {TargetSlug} with status {StatusCode}", ProjectSlug, _activeTarget.Slug, (int)resp.StatusCode);
                 _loading = false;
@@ -820,10 +820,9 @@
                 return;
             }
             var body = await resp.Content.ReadFromJsonAsync<ChatStartResponse>();
-            if (body is null) { _loading = false; StateHasChanged(); return; }
+            if (body is null) { if (_inputText.Length == 0) _inputText = draft; _loading = false; StateHasChanged(); return; }
 
             _messages.Add(new ChatMessage("user", text, sentImages));
-            _inputText = "";
             _pendingImages.Clear();
             _pasteError = null;
 
@@ -840,6 +839,7 @@
         }
         catch (Exception ex)
         {
+            if (_inputText.Length == 0) _inputText = draft;
             AddErrorMessage("Impossible de démarrer la conversation. Réessayez.");
             Logger.LogWarning(ex, "Chat start request failed for project {ProjectSlug} target {TargetSlug}", ProjectSlug, _activeTarget.Slug);
             _loading = false;
