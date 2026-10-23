@@ -75,13 +75,25 @@
     else if (_report is not null)
     {
         <div class="cost-visible-total" data-testid="cost-visible-total" aria-live="polite">
-            <span>@L["DisplayedTotal"]</span>
+            <span>@L["ApiEquivalentTotal"]</span>
             <strong>@Usd(VisibleTotalUsd)</strong>
             @if (VisibleTotalEstimated)
             {
                 <span class="estimated-marker" title="@L["EstimatedHelp"]" tabindex="0">~ @L["Estimated"]</span>
             }
         </div>
+        <p class="cost-accounting-help">@L["ApiEquivalentHelp"]</p>
+        @if (_report.UnpricedRuns > 0)
+        {
+            <p class="cost-state" role="status">@_report.UnpricedRuns @L["UnpricedRunsHelp"]</p>
+        }
+        @foreach (var subscription in _report.Subscriptions ?? [])
+        {
+            <p class="cost-accounting-help" data-testid="cost-subscription">
+                <strong>ChatGPT @subscription.Plan · @L["SubscriptionDetected"]</strong>
+                <span> @L["SubscriptionApiValue"] @Usd(subscription.ApiEquivalentUsd). @L["SubscriptionAmountUnknown"]</span>
+            </p>
+        }
 
         @if (_report.Projects.Count == 0)
         {
@@ -256,7 +268,7 @@
     }
 
     private static decimal SegmentHeight(decimal value, decimal maxStackedUsd)
-        => value <= 0 || maxStackedUsd <= 0 ? 0 : Math.Max(5, value / maxStackedUsd * 100);
+        => value <= 0 || maxStackedUsd <= 0 ? 0 : value / maxStackedUsd * 100;
 
     private static string Pct(decimal value) => $"{value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}%";
 

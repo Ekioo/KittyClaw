@@ -61,6 +61,18 @@ public class RunStateManagerTests
     // ── Group concurrency ─────────────────────────────────────────────────────
 
     [Fact]
+    public async Task CeoGroup_DoesNotBypassTheDailyBudget()
+    {
+        using var temp = new KittyClaw.Core.Tests.Helpers.TempDir();
+        var runtime = MakeRuntime(dailyBudget: 1m);
+        runtime.Workspace = temp.Path;
+        new CostTracker().LogRun(temp.Path, new CostLogEntry(
+            DateTime.UtcNow, "fixture", null, "mock", 0, 0, 0, 0, 1m, 0, 0));
+
+        Assert.True(await MakeSut().ShouldSkipAsync(runtime, MakeSpec(), MakeFiring(), "ceo", "ceo"));
+    }
+
+    [Fact]
     public async Task Returns_true_when_group_is_already_active()
     {
         var runs = new AgentRunRegistry();

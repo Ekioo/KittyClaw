@@ -12,6 +12,7 @@ public class TicketService
     private readonly ProjectService _projectService;
     private readonly MemberService _memberService;
     private readonly ColumnProcessorService? _columnProcessors;
+    private readonly Lazy<JevWorkReviewService>? _jevReviews;
     private readonly SemaphoreSlim _scheduledPromotionLock = new(1, 1);
     private readonly AutomationStore? _automationStore;
     private readonly ILogger<TicketService>? _logger;
@@ -23,6 +24,68 @@ public class TicketService
     /// </summary>
     public event Action<string, int, string, string>? TicketStatusChanged;
     public event Action<string, int>? TicketCreated;
+
+    public async Task<TicketAcceptanceCriterion?> SaveAcceptanceCriterionAsync(string slug, int ticketId,
+        string? criterionId, SaveAcceptanceCriterionRequest request, string author = "owner")
+    {
+        ValidateAcceptanceCriterion(request);
+        await using var db = _projectService.GetProjectDb(slug);
+        await EnsureActivityTableAsync(db);
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        var ticket = await db.Tickets.FindAsync(ticketId);
+        if (ticket is null) return null;
+        var criteria = ticket.AcceptanceCriteria;
+        var index = criterionId is null ? -1 : criteria.FindIndex(c => c.Id == criterionId);
+        if (criterionId is not null && index < 0) return null;
+        var criterion = new TicketAcceptanceCriterion(criterionId ?? Guid.NewGuid().ToString("N"), request.Text.Trim(), request.Status, request.Evidence);
+        if (index < 0) criteria.Add(criterion); else criteria[index] = criterion;
+        ticket.AcceptanceCriteria = criteria;
+        ticket.UpdatedAt = DateTime.UtcNow;
+        db.ActivityEntries.Add(new ActivityEntry { TicketId = ticketId, Author = author, Text = $"Acceptance criterion {criterion.Status}: {criterion.Text}" });
+        await db.SaveChangesAsync();
+        await transaction.CommitAsync();
+        return criterion;
+    }
+
+    internal static void ValidateAcceptanceCriterion(SaveAcceptanceCriterionRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Text) || request.Text.Length > 10000)
+            throw new InvalidOperationException("Criterion text is required and must not exceed 10000 characters.");
+        if (!Enum.IsDefined(request.Status)) throw new InvalidOperationException("Invalid acceptance status.");
+        if (request.Evidence is { } proof)
+        {
+            if (string.IsNullOrWhiteSpace(proof.Content)) throw new InvalidOperationException("Evidence content is required.");
+            if (proof.Content.Length > 8_000_000) throw new InvalidOperationException("Evidence is too large.");
+            if (proof.MediaType is not ("text/plain" or "application/json" or "image/png" or "image/jpeg" or "image/gif" or "image/webp"))
+                throw new InvalidOperationException("Unsupported evidence media type.");
+            if (proof.MediaType == "application/json")
+            {
+                try { using var document = System.Text.Json.JsonDocument.Parse(proof.Content); }
+                catch (System.Text.Json.JsonException) { throw new InvalidOperationException("Evidence must contain valid JSON."); }
+            }
+            if (proof.MediaType.StartsWith("image/"))
+            {
+                try { Convert.FromBase64String(proof.Content); }
+                catch (FormatException) { throw new InvalidOperationException("Image evidence must be base64 encoded."); }
+            }
+        }
+    }
+
+    public async Task<bool> DeleteAcceptanceCriterionAsync(string slug, int ticketId, string criterionId)
+    {
+        await using var db = _projectService.GetProjectDb(slug);
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        var ticket = await db.Tickets.FindAsync(ticketId);
+        if (ticket is null) return false;
+        var criteria = ticket.AcceptanceCriteria;
+        if (criteria.RemoveAll(c => c.Id == criterionId) == 0) return false;
+        ticket.AcceptanceCriteria = criteria;
+        ticket.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        await transaction.CommitAsync();
+        return true;
+    }
+
 
     internal void NotifyStatusChanged(string projectSlug, int ticketId, string fromStatus, string toStatus) =>
         TicketStatusChanged?.Invoke(projectSlug, ticketId, fromStatus, toStatus);
@@ -38,13 +101,14 @@ public class TicketService
         MemberService memberService,
         ColumnProcessorService? columnProcessors = null,
         AutomationStore? automationStore = null,
-        ILogger<TicketService>? logger = null)
+        ILogger<TicketService>? logger = null, Lazy<JevWorkReviewService>? jevReviews = null)
     {
         _projectService = projectService;
         _memberService = memberService;
         _columnProcessors = columnProcessors;
         _automationStore = automationStore;
         _logger = logger;
+        _jevReviews = jevReviews;
     }
 
     /// <summary>
@@ -837,8 +901,13 @@ public class TicketService
                 ? await db.BoardColumns.FindAsync(sourceColumnId)
                 : null;
             if (atomicDecision is null && source is not null && _columnProcessors is not null &&
-                (await _columnProcessors.GetAsync(projectSlug, source.Id)) is { Enabled: true, JevAcceptanceValidation: true })
-                throw new InvalidOperationException("Review the JEV acceptance criteria in the ticket before moving it from this validation column.");
+                (await _columnProcessors.GetAsync(projectSlug, source.Id)) is { Enabled: true, JevAcceptanceValidation: true } reviewProcessor)
+            {
+                var review = _jevReviews is null ? null : await _jevReviews.Value.GetAsync(projectSlug, ticket.Id, source.Id);
+                if (review is null || !await _jevReviews!.Value.IsCurrentAsync(projectSlug, reviewProcessor, ticket, review) ||
+                    JevCertainty.Work(review, reviewProcessor.JevConfidenceThreshold))
+                    throw new InvalidOperationException("Review the JEV acceptance criteria in the ticket before moving it from this validation column.");
+            }
             await EnsureRoutingAllowsManualMoveAsync(projectSlug, db, source, destination, enforceRouting);
             ticket.Status = status!;
             ticket.ColumnId = destination!.Id;

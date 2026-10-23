@@ -33,6 +33,25 @@ public class BoardSortStateTests
             ParentId: null,
             SubTickets: new List<SubTicketInfo>());
 
+    [Theory]
+    [InlineData(SortDirection.Ascending, new[] { 2, 3, 4, 1 })]
+    [InlineData(SortDirection.Descending, new[] { 1, 3, 4, 2 })]
+    public void Tokens_orders_numerically_with_zero_large_values_and_stable_ties(
+        SortDirection direction, int[] expectedIds)
+    {
+        var input = new[]
+        {
+            T(1) with { AgentTokens = 3_000_000_000L },
+            T(2),
+            T(3) with { AgentTokens = 900 },
+            T(4) with { AgentTokens = 900 }
+        };
+
+        var result = BoardSortState.ApplySort(input, ColumnSortMode.Tokens, direction);
+
+        Assert.Equal(expectedIds, result.Select(t => t.Id));
+    }
+
     [Fact]
     public void Manual_returns_input_order_unchanged()
     {

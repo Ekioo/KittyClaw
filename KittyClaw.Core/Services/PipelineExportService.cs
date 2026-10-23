@@ -239,6 +239,7 @@ public sealed partial class PipelineExportService(
             Prompt = processor.Prompt,
             Model = processor.Model,
             Enabled = processor.Enabled,
+            EvaluateAcceptanceCriteria = processor.EvaluateAcceptanceCriteria,
             MaxTurns = processor.MaxTurns,
             SelectionOrder = processor.SelectionOrder,
             MaxAttempts = processor.MaxAttempts,

@@ -7,6 +7,15 @@ The first-use guidance banner is shown only while the project has no tickets, ru
 
 The empty dashboard invites users to **Add tile** and offers clickable examples (tickets by column, recent Git activity, and a README summary). Examples open the creation chat with an editable request; sending it generates a proposal that must be reviewed before creation.
 
+## Mobile presentation
+
+At widths up to 767px, `css/mobile.css` displays tiles as a vertical list fitted
+to the screen, removing overlaps and unused canvas space. Content can scroll
+inside tall tiles. Desktop inline positions and sizes remain intact; drag and
+resize entry points in `dashboard.js` ignore mobile layouts so reading a tile
+cannot rewrite the saved desktop canvas. Tile selection and editing remain
+available. See the [graphic charter](./graphic-charter.md) for responsive rules.
+
 ## Folder-per-tile layout
 
 Each tile owns a dedicated subfolder under `.dashboard/`:
@@ -85,3 +94,46 @@ The open dashboard reloads tile output and sidecars when the refresh queue chang
 ## External dependencies
 - [Storage](./storage.md) — tile layout persisted in the per-project SQLite DB.
 - [REST API](./rest-api.md) — tile manipulation endpoints registered in `Endpoints.cs`.
+
+## Output writes with worktrees enabled
+
+`PUT /api/projects/{slug}/dashboard/tiles/{tileSlug}/output` writes the output in the
+project's serialized maintenance worktree and returns HTTP 204 once the validated
+change is committed and queued. At that point the primary checkout and its current
+output remain unchanged. Integration publishes the commit to the isolated integration
+tip; the separate local-checkout synchronization makes the new output available to
+dashboard reads and rendering. Repeating an unchanged write reuses the maintenance
+worktree without creating a review-required change.
+
+Generated directory names are bounded to avoid Git for Windows' `$GIT_DIR too big`
+failure with long project slugs; see [durable integrations](./durable-worktree-integrations.md)
+for naming and existing-worktree compatibility.
+
+`DashboardOutputWorktreeHttpTests` exercises the HTTP write and queued maintenance
+output. `DashboardWorktreeJourneyTests` runs the real application on an ephemeral local
+port and checks initial rendering, the 204 response, isolation before integration,
+the integrated Git content, synchronization by the actual background worker after
+project resume, updated browser rendering, and an unchanged repeated write. It uses
+synthetic data and no agent provider. Run it with:
+
+```powershell
+$env:KITTYCLAW_DASHBOARD_WORKTREE_E2E = '1'
+dotnet test KittyClaw.Core.Tests --filter FullyQualifiedName~DashboardWorktreeJourneyTests
+```
+
+Playwright Chromium must be installed; alternatively set
+`KITTYCLAW_TEST_BROWSER_CHANNEL=msedge` to use an installed Edge browser. Screenshots
+are written to the ignored `.artifacts/dashboard-worktree-e2e.png` file and are not
+part of published documentation.
+
+## Tile selection and editor keyboard behavior
+
+The tile selector above the canvas lists every tile, including tiles fully covered
+by another tile. Selecting a tile brings it to the foreground, scrolls it into view
+and focuses its first available action. Pointer activation and keyboard focus also
+activate tiles. This transient stacking order does not change persisted coordinates.
+
+The configuration editor registers with the shared Escape stack on every entry
+(edit or AI proposal), moves focus inside after render, and contains Tab navigation.
+Escape closes the topmost editor and restores the original trigger's focus. Save,
+cancel, revise and component disposal release the Escape registration.

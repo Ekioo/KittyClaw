@@ -9,7 +9,8 @@ using System.Text.RegularExpressions;
 namespace KittyClaw.Core.Services;
 
 /// <summary>Durable ticket claims and lifecycle for column processors.</summary>
-public sealed class ColumnExecutionService(ProjectService projects, TicketService tickets, JevWorkReviewService? jevReviews = null)
+public sealed class ColumnExecutionService(ProjectService projects, TicketService tickets, JevWorkReviewService? jevReviews = null,
+    JevQualificationService? qualification = null)
 {
     internal Func<Task>? BeforeSuccessCompareAndSwapAsync { get; set; }
     internal static readonly TimeSpan RoutingLoopWindow = TimeSpan.FromMinutes(10);
@@ -92,12 +93,34 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         });
         await MigrationGate.RunOnceAsync(db, "column-executions-jev-snapshot-v1", static d =>
             MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN JevExecutionProfileJson TEXT NULL"));
+        await MigrationGate.RunOnceAsync(db, "column-executions-jev-fallback-v1", static d =>
+            MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN JevClassicFallback INTEGER NOT NULL DEFAULT 0"));
+    }
+
+    public async Task<bool> UsesClassicFallbackAsync(string slug, ColumnProcessor processor, Ticket ticket)
+    {
+        if (processor.JevObservationOnly && qualification is not null)
+        {
+            var proposal = await qualification.GetAsync(slug, ticket.Id);
+            if (proposal is null || proposal.SourceColumnId != ticket.ColumnId || proposal.TicketUpdatedAt != ticket.UpdatedAt) return false;
+            await using var db = projects.GetProjectDb(slug);
+            var columns = await db.BoardColumns.AsNoTracking().ToListAsync();
+            if (proposal.ProcessorFingerprint != JevQualificationService.RoutingConfigurationFingerprint(processor, columns)) return false;
+            return !JevCertainty.Routing(proposal, processor.JevConfidenceThreshold);
+        }
+        if ((processor.JevAcceptanceValidation || processor.JevExecutionSelection) && jevReviews is not null)
+        {
+            var review = await jevReviews.GetAsync(slug, ticket.Id, processor.ColumnId);
+            return review is not null && await jevReviews.IsCurrentAsync(slug, processor, ticket, review) &&
+                !JevCertainty.Work(review, processor.JevConfidenceThreshold);
+        }
+        return false;
     }
 
     public async Task<ColumnExecution?> ClaimNextAsync(string projectSlug, ColumnProcessor processor, DateTime now,
         IReadOnlyDictionary<int, int>? ownerFeedbackSignals = null)
     {
-        if (processor.JevObservationOnly || processor.JevAcceptanceValidation) return null;
+        if (processor.JevObservationOnly && qualification is null || processor.JevAcceptanceValidation && jevReviews is null) return null;
         await using var db = projects.GetProjectDb(projectSlug);
         await ColumnService.EnsureBoardColumnsTableAsync(db);
         await TicketService.EnsureActivityTableAsync(db);
@@ -107,8 +130,19 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         await TicketService.EnsureAgentUsageColumnsAsync(db);
         await EnsureTableAsync(db);
 
+        await TicketService.EnsureTicketDependenciesTableAsync(db);
+        // Match the legacy dispatch gate: only a Success column resolves a prerequisite.
+        // Filter before the selection window so waiting cards cannot starve eligible work.
+        var unresolvedTicketIds = db.TicketDependencies
+            .Join(db.Tickets, dependency => dependency.BlocksTicketId, ticket => ticket.Id,
+                (dependency, ticket) => new { dependency.BlockedTicketId, ticket.ColumnId })
+            .Where(item => !db.BoardColumns.Any(column => column.Id == item.ColumnId
+                && column.Role == ColumnRole.Success))
+            .Select(item => item.BlockedTicketId);
+
         var waiting = await db.ColumnExecutions
-            .Where(e => e.ProcessorId == processor.Id && e.Status == ColumnExecutionStatus.WaitingForChildren)
+            .Where(e => e.ProcessorId == processor.Id && e.Status == ColumnExecutionStatus.WaitingForChildren
+                && !unresolvedTicketIds.Contains(e.TicketId))
             .OrderBy(e => e.ClaimedAt).ToListAsync();
         foreach (var candidate in waiting)
         {
@@ -143,6 +177,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         await using var retryTransaction = await db.Database.BeginTransactionAsync();
         var retries = await db.ColumnExecutions
             .Where(e => e.ProcessorId == processor.Id && e.Status == ColumnExecutionStatus.Retrying
+                && !unresolvedTicketIds.Contains(e.TicketId)
                 && (e.AvailableAt == null || e.AvailableAt <= now))
             .OrderBy(e => e.AvailableAt).ThenBy(e => e.ClaimedAt)
             .ToListAsync();
@@ -196,6 +231,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         // into a tight column-scan loop and eventually trip the routing-loop guard.
         var candidates = db.Tickets.Where(t => t.ColumnId == processor.ColumnId
             && t.FireAt == null
+            && !unresolvedTicketIds.Contains(t.Id)
             && !activeTicketIds.Contains(t.Id));
         candidates = processor.SelectionOrder switch
         {
@@ -209,12 +245,16 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         var window = await candidates.Take(50).ToListAsync();
         Ticket? selected = null;
         JevExecutionProfile? selectedProfile = null;
+        var selectedFallback = false;
         foreach (var candidate in window)
         {
+            selectedFallback = await UsesClassicFallbackAsync(projectSlug, processor, candidate);
+            if ((processor.JevObservationOnly || processor.JevAcceptanceValidation) && !selectedFallback) continue;
             if (processor.JevExecutionSelection)
             {
                 selectedProfile = jevReviews is null ? null : await jevReviews.ApprovedProfileAsync(projectSlug, processor, candidate);
-                if (selectedProfile is null) continue;
+                if (selectedFallback) selectedProfile = null;
+                else if (selectedProfile is null) continue;
             }
             var blockingChildren = await db.Tickets.Where(t => t.ParentId == candidate.Id && t.BlocksParent)
                 .Select(t => t.ColumnId).Distinct().ToListAsync();
@@ -337,6 +377,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             ClaimedAt = now,
             TriggerTicketUpdatedAt = selected.UpdatedAt,
             JevExecutionProfileJson = selectedProfile is null ? null : JsonSerializer.Serialize(selectedProfile),
+            JevClassicFallback = selectedFallback,
             TriggerSignalType = triggerOwnerComment is null ? "column_scan" : "owner-feedback",
             TriggerOwnerCommentId = triggerOwnerComment?.Id,
             TriggerOwnerCommentCreatedAt = triggerOwnerComment?.CreatedAt,
@@ -345,7 +386,8 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         if (await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE Tickets SET UpdatedAt = UpdatedAt WHERE Id = {selected.Id} AND UpdatedAt = {selected.UpdatedAt} AND ColumnId = {processor.ColumnId}") != 1)
             return null;
         var currentProcessor = await db.ColumnProcessors.AsNoTracking().FirstOrDefaultAsync(p => p.Id == processor.Id);
-        if (currentProcessor is { JevAcceptanceValidation: true } || currentProcessor is { Enabled: false }) return null;
+        if (currentProcessor is { JevAcceptanceValidation: true } && !selectedFallback || currentProcessor is { Enabled: false }) return null;
+        if (selectedFallback && (currentProcessor is null || JevCertainty.Configuration(currentProcessor) != JevCertainty.Configuration(processor))) return null;
         if (processor.JevExecutionSelection)
         {
             if (currentProcessor is null || !currentProcessor.JevExecutionSelection ||
@@ -353,6 +395,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                 JevWorkReviewService.Hash(new { processor.Mission, processor.Prompt, processor.JevExecutionProfiles, processor.RequiredSkills })) return null;
         }
         db.ColumnExecutions.Add(execution);
+        if (selectedFallback) AddClassicFallbackActivity(db, execution.TicketId);
         try { await db.SaveChangesAsync(); await claimTransaction.CommitAsync(); }
         catch (DbUpdateException)
         {
@@ -360,6 +403,25 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             return null;
         }
         return execution;
+    }
+
+    private static void AddClassicFallbackActivity(TodoDbContext db, int ticketId) => db.ActivityEntries.Add(new()
+    {
+        TicketId = ticketId, Author = "JEV",
+        Text = "No sufficiently confident JEV answer. Continuing with normal processing and classic routing."
+    });
+
+    public async Task RecordClassicFallbackAsync(string slug, ColumnExecution execution)
+    {
+        await using var db = projects.GetProjectDb(slug);
+        await EnsureTableAsync(db);
+        await TicketService.EnsureActivityTableAsync(db);
+        var row = await db.ColumnExecutions.FindAsync(execution.Id);
+        if (row is null || row.JevClassicFallback) return;
+        row.JevClassicFallback = true;
+        AddClassicFallbackActivity(db, row.TicketId);
+        await db.SaveChangesAsync();
+        execution.JevClassicFallback = true;
     }
 
     /// <summary>True when the ticket's UpdatedAt advance is fully explained by non-owner
@@ -442,15 +504,57 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
     }
 
     public async Task SaveAgentResultAsync(
-        string projectSlug, ColumnExecution execution, ColumnAgentResult result)
+        string projectSlug, ColumnExecution execution, ColumnAgentResult result, ColumnProcessor? processor = null)
     {
         await using var db = projects.GetProjectDb(projectSlug);
         await EnsureTableAsync(db);
+        await using var transaction = await db.Database.BeginTransactionAsync();
         var row = await db.ColumnExecutions.FindAsync(execution.Id)
             ?? throw new InvalidOperationException($"L’exécution '{execution.Id}' n’existe plus.");
+        if (row.AgentCompleted)
+        {
+            execution.AgentCompleted = true;
+            execution.AgentResult = row.AgentResult;
+            return;
+        }
+        if (processor?.EvaluateAcceptanceCriteria == true)
+        {
+            if (row.Status != ColumnExecutionStatus.Running)
+                throw new InvalidOperationException("Only a running execution can record acceptance assessments.");
+            var ticket = await db.Tickets.FindAsync(execution.TicketId)
+                ?? throw new InvalidOperationException("The ticket no longer exists.");
+            var criteria = ticket.AcceptanceCriteria;
+            if (criteria.Count > 0 && result.AcceptanceCriteria is null)
+                throw new InvalidOperationException("The processor must return acceptanceCriteria before routing.");
+            var evaluations = result.AcceptanceCriteria ?? [];
+            if (evaluations.Count > 0)
+            {
+                var consumed = result.Evidence?.TicketUpdatedAt ?? row.TriggerTicketUpdatedAt;
+                if (consumed is null || NormalizeUtcInstant(consumed.Value) != NormalizeUtcInstant(ticket.UpdatedAt))
+                    throw new InvalidOperationException("stale_ticket_context");
+                if (evaluations.Any(e => e is null) || evaluations.Select(e => e.Id).Distinct(StringComparer.Ordinal).Count() != evaluations.Count)
+                    throw new InvalidOperationException("Acceptance criterion IDs must be unique.");
+                foreach (var evaluation in evaluations)
+                {
+                    var index = criteria.FindIndex(c => c.Id == evaluation.Id);
+                    if (index < 0) throw new InvalidOperationException("Unknown acceptance criterion ID.");
+                    if (evaluation.Status != AcceptanceStatus.NotEvaluated && evaluation.Evidence is null)
+                        throw new InvalidOperationException("Evaluated criteria require evidence.");
+                    TicketService.ValidateAcceptanceCriterion(new(criteria[index].Text, evaluation.Status, evaluation.Evidence));
+                    criteria[index] = criteria[index] with { Status = evaluation.Status, Evidence = evaluation.Evidence };
+                }
+                ticket.AcceptanceCriteria = criteria;
+                // Assessments are session metadata. Preserve the consumed ticket revision so
+                // success/owner-feedback guards still validate the agent's actual delivery.
+                await TicketService.EnsureActivityTableAsync(db);
+                db.ActivityEntries.Add(new ActivityEntry { TicketId = ticket.Id, Author = processor.Name,
+                    Text = $"Recorded {evaluations.Count} acceptance criterion assessments for execution {execution.Id}." });
+            }
+        }
         row.AgentCompleted = true;
         row.AgentResult = result;
         await db.SaveChangesAsync();
+        await transaction.CommitAsync();
         execution.AgentCompleted = true;
         execution.AgentResult = result;
     }
@@ -544,7 +648,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
 
     public async Task CompleteAsync(
         string projectSlug, ColumnExecution execution, ColumnProcessor processor,
-        ColumnAgentResult result, string author)
+        ColumnAgentResult result, string author, JevRoutingProposal? routingProposal = null)
     {
         var required = processor.RequiredSkills.ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (!required.IsSubsetOf(result.SkillsUsed.ToHashSet(StringComparer.OrdinalIgnoreCase)))
@@ -579,6 +683,13 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         var route = processor.Routes.FirstOrDefault(r =>
             string.Equals(r.Outcome, result.Outcome, StringComparison.OrdinalIgnoreCase));
         var targetId = route?.TargetColumnId ?? processor.DefaultTargetColumnId;
+        if (routingProposal is not null)
+        {
+            if (routingProposal.Error is not null || routingProposal.Choice?.StartsWith("column-") != true ||
+                !int.TryParse(routingProposal.Choice[7..], out var selected))
+                throw new InvalidOperationException("JEV has no destination to apply.");
+            targetId = selected;
+        }
         if (targetId is null)
         {
             await FailAttemptAsync(projectSlug, execution, processor,
@@ -628,6 +739,24 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         var row = await db.ColumnExecutions.FindAsync(execution.Id);
         if (row is null) return;
         var oldStatus = ticket.Status;
+        double? routingThreshold = null;
+        if (routingProposal is not null)
+        {
+            await JevDecisionStore.PrepareAsync(db);
+            var currentProcessor = await db.ColumnProcessors.AsNoTracking().SingleAsync(p => p.ColumnId == processor.ColumnId);
+            var columns = await db.BoardColumns.AsNoTracking().ToListAsync();
+            if (!currentProcessor.UsesAutomaticJevRouting ||
+                (await projects.GetProjectAsync(projectSlug)) is not { IsPaused: false } ||
+                row.Status != ColumnExecutionStatus.Running || row.ProcessorId != currentProcessor.Id ||
+                routingProposal.Confidence is not double confidence || !double.IsFinite(confidence) || confidence < currentProcessor.JevConfidenceThreshold ||
+                routingProposal.TicketUpdatedAt != ticket.UpdatedAt || routingProposal.TicketColumnId != ticket.ColumnId ||
+                routingProposal.SourceColumnId != processor.ColumnId || ticket.ColumnId != processor.ColumnId ||
+                routingProposal.ProcessorFingerprint != JevQualificationService.RoutingConfigurationFingerprint(currentProcessor, columns) ||
+                !JevQualificationService.BuildDestinations(currentProcessor, columns).ContainsKey(routingProposal.Choice!) ||
+                await JevDecisionStore.HasRecentAutomaticTransitionAsync(db, ticket.Id, processor.ColumnId, routingProposal.Choice!))
+                throw new InvalidOperationException("The JEV routing context changed or this transition recently occurred.");
+            routingThreshold = currentProcessor.JevConfidenceThreshold;
+        }
         Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? successTransaction = null;
         if (target.Role == ColumnRole.Success)
         {
@@ -678,6 +807,14 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         }
         if (target.Role != ColumnRole.Success)
         {
+            if (routingProposal is not null)
+            {
+                successTransaction = await db.Database.BeginTransactionAsync();
+                // Acquire the write lock and compare the inference snapshot before moving.
+                var unchanged = await db.Tickets.Where(t => t.Id == ticket.Id && t.UpdatedAt == routingProposal.TicketUpdatedAt && t.ColumnId == routingProposal.TicketColumnId)
+                    .ExecuteUpdateAsync(s => s.SetProperty(t => t.UpdatedAt, ticket.UpdatedAt));
+                if (unchanged == 0) throw new InvalidOperationException("The ticket changed while JEV was choosing its route.");
+            }
             ColumnAssignmentPolicy.Apply(ticket, source, target);
             ticket.PipelineId = target.PipelineId;
             ticket.ColumnId = target.Id;
@@ -706,6 +843,9 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             Author = author,
             Text = $"traitement de colonne terminé ({result.Outcome}) : {oldStatus} → {target.Name}",
         });
+        if (routingProposal is not null)
+            await JevDecisionStore.SaveAsync(db, new(JevDecisionStore.ProposalId(routingProposal), ticket.Id,
+                true, DateTime.UtcNow, "JEV", null, routingProposal, target.Id, true, routingThreshold));
         await db.SaveChangesAsync();
         if (successTransaction is not null)
         {
@@ -716,9 +856,9 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
     }
 
     public async Task<string?> ValidateSuccessContextAsync(
-        string projectSlug, ColumnExecution execution, ColumnProcessor processor, ColumnAgentResult result)
+        string projectSlug, ColumnExecution execution, ColumnProcessor processor, ColumnAgentResult result, int? jevTarget = null)
     {
-        var targetId = processor.Routes.FirstOrDefault(r =>
+        var targetId = jevTarget ?? processor.Routes.FirstOrDefault(r =>
             string.Equals(r.Outcome, result.Outcome, StringComparison.OrdinalIgnoreCase))?.TargetColumnId
             ?? processor.DefaultTargetColumnId;
         if (targetId is null) return null;

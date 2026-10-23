@@ -1,6 +1,8 @@
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using KittyClaw.Core.Services;
 using KittyClaw.Core.Tests.Services;
 using KittyClaw.Web.Api;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -47,12 +49,17 @@ public sealed class DashboardOutputWorktreeHttpTests : IClassFixture<DashboardOu
         var response = await _client.PutAsync(
             $"/api/projects/{slug}/dashboard/tiles/roadmap/output", content);
 
-        response.EnsureSuccessStatusCode();
+        Assert.True(response.IsSuccessStatusCode,
+            $"Dashboard output returned {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
         Assert.Equal("before", await File.ReadAllTextAsync(Path.Combine(tileDirectory, "output.md")));
-        var maintenance = Path.Combine(
-            Path.GetDirectoryName(repository)!,
-            Path.GetFileName(repository) + ".worktrees",
-            "maintenance-" + slug);
+        var requests = await _client.GetFromJsonAsync<List<WorktreeMergeRequest>>(
+            $"/api/projects/{slug}/worktree-merges", new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            { Converters = { new JsonStringEnumConverter() } });
+        var request = Assert.Single(requests!);
+        Assert.Equal(WorktreeMergeJobKind.Maintenance, request.JobKind);
+        Assert.Equal(WorktreeMergeStatus.Pending, request.Status);
+        Assert.Equal($"maintenance/{slug}", request.SourceBranch);
+        var maintenance = request.WorktreePath;
         Assert.Equal("after", await File.ReadAllTextAsync(
             Path.Combine(maintenance, ".dashboard", "roadmap", "output.md")));
         Assert.Empty(Git(repository, "status", "--porcelain"));

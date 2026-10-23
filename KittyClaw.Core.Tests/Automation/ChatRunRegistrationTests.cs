@@ -88,6 +88,10 @@ public sealed class ChatRunRegistrationTests
     {
         using var root = new TempDir();
         var projects = new ProjectService(Path.Combine(root.Path, "data"));
+        var project = await projects.CreateProjectAsync("chat preparation failure");
+        // Budget validation must succeed before the non-Git workspace fails preparation.
+        await projects.UpdateProjectAsync(project.Slug, root.Path, worktreesEnabled: true,
+            integrationBranch: "integration");
         var members = new MemberService(projects);
         var tickets = new TicketService(projects, members);
         var runs = new AgentRunRegistry();
@@ -100,7 +104,7 @@ public sealed class ChatRunRegistrationTests
         var runId = Guid.NewGuid().ToString("N");
         var ctx = new AgentRunContext
         {
-            ProjectSlug = "ghost-project",
+            ProjectSlug = project.Slug,
             WorkspacePath = root.Path,
             AgentName = "owner-chat",
             SkillFile = "chat",
@@ -109,12 +113,12 @@ public sealed class ChatRunRegistrationTests
             MaxTurns = 1,
             SessionScope = "chat",
             ChatTarget = "owner-chat",
-            ConcurrencyGroup = "chat:ghost-project:owner-chat",
+            ConcurrencyGroup = $"chat:{project.Slug}:owner-chat",
             PresetRunId = runId,
         };
 
         // A failure during preparation (here: the interactive worktree cannot be resolved
-        // because the project does not exist) must not vanish in the fire-and-forget caller:
+        // because the workspace is not a Git repository) must not vanish in the fire-and-forget caller:
         // the registered run fails with a visible error event the drawer can render.
         var runTask = runner.RunAsync(ctx, CancellationToken.None);
         Assert.NotNull(runs.Get(runId));

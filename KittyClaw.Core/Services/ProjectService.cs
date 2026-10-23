@@ -415,7 +415,16 @@ public partial class ProjectService
         var schema = _schemaCreated.GetOrAdd(path, static dbPath => new Lazy<bool>(() =>
         {
             using var initializer = new TodoDbContext(dbPath);
-            return initializer.Database.EnsureCreated();
+            var created = initializer.Database.EnsureCreated();
+            using var command = initializer.Database.GetDbConnection().CreateCommand();
+            initializer.Database.OpenConnection();
+            command.CommandText = "SELECT COUNT(*) FROM pragma_table_info('Tickets') WHERE name = 'AcceptanceCriteriaJson'";
+            if (Convert.ToInt32(command.ExecuteScalar()) == 0)
+            {
+                command.CommandText = "ALTER TABLE Tickets ADD COLUMN AcceptanceCriteriaJson TEXT NOT NULL DEFAULT '[]'";
+                command.ExecuteNonQuery();
+            }
+            return created;
         }, LazyThreadSafetyMode.ExecutionAndPublication));
         try
         {

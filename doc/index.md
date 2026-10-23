@@ -6,6 +6,11 @@ Concepts are explained in exactly one place — other pages cross-link via relat
 
 For a high-level overview see the root [README.md](../README.md). For repo layout and conventions see [AGENTS.md](../AGENTS.md).
 
+The [2026-10-23 feature audit](../docs/audits/2026-10-23-feature-audit.md) records a
+historical inventory, usefulness/functionality/completion scores, and verification limits,
+followed by verified fixes for transfers, budgets, dashboard worktrees, translations
+and API/MCP documentation.
+
 ## Features
 
 - [Projects using KittyClaw](./projects-using-kittyclaw.md) — real project usage and forks, with workspace evidence or owner confirmation.
@@ -35,6 +40,7 @@ For a high-level overview see the root [README.md](../README.md). For repo layou
 - [Project secrets vault](./project-secrets.md) — per-project write-only secrets, native encryption on Windows/macOS/Linux, subprocess-only injection, fail-closed behavior.
 - [Kanban UI](./kanban-ui.md) — Blazor Server board, ticket panel, agent run drawer.
 - [Evidence decision briefs](./evidence-decision-briefs.md) — traceable run evidence, recovery guidance, and human accept/correct/stop decisions in owner-action columns.
+- [Ticket acceptance criteria](./acceptance-criteria.md) — independent assessments, evidence and read/write REST/MCP access.
 - [Ticket scheduling](./ticket-scheduling.md) — park tickets until a future time, then promote them into the workflow.
 - [Lossless ticket transfer](./ticket-transfer.md) — atomically move a complete ticket tree and its history between projects.
 - [Dashboard](./dashboard.md) — free-form tile view backed by `.dashboard/` Markdown files with drag-and-drop layout.

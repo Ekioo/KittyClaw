@@ -70,7 +70,10 @@ builder.Services.AddSingleton(sp => new FirstRunProviderService(dataDir,
     sp.GetRequiredService<AgentCliReadinessService>()));
 builder.Services.AddSingleton(sp => new DashboardGuidanceService(dataDir));
 builder.Services.AddSingleton(new FirstProjectActivationMetricsService(dataDir));
-builder.Services.AddSingleton<TicketService>();
+builder.Services.AddSingleton(sp => new TicketService(sp.GetRequiredService<ProjectService>(),
+    sp.GetRequiredService<MemberService>(), sp.GetRequiredService<ColumnProcessorService>(),
+    sp.GetRequiredService<AutomationStore>(), sp.GetRequiredService<ILogger<TicketService>>(),
+    new Lazy<JevWorkReviewService>(sp.GetRequiredService<JevWorkReviewService>)));
 builder.Services.AddSingleton(sp => new FirstTicketDraftService(dataDir, sp.GetRequiredService<TicketService>()));
 builder.Services.AddSingleton(sp => new MinimalWorkflowService(dataDir,
     sp.GetRequiredService<PipelineService>(), sp.GetRequiredService<ColumnService>(),
@@ -141,6 +144,7 @@ builder.Services.AddHostedService<ChatMemoryConsolidationService>();
 builder.Services.AddSingleton<IColumnAgentDispatcher, ColumnAgentDispatcher>();
 builder.Services.AddSingleton<ColumnActionExecutor>();
 builder.Services.AddSingleton<CostTracker>();
+builder.Services.AddSingleton<AgentBudgetService>();
 builder.Services.AddSingleton<CostReportService>();
 builder.Services.AddSingleton<IRtkSavingsReader, RtkSavingsReader>();
 builder.Services.AddHostedService<CostReportRefreshService>();

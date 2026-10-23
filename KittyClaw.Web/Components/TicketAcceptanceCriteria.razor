@@ -1,0 +1,99 @@
+@using KittyClaw.Core.Models
+@using KittyClaw.Core.Services
+@using Microsoft.AspNetCore.Components.Forms
+@inject TicketService Tickets
+@inject LocalizationService L
+
+<section class="acceptance-criteria" data-testid="ticket-acceptance-criteria">
+    <div class="section-header"><span class="section-label">@L["TicketAcceptanceCriteria"]</span>
+        <button class="icon-btn" title="@L["AddCriterion"]" disabled="@_busy" @onclick="() => Edit(null)">+</button></div>
+    @foreach (var criterion in Ticket.AcceptanceCriteria)
+    {
+        <div class="acceptance-row" @key="criterion.Id">
+            <span class="acceptance-text">@criterion.Text</span>
+            <select class="settings-input" aria-label="@(L["CriterionStatus"] + ": " + criterion.Text)" value="@criterion.Status" disabled="@_busy" @onchange="e => ChangeStatus(criterion, e.Value?.ToString())">
+                @foreach (var status in Enum.GetValues<AcceptanceStatus>()) { <option value="@status">@StatusLabel(status)</option> }
+            </select>
+            <button class="icon-btn" title="@L["EditCriterion"]" disabled="@_busy" @onclick="() => Edit(criterion)">&#9998;</button>
+            <button class="icon-btn" title="@L["DeleteCriterion"]" disabled="@_busy" @onclick="() => Delete(criterion.Id)">×</button>
+        </div>
+        @if (criterion.Evidence is { } evidence)
+        {
+            <details class="acceptance-proof"><summary>@L["CriterionEvidence"] @evidence.FileName</summary>
+                @if (evidence.MediaType.StartsWith("image/")) { <img src="@($"data:{evidence.MediaType};base64,{evidence.Content}")" alt="@criterion.Text" /> }
+                else { <pre>@evidence.Content</pre> }
+            </details>
+        }
+    }
+    @if (_editing)
+    {
+        <div class="acceptance-editor">
+            <label>@L["CriterionText"]<textarea class="settings-input" @bind="_text" disabled="@_busy"></textarea></label>
+            <label>@L["CriterionEvidence"]
+                <select class="settings-input" @bind="_mediaType" @bind:after="() => { _proof = string.Empty; _fileName = null; }" disabled="@_busy"><option value="text/plain">Text</option><option value="application/json">JSON</option><option value="image/png">Image</option></select>
+            </label>
+            @if (_mediaType.StartsWith("image/"))
+            {
+                <InputFile OnChange="ReadImage" accept="image/png,image/jpeg,image/gif,image/webp" disabled="@_busy" />
+                @if (_proof.Length > 0) { <img class="acceptance-preview" src="@($"data:{_mediaType};base64,{_proof}")" alt="@L["CriterionEvidence"]" /> }
+            }
+            else { <textarea class="settings-input" aria-label="@L["CriterionEvidence"]" @bind="_proof" disabled="@_busy"></textarea> }
+            <button class="settings-primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_text))" @onclick="Save">@L["Save"]</button>
+            <button class="icon-btn" disabled="@_busy" @onclick="() => _editing = false">@L["Cancel"]</button>
+            <button class="icon-btn" disabled="@_busy" @onclick="ClearEvidence">@L["RemoveEvidence"]</button>
+        </div>
+    }
+    @if (_error is not null) { <p role="alert">@_error</p> }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public string Slug { get; set; } = "";
+    [Parameter, EditorRequired] public Ticket Ticket { get; set; } = default!;
+    [Parameter] public EventCallback OnChanged { get; set; }
+    private bool _busy, _editing;
+    private string? _id, _error, _fileName;
+    private string _text = "", _proof = "", _mediaType = "text/plain";
+    private AcceptanceStatus _status;
+    private int _ticketId;
+    protected override void OnParametersSet() { if (_ticketId != Ticket.Id) { _editing = false; _error = null; _ticketId = Ticket.Id; } }
+    private string StatusLabel(AcceptanceStatus status) => status == AcceptanceStatus.NotEvaluated ? L["CriterionNotEvaluated"] : status.ToString();
+    private void Edit(TicketAcceptanceCriterion? criterion)
+    {
+        _id = criterion?.Id; _text = criterion?.Text ?? ""; _status = criterion?.Status ?? AcceptanceStatus.NotEvaluated;
+        _proof = criterion?.Evidence?.Content ?? ""; _mediaType = criterion?.Evidence?.MediaType ?? "text/plain";
+        _fileName = criterion?.Evidence?.FileName; _editing = true; _error = null;
+    }
+    private void ClearEvidence() { _proof = ""; _fileName = null; _mediaType = "text/plain"; }
+    private async Task ReadImage(InputFileChangeEventArgs e)
+    {
+        _busy = true;
+        try {
+            var file = e.File;
+            if (file.ContentType is not ("image/png" or "image/jpeg" or "image/gif" or "image/webp")) throw new InvalidOperationException("Unsupported image format.");
+            using var stream = new MemoryStream();
+            await file.OpenReadStream(5_000_000).CopyToAsync(stream);
+            _proof = Convert.ToBase64String(stream.ToArray()); _mediaType = file.ContentType; _fileName = file.Name; _error = null;
+        } catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+    private async Task Mutate(Func<Task> action)
+    {
+        _busy = true; _error = null;
+        try { await action(); await OnChanged.InvokeAsync(); }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+    private Task Save() => Mutate(async () => {
+        var result = await Tickets.SaveAcceptanceCriterionAsync(Slug, Ticket.Id, _id, new(_text, _status,
+            string.IsNullOrWhiteSpace(_proof) ? null : new(_proof, _mediaType, _fileName)));
+        if (result is null) throw new InvalidOperationException("Ticket or criterion no longer exists.");
+        _editing = false;
+    });
+    private Task ChangeStatus(TicketAcceptanceCriterion criterion, string? value) => Mutate(async () => {
+        if (!Enum.TryParse<AcceptanceStatus>(value, out var status)) return;
+        if (await Tickets.SaveAcceptanceCriterionAsync(Slug, Ticket.Id, criterion.Id, new(criterion.Text, status, criterion.Evidence)) is null)
+            throw new InvalidOperationException("Ticket or criterion no longer exists.");
+        if (_id == criterion.Id) _status = status;
+    });
+    private Task Delete(string id) => Mutate(async () => { await Tickets.DeleteAcceptanceCriterionAsync(Slug, Ticket.Id, id); if (_id == id) _editing = false; });
+}

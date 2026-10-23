@@ -20,6 +20,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject LocalizationService L
+@inject EscapeKeyStack EscapeStack
 @rendermode InteractiveServer
 @implements IAsyncDisposable
 
@@ -89,12 +90,23 @@ else
         }
         else
         {
+            <nav class="dashboard-tile-selector" aria-label="@L["DashboardTiles"]">
+                @foreach (var tile in _tiles)
+                {
+                    var selectedTile = tile;
+                    <button type="button" class="dashboard-tile-select"
+                            aria-pressed="@(_activeTileSlug == selectedTile.Slug ? "true" : "false")"
+                            @onclick="() => SelectTile(selectedTile.Slug)">@TileTitle(selectedTile.Slug)</button>
+                }
+            </nav>
             <div class="dashboard-grid" id="dashboard-grid" style="height: @(GridHeight)px;">
                 @foreach (var tile in _tiles.ToList())
                 {
                     var t = tile;
                     var tileId = TileId(t.Slug);
-                    <div class="dashboard-tile @(_resizingTile?.Slug == t.Slug ? "tile-resizing" : "")"
+                    <div class="dashboard-tile @(_resizingTile?.Slug == t.Slug ? "tile-resizing" : "") @(_activeTileSlug == t.Slug ? "tile-active" : "")"
+                         @onpointerdown="() => ActivateTile(t.Slug)"
+                         @onfocusin="() => ActivateTile(t.Slug)"
                          id="@tileId"
                          style="left:@(t.X)px; top:@(t.Y)px; width:@(t.Width)px; height:@(t.Height)px;">
                         <div class="dashboard-tile-header"
@@ -200,10 +212,10 @@ else
     @if (_tileConfigOpen)
     {
         <div class="ticket-modal-overlay">
-            <div class="tile-config-popup" @onclick:stopPropagation>
+            <div class="tile-config-popup" role="dialog" aria-modal="true" aria-labelledby="tile-config-title" @onclick:stopPropagation>
                 <div class="tile-config-header">
-                    <h2>@(_configEditingSlug is null ? L["TileConfigTitle"] : L["TileConfigEditTitle"])</h2>
-                    <button class="agent-close-btn" @onclick="CloseTileConfigPopup">&times;</button>
+                    <h2 id="tile-config-title">@(_configEditingSlug is null ? L["TileConfigTitle"] : L["TileConfigEditTitle"])</h2>
+                    <button class="agent-close-btn" aria-label="@L["Cancel"]" @onclick="CloseTileConfigPopup">&times;</button>
                 </div>
                 <div class="tile-config-body">
                     <div class="tile-config-field">
@@ -444,6 +456,10 @@ else
 
     // ── Tile config popup ──
 
+    private string? _activeTileSlug;
+    private string? _pendingTileFocus;
+    private bool _focusTileConfig;
+    private IDisposable? _escTileConfig;
     private bool _tileConfigOpen;
     private string? _configEditingSlug;
     private string _configSlug = "";
@@ -592,10 +608,21 @@ else
             _dotNetRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("dashboardInitDnd", _dotNetRef);
         }
+        if (_pendingTileFocus is { } tileSlug)
+        {
+            _pendingTileFocus = null;
+            await JS.InvokeVoidAsync("dashboardFocusTile", TileId(tileSlug));
+        }
+        if (_focusTileConfig && _tileConfigOpen)
+        {
+            _focusTileConfig = false;
+            await JS.InvokeVoidAsync("dashboardFocusTileEditor");
+        }
     }
 
     public async ValueTask DisposeAsync()
     {
+        _escTileConfig?.Dispose();
         RunsState.OnChange -= OnRunsStateChanged;
         TileGate.StateChanged -= OnTileGateStateChanged;
         _refreshTimingCts.Cancel();
@@ -894,7 +921,7 @@ else
                     _configFrequencyValue = aiValue == 0 ? 10 : aiValue;
                     _configFrequencyTime = aiTime ?? "09:00";
                     _configModel = config.Model;
-                    _tileConfigOpen = true;
+                    ShowTileConfigPopup();
                 }
             }
         }
@@ -949,16 +976,41 @@ else
 
     // ── Tile config popup ──
 
-    private void CloseTileConfigPopup()
+    private void ActivateTile(string tileSlug) => _activeTileSlug = tileSlug;
+
+    private void SelectTile(string tileSlug)
+    {
+        ActivateTile(tileSlug);
+        _pendingTileFocus = tileSlug;
+    }
+
+    private void ShowTileConfigPopup()
+    {
+        _escTileConfig?.Dispose();
+        _tileConfigOpen = true;
+        _focusTileConfig = true;
+        _escTileConfig = EscapeStack.PushWithFocus(JS,
+            () => InvokeAsync(() => { CloseTileConfigPopup(); StateHasChanged(); }));
+    }
+
+    private void HideTileConfigPopup()
     {
         _tileConfigOpen = false;
+        _focusTileConfig = false;
+        _escTileConfig?.Dispose();
+        _escTileConfig = null;
+    }
+
+    private void CloseTileConfigPopup()
+    {
+        HideTileConfigPopup();
         _configEditingSlug = null;
         _configScriptError = null;
     }
 
     private void ReviseTileConfig()
     {
-        _tileConfigOpen = false;
+        HideTileConfigPopup();
         _configEditingSlug = null;
         _chatOpen = true;
     }
@@ -980,7 +1032,7 @@ else
         _configFrequencyValue = fvalue == 0 ? 10 : fvalue;
         _configFrequencyTime = ftime ?? "09:00";
         _configModel = sidecar.Model ?? "";
-        _tileConfigOpen = true;
+        ShowTileConfigPopup();
     }
 
     private async Task AcceptTileConfig()
@@ -1002,7 +1054,7 @@ else
         {
             await DashboardService.WriteSidecarAsync(_workspace, _configEditingSlug, sidecar);
             _sidecars[_configEditingSlug] = sidecar;
-            _tileConfigOpen = false;
+            HideTileConfigPopup();
             _configEditingSlug = null;
             return;
         }
@@ -1041,7 +1093,7 @@ else
         _availableSlugs = DashboardService.GetAvailableSlugs(_workspace);
         _tiles = await DashboardService.GetTilesAsync(Slug, _workspace);
         _sidecars[tileSlug] = sidecar;
-        _tileConfigOpen = false;
+        HideTileConfigPopup();
         await LoadActivityAsync();
 
         _contentCache[tileSlug] = await DashboardService.ReadOutputAsync(_workspace, tileSlug);

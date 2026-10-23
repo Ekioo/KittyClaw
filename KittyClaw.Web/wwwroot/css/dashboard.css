@@ -1338,3 +1338,20 @@
 
 .all-boards-link { margin-left: auto; }
 
+
+/* Hover-only chrome must remain discoverable with keyboard and touch. */
+.dashboard-tile:focus-within .dashboard-tile-refresh,
+.dashboard-tile:focus-within .dashboard-tile-edit,
+.dashboard-tile:focus-within .dashboard-tile-remove { opacity: 1; }
+@media (hover: none), (pointer: coarse) {
+    .dashboard-tile-refresh, .dashboard-tile-edit, .dashboard-tile-remove { opacity: 1; }
+}
+
+/* A selector outside the canvas makes even fully covered tiles reachable. */
+.dashboard-tile-selector { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .75rem; }
+.dashboard-tile-select { background: var(--surface2); color: var(--text); border: 1px solid var(--border-strong); white-space: normal; text-align: left; }
+.dashboard-tile-select:hover, .dashboard-tile-select[aria-pressed="true"] { background: var(--surface3); color: var(--text); border-color: var(--accent); }
+.dashboard-tile.tile-active { z-index: 1; }
+.dashboard-tile:focus-within { z-index: 2; }
+.dashboard-tile.tile-dragging, .dashboard-tile.tile-resizing { z-index: 100; }
+@media (pointer: coarse) { .dashboard-tile-select { min-height: 44px; } }

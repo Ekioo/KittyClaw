@@ -1,0 +1,13 @@
+{
+  "TicketAcceptanceCriteria": "Akzeptanzkriterien",
+  "AddCriterion": "Kriterium hinzufügen",
+  "CriterionStatus": "Status",
+  "EditCriterion": "Kriterium und Nachweise bearbeiten",
+  "DeleteCriterion": "Kriterium löschen",
+  "CriterionEvidence": "Nachweise",
+  "CriterionText": "Kriterium",
+  "CriterionNotEvaluated": "Nicht bewertet",
+  "RemoveEvidence": "Nachweis entfernen",
+  "ProcessorEvaluateAcceptance": "Akzeptanzkriterien des Tickets bewerten",
+  "ProcessorEvaluateAcceptanceHelp": "Diesen Prozessor die relevanten Ticketkriterien bewerten und Nachweise beifügen lassen. Die Ergebnisse werden vor der Weiterleitung gespeichert. Standardmäßig deaktiviert."
+}

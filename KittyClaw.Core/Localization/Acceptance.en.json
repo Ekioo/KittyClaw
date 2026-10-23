@@ -1,0 +1,13 @@
+{
+  "TicketAcceptanceCriteria": "Acceptance criteria",
+  "AddCriterion": "Add criterion",
+  "CriterionStatus": "Status",
+  "EditCriterion": "Edit criterion and evidence",
+  "DeleteCriterion": "Delete criterion",
+  "CriterionEvidence": "Evidence",
+  "CriterionText": "Criterion",
+  "CriterionNotEvaluated": "Not evaluated",
+  "RemoveEvidence": "Remove evidence",
+  "ProcessorEvaluateAcceptance": "Evaluate ticket acceptance criteria",
+  "ProcessorEvaluateAcceptanceHelp": "Ask this processor to assess relevant ticket criteria and attach evidence. Results are saved before routing. Disabled by default."
+}

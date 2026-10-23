@@ -33,6 +33,10 @@ public sealed class CostTracker
         }
     }
 
+    /// <summary>Includes known usage not yet persisted by the asynchronous completion recorder.</summary>
+    internal decimal GetDailySpendUsd(string workspacePath, IEnumerable<AgentRun> runs) =>
+        SumUsdForDay(workspacePath, DateTime.UtcNow.Date, runs);
+
     internal string CurrentLogPath(string workspacePath) =>
         _sessions?.ChannelFilePath(workspacePath, "cost-log.jsonl")
         ?? Path.Combine(workspacePath, ".agents", "channel", "cost-log.jsonl");
@@ -59,11 +63,17 @@ public sealed class CostTracker
         }
     }
 
-    private decimal SumUsdForDay(string workspacePath, DateTime day)
+    private decimal SumUsdForDay(string workspacePath, DateTime day, IEnumerable<AgentRun>? runs = null)
     {
-        var path = CurrentLogPath(workspacePath);
-        if (!File.Exists(path)) return 0m;
+        lock (_lock) return SumUsdForDayCore(workspacePath, day, runs);
+    }
+
+    private decimal SumUsdForDayCore(string workspacePath, DateTime day, IEnumerable<AgentRun>? runs)
+    {
+        var files = LogFiles(workspacePath);
         decimal sum = 0m;
+        var entries = new List<CostLogEntry>();
+        foreach (var path in files.Order(StringComparer.Ordinal))
         foreach (var line in File.ReadLines(path))
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
@@ -71,8 +81,20 @@ public sealed class CostTracker
             try { e = JsonSerializer.Deserialize<CostLogEntry>(line); }
             catch { /* skip malformed lines */ continue; }
             if (e is null) continue;
-            if (e.At.Date != day) continue;
-            sum += e.UsdCost;
+            entries.Add(e);
+        }
+        var latestEntries = entries.Where(entry => entry.RunId is null)
+                     .Concat(entries.Where(entry => entry.RunId is not null).GroupBy(entry => entry.RunId!)
+                         .Select(group => group.OrderBy(entry => entry.UsageVersion).Last())).ToList();
+        foreach (var entry in latestEntries)
+            if (entry.At.Date == day && entry.CostKnown) sum += Math.Max(0m, entry.UsdCost);
+        foreach (var run in runs ?? [])
+        {
+            if ((run.EndedAt ?? DateTime.UtcNow).Date != day || !run.UsageIsReliable || run.TotalCostUsd is not decimal cost) continue;
+            var recorded = latestEntries.Where(entry => entry.At.Date == day && entry.CostKnown && entry.Source != "jev"
+                && entry.RunId == run.RunId && (entry.StartedAt == run.StartedAt || entry.StartedAt is null && entry.At == run.EndedAt))
+                .Sum(entry => Math.Max(0m, entry.UsdCost));
+            sum += Math.Max(0m, cost - recorded);
         }
         return sum;
     }
@@ -95,5 +117,11 @@ public sealed record CostLogEntry(
     int? PipelineId = null,
     string? RunId = null,
     string? Source = null,
-    bool CostKnown = true
+    bool CostKnown = true,
+    string? SessionId = null,
+    DateTime? StartedAt = null,
+    int UsageVersion = 0,
+    string? BillingPlan = null,
+    string? RateCardVersion = null,
+    bool UsageReliable = true
 );

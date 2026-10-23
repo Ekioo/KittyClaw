@@ -101,17 +101,47 @@ internal static class CodexStreamAdapter
     {
         if (!root.TryGetProperty("usage", out var usage) || usage.ValueKind != JsonValueKind.Object)
             return;
-        var input = Int(usage, "input_tokens");
-        var cached = Int(usage, "cached_input_tokens");
-        var output = Int(usage, "output_tokens");
-        if (input > 0 || cached > 0 || output > 0)
+        var total = CodexTokenTotals.From(usage);
+        if (run.CodexUsageBaseline is not { } baseline) return;
+        var delta = total.Delta(baseline);
+        run.CodexUsageBaseline = total;
+        var input = delta.Input;
+        var cached = delta.Cached;
+        var output = delta.Output;
+        if (input > 0 || cached > 0 || output > 0 || delta.Writes > 0)
         {
             // OpenAI reports cached input as a subset of input_tokens. AgentRun stores token
             // classes separately, so keep only the uncached remainder in InputTokens.
             var uncachedInput = Math.Max(0, input - cached);
             var estimated = ModelCostEstimator.TryEstimate(
-                run.Model, uncachedInput, output, cached, 0, out var cost);
-            run.AddUsage(uncachedInput, output, cached, 0, estimated ? cost : null, estimated);
+                run.Model, uncachedInput, output, cached, delta.Writes, out var cost);
+            if (run.SessionId is { } session)
+            {
+                var points = new CodexSessionUsage().Read(session);
+                run.BillingPlan = points.LastOrDefault(point => point.Plan is not null)?.Plan ?? run.BillingPlan;
+                var end = -1;
+                var start = baseline == default(CodexTokenTotals) ? -1 : -2;
+                for (var index = 0; index < points.Count; index++)
+                {
+                    if (points[index].Total == baseline) start = index;
+                    if (points[index].Total == total) end = index;
+                }
+                if (start >= -1 && end > start)
+                {
+                    decimal requestCost = 0;
+                    var previous = baseline;
+                    for (var index = start + 1; index <= end; index++)
+                    {
+                        var request = points[index].Total.Delta(previous);
+                        previous = points[index].Total;
+                        estimated &= ModelCostEstimator.TryEstimate(run.Model, Math.Max(0, request.Input - request.Cached),
+                            request.Output, request.Cached, request.Writes, out var amount, requestContext: true);
+                        requestCost += amount;
+                    }
+                    cost = requestCost;
+                }
+            }
+            run.AddUsage(uncachedInput, output, cached, delta.Writes, estimated ? cost : null, estimated);
         }
     }
 
@@ -128,7 +158,4 @@ internal static class CodexStreamAdapter
             ? value.GetString()
             : null;
 
-    private static int Int(JsonElement obj, string name) =>
-        obj.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number &&
-        value.TryGetInt32(out var result) ? result : 0;
 }

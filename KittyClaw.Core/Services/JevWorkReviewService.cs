@@ -90,7 +90,7 @@ public sealed class JevWorkReviewService(ProjectService projects, JevConfigurati
         // Checkbox text is a criterion, never evidence of completion, including checked boxes.
         var checklist = Regex.Matches(ticket.Description ?? "", @"(?m)^\s*[-*]\s+\[[ xX]\]\s+(.+)$")
             .Select(m => m.Groups[1].Value.Trim());
-        return processor.JevAcceptanceCriteria.Concat(checklist).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        return processor.JevAcceptanceCriteria.Concat(ticket.AcceptanceCriteria.Select(c => c.Text)).Concat(checklist).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     public async Task<JevReviewContext> ContextAsync(string slug, ColumnProcessor processor, Ticket ticket, TodoDbContext? transactionDb = null)
@@ -126,9 +126,9 @@ public sealed class JevWorkReviewService(ProjectService projects, JevConfigurati
             }
         }
         var criteria = processor.JevAcceptanceValidation ? AcceptanceCriteria(processor, ticket) : [];
-        var fingerprint = Hash(new { version = "work-v1", ticket.Id, ticket.ColumnId, ticket.Title, ticket.Description,
+        var fingerprint = Hash(new { version = "work-v1", ticket.Id, ticket.ColumnId, ticket.Title, ticket.Description, acceptanceCriteria = ticket.AcceptanceCriteria.Select(c => c.ToRoutingContext()),
             updatedAt = ticket.UpdatedAt.Ticks, ticket.Priority, processor.Mission, processor.Prompt,
-            processor.JevAcceptanceValidation, processor.JevExecutionSelection, criteria, evidence,
+            processor.EvaluateAcceptanceCriteria, processor.JevAcceptanceValidation, processor.JevExecutionSelection, criteria, evidence,
             profiles = processor.JevExecutionProfiles, processor.AvailableSkills, processor.RecommendedSkills, processor.RequiredSkills,
             processor.DefaultTargetColumnId, processor.Routes });
         var feedback = (transactionDb is null ? await DecisionsAsync(slug, ticket.Id) : await ReadDecisionsAsync(transactionDb, ticket.Id)).Where(d => !d.Accepted && d.Kind == "profile" &&
@@ -150,7 +150,8 @@ public sealed class JevWorkReviewService(ProjectService projects, JevConfigurati
     public async Task ObserveAsync(string slug, ColumnProcessor processor, Ticket ticket, CancellationToken ct)
     {
         if (!processor.Enabled || ticket.ColumnId != processor.ColumnId || (!processor.JevAcceptanceValidation && !processor.JevExecutionSelection)) return;
-        if (processor.JevExecutionSelection)
+        // A classic fallback owns its execution context until completion; progress comments
+        // must not reactivate JEV or spend more inference calls during that execution.
         {
             await using var activeDb = projects.GetProjectDb(slug); await ColumnExecutionService.EnsureTableAsync(activeDb);
             if (await activeDb.ColumnExecutions.AnyAsync(e => e.TicketId == ticket.Id &&
@@ -194,7 +195,7 @@ public sealed class JevWorkReviewService(ProjectService projects, JevConfigurati
             }
             if (questions.Count > 0)
             {
-                var state = new { ticket = new { ticket.Title, ticket.Description, ticket.Priority }, processor.Mission, processor.Prompt,
+                var state = new { ticket = new { ticket.Title, ticket.Description, acceptanceCriteria = ticket.AcceptanceCriteria.Select(c => c.ToRoutingContext()), ticket.Priority }, processor.Mission, processor.Prompt,
                     criteria = context.Criteria, evidence = context.Evidence, requiredSkills = processor.RequiredSkills,
                     ownerFeedback = context.Feedback.Select(d => new { profile = d.Review.Profile?.Name, d.Reason }) };
                 if (JsonSerializer.Serialize(new { state, questions }, Json).Length > 48000) throw new InvalidOperationException("JEV work review context exceeds 48,000 characters.");
@@ -219,7 +220,7 @@ public sealed class JevWorkReviewService(ProjectService projects, JevConfigurati
                         var status = JevQualificationService.ReadChoice(answers.GetProperty($"criterion-{i}"), Statuses);
                         var reference = JevQualificationService.ReadChoice(answers.GetProperty($"evidence-{i}"), references);
                         results.Add(new(context.Criteria[i], reference.Choice == "none" ? "insufficient" : status.Choice,
-                            status.Confidence, reference.Choice == "none" ? null : reference.Choice));
+                            Math.Min(status.Confidence, reference.Confidence), reference.Choice == "none" ? null : reference.Choice));
                     }
                     review = review with { Criteria = results };
                 }

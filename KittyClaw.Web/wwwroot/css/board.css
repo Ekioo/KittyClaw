@@ -1,4 +1,5 @@
 ﻿/* Board */
+.page-header .mobile-actions-toggle { display: none; }
 .board-layout {
     height: 100vh;
     min-height: 0;
@@ -97,7 +98,7 @@
     position: sticky;
     top: 50%;
     margin: calc(50vh - 2.8rem) 0 0 50%;
-    transform: translate(-50%, -50%) scale(.8);
+    transform: translate(-50%, -50%);
     width: 1.8rem;
     height: 1.8rem;
     padding: 0;
@@ -111,10 +112,12 @@
     box-shadow: 0 4px 16px rgba(0,0,0,.45);
     transition: opacity .15s, transform .15s;
 }
-.column-insert-slot:hover .column-insert-btn,
-.column-insert-btn:focus-visible {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
+.column-insert-btn:focus-visible { opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+    .column-insert-slot:hover .column-insert-btn { opacity: 1; }
+}
+@media (hover: none), (pointer: coarse) {
+    .column-insert-btn { opacity: 1; }
 }
 .add-column-lane {
     min-width: 170px;
@@ -305,15 +308,15 @@
     flex-shrink: 0;
 }
 
-/* Drop slot — always in DOM during drag, expands when active */
+/* Drop slots keep a stable size while the active destination is highlighted. */
 .drop-slot {
-    min-height: 32px;
+    min-height: 40px;
     border-radius: 8px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: min-height 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+    transition: background 0.12s ease, border-color 0.12s ease;
     border: 2px dashed var(--border);
     background: color-mix(in srgb, var(--accent) 4%, transparent);
     margin: 3px 0;

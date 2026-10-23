@@ -141,6 +141,12 @@ public sealed class ColumnAgentDispatcher(
         text.AppendLine("## Result contract");
         text.AppendLine("Your final response must be exactly one JSON object, with no Markdown:");
         text.AppendLine("{\"outcome\":\"configured-outcome\",\"skillsUsed\":[\"skill-slug\"],\"summary\":\"short result\"}");
+        if (processor.EvaluateAcceptanceCriteria)
+        {
+            text.AppendLine("Acceptance evaluation is enabled. Include acceptanceCriteria in your final JSON: [{\"id\":\"existing-criterion-id\",\"status\":\"PASS\",\"evidence\":{\"content\":\"actual verification results\",\"mediaType\":\"text/plain\"}}].");
+            text.AppendLine("Assess criteria relevant to this processor mission. Omit unrelated criteria from this array so they remain unchanged; use an empty array if none are relevant. Use NotEvaluated when verification was not performed; otherwise use PASS, FAIL or PARTIAL and attach non-empty proof (text/plain, application/json, or base64 image/png, image/jpeg, image/gif, image/webp). Never invent IDs or evidence. Return the evaluations in this final result instead of updating criteria through API/MCP during this session. KittyClaw saves them atomically before routing. Include evidence.ticketUpdatedAt matching the ticket revision you consumed.");
+        }
+        else text.AppendLine("Acceptance evaluation is disabled for this processor. Do not update ticket acceptance statuses or proofs; leave acceptanceCriteria out of your result.");
         text.AppendLine("For a success outcome, include evidence.ticketUpdatedAt. For owner-feedback, include the exact ownerFeedbackCommentId, a new delivery comment, and evidence.deliverables entries with path, updatedAt after the feedback, and a non-empty verification statement.");
         text.AppendLine("Also include `lessons` as an array of concrete reusable lessons. Use an empty array when this run produced no new lesson; do not repeat existing memory.");
         text.AppendLine("For outcome \"scheduled\", also include \"fireAt\" as an ISO-8601 UTC date and \"scheduleTarget\" as the exact destination column name used when the wake fires. Both fields are mandatory for scheduled and must be omitted for other outcomes such as \"needs_input\".");
@@ -170,6 +176,9 @@ public sealed class ColumnAgentDispatcher(
         Title: {{ticket.Title}}
         Description:
         {{ticket.Description}}
+
+        ## Ticket acceptance criteria (current recorded assessments; verify evidence before relying on it)
+        {{System.Text.Json.JsonSerializer.Serialize(ticket.AcceptanceCriteria.Select(c => c.ToRoutingContext()))}}
 
         Blocking and related children:
         {{string.Join("\n", ticket.SubTickets.Select(s => $"- #{s.Id} [{s.Status}] {s.Title} (blocks parent: {s.BlocksParent})"))}}

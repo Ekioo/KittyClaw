@@ -2,7 +2,7 @@
 
 ## Purpose
 Ship a per-user Windows x64 installer with .NET included, check for updates on GitHub,
-and let the owner download and apply them without interrupting active agents.
+download them automatically, and let the owner confirm installation without interrupting active agents.
 Source installations retain the dismissible release-link banner described below.
 
 ## Packaging and desktop lifetime
@@ -20,7 +20,11 @@ Source installations retain the dismissible release-link banner described below.
   creating the host. Installer hooks exit before touching application data.
   Startup auto-apply is disabled so a second launch cannot replace a running server.
 - `WindowsDesktopLifetime` owns a per-data-directory named mutex, opens the browser
-  after startup, and provides Open/Quit actions in the notification area. The content
+  after startup, and provides Open, Check for updates, and Quit actions in the notification area.
+  The manual check downloads available updates in the background and reports the result
+  in a notification. Clicking the notification opens KittyClaw, where installation and
+  restart still require owner confirmation. The menu action is disabled during its check.
+  The content
   root is the executable directory, independent of the shortcut's working directory.
   `KITTYCLAW_DESKTOP=false` disables the desktop shell for isolated tests.
 - Setup creates desktop and Start-menu shortcuts. Its first-run hook confirms that
@@ -44,9 +48,12 @@ Source installations retain the dismissible release-link banner described below.
 - `DownloadUpdatesAsync` selects available deltas using the cached installed full package,
   reconstructs the target, and validates it. Velopack falls back to a full download if a
   required baseline/delta is missing or reconstruction fails. No delta-disabling option is set.
-- `InstalledUpdateService` serializes operations. `UpdateBanner.razor` offers
-  **Download update**, shows progress and retryable errors, then offers
-  **Update and restart**. Prepared downloads remain available after restart, even offline.
+- `InstalledUpdateService` serializes checks and downloads. Each installed update check
+  automatically downloads an available package in the background, including while agents
+  are running. Failed checks or downloads retry on the next scheduled check.
+  `UpdateBanner.razor` shows download progress and errors, then offers only
+  **Update and restart** for explicit owner confirmation. Prepared downloads remain
+  available after restart, even offline, without downloading them again.
 - Installed builds check on startup and hourly, independently of the legacy API throttle.
 - Downloading does not stop the host. Installation acquires the registry's update gate
   only when no runs or tracked execution tasks are active. New dispatches are rejected

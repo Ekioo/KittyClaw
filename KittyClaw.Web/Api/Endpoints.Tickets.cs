@@ -94,6 +94,31 @@ public static partial class Endpoints
         .Produces(StatusCodes.Status204NoContent)
         .ProducesProblem(StatusCodes.Status404NotFound);
 
+        api.MapPost("/projects/{slug}/tickets/{id:int}/acceptance-criteria", async (string slug, int id, SaveAcceptanceCriterionRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
+        {
+            try {
+                var criterion = await ts.SaveAcceptanceCriterionAsync(slug, id, null, req);
+                if (criterion is null) return Results.NotFound(new { error = "Ticket or criterion not found." });
+                notifier.NotifyProjectUpdated(slug);
+                return Results.Ok(criterion);
+            } catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
+        }).WithTags("Tickets").Produces<TicketAcceptanceCriterion>();
+        api.MapPut("/projects/{slug}/tickets/{id:int}/acceptance-criteria/{criterionId}", async (string slug, int id, string criterionId, SaveAcceptanceCriterionRequest req, TicketService ts, BoardUpdateNotifier notifier) =>
+        {
+            try {
+                var criterion = await ts.SaveAcceptanceCriterionAsync(slug, id, criterionId, req);
+                if (criterion is null) return Results.NotFound(new { error = "Ticket or criterion not found." });
+                notifier.NotifyProjectUpdated(slug);
+                return Results.Ok(criterion);
+            } catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
+        }).WithTags("Tickets").Produces<TicketAcceptanceCriterion>();
+        api.MapDelete("/projects/{slug}/tickets/{id:int}/acceptance-criteria/{criterionId}", async (string slug, int id, string criterionId, TicketService ts, BoardUpdateNotifier notifier) =>
+        {
+            if (!await ts.DeleteAcceptanceCriterionAsync(slug, id, criterionId)) return Results.NotFound(new { error = "Ticket or criterion not found." });
+            notifier.NotifyProjectUpdated(slug);
+            return Results.NoContent();
+        }).WithTags("Tickets");
+
         // Sub-tickets
         api.MapPut("/projects/{slug}/tickets/{id:int}/parent", HandleSetTicketParent).WithTags("Tickets");
 

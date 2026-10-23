@@ -209,8 +209,9 @@ public sealed class AgentRunner
     private readonly DurableWriteRouter? _durableWrites;
     private readonly ProjectService? _projects;
     private readonly PrimaryCheckoutActivityRegistry? _primaryCheckoutActivity;
+    private readonly AgentBudgetService? _budgets;
 
-    public AgentRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<AgentRunner> logger, AppSettingsService? appSettings = null, BoundaryObservationService? boundaryObserver = null, TicketWorktreeService? worktrees = null, RtkIntegrationService? rtk = null, ProjectSecretVault? projectSecrets = null, DurableWriteRouter? durableWrites = null, ProjectService? projects = null, PrimaryCheckoutActivityRegistry? primaryCheckoutActivity = null)
+    public AgentRunner(SessionRegistry sessions, AgentRunRegistry runs, RunConcurrencyGate gate, ILogger<AgentRunner> logger, AppSettingsService? appSettings = null, BoundaryObservationService? boundaryObserver = null, TicketWorktreeService? worktrees = null, RtkIntegrationService? rtk = null, ProjectSecretVault? projectSecrets = null, DurableWriteRouter? durableWrites = null, ProjectService? projects = null, PrimaryCheckoutActivityRegistry? primaryCheckoutActivity = null, AgentBudgetService? budgets = null)
     {
         _sessions = sessions;
         _runs = runs;
@@ -224,6 +225,7 @@ public sealed class AgentRunner
         _durableWrites = durableWrites;
         _projects = projects;
         _primaryCheckoutActivity = primaryCheckoutActivity;
+        _budgets = budgets ?? (projects is null ? null : new AgentBudgetService(projects, new CostTracker(sessions), runs));
     }
 
     public Task<AgentRun> RunAsync(AgentRunContext ctx, CancellationToken ct)
@@ -276,6 +278,11 @@ public sealed class AgentRunner
 
     private async Task<AgentRun> ExecuteRegisteredAsync(AgentRun run, AgentRunContext ctx, CancellationToken ct)
     {
+        if (!await CheckBudgetAsync(run, ct))
+        {
+            CleanupImageTempFiles(ctx);
+            return run;
+        }
         try
         {
             if (_projects is not null && await _projects.GetProjectAsync(ctx.ProjectSlug) is { } project)
@@ -1000,6 +1007,27 @@ public sealed class AgentRunner
         catch (JsonException) { return false; /* Optional provider payload: non-rejected is the intended fallback. */ }
     }
 
+    private async Task<bool> CheckBudgetAsync(AgentRun run, CancellationToken ct)
+    {
+        if (_budgets is null) return true;
+        AgentBudgetDecision decision;
+        try { decision = await _budgets.CheckAsync(run.ProjectSlug, ct); }
+        catch (OperationCanceledException)
+        {
+            _runs.Complete(run.RunId, AgentRunStatus.Stopped, null);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Daily budget check failed for run {RunId}", run.RunId);
+            decision = new(false, null, 0m, "Agent launch blocked: the daily budget could not be checked.");
+        }
+        if (decision.Allowed) return true;
+        try { run.Push(new StreamEvent(DateTime.UtcNow, "error", decision.Reason!)); }
+        finally { _runs.Complete(run.RunId, AgentRunStatus.Failed, -1); }
+        return false;
+    }
+
     private async Task<SpawnResult> SpawnAndWaitAsync(
         AgentRunContext ctx, AgentRun run, string skillContent,
         string sessionId, bool isResume, CancellationToken ct)
@@ -1054,9 +1082,25 @@ public sealed class AgentRunner
         string Redact(string text) => SecretRedactor.Redact(text, projectSecrets.Values);
 
         AppendDebugLog(ctx, $"LAUNCHING {ctx.AgentName} {(isResume ? "(resume)" : "(new)")} ticket=#{ctx.TicketId} session={sessionId}");
+        if (backend.Provider == CliProvider.Codex)
+        {
+            var usage = isResume ? new CodexSessionUsage().Read(sessionId) : [];
+            run.CodexUsageBaseline = isResume ? usage.LastOrDefault()?.Total : default(CodexTokenTotals);
+            run.UsageIsReliable &= run.CodexUsageBaseline is not null;
+            run.BillingPlan = usage.LastOrDefault(point => point.Plan is not null)?.Plan ?? run.BillingPlan;
+        }
         _logger.LogInformation("LAUNCH {Agent} {Mode} ticket=#{TicketId} session={SessionId} cmd={Bin} {Args}",
             ctx.AgentName, isResume ? "(resume)" : "(new)", ctx.TicketId, sessionId,
             psi.FileName, string.Join(" ", invocation.LogArguments ?? invocation.Arguments));
+
+        // Check at the process boundary after queue waits and prompt preparation, including
+        // fallback/resume/steering attempts. Chat's concurrency exemption is not a budget exemption.
+        if (!await CheckBudgetAsync(run, ct))
+        {
+            TryDeleteFile(invocation.TemporaryFile);
+            TryDeleteDirectory(invocation.TemporaryDirectory);
+            return new SpawnResult(-1, 0, true, FallbackReason.None);
+        }
 
         System.Diagnostics.Process proc;
         try

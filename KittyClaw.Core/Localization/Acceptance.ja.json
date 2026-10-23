@@ -1,0 +1,13 @@
+{
+  "TicketAcceptanceCriteria": "受け入れ基準",
+  "AddCriterion": "基準を追加",
+  "CriterionStatus": "状態",
+  "EditCriterion": "基準と証拠を編集",
+  "DeleteCriterion": "基準を削除",
+  "CriterionEvidence": "証拠",
+  "CriterionText": "基準",
+  "CriterionNotEvaluated": "未評価",
+  "RemoveEvidence": "証拠を削除",
+  "ProcessorEvaluateAcceptance": "チケットの受け入れ基準を評価",
+  "ProcessorEvaluateAcceptanceHelp": "このプロセッサーに、関連するチケットの基準の評価と証拠の添付を依頼します。結果はルーティング前に保存されます。既定では無効です。"
+}

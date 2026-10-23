@@ -47,8 +47,11 @@ public sealed class AgentRun
     public int CacheWriteTokens { get; private set; }
     public decimal? TotalCostUsd { get; private set; }
     public bool CostIsEstimated { get; private set; }
+    internal CodexTokenTotals? CodexUsageBaseline { get; set; } = default(CodexTokenTotals);
+    internal bool UsageIsReliable { get; set; } = true;
+    public string? BillingPlan { get; set; }
     public long TotalTokens => (long)InputTokens + OutputTokens + CacheReadTokens + CacheWriteTokens;
-    public bool HasUsage => TotalTokens > 0 || TotalCostUsd is not null;
+    public bool HasUsage => TotalTokens > 0 || TotalCostUsd is not null || !UsageIsReliable;
 
     public void AddUsage(int inputTokens, int outputTokens, int cacheReadTokens, int cacheWriteTokens,
         decimal? costUsd, bool costIsEstimated = false)
@@ -64,6 +67,21 @@ public sealed class AgentRun
                 TotalCostUsd = (TotalCostUsd ?? 0m) + costUsd.Value;
                 CostIsEstimated |= costIsEstimated;
             }
+        }
+    }
+
+    internal void ReconcileUsage(CostLogEntry entry)
+    {
+        lock (_logLock)
+        {
+            InputTokens = entry.InputTokens;
+            OutputTokens = entry.OutputTokens;
+            CacheReadTokens = entry.CacheReadTokens;
+            CacheWriteTokens = entry.CacheWriteTokens;
+            TotalCostUsd = entry.CostKnown ? entry.UsdCost : null;
+            CostIsEstimated = entry.CostEstimated;
+            BillingPlan = entry.BillingPlan;
+            UsageIsReliable = entry.UsageReliable;
         }
     }
 
@@ -240,6 +258,8 @@ public sealed class AgentRunSnapshot
     public int CacheWriteTokens { get; set; }
     public decimal? TotalCostUsd { get; set; }
     public bool CostIsEstimated { get; set; }
+    public bool UsageIsReliable { get; set; } = true;
+    public string? BillingPlan { get; set; }
     public CliVersionMetadata? CliVersion { get; set; }
     public List<StreamEvent> Events { get; set; } = [];
     public List<string> PendingSteerMessages { get; set; } = [];
@@ -294,6 +314,8 @@ public sealed class RunLogStore
             CacheWriteTokens = run.CacheWriteTokens,
             TotalCostUsd = run.TotalCostUsd,
             CostIsEstimated = run.CostIsEstimated,
+            UsageIsReliable = run.UsageIsReliable,
+            BillingPlan = run.BillingPlan,
             CliVersion = run.CliVersion,
             Events = run.SnapshotBuffer().ToList(),
             PendingSteerMessages = run.PendingSteerMessages.ToList(),
@@ -341,6 +363,8 @@ public sealed class RunLogStore
             run.EndedAt = snapshot.EndedAt;
             run.ExitCode = snapshot.ExitCode;
             run.CliVersion = snapshot.CliVersion;
+            run.BillingPlan = snapshot.BillingPlan;
+            run.UsageIsReliable = snapshot.UsageIsReliable;
             run.AddUsage(snapshot.InputTokens, snapshot.OutputTokens,
                 snapshot.CacheReadTokens, snapshot.CacheWriteTokens, snapshot.TotalCostUsd,
                 snapshot.CostIsEstimated);
@@ -394,6 +418,8 @@ public sealed class RunLogStore
         run.EndedAt = snapshot.EndedAt;
         run.ExitCode = snapshot.ExitCode;
         run.CliVersion = snapshot.CliVersion;
+        run.BillingPlan = snapshot.BillingPlan;
+        run.UsageIsReliable = snapshot.UsageIsReliable;
         run.AddUsage(snapshot.InputTokens, snapshot.OutputTokens,
             snapshot.CacheReadTokens, snapshot.CacheWriteTokens, snapshot.TotalCostUsd,
             snapshot.CostIsEstimated);

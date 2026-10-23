@@ -13,6 +13,7 @@ window.dashboardInitDnd = (dotnetRef) => { _dotnet = dotnetRef; };
 let _drag = null;
 
 window.dashboardStartDrag = (fileName, tileId, mouseX, mouseY, tileX, tileY) => {
+    if (window.matchMedia('(max-width: 767px)').matches) return;
     const tile = document.getElementById(tileId);
     if (!tile) return;
     tile.classList.add('tile-dragging');
@@ -25,6 +26,7 @@ window.dashboardStartDrag = (fileName, tileId, mouseX, mouseY, tileX, tileY) => 
 let _resize = null;
 
 window.dashboardStartResize = (fileName, tileId, mouseX, mouseY, tileW, tileH) => {
+    if (window.matchMedia('(max-width: 767px)').matches) return;
     const tile = document.getElementById(tileId);
     if (!tile) return;
     tile.classList.add('tile-resizing');
@@ -39,8 +41,9 @@ document.addEventListener('mousemove', (e) => {
         const { tile, mouseX, mouseY, tileX, tileY } = _drag;
         const newX = snap(Math.max(0, tileX + e.clientX - mouseX));
         const newY = snap(Math.max(0, tileY + e.clientY - mouseY));
-        tile.style.left = newX + 'px';
-        tile.style.top  = newY + 'px';
+        if (newX !== _drag.lastX || newY !== _drag.lastY) {
+            tile.style.transform = `translate(${newX - tileX}px, ${newY - tileY}px)`;
+        }
         _drag.lastX = newX;
         _drag.lastY = newY;
     }
@@ -61,6 +64,10 @@ document.addEventListener('mouseup', () => {
 
     if (_drag) {
         const { fileName, tile, lastX, lastY } = _drag;
+        // Commit layout once, after the compositor-only drag preview.
+        tile.style.left = lastX + 'px';
+        tile.style.top = lastY + 'px';
+        tile.style.transform = '';
         tile.classList.remove('tile-dragging');
         _drag = null;
         if (!_resize) grid?.classList.remove('grid-active');
@@ -134,3 +141,30 @@ const _mermaidObserver = new MutationObserver(() => {
 });
 _mermaidObserver.observe(document.body, { childList: true, subtree: true });
 document.addEventListener('DOMContentLoaded', renderPendingMermaid);
+
+// Called after Blazor has brought the chosen tile above its siblings.
+window.dashboardFocusTile = (tileId) => {
+    const tile = document.getElementById(tileId);
+    if (!tile) return;
+    tile.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+    tile.querySelector('button:not(:disabled)')?.focus({ preventScroll: true });
+};
+window.dashboardFocusTileEditor = () => {
+    const editor = document.querySelector('.tile-config-popup');
+    editor?.querySelector('input:not(:disabled), select:not(:disabled), textarea:not(:disabled), button:not(:disabled)')?.focus();
+};
+// Keep Tab inside the modal; Escape is handled by the shared LIFO stack.
+document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Tab') return;
+    const editor = document.querySelector('.tile-config-popup');
+    if (!editor) return;
+    const controls = [...editor.querySelectorAll('button, input, select, textarea, a[href], [tabindex]')]
+        .filter(el => !el.disabled && el.tabIndex >= 0 && el.getClientRects().length > 0);
+    if (!controls.length) return;
+    const first = controls[0], last = controls[controls.length - 1];
+    if (!editor.contains(document.activeElement) || (event.shiftKey && document.activeElement === first)) {
+        event.preventDefault(); (event.shiftKey ? last : first).focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault(); first.focus();
+    }
+});

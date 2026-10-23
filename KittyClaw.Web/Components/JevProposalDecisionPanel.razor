@@ -12,14 +12,17 @@
     }
     else if (Proposal.Error is null)
     {
-        <details class="jev-disclosure" data-testid="jev-routing-reason" open="@_rejecting"><summary>@L["JevDecisionReason"]</summary>
+        @if (_rejecting)
+        {
+        <div class="jev-disclosure" data-testid="jev-routing-reason">
         <label>@L["JevDecisionReason"]
             <textarea class="settings-input" maxlength="2000" @bind="_reason" @bind:event="oninput" data-testid="jev-decision-reason"></textarea>
         </label>
         @if (_rejecting) { <button class="settings-primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_reason))" @onclick="() => DecideAsync(false)">@L["JevConfirm"]</button> }
-        </details>
+        </div>
+        }
         <div class="settings-row">
-            <button class="settings-primary" disabled="@(_busy || Stale || Proposal.Choice is null || !Proposal.Choice.StartsWith("column-"))" @onclick="() => DecideAsync(true)" data-testid="jev-accept" title="@(Stale ? L["JevDecisionStale"] : L["JevAcceptanceEffect"])">@L["JevAcceptAndApply"]</button>
+            <button class="settings-primary" disabled="@(_busy || Stale || Proposal.Choice is null || !Proposal.Choice.StartsWith("column-"))" @onclick="() => DecideAsync(true)" data-testid="jev-accept" title="@(Stale ? L["JevDecisionStale"] : L["JevAcceptanceEffect"])">@(AcceptLabel ?? L["JevAcceptAndApply"])</button>
             <button class="settings-browse" disabled="@(_busy || Stale)" @onclick="RejectAsync" data-testid="jev-reject" title="@(Stale ? L["JevDecisionStale"] : L["JevRejectionEffect"])">@L["JevReject"]</button>
         </div>
 
@@ -33,6 +36,7 @@
     [Parameter] public int TicketId { get; set; }
     [Parameter, EditorRequired] public JevRoutingProposal Proposal { get; set; } = default!;
     [Parameter] public JevProposalDecision? Decision { get; set; }
+    [Parameter] public string? AcceptLabel { get; set; }
     [Parameter] public bool Stale { get; set; }
     [Parameter] public EventCallback OnDecided { get; set; }
     private string _reason = "";

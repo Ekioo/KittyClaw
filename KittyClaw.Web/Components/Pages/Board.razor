@@ -53,7 +53,10 @@ else
             <a class="view-toggle-btn" href="/costs">@L["Costs"]</a>
         </div>
         <BoardFilterBar OnChanged="ResetLoadedColumns" />
-        <div class="header-right">
+        <button type="button" class="header-action-btn mobile-actions-toggle"
+                aria-expanded="@(_mobileActionsOpen ? "true" : "false")" aria-controls="board-header-actions"
+                @onclick="() => _mobileActionsOpen = !_mobileActionsOpen">&#8943; @L["ColumnActionsTab"]</button>
+        <div id="board-header-actions" class="header-right @(_mobileActionsOpen ? "mobile-actions-open" : "")">
             <button class="header-action-btn pause-btn @(_project.IsPaused ? "pause-btn--paused" : "")"
                     title="@(_project.IsPaused ? L["Resume"] : L["Pause"])"
                     @onclick="ToggleProjectPause">
@@ -100,7 +103,8 @@ else
         </nav>
     }
 
-    <div class="board">
+    <MobileColumnNavigation BoardId="project-kanban" />
+    <div class="board" id="project-kanban">
         @foreach (var col in _columns)
         {
             var colIndex = _columns.IndexOf(col);
@@ -465,6 +469,7 @@ else
 }
 
 @code {
+    private bool _mobileActionsOpen;
     [Parameter] public string Slug { get; set; } = "";
     [Parameter] public int? TicketId { get; set; }
     [Parameter] public int? ParentId { get; set; }
@@ -958,6 +963,7 @@ else
         KittyClaw.Web.Services.ColumnSortMode.Assignee,
         KittyClaw.Web.Services.ColumnSortMode.CreatedAt,
         KittyClaw.Web.Services.ColumnSortMode.UpdatedAt,
+        KittyClaw.Web.Services.ColumnSortMode.Tokens,
     };
     private static readonly KittyClaw.Web.Services.SortDirection[] _sortDirections = new[]
     {
@@ -1123,6 +1129,7 @@ else
         KittyClaw.Web.Services.ColumnSortMode.Assignee => L["SortByAssignee"],
         KittyClaw.Web.Services.ColumnSortMode.CreatedAt => L["SortByCreated"],
         KittyClaw.Web.Services.ColumnSortMode.UpdatedAt => L["SortByUpdated"],
+        KittyClaw.Web.Services.ColumnSortMode.Tokens => L["SortByTokens"],
         _ => L["SortManual"],
     };
 

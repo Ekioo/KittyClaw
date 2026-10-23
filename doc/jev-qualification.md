@@ -4,8 +4,19 @@
 
 A column processor can opt into `JevObservationOnly`. This replaces normal agent processing
 for that column with a routing suggestion. Agent dispatch, before/after actions, and
-column execution claims are bypassed. Manual validation is the default; automatic routing is a separate opt-in. Independent scheduled tasks
+column execution claims are bypassed. Configured business routes are applied automatically when JEV meets the column confidence threshold. Independent scheduled tasks
 and legacy automations retain their own configuration.
+
+## Shared uncertainty fallback
+
+Every JEV mode uses the configured confidence threshold. Errors, missing credentials,
+abstentions, insufficient acceptance evidence and low-confidence answers resume the equivalent
+classic processing. Qualification-only columns run their normal agent and routing; execution
+profile selection uses the column's normal model and skills; acceptance validation uses the
+normal column processor and manual transition rules. A pending or stale observation is refreshed
+before making this choice. Confident negative acceptance judgments still require owner review.
+Fallback is recorded on the durable execution so retries keep the same classic behavior without
+changing the saved column configuration. Required skills and success-context checks still apply.
 
 ## Configuration
 
@@ -44,7 +55,7 @@ it does not estimate duration or urgency. Clarification is displayed as a yes-pr
 without converting it into an automatic decision or inventing a free-text explanation.
 
 The ticket shows the estimates, Choice confidence and distributions, plus available input/output
-token usage and API duration. No ticket field, priority, assignee or route is changed by triage.
+token usage and API duration. Triage does not change ticket fields; a sufficiently confident route is applied by the routing policy.
 Every required answer is validated before publishing the observation; a malformed triage answer
 cannot leave a seemingly valid routing proposal. Question version `qualification-v3` invalidates
 the previous fingerprint so existing enabled observation columns are requalified once. Stored
@@ -75,16 +86,14 @@ policy uses this returned confidence, rather than the selected option’s probab
 
 ## Debug browser verification
 
-The opt-in `JevObservationJourneyTests` starts the real Blazor/Kestrel app on port 5232,
-uses an isolated Git repository and database below `%APPDATA%/KittyClaw-debug/jev-e2e-*`,
-and replaces the TypeSafe HTTP client with a deterministic fixture while disabling host-key detection.
-Playwright saves a fake key through global settings, verifies the cleared password field and zero
-API calls before column activation. The project
-starts with its processor disabled; Playwright activates observation and the processor
-through the column dialog, then verifies the proposal in the ticket. It checks the ticket
-stays in its source column for 32 seconds, no column execution is created, and only one
-TypeSafe fixture request occurs. Screenshots and debug data are retained in that directory.
-The test is skipped by default and requires a free port 5232 and installed Playwright Chromium.
+`JevObservationJourneyTests` starts the real Blazor/Kestrel app on an ephemeral port with
+isolated data under `%APPDATA%/KittyClaw-debug/jev-e2e-*`. It replaces TypeSafe with a
+fixture, disables host-key detection and saves a fake global key through settings. The
+browser configures qualification while leaving the processor disabled, automatically displays a current
+recommendation, checks deduplication and manually applies it. Reload retains the JEV entry
+alongside comments. Enabling the processor then proves automatic routing for a second ticket
+without the legacy automatic-routing flag. Screenshots and debug data are retained there.
+No real project data, TypeSafe requests or provider runs are used.
 
 ```powershell
 $env:KITTYCLAW_JEV_DEBUG_E2E = '1'
@@ -118,15 +127,10 @@ late, a snapshot without evidence may refresh once. Failed requests use the exis
 The ticket shows the source column, actual workflow destination, JEV suggestion, confidence, distribution,
 execution/run ids, missing-evidence notice and historical-context marker when the ticket has changed.
 
-`JevPostRunJourneyTests` uses an ephemeral debug port and isolated data. It runs the real column engine
-with a fixture dispatcher and TypeSafe handler, enables post-run observation through the UI, verifies
-that normal routing reaches Review while JEV suggests Todo, then checks for 32 seconds that no additional
-execution or transition occurs. It uses the same `KITTYCLAW_JEV_DEBUG_E2E=1` opt-in as the initial journey.
-
 ## Human decisions with workflow effects
 
-Both qualification and post-run proposals expose **Accept and apply destination** and **Reject and
-requalify**. With the default manual policy, explicit owner acceptance applies the proposed
+Current routing recommendations expose **Accept and apply destination** and **Reject and
+requalify**. When automatic routing cannot apply a choice, explicit owner acceptance applies the proposed
 column through `TicketService` and its existing manual-routing, assignment and scheduling rules.
 The normal destination processor may consequently start. If the ticket is already at that destination,
 acceptance records approval without replaying the transition or changing ticket freshness.
@@ -148,82 +152,58 @@ be evaluated again; past decisions remain available in the audit history.
 `JevDecisionStore` keeps an immutable `JevProposalDecisions` record keyed by the SHA-256 identity of the
 complete proposal revision. It stores the exact proposal, accepted/rejected outcome, owner, UTC time,
 reason and applied destination. Refreshing a model result cannot rewrite a past human decision. The
-ticket shows the current decision and the full decision history. Human UI actions invoke the manual decision path; the observation worker can invoke the separately
-checked automatic path only for columns that explicitly enable it.
+comment timeline shows past observations and decisions. Human UI actions invoke the manual
+decision path; the observation worker uses the separately checked automatic path for configured
+business routes.
 
-The debug post-run browser journey now also accepts a proposal, verifies that the ordinary destination
-agent runs, reloads the saved decision, then rejects another ticket's proposal and verifies that JEV
-suggests an alternative using the supplied reason without launching another agent. All providers in
-that journey are deterministic fixtures; real project data and production instances are not used.
+## Automatic routing and the next-step recommendation
 
-## Optional automatic routing
+Business routes (outcome routes or a default destination) enable automatic JEV routing without
+requiring the legacy `jevAutomaticRouting` switch. The configured confidence threshold is still
+used (90% by default). Sufficiently confident acceptance reviews remain explicit owner decisions.
 
-In **Configure column → Processor**, enable **Apply JEV routes automatically** and set
-**Minimum JEV confidence (%)**. The checkbox defaults to off for new and existing processors;
-the initial threshold is 90%. Both qualification and post-run proposal modes support it. The
-REST fields are `jevAutomaticRouting` and `jevConfidenceThreshold` (finite number from 0 to 1,
-inclusive). Omitting either preserves its saved value. Both fields live in the authoritative
-`processor.json` and its SQLite projection; automatic routing requires an enabled JEV mode.
+In qualification-only columns, `JevObservationEngine` evaluates tickets and applies eligible
+choices through `JevProposalDecisionService`. For ordinary agent columns with a detected TypeSafe
+credential, `ColumnProcessingEngine` asks JEV after the agent result and memory capitalization,
+before the normal workflow transition. The agent result is included as unverified claims.
+JEV chooses only among configured business destinations plus `none`. Scheduling and waiting
+for child tickets retain their deterministic contracts. Without a detected credential, ordinary
+agent columns retain their existing outcome routing.
 
-After observing a ticket, `JevObservationEngine` attempts to apply an undecided proposal only
-when the column opted in. `JevProposalDecisionService` uses the same atomic ticket/audit path
-as human acceptance, with additional checks before and inside the transaction. Confidence must
-meet or exceed the current threshold. `none`, errors, stale ticket/execution/configuration
-snapshots, disabled processors, paused projects and already-decided revisions cannot route.
-An active, retrying or child-waiting column execution prevents automatic routing. The same
-automatic ticket/source/destination transition cannot repeat within ten minutes, which limits
-qualification-only routing loops; manual acceptance remains available. Existing ticket-routing,
-assignment and scheduling rules still apply. A successful move may start the destination processor.
+A confident JEV choice determines the execution's actual destination; the agent's original
+outcome remains in the execution record. Required skills, success evidence, ticket freshness,
+assignment and scheduling checks still apply. The exact JEV choice, threshold and automatic
+audit record are committed with the ticket move and execution completion. Audit failure rolls
+back the move. A repeated automatic source/destination transition within ten minutes is refused.
+The ordinary success guard also runs when JEV selects a success column that differs from the
+agent's proposed destination, before configured side effects.
 
-A proposal includes a fingerprint of its source mission, instructions and business destinations.
-Legacy proposals without this fingerprint remain available for manual review but cannot apply
-automatically. Changing routing policy or its threshold does not require another inference;
-changing the semantic routing context invalidates automatic application of the old result.
-Below-threshold and ineligible proposals remain visible for manual acceptance or rejection.
+An API error, `none`, or confidence below the threshold falls back to the ordinary agent
+outcome/default routing. Missing credentials also preserve classic routing. No additional
+agent dispatch or manual hold is introduced by this fallback.
+Post-run observations are historical comparisons, not a second automatic routing pass.
 
-Automatic decisions preserve the exact proposal and threshold with `automatic: true` and actor
-`JEV`, sharing the transaction with the move. The ticket displays the current source-column
-policy and distinguishes automatic application from owner decisions in both the current proposal
-and the durable history. Duplicate sweeps cannot replay the same decision. Audit failure rolls
-back the move and emits no status event.
+The ticket leads with **Confirm the ticket’s next step**, the suggested destination and an
+explicit **Move to [destination]** action. Opening the ticket automatically requests a current
+recommendation after interactive rendering; no preliminary request button is required.
+Suggestions are hidden during active processing and in success/failure columns;
+unchanged inputs use the stored result. Only an undecided recommendation matching the current
+column, ticket and processor fingerprint appears here. Rejected, applied and outdated results
+appear as JEV entries alongside comments in the activity timeline, with technical details
+collapsed and no stale action buttons. Decisions remain immutable in `JevProposalDecisions`;
+timeline rendering does not add agent-triggering comments or mutate ticket freshness.
 
-`JevProposalDecisionTests` covers opt-in/defaults, inclusive boundaries, manual override below the
-threshold, persistence with older clients, invalid values, stale/abstained/failed/rejected
-proposals, pause/disable, active executions and repeated transitions. The opt-in
-`JevAutomaticRoutingJourneyTests` uses isolated debug data and an ephemeral Kestrel port, real
-Blazor UI, and fake JEV/agent providers: it verifies the manual default, enables automatic routing
-with a 100% threshold in the column dialog, observes automatic application and the destination
-agent, reloads the audit history, then proves an 80% proposal stays pending and can be rejected.
-It uses `KITTYCLAW_JEV_DEBUG_E2E=1`; it never calls the live TypeSafe API.
-
-## Live API verification of automatic routing
-
-`JevLiveAutomaticRoutingJourneyTests` is a separate paid opt-in journey using the real TypeSafe
-HTTPS transport and the key detected from the machine environment. It neither saves nor logs the
-key. It starts Kestrel on an ephemeral port with unique data under
-`%APPDATA%/KittyClaw-debug/jev-live-auto-*`, leaving existing debug and production instances alone.
-Agents remain simulated, with an actual deliberately failing command captured as verified process
-exit evidence. The shared live transport limits this journey to two requests and never alters a
-model response or confidence score.
-
-Through the column dialog, it enables automatic routing at 50%, verifies a real confidence strictly
-above 50% and the resulting Review → Todo transition with a persisted automatic audit. It then
-raises the threshold to 100% through the UI before creating a second ticket. That proposal must
-have confidence strictly below 100%; it remains in Review for at least 32 seconds, spanning two
-observation sweeps, with no decision, timestamp change or extra agent. Reloading retains the
-manual acceptance control. A model abstention or confidence outside these expected ranges fails
-the scenario rather than fabricating a response. Screenshots and isolated debug data are retained.
-
-```powershell
-$env:KITTYCLAW_JEV_LIVE_E2E = '1'
-dotnet test KittyClaw.Core.Tests --artifacts-path KittyClaw.Core.Tests/bin/jev-postrun-artifacts --filter FullyQualifiedName~JevLiveAutomaticRoutingJourneyTests
-Remove-Item Env:KITTYCLAW_JEV_LIVE_E2E
-```
+`AutomaticJevColumnRoutingTests` covers agent-before-routing order, destination selection,
+uncertainty/abstention/API-error fallback, stale inputs, success evidence and audit rollback. The isolated
+`JevObservationJourneyTests` exercises the directly visible recommendation and action in a column whose processor is
+disabled, comment history after reload, and automatic application after enabling qualification,
+without the legacy automatic-routing flag.
+Use `KITTYCLAW_JEV_DEBUG_E2E=1` for that browser journey; it uses fixture providers only.
 
 ## Acceptance criteria validation
 
 A column can enable **JEV acceptance criteria validation** independently from routing qualification.
-Both new work-review options default to off. A validation column replaces its implicit agent and
+Both new work-review options default to off. A sufficiently confident validation replaces its implicit agent and
 before/after actions with a manual review hold; it cannot combine this mode with routing observation,
 automatic JEV routing or execution-profile selection. Finish or cancel active column executions before
 enabling it. Configure the default destination for owner approval and an outcome route named
@@ -252,7 +232,7 @@ insufficient locally without spending an API call. The ticket shows each criteri
 available model confidence, evidence reference, all captured evidence and the count of unmet or
 unverified criteria. This identifies missing verification as well as missing behavior.
 
-Only owner actions apply outcomes. **Approve and continue** applies the configured default destination.
+For sufficiently confident reviews, only owner actions apply outcomes. **Approve and continue** applies the configured default destination.
 Overriding any unmet/unverified criterion requires a reason. **Request corrections** requires a reason,
 applies the configured `changes_requested` route when present, and adds owner feedback listing the
 missing criteria for the next agent. Direct moves out of an enabled validation column through
@@ -305,7 +285,7 @@ criteria, and approves another ticket through to Done with historical evidence r
 
 ### Ticket presentation
 
-JEV panels lead with a short verdict, criteria checklist or recommended profile, and the next owner action. Proofs, technical diagnostics, probabilities, and past decisions are collapsed by default. Rejection and acceptance overrides reveal a reason field only when needed. Column options live together under the JEV assistance disclosure.
+The current JEV area leads with a next-step recommendation, criteria checklist or recommended profile, and the next owner action. Historical routing observations and decisions live in the comment timeline. Proofs, technical diagnostics, probabilities, and past decisions are collapsed by default. Rejection and acceptance overrides reveal a reason field only when needed. Column options live together under the JEV assistance disclosure.
 
 ### Live work review journey
 

@@ -7,16 +7,19 @@ namespace KittyClaw.Core.Tests.Services;
 public class InstalledUpdateServiceTests
 {
     [Fact]
-    public async Task Download_DoesNotStopHost_AndRestartWaitsForAgentCompletion()
+    public async Task Check_DownloadsAutomaticallyWithoutStoppingHost_AndRestartWaitsForAgentCompletion()
     {
         var client = new FakeClient();
         var runs = new AgentRunRegistry();
         var lifetime = new FakeLifetime();
         var service = Create(client, runs, lifetime);
-        await service.DownloadAsync();
+        await service.CheckAsync();
         Assert.True(service.IsReady);
         Assert.Equal(100, service.Progress);
         Assert.False(lifetime.Stopped);
+        await service.CheckAsync();
+        Assert.Equal(1, client.CheckCount);
+        Assert.Equal(1, client.DownloadCount);
 
         var run = NewRun();
         runs.Register(run);
@@ -69,13 +72,13 @@ public class InstalledUpdateServiceTests
         var client = new FakeClient { FailDownload = true };
         var lifetime = new FakeLifetime();
         var service = Create(client, new AgentRunRegistry(), lifetime);
-        await service.DownloadAsync();
+        await service.CheckAsync();
         Assert.False(service.IsBusy);
         Assert.False(service.IsReady);
         Assert.NotNull(service.Error);
         Assert.False(lifetime.Stopped);
         client.FailDownload = false;
-        await service.DownloadAsync();
+        await service.CheckAsync();
         Assert.True(service.IsReady);
         Assert.Null(service.Error);
     }
@@ -88,6 +91,7 @@ public class InstalledUpdateServiceTests
         await service.CheckAsync();
         Assert.Equal("1.1.0", service.AvailableVersion);
         Assert.True(service.IsReady);
+        Assert.Equal(0, client.DownloadCount);
         service.InstallAndRestart();
         Assert.True(service.IsRestarting);
     }
@@ -99,7 +103,6 @@ public class InstalledUpdateServiceTests
         var lifetime = new FakeLifetime();
         var service = Create(client, new AgentRunRegistry(), lifetime);
         await service.CheckAsync();
-        await service.DownloadAsync();
         service.InstallAndRestart();
         Assert.Equal(0, client.CheckCount);
         Assert.False(client.Prepared);
@@ -107,17 +110,56 @@ public class InstalledUpdateServiceTests
     }
 
     [Fact]
-    public async Task ConcurrentDownloadClicks_OnlyStartOneDownload()
+    public async Task ConcurrentChecks_OnlyStartOneDownload()
     {
         var releaseDownload = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var client = new FakeClient { DownloadBarrier = releaseDownload.Task };
         var service = Create(client, new AgentRunRegistry(), new FakeLifetime());
-        var first = service.DownloadAsync();
-        await service.DownloadAsync();
+        var first = service.CheckAsync();
+        Assert.False(await service.CheckAsync());
         Assert.Equal(1, client.DownloadCount);
+        Assert.True(service.IsBusy);
+        service.InstallAndRestart();
+        Assert.False(client.Prepared);
         releaseDownload.SetResult();
-        await first;
+        Assert.True(await first);
         Assert.True(service.IsReady);
+    }
+
+    [Fact]
+    public async Task Check_WithNoUpdate_DoesNotDownloadOrShowProgress()
+    {
+        var client = new FakeClient { NextVersion = null };
+        var lifetime = new FakeLifetime();
+        var service = Create(client, new AgentRunRegistry(), lifetime);
+        await service.CheckAsync();
+        Assert.Equal(0, client.DownloadCount);
+        Assert.Null(service.AvailableVersion);
+        Assert.Null(service.Error);
+        Assert.False(service.IsBusy);
+        Assert.False(lifetime.Stopped);
+    }
+
+    [Fact]
+    public async Task FailedCheck_IsRetriedByNextPoll_AndDownloadsWhileAgentsRun()
+    {
+        var client = new FakeClient { FailCheck = true };
+        var runs = new AgentRunRegistry();
+        runs.Register(NewRun());
+        var lifetime = new FakeLifetime();
+        var service = Create(client, runs, lifetime);
+        Assert.False(await service.CheckAsync());
+        Assert.Null(service.Error);
+        Assert.Null(service.AvailableVersion);
+        Assert.False(service.IsBusy);
+        Assert.Equal(0, client.DownloadCount);
+        client.FailCheck = false;
+        Assert.True(await service.CheckAsync());
+        Assert.True(service.IsReady);
+        Assert.Null(service.Error);
+        Assert.False(lifetime.Stopped);
+        service.InstallAndRestart();
+        Assert.False(client.Prepared);
     }
 
     [Fact]
@@ -150,6 +192,7 @@ public class InstalledUpdateServiceTests
     private sealed class FakeClient : IInstalledUpdateClient
     {
         public bool IsSupported { get; set; } = true;
+        public string? NextVersion { get; set; } = "1.1.0";
         public string? PendingVersion { get; set; }
         public bool FailPrepare { get; set; }
         public bool FailDownload { get; set; }
@@ -162,7 +205,7 @@ public class InstalledUpdateServiceTests
         {
             CheckCount++;
             if (FailCheck) throw new IOException("Offline");
-            return Task.FromResult<string?>("1.1.0");
+            return Task.FromResult(NextVersion);
         }
         public async Task DownloadAsync(Action<int> progress, CancellationToken ct)
         {

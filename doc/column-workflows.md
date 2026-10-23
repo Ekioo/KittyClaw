@@ -39,6 +39,15 @@ and ensures a partially configured workflow cannot strand a ticket with no avail
 6. selects an outcome route (switch-like rule) or the default route;
 7. moves the ticket atomically to the target column, possibly in another pipeline.
 
+Explicit ticket dependencies are checked before claiming new work, delayed or manual retries,
+interrupted executions, and parents resuming after their children finish. A prerequisite is
+resolved only when its current column has the `Success` role, using the same definition as
+the legacy dispatch gate. Cards with unresolved prerequisites stay in their current column
+(including Todo), without comments, new executions, or consumed retry attempts. The filter
+runs before the candidate window so other eligible cards can be selected. Once all prerequisites
+reach success, the next engine scan can claim the card. `Blocked` is reserved for obstacles
+requiring external intervention or an indispensable decision, rather than ordinary delivery dependencies.
+
 ### Native processor-memory capitalization
 
 Every successful agent dispatch reaches a durable post-processing checkpoint before after-actions

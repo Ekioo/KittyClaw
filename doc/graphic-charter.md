@@ -78,6 +78,55 @@ Status-grid uses a fixed mapping: `ok` → `--accent-success`, `warn` → `#f59e
 - **Tile snap grid**: 20px (defined as `SNAP` in `dashboard.js` and the
   `snap()` helper in `DashboardService`)
 
+## Responsive layout: desktop and mobile
+
+Desktop layouts apply above 767px; phone overrides live in `css/mobile.css`, loaded
+after component and motion styles. Reuse the same palette and hierarchy on both.
+Responsive rules must override the specificity of compact desktop rules, including
+the header rules in `settings-editor.css`.
+
+| Area | Desktop | Mobile (up to 767px) |
+|---|---|---|
+| Page geometry | Bounded reading widths; multi-column layouts where useful | Fit the viewport; no document-level horizontal overflow or automatic zoom-out |
+| Spacing | Separate sections with purposeful gutters | Remove nested outer gutters and redundant card frames; use roughly .5–.75rem internal padding |
+| Header | Directly visible actions | Wrap title and navigation; full-width search; project secondary actions behind an accessible Actions toggle |
+| Pipelines | Segmented controls | Full-width surface matching the header and board, no black surrounding strip; active project pipeline underlined |
+| Kanban | Multiple columns and drag-and-drop | One full-width column, mandatory horizontal snapping, one stop per column; independent vertical ticket scrolling |
+| Column navigation | Columns visible together | Current name and `position / total`, swipe hint, 44px previous/next buttons disabled at the ends; hidden for one column |
+| Ticket details | Overlay with side-by-side sections | Full-screen overlay with vertically stacked sections; change column through its native selector |
+| Forms and settings | Inline rows when space permits | Inputs receive a full row; actions wrap below; long paths and identifiers wrap; wide tables scroll within their own section |
+| Dashboard | Saved free canvas with drag and resize | Tiles stack to screen width without overlaps or empty canvas space; preserve saved desktop coordinates and disable canvas drag/resize |
+| Drawers and dialogs | Bounded surfaces | Fit screen width and dynamic viewport height; preserve safe-area spacing and reachable close controls |
+
+- Use `100dvh` for full-screen mobile surfaces. Account for safe-area insets.
+- Touch actions need at least 44px targets. Hover-only controls must be visible on
+  coarse pointers, and keyboard focus must remain visible on both layouts.
+- Text-entry controls use at least 16px on phones to prevent iOS focus zoom; never
+  disable browser zoom in the viewport meta tag.
+- Keep horizontal scrolling local to meaningful content: column pagination,
+  long tab strips, wide tables, or code. Never hide page overflow to conceal a
+  sizing bug. Long paths use `overflow-wrap: anywhere`.
+- Mobile display rules must not persist new desktop canvas coordinates or change
+  ticket data. Changing a ticket's column uses existing service validation.
+- Instruction chat, execution logs, and tile-creation chat fill the mobile screen.
+  Keep the close button at least 44px, the composer reachable, and scrolling inside
+  the message/log area. The chat model picker occupies its own row; log timestamps
+  must not collide with event labels. Desktop retains bounded drawers and dialogs.
+
+### Responsive verification
+
+Use the isolated debug instance on port 5232 with its own data and mock providers.
+Check at 320, 390, and 430px wide and at desktop width (1440px), including populated
+content and long identifiers. Inspect rendered screenshots as well as geometry.
+For mobile, both `innerWidth` and document scroll width must match the requested
+viewport: a layout overflow can enlarge the emulated visual viewport itself.
+
+Cover project/unified/nested Kanbans, project cards, global/project settings,
+workflows, approvals, costs, dashboard tiles, ticket details, and relevant dialogs
+and drawers. Exercise navigation, column swipes and arrows, tile selection, and
+dialog opening/closing without dispatching real agents. Verify desktop controls
+remain accessible after responsive changes.
+
 ## Form controls
 
 Inputs, textareas, and selects in popups must use this exact pattern (see
@@ -156,3 +205,16 @@ When adding a new template, mirror the conventions:
 - SVG charts use `viewBox` so they scale with the tile; no fixed pixel sizes.
 - No client-side JS dependency unless absolutely required (mermaid is the lone
   exception, lazy-loaded from CDN in `dashboard.js`).
+
+### Keyboard and motion preferences
+
+- Native buttons expose ticket opening, sub-ticket navigation, priority selection,
+  and project-lane expansion without relying on pointer events.
+- Hover-revealed actions must also appear on `:focus-within` and remain visible
+  on coarse pointers or devices without hover.
+- `css/motion.css`, loaded after the component styles, removes nonessential
+  movement for `prefers-reduced-motion: reduce` while preserving status text,
+  static loading indicators, focus rings, and color feedback. Scoped component
+  animations handle this preference in their own stylesheets.
+- Drag targets retain stable geometry. Dashboard drag previews use transforms;
+  persisted layout coordinates are committed only when the pointer is released.

@@ -8,7 +8,7 @@ namespace KittyClaw.Core.Automation;
 /// </summary>
 public static class ModelCostEstimator
 {
-    public const string RateCardVersion = "2026-10-22";
+    public const string RateCardVersion = "2026-10-23";
 
     public static bool TryEstimate(
         string? model,
@@ -16,7 +16,8 @@ public static class ModelCostEstimator
         int outputTokens,
         int cacheReadTokens,
         int cacheWriteTokens,
-        out decimal costUsd)
+        out decimal costUsd,
+        bool requestContext = false)
     {
         costUsd = 0m;
         if (string.IsNullOrWhiteSpace(model)) return false;
@@ -36,6 +37,10 @@ public static class ModelCostEstimator
             // https://docs.typesafe.ai/models, verified 2026-10-22: input only, output is free.
             "jev-1.13.0" or "jev-1.14.0" => new(0.042m, 0m, 0m, 0m),
             // https://developers.openai.com/api/docs/pricing (standard, 30-minute writes).
+            "gpt-6-astra" => new(10m, 50m, 1m, 12.5m),
+            "gpt-6.1-sol" => new(2m, 10m, 0.1m, 2.5m),
+            "gpt-6-sol" => new(2m, 10m, 0.2m, 2.5m),
+            "gpt-6-luna" => new(0.1m, 0.5m, 0.01m, 0.125m),
             "gpt-5.6-sol" => new(4m, 20m, 0.4m, 5m),
             "gpt-5.6-terra" => new(2.5m, 15m, 0.25m, 3.125m),
             "gpt-5.6-luna" => new(1m, 6m, 0.1m, 1.25m),
@@ -60,6 +65,10 @@ public static class ModelCostEstimator
 
         // xAI doubles all token rates for requests whose context reaches 200k tokens.
         var inputContext = (long)inputTokens + cacheReadTokens + cacheWriteTokens;
+        // Only individual requests establish a long-context tier; never infer it from run totals.
+        if (requestContext && normalized.StartsWith("gpt-6", StringComparison.OrdinalIgnoreCase) && inputContext > 272_000)
+            rates = new(rates.Value.Input * 2m, rates.Value.Output * 1.5m,
+                rates.Value.CacheRead * 2m, rates.Value.CacheWrite * 2m);
         if (normalized.Equals("claude-haiku-5-5", StringComparison.OrdinalIgnoreCase) && inputContext > 100_000)
             rates = rates.Value.Scale(5m);
         if (normalized.StartsWith("grok-", StringComparison.OrdinalIgnoreCase) && inputContext >= 200_000)

@@ -1,4 +1,5 @@
 {
+  "DashboardTiles": "Tuiles du tableau de bord",
   "CardActiveRunTooltip": "Ouvrir l'agent en cours : {0}",
   "CardLastRunTooltip": "Voir la dernière exécution : {0} · {1}",
   "TicketCurrentColumn": "Colonne",
@@ -9,6 +10,7 @@
   "SortByAssignee": "Assigné",
   "SortByCreated": "Date de création",
   "SortByUpdated": "Date de modification",
+  "SortByTokens": "Nombre de tokens",
   "SortAsc": "Croissant",
   "SortDesc": "Décroissant",
   "KanbanView": "Kanban",
@@ -482,5 +484,12 @@
   "JevVerificationProof": "Résultat des vérifications",
   "JevRepositoryProof": "Modifications du projet",
   "JevSettings": "Aide JEV",
-  "JevConfirm": "Confirmer"
+  "JevConfirm": "Confirmer",
+  "JevNextAction": "JEV · Prochaine étape",
+  "JevValidateNextStep": "Validez la prochaine étape du ticket",
+  "JevMoveTo": "Déplacer vers {0}",
+  "JevAsk": "Que faire de ce ticket ?",
+  "JevThinking": "JEV examine le ticket…",
+  "JevClassicFallback": "JEV n'a pas de réponse suffisamment sûre. Le fonctionnement habituel sans JEV s'applique.",
+  "JevRoutingAutomaticDefault": "JEV choisit et applique automatiquement les destinations configurées après le traitement, si sa confiance atteint ce seuil. En cas d'incertitude, d'absence de destination ou d'indisponibilité, le routage classique s'applique."
 }

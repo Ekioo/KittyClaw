@@ -1,0 +1,13 @@
+{
+  "TicketAcceptanceCriteria": "Criterios de aceptación",
+  "AddCriterion": "Añadir criterio",
+  "CriterionStatus": "Estado",
+  "EditCriterion": "Editar criterio y evidencias",
+  "DeleteCriterion": "Eliminar criterio",
+  "CriterionEvidence": "Evidencias",
+  "CriterionText": "Criterio",
+  "CriterionNotEvaluated": "Sin evaluar",
+  "RemoveEvidence": "Eliminar evidencia",
+  "ProcessorEvaluateAcceptance": "Evaluar los criterios de aceptación del ticket",
+  "ProcessorEvaluateAcceptanceHelp": "Pedir a este procesador que evalúe los criterios pertinentes del ticket y adjunte evidencias. Los resultados se guardan antes del enrutamiento. Desactivado por defecto."
+}

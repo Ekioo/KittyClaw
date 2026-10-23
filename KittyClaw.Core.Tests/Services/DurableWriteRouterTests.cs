@@ -27,6 +27,28 @@ public sealed class DurableWriteRouterTests
     }
 
     [Fact]
+    public async Task ExistingLongNamedMaintenanceWorktree_IsReusedWithoutMovingItsFiles()
+    {
+        using var fixture = await Fixture.CreateAsync(withQueue: true, productionTopology: true,
+            projectName: "legacy-dashboard-" + new string('x', 40));
+        var legacy = Path.Combine(Path.GetDirectoryName(fixture.Repository)!,
+            Path.GetFileName(fixture.Repository) + ".worktrees", "maintenance-" + fixture.Slug);
+        Git(fixture.Repository, "worktree", "add", "-b", $"maintenance/{fixture.Slug}", legacy, "integration");
+
+        var route = await fixture.Router.ResolveAsync(fixture.Slug, null, [".dashboard"]);
+
+        Assert.Equal(legacy, route.RootPath);
+        Assert.Single(Directory.GetDirectories(Path.GetDirectoryName(legacy)!));
+        var directory = Path.Combine(route.RootPath, ".dashboard", "proof");
+        Directory.CreateDirectory(directory);
+        await File.WriteAllTextAsync(Path.Combine(directory, "output.md"), "Legacy worktree retained");
+        var validation = await fixture.Router.CommitAndQueueAsync(fixture.Slug, route, "Update legacy dashboard");
+        Assert.Equal(DurableWriteValidationStatus.Ready, validation.Status);
+        Assert.Equal(WorktreeMergeStatus.Pending, Assert.Single(await fixture.Queue!.ListAsync(fixture.Slug)).Status);
+        Assert.Empty(Git(fixture.Repository, "status", "--porcelain"));
+    }
+
+    [Fact]
     public async Task MaintenanceRoutes_AreSerializedUntilTheCurrentWriteIsValidated()
     {
         using var fixture = await Fixture.CreateAsync();
@@ -587,7 +609,8 @@ public sealed class DurableWriteRouterTests
         public static async Task<Fixture> CreateAsync(
             bool withQueue = false,
             bool productionTopology = false,
-            bool useForwardSlashesForWorkspace = false)
+            bool useForwardSlashesForWorkspace = false,
+            string projectName = "router")
         {
             var root = new TempDir();
             var workspace = root.Path;
@@ -603,7 +626,7 @@ public sealed class DurableWriteRouterTests
                 Git(repository, "commit", "--allow-empty", "-m", "initial");
             }
             var projects = new ProjectService(Path.Combine(root.Path, "data"));
-            var project = await projects.CreateProjectAsync("router");
+            var project = await projects.CreateProjectAsync(projectName);
             var configuredWorkspace = productionTopology ? workspace : repository;
             if (useForwardSlashesForWorkspace)
                 configuredWorkspace = configuredWorkspace.Replace('\\', '/');

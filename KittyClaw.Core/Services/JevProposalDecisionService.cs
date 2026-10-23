@@ -43,9 +43,12 @@ public sealed class JevProposalDecisionService(ProjectService projects, TicketSe
             {
                 if (!proposal.Choice.StartsWith("column-", StringComparison.Ordinal) || !int.TryParse(proposal.Choice[7..], out var target))
                     throw new InvalidOperationException("This proposal has no destination to apply.");
-                var source = await processors.GetAsync(slug, proposal.SourceColumnId)
-                    ?? throw new InvalidOperationException("The source processor no longer exists.");
                 var columns = await db.BoardColumns.AsNoTracking().ToListAsync();
+                var configuredSource = await processors.GetAsync(slug, proposal.SourceColumnId);
+                var sourceColumn = columns.SingleOrDefault(c => c.Id == proposal.SourceColumnId)
+                    ?? throw new InvalidOperationException("The source column no longer exists.");
+                var source = proposal.ExecutionId is null ? JevQualificationService.RecommendationProcessor(configuredSource, sourceColumn, columns)
+                    : configuredSource ?? throw new InvalidOperationException("The source processor no longer exists.");
                 if (!JevQualificationService.BuildDestinations(source, columns).ContainsKey(proposal.Choice))
                     throw new InvalidOperationException("The proposed route is no longer configured.");
                 if (!source.Enabled || proposal.TicketUpdatedAt != ticket.UpdatedAt || proposal.TicketColumnId != ticket.ColumnId)
@@ -53,7 +56,7 @@ public sealed class JevProposalDecisionService(ProjectService projects, TicketSe
                 if (proposal.ExecutionId is null)
                 {
                     var feedback = JevQualificationService.RejectionFeedback(await decisions.ListAsync(slug, ticketId), source, ticket);
-                    if (!source.JevObservationOnly || proposal.Fingerprint != JevQualificationService.Fingerprint(source, ticket, columns, feedback.Count == 0 ? null : feedback))
+                    if (source.JevAcceptanceValidation || !source.HasBusinessRouting || proposal.Fingerprint != JevQualificationService.Fingerprint(source, ticket, columns, feedback.Count == 0 ? null : feedback, proposal.RoutingResult))
                         throw new InvalidOperationException("The qualification context changed. Obtain a new proposal before accepting it.");
                 }
                 else
@@ -104,8 +107,8 @@ public sealed class JevProposalDecisionService(ProjectService projects, TicketSe
         JevRoutingProposal proposal, int proposalTicketId, double? expectedThreshold = null)
     {
         var source = await db.ColumnProcessors.AsNoTracking().SingleOrDefaultAsync(p => p.ColumnId == proposal.SourceColumnId);
-        if (source is null || !source.Enabled || !source.JevAutomaticRouting ||
-            (proposal.ExecutionId is null ? !source.JevObservationOnly : !source.JevPostRunObservation) ||
+        if (source is null || !source.UsesAutomaticJevRouting ||
+            (proposal.ExecutionId is not null && !source.JevPostRunObservation) ||
             !double.IsFinite(source.JevConfidenceThreshold) || source.JevConfidenceThreshold < 0 || source.JevConfidenceThreshold > 1 ||
             proposal.Confidence is not double confidence || !double.IsFinite(confidence) || confidence < source.JevConfidenceThreshold ||
             (expectedThreshold.HasValue && expectedThreshold != source.JevConfidenceThreshold) ||

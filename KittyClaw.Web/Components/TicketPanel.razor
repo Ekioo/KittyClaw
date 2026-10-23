@@ -9,6 +9,9 @@
 @inject LabelService LabelService
 @inject ColumnService ColumnService
 @inject ColumnProcessorService ProcessorService
+@inject JevQualificationService JevQualification
+@inject JevDecisionStore JevDecisions
+@inject JevWorkReviewService JevWorkReviews
 @inject MemberService MemberService
 @inject TicketWorktreeService TicketWorktreeService
 @inject WorktreeMergeQueueService WorktreeMergeQueueService
@@ -30,9 +33,11 @@
         <div class="ticket-panel">
         <div class="ticket-panel-header">
             <div class="editable-field">
-                <div class="priority-dot-btn" @onclick="TogglePriorityPicker" title="@L["ChangePriority"]">
+                <button type="button" class="priority-dot-btn" @onclick="TogglePriorityPicker"
+                        title="@L["ChangePriority"]" aria-label="@L["ChangePriority"]"
+                        aria-expanded="@(_showPriorityPicker ? "true" : "false")">
                     <span class="priority-dot priority-@GetPriorityClass(_ticket.Priority)"></span>
-                </div>
+                </button>
                 @if (_showPriorityPicker)
                 {
                     <div class="priority-dropdown">
@@ -66,10 +71,20 @@
 
         <div class="ticket-properties-row">
         <div class="ticket-column-row" data-testid="ticket-current-column">
-            <span class="ticket-column-badge" title="@L["TicketCurrentColumn"]" aria-label="@(L["TicketCurrentColumn"] + ": " + (CurrentColumn()?.Name ?? _ticket.Status))">
+            <label class="ticket-column-badge" title="@L["TicketCurrentColumn"]">
                 <span class="sub-ticket-status-dot" style="background: @(CurrentColumn()?.Color ?? GetColumnColor(_ticket.Status))" aria-hidden="true"></span>
-                @(CurrentColumn()?.Name ?? _ticket.Status)
-            </span>
+                <select class="ticket-column-select" aria-label="@L["TicketCurrentColumn"]"
+                        value="@CurrentColumn()?.Id" @onchange="ChangeColumnAsync" disabled="@_movingColumn">
+                    @foreach (var column in _columns)
+                    {
+                        <option value="@column.Id">@column.Name</option>
+                    }
+                </select>
+            </label>
+            @if (_columnMoveError is not null)
+            {
+                <span class="dep-error" role="alert">@_columnMoveError</span>
+            }
         </div>
 
         @* ── Labels row ── *@
@@ -353,6 +368,8 @@
                     }
                 </div>
 
+                <TicketAcceptanceCriteria Slug="@Slug" Ticket="@_ticket" OnChanged="@RefreshAsync" />
+
                 @if (CurrentColumn() is { } guidanceColumn &&
                     guidanceColumn.Role is ColumnRole.Waiting or ColumnRole.OwnerAction)
                 {
@@ -398,7 +415,15 @@
                     </div>
                     @foreach (var item in GetTimeline())
                     {
-                        @if (item.IsComment)
+                        @if (item.Proposal is not null)
+                        {
+                            <JevHistoryEntry Proposal="@item.Proposal" Decision="@item.Decision" Columns="@_columns" />
+                        }
+                        else if (item.WorkDecision is not null)
+                        {
+                            <JevWorkHistoryEntry Decision="@item.WorkDecision" />
+                        }
+                        else if (item.IsComment)
                         {
                             <div class="timeline-comment">
                                 <div class="timeline-comment-header">
@@ -579,6 +604,34 @@
         : _columns.FirstOrDefault(column => column.Id == _ticket.ColumnId)
           ?? _columns.FirstOrDefault(column => column.Name.Equals(_ticket.Status, StringComparison.OrdinalIgnoreCase));
 
+    private bool _movingColumn;
+    private string? _columnMoveError;
+
+    private async Task ChangeColumnAsync(ChangeEventArgs args)
+    {
+        if (_movingColumn || _ticket is null || !int.TryParse(args.Value?.ToString(), out var id)) return;
+        var column = _columns.FirstOrDefault(c => c.Id == id);
+        if (column is null || column.Id == CurrentColumn()?.Id) return;
+        var ticketId = _ticket.Id;
+        var oldStatus = _ticket.Status;
+        var oldColumnId = _ticket.ColumnId;
+        var pipelineId = _ticket.PipelineId;
+        _movingColumn = true;
+        _columnMoveError = null;
+        try
+        {
+            await TicketService.UpdateTicketAsync(Slug, ticketId, author: "owner",
+                status: column.Name, pipelineId: pipelineId, columnId: column.Id, enforceRouting: true);
+            PushUndo?.Invoke($"{L["UndoMove"]} #{ticketId}", async () =>
+                await TicketService.UpdateTicketAsync(Slug, ticketId, author: "owner",
+                    status: oldStatus, pipelineId: pipelineId, columnId: oldColumnId));
+            await RefreshAsync();
+            BoardUpdateNotifier.NotifyProjectUpdated(Slug);
+        }
+        catch (InvalidOperationException ex) { _columnMoveError = ex.Message; }
+        finally { _movingColumn = false; }
+    }
+
     private string WaitingGuidance(BoardColumn column)
     {
         if (!string.IsNullOrWhiteSpace(column.UserGuidance))
@@ -677,6 +730,7 @@
     private async Task LoadAsync()
     {
         _ticket = await TicketService.GetTicketAsync(Slug, TicketId);
+        await LoadJevHistoryAsync();
         _summaries = await TicketService.ListTicketsAsync(Slug);
         _columns = _ticket is null ? [] : await ColumnService.ListColumnsAsync(Slug, _ticket.PipelineId);
         _allLabels = await LabelService.ListLabelsAsync(Slug);
@@ -691,6 +745,7 @@
     private async Task RefreshAsync()
     {
         _ticket = await TicketService.GetTicketAsync(Slug, TicketId);
+        await LoadJevHistoryAsync();
         _summaries = await TicketService.ListTicketsAsync(Slug);
         if (_ticket is not null)
             _columns = await ColumnService.ListColumnsAsync(Slug, _ticket.PipelineId);
@@ -887,7 +942,27 @@
 
     // ── Timeline ──
 
-    private record TimelineItem(DateTime At, string Author, bool IsComment, string Text, int? Id);
+    private record TimelineItem(DateTime At, string Author, bool IsComment, string Text, int? Id,
+        JevRoutingProposal? Proposal = null, JevProposalDecision? Decision = null, JevWorkDecision? WorkDecision = null);
+    private List<TimelineItem> _jevHistory = [];
+    private async Task LoadJevHistoryAsync()
+    {
+        var decisions = await JevDecisions.ListAsync(Slug, TicketId);
+        var proposals = await JevQualification.GetPostRunAsync(Slug, TicketId);
+        if (await JevQualification.GetAsync(Slug, TicketId) is { } qualification &&
+            (qualification.TicketUpdatedAt != _ticket?.UpdatedAt || qualification.TicketColumnId != _ticket?.ColumnId ||
+                decisions.Any(d => d.ProposalId == JevDecisionStore.ProposalId(qualification))))
+            proposals.Add(qualification);
+        _jevHistory = proposals.Concat(decisions.Select(d => d.Proposal))
+            .DistinctBy(JevDecisionStore.ProposalId)
+            .Select(p =>
+            {
+                var decision = decisions.FirstOrDefault(d => d.ProposalId == JevDecisionStore.ProposalId(p));
+                return new TimelineItem(decision?.DecidedAt ?? p.ObservedAt, "JEV", false, "", null, p, decision);
+            }).ToList();
+        _jevHistory.AddRange((await JevWorkReviews.DecisionsAsync(Slug, TicketId))
+            .Select(d => new TimelineItem(d.DecidedAt, "JEV", false, "", null, WorkDecision: d)));
+    }
 
     private IEnumerable<TimelineItem> GetTimeline()
     {
@@ -895,7 +970,10 @@
         return _ticket.Comments
             .Select(c => new TimelineItem(c.CreatedAt, c.Author, true, c.Content, c.Id))
             .Concat(_ticket.Activities
+                .Where(a => !a.Text.StartsWith("JEV proposal ", StringComparison.Ordinal) && !a.Text.StartsWith("Automatic routing. JEV proposal ", StringComparison.Ordinal) &&
+                    !a.Text.StartsWith("JEV acceptance ", StringComparison.Ordinal) && !a.Text.StartsWith("JEV profile ", StringComparison.Ordinal))
                 .Select(a => new TimelineItem(a.CreatedAt, ActivityAuthor(a.Author), false, a.Text, null)))
+            .Concat(_jevHistory)
             .OrderByDescending(x => x.At);
     }
 
@@ -1145,7 +1223,11 @@
         {
             var restored = await TicketService.CreateTicketAsync(Slug, t.Title, t.Description, t.CreatedBy, t.Status, labelIds, t.Priority, t.AssignedTo, t.ParentId, t.PipelineId, t.ColumnId, t.BlocksParent);
             if (restored is not null)
+            {
+                foreach (var criterion in t.AcceptanceCriteria)
+                    await TicketService.SaveAcceptanceCriterionAsync(Slug, restored.Id, null, new(criterion.Text, criterion.Status, criterion.Evidence));
                 await OnMutatedTicket.InvokeAsync(restored.Id);
+            }
         });
         _confirmDelete = false;
         await OnDeleted.InvokeAsync();

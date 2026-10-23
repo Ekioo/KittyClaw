@@ -1189,6 +1189,111 @@ public sealed class ColumnExecutionServiceTests : IDisposable
         Assert.Equal(success.Id, (await _tickets.GetTicketAsync(project.Slug, ticket.Id))!.ColumnId);
     }
 
+    [Fact]
+    public async Task Dependencies_wait_silently_until_all_reach_custom_success_column()
+    {
+        var project = await _projects.CreateProjectAsync("Dependency queue");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Todo");
+        var success = await _columns.CreateColumnAsync(project.Slug, "Delivered", role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, success.Id);
+        var first = await _tickets.CreateTicketAsync(project.Slug, "First prerequisite");
+        var second = await _tickets.CreateTicketAsync(project.Slug, "Second prerequisite");
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Waiting", status: source.Name, columnId: source.Id);
+        await _tickets.AddDependencyAsync(project.Slug, ticket.Id, first.Id);
+        await _tickets.AddDependencyAsync(project.Slug, ticket.Id, second.Id);
+        var before = await _tickets.GetTicketAsync(project.Slug, ticket.Id);
+
+        Assert.Null(await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow));
+        await _tickets.MoveTicketAsync(project.Slug, first.Id, success.Name, "owner");
+        Assert.Null(await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow));
+        Assert.Null(await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow));
+        var waiting = await _tickets.GetTicketAsync(project.Slug, ticket.Id);
+        Assert.Equal(before!.UpdatedAt, waiting!.UpdatedAt);
+        Assert.Equal(before.Description, waiting.Description);
+        Assert.Equal(before.Comments.Count, waiting.Comments.Count);
+        Assert.Equal(before.Activities.Count, waiting.Activities.Count);
+        Assert.Equal(2, waiting.BlockedBy.Count);
+        Assert.Empty(await _executions.ListAsync(project.Slug));
+
+        await _tickets.MoveTicketAsync(project.Slug, second.Id, success.Name, "owner");
+        Assert.Equal(ticket.Id, (await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow))!.TicketId);
+        Assert.Equal(source.Id, (await _tickets.GetTicketAsync(project.Slug, ticket.Id))!.ColumnId);
+    }
+
+    [Fact]
+    public async Task Dependency_filter_selects_eligible_card_beyond_first_window()
+    {
+        var project = await _projects.CreateProjectAsync("Dependency selection");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Todo");
+        var success = await _columns.CreateColumnAsync(project.Slug, "Delivered", role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, success.Id);
+        var blocker = await _tickets.CreateTicketAsync(project.Slug, "Open prerequisite");
+        for (var index = 0; index < 51; index++)
+        {
+            var waiting = await _tickets.CreateTicketAsync(project.Slug, $"Waiting {index}", status: source.Name, columnId: source.Id);
+            await _tickets.AddDependencyAsync(project.Slug, waiting.Id, blocker.Id);
+        }
+        var eligible = await _tickets.CreateTicketAsync(project.Slug, "Eligible", status: source.Name, columnId: source.Id);
+        Assert.Equal(eligible.Id, (await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow))!.TicketId);
+    }
+
+    [Theory]
+    [InlineData(ColumnRole.Normal)]
+    [InlineData(ColumnRole.Failure)]
+    public async Task Dependency_in_non_success_column_stays_unresolved(ColumnRole role)
+    {
+        var project = await _projects.CreateProjectAsync("Dependency roles");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Todo");
+        var destination = await _columns.CreateColumnAsync(project.Slug, "Done", role: role);
+        // Projects already contain Done with Success; explicitly change its role for this case.
+        destination = (await _columns.UpdateColumnAsync(project.Slug, destination.Id, role: role))!;
+        Assert.Equal(role, destination.Role);
+        var processor = await SaveProcessor(project.Slug, source.Id, destination.Id);
+        var blocker = await _tickets.CreateTicketAsync(project.Slug, "Prerequisite", status: destination.Name, columnId: destination.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Waiting", status: source.Name, columnId: source.Id);
+        await _tickets.AddDependencyAsync(project.Slug, ticket.Id, blocker.Id);
+        Assert.Null(await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow));
+    }
+
+    [Theory]
+    [InlineData("retry")]
+    [InlineData("manual_retry")]
+    [InlineData("recovery")]
+    [InlineData("children")]
+    public async Task Resumed_claims_recheck_dependencies_without_consuming_attempts(string mode)
+    {
+        var project = await _projects.CreateProjectAsync("Dependency resume");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Todo");
+        var success = await _columns.CreateColumnAsync(project.Slug, "Delivered", role: ColumnRole.Success);
+        var processor = await SaveProcessor(project.Slug, source.Id, success.Id);
+        var ticket = await _tickets.CreateTicketAsync(project.Slug, "Resume", status: source.Name, columnId: source.Id);
+        var execution = (await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow))!;
+        var blocker = await _tickets.CreateTicketAsync(project.Slug, "New prerequisite");
+        await _tickets.AddDependencyAsync(project.Slug, ticket.Id, blocker.Id);
+        await using (var db = _projects.GetProjectDb(project.Slug))
+        {
+            var row = await db.ColumnExecutions.FindAsync(execution.Id);
+            row!.Status = mode switch
+            {
+                "children" => ColumnExecutionStatus.WaitingForChildren,
+                "manual_retry" => ColumnExecutionStatus.Failed,
+                "retry" => ColumnExecutionStatus.Retrying,
+                _ => ColumnExecutionStatus.Running,
+            };
+            await db.SaveChangesAsync();
+        }
+        if (mode == "manual_retry") Assert.True(await _executions.RetryAsync(project.Slug, execution.Id));
+        if (mode == "recovery") await _executions.RecoverInterruptedAsync(project.Slug);
+        var before = Assert.Single(await _executions.ListAsync(project.Slug));
+        Assert.Null(await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow.AddMinutes(1)));
+        var after = Assert.Single(await _executions.ListAsync(project.Slug));
+        Assert.Equal(before.Status, after.Status);
+        Assert.Equal(before.Attempt, after.Attempt);
+        await _tickets.MoveTicketAsync(project.Slug, blocker.Id, success.Name, "owner");
+        var resumed = await _executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow.AddMinutes(1));
+        Assert.Equal(execution.Id, resumed!.Id);
+    }
+
     private Task<ColumnProcessor> SaveProcessor(
         string slug, int sourceId, int defaultTargetId,
         TicketSelectionOrder selectionOrder = TicketSelectionOrder.Position,

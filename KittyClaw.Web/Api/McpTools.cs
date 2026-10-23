@@ -35,6 +35,29 @@ public sealed class McpTools(
         Converters = { new JsonStringEnumConverter() },
     };
 
+    [McpServerTool(Name = "save_acceptance_criterion")]
+    [Description("Add or update one ticket acceptance criterion with status NotEvaluated, PASS, FAIL or PARTIAL and optional evidence. Read criteria through get_ticket. Evidence is plain text, JSON, or base64 image content with its media type. Updates replace this criterion only; supply its existing evidence to retain it.")]
+    public async Task<TicketAcceptanceCriterion> SaveAcceptanceCriterion(string project, int id, SaveAcceptanceCriterionRequest criterion, string? criterionId = null)
+    {
+        await RequireProjectAsync(project);
+        try {
+            var result = await tickets.SaveAcceptanceCriterionAsync(project, id, criterionId, criterion);
+            if (result is null) throw new McpException("Ticket or criterion not found.");
+            notifier.NotifyProjectUpdated(project);
+            return result;
+        } catch (InvalidOperationException ex) { throw new McpException(ex.Message); }
+    }
+
+    [McpServerTool(Name = "delete_acceptance_criterion", Destructive = true)]
+    [Description("Delete one acceptance criterion and its evidence from a ticket.")]
+    public async Task<bool> DeleteAcceptanceCriterion(string project, int id, string criterionId)
+    {
+        await RequireProjectAsync(project);
+        var deleted = await tickets.DeleteAcceptanceCriterionAsync(project, id, criterionId);
+        if (deleted) notifier.NotifyProjectUpdated(project);
+        return deleted;
+    }
+
     [McpServerTool(Name = "list_projects", ReadOnly = true, Idempotent = true)]
     [Description("List all KittyClaw projects (kanban boards) with their slugs. The slug identifies the project in every other tool.")]
     public Task<List<Project>> ListProjects() => projects.ListProjectsAsync();

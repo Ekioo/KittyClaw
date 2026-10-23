@@ -53,3 +53,8 @@ Thumbs.db
 # Execution evidence and private exports are local-only. Maintained synthetic
 # fixtures belong in their owning test project's Fixtures/ directory.
 evidence/
+# Isolated builds, test data and diagnostic scratch.
+/.artifacts/
+
+# Local audit scratch and temporary test runs.
+/.ci-audit/

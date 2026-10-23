@@ -12,6 +12,54 @@ namespace KittyClaw.Core.Tests.Services;
 public sealed class JevWorkReviewTests
 {
     [Fact]
+    public async Task Uncertain_acceptance_does_not_block_a_classic_manual_transition()
+    {
+        using var f = await Fixture.CreateAsync();
+        await f.ObserveAsync();
+        var tickets = new TicketService(f.Projects, new MemberService(f.Projects), f.Processors,
+            jevReviews: new Lazy<JevWorkReviewService>(() => f.Reviews));
+        await tickets.UpdateTicketAsync(f.Slug, f.Ticket.Id, columnId: f.Corrections.Id);
+        Assert.Equal(f.Corrections.Id, (await tickets.GetTicketAsync(f.Slug, f.Ticket.Id))!.ColumnId);
+        Assert.Empty(await f.Reviews.DecisionsAsync(f.Slug, f.Ticket.Id));
+    }
+    [Theory]
+    [InlineData(false, "insufficient")]
+    [InlineData(false, "uncertain")]
+    [InlineData(false, "error")]
+    [InlineData(true, "none")]
+    [InlineData(true, "uncertain")]
+    [InlineData(true, "error")]
+    public async Task Uncertain_work_review_falls_back_to_column_defaults_without_approval(bool profile, string scenario)
+    {
+        using var f = await Fixture.CreateAsync(profile);
+        if (!profile && scenario != "insufficient") f.AddEvidence();
+        f.Handler.Confidence = scenario == "uncertain" ? .2 : 1;
+        f.Handler.Abstain = scenario == "none";
+        f.Handler.Fail = scenario == "error";
+        await f.ObserveAsync();
+        Assert.False(JevCertainty.Work(await f.ReviewAsync(), f.Processor.JevConfidenceThreshold));
+        var executions = new ColumnExecutionService(f.Projects, f.Tickets, f.Reviews);
+        var execution = await executions.ClaimNextAsync(f.Slug, f.Processor, DateTime.UtcNow);
+        Assert.NotNull(execution);
+        Assert.True(execution.JevClassicFallback);
+        Assert.Null(execution.JevExecutionProfileJson);
+        var effective = f.Processor.WithoutJev();
+        Assert.False(effective.JevAcceptanceValidation);
+        Assert.False(effective.JevExecutionSelection);
+        Assert.False(effective.UsesAutomaticJevRouting);
+        Assert.Equal(f.Processor.Model, effective.Model);
+        Assert.Equal(f.Processor.RequiredSkills, effective.RequiredSkills);
+        Assert.Equal(f.Processor.DefaultTargetColumnId, effective.DefaultTargetColumnId);
+        Assert.Empty(await f.Reviews.DecisionsAsync(f.Slug, f.Ticket.Id));
+        Assert.True(Assert.Single(await executions.ListAsync(f.Slug, f.Ticket.Id)).JevClassicFallback);
+        var engine = new ColumnProcessingEngine(f.Projects, f.Tickets, f.Processors, executions, new ClassicDispatcher(),
+            new ColumnActionExecutor(f.Projects, f.Tickets, Microsoft.Extensions.Logging.Abstractions.NullLogger<ColumnActionExecutor>.Instance),
+            new ColumnMemoryCapitalizationService(f.Projects), Microsoft.Extensions.Logging.Abstractions.NullLogger<ColumnProcessingEngine>.Instance);
+        await engine.ProcessAsync(f.Slug, f.Processor, execution, CancellationToken.None);
+        Assert.Equal(f.Target.Id, (await f.Tickets.GetTicketAsync(f.Slug, f.Ticket.Id))!.ColumnId);
+        Assert.Equal(ColumnExecutionStatus.Completed, Assert.Single(await executions.ListAsync(f.Slug, f.Ticket.Id)).Status);
+    }
+    [Fact]
     public async Task Acceptance_reviews_real_references_and_requires_owner_approval_before_any_move()
     {
         using var f = await Fixture.CreateAsync(); f.AddEvidence();
@@ -220,8 +268,23 @@ public sealed class JevWorkReviewTests
         public void Dispose() { _client.Dispose(); _temp.Dispose(); }
     }
 
+    private sealed class ClassicDispatcher : IColumnAgentDispatcher
+    {
+        public Task<ColumnDispatchResult> DispatchAsync(string slug, ColumnProcessor processor, ColumnExecution execution, Ticket ticket, CancellationToken ct)
+        {
+            Assert.False(processor.JevAcceptanceValidation);
+            Assert.False(processor.JevExecutionSelection);
+            Assert.True(processor.JevClassicFallback);
+            return Task.FromResult(new ColumnDispatchResult(new AgentRun { RunId = execution.Id, ProjectSlug = slug, TicketId = ticket.Id,
+                AgentName = processor.Name, SkillFile = "", ConcurrencyGroup = "fixture", StartedAt = DateTime.UtcNow },
+                new ColumnAgentResult("completed", processor.RequiredSkills, "Classic processor completed", Evidence: new(ticket.UpdatedAt)), null));
+        }
+    }
+
     internal sealed class Handler : HttpMessageHandler
     {
+        public double Confidence = 1;
+        public bool Abstain, Fail;
         public int Count;
         public string Status = "satisfied";
         public string? Reference;
@@ -229,6 +292,7 @@ public sealed class JevWorkReviewTests
         public string Options = "";
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
+            if (Fail) return new(HttpStatusCode.ServiceUnavailable);
             using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct));
             State = body.RootElement.GetProperty("state").Clone();
             var answers = new Dictionary<string, object>();
@@ -237,7 +301,8 @@ public sealed class JevWorkReviewTests
                 var keys = question.Value.GetProperty("criteria").EnumerateObject().Select(p => p.Name).ToList();
                 var choice = question.Name.StartsWith("criterion-") ? Status : question.Name.StartsWith("evidence-") ? Reference ?? keys.First(k => k != "none") : keys.First(k => k != "none");
                 Options = question.Value.GetProperty("criteria").ToString();
-                answers[question.Name] = new { type = "choice", choice, confidence = 1, probabilities = keys.ToDictionary(k => k, k => k == choice ? 1.0 : 0.0) };
+                if (Abstain) choice = "none";
+                answers[question.Name] = new { type = "choice", choice, confidence = Confidence, probabilities = keys.ToDictionary(k => k, k => k == choice ? 1.0 : 0.0) };
             }
             Count++; return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { model = "jev-1.14.0", answers, usage = new { input_tokens = 1000, output_tokens = 40 } }) };
         }

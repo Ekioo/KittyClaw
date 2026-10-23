@@ -152,8 +152,14 @@ else
             <section @key="slug" class="board-lane @(collapsed ? "board-lane-collapsed" : "")">
                 <div class="board-lane-header" @onclick="() => ToggleLane(slug)"
                      title="@(collapsed ? L["UnifiedBoardExpandLane"] : L["UnifiedBoardCollapseLane"])">
-                    <span class="board-lane-caret">@(collapsed ? "▶" : "▼")</span>
-                    <h2 class="board-lane-title">@lane.Project.Name</h2>
+                    <h2 class="board-lane-title">
+                        <button type="button" class="board-lane-toggle"
+                                aria-expanded="@(collapsed ? "false" : "true")"
+                                @onclick="() => ToggleLane(slug)" @onclick:stopPropagation>
+                            <span class="board-lane-caret" aria-hidden="true">@(collapsed ? "▶" : "▼")</span>
+                            @lane.Project.Name
+                        </button>
+                    </h2>
                     <span class="board-lane-ticket-total">@VisibleTicketCount(lane)</span>
                     @if (lane.Project.IsPaused)
                     {
@@ -198,7 +204,8 @@ else
                 }
                 else
                 {
-                    <div class="board board-lane-columns">
+                    <MobileColumnNavigation BoardId="@($"kanban-{slug}")" />
+                    <div class="board board-lane-columns" id="@($"kanban-{slug}")">
                         @foreach (var col in lane.Columns)
                         {
                             var colTickets = GetTickets(lane, col.Name);
@@ -1039,6 +1046,7 @@ else
         KittyClaw.Web.Services.ColumnSortMode.Assignee,
         KittyClaw.Web.Services.ColumnSortMode.CreatedAt,
         KittyClaw.Web.Services.ColumnSortMode.UpdatedAt,
+        KittyClaw.Web.Services.ColumnSortMode.Tokens,
     };
     private static readonly KittyClaw.Web.Services.SortDirection[] _sortDirections = new[]
     {
@@ -1080,6 +1088,7 @@ else
         KittyClaw.Web.Services.ColumnSortMode.Assignee => L["SortByAssignee"],
         KittyClaw.Web.Services.ColumnSortMode.CreatedAt => L["SortByCreated"],
         KittyClaw.Web.Services.ColumnSortMode.UpdatedAt => L["SortByUpdated"],
+        KittyClaw.Web.Services.ColumnSortMode.Tokens => L["SortByTokens"],
         _ => L["SortManual"],
     };
 

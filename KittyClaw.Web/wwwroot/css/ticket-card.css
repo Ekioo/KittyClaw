@@ -11,6 +11,14 @@
     gap: 0.35rem;
     box-shadow: 0 1px 4px rgba(0,0,0,0.3);
 }
+.ticket-cover-image {
+    display: block;
+    width: calc(100% + 1.6rem);
+    max-width: none;
+    height: auto;
+    margin: -0.65rem -0.8rem 0;
+    border-radius: 7px 7px 0 0;
+}
 .ticket-card:hover {
     border-color: var(--accent);
     box-shadow: 0 3px 14px rgba(0,0,0,0.4);
@@ -302,3 +310,16 @@
     font-size: .62rem; font-weight: 700; line-height: 1.25; white-space: nowrap; flex-shrink: 0;
 }
 
+
+/* Native actions keep the card's compact appearance and shared focus ring. */
+.ticket-open-btn, .ticket-open-btn:hover {
+    display: block;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    font-weight: inherit;
+    text-align: left;
+    white-space: normal;
+}
+.sub-ticket-indicator { border: 0; background: transparent; color: var(--text-muted); font-weight: inherit; text-align: left; }

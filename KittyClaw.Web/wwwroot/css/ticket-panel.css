@@ -198,6 +198,16 @@ select:focus-visible,
     font-size: 0.83rem;
     font-weight: 600;
 }
+.ticket-column-select {
+    min-width: 0;
+    max-width: 100%;
+    border: 0;
+    background: var(--surface2);
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+    padding: .25rem;
+}
 .header-actions {
     display: flex;
     align-items: center;
@@ -646,6 +656,8 @@ select:focus-visible,
 
 /* Priority dot button */
 .priority-dot-btn {
+    background: transparent;
+    border: 0;
     cursor: pointer;
     padding: 0.35rem;
     border-radius: 50%;
@@ -829,7 +841,7 @@ select:focus-visible,
     border: 1px dashed var(--border);
     background: transparent;
     color: var(--text);
-    transition: border-color 0.15s, width 0.15s;
+    transition: border-color 0.15s;
 }
 .label-autocomplete-input:focus {
     width: 160px;
@@ -1434,3 +1446,11 @@ select:focus-visible,
 .jev-settings > summary { margin-bottom:8px; }
 
 .jev-disclosure article > small { display:block; margin:4px 0; }
+
+.jev-route-assistance { display: block; padding: .75rem 0; border-block: 1px solid var(--border); }
+.jev-route-assistance .jev-verdict { margin: .6rem 0; }
+.jev-route-assistance .jev-decision-controls { border: 0; padding: 0; margin: .5rem 0; }
+.jev-history-entry > p { margin: .4rem 0; }
+
+.jev-next-action { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+.jev-next-action .jev-decision-controls { margin: 0; }

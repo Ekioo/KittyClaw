@@ -31,10 +31,13 @@ public sealed record CostProjectTotal(
     int RtkCommands = 0,
     decimal? RtkEstimatedUsd = null,
     JevCostSummary? Jev = null);
-public sealed record CostReport(decimal TotalUsd, bool Estimated, IReadOnlyList<CostBucket> Daily, IReadOnlyList<CostProjectTotal> Projects);
+public sealed record CostBillingSummary(string Plan, decimal ApiEquivalentUsd);
+public sealed record CostReport(decimal TotalUsd, bool Estimated, IReadOnlyList<CostBucket> Daily, IReadOnlyList<CostProjectTotal> Projects,
+    int UnpricedRuns = 0, IReadOnlyList<CostBillingSummary>? Subscriptions = null);
 public sealed record CostReportOptions(IReadOnlyList<CostProjectOption> Projects, IReadOnlyList<CostPipelineOption> Pipelines, IReadOnlyList<CostModelOption> Models);
 
-internal sealed record CostSnapshotRow(DateOnly Day, string ProjectSlug, string ProjectName, string? PipelineKey, string Model, long InputTokens, decimal UsdCost, bool Estimated, JevCostSummary? Jev = null);
+internal sealed record CostSnapshotRow(DateOnly Day, string ProjectSlug, string ProjectName, string? PipelineKey, string Model, long InputTokens, decimal UsdCost, bool Estimated, JevCostSummary? Jev = null,
+    int UnpricedRuns = 0, string? BillingPlan = null);
 internal sealed record RtkSavingsSnapshotRow(DateOnly Day, string ProjectSlug, string ProjectName, long InputTokens, long SavedTokens, int Commands);
 internal sealed record CostReportSnapshot(
     int Version,
@@ -49,7 +52,7 @@ internal sealed record CostReportSnapshot(
 /// </summary>
 public sealed class CostReportService
 {
-    private const int SnapshotVersion = 5;
+    private const int SnapshotVersion = 6;
     private const string UnknownPipelineSuffix = "unknown";
     private static readonly CostReportOptions EmptyOptions = new([], [], []);
     private static readonly CostReportSnapshot EmptySnapshot = new(SnapshotVersion, DateTime.MinValue, EmptyOptions, [], []);
@@ -150,6 +153,7 @@ public sealed class CostReportService
         var rtkRows = new List<RtkSavingsSnapshotRow>();
         var pipelineOptions = new List<CostPipelineOption>();
         var seenRuns = new HashSet<string>(StringComparer.Ordinal);
+        var accounting = new CostHistoryAccounting(_projects.DataDir);
 
         foreach (var project in allProjects)
         {
@@ -177,8 +181,24 @@ public sealed class CostReportService
                     cancellationToken.ThrowIfCancellationRequested();
                     CostLogEntry? entry;
                     try { entry = JsonSerializer.Deserialize<CostLogEntry>(line); } catch { continue; }
-                    if (entry is null || (entry.RunId is not null && !seenRuns.Add(entry.RunId))) continue;
+                    if (entry is null) continue;
                     entries.Add(entry);
+                }
+
+                // Accounting revisions append to the journal; retain original evidence and prefer
+                // corrected deltas to legacy cumulative records, including across rotated files.
+                entries = entries.Where(entry => entry.RunId is null)
+                    .Concat(entries.Where(entry => entry.RunId is not null).GroupBy(entry => entry.RunId!)
+                        .Select(group => group.OrderBy(entry => entry.UsageVersion).Last()))
+                    .Where(entry => entry.RunId is null || seenRuns.Add(entry.RunId)).ToList();
+                for (var index = 0; index < entries.Count; index++)
+                {
+                    var original = entries[index];
+                    var corrected = accounting.Normalize(original);
+                    entries[index] = corrected;
+                    if (_costTracker is not null && original.RunId is not null
+                        && original.UsageVersion < 2 && corrected.UsageVersion == 2 && corrected.CostKnown)
+                        _costTracker.LogRun(workspace, corrected);
                 }
 
                 foreach (var legacy in await ReadLegacyJevCostsAsync(project.Slug, cancellationToken))
@@ -217,7 +237,8 @@ public sealed class CostReportService
                         entry.InputTokens,
                         entry.UsdCost,
                         entry.CostEstimated,
-                        entry.Source == "jev" ? new(1, entry.InputTokens, entry.OutputTokens, entry.UsdCost, entry.CostKnown ? 0 : 1) : null));
+                        entry.Source == "jev" ? new(1, entry.InputTokens, entry.OutputTokens, entry.UsdCost, entry.CostKnown ? 0 : 1) : null,
+                        entry.CostKnown ? 0 : 1, entry.BillingPlan));
                 }
 
                 if (hasUnknownPipeline)
@@ -238,7 +259,7 @@ public sealed class CostReportService
 
         // Estimated stays in the group key so daily reports can split measured from estimated cost.
         var compactRows = rows
-            .GroupBy(row => new { row.Day, row.ProjectSlug, row.ProjectName, row.PipelineKey, row.Model, row.Estimated, IsJev = row.Jev is not null })
+            .GroupBy(row => new { row.Day, row.ProjectSlug, row.ProjectName, row.PipelineKey, row.Model, row.Estimated, row.BillingPlan, IsJev = row.Jev is not null })
             .Select(group => new CostSnapshotRow(
                 group.Key.Day,
                 group.Key.ProjectSlug,
@@ -248,7 +269,7 @@ public sealed class CostReportService
                 group.Sum(row => row.InputTokens),
                 group.Sum(row => row.UsdCost),
                 group.Key.Estimated,
-                SumJev(group.Select(row => row.Jev))))
+                SumJev(group.Select(row => row.Jev)), group.Sum(row => row.UnpricedRuns), group.Key.BillingPlan))
             .OrderBy(row => row.Day)
             .ThenBy(row => row.ProjectName)
             .ToList();
@@ -400,7 +421,10 @@ public sealed class CostReportService
             .OrderByDescending(total => total.UsdCost)
             .ThenByDescending(total => total.RtkSavedTokens)
             .ToList();
-        return new(rows.Sum(row => row.UsdCost), rows.Any(row => row.Estimated), daily, totals);
+        return new(rows.Sum(row => row.UsdCost), rows.Any(row => row.Estimated), daily, totals,
+            rows.Sum(row => row.UnpricedRuns), rows.Where(row => row.BillingPlan is not null)
+                .GroupBy(row => row.BillingPlan!)
+                .Select(group => new CostBillingSummary(group.Key, group.Sum(row => row.UsdCost))).ToList());
     }
 
     private static decimal? EstimateRtkInputRatePerToken(IReadOnlyList<CostSnapshotRow> rows, string projectSlug)
@@ -409,14 +433,14 @@ public sealed class CostReportService
         long pricedInputTokens = 0;
         foreach (var row in rows.Where(row => row.ProjectSlug == projectSlug && row.InputTokens > 0 && row.Jev is null))
         {
-            if (!ModelCostEstimator.TryEstimate(row.Model, 1_000_000, 0, 0, 0, out var inputRate)) continue;
+            if (!ModelCostEstimator.TryEstimate(row.Model, 1, 0, 0, 0, out var inputRate)) continue;
             weightedRates += inputRate * row.InputTokens;
             pricedInputTokens += row.InputTokens;
         }
 
         return pricedInputTokens == 0
             ? null
-            : weightedRates / pricedInputTokens / 1_000_000m;
+            : weightedRates / pricedInputTokens;
     }
 
     private static JevCostSummary? SumJev(IEnumerable<JevCostSummary?> summaries)
