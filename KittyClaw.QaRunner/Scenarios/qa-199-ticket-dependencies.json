@@ -38,7 +38,7 @@
     { "type": "assertVisible", "selector": ".dep-section .dep-link" },
     { "type": "assertText", "selector": ".dep-section .dep-link", "expected": "#{blockerId} Blocker ticket" },
     { "type": "fill", "selector": ".dep-add-input", "value": "{blockedId}" },
-    { "type": "click", "selector": ".dep-add-btn" },
+    { "type": "assertInteractionDuration", "selector": ".dep-add-btn", "waitForSelector": ".dep-error", "maxMs": 5000 },
     { "type": "assertVisible", "selector": ".dep-error" },
     {
       "type": "screenshot",

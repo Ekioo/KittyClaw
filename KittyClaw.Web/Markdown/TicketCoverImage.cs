@@ -17,13 +17,12 @@ public static class TicketCoverImage
         {
             var url = image.Url;
             if (string.IsNullOrWhiteSpace(url)) continue;
+            // Root-relative URLs are interpreted as file URIs on Unix.
+            if (!url.StartsWith("//") && !url.Contains('\\') && !url.Contains(':'))
+                return url;
             if (Uri.TryCreate(url, UriKind.Absolute, out var absolute))
             {
                 if (absolute.Scheme is "http" or "https") return url;
-            }
-            else if (!url.StartsWith("//") && !url.Contains('\\') && !url.Contains(':'))
-            {
-                return url;
             }
         }
 
