@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\KittyClaw.Core\KittyClaw.Core.csproj" />
+    <ProjectReference Include="..\KittyClaw.Benchmarks\KittyClaw.Benchmarks.csproj" />
     <!-- Integration tests execute the mock CLI from its own bin directory. Keep that
          executable in sync with the sources instead of accepting a stale on-disk build. -->
     <ProjectReference Include="..\KittyClaw.ClaudeMock\KittyClaw.ClaudeMock.csproj"
