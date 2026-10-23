@@ -65,6 +65,7 @@
                 }
             </div>
             <div class="header-actions">
+                <button class="tile-config-revise" @onclick="() => _showImprovement = true">✦ @L["ImproveTicket"]</button>
                 <button class="close-btn" @onclick="CloseAsync">&times;</button>
             </div>
         </div>
@@ -526,7 +527,14 @@
     </ErrorBoundary>
 }
 
+@if (_showImprovement)
+{
+    <TicketImprovementDialog Slug="@Slug" TicketId="@TicketId" OnClose="() => _showImprovement = false" OnChanged="RefreshAsync" />
+}
+
 @code {
+    private bool _showImprovement;
+
     private string CostTooltip(long tokens, double cost, bool estimated)
     {
         var value = cost > 0 ? $" · {(estimated ? "≈ " : "")}{KittyClaw.Web.Services.TokenDisplay.Usd(cost)}" : "";

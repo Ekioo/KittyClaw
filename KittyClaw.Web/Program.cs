@@ -134,6 +134,7 @@ builder.Services.AddScoped<KittyClaw.Web.Services.BoardFilterState>();
 builder.Services.AddScoped<KittyClaw.Web.Services.BoardSortState>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.BoardUpdateNotifier>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.WorkflowMigrationPlanner>();
+builder.Services.AddSingleton<KittyClaw.Web.Services.TicketImprovementService>();
 builder.Services.AddScoped<KittyClaw.Web.Services.EscapeKeyStack>();
 
 // Automation engine

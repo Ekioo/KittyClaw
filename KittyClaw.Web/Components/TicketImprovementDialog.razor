@@ -1,0 +1,67 @@
+@using KittyClaw.Core.Models
+@using KittyClaw.Core.Services
+@using KittyClaw.Web.Services
+@inject TicketImprovementService Improvements
+@inject TicketService Tickets
+@inject LocalizationService L
+@inject EscapeKeyStack EscapeStack
+@implements IDisposable
+
+<div class="ticket-improvement-overlay">
+    <section class="ticket-improvement-dialog" role="dialog" aria-modal="true" aria-label="@L["ImproveTicket"]" aria-busy="@_busy">
+        <h3>@L["ImproveTicket"]</h3>
+        @if (_busy) { <p role="status">@L["ImprovingTicket"]</p> }
+        @if (_proposal is not null)
+        {
+            <p>@L["ImprovementReview"]</p>
+            <label>@L["Description"]<textarea class="settings-input" rows="12" @bind="_description" @bind:event="oninput"></textarea></label>
+            <label>@L["TicketAcceptanceCriteria"]<textarea class="settings-input" rows="7" @bind="_criteria" @bind:event="oninput"></textarea></label>
+            <p>@L["ImprovementCriteriaHint"]</p>
+            <button class="settings-primary" disabled="@_busy" @onclick="Apply">@L["Save"]</button>
+        }
+        @if (_error is not null) { <p class="dep-error" role="alert">@_error</p> }
+        <button class="tile-config-cancel" @onclick="() => OnClose.InvokeAsync()">@L["Cancel"]</button>
+    </section>
+</div>
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+    [Parameter] public int TicketId { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+    private readonly CancellationTokenSource _cts = new();
+    private IDisposable? _escape;
+    private Ticket? _original;
+    private TicketImprovement? _proposal;
+    private string _description = "", _criteria = "";
+    private string? _error;
+    private bool _busy;
+    protected override async Task OnInitializedAsync()
+    {
+        _escape = EscapeStack.Push(() => { _ = OnClose.InvokeAsync(); });
+        _busy = true;
+        try {
+            _original = await Tickets.GetTicketAsync(Slug, TicketId) ?? throw new InvalidOperationException("Ticket no longer exists.");
+            _proposal = await Improvements.AnalyzeAsync(Slug, _original, _cts.Token);
+            _description = _proposal.Description;
+            _criteria = string.Join("\n", _proposal.AcceptanceCriteria);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+    private async Task Apply()
+    {
+        if (_original is null) return;
+        _busy = true; _error = null;
+        try {
+            await Tickets.ApplyImprovementAsync(Slug, TicketId, _original.Description, _original.AcceptanceCriteriaJson,
+                _description, _criteria.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList());
+            await OnChanged.InvokeAsync();
+            await OnClose.InvokeAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+    public void Dispose() { _escape?.Dispose(); _cts.Cancel(); _cts.Dispose(); }
+}

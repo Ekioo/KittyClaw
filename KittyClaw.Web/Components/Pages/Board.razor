@@ -293,6 +293,7 @@ else
                 <span>@L["TicketMenuOpen"]</span>
             </button>
             <div class="column-context-menu-separator"></div>
+            <button class="column-context-menu-item" @onclick="() => { _improvementTicketId = menuTicket.Id; CloseTicketMenu(); }">✦ @L["ImproveTicket"]</button>
             <div class="column-context-menu-title">@L["TicketMenuMoveTo"]</div>
             @if (_ticketMenuRoutingPolicy?.IsRestricted == true)
             {
@@ -469,7 +470,14 @@ else
     <WorkflowMigrationWizard ProjectSlug="@Slug" OnClose="CloseMigrationWizard" />
 }
 
+@if (_improvementTicketId is int improvementId)
+{
+    <TicketImprovementDialog Slug="@Slug" TicketId="@improvementId" OnClose="() => _improvementTicketId = null" OnChanged="RefreshTicketsAsync" />
+}
+
 @code {
+    private int? _improvementTicketId;
+
     private bool _mobileActionsOpen;
     [Parameter] public string Slug { get; set; } = "";
     [Parameter] public int? TicketId { get; set; }

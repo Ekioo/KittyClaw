@@ -25,6 +25,28 @@ public class TicketService
     public event Action<string, int, string, string>? TicketStatusChanged;
     public event Action<string, int>? TicketCreated;
 
+    public async Task ApplyImprovementAsync(string slug, int ticketId, string? originalDescription,
+        string originalCriteria, string description, List<string> criteria)
+    {
+        if (string.IsNullOrWhiteSpace(description) || description.Length > 100000 || criteria.Count is < 1 or > 50)
+            throw new InvalidOperationException("A description and 1–50 acceptance criteria are required.");
+        foreach (var text in criteria) ValidateAcceptanceCriterion(new(text, AcceptanceStatus.NotEvaluated));
+        await using var db = _projectService.GetProjectDb(slug);
+        await EnsureActivityTableAsync(db);
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        var ticket = await db.Tickets.FindAsync(ticketId) ?? throw new InvalidOperationException("Ticket no longer exists.");
+        if (ticket.Description != originalDescription || ticket.AcceptanceCriteriaJson != originalCriteria)
+            throw new InvalidOperationException("The ticket changed during analysis. Close this proposal and analyze it again.");
+        var previous = ticket.AcceptanceCriteria;
+        ticket.Description = description.Trim();
+        ticket.AcceptanceCriteria = criteria.Select(text => previous.FirstOrDefault(c => c.Text == text.Trim())
+            ?? new TicketAcceptanceCriterion(Guid.NewGuid().ToString("N"), text.Trim(), AcceptanceStatus.NotEvaluated)).ToList();
+        ticket.UpdatedAt = DateTime.UtcNow;
+        db.ActivityEntries.Add(new ActivityEntry { TicketId = ticketId, Author = "owner", Text = "Applied AI ticket improvement. New or rewritten criteria require evaluation." });
+        await db.SaveChangesAsync();
+        await transaction.CommitAsync();
+    }
+
     public async Task<TicketAcceptanceCriterion?> SaveAcceptanceCriterionAsync(string slug, int ticketId,
         string? criterionId, SaveAcceptanceCriterionRequest request, string author = "owner")
     {

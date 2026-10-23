@@ -243,6 +243,7 @@ else
                                              data-ticket-id="@ticket.Id"
                                              @ondragstart="() => OnDragStart(slug, ticket)"
                                              @ondragend="OnDragEnd"
+                                             @oncontextmenu="e => OpenImprovementMenu(slug, ticket.Id, e)" @oncontextmenu:preventDefault @oncontextmenu:stopPropagation
                                              @onclick="() => OpenTicket(slug, ticket.Id)">
                                         <div class="ticket-card-top">
                                             <div class="ticket-card-statuses">
@@ -404,7 +405,34 @@ else
 </div>
 
 
+@if (_improvementMenu is not null)
+{
+    <div class="column-context-menu-backdrop" @onclick="() => _improvementMenu = null" @oncontextmenu:preventDefault></div>
+    <div class="column-context-menu" style="left:@(_improvementX)px; top:@(_improvementY)px;">
+        <button class="column-context-menu-item" @onclick="() => { _improvement = _improvementMenu; _improvementMenu = null; }">✦ @L["ImproveTicket"]</button>
+    </div>
+}
+@if (_improvement is { } improvement)
+{
+    <TicketImprovementDialog Slug="@improvement.Slug" TicketId="@improvement.Id" OnClose="() => _improvement = null" OnChanged="RefreshImprovedTicket" />
+}
+
 @code {
+    private (string Slug, int Id)? _improvementMenu, _improvement;
+    private double _improvementX, _improvementY;
+    private async Task RefreshImprovedTicket()
+    {
+        if (_improvement is not { } target || _lanes is null) return;
+        var lane = _lanes.FirstOrDefault(l => l.Project.Slug == target.Slug);
+        if (lane is not null) await RefreshLaneAsync(lane.Project, lane.SelectedPipelineId);
+    }
+    private void OpenImprovementMenu(string slug, int id, MouseEventArgs e)
+    {
+        CloseSortMenu();
+        _improvementMenu = (slug, id);
+        _improvementX = e.ClientX; _improvementY = e.ClientY;
+    }
+
     private sealed record LaneData(
         Project Project,
         List<Pipeline> Pipelines,
@@ -526,7 +554,7 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_sortMenuSlug is not null && _sortMenuColumn is not null)
+        if (_improvementMenu is not null || (_sortMenuSlug is not null && _sortMenuColumn is not null))
             await JS.InvokeVoidAsync("fitBoardContextMenus");
 
         if (_attachTicketDraft && _newTicketProjectSlug is not null)

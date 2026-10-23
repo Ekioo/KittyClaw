@@ -1495,3 +1495,8 @@ select:focus-visible,
     .acceptance-proof { margin-left: 0; }
     .acceptance-editor .settings-input { font-size: 16px; }
 }
+
+.ticket-improvement-overlay { position: fixed; inset: 0; z-index: 1600; background: #0009; display: grid; place-items: center; padding: 1rem; }
+.ticket-improvement-dialog { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; width: min(760px, 100%); max-height: 90dvh; overflow-y: auto; }
+.ticket-improvement-dialog label { display: block; margin: .75rem 0; }
+.ticket-improvement-dialog textarea { display: block; width: 100%; box-sizing: border-box; background: var(--surface2); border: 1px solid var(--border); border-radius: 7px; color: var(--text); padding: .5rem .65rem; font-size: 1rem; }

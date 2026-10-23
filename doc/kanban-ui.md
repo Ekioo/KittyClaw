@@ -59,3 +59,7 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 - [Storage](./storage.md) — domain services for tickets, columns, members, labels.
 - [Agent dispatch](./agent-dispatch.md) — backs the run drawer and the new-instruction chat.
 - [Automation engine](./automation-engine.md) — remains available through its configuration file and API without a legacy editor in the Kanban UI.
+
+### Ticket improvement
+
+The shared ticket panel and right-click menus on project and unified boards offer **Improve with AI**. `TicketImprovementService` requests a structured proposal through the existing provider runner. The editable preview keeps description and acceptance criteria separate and flags unknown information as questions. Saving replaces both atomically, rejects concurrent content changes, preserves assessments only for identical criteria, and records an activity entry. Closing the dialog cancels the analysis.
