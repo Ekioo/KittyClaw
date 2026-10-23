@@ -33,6 +33,10 @@ public sealed class CostTracker
         }
     }
 
+    /// <summary>Includes known usage not yet persisted by the asynchronous completion recorder.</summary>
+    internal decimal GetDailySpendUsd(string workspacePath, IEnumerable<AgentRun> runs) =>
+        SumUsdForDay(workspacePath, DateTime.UtcNow.Date, runs);
+
     internal string CurrentLogPath(string workspacePath) =>
         _sessions?.ChannelFilePath(workspacePath, "cost-log.jsonl")
         ?? Path.Combine(workspacePath, ".agents", "channel", "cost-log.jsonl");
@@ -59,7 +63,12 @@ public sealed class CostTracker
         }
     }
 
-    private decimal SumUsdForDay(string workspacePath, DateTime day)
+    private decimal SumUsdForDay(string workspacePath, DateTime day, IEnumerable<AgentRun>? runs = null)
+    {
+        lock (_lock) return SumUsdForDayCore(workspacePath, day, runs);
+    }
+
+    private decimal SumUsdForDayCore(string workspacePath, DateTime day, IEnumerable<AgentRun>? runs)
     {
         var files = LogFiles(workspacePath);
         decimal sum = 0m;
@@ -79,6 +88,14 @@ public sealed class CostTracker
                          .Select(group => group.OrderBy(entry => entry.UsageVersion).Last())).ToList();
         foreach (var entry in latestEntries)
             if (entry.At.Date == day && entry.CostKnown) sum += Math.Max(0m, entry.UsdCost);
+        foreach (var run in runs ?? [])
+        {
+            if ((run.EndedAt ?? DateTime.UtcNow).Date != day || !run.UsageIsReliable || run.TotalCostUsd is not decimal cost) continue;
+            var recorded = latestEntries.Where(entry => entry.At.Date == day && entry.CostKnown && entry.Source != "jev"
+                && entry.RunId == run.RunId && (entry.StartedAt == run.StartedAt || entry.StartedAt is null && entry.At == run.EndedAt))
+                .Sum(entry => Math.Max(0m, entry.UsdCost));
+            sum += Math.Max(0m, cost - recorded);
+        }
         return sum;
     }
 }

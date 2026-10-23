@@ -4,6 +4,16 @@
 
 When project worktrees are enabled, KittyClaw keeps the primary checkout read-only. Ticket work is written to the root ticket worktree; background durable writes such as memories, lessons, and dashboard outputs use a serialized maintenance worktree. Both kinds of work are integrated through a persistent queue, so a restart cannot silently forget pending changes. Disabling worktrees prevents new worktree creation but does not disable recovery and finalization of terminal-ticket worktrees that Git already has registered.
 
+Generated maintenance, integration and quarantine directory names are limited to 40
+characters. Longer names retain a readable prefix and a deterministic SHA-256 suffix,
+so projects with similar long names use distinct stable paths. This avoids Git for
+Windows failing with `$GIT_DIR too big` when the full project slug is repeated in its
+administrative worktree path; enabling `core.longpaths` alone does not fix that failure.
+Existing registered maintenance and integration worktrees retain their original paths.
+Branch names and persisted project identities are unchanged. Consumers should read the
+actual `worktreePath` from the integration request rather than construct a directory
+name from the project slug.
+
 Before a maintenance execution starts, ignored `node_modules` directories found in the canonical workspace are exposed at the same relative paths in the maintenance worktree. Discovery excludes the complete sibling worktree container and all linked directories, so dependencies from maintenance or ticket worktrees cannot be rediscovered recursively. KittyClaw uses directory links (Windows junctions when symbolic-link privileges are unavailable), so dependencies are neither copied nor versioned and remain available when an existing worktree is reused after restart. Preparation failures stop the execution with an error that identifies both the dependency source and the intended worktree path.
 
 The queue validates each rebased result in a dedicated per-project worktree whose HEAD is detached, then atomically advances `refs/kittyclaw/integration/<target>`. This integration tip is never checked out, so integration leaves the primary checkout, its target branch, index, tracked files, and untracked files unchanged even when that checkout is dirty. Synchronizing the checked-out target branch to the integration tip is a separate durable step described below. A target branch that diverges from the integration tip becomes `BlockedByExternalChanges`; the background reconciler can retry after reconciliation. A clean source worktree whose commit Git ancestry already proves integrated only needs cleanup. The queue also discovers registered worktrees for terminal ticket families after startup — including legacy `ticket/<child>` worktrees whose root ticket is terminal — and queues them without creating missing worktrees; a `Completed` row whose registered worktree still exists is re-queued so finalization proves ancestry again before removing the worktree and its branch, and this recovery stays idempotent across repeated restarts. When the next pending job belongs to a ticket family that is still busy (active agent runs or processor writes), the queue skips it and integrates the next independent job instead of stalling behind it; the skipped job stays `Pending` and is retried later.
@@ -19,6 +29,7 @@ Versioned project knowledge stays in Git. Local control data such as prompts, tr
 ## Key components
 
 - `KittyClaw.Core/Services/DurableWriteRouter.cs` — selects ticket or maintenance worktrees, restricts writable paths, scans for probable secrets, commits maintenance changes, and checkpoints them in the queue.
+- `KittyClaw.Core/Services/ProjectWorktreePaths.cs` — builds bounded, deterministic directory names for newly generated project worktrees.
 - `KittyClaw.Core/Services/WorktreeMergeQueueService.cs` — persists integration jobs and their state in the project database, discovers terminal-ticket worktrees, classifies finalization files, commits validated durable changes, rebases source branches, validates them in detached integration worktrees, atomically publishes integration-tip refs, and preserves review or conflict states.
 - `KittyClaw.Core/Services/WorktreeMergeQueueProcessor.cs` — periodically recovers terminal-ticket worktrees, reconciles pending or externally blocked jobs after startup or interruption, and runs the pending local-checkout synchronization checkpoint after each pass.
 - `KittyClaw.Core/Services/WorktreeFinalizationCoordinator.cs` — prevents finalization while a column processor is still writing to a ticket family worktree.

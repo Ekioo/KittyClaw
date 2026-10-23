@@ -51,6 +51,8 @@ public sealed class TicketTransferService(
             throw new InvalidOperationException("The ticket has a parent outside its sub-ticket tree. Transfer the parent ticket instead to preserve the relationship.");
 
         await using var target = new TodoDbContext(targetPath);
+        await TicketService.EnsureTicketDependenciesTableAsync(source);
+        await TicketService.EnsureTicketDependenciesTableAsync(target);
         var ids = transferIds.ToList();
         var conflictingTicketIds = await target.Tickets.Where(t => ids.Contains(t.Id)).Select(t => t.Id).ToListAsync();
         var commentIds = transferTickets.SelectMany(t => t.Comments).Select(c => c.Id).ToList();
@@ -96,6 +98,16 @@ public sealed class TicketTransferService(
         try
         {
             await using var transaction = connection.BeginTransaction();
+            // Read edges under the same write transaction as the move. A dependency added
+            // during preflight must not be silently split or left behind in the source.
+            var dependencies = await ReadDependenciesAsync(connection, transaction, transferIds);
+            var externalDependency = dependencies.FirstOrDefault(d =>
+                !transferIds.Contains(d.BlockedTicketId) || !transferIds.Contains(d.BlocksTicketId));
+            if (externalDependency is not null)
+                throw new InvalidOperationException(
+                    $"Transfer would split dependency: ticket #{externalDependency.BlockedTicketId} is blocked by " +
+                    $"ticket #{externalDependency.BlocksTicketId}; one endpoint is outside the transferred tree. " +
+                    "Transfer a tree containing both tickets or explicitly remove the dependency first.");
             try
             {
                 foreach (var sourceLabel in sourceLabels.Where(l => !labelMap.ContainsKey(l.Id)))
@@ -119,6 +131,16 @@ public sealed class TicketTransferService(
                 foreach (var ticket in transferTickets)
                 foreach (var label in ticket.Labels)
                     await ExecuteAsync(connection, transaction, "INSERT INTO target.TicketLabels (TicketsId, LabelsId) VALUES ($ticketId, $labelId)", ("$ticketId", ticket.Id), ("$labelId", labelMap[label.Id]));
+
+                foreach (var dependency in dependencies)
+                {
+                    // Edge identifiers are local to each database; ticket identities and
+                    // the original edge timestamp remain unchanged.
+                    await ExecuteAsync(connection, transaction,
+                        "INSERT INTO target.TicketDependencies (BlockedTicketId, BlocksTicketId, CreatedAt) VALUES ($blocked, $blocker, $created)",
+                        ("$blocked", dependency.BlockedTicketId), ("$blocker", dependency.BlocksTicketId), ("$created", dependency.CreatedAt));
+                    await ExecuteAsync(connection, transaction, "DELETE FROM TicketDependencies WHERE Id = $id", ("$id", dependency.Id));
+                }
 
                 var maxActivityId = Convert.ToInt64(await ScalarAsync(connection, transaction, """
                     SELECT COALESCE(MAX(Id), 0)
@@ -172,6 +194,26 @@ public sealed class TicketTransferService(
             if (children.TryGetValue(ticket.Id, out var descendants))
                 foreach (var child in descendants) pending.Push(child);
         }
+        return result;
+    }
+
+    private sealed record TransferDependency(int Id, int BlockedTicketId, int BlocksTicketId, string CreatedAt);
+
+    private static async Task<List<TransferDependency>> ReadDependenciesAsync(
+        SqliteConnection connection, SqliteTransaction transaction, HashSet<int> ticketIds)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT Id, BlockedTicketId, BlocksTicketId, CreatedAt FROM TicketDependencies
+            WHERE BlockedTicketId IN (SELECT value FROM json_each($ids))
+               OR BlocksTicketId IN (SELECT value FROM json_each($ids))
+            """;
+        command.Parameters.AddWithValue("$ids", System.Text.Json.JsonSerializer.Serialize(ticketIds));
+        await using var reader = await command.ExecuteReaderAsync();
+        var result = new List<TransferDependency>();
+        while (await reader.ReadAsync())
+            result.Add(new(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2), reader.GetString(3)));
         return result;
     }
 

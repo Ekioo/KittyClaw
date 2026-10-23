@@ -1168,10 +1168,10 @@ public sealed partial class WorktreeMergeQueueService(
     /// </summary>
     private static string EnsureIntegrationWorktree(string repository, string projectSlug, string tipCommit)
     {
-        var parent = Directory.GetParent(repository)?.FullName
-            ?? throw new InvalidOperationException($"Repository '{repository}' has no parent directory.");
-        var repositoryName = Path.GetFileName(Path.TrimEndingDirectorySeparator(repository));
-        var path = Path.GetFullPath(Path.Combine(parent, $"{repositoryName}.worktrees", $"integration-{SafeName(projectSlug)}"));
+        var path = ProjectWorktreePaths.GetPath(repository, "integration", SafeName(projectSlug));
+        var legacyPath = ProjectWorktreePaths.GetPath(repository, "integration", SafeName(projectSlug), legacy: true);
+        if (!string.Equals(path, legacyPath, StringComparison.OrdinalIgnoreCase) && IsRegisteredWorktree(repository, legacyPath))
+            path = legacyPath;
         if (IsRegisteredWorktree(repository, path) && !Directory.Exists(path))
             RunGit(repository, ["worktree", "prune"], false);
         if (!IsRegisteredWorktree(repository, path))

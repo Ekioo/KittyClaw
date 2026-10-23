@@ -13,6 +13,36 @@ Runs an agent through the selected Claude Code, Grok Build, OpenAI Codex, Mistra
 - `KittyClaw.Core/Automation/AgentRun.cs` — in-memory run model + event stream consumed by the UI; carries a `ChatTarget` slug so the steer endpoint knows which chat thread to append injected messages to; also holds a `PendingSteerMessages` list populated when steering arrives after stdin is closed. `DrainPendingSteerMessages()` reads and atomically clears the list in one lock, preventing double-replay. `IsAwaitingUserAnswer` (bool) is set by `AgentStreamPump` when an `ask_user_question` event is detected and cleared by `AgentRunner` after the answer is received or the wait times out.
 - `KittyClaw.Core/Automation/RunHistoryLoadingService.cs` — loads persisted run snapshots sequentially after `ApplicationStarted`, reports bounded progress, reconciles stale running snapshots before publishing them to `AgentRunRegistry`, and completes before interrupted chat recovery begins.
 
+## Daily budget admission
+
+`AgentBudgetService` applies the project's `dailyBudgetUsd` from the control workspace's
+`.agents/automations.json` to every `AgentRunner` launch: column processors, legacy
+automations, chats, dashboard refreshes, workflow planning, memory consolidation and
+manual retries. There is no chat or `ceo` exemption. A missing or non-positive limit
+preserves unlimited operation; malformed or unreadable configuration fails closed.
+
+The runner registers the run first, then checks before preparation, and checks again
+immediately before each provider subprocess starts. Queued work, resume recovery,
+fallback models and steering continuations therefore use the current configuration and
+spend rather than an earlier admission decision. A denial produces a visible error and
+a terminal Failed run without launching that provider attempt.
+
+Spend uses the UTC calendar day, current and rotated cost journals (including recorded
+JEV charges), and reliable known usage from current/recent runs that the asynchronous
+cost recorder has not persisted yet. Already-journaled usage is not added twice; runtime
+cost files resolve through the same `SessionRegistry` as the recorder, even when work
+executes in a ticket or maintenance worktree.
+
+This is an admission limit on known spend, not a monetary reservation or provider-side
+hard cap. Already-running processes are not stopped; simultaneous admitted work and
+usage reported only when a provider finishes can exceed the configured amount. Unknown
+costs remain unpriced. The next launch/continuation is refused once known spend reaches
+the cap. The global cost report remains a separate reporting view.
+
+`AgentBudgetTests` exercises exhausted budgets across provider/scope combinations,
+UTC/rotation accounting, pending recorder usage, configuration changes, project isolation,
+queued work, fallback and steering replay with the mock CLI.
+
 ## CLI binary and version pinning
 
 KittyClaw records the effective external CLI provider, binary identity, and detected version on every run and exposes it through the runs API. Detection uses `<binary> --version` with a three-second timeout; failure is recorded as a warning and never blocks dispatch. Binary overrides are `KITTYCLAW_CLAUDE_BIN`, `KITTYCLAW_CODEX_BIN`, `KITTYCLAW_GROK_BIN`, and `KITTYCLAW_MISTRAL_BIN`. Set these before starting KittyClaw to pin each provider to a specific executable. Optional `KITTYCLAW_CLAUDE_EXPECTED_VERSION`, `KITTYCLAW_CODEX_EXPECTED_VERSION`, `KITTYCLAW_GROK_EXPECTED_VERSION`, and `KITTYCLAW_MISTRAL_EXPECTED_VERSION` values add a visible non-blocking warning when the detected version differs.

@@ -35,7 +35,7 @@ internal sealed class RunStateManager
         string agentName,
         string group)
     {
-        if (rt.Config?.DailyBudgetUsd is decimal cap && group != "ceo"
+        if (rt.Config?.DailyBudgetUsd is decimal cap
             && _cost.IsBudgetExceeded(rt.Workspace!, cap))
         {
             _logger.LogInformation("Budget exceeded for {Slug} — skipping {Agent}", rt.Slug, agentName);

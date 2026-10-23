@@ -57,15 +57,18 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
         var repository = projects.ResolveRepositoryPath(project);
         var safeSlug = SafeName(projectSlug);
         var branch = $"maintenance/{safeSlug}";
-        var parent = Directory.GetParent(repository)?.FullName ?? throw new InvalidOperationException($"Repository '{repository}' has no parent directory.");
-        var repositoryName = Path.GetFileName(Path.TrimEndingDirectorySeparator(repository));
-        var path = Path.GetFullPath(Path.Combine(parent, $"{repositoryName}.worktrees", $"maintenance-{safeSlug}"));
+        var path = ProjectWorktreePaths.GetPath(repository, "maintenance", safeSlug);
+        var legacyPath = ProjectWorktreePaths.GetPath(repository, "maintenance", safeSlug, legacy: true);
         var gate = MaintenanceGates.GetOrAdd(repository, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(ct);
         try
         {
-            var listed = RunGit(repository, ["worktree", "list", "--porcelain"]).Output.Replace('\\', '/');
-            if (!listed.Contains($"worktree {path.Replace('\\', '/')}", StringComparison.OrdinalIgnoreCase))
+            var listed = RunGit(repository, ["worktree", "list", "--porcelain"]).Output.Replace('\\', '/')
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => line.TrimEnd('\r'))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            // Keep registered worktrees from older versions at their existing location.
+            if (listed.Contains($"worktree {legacyPath.Replace('\\', '/')}")) path = legacyPath;
+            if (!listed.Contains($"worktree {path.Replace('\\', '/')}"))
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
                 var exists = RunGit(repository, ["show-ref", "--verify", "--quiet", $"refs/heads/{branch}"], false).ExitCode == 0;
@@ -118,7 +121,7 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
         var suffix = DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + "-" + Guid.NewGuid().ToString("N")[..8];
         var quarantineBranch = $"recovery/maintenance-{safeSlug}-{suffix}";
         var quarantinePath = Path.Combine(
-            Path.GetDirectoryName(path)!, $"maintenance-{safeSlug}-quarantine-{suffix}");
+            Path.GetDirectoryName(path)!, ProjectWorktreePaths.LeafName("maintenance", $"{safeSlug}-quarantine-{suffix}"));
         var renamed = false;
         var moved = false;
         try

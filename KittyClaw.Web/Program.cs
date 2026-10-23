@@ -144,6 +144,7 @@ builder.Services.AddHostedService<ChatMemoryConsolidationService>();
 builder.Services.AddSingleton<IColumnAgentDispatcher, ColumnAgentDispatcher>();
 builder.Services.AddSingleton<ColumnActionExecutor>();
 builder.Services.AddSingleton<CostTracker>();
+builder.Services.AddSingleton<AgentBudgetService>();
 builder.Services.AddSingleton<CostReportService>();
 builder.Services.AddSingleton<IRtkSavingsReader, RtkSavingsReader>();
 builder.Services.AddHostedService<CostReportRefreshService>();

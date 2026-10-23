@@ -3,6 +3,7 @@ using KittyClaw.Core.Models;
 using KittyClaw.Core.Services;
 using KittyClaw.Core.Tests.Helpers;
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 
 namespace KittyClaw.Core.Tests.Services;
 
@@ -20,6 +21,78 @@ public sealed class TicketTransferServiceTests
         await columnService.ListColumnsAsync(source.Slug);
         await columnService.ListColumnsAsync(target.Slug);
         return (new TicketTransferService(projects, ticketService, columnService, members, labelService), ticketService, projects, source.Slug, target.Slug);
+    }
+
+    [Fact]
+    public async Task Transfer_PreservesInternalDependenciesAndTheirTimestamps()
+    {
+        using var temp = new TempDir();
+        var (transfers, tickets, projects, source, target) = await BuildSut(temp);
+        var root = await tickets.CreateTicketAsync(source, "Root");
+        var dependent = await tickets.CreateTicketAsync(source, "Delivery", parentId: root.Id);
+        var blocker = await tickets.CreateTicketAsync(source, "Prerequisite", parentId: root.Id);
+        var dependency = await tickets.AddDependencyAsync(source, dependent.Id, blocker.Id);
+
+        await transfers.TransferAsync(source, root.Id, target, "owner");
+
+        var moved = (await tickets.GetTicketAsync(target, dependent.Id))!;
+        Assert.Equal(blocker.Id, Assert.Single(moved.BlockedBy).TicketId);
+        Assert.Equal(dependent.Id, Assert.Single((await tickets.GetTicketAsync(target, blocker.Id))!.Blocks).TicketId);
+        await using var targetDb = projects.GetProjectDb(target);
+        var saved = Assert.Single(targetDb.TicketDependencies);
+        Assert.Equal(dependency.CreatedAt, saved.CreatedAt);
+        await using var sourceDb = projects.GetProjectDb(source);
+        Assert.Empty(sourceDb.TicketDependencies);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Transfer_RejectsExternalDependenciesInEitherDirectionWithoutMutation(bool incoming)
+    {
+        using var temp = new TempDir();
+        var (transfers, tickets, projects, source, target) = await BuildSut(temp);
+        var root = await tickets.CreateTicketAsync(source, "Root");
+        var child = await tickets.CreateTicketAsync(source, "Child", parentId: root.Id);
+        var outside = await tickets.CreateTicketAsync(source, "Outside tree");
+        await tickets.AddDependencyAsync(source, incoming ? child.Id : outside.Id, incoming ? outside.Id : child.Id);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => transfers.TransferAsync(source, root.Id, target, "owner"));
+
+        Assert.Contains("split dependency", error.Message);
+        Assert.Contains($"#{outside.Id}", error.Message);
+        Assert.NotNull(await tickets.GetTicketAsync(source, root.Id));
+        Assert.NotNull(await tickets.GetTicketAsync(source, child.Id));
+        Assert.Null(await tickets.GetTicketAsync(target, root.Id));
+        await using var sourceDb = projects.GetProjectDb(source);
+        Assert.Single(sourceDb.TicketDependencies);
+        await using var targetDb = projects.GetProjectDb(target);
+        Assert.Empty(targetDb.Tickets);
+        Assert.Empty(targetDb.ActivityEntries);
+        Assert.Empty(targetDb.TicketDependencies);
+    }
+
+    [Fact]
+    public async Task Transfer_RollsBackTicketsAndDependenciesWhenDependencyWriteFails()
+    {
+        using var temp = new TempDir();
+        var (transfers, tickets, projects, source, target) = await BuildSut(temp);
+        var root = await tickets.CreateTicketAsync(source, "Root");
+        var child = await tickets.CreateTicketAsync(source, "Child", parentId: root.Id);
+        await tickets.AddDependencyAsync(source, root.Id, child.Id);
+        await using (var db = projects.GetProjectDb(target))
+        {
+            await TicketService.EnsureTicketDependenciesTableAsync(db);
+            await db.Database.ExecuteSqlRawAsync("CREATE TRIGGER reject_dependency BEFORE INSERT ON TicketDependencies BEGIN SELECT RAISE(ABORT, 'synthetic dependency failure'); END;");
+        }
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => transfers.TransferAsync(source, root.Id, target, "owner"));
+
+        Assert.Equal(child.Id, Assert.Single((await tickets.GetTicketAsync(source, root.Id))!.BlockedBy).TicketId);
+        Assert.NotNull(await tickets.GetTicketAsync(source, child.Id));
+        await using var targetDb = projects.GetProjectDb(target);
+        Assert.Empty(targetDb.Tickets);
+        Assert.Empty(targetDb.TicketDependencies);
     }
 
     [Fact]
