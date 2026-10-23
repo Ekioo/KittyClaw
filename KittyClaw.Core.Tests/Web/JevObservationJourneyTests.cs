@@ -208,10 +208,9 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
             await Expect(page.GetByTestId("jev-history-entry")).ToHaveCountAsync(2);
             await CaptureTicketAsync("05-complete-agent-review-done.png");
 
-            var stricter = await http.PutAsJsonAsync($"/api/projects/{slug}/columns/{source.Id}/processor",
-                new SaveColumnProcessorRequest("Implementation", "Complete the work and choose its next destination.",
-                    DefaultTargetColumnId: classicTarget.Id, Routes: [new("review", target.Id)], JevConfidenceThreshold: 1));
-            stricter.EnsureSuccessStatusCode();
+            // Change the simulated judgment, keeping the configured workflow stable.
+            // Workflow edits racing an active sweep are deliberately rejected by the engine.
+            factory.Handler.Confidence = .5;
             var fallbackResponse = await http.PostAsJsonAsync($"/api/projects/{slug}/tickets",
                 new CreateTicketRequest("Classic routing when JEV is uncertain", "owner", source.Name,
                     "Use the normal route when JEV is below the configured confidence threshold.", PipelineId: source.PipelineId, ColumnId: source.Id));
@@ -327,6 +326,7 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
     private sealed class FixtureHandler : HttpMessageHandler
     {
         public int Count;
+        public double Confidence = .9;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Assert.Equal("https://api.typesafe.ai/v1/systemone", request.RequestUri!.ToString());
@@ -336,6 +336,7 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
             var candidates = options.EnumerateObject().Where(p => p.Name != "none").ToList();
             var selected = candidates.OrderByDescending(p => p.Value.GetString()!.StartsWith("Review:")).First().Name;
             var answers = JsonSerializer.SerializeToNode(JevResponseFixture.Answers(selected))!;
+            answers["routing"]!["confidence"] = Confidence;
             answers["routing"]!["probabilities"] = JsonSerializer.SerializeToNode(options.EnumerateObject().ToDictionary(p => p.Name,
                 p => p.Name == selected ? .95 : .05 / (options.EnumerateObject().Count() - 1)));
             Interlocked.Increment(ref Count);
