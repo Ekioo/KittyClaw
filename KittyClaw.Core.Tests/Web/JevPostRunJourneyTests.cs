@@ -138,7 +138,11 @@ public sealed class JevPostRunJourneyTests(ITestOutputHelper output)
             await page.GotoAsync(new Uri(http.BaseAddress!, $"/board/{slug}/ticket/{secondTicket.Id}").ToString());
             proposal = page.GetByTestId("jev-history-entry").Filter(new() { HasText = "Suggested destination: Todo" }).First;
             await Expect(proposal).ToContainTextAsync("Suggested destination: Todo", new() { Timeout = 60000 });
-            var rejectedProposal = Assert.Single(await factory.Services.GetRequiredService<JevQualificationService>().GetPostRunAsync(slug, secondTicket.Id));
+            var qualification = factory.Services.GetRequiredService<JevQualificationService>();
+            var observedUntil = DateTime.UtcNow.AddSeconds(60);
+            while ((await qualification.GetPostRunAsync(slug, secondTicket.Id)).Count == 0 && DateTime.UtcNow < observedUntil)
+                await Task.Delay(100);
+            var rejectedProposal = Assert.Single(await qualification.GetPostRunAsync(slug, secondTicket.Id));
             await factory.Services.GetRequiredService<JevProposalDecisionService>().DecideAsync(slug, secondTicket.Id,
                 JevDecisionStore.ProposalId(rejectedProposal!), false, "Review evidence before returning to implementation");
             await page.ReloadAsync();
