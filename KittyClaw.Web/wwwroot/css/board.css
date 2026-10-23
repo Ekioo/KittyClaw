@@ -59,10 +59,6 @@
     border: 1px solid currentColor;
 }
 
-.column-body {
-    cursor: no-drop;
-}
-
 .column-header {
     padding: 0.7rem 0.85rem;
     display: flex;
