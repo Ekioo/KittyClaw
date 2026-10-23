@@ -9,5 +9,11 @@
   "CriterionNotEvaluated": "Non valutato",
   "RemoveEvidence": "Rimuovi prova",
   "ProcessorEvaluateAcceptance": "Valuta i criteri di accettazione del ticket",
-  "ProcessorEvaluateAcceptanceHelp": "Chiedi a questo processore di valutare i criteri pertinenti del ticket e allegare prove. I risultati vengono salvati prima dell'instradamento. Disattivato per impostazione predefinita."
+  "ProcessorEvaluateAcceptanceHelp": "Chiedi a questo processore di valutare i criteri pertinenti del ticket e allegare prove. I risultati vengono salvati prima dell'instradamento. Disattivato per impostazione predefinita.",
+  "CriterionValidated": "Validato",
+  "CriterionFailed": "Non validato",
+  "CriterionPartial": "Parziale",
+  "CriteriaValidatedCount": "{0} / {1} validati",
+  "CriteriaEmpty": "Nessun criterio. Aggiungi le condizioni necessarie per validare questo ticket.",
+  "CriterionEvidenceText": "Testo"
 }

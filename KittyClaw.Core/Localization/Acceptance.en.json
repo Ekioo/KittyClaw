@@ -9,5 +9,11 @@
   "CriterionNotEvaluated": "Not evaluated",
   "RemoveEvidence": "Remove evidence",
   "ProcessorEvaluateAcceptance": "Evaluate ticket acceptance criteria",
-  "ProcessorEvaluateAcceptanceHelp": "Ask this processor to assess relevant ticket criteria and attach evidence. Results are saved before routing. Disabled by default."
+  "ProcessorEvaluateAcceptanceHelp": "Ask this processor to assess relevant ticket criteria and attach evidence. Results are saved before routing. Disabled by default.",
+  "CriterionValidated": "Validated",
+  "CriterionFailed": "Not validated",
+  "CriterionPartial": "Partial",
+  "CriteriaValidatedCount": "{0} / {1} validated",
+  "CriteriaEmpty": "No criteria yet. Add the conditions needed to validate this ticket.",
+  "CriterionEvidenceText": "Text"
 }

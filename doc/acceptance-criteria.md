@@ -4,6 +4,10 @@ Tickets expose an `acceptanceCriteria` array. Each criterion has a stable `id`, 
 `status` (`NotEvaluated`, `PASS`, `FAIL`, `PARTIAL`) and optional `evidence`.
 The ticket panel displays these directly below the description, with independent status
 selectors and an editor to add, change or remove a criterion and its proof.
+Each criterion groups its text, localized status and expandable evidence in a bordered
+row. Status labels, icons and colors distinguish validated (green), partial (amber),
+unmet (red) and unevaluated (gray) criteria. A count summarizes validated criteria.
+Controls wrap below the text on mobile; underlying status values remain unchanged.
 
 Evidence contains `content`, `mediaType` and optional `fileName`. Supported media types
 are `text/plain`, `application/json`, `image/png`, `image/jpeg`, `image/gif` and `image/webp`.

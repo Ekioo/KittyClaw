@@ -9,5 +9,11 @@
   "CriterionNotEvaluated": "Nicht bewertet",
   "RemoveEvidence": "Nachweis entfernen",
   "ProcessorEvaluateAcceptance": "Akzeptanzkriterien des Tickets bewerten",
-  "ProcessorEvaluateAcceptanceHelp": "Diesen Prozessor die relevanten Ticketkriterien bewerten und Nachweise beifügen lassen. Die Ergebnisse werden vor der Weiterleitung gespeichert. Standardmäßig deaktiviert."
+  "ProcessorEvaluateAcceptanceHelp": "Diesen Prozessor die relevanten Ticketkriterien bewerten und Nachweise beifügen lassen. Die Ergebnisse werden vor der Weiterleitung gespeichert. Standardmäßig deaktiviert.",
+  "CriterionValidated": "Bestanden",
+  "CriterionFailed": "Nicht bestanden",
+  "CriterionPartial": "Teilweise",
+  "CriteriaValidatedCount": "{0} / {1} bestanden",
+  "CriteriaEmpty": "Noch keine Kriterien. Fügen Sie die Bedingungen für die Validierung dieses Tickets hinzu.",
+  "CriterionEvidenceText": "Text"
 }

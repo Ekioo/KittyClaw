@@ -5,32 +5,51 @@
 @inject LocalizationService L
 
 <section class="acceptance-criteria" data-testid="ticket-acceptance-criteria">
-    <div class="section-header"><span class="section-label">@L["TicketAcceptanceCriteria"]</span>
-        <button class="icon-btn" title="@L["AddCriterion"]" disabled="@_busy" @onclick="() => Edit(null)">+</button></div>
+    <div class="acceptance-heading">
+        <div>
+            <span class="section-label">@L["TicketAcceptanceCriteria"]</span>
+            @if (Ticket.AcceptanceCriteria.Count > 0)
+            {
+                <span class="acceptance-count">@L.Get("CriteriaValidatedCount", Ticket.AcceptanceCriteria.Count(c => c.Status == AcceptanceStatus.PASS), Ticket.AcceptanceCriteria.Count)</span>
+            }
+        </div>
+        <button class="acceptance-add" title="@L["AddCriterion"]" disabled="@_busy" @onclick="() => Edit(null)"><span aria-hidden="true">+</span> @L["AddCriterion"]</button>
+    </div>
+    @if (Ticket.AcceptanceCriteria.Count == 0 && !_editing)
+    {
+        <p class="acceptance-empty">@L["CriteriaEmpty"]</p>
+    }
+    <div class="acceptance-list">
     @foreach (var criterion in Ticket.AcceptanceCriteria)
     {
-        <div class="acceptance-row" @key="criterion.Id">
-            <span class="acceptance-text">@criterion.Text</span>
-            <select class="settings-input" aria-label="@(L["CriterionStatus"] + ": " + criterion.Text)" value="@criterion.Status" disabled="@_busy" @onchange="e => ChangeStatus(criterion, e.Value?.ToString())">
-                @foreach (var status in Enum.GetValues<AcceptanceStatus>()) { <option value="@status">@StatusLabel(status)</option> }
-            </select>
-            <button class="icon-btn" title="@L["EditCriterion"]" disabled="@_busy" @onclick="() => Edit(criterion)">&#9998;</button>
-            <button class="icon-btn" title="@L["DeleteCriterion"]" disabled="@_busy" @onclick="() => Delete(criterion.Id)">×</button>
-        </div>
-        @if (criterion.Evidence is { } evidence)
-        {
-            <details class="acceptance-proof"><summary>@L["CriterionEvidence"] @evidence.FileName</summary>
-                @if (evidence.MediaType.StartsWith("image/")) { <img src="@($"data:{evidence.MediaType};base64,{evidence.Content}")" alt="@criterion.Text" /> }
-                else { <pre>@evidence.Content</pre> }
-            </details>
-        }
+        <article class="acceptance-item @StatusClass(criterion.Status)" @key="criterion.Id">
+            <div class="acceptance-row">
+                <span class="acceptance-status-icon" aria-hidden="true">@StatusIcon(criterion.Status)</span>
+                <span class="acceptance-text">@criterion.Text</span>
+                <div class="acceptance-controls">
+                    <select class="acceptance-status" aria-label="@(L["CriterionStatus"] + ": " + criterion.Text)" value="@criterion.Status" disabled="@_busy" @onchange="e => ChangeStatus(criterion, e.Value?.ToString())">
+                        @foreach (var status in Enum.GetValues<AcceptanceStatus>()) { <option value="@status">@StatusLabel(status)</option> }
+                    </select>
+                    <button class="icon-btn" title="@L["EditCriterion"]" disabled="@_busy" @onclick="() => Edit(criterion)">&#9998;</button>
+                    <button class="icon-btn" title="@L["DeleteCriterion"]" disabled="@_busy" @onclick="() => Delete(criterion.Id)">×</button>
+                </div>
+            </div>
+            @if (criterion.Evidence is { } evidence)
+            {
+                <details class="acceptance-proof"><summary>@L["CriterionEvidence"] @evidence.FileName</summary>
+                    @if (evidence.MediaType.StartsWith("image/")) { <img src="@($"data:{evidence.MediaType};base64,{evidence.Content}")" alt="@criterion.Text" /> }
+                    else { <pre>@evidence.Content</pre> }
+                </details>
+            }
+        </article>
     }
+    </div>
     @if (_editing)
     {
         <div class="acceptance-editor">
             <label>@L["CriterionText"]<textarea class="settings-input" @bind="_text" disabled="@_busy"></textarea></label>
             <label>@L["CriterionEvidence"]
-                <select class="settings-input" @bind="_mediaType" @bind:after="() => { _proof = string.Empty; _fileName = null; }" disabled="@_busy"><option value="text/plain">Text</option><option value="application/json">JSON</option><option value="image/png">Image</option></select>
+                <select class="settings-input" @bind="_mediaType" @bind:after="() => { _proof = string.Empty; _fileName = null; }" disabled="@_busy"><option value="text/plain">@L["CriterionEvidenceText"]</option><option value="application/json">JSON</option><option value="image/png">Image</option></select>
             </label>
             @if (_mediaType.StartsWith("image/"))
             {
@@ -43,7 +62,7 @@
             <button class="icon-btn" disabled="@_busy" @onclick="ClearEvidence">@L["RemoveEvidence"]</button>
         </div>
     }
-    @if (_error is not null) { <p role="alert">@_error</p> }
+    @if (_error is not null) { <p class="acceptance-error" role="alert">@_error</p> }
 </section>
 
 @code {
@@ -56,7 +75,24 @@
     private AcceptanceStatus _status;
     private int _ticketId;
     protected override void OnParametersSet() { if (_ticketId != Ticket.Id) { _editing = false; _error = null; _ticketId = Ticket.Id; } }
-    private string StatusLabel(AcceptanceStatus status) => status == AcceptanceStatus.NotEvaluated ? L["CriterionNotEvaluated"] : status.ToString();
+    private string StatusLabel(AcceptanceStatus status) => L[status switch
+    {
+        AcceptanceStatus.PASS => "CriterionValidated",
+        AcceptanceStatus.FAIL => "CriterionFailed",
+        AcceptanceStatus.PARTIAL => "CriterionPartial",
+        _ => "CriterionNotEvaluated"
+    }];
+    private static string StatusClass(AcceptanceStatus status) => status switch
+    {
+        AcceptanceStatus.PASS => "acceptance-item--pass",
+        AcceptanceStatus.FAIL => "acceptance-item--fail",
+        AcceptanceStatus.PARTIAL => "acceptance-item--partial",
+        _ => "acceptance-item--pending"
+    };
+    private static string StatusIcon(AcceptanceStatus status) => status switch
+    {
+        AcceptanceStatus.PASS => "✓", AcceptanceStatus.FAIL => "×", AcceptanceStatus.PARTIAL => "◐", _ => "○"
+    };
     private void Edit(TicketAcceptanceCriterion? criterion)
     {
         _id = criterion?.Id; _text = criterion?.Text ?? ""; _status = criterion?.Status ?? AcceptanceStatus.NotEvaluated;

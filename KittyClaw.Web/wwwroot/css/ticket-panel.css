@@ -1454,3 +1454,44 @@ select:focus-visible,
 
 .jev-next-action { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
 .jev-next-action .jev-decision-controls { margin: 0; }
+
+/* Acceptance criteria keep status, requirement and evidence together. */
+.acceptance-criteria { margin: 1.5rem 0; min-width: 0; }
+.acceptance-heading { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: .75rem; flex-wrap: wrap; }
+.acceptance-heading > div { display: flex; align-items: baseline; gap: .75rem; flex-wrap: wrap; }
+.acceptance-count { color: var(--text-muted); font-size: .78rem; }
+.acceptance-add { display: inline-flex; align-items: center; gap: .4rem; padding: .4rem .65rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface2); color: var(--text); font: inherit; font-size: .8rem; cursor: pointer; }
+.acceptance-add:hover { border-color: var(--border-strong); }
+.acceptance-list { display: grid; gap: .6rem; }
+.acceptance-item { --criterion-color: var(--text-muted); border: 1px solid var(--border); border-left: 3px solid var(--criterion-color); border-radius: 8px; padding: .8rem; background: color-mix(in srgb, var(--criterion-color) 4%, var(--surface)); min-width: 0; }
+.acceptance-item--pass { --criterion-color: var(--accent-hover); }
+.acceptance-item--partial { --criterion-color: #fbbf24; }
+.acceptance-item--fail { --criterion-color: var(--s-blocked); }
+.acceptance-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: .6rem; }
+.acceptance-status-icon { color: var(--criterion-color); font-size: 1.1rem; font-weight: 700; text-align: center; }
+.acceptance-text { line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
+.acceptance-controls { display: flex; align-items: center; gap: .4rem; }
+.acceptance-status { border: 1px solid color-mix(in srgb, var(--criterion-color) 40%, var(--border)); background: color-mix(in srgb, var(--criterion-color) 10%, var(--surface)); color: var(--criterion-color); font: inherit; font-size: .8rem; font-weight: 600; padding: .4rem .5rem; border-radius: 6px; min-width: 130px; cursor: pointer; }
+.acceptance-status option { color: var(--text); background: var(--surface2); }
+.acceptance-controls .icon-btn { width: 28px; height: 30px; flex-shrink: 0; }
+.acceptance-proof { margin: .65rem 0 0 1.95rem; border-top: 1px solid var(--border); padding-top: .6rem; color: var(--text-muted); font-size: .8rem; }
+.acceptance-proof summary { cursor: pointer; overflow-wrap: anywhere; }
+.acceptance-proof pre { max-height: 25rem; overflow: auto; margin-top: .6rem; padding: .7rem; border-radius: 6px; background: var(--bg); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+.acceptance-proof img, .acceptance-preview { display: block; max-width: 100%; max-height: 320px; object-fit: contain; margin-top: .6rem; border-radius: 6px; }
+.acceptance-empty { color: var(--text-muted); font-size: .85rem; line-height: 1.5; padding: .8rem; border: 1px dashed var(--border); border-radius: 8px; }
+.acceptance-editor { display: flex; flex-wrap: wrap; gap: .65rem; padding: .9rem; margin-top: .75rem; background: var(--surface2); border: 1px solid var(--border-strong); border-radius: 8px; }
+.acceptance-editor > label, .acceptance-editor > textarea, .acceptance-editor > input { width: 100%; min-width: 0; }
+.acceptance-editor label { display: grid; gap: .4rem; color: var(--text-muted); font-size: .8rem; }
+.acceptance-editor textarea { min-height: 80px; resize: vertical; }
+.acceptance-editor .settings-input { width: 100%; }
+.acceptance-error { color: var(--s-blocked); margin-top: .75rem; }
+.acceptance-criteria :is(button, select, textarea):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.acceptance-criteria :is(button, select):disabled { opacity: .55; cursor: default; }
+@media (max-width: 767px) {
+    .acceptance-row { grid-template-columns: 22px minmax(0, 1fr); align-items: start; }
+    .acceptance-controls { grid-column: 2; flex-wrap: wrap; }
+    .acceptance-controls .icon-btn, .acceptance-add { min-width: 44px; min-height: 44px; }
+    .acceptance-status { min-height: 44px; font-size: 16px; min-width: 0; max-width: 100%; }
+    .acceptance-proof { margin-left: 0; }
+    .acceptance-editor .settings-input { font-size: 16px; }
+}
