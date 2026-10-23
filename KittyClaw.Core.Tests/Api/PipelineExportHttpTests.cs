@@ -134,6 +134,8 @@ public sealed class PipelineExportHttpTests : IClassFixture<PipelineExportHttpTe
     {
         var (sourceSlug, pipelineId, sourceColumnId, targetColumnId) =
             await CreatePipelineAsync("Portable source");
+        (await _client.PatchAsJsonAsync($"/api/projects/{sourceSlug}/columns/{sourceColumnId}",
+            new { maxTickets = 3, capacityBlocking = true })).EnsureSuccessStatusCode();
         var secretValue = "vault-only-" + Guid.NewGuid().ToString("N");
         var secret = await _client.PutAsJsonAsync($"/api/projects/{sourceSlug}/secrets/DEPLOY_TOKEN",
             new { value = secretValue });
@@ -176,7 +178,8 @@ public sealed class PipelineExportHttpTests : IClassFixture<PipelineExportHttpTe
             }, names);
             var allText = string.Join("\n", zip.Entries.Select(ReadEntry));
             Assert.DoesNotContain(secretValue, allText, StringComparison.Ordinal);
-            Assert.DoesNotContain("ticket", allText, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("\"tickets\"", allText, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("\"ticketId\"", allText, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("agentCost", allText, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("workspacePath", allText, StringComparison.OrdinalIgnoreCase);
             var portable = JsonDocument.Parse(ReadEntry(zip.GetEntry("pipeline.json")!)).RootElement;
@@ -226,6 +229,10 @@ public sealed class PipelineExportHttpTests : IClassFixture<PipelineExportHttpTe
             .GetProperty("columnId").GetInt32();
         Assert.NotEqual(sourceColumnId, importedSourceId);
         Assert.NotEqual(targetColumnId, importedTargetId);
+        var targetColumns = await _client.GetFromJsonAsync<JsonElement[]>($"/api/projects/{targetSlug}/columns");
+        var importedSource = targetColumns!.Single(column => column.GetProperty("id").GetInt32() == importedSourceId);
+        Assert.Equal(3, importedSource.GetProperty("maxTickets").GetInt32());
+        Assert.True(importedSource.GetProperty("capacityBlocking").GetBoolean());
         var importedProcessor = await _client.GetFromJsonAsync<JsonElement>(
             $"/api/projects/{targetSlug}/columns/{importedSourceId}/processor");
         Assert.Equal(importedTargetId,
