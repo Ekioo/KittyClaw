@@ -34,6 +34,11 @@ public sealed class TicketOpeningJourneyTests(ITestOutputHelper output)
         var page = await browser.NewPageAsync();
         var errors = new List<string>();
         page.PageError += (_, error) => errors.Add(error);
+        page.Console += (_, message) =>
+        {
+            if (message.Type == "error" && message.Text.Contains("unhandled exception", StringComparison.OrdinalIgnoreCase))
+                errors.Add(message.Text);
+        };
         await page.GotoAsync(new Uri(http.BaseAddress!, $"/board/{slug}").ToString());
         var card = page.Locator($".ticket-card[data-ticket-id='{ticket.Id}']");
         var panel = page.Locator(".ticket-panel");
@@ -48,6 +53,13 @@ public sealed class TicketOpeningJourneyTests(ITestOutputHelper output)
         await Expect(page.GetByTestId("ticket-worktree-error")).ToHaveCountAsync(0);
         await panel.Locator(".ticket-panel-header .close-btn").ClickAsync();
         await Expect(panel).ToHaveCountAsync(0);
+        // Closing while secondary details load must not break the next opening.
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            await card.ClickAsync();
+            await panel.Locator(".ticket-panel-header .close-btn").ClickAsync();
+            await Expect(panel).ToHaveCountAsync(0);
+        }
         var stopwatch = Stopwatch.StartNew();
         await card.ClickAsync();
         await Expect(panel.Locator("h2")).ToContainTextAsync(ticket.Title, new() { Timeout = 3000 });
