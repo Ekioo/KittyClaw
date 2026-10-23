@@ -1,0 +1,9 @@
+{
+  "ColumnMaxTickets": "Maximale Tickets (0 = unbegrenzt)",
+  "ColumnCapacityMode": "Bei Erreichen des Limits",
+  "ColumnCapacityWarning": "Nur Warnung",
+  "ColumnCapacityBlocking": "Neue Zugänge blockieren",
+  "ColumnCapacityHelp": "Gilt nur für diese Spalte. Bestehende Tickets können bearbeitet und verschoben werden. Standardmäßig kein Limit.",
+  "ColumnCapacityReached": "Ticketlimit erreicht",
+  "ColumnCapacityError": "Spaltenlimit erreicht. Wählen Sie eine andere Spalte oder ändern Sie die Einstellungen."
+}

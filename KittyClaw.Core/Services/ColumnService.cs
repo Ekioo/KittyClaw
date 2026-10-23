@@ -61,7 +61,30 @@ public class ColumnService
                 await d.Database.ExecuteSqlRawAsync("ALTER TABLE BoardColumns ADD COLUMN UserGuidance TEXT NOT NULL DEFAULT ''");
         });
 
+        await MigrationGate.RunOnceAsync(db, "board-column-capacity-v1", static async d =>
+        {
+            var columns = await d.Database.SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('BoardColumns')").ToListAsync();
+            if (!columns.Contains("MaxTickets", StringComparer.OrdinalIgnoreCase))
+                await d.Database.ExecuteSqlRawAsync("ALTER TABLE BoardColumns ADD COLUMN MaxTickets INTEGER NOT NULL DEFAULT 0");
+            if (!columns.Contains("CapacityBlocking", StringComparer.OrdinalIgnoreCase))
+                await d.Database.ExecuteSqlRawAsync("ALTER TABLE BoardColumns ADD COLUMN CapacityBlocking INTEGER NOT NULL DEFAULT 0");
+        });
         var defaultPipeline = await PipelineService.EnsureWorkflowSchemaAsync(db);
+        // SQLite enforces explicit blocking limits atomically for every writer, including concurrent arrivals.
+        await MigrationGate.RunOnceAsync(db, "board-column-capacity-triggers-v1", static d =>
+            d.Database.ExecuteSqlRawAsync("""
+                CREATE TRIGGER IF NOT EXISTS TicketColumnCapacityInsert BEFORE INSERT ON Tickets
+                WHEN EXISTS (SELECT 1 FROM BoardColumns c WHERE c.Id = NEW.ColumnId
+                    AND c.CapacityBlocking = 1 AND c.MaxTickets > 0
+                    AND (SELECT COUNT(*) FROM Tickets t WHERE t.ColumnId = c.Id) >= c.MaxTickets)
+                BEGIN SELECT RAISE(ABORT, 'column_capacity_reached'); END;
+                CREATE TRIGGER IF NOT EXISTS TicketColumnCapacityMove BEFORE UPDATE OF ColumnId ON Tickets
+                WHEN NEW.ColumnId IS NOT OLD.ColumnId AND EXISTS
+                    (SELECT 1 FROM BoardColumns c WHERE c.Id = NEW.ColumnId
+                    AND c.CapacityBlocking = 1 AND c.MaxTickets > 0
+                    AND (SELECT COUNT(*) FROM Tickets t WHERE t.ColumnId = c.Id) >= c.MaxTickets)
+                BEGIN SELECT RAISE(ABORT, 'column_capacity_reached'); END;
+                """));
 
         // Duplicate column names crash the board (ToDictionary by name) and make ticket
         // Status ambiguous. Heal boards that already contain duplicates (the pre-index
@@ -163,7 +186,7 @@ public class ColumnService
     public async Task<BoardColumn> CreateColumnAsync(
         string projectSlug, string name, string color = "#5a6a80",
         int? pipelineId = null, ColumnRole role = ColumnRole.Normal, int? insertIndex = null,
-        string userGuidance = "")
+        string userGuidance = "", int maxTickets = 0, bool capacityBlocking = false)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureBoardColumnsTableAsync(db);
@@ -179,6 +202,7 @@ public class ColumnService
         var targetIndex = Math.Clamp(insertIndex ?? columns.Count, 0, columns.Count);
         for (var index = targetIndex; index < columns.Count; index++)
             columns[index].SortOrder = index + 1;
+        if (maxTickets < 0) throw new InvalidOperationException("The ticket limit cannot be negative.");
         var column = new BoardColumn
         {
             PipelineId = pipelineId.Value,
@@ -187,6 +211,8 @@ public class ColumnService
             SortOrder = targetIndex,
             Role = role,
             UserGuidance = userGuidance.Trim(),
+            MaxTickets = maxTickets,
+            CapacityBlocking = capacityBlocking,
         };
         db.BoardColumns.Add(column);
         try { await db.SaveChangesAsync(); }
@@ -200,7 +226,7 @@ public class ColumnService
 
     public async Task<BoardColumn?> UpdateColumnAsync(
         string projectSlug, int columnId, string? name = null, string? color = null,
-        ColumnRole? role = null, string? userGuidance = null)
+        ColumnRole? role = null, string? userGuidance = null, int? maxTickets = null, bool? capacityBlocking = null)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureBoardColumnsTableAsync(db);
@@ -226,6 +252,9 @@ public class ColumnService
                 "UPDATE Tickets SET ScheduleTarget = {0} WHERE PipelineId = {1} AND ScheduleTarget = {2}",
                 name, column.PipelineId, oldName);
         }
+        if (maxTickets < 0) throw new InvalidOperationException("The ticket limit cannot be negative.");
+        if (maxTickets is not null) column.MaxTickets = maxTickets.Value;
+        if (capacityBlocking is not null) column.CapacityBlocking = capacityBlocking.Value;
         if (color is not null) column.Color = color;
         if (role is not null) column.Role = role.Value;
         if (userGuidance is not null) column.UserGuidance = userGuidance.Trim();

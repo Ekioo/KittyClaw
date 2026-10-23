@@ -71,6 +71,16 @@
                             </select>
                         </label>
                     </div>
+                    <div class="column-editor-grid">
+                        <label>@L["ColumnMaxTickets"]<input class="settings-input" type="number" min="0" @bind="_maxTickets" /></label>
+                        <label>@L["ColumnCapacityMode"]
+                            <select @bind="CapacityBlockingValue" aria-label="@L["ColumnCapacityMode"]">
+                                <option value="false">@L["ColumnCapacityWarning"]</option>
+                                <option value="true">@L["ColumnCapacityBlocking"]</option>
+                            </select>
+                        </label>
+                    </div>
+                    <p class="settings-hint">@L["ColumnCapacityHelp"]</p>
                     <label class="column-guidance-field">
                         <FieldHelp Label="@L["ColumnUserGuidance"]" Help="@L["ColumnUserGuidanceHelp"]" />
                         <textarea class="settings-input workflow-textarea" @bind="_userGuidance"
@@ -411,6 +421,13 @@
     private ColumnRole _columnRole;
     private string _userGuidance = "";
     private int _positionIndex;
+    private int _maxTickets;
+    private bool _capacityBlocking;
+    private string CapacityBlockingValue
+    {
+        get => _capacityBlocking ? "true" : "false";
+        set => _capacityBlocking = value == "true";
+    }
     private string _name = "";
     private string _mission = "";
     private string _prompt = "";
@@ -463,6 +480,8 @@
             _columnColor = source?.Color ?? "#5a6a80";
             _columnRole = source?.Role ?? ColumnRole.Normal;
             _userGuidance = source?.UserGuidance ?? "";
+            _maxTickets = source?.MaxTickets ?? 0;
+            _capacityBlocking = source?.CapacityBlocking ?? false;
             var sourceIndex = source is null ? PipelineColumns.Count : PipelineColumns.FindIndex(column => column.Id == source.Id);
             _positionIndex = Math.Clamp(InsertIndex >= 0 ? InsertIndex : Math.Max(0, sourceIndex), 0, SiblingColumns.Count);
             _deleteTargetId = SiblingColumns.FirstOrDefault()?.Id ?? 0;
@@ -565,12 +584,12 @@
             if (IsCreating)
             {
                 savedColumn = await ColumnService.CreateColumnAsync(Slug, trimmedName, _columnColor, PipelineId,
-                    _columnRole, _positionIndex, _userGuidance);
+                    _columnRole, _positionIndex, _userGuidance, _maxTickets, _capacityBlocking);
             }
             else
             {
                 savedColumn = await ColumnService.UpdateColumnAsync(Slug, Column!.Id, trimmedName, _columnColor,
-                    _columnRole, _userGuidance)
+                    _columnRole, _userGuidance, _maxTickets, _capacityBlocking)
                     ?? throw new InvalidOperationException(L["ColumnNameAlreadyExists"]);
                 await ColumnService.ReorderColumnAsync(Slug, savedColumn.Id, _positionIndex);
             }

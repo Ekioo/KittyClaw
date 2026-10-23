@@ -43,7 +43,7 @@ public sealed class AutomationEngine : BackgroundService
         var runState = new RunStateManager(runs, cost, tickets, logger);
         var executor = new ActionExecutor(tickets, members, labels, sessions, runs, runner, cost, loc, projects, runState, logger, projectSecrets, durableWrites);
         _triggerHandler = new TriggerHandler(projects, _runtimeManager, executor, tickets, members, sessions, runs, queue, loc, logger);
-        _queueProcessor = new AutomationQueueProcessor(projects, tickets, queue, _runtimeManager, executor, logger);
+        _queueProcessor = new AutomationQueueProcessor(projects, tickets, queue, _runtimeManager, executor, logger, runs);
         queue.WorkAvailable += WakeQueueConsumer;
 
         store.OnConfigChangedOnDisk += slug =>
@@ -138,7 +138,10 @@ public sealed class AutomationEngine : BackgroundService
         var active = _runs.AllActive().ToArray();
         foreach (var run in active) run.Cancellation.Cancel();
         await base.StopAsync(cancellationToken);
-        await WaitForRunsAsync(active, cancellationToken);
+        if (_runs.IsUpdating)
+            await _runs.WaitForExecutionsAsync(cancellationToken);
+        else
+            await WaitForRunsAsync(active, cancellationToken);
     }
 
     public static Task CancelAndWaitForRunsAsync(IEnumerable<AgentRun> runs, CancellationToken ct)

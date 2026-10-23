@@ -1,0 +1,9 @@
+{
+  "ColumnMaxTickets": "チケット上限（0 = 無制限）",
+  "ColumnCapacityMode": "上限に達したとき",
+  "ColumnCapacityWarning": "警告のみ",
+  "ColumnCapacityBlocking": "新規追加をブロック",
+  "ColumnCapacityHelp": "この列にのみ適用されます。既存のチケットの編集と移動は可能です。初期設定は無制限です。",
+  "ColumnCapacityReached": "チケット上限に達しました",
+  "ColumnCapacityError": "列の上限に達しました。別の列を選ぶか設定を変更してください。"
+}

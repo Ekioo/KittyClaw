@@ -1,0 +1,9 @@
+{
+  "ColumnMaxTickets": "Máximo de tickets (0 = ilimitado)",
+  "ColumnCapacityMode": "Ao atingir o limite",
+  "ColumnCapacityWarning": "Somente aviso",
+  "ColumnCapacityBlocking": "Bloquear novas entradas",
+  "ColumnCapacityHelp": "Aplica-se apenas a esta coluna. Tickets existentes podem ser editados e movidos para fora. Sem limite por padrão.",
+  "ColumnCapacityReached": "Limite de tickets atingido",
+  "ColumnCapacityError": "Limite da coluna atingido. Escolha outra coluna ou altere suas configurações."
+}

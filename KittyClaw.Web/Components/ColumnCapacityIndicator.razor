@@ -1,0 +1,12 @@
+@inject LocalizationService L
+@if (Column.MaxTickets > 0)
+{
+    var full = Count >= Column.MaxTickets;
+    <span class="count column-capacity @(full ? "column-capacity--full" : "")"
+          title="@(full ? L["ColumnCapacityReached"] + " — " + L[Column.CapacityBlocking ? "ColumnCapacityBlocking" : "ColumnCapacityWarning"] : L["ColumnMaxTickets"])"
+          role="@(full ? "status" : null)">@Count / @Column.MaxTickets @(full ? "⚠" : "") @(Column.CapacityBlocking ? "🔒" : "")</span>
+}
+@code {
+    [Parameter, EditorRequired] public BoardColumn Column { get; set; } = default!;
+    [Parameter] public int Count { get; set; }
+}

@@ -1,4 +1,4 @@
-﻿/* Board */
+/* Board */
 .page-header .mobile-actions-toggle { display: none; }
 .board-layout {
     height: 100vh;
@@ -50,7 +50,16 @@
     filter: saturate(.5);
     box-shadow: none;
 }
-.column.column-ticket-drop-forbidden .column-body {
+.column.column-ticket-drop-forbidden  .column-capacity {
+    margin-left: .25rem;
+}
+
+.column-capacity--full {
+    color: var(--s-blocked);
+    border: 1px solid currentColor;
+}
+
+.column-body {
     cursor: no-drop;
 }
 

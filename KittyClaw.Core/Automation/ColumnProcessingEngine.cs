@@ -125,7 +125,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
     private async Task ScheduleProjectAsync(string slug, CancellationToken stoppingToken)
     {
         var project = await _projects.GetProjectAsync(slug);
-        if (project is null || project.IsPaused) return;
+        if (project is null || project.IsPaused || _runs?.IsUpdating == true) return;
         foreach (var processor in await _processors.ListEnabledAsync(slug))
         {
             var key = $"{slug}:{processor.Id}";
@@ -229,6 +229,9 @@ public sealed class ColumnProcessingEngine : BackgroundService
                 var dispatch = await _dispatcher.DispatchAsync(slug, processor, execution, ticket, cancellationToken);
                 if (dispatch.Result is null)
                 {
+                    // Leave the durable execution running for startup recovery, without
+                    // consuming a retry or routing the ticket to a failure column.
+                    if (_runs?.IsUpdating == true || cancellationToken.IsCancellationRequested) return;
                     await _executions.FailAttemptAsync(slug, execution, processor,
                         dispatch.Error ?? "Échec inconnu du processeur.", activityAuthor);
                     return;

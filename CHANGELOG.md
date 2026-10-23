@@ -4,6 +4,35 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.22] — 2026-10-23
+
+Configurable column capacity, recoverable ticket drafts, and smoother update restarts.
+
+### Highlights
+
+Columns can define an optional ticket limit, either as a visible warning or an enforced arrival limit. Ticket creation no longer stops across the entire project because the blocked queue is full.
+
+Ticket drafts preserve their title and description after failed creation and browser reloads. Installing an update can gracefully interrupt active agents, preserve recoverable work, and reconnect the browser after restart.
+
+### Added
+
+- Optional per-column ticket capacity with warning and blocking modes, visible on project and unified boards.
+- Capacity settings in column APIs and pipeline import/export.
+- Session-backed title and description drafts for ticket creation.
+
+### Changed
+
+- Replace the project-wide blocked-ticket creation limit with explicit column capacity settings.
+- Allow update installation while agents are active, closing dispatch admission and preserving interrupted work for startup recovery.
+
+### Fixed
+
+- Preserve ticket input and display errors when creation fails.
+- Enforce blocking column limits atomically for concurrent arrivals while permitting edits and departures.
+- Retry browser reconnection while the application restarts after an update.
+
+---
+
 ## [v0.21] — 2026-10-23
 
 Background updates, clearer ticket qualification, mobile boards, and more reliable delivery workflows.

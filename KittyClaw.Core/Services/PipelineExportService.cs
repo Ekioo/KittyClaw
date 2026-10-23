@@ -86,6 +86,8 @@ public sealed partial class PipelineExportService(
                 Color = column.Color,
                 Role = column.Role,
                 UserGuidance = column.UserGuidance,
+                MaxTickets = column.MaxTickets,
+                CapacityBlocking = column.CapacityBlocking,
             };
             if (processorsByColumn.TryGetValue(column.Id, out var processor))
                 portableColumn.Processor = BuildPortableProcessor(

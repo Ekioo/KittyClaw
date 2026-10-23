@@ -230,6 +230,7 @@ else
                                         <span>@col.Name</span>
                                     </span>
                                     <span class="count">@colTickets.Count</span>
+                                    <ColumnCapacityIndicator Column="col" Count="@lane.Tickets.Count(t => t.ColumnId == col.Id)" />
                                 </div>
                                 <div class="column-body">
                                     @foreach (var ticket in colTickets)
@@ -301,7 +302,7 @@ else
 @if (_newTicketProjectSlug is not null)
 {
     <div class="ticket-modal-overlay" @onclick="CloseCreateTicket">
-        <div class="create-popup" @onclick:stopPropagation>
+        <div class="create-popup" @ref="_createPopup" @onclick:stopPropagation>
             <div class="create-popup-header">
                 <h2>@L["NewTicket"] — @_newTicketProjectName</h2>
                 <button class="close-btn" @onclick="CloseCreateTicket">&times;</button>
@@ -449,6 +450,9 @@ else
     private string? _newTicketProjectSlug;
     private string _newTicketProjectName = "";
     private string _newTicketStatus = "";
+    private ElementReference _createPopup;
+    private bool _attachTicketDraft;
+    private string TicketDraftKey => $"kittyclaw.ticket-draft:{_newTicketProjectSlug}:{_newTicketPipelineId}:{_newTicketColumnId}";
     private string _newTicketTitle = "";
     private string _newTicketDescription = "";
     private TicketPriority _newTicketPriority = TicketPriority.NiceToHave;
@@ -522,6 +526,21 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (_attachTicketDraft && _newTicketProjectSlug is not null)
+        {
+            _attachTicketDraft = false;
+            try
+            {
+                var draft = await JS.InvokeAsync<string[]?>("ticketDraft.attach", _createPopup, TicketDraftKey);
+                if (draft is { Length: 2 })
+                {
+                    _newTicketTitle = draft[0];
+                    _newTicketDescription = draft[1];
+                    StateHasChanged();
+                }
+            }
+            catch (Exception ex) { Logger.LogWarning(ex, "Ticket draft initialization failed"); }
+        }
         // localStorage-backed preferences (collapse state, per-column sorts) need JS
         // interop, which only exists after the first render.
         if (firstRender)
@@ -788,6 +807,7 @@ else
 
     private void OpenCreateTicket(LaneData lane, string status)
     {
+        _attachTicketDraft = true;
         _newTicketProjectSlug = lane.Project.Slug;
         _newTicketProjectName = lane.Project.Name;
         _newTicketStatus = status;
@@ -831,6 +851,8 @@ else
                 status: _newTicketStatus, priority: _newTicketPriority,
                 pipelineId: _newTicketPipelineId, columnId: _newTicketColumnId);
 
+            try { await JS.InvokeVoidAsync("ticketDraft.clear", TicketDraftKey); }
+            catch (Exception ex) { Logger.LogWarning(ex, "Ticket draft cleanup failed"); }
             if (_lanes is not null)
             {
                 var index = _lanes.FindIndex(lane => lane.Project.Slug == slug);
@@ -843,7 +865,7 @@ else
         }
         catch (Exception ex)
         {
-            _newTicketError = ex.Message;
+            _newTicketError = ex.GetBaseException().Message.Contains("column_capacity_reached") ? L["ColumnCapacityError"] : ex.Message;
         }
         finally
         {
@@ -971,7 +993,14 @@ else
 
         var lanes = _lanes!;
         var targetIndex = GetTickets(lanes.First(l => l.Project.Slug == slug), newStatus).Count;
-        await TicketService.ReorderTicketAsync(slug, ticketId, newStatus, targetIndex, enforceRouting: true);
+        try { await TicketService.ReorderTicketAsync(slug, ticketId, newStatus, targetIndex, enforceRouting: true); }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Ticket move refused");
+            OnDragEnd();
+            await JS.InvokeVoidAsync("alert", ex.GetBaseException().Message.Contains("column_capacity_reached") ? L["ColumnCapacityError"] : ex.Message);
+            return;
+        }
         OnDragEnd();
 
         var idx = lanes.FindIndex(l => l.Project.Slug == slug);

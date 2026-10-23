@@ -27,15 +27,17 @@ public static partial class Endpoints
 
     internal static async Task<IResult> HandleCreateColumn(string slug, CreateColumnRequest req, ColumnService cs, BoardUpdateNotifier notifier)
     {
+        if (req.MaxTickets < 0) return Results.BadRequest(new { error = "The ticket limit cannot be negative." });
         var column = await cs.CreateColumnAsync(slug, req.Name, req.Color, req.PipelineId, req.Role,
-            userGuidance: req.UserGuidance);
+            userGuidance: req.UserGuidance, maxTickets: req.MaxTickets, capacityBlocking: req.CapacityBlocking);
         notifier.NotifyProjectUpdated(slug);
         return Results.Created($"/api/projects/{slug}/columns/{column.Id}", column);
     }
 
     internal static async Task<IResult> HandleUpdateColumn(string slug, int columnId, UpdateColumnRequest req, ColumnService cs, BoardUpdateNotifier notifier)
     {
-        var column = await cs.UpdateColumnAsync(slug, columnId, req.Name, req.Color, req.Role, req.UserGuidance);
+        if (req.MaxTickets < 0) return Results.BadRequest(new { error = "The ticket limit cannot be negative." });
+        var column = await cs.UpdateColumnAsync(slug, columnId, req.Name, req.Color, req.Role, req.UserGuidance, req.MaxTickets, req.CapacityBlocking);
         if (column is not null) notifier.NotifyProjectUpdated(slug);
         return column is null ? Results.NotFound() : Results.Ok(column);
     }

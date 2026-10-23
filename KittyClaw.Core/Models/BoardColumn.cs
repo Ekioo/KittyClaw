@@ -8,6 +8,9 @@ public class BoardColumn
     public int PipelineId { get; set; }
     public required string Name { get; set; }
     public string Color { get; set; } = "#5a6a80";
+    /// <summary>Zero disables the optional per-column capacity.</summary>
+    public int MaxTickets { get; set; }
+    public bool CapacityBlocking { get; set; }
     public int SortOrder { get; set; }
     public ColumnRole Role { get; set; } = ColumnRole.Normal;
     /// <summary>

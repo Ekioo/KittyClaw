@@ -7,7 +7,7 @@ namespace KittyClaw.Core.Tests.Services;
 public class InstalledUpdateServiceTests
 {
     [Fact]
-    public async Task Check_DownloadsAutomaticallyWithoutStoppingHost_AndRestartWaitsForAgentCompletion()
+    public async Task Check_DownloadsAutomaticallyWithoutStoppingHost_AndRestartStartsGracefulShutdownWithActiveAgents()
     {
         var client = new FakeClient();
         var runs = new AgentRunRegistry();
@@ -24,12 +24,6 @@ public class InstalledUpdateServiceTests
         var run = NewRun();
         runs.Register(run);
         service.InstallAndRestart();
-        Assert.Contains("Agents are still running", service.Error);
-        Assert.False(client.Prepared);
-        Assert.False(lifetime.Stopped);
-
-        runs.Complete(run.RunId, AgentRunStatus.Completed, 0);
-        service.InstallAndRestart();
         Assert.True(client.Prepared);
         Assert.True(service.IsRestarting);
         Assert.True(lifetime.Stopped);
@@ -37,15 +31,15 @@ public class InstalledUpdateServiceTests
     }
 
     [Fact]
-    public void Restart_AlsoWaitsForPostRunFinalization()
+    public void Restart_GatesDispatchWhileHostDrainsPostRunFinalization()
     {
         var runs = new AgentRunRegistry();
         var service = Create(new FakeClient { PendingVersion = "1.1.0" }, runs, new FakeLifetime());
         var execution = runs.TrackExecution();
         service.InstallAndRestart();
-        Assert.False(service.IsRestarting);
+        Assert.True(service.IsRestarting);
+        Assert.False(runs.WaitForExecutionsAsync(CancellationToken.None).IsCompleted);
         execution.Dispose();
-        service.InstallAndRestart();
         Assert.True(service.IsRestarting);
     }
 
@@ -159,7 +153,19 @@ public class InstalledUpdateServiceTests
         Assert.Null(service.Error);
         Assert.False(lifetime.Stopped);
         service.InstallAndRestart();
-        Assert.False(client.Prepared);
+        Assert.True(client.Prepared);
+    }
+
+    [Fact]
+    public void UpdateShutdown_PreservesChatForAutomaticRecovery()
+    {
+        var runs = new AgentRunRegistry();
+        var run = NewRun();
+        run.ChatTarget = "test";
+        runs.Register(run);
+        Assert.True(runs.BeginUpdateShutdown());
+        runs.Complete(run.RunId, AgentRunStatus.Stopped, null);
+        Assert.Contains(run, runs.InterruptedChats());
     }
 
     [Fact]

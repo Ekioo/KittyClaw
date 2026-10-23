@@ -55,12 +55,12 @@ Source installations retain the dismissible release-link banner described below.
   **Update and restart** for explicit owner confirmation. Prepared downloads remain
   available after restart, even offline, without downloading them again.
 - Installed builds check on startup and hourly, independently of the legacy API throttle.
-- Downloading does not stop the host. Installation acquires the registry's update gate
-  only when no runs or tracked execution tasks are active. New dispatches are rejected
-  once the gate is acquired. AgentRunner, column processors, and scheduled column action
-  chains retain execution leases through finalization, including after terminal status.
-- If busy, the owner is asked to retry after work finishes. If starting the updater fails,
-  the dispatch gate is released and the current application keeps running.
+- Downloading does not stop the host. Installation closes the registry dispatch gate even
+  with active agents, then initiates graceful host shutdown. Provider processes are stopped,
+  tracked execution leases drain through finalization, and SQLite state is preserved.
+  Interrupted chats are marked for automatic startup recovery; column executions retain
+  their durable checkpoint and queued automations remain retryable after restart.
+- If starting the updater fails, the dispatch gate is released and the application keeps running.
 - `WaitExitThenApplyUpdates` starts the updater, then `StopApplication()` stops the host
   gracefully. Velopack waits for process exit, applies the package, and restarts the app.
   Its wait is limited to 60 seconds; the ordinary host shutdown timeout is shorter.

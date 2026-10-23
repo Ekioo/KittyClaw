@@ -100,6 +100,8 @@ public sealed class PortableColumn
     public string Name { get; set; } = "";
     public string Color { get; set; } = "";
     public ColumnRole Role { get; set; } = ColumnRole.Normal;
+    public int MaxTickets { get; set; }
+    public bool CapacityBlocking { get; set; }
     public string UserGuidance { get; set; } = "";
     public PortableProcessor? Processor { get; set; }
 }

@@ -321,7 +321,8 @@ public sealed partial class PipelineImportService(
                 var created = await columns.CreateColumnAsync(
                     projectSlug, column.Name.Trim(),
                     string.IsNullOrWhiteSpace(column.Color) ? "#5a6a80" : column.Color,
-                    pipeline.Id, column.Role, userGuidance: column.UserGuidance ?? "");
+                    pipeline.Id, column.Role, userGuidance: column.UserGuidance ?? "",
+                    maxTickets: column.MaxTickets, capacityBlocking: column.CapacityBlocking);
                 columnIds[column.Key] = created.Id;
             }
             await FaultAsync("columns-created");
@@ -758,6 +759,8 @@ public sealed partial class PipelineImportService(
                 Reject("invalid-pipeline", $"Nom de colonne vide, trop long ou dupliqué : '{column.Name}'.");
             if (!string.IsNullOrWhiteSpace(column.Color) && !ColorPattern().IsMatch(column.Color))
                 Reject("invalid-pipeline", $"Couleur invalide pour la colonne '{column.Key}' : '{column.Color}'.");
+            if (column.MaxTickets < 0)
+                Reject("invalid-pipeline", $"Negative ticket capacity for column '{column.Key}'.");
             if (!Enum.IsDefined(column.Role))
                 Reject("invalid-pipeline", $"Rôle inconnu pour la colonne '{column.Key}'.");
         }

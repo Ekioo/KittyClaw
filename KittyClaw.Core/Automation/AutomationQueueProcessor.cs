@@ -15,6 +15,7 @@ internal sealed class AutomationQueueProcessor
     private readonly ProjectRuntimeManager _runtimes;
     private readonly ActionExecutor _executor;
     private readonly ILogger _logger;
+    private readonly AgentRunRegistry? _runs;
     private const int MaxWorkersPerProject = 8;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _projectWorkers = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _reservationLock = new();
@@ -24,8 +25,9 @@ internal sealed class AutomationQueueProcessor
     private sealed record GroupReservation(HashSet<string> Groups, HashSet<string> Excludes);
 
     public AutomationQueueProcessor(ProjectService projects, TicketService tickets, AutomationQueueStore queue,
-        ProjectRuntimeManager runtimes, ActionExecutor executor, ILogger logger)
+        ProjectRuntimeManager runtimes, ActionExecutor executor, ILogger logger, AgentRunRegistry? runs = null)
     {
+        _runs = runs;
         _projects = projects; _tickets = tickets; _queue = queue; _runtimes = runtimes; _executor = executor; _logger = logger;
     }
 
@@ -33,7 +35,7 @@ internal sealed class AutomationQueueProcessor
     {
         foreach (var project in await _projects.ListProjectsAsync())
         {
-            if (ct.IsCancellationRequested) return;
+            if (ct.IsCancellationRequested || _runs?.IsUpdating == true) return;
             if (project.IsPaused) continue;
             var workers = _projectWorkers.GetOrAdd(project.Slug,
                 _ => new SemaphoreSlim(MaxWorkersPerProject, MaxWorkersPerProject));
@@ -145,6 +147,12 @@ internal sealed class AutomationQueueProcessor
                 }
                 if (run?.Status == AgentRunStatus.Stopped)
                 {
+                    if (ct.IsCancellationRequested || _runs?.IsUpdating == true)
+                    {
+                        await _queue.ScheduleRetryAsync(slug, entry.Id, DateTime.UtcNow,
+                            resetAttempts: true, CancellationToken.None);
+                        return;
+                    }
                     await _queue.FinishAsync(slug, entry.Id, AutomationQueueStatus.Cancelled,
                         "Agent run was stopped manually; automatic retry suppressed.", ct);
                     return;
