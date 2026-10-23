@@ -60,17 +60,17 @@
 
         @if (_columnExecution is not null)
         {
-            <div class="agent-action-error fresh-context-details" role="status">
-                <strong>Fresh ticket context</strong>
+            <details class="fresh-context-details">
+                <summary>Ticket context · technical details</summary>
                 <span>Trigger version: @(_columnExecution.TriggerTicketUpdatedAt?.ToString("O") ?? "unavailable")</span>
                 <span>Trigger signal: @_columnExecution.TriggerSignalType</span>
                 <span>Consumed version: @(_columnExecution.ConsumedTicketUpdatedAt?.ToString("O") ?? "not consumed")</span>
                 <span>Owner feedback: @(_columnExecution.TriggerOwnerCommentId is int commentId ? $"#{commentId}" : "none")</span>
-                @if (!string.IsNullOrWhiteSpace(_columnExecution.ContextRejectionReason))
-                {
-                    <span>Refusal: @_columnExecution.ContextRejectionReason</span>
-                }
-            </div>
+            </details>
+            @if (!string.IsNullOrWhiteSpace(_columnExecution.ContextRejectionReason))
+            {
+                <div class="agent-action-error" role="alert">Context refused: @_columnExecution.ContextRejectionReason</div>
+            }
         }
 
         <div class="agent-drawer-console" @ref="_consoleRef">

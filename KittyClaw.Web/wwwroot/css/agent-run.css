@@ -133,6 +133,24 @@
     gap: 0.4rem;
 }
 
+.fresh-context-details {
+    margin: 0.65rem 1rem 0;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    overflow-wrap: anywhere;
+}
+.fresh-context-details summary {
+    cursor: pointer;
+    color: var(--text);
+}
+.fresh-context-details > span {
+    display: block;
+    margin-top: 0.3rem;
+}
 .agent-action-error {
     margin: 0.65rem 1rem 0;
     padding: 0.55rem 0.7rem;
