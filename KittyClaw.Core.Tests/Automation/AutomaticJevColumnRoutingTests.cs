@@ -12,6 +12,7 @@ public sealed class AutomaticJevColumnRoutingTests
 {
     [Theory]
     [InlineData("route", true)]
+    [InlineData("disabled", false)]
     [InlineData("assessments", true)]
     [InlineData("uncertain", false)]
     [InlineData("none", false)]
@@ -36,9 +37,9 @@ public sealed class AutomaticJevColumnRoutingTests
         var processor = await processors.SaveAsync(project.Slug, source.Id, "Worker", "Process and route the ticket", null,
             true, 20, [], [], [], defaultTargetColumnId: original.Id, routes: [new("alternative", chosen.Id)],
             afterActions: [new("after", new AddCommentActionSpec { Content = "Action after routing" })],
-            evaluateAcceptanceCriteria: scenario == "assessments");
-        Assert.False(processor.JevAutomaticRouting);
-        Assert.True(processor.UsesAutomaticJevRouting);
+            evaluateAcceptanceCriteria: scenario == "assessments", jevAutomaticRouting: scenario != "disabled");
+        Assert.Equal(scenario != "disabled", processor.JevAutomaticRouting);
+        Assert.Equal(scenario != "disabled", processor.UsesAutomaticJevRouting);
         var ticket = await tickets.CreateTicketAsync(project.Slug, "Choose the right next step", status: source.Name,
             pipelineId: source.PipelineId, columnId: source.Id);
         if (scenario == "assessments") await tickets.SaveAcceptanceCriterionAsync(project.Slug, ticket.Id, null, new("Checks pass"));
@@ -56,6 +57,7 @@ public sealed class AutomaticJevColumnRoutingTests
         var dispatcher = new Dispatcher();
         using var client = new HttpClient(new Handler(async request =>
         {
+            Assert.NotEqual("disabled", scenario);
             Assert.Equal(1, dispatcher.Calls);
             if (scenario == "api-error") return new(HttpStatusCode.ServiceUnavailable);
             Assert.Equal(source.Id, (await tickets.GetTicketAsync(project.Slug, ticket.Id))!.ColumnId);
@@ -91,7 +93,7 @@ public sealed class AutomaticJevColumnRoutingTests
             jev: qualification, jevConfiguration: configuration);
         await engine.ProcessAsync(project.Slug, processor, execution, CancellationToken.None);
         var updated = (await tickets.GetTicketAsync(project.Slug, ticket.Id))!;
-        var fallback = scenario is "uncertain" or "none" or "api-error" or "missing-key";
+        var fallback = scenario is "uncertain" or "none" or "api-error" or "missing-key" or "disabled";
         Assert.Equal(moves ? chosen.Id : fallback ? original.Id : source.Id, updated.ColumnId);
         var decisions = await new JevDecisionStore(projects).ListAsync(project.Slug, ticket.Id);
         if (moves)

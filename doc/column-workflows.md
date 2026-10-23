@@ -33,7 +33,7 @@ and ensures a partially configured workflow cannot strand a ticket with no avail
 
 1. claims one eligible ticket using the configured order;
 2. creates a durable execution claim, protected by a unique active-ticket index;
-3. dispatches the generic column agent with its mission, persistent memory, ticket context, and project skills;
+3. dispatches the generic column agent with its current mission, persistent memory, ticket context, and project skills;
 4. validates the structured outcome and required-skill report;
 5. runs the native memory-capitalization checkpoint;
 6. selects an outcome route (switch-like rule) or the default route;
@@ -107,6 +107,13 @@ consume an explicitly evidenced current ticket version, preserving legacy and cu
 After the host reports `ApplicationStarted`, interrupted executions are recovered for every project, including projects that are paused. This keeps HTTP health and root responses available before recovery work begins. Recovery updates the durable execution state without dispatching new work; processing resumes only after the project is unpaused.
 
 A route cannot point back to its source column. Repeating work is expressed through the explicit retry policy, avoiding accidental processing loops.
+
+Provider sessions are scoped to the ticket's current column visit. Every column change
+(including leaving and returning to the same column) starts a fresh session. SQLite
+increments `Ticket.ColumnVisit` atomically for all transition writers. A dispatch that
+resumes within the same visit reuses its session and receives the complete current
+processor profile and ticket context again, so configuration edits take effect.
+Completed-agent checkpoints still skip dispatch when only platform post-processing remains.
 
 The cross-column loop guard uses a ten-minute window and compares the two most recent
 occurrences of the same source-to-target transition. Each completed execution persists a

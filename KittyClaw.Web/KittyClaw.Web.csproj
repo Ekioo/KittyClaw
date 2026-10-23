@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <PackageReference Include="Markdig" Version="1.1.2" />
+    <PackageReference Include="QRCoder" Version="1.8.1" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.5" />
     <!-- Pins the transitive Microsoft.OpenApi above the vulnerable 2.0.0 (NU1903 / GHSA-v5pm-xwqc-g5wc). -->
     <PackageReference Include="Microsoft.OpenApi" Version="2.10.0" />

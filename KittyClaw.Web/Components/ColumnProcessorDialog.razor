@@ -171,8 +171,8 @@
                         }
                         <label class="workflow-check"><input type="checkbox" @bind="_jevObservationOnly" disabled="@(_jevAcceptanceValidation || _jevExecutionSelection || (!_jevAvailability.Available && !_jevObservationOnly))" /> <FieldHelp Label="@L["JevObservationMode"]" Help="@L["JevObservationHelp"]" /></label>
                         <p class="settings-hint">@L["JevObservationHelp"]</p>
-                        <label class="workflow-check"><input type="checkbox" @bind="_jevPostRunObservation" disabled="@(_jevAcceptanceValidation || (!_jevAvailability.Available && !_jevPostRunObservation))" /> <FieldHelp Label="@L["JevPostRunMode"]" Help="@L["JevPostRunHelp"]" /></label>
-                        <p class="settings-hint">@L["JevPostRunHelp"]</p>
+                        <label class="workflow-check"><input type="checkbox" data-testid="jev-automatic-routing-mode" @bind="_jevAutomaticRouting" disabled="@(_jevObservationOnly || _jevAcceptanceValidation || (!_jevAvailability.Available && !_jevAutomaticRouting))" /> <FieldHelp Label="@L["JevAutomaticRoutingMode"]" Help="@L["JevAutomaticRoutingHelp"]" /></label>
+                        <p class="settings-hint">@L["JevAutomaticRoutingHelp"]</p>
                         @if (!_jevAcceptanceValidation)
                         {
                         <p class="settings-hint" data-testid="jev-automatic-routing">@L["JevRoutingAutomaticDefault"]</p>
@@ -409,11 +409,10 @@
     private static void ToggleProfileSkill(JevProfileDraft profile, string skill, bool selected)
     { if (selected) profile.Skills.Add(skill); else profile.Skills.Remove(skill); }
     private void AcceptanceModeChanged()
-    { if (_jevAcceptanceValidation) { _jevObservationOnly = false; _jevPostRunObservation = false; _jevAutomaticRouting = false; _jevExecutionSelection = false; } }
+    { if (_jevAcceptanceValidation) { _jevObservationOnly = false; _jevAutomaticRouting = false; _jevExecutionSelection = false; } }
     private void SelectionModeChanged()
     { if (_jevExecutionSelection) _jevObservationOnly = false; }
     private bool _jevObservationOnly;
-    private bool _jevPostRunObservation;
     private bool _jevAutomaticRouting;
     private double _jevConfidencePercent = 90;
     private bool _enabled = true;
@@ -552,7 +551,6 @@
         _jevCriteriaText = string.Join("\n", processor?.JevAcceptanceCriteria ?? []);
         _jevProfiles = processor?.JevExecutionProfiles.Select(p => new JevProfileDraft { Name = p.Name, Model = p.Model, Description = p.Description, Skills = new(p.Skills, StringComparer.OrdinalIgnoreCase) }).ToList() ?? [];
         _jevObservationOnly = processor?.JevObservationOnly ?? false;
-        _jevPostRunObservation = processor?.JevPostRunObservation ?? false;
         _jevAutomaticRouting = processor?.JevAutomaticRouting ?? false;
         _jevConfidencePercent = (processor?.JevConfidenceThreshold ?? 0.9) * 100;
         _maxTurns = processor?.MaxTurns ?? 100;
@@ -615,8 +613,8 @@
                     beforeActions: _beforeActions.Select(action => action.ToModel()).ToList(),
                     afterActions: _afterActions.Select(action => action.ToModel()).ToList(),
                     jevObservationOnly: _jevObservationOnly,
-                    jevPostRunObservation: !_jevObservationOnly && _jevPostRunObservation,
-                    jevAutomaticRouting: (_jevObservationOnly || _jevPostRunObservation) && _jevAutomaticRouting,
+                    jevPostRunObservation: false,
+                    jevAutomaticRouting: !_jevObservationOnly && _jevAutomaticRouting,
                     jevConfidenceThreshold: _jevConfidencePercent / 100,
                     jevAcceptanceValidation: _jevAcceptanceValidation,
                     jevExecutionSelection: _jevExecutionSelection,

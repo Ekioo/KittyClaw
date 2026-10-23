@@ -110,7 +110,7 @@
             ? JevQualificationService.RecommendationProcessor(configured, source, columns) : null;
         var activeExecution = (await Executions.ListAsync(Slug, TicketId)).Any(e =>
             e.Status is ColumnExecutionStatus.Running or ColumnExecutionStatus.Retrying or ColumnExecutionStatus.WaitingForChildren);
-        _eligible = !activeExecution && _processor is { HasBusinessRouting: true, JevAcceptanceValidation: false } &&
+        _eligible = (configured is null || configured.JevObservationOnly) && !activeExecution && _processor is { HasBusinessRouting: true, JevAcceptanceValidation: false } &&
             columns.FirstOrDefault(c => c.Id == ticket?.ColumnId)?.Role is not (ColumnRole.Success or ColumnRole.Failure);
         _columnNames = columns.ToDictionary(c => c.Id, c => c.Name);
         var decisions = await Decisions.ListAsync(Slug, TicketId, _stopToken);
@@ -142,7 +142,7 @@
         {
             var ticket = await Tickets.GetTicketAsync(slug, ticketId);
             var processor = ticket?.ColumnId is int id ? await Processors.GetAsync(slug, id) : null;
-            if (ticket is null) return;
+            if (ticket is null || processor is { JevObservationOnly: false }) return;
             await using var db = Projects.GetProjectDb(slug);
             var columns = await db.BoardColumns.AsNoTracking().ToListAsync(_stopToken);
             if (columns.FirstOrDefault(c => c.Id == ticket.ColumnId) is not { } source) return;

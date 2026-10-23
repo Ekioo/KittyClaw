@@ -3,7 +3,8 @@
 KittyClaw remains loopback-only by default. Global settings links to
 `/network-setup`, a server-rendered setup page accessible only through a loopback
 connection with a loopback Host header. Association and reset require antiforgery
-validation. Add the displayed setup key to a TOTP authenticator (SHA-1, six digits,
+validation. Scan the locally generated QR code or add the displayed setup key to a
+TOTP authenticator (SHA-1, six digits,
 30 seconds), then confirm a code. No password or external identity service is used;
 this is authenticator-only authentication, not two independent factors.
 

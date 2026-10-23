@@ -11,6 +11,15 @@ namespace KittyClaw.Core.Tests.Automation;
 public sealed class ColumnAgentDispatcherFirstRunIntegrationTests
 {
     [Fact]
+    public async Task Column_dispatch_resumes_only_within_the_same_column_visit()
+    {
+        using var fixture = new FirstRunFixture(claude: true, grok: false);
+        var plan = await fixture.FirstRun.SelectAsync("fresh-session");
+
+        await fixture.DispatchAsync(plan, "fresh-session", verifyFreshSecondDispatch: true);
+    }
+
+    [Fact]
     public async Task First_qualify_run_completes_with_selected_primary_and_correlated_events()
     {
         using var fixture = new FirstRunFixture(claude: true, grok: false);
@@ -105,7 +114,7 @@ public sealed class ColumnAgentDispatcherFirstRunIntegrationTests
             _dispatcher = new ColumnAgentDispatcher(runner, _projects, skills, processors, FirstRun);
         }
 
-        public async Task<ColumnDispatchResult> DispatchAsync(FirstRunProviderPlan plan, string journeyId)
+        public async Task<ColumnDispatchResult> DispatchAsync(FirstRunProviderPlan plan, string journeyId, bool verifyFreshSecondDispatch = false)
         {
             var project = await _projects.CreateProjectAsync($"first-run-{Guid.NewGuid():N}");
             var workspace = _projects.ResolveWorkspacePath(project);
@@ -130,7 +139,24 @@ public sealed class ColumnAgentDispatcherFirstRunIntegrationTests
                 Description = $"Journey: `{journeyId}`",
             };
 
-            return await _dispatcher.DispatchAsync(project.Slug, processor, execution, ticket, CancellationToken.None);
+            var first = await _dispatcher.DispatchAsync(project.Slug, processor, execution, ticket, CancellationToken.None);
+            if (!verifyFreshSecondDispatch) return first;
+
+            var next = new ColumnExecution { Id = Guid.NewGuid().ToString("N"), ProcessorId = 1, TicketId = 1 };
+            var second = await _dispatcher.DispatchAsync(project.Slug, processor, next, ticket, CancellationToken.None);
+            Assert.Equal(AgentRunStatus.Completed, first.Run.Status);
+            Assert.Equal(AgentRunStatus.Completed, second.Run.Status);
+            Assert.Equal(first.Run.SessionId, second.Run.SessionId);
+            Assert.Contains(second.Run.SnapshotBuffer(), e => e.Kind == "launch" && e.Text!.Contains("(resume)"));
+
+            // An away-and-back transition retains the column ID but changes the visit.
+            ticket.ColumnVisit += 2;
+            var returned = new ColumnExecution { Id = Guid.NewGuid().ToString("N"), ProcessorId = 1, TicketId = 1 };
+            var third = await _dispatcher.DispatchAsync(project.Slug, processor, returned, ticket, CancellationToken.None);
+            Assert.Equal(AgentRunStatus.Completed, third.Run.Status);
+            Assert.NotEqual(first.Run.SessionId, third.Run.SessionId);
+            Assert.Contains(third.Run.SnapshotBuffer(), e => e.Kind == "launch" && e.Text!.Contains("(new)"));
+            return third;
         }
 
         public async Task<List<FirstRunActivationEvent>> ReadEventsAsync() =>

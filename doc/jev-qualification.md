@@ -20,7 +20,8 @@ changing the saved column configuration. Required skills and success-context che
 
 ## Configuration
 
-In **Configure column → Processor**, enable **JEV qualification**.
+In **Configure column → Processor**, enable **Triage column: JEV instead of an agent** only for an explicit triage column.
+For worker columns, leave triage disabled and enable **Let JEV route after the agent finishes** to route using the saved agent result.
 Set the mission and optional instructions, and configure outcome routes or a default destination
 in the Routing tab. JEV is optional: the option is disabled until a credential is detected.
 Add a key in **Settings → JEV / TypeSafe**, set `TYPESAFE_API_KEY` in the machine environment,
@@ -158,8 +159,7 @@ business routes.
 
 ## Automatic routing and the next-step recommendation
 
-Business routes (outcome routes or a default destination) enable automatic JEV routing without
-requiring the legacy `jevAutomaticRouting` switch. The configured confidence threshold is still
+The explicit **Let JEV route after the agent finishes** option enables worker routing with configured business destinations. Business routes alone no longer enable JEV. The persisted `jevAutomaticRouting` flag now controls this option. The configured confidence threshold is still
 used (90% by default). Sufficiently confident acceptance reviews remain explicit owner decisions.
 
 In qualification-only columns, `JevObservationEngine` evaluates tickets and applies eligible
@@ -185,7 +185,7 @@ Post-run observations are historical comparisons, not a second automatic routing
 
 The ticket leads with **Confirm the ticket’s next step**, the suggested destination and an
 explicit **Move to [destination]** action. Opening the ticket automatically requests a current
-recommendation after interactive rendering; no preliminary request button is required.
+recommendation after interactive rendering only for explicit triage columns or columns without a configured processor. Worker columns never request routing from ticket rendering; their execution supplies the completed agent result.
 Suggestions are hidden during active processing and in success/failure columns;
 unchanged inputs use the stored result. Only an undecided recommendation matching the current
 column, ticket and processor fingerprint appears here. Rejected, applied and outdated results

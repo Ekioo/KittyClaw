@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Antiforgery;
 using KittyClaw.Core.Services;
+using QRCoder;
 
 namespace KittyClaw.Web.Services;
 
@@ -147,7 +148,10 @@ public sealed class NetworkAccessMiddleware(RequestDelegate next)
             var enrollment = access.CreateEnrollment();
             var secret = access.EnrollmentSecret(enrollment);
             var uri = $"otpauth://totp/KittyClaw:{Uri.EscapeDataString(Environment.MachineName)}?secret={secret}&issuer=KittyClaw&algorithm=SHA1&digits=6&period=30";
-            content += $"<p>{E(l["NetworkEnroll"])}</p><p><code>{E(secret)}</code></p><p><a href='{E(uri)}'>{E(l["NetworkOpenApp"])}</a></p>" +
+            using var qrData = QRCodeGenerator.GenerateQrCode(uri, QRCodeGenerator.ECCLevel.Q);
+            using var qr = new PngByteQRCode(qrData);
+            var qrImage = Convert.ToBase64String(qr.GetGraphic(6));
+            content += $"<p>{E(l["NetworkEnroll"])}</p><p><img src='data:image/png;base64,{qrImage}' alt='{E(l["NetworkQrCode"])}' style='display:block;width:300px;max-width:100%;height:auto;image-rendering:pixelated'></p><p><code>{E(secret)}</code></p><p><a href='{E(uri)}'>{E(l["NetworkOpenApp"])}</a></p>" +
                 $"<form method='post' action='/network-setup'>{Token(context, antiforgery)}<input type='hidden' name='enrollment' value='{E(enrollment)}'>{CodeInput(l)}<button>{E(l["NetworkEnable"])}</button></form>";
         }
         content += $"<p>{E(l["NetworkRecovery"])}</p><p><a href='/settings'>{E(l["GlobalSettings"])}</a></p>";
@@ -174,7 +178,7 @@ public sealed class NetworkAccessMiddleware(RequestDelegate next)
     private static async Task Page(HttpContext context, string title, string content)
     {
         context.Response.ContentType = "text/html; charset=utf-8";
-        context.Response.Headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+        context.Response.Headers["Content-Security-Policy"] = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
         context.Response.Headers["X-Content-Type-Options"] = "nosniff";
         context.Response.Headers["Referrer-Policy"] = "no-referrer";
         await context.Response.WriteAsync($$"""

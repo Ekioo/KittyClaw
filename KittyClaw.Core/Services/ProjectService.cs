@@ -424,6 +424,21 @@ public partial class ProjectService
                 command.CommandText = "ALTER TABLE Tickets ADD COLUMN AcceptanceCriteriaJson TEXT NOT NULL DEFAULT '[]'";
                 command.ExecuteNonQuery();
             }
+            command.CommandText = "SELECT COUNT(*) FROM pragma_table_info('Tickets') WHERE name = 'ColumnVisit'";
+            if (Convert.ToInt32(command.ExecuteScalar()) == 0)
+            {
+                command.CommandText = "ALTER TABLE Tickets ADD COLUMN ColumnVisit INTEGER NOT NULL DEFAULT 0";
+                command.ExecuteNonQuery();
+            }
+            command.CommandText = """
+                CREATE TRIGGER IF NOT EXISTS ticket_column_visit
+                AFTER UPDATE OF ColumnId, PipelineId ON Tickets
+                WHEN OLD.ColumnId IS NOT NEW.ColumnId OR OLD.PipelineId IS NOT NEW.PipelineId
+                BEGIN
+                    UPDATE Tickets SET ColumnVisit = OLD.ColumnVisit + 1 WHERE Id = NEW.Id;
+                END;
+                """;
+            command.ExecuteNonQuery();
             return created;
         }, LazyThreadSafetyMode.ExecutionAndPublication));
         try

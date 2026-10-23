@@ -7,6 +7,31 @@ namespace KittyClaw.Core.Tests.Services;
 public sealed class JevQualificationTests
 {
     [Fact]
+    public async Task Worker_routing_does_not_request_Jev_before_the_agent_result()
+    {
+        using var temp = new TempDir();
+        var projects = new ProjectService(temp.Path);
+        var slug = (await projects.CreateProjectAsync("Worker routing order")).Slug;
+        var board = await new ColumnService(projects).ListColumnsAsync(slug);
+        var processors = new ColumnProcessorService(projects, new ProjectSkillService(projects));
+        var processor = await processors.SaveAsync(slug, board[0].Id, "Worker", "Do the work", null,
+            true, 20, [], [], [], defaultTargetColumnId: board[1].Id);
+        var tickets = new TicketService(projects, new MemberService(projects));
+        var ticket = await tickets.CreateTicketAsync(slug, "Work first", columnId: board[0].Id, pipelineId: board[0].PipelineId);
+        var vault = new ProjectSecretVault(temp.Path, new TestSecretProtector());
+        await vault.SetAsync(slug, JevQualificationService.SecretName, "fixture-key");
+        var handler = new FakeHandler(board[1].Id);
+        using var client = new HttpClient(handler);
+        var qualification = new JevQualificationService(projects, vault, client);
+        await qualification.ObserveAsync(slug, processor, ticket, board, CancellationToken.None);
+        // Opening the ticket uses a recommendation context and must obey the same guard.
+        await qualification.ObserveAsync(slug,
+            JevQualificationService.RecommendationProcessor(processor, board[0], board), ticket, board, CancellationToken.None);
+        Assert.Equal(0, handler.Count);
+        Assert.Null(await qualification.GetAsync(slug, ticket.Id));
+    }
+
+    [Fact]
     public async Task Qualification_without_a_usable_answer_claims_classic_processing_instead_of_holding()
     {
         using var temp = new TempDir();
@@ -128,7 +153,7 @@ public sealed class JevQualificationTests
         processor.JevObservationOnly = false;
         ticket.Description = "Changed";
         await restarted.ObserveAsync(project.Slug, processor, ticket, board, CancellationToken.None);
-        Assert.Equal(2, handler.Count);
+        Assert.Equal(1, handler.Count);
     }
 
     [Fact]
