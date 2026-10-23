@@ -86,6 +86,21 @@ if (networkAccess.Enabled)
     });
     networkAccess.Listening = true;
 }
+// A tunnel origin has its own loopback port and never inherits local trust.
+var remoteTunnel = RemoteTunnelOptions.Read(builder.Configuration);
+builder.Services.AddSingleton(remoteTunnel);
+if (remoteTunnel.Enabled)
+{
+    var urls = builder.Configuration["urls"] ?? "http://localhost:5230";
+    if (remoteTunnel.Port == networkAccess.Port || urls.Split(';', StringSplitOptions.RemoveEmptyEntries)
+        .Any(url => Uri.TryCreate(url.Replace("*", "localhost").Replace("+", "localhost"), UriKind.Absolute, out var uri)
+            && uri.Port == remoteTunnel.Port))
+        throw new InvalidOperationException("RemoteTunnel:Port must be distinct from every existing listener.");
+    builder.WebHost.UseUrls($"{urls};http://localhost:{remoteTunnel.Port}");
+    builder.Services.PostConfigure<HostFilteringOptions>(options =>
+        options.AllowedHosts = (options.AllowedHosts ?? Array.Empty<string>())
+            .Append(remoteTunnel.Hostname).Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
+}
 builder.Services.AddSingleton(appSettings);
 builder.Services.AddSingleton(new KittyClaw.Core.Services.LocalizationService(appSettings));
 var projectSecretVault = new ProjectSecretVault(dataDir);
@@ -269,6 +284,7 @@ builder.Services.AddRazorComponents()
 var app = builder.Build();
 
 // Gate all remote traffic, including uploads, APIs, MCP and Blazor connections.
+app.UseMiddleware<RemoteTunnelMiddleware>();
 app.UseMiddleware<NetworkAccessMiddleware>();
 
 // Configure the HTTP request pipeline.

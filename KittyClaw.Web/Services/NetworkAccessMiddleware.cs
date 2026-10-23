@@ -13,6 +13,7 @@ public sealed class NetworkAccessMiddleware(RequestDelegate next)
 
     internal static bool IsLocal(HttpContext context)
     {
+        if (context.Features.Get<RemoteTunnelRequest>() is not null) return false;
         var address = context.Connection.RemoteIpAddress;
         // In-process HTTP transports have no IP pair. Kestrel TCP connections always do.
         var localTransport = address is null ? context.Connection.LocalIpAddress is null

@@ -13,6 +13,8 @@ and API/MCP documentation.
 
 ## Features
 
+- [Managed public instance access](./public-instance-access.md) — dedicated tunnel origin boundary and Cloudflare delivery milestones.
+
 - [Local network access](./network-access.md) — opt-in HTTPS access from phones, authenticator-only login, local enrollment and session revocation.
 
 - [Performance benchmarks](./performance-benchmarks.md) — isolated core, SQLite and API workloads, allocation and timing reports, and PR regression comparison.

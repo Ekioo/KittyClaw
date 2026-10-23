@@ -22,7 +22,7 @@ The HTTPS certificate is self-signed, generated on this PC and reused across
 restarts. Verify its SHA-256 fingerprint on the setup page before trusting it on
 another device. Allow the HTTPS port through the OS firewall for the private
 network if needed; KittyClaw does not modify firewall rules. This feature supports
-direct LAN connections, not reverse proxies or Internet publication. Do not proxy
+direct LAN connections. The dedicated origin for managed public access is documented in [public instance access](./public-instance-access.md). Do not proxy
 remote requests through localhost: loopback access is intentionally trusted for
 local automation.
 
