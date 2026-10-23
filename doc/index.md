@@ -13,6 +13,8 @@ and API/MCP documentation.
 
 ## Features
 
+- [Local network access](./network-access.md) — opt-in HTTPS access from phones, authenticator-only login, local enrollment and session revocation.
+
 - [Performance benchmarks](./performance-benchmarks.md) — isolated core, SQLite and API workloads, allocation and timing reports, and PR regression comparison.
 
 - [Projects using KittyClaw](./projects-using-kittyclaw.md) — real project usage and forks, with workspace evidence or owner confirmation.

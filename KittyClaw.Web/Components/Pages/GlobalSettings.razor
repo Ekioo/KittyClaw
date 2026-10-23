@@ -16,6 +16,16 @@
 </div>
 
 <div class="settings-container">
+    <section class="settings-section" data-testid="network-global-settings">
+        <h2>@L["NetworkTitle"]</h2>
+        <p class="settings-hint">@L["NetworkHint"]</p>
+        <a class="settings-browse" href="/network-setup">@L["NetworkConfigure"]</a>
+        <p class="settings-hint">@L["NetworkLocalSetup"]</p>
+        <form method="post" action="/access/logout">
+            <AntiforgeryToken />
+            <button type="submit" class="settings-browse">@L["NetworkLogout"]</button>
+        </form>
+    </section>
     <section class="settings-section" data-testid="language-global-settings">
         <h2>@L["Language"]</h2>
         <div class="settings-row">

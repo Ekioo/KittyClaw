@@ -1,0 +1,19 @@
+{
+  "NetworkTitle": "Accès au réseau local",
+  "NetworkHint": "Ouvrez KittyClaw sur votre téléphone ou un autre appareil avec un code de votre application d’authentification. Aucun mot de passe requis.",
+  "NetworkConfigure": "Configurer l’accès réseau",
+  "NetworkLocalSetup": "Configurez ou réinitialisez l’accès depuis localhost sur ce PC.",
+  "NetworkLogin": "Se connecter",
+  "NetworkLoginHint": "Saisissez le code à six chiffres affiché par votre application d’authentification.",
+  "NetworkCode": "Code d’authentification",
+  "NetworkInvalidCode": "Code incorrect, expiré ou déjà utilisé. Attendez le prochain code puis réessayez. Après cinq échecs, patientez une minute.",
+  "NetworkEnabled": "L’accès réseau est activé. Utilisez une de ces adresses sur votre téléphone.",
+  "NetworkRestart": "La protection est configurée. Redémarrez KittyClaw pour démarrer l’écoute HTTPS sur le réseau.",
+  "NetworkCertificate": "La connexion utilise un certificat généré par ce PC. À la première visite, vérifiez ce certificat et approuvez-le sur votre appareil. Le pare-feu doit autoriser le port HTTPS affiché sur votre réseau privé.",
+  "NetworkDisable": "Désactiver l’accès et réinitialiser l’application",
+  "NetworkEnroll": "Dans votre application d’authentification, ajoutez un compte avec cette clé (basé sur l’heure, six chiffres, toutes les 30 secondes), puis saisissez le code actuel.",
+  "NetworkOpenApp": "Ouvrir dans une application d’authentification",
+  "NetworkEnable": "Valider le code et activer l’accès réseau",
+  "NetworkRecovery": "En cas de perte de votre application, ouvrez cette page via localhost sur ce PC pour désactiver l’accès et associer une nouvelle application. La désactivation révoque aussi les sessions existantes.",
+  "NetworkLogout": "Déconnecter cet appareil"
+}
