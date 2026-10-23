@@ -368,7 +368,10 @@
                     }
                 </div>
 
-                <TicketAcceptanceCriteria Slug="@Slug" Ticket="@_ticket" OnChanged="@RefreshAsync" />
+                @if (!_detailsLoading)
+                {
+                    <TicketAcceptanceCriteria Slug="@Slug" Ticket="@_ticket" OnChanged="@RefreshAsync" />
+                }
 
                 @if (CurrentColumn() is { } guidanceColumn &&
                     guidanceColumn.Role is ColumnRole.Waiting or ColumnRole.OwnerAction)
@@ -397,8 +400,11 @@
                     }
                 }
 
-                <JevWorkReviewPanel Slug="@Slug" TicketId="@TicketId" OnDecided="RefreshAsync" />
-                <JevProposalPanel Slug="@Slug" TicketId="@TicketId" OnDecisionTaken="RefreshAsync" OnHistoryChanged="RefreshJevHistoryAsync" />
+                @if (!_detailsLoading)
+                {
+                    <JevWorkReviewPanel Slug="@Slug" TicketId="@TicketId" OnDecided="RefreshAsync" />
+                    <JevProposalPanel Slug="@Slug" TicketId="@TicketId" OnDecisionTaken="RefreshAsync" OnHistoryChanged="RefreshJevHistoryAsync" />
+                }
                 <div class="thread-section-divider">
                     <div class="activity-header">
                         <span class="section-label">@L["Activity"]</span>
@@ -554,6 +560,7 @@
     private string? _worktreeLoadError;
     private bool _worktreeActionBusy;
     private bool _detailsLoading;
+    private bool _disposed;
 
     private bool _confirmDelete;
     private bool _editingTitle;
@@ -702,6 +709,7 @@
 
     public void Dispose()
     {
+        _disposed = true;
         BoardUpdateNotifier.OnProjectUpdated -= OnProjectUpdatedExternal;
         _escClose?.Dispose();
         _escFullscreenEditor?.Dispose();
@@ -734,11 +742,12 @@
         try
         {
             _ticket = await TicketService.GetTicketAsync(Slug, TicketId);
-            if (_ticket is null) return;
+            if (_disposed || _ticket is null) return;
             // Show the ticket before loading ancillary history, processor files and Git state.
             _worktreeState = null; _mergeRequest = null; _mergePosition = null; _worktreeLoadError = null;
             StateHasChanged();
             await Task.Yield();
+            if (_disposed) return;
             var summaries = TicketService.ListTicketsAsync(Slug);
             var columns = ColumnService.ListColumnsAsync(Slug, _ticket.PipelineId);
             var labels = LabelService.ListLabelsAsync(Slug);
@@ -746,6 +755,7 @@
             var slug = Slug;
             var processors = Task.Run(() => ProcessorService.ListAsync(slug));
             await Task.WhenAll(summaries, columns, labels, members, processors);
+            if (_disposed) return;
             _summaries = await summaries;
             _columns = await columns;
             _allLabels = await labels;
@@ -897,6 +907,7 @@
         if (!slug.Equals(Slug, StringComparison.OrdinalIgnoreCase)) return;
         InvokeAsync(async () =>
         {
+            if (_disposed) return;
             _ticket = await TicketService.GetTicketAsync(Slug, TicketId);
             if (_ticket is null)
             {
@@ -909,7 +920,7 @@
             _allLabels = await LabelService.ListLabelsAsync(Slug);
             _allMembers = await MemberService.ListMembersAsync(Slug);
             await RebuildPipelineAsync();
-            StateHasChanged();
+            if (!_disposed) StateHasChanged();
         });
     }
 

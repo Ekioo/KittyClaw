@@ -2,7 +2,7 @@
 @using KittyClaw.Web.Extensions
 @inject LocalizationService L
 
-<div class="timeline-comment jev-history-entry" data-testid="jev-history-entry">
+<div class="timeline-comment jev-history-entry" data-testid="jev-history-entry" data-execution-id="@Proposal.ExecutionId">
     <div class="timeline-comment-header">
         <strong>JEV</strong>
         <small><time datetime="@BrowserLocalDateTime.UtcIso(Decision?.DecidedAt ?? Proposal.ObservedAt)" data-local-date-time data-local-date-time-locale="@L.Lang">@BrowserLocalDateTime.UtcFallback(Decision?.DecidedAt ?? Proposal.ObservedAt)</time></small>

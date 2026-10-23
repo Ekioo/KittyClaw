@@ -30,8 +30,10 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
             "KittyClaw-debug", "jev-e2e-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dataDir);
         await File.WriteAllTextAsync(Path.Combine(dataDir, "settings.json"), """{"OnboardingSeen":true,"Language":"en"}""");
-        var mock = Path.Combine(repo, "KittyClaw.ClaudeMock", "bin", "Debug", "net10.0", "claude.exe");
-        Assert.True(File.Exists(mock), "Build KittyClaw.ClaudeMock before this journey.");
+        var mock = new[] { "Release", "Debug" }
+            .Select(configuration => Path.Combine(repo, "KittyClaw.ClaudeMock", "bin", configuration, "net10.0", "claude.exe"))
+            .FirstOrDefault(File.Exists);
+        Assert.NotNull(mock);
         var changes = new Dictionary<string, string?>
         {
             ["KITTYCLAW_DATA_DIR"] = dataDir,
