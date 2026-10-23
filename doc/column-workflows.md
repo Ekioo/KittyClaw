@@ -50,6 +50,14 @@ requiring external intervention or an indispensable decision, rather than ordina
 
 ### Native processor-memory capitalization
 
+Native `MEMORY.md` and `pipeline-lessons.md` writes are checkpointed immediately in their
+own Git commit, including ticket-worktree writes and projects without worktrees. Replays
+and runs with no new lessons also checkpoint pending native memory changes. Preparing a
+processor recovers older uncommitted native memory files before dispatch. Commits use only
+these two paths, preserve unrelated index entries, and check for probable secrets. Workspaces
+without a Git repository retain file-based memory. Maintenance writes keep their normal
+integration-queue lifecycle.
+
 Every successful agent dispatch reaches a durable post-processing checkpoint before after-actions
 and business routing. The structured result carries a `lessons` array. An empty array is an explicit
 successful `NoChange`; concrete lessons are normalized, deduplicated and persisted under

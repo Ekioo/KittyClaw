@@ -575,6 +575,7 @@ public sealed class ColumnProcessorService(
             ?? throw new InvalidOperationException($"Le projet '{projectSlug}' n'existe pas.");
         var workspace = projects.ResolveWorkspacePath(project);
         var relativeMemoryDir = Path.Combine(".agents", "processors", ColumnReference(processor.ColumnId), "memory");
+        await ProcessorMemoryGit.CommitAsync(workspace, processor.ColumnId);
         var primaryIndex = Path.Combine(workspace, relativeMemoryDir, "MEMORY.md");
         DurableWriteRoute? route = null;
         var root = workspace;
@@ -611,6 +612,8 @@ public sealed class ColumnProcessorService(
                 throw new InvalidOperationException(validation.Error ??
                     $"Processor memory migration durable write requires review ({validation.Status}).");
         }
+
+        else await ProcessorMemoryGit.CommitAsync(root, processor.ColumnId);
 
         return index;
     }
