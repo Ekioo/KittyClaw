@@ -57,9 +57,10 @@ public sealed class TestInstance : IAsyncDisposable
 
         // Pre-seed AppSettings to skip the onboarding splash on first launch — fresh data dir
         // means OnboardingSeen=false by default, which blocks the home page behind a modal.
+        // Keep remote release checks from injecting a banner over scenario controls.
         await File.WriteAllTextAsync(
             Path.Combine(dataDir, "settings.json"),
-            """{"OnboardingSeen":true,"Language":"en"}""", ct);
+            System.Text.Json.JsonSerializer.Serialize(new { OnboardingSeen = true, Language = "en", UpdateCheckLastRun = DateTime.UtcNow }), ct);
 
         var psi = new ProcessStartInfo
         {

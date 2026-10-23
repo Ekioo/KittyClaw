@@ -90,6 +90,24 @@ public class ScenarioParseTests
     }
 
     [Fact]
+    public void CommittedScenarios_DeclarePositiveViewportDimensions()
+    {
+        var scenarioDirectory = Path.Combine(RepositoryRoot(), "KittyClaw.QaRunner", "Scenarios");
+        var viewportCount = 0;
+        foreach (var path in Directory.EnumerateFiles(scenarioDirectory, "*.json", SearchOption.AllDirectories))
+        {
+            var scenario = JsonSerializer.Deserialize<Scenario>(File.ReadAllText(path), Opts)!;
+            foreach (var action in scenario.Setup.Concat(scenario.Actions).Where(a => a.Type == "setViewport"))
+            {
+                Assert.True(action.Width is > 0 && action.Height is > 0,
+                    $"{Path.GetRelativePath(scenarioDirectory, path)}: setViewport requires positive width and height.");
+                viewportCount++;
+            }
+        }
+        Assert.True(viewportCount > 0, "The scenario corpus must exercise viewport changes.");
+    }
+
+    [Fact]
     public void ScenarioResult_RoundTrip_PreservesAssertionsAndScreenshots()
     {
         var r = new ScenarioResult
