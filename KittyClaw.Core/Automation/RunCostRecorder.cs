@@ -58,11 +58,13 @@ public sealed class RunCostRecorder : IHostedService
             var project = await _projects.GetProjectAsync(run.ProjectSlug);
             if (project is not null)
             {
+                if (run.Provider == CliProvider.Codex && run.SessionId is { } sessionId)
+                    run.BillingPlan ??= new CodexSessionUsage().Read(sessionId).LastOrDefault(point => point.Plan is not null)?.Plan;
                 var workspace = _projects.ResolveWorkspacePath(project);
                 int? pipelineId = null;
                 if (run.TicketId is int snapshotTicketId)
                     pipelineId = (await _tickets.GetTicketAsync(run.ProjectSlug, snapshotTicketId))?.PipelineId;
-                _cost.LogRun(workspace, new CostLogEntry(
+                var entry = new CostLogEntry(
                     At: endedAt,
                     Agent: run.AgentName,
                     TicketId: run.TicketId,
@@ -77,7 +79,17 @@ public sealed class RunCostRecorder : IHostedService
                     CostEstimated: run.CostIsEstimated,
                     ProjectSlug: run.ProjectSlug,
                     PipelineId: pipelineId,
-                    RunId: run.RunId));
+                    RunId: run.RunId,
+                    CostKnown: run.TotalCostUsd is not null && run.UsageIsReliable,
+                    SessionId: run.SessionId,
+                    StartedAt: run.StartedAt,
+                    UsageVersion: 2,
+                    BillingPlan: run.BillingPlan,
+                    RateCardVersion: run.CostIsEstimated ? ModelCostEstimator.RateCardVersion : null,
+                    UsageReliable: run.UsageIsReliable);
+                _cost.LogRun(workspace, entry);
+                run.ReconcileUsage(entry);
+                _runs.Persist(run);
             }
 
             if (run.TicketId is int ticketId)

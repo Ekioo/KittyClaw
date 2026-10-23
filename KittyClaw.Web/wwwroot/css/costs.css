@@ -12,6 +12,7 @@
 }
 
 .costs-header h1 { font-size: 1.65rem; letter-spacing: -.025em; }
+.cost-accounting-help { color: var(--text-muted); line-height: 1.5; margin: .75rem 0; }
 .costs-back-link { display: inline-flex; align-items: center; gap: .45rem; color: var(--text-muted); text-decoration: none; transition: color .15s ease; }
 .costs-back-link:hover { color: var(--text); }
 

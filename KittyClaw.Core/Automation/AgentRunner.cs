@@ -1054,6 +1054,13 @@ public sealed class AgentRunner
         string Redact(string text) => SecretRedactor.Redact(text, projectSecrets.Values);
 
         AppendDebugLog(ctx, $"LAUNCHING {ctx.AgentName} {(isResume ? "(resume)" : "(new)")} ticket=#{ctx.TicketId} session={sessionId}");
+        if (backend.Provider == CliProvider.Codex)
+        {
+            var usage = isResume ? new CodexSessionUsage().Read(sessionId) : [];
+            run.CodexUsageBaseline = isResume ? usage.LastOrDefault()?.Total : default(CodexTokenTotals);
+            run.UsageIsReliable &= run.CodexUsageBaseline is not null;
+            run.BillingPlan = usage.LastOrDefault(point => point.Plan is not null)?.Plan ?? run.BillingPlan;
+        }
         _logger.LogInformation("LAUNCH {Agent} {Mode} ticket=#{TicketId} session={SessionId} cmd={Bin} {Args}",
             ctx.AgentName, isResume ? "(resume)" : "(new)", ctx.TicketId, sessionId,
             psi.FileName, string.Join(" ", invocation.LogArguments ?? invocation.Arguments));

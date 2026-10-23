@@ -50,7 +50,53 @@ Legacy Devstral rates are retained, not freshly verified. Regional, speed-tier, 
 retention, and separately billed tool fees are outside this token-only estimate.
 Existing durable cost records are not repriced by this update.
 
-## JEV API accounting
+## Session accounting and subscriptions (2026-10-23)
+
+Codex `turn.completed.usage` is cumulative across the resumed thread. Before each subprocess,
+the runner reads the last local rollout token counter for that session; the adapter charges only
+the delta and advances its baseline. Repeated identical summaries contribute zero, and a fresh
+fallback session starts from zero. A missing resume baseline remains unpriced rather than
+charging the entire thread again. Cached input is a subset of input, and reasoning output is
+already included in output; neither is added twice.
+
+The rate card now includes all four GPT-6 selectors (Astra, 6.1 Sol, Sol, Luna), verified against
+their official model pages on 2026-10-23. Standard short-context prices are used as the reference.
+When rollout request telemetry is available, requests above 272,000 input tokens use twice the
+input/cache rates and 1.5 times the output rate. Aggregate run tokens cannot establish this tier.
+Speed tiers, regional premiums and separately billed tools are outside this reference estimate.
+
+On background refresh, `CostHistoryAccounting` uses retained run timestamps/session IDs and
+local Codex rollout counters (including `archived_sessions`) to reconstruct legacy request deltas. Corrected records are appended
+as version 2 accounting revisions with the same run ID; the original evidence is retained.
+Both reports and budget accounting select the highest accounting revision across current and
+rotated journals. Snapshot version 6 invalidates old totals. Missing run/rollout evidence is
+explicitly counted as unpriced. Repeated refreshes are idempotent. Run snapshots may be purged,
+so successfully repaired records retain the corrected tokens, session, plan and rate-card version.
+
+The page labels its total as **token usage value at API rates**, not actual spending. Codex rollout
+`rate_limits.plan_type` detects the plan used for those requests (for example ChatGPT Pro), without
+reading or exposing authentication credentials. Subscription usage is shown with its separate
+API equivalent. The actual monthly payment, currency, tax, purchased-credit charges and any
+allocation between projects cannot be inferred from these counters; no monthly fee is invented.
+JEV remains a separate API usage breakdown. RTK shows hypothetical usage avoided, not a discount
+on a subscription invoice.
+
+`tools/RebuildCostReport` can explicitly rebuild an existing data directory with
+`dotnet run --project tools/RebuildCostReport -- --apply <data-directory>`. It backs up the old
+snapshot and starts no automation host or provider. Use it on an isolated copy first; only apply
+to a live data directory after upgrading the app, because older binaries do not understand
+accounting revisions. The new app also performs this rebuild automatically at startup.
+For a live-safe preview with consistent SQLite backups, use
+`dotnet run --project tools/RebuildCostReport -- --preview <source-data-directory> <new-preview-directory>`.
+The preview copies only the reporting databases, run metadata and runtime cost journals, never
+provider credentials or the project secret vault. The daily budget remains a cap on token value
+at API rates; it does not estimate the remaining subscription allowance.
+
+`CostAccountingTests` covers resume baselines, duplicate counters, fresh-session fallback,
+missing evidence, all new rates, request context tiers, historical repair, subscription
+attribution, journal revisions across rotation, budget deduplication and snapshot restart.
+
+## JEV API accounting details
 
 `JevCostRecorder` writes a separate `CostLogEntry` for each successful JEV API response, before
 validating its judgments. Qualification, post-run routing, profile selection, and acceptance review

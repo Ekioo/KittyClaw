@@ -61,9 +61,10 @@ public sealed class CostTracker
 
     private decimal SumUsdForDay(string workspacePath, DateTime day)
     {
-        var path = CurrentLogPath(workspacePath);
-        if (!File.Exists(path)) return 0m;
+        var files = LogFiles(workspacePath);
         decimal sum = 0m;
+        var entries = new List<CostLogEntry>();
+        foreach (var path in files.Order(StringComparer.Ordinal))
         foreach (var line in File.ReadLines(path))
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
@@ -71,9 +72,13 @@ public sealed class CostTracker
             try { e = JsonSerializer.Deserialize<CostLogEntry>(line); }
             catch { /* skip malformed lines */ continue; }
             if (e is null) continue;
-            if (e.At.Date != day) continue;
-            sum += e.UsdCost;
+            entries.Add(e);
         }
+        var latestEntries = entries.Where(entry => entry.RunId is null)
+                     .Concat(entries.Where(entry => entry.RunId is not null).GroupBy(entry => entry.RunId!)
+                         .Select(group => group.OrderBy(entry => entry.UsageVersion).Last())).ToList();
+        foreach (var entry in latestEntries)
+            if (entry.At.Date == day && entry.CostKnown) sum += Math.Max(0m, entry.UsdCost);
         return sum;
     }
 }
@@ -95,5 +100,11 @@ public sealed record CostLogEntry(
     int? PipelineId = null,
     string? RunId = null,
     string? Source = null,
-    bool CostKnown = true
+    bool CostKnown = true,
+    string? SessionId = null,
+    DateTime? StartedAt = null,
+    int UsageVersion = 0,
+    string? BillingPlan = null,
+    string? RateCardVersion = null,
+    bool UsageReliable = true
 );
