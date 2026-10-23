@@ -1,3 +1,4 @@
+@inject IHttpClientFactory HttpFactory
 @using KittyClaw.Core.Models
 @using KittyClaw.Web.Services
 @inject WorkflowMigrationPlanner Planner
@@ -362,7 +363,7 @@
         _retryBody = body;
         try
         {
-            using var http = new HttpClient { BaseAddress = new Uri(Navigation.BaseUri) };
+            using var http = HttpFactory.CreateClient("KittyClawLocal");
             var response = await http.PostAsJsonAsync($"/api/projects/{ProjectSlug}/workflow-migrations/{action}", body, _dispose.Token);
             response.EnsureSuccessStatusCode();
             var accepted = await response.Content.ReadFromJsonAsync<JobAccepted>(MigrationJson, _dispose.Token)

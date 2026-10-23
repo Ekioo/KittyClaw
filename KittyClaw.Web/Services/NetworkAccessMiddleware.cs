@@ -13,6 +13,7 @@ public sealed class NetworkAccessMiddleware(RequestDelegate next)
 
     internal static bool IsLocal(HttpContext context)
     {
+        if (context.Features.Get<RemoteTunnelRequest>() is not null) return false;
         var address = context.Connection.RemoteIpAddress;
         // In-process HTTP transports have no IP pair. Kestrel TCP connections always do.
         var localTransport = address is null ? context.Connection.LocalIpAddress is null
@@ -175,12 +176,12 @@ public sealed class NetworkAccessMiddleware(RequestDelegate next)
     }
 
     private static string E(string value) => WebUtility.HtmlEncode(value);
-    private static async Task Page(HttpContext context, string title, string content)
+    internal static async Task Page(HttpContext context, string title, string content)
     {
         context.Response.ContentType = "text/html; charset=utf-8";
         context.Response.Headers["Content-Security-Policy"] = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
         context.Response.Headers["X-Content-Type-Options"] = "nosniff";
-        context.Response.Headers["Referrer-Policy"] = "no-referrer";
+        context.Response.Headers["Referrer-Policy"] = "same-origin";
         await context.Response.WriteAsync($$"""
             <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{E(title)}} — KittyClaw</title>
             <style>body{background:#05050a;color:#e4e4f0;font:16px system-ui;margin:0;padding:24px}main{max-width:600px;margin:5vh auto;padding:24px;background:#191928;border-radius:12px}a{color:#4ade80;overflow-wrap:anywhere}code{overflow-wrap:anywhere}label,input,button{display:block;margin:16px 0}input,button{font:inherit;padding:12px;border-radius:7px;max-width:100%;box-sizing:border-box}button{background:#22c55e;color:#05050a;border:0;cursor:pointer}h1{font-size:1.4rem}</style></head><body><main><h1>{{E(title)}}</h1>{{content}}</main></body></html>

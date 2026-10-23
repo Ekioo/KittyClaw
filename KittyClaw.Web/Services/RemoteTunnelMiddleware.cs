@@ -1,0 +1,81 @@
+using System.Net;
+using System.Text.RegularExpressions;
+
+namespace KittyClaw.Web.Services;
+
+/// <summary>Explicit opt-in origin listener reserved for a managed HTTPS tunnel.</summary>
+public sealed record RemoteTunnelOptions(bool Enabled = false, int Port = 5234, string Hostname = "")
+{
+    public static RemoteTunnelOptions Read(IConfiguration configuration)
+    {
+        var options = new RemoteTunnelOptions(
+            configuration.GetValue("RemoteTunnel:Enabled", false),
+            configuration.GetValue("RemoteTunnel:Port", 5234),
+            configuration["RemoteTunnel:Hostname"] ?? "");
+        if (!options.Enabled) return options;
+        if (options.Port is < 1024 or > 65535)
+            throw new InvalidOperationException("RemoteTunnel:Port must be between 1024 and 65535.");
+        if (!RemoteAccessName.IsHostname(options.Hostname))
+            throw new InvalidOperationException("RemoteTunnel:Hostname must be an assigned instance hostname under kittyclaw.dev.");
+        return options;
+    }
+}
+
+/// <summary>Marks the listener, never a client header, as the remote trust boundary.</summary>
+internal sealed class RemoteTunnelRequest;
+
+public sealed class RemoteTunnelMiddleware(RequestDelegate next, RemoteTunnelOptions options, RemoteAccessStore? store = null)
+{
+    public async Task InvokeAsync(HttpContext context)
+    {
+        if (!options.Enabled || context.Connection.LocalPort != options.Port)
+        {
+            // An assigned public host must never reach the trusted local listener.
+            if (options.Enabled && context.Request.Host.Host.Equals(options.Hostname, StringComparison.OrdinalIgnoreCase))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return;
+            }
+            await next(context);
+            return;
+        }
+
+        context.Features.Set(new RemoteTunnelRequest());
+        if (store?.Snapshot.Registered == true && !store.Snapshot.Enabled)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+        var peer = context.Connection.RemoteIpAddress;
+        if (peer is null || !IPAddress.IsLoopback(peer.IsIPv4MappedToIPv6 ? peer.MapToIPv4() : peer)
+            || !context.Request.Host.Host.Equals(options.Hostname, StringComparison.OrdinalIgnoreCase)
+            || context.Request.Host.Port is not (null or 443))
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+
+        // Only this dedicated loopback origin represents a configured HTTPS edge.
+        // Do not derive trust or the public origin from X-Forwarded-* headers.
+        context.Request.Scheme = "https";
+        context.Response.Headers.CacheControl = "no-store";
+        context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
+
+        // Browser-only API exceptions still pass the session gate below. Image
+        // writes additionally require an exact Origin because the upload API
+        // deliberately has no antiforgery contract for local automation clients.
+        var browserApi = HttpMethods.IsGet(context.Request.Method) &&
+            (context.Request.Path == "/api/engine/health" || Regex.IsMatch(context.Request.Path.Value ?? "",
+                @"^/api/projects/[a-zA-Z0-9_-]+/runs/[a-zA-Z0-9_-]+/stream$"));
+        if (HttpMethods.IsPost(context.Request.Method) && context.Request.Path == "/api/images")
+            browserApi = context.Request.Headers.Origin == $"https://{options.Hostname}";
+        if (context.Request.Path.StartsWithSegments("/api") && !browserApi
+            || context.Request.Path.StartsWithSegments("/mcp")
+            || context.Request.Path.StartsWithSegments("/openapi"))
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+        await next(context);
+    }
+}

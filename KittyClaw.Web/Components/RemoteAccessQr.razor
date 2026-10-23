@@ -1,0 +1,36 @@
+@inject LocalizationService L
+@implements IDisposable
+
+<figure class="remote-access-qr" data-testid="remote-access-qr">
+    <a class="remote-access-qr-image" href="@Url" target="_blank" rel="noopener noreferrer" aria-label="@L["RemoteUrlQr"]">
+        <img src="@_image" width="256" height="256" alt="@L["RemoteUrlQr"]" data-testid="remote-url-qr" />
+    </a>
+    <figcaption>
+        <strong>@L["RemoteQrTitle"]</strong>
+        <p class="settings-hint">@L["RemoteQrInstructions"]</p>
+        <a class="remote-access-url" href="@Url" target="_blank" rel="noopener noreferrer">@Url</a>
+        <p class="settings-hint">@L["RemoteQrAuthentication"]</p>
+        @if (!Enabled)
+        {
+            <p class="settings-status settings-status-warn">@L["RemoteStatusDisabled"]</p>
+        }
+    </figcaption>
+</figure>
+
+@code {
+    [Parameter, EditorRequired] public string Url { get; set; } = "";
+    [Parameter] public bool Enabled { get; set; }
+    private string? _encodedUrl;
+    private string _image = "";
+
+    protected override void OnInitialized() => L.OnLanguageChanged += LanguageChanged;
+    private void LanguageChanged() => InvokeAsync(StateHasChanged);
+    public void Dispose() => L.OnLanguageChanged -= LanguageChanged;
+
+    protected override void OnParametersSet()
+    {
+        if (_encodedUrl == Url) return;
+        _image = RemoteAccessQrCode.DataUrl(Url);
+        _encodedUrl = Url;
+    }
+}
