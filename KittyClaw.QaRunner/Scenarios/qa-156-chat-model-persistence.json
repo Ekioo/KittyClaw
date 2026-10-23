@@ -22,7 +22,7 @@
     { "type": "selectOption", "selector": ".chat-drawer-model-select", "value": "claude-fable-5-1" },
     { "type": "assertValue", "selector": ".chat-drawer-model-select", "expected": "claude-fable-5-1" },
     { "type": "click", "selector": ".chat-drawer .agent-close-btn" },
-    { "type": "click", "selector": ".chat-with-agent-btn" },
+    { "type": "assertInteractionDuration", "selector": ".chat-with-agent-btn", "waitForSelector": ".chat-drawer-model-select:has(option[value='claude-fable-5-1']:checked)", "maxMs": 5000 },
     { "type": "assertValue", "selector": ".chat-drawer-model-select", "expected": "claude-fable-5-1" },
     {
       "type": "screenshot",
