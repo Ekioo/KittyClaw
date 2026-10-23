@@ -15,8 +15,8 @@ public sealed record RemoteTunnelOptions(bool Enabled = false, int Port = 5234, 
         if (!options.Enabled) return options;
         if (options.Port is < 1024 or > 65535)
             throw new InvalidOperationException("RemoteTunnel:Port must be between 1024 and 65535.");
-        if (!Regex.IsMatch(options.Hostname, @"^kc-[a-z0-9]{6,40}\.kittyclaw\.dev$", RegexOptions.CultureInvariant))
-            throw new InvalidOperationException("RemoteTunnel:Hostname must be an assigned kc-<instance>.kittyclaw.dev hostname.");
+        if (!RemoteAccessName.IsHostname(options.Hostname))
+            throw new InvalidOperationException("RemoteTunnel:Hostname must be an assigned instance hostname under kittyclaw.dev.");
         return options;
     }
 }

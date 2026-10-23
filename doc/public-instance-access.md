@@ -3,13 +3,16 @@
 ## Purpose and current delivery
 
 Each opted-in installation gets a stable address such as
-`https://kc-<installation-id>.kittyclaw.dev`. The desktop connector and local
+`https://my-office.kittyclaw.dev`, or the automatic
+`https://kc-<installation-id>.kittyclaw.dev` when no name is chosen. The desktop connector and local
 activation flow are implemented. The separate invitation-only provisioning Worker
 lives in the KittyClaw-Front repository under `remote-access-worker/`.
 
-The Worker is not deployed. Desktop tests replace the broker and connector with
-isolated fakes. No production tunnel, DNS record or public address has been created.
-A real Cloudflare/Android acceptance run remains required before beta publication.
+The Worker is deployed at https://remote-api.kittyclaw.dev with its dedicated D1
+registry and request-limit bindings. The scoped runtime token is installed in Worker
+secrets and is usable from Cloudflare servers. Real provisioning, public TLS,
+authenticator login, interactive Blazor and uploads have been exercised against an
+isolated installation. Full acceptance results are recorded below.
 
 ## Owner activation
 
@@ -20,12 +23,24 @@ read installation credentials through this page. The owner first associates the
 accepts Cloudflare transit. No Cloudflare account or API key is requested from the
 end user.
 
+Owners may choose an available name during first activation. Names use 3–32 ASCII
+letters, digits or hyphens and are normalized to lowercase. Service names, existing
+DNS records and the automatic `kc-` namespace cannot be claimed. The Worker checks
+availability after validating the invitation; a D1 unique hostname constraint also
+handles concurrent claims. A name refusal does not consume the invitation. The
+owner can then choose another name using the same installation ID and credential.
+
+The protected identity persists the chosen name before registration. An ambiguous
+response keeps that name fixed for retries. Once assigned, an address cannot be
+renamed and remains reserved after retirement. Existing automatic addresses and
+protected identities without a chosen-name field remain compatible.
+
 `RemoteAccessStore` persists a random installation ID and credential, protected with
 the existing network Data Protection provider, before making an allocation request.
 A failed or lost registration response can be retried with the same identity. The
 broker origin and dedicated port are bound to this identity; an accidental service
 change cannot forward the saved credential elsewhere. Registration validates the
-returned instance ID, exact HTTPS hostname and port.
+returned instance ID, exact chosen or automatic HTTPS hostname and port.
 
 The first successful activation reserves the address and requests one restart to
 bind the dedicated origin. Later stop/resume operations retain the URL and require
@@ -119,10 +134,9 @@ in Worker secrets; each desktop receives only its own tunnel credential. Registr
 is invitation-only. Durable state and exact resource lookups handle partial failures.
 Permanent retirement differs from desktop pause and retains a name tombstone.
 
-Before release, deploy the reviewed Worker/D1 configuration, add edge rate limits,
-inspect real quotas, verify remotely managed token rotation and forced connector
-termination, test live DNS/HTTPS readiness, and run Android/Blazor reconnect, SSE and
-upload journeys. Finish recovery for lost or cloned installation identities and
+The invitation beta is deployed with D1, rate limits and validated live DNS/HTTPS.
+Before general release, inspect fleet quotas, isolate rotation-only old-token
+rejection, and run Android hardware, reconnect and SSE journeys. Finish recovery for lost or cloned installation identities and
 establish fleet suspension, monitoring, backup and retention procedures.
 
 ## Verification and authoritative references
@@ -147,3 +161,34 @@ desktop/mobile layouts. Enable it with `KITTYCLAW_REMOTE_DEBUG_E2E=1`; optionall
 
 The service's included capacities do not imply unlimited free hosting. Confirm the
 current Cloudflare account quotas and operating budget before increasing beta size.
+
+## Opt-in real Cloudflare acceptance
+
+`RemoteAccessLiveJourneyTests` is skipped unless `KITTYCLAW_REMOTE_LIVE_E2E=1` and
+`KITTYCLAW_REMOTE_LIVE_INVITATION` points to an operator-issued private invitation
+JSON file. It starts only its own child app on localhost:25832, with origin 25834,
+LAN HTTPS 25833, a fresh ignored `.artifacts/remote-live/` data directory, mock CLI
+providers and no user projects. It restarts that isolated app after registration,
+then checks a unique chosen subdomain, default browser TLS validation, authenticator login, an interactive
+Blazor round trip, authenticated image upload, cross-origin denial, pause/session
+revocation, same-URL resume and permanent test-tunnel retirement. Cleanup stops the
+child tree and attempts retirement even after failure. Private installation state
+is retained for operator recovery if cleanup cannot complete.
+
+This test is intentionally separate from the regular suite: running it creates real
+Cloudflare resources and requires explicit operator authorization and credentials.
+A timeout or a passing fake-backed test must never be described as live acceptance.
+
+## Live acceptance result
+
+On 2026-10-24, the opt-in real Cloudflare journey passed using a unique chosen
+subdomain and an isolated app with mock provider CLIs. It verified trusted public
+TLS, authenticator login, a Blazor WebSocket round trip, authenticated upload,
+cross-origin denial, session invalidation on pause, same-address resume, renewed
+login and permanent retirement. The Worker accepted the secret-update/disconnect/
+delete sequence. Rotation-only rejection of an old connector token was not isolated.
+
+The browser was desktop Edge with a mobile viewport; this does not claim physical
+Android acceptance. All test identities were retired and cloud resources checked
+separately. Evidence and protected test identities remain in ignored .artifacts/.
+No real user project or main-instance data was used.

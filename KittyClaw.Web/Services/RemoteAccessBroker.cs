@@ -19,7 +19,7 @@ public sealed class RemoteAccessBroker(HttpClient http, Uri endpoint)
     internal async Task RegisterAsync(RemoteAccessIdentity identity, string invitation, CancellationToken ct)
     {
         if (!Regex.IsMatch(invitation, "^[a-f0-9]{64}$")) throw new RemoteAccessException("RemoteInvitationInvalid");
-        await SendAsync(identity, "v1/instances", new { instanceId = identity.InstanceId, invitation, originPort = identity.Port }, false, ct);
+        await SendAsync(identity, "v1/instances", new { instanceId = identity.InstanceId, invitation, originPort = identity.Port, subdomain = identity.Subdomain }, false, ct);
     }
     internal async Task<string> ConnectAsync(RemoteAccessIdentity identity, CancellationToken ct)
     {
@@ -41,6 +41,14 @@ public sealed class RemoteAccessBroker(HttpClient http, Uri endpoint)
         {
             using var response = await http.SendAsync(request, HttpCompletionOption.ResponseContentRead, timeout.Token);
             if (!response.IsSuccessStatusCode)
+            {
+                if (!connect && response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Conflict)
+                {
+                    var failure = await response.Content.ReadFromJsonAsync<BrokerError>(cancellationToken: timeout.Token);
+                    if (failure?.Error == "name_unavailable") throw new RemoteAccessException("RemoteNameUnavailable");
+                    if (failure?.Error == "invalid_subdomain") throw new RemoteAccessException("RemoteNameInvalid");
+                    if (failure?.Error == "name_locked") throw new RemoteAccessException("RemoteNameLocked");
+                }
                 throw new RemoteAccessException(response.StatusCode switch
                 {
                     HttpStatusCode.Forbidden when !connect => "RemoteInvitationInvalid",
@@ -48,9 +56,10 @@ public sealed class RemoteAccessBroker(HttpClient http, Uri endpoint)
                     HttpStatusCode.Gone => "RemoteRetired",
                     _ => "RemoteBrokerUnavailable"
                 });
+            }
             var result = await response.Content.ReadFromJsonAsync<BrokerResponse>(cancellationToken: timeout.Token);
             if (result is null || result.InstanceId != identity.InstanceId || result.OriginPort != identity.Port
-                || result.Url != $"https://kc-{identity.InstanceId}.kittyclaw.dev"
+                || result.Url != $"https://{RemoteAccessName.Hostname(identity)}"
                 || result.State is not ("pending" or "active")) throw new RemoteAccessException("RemoteBrokerInvalid");
             return result;
         }
@@ -58,5 +67,6 @@ public sealed class RemoteAccessBroker(HttpClient http, Uri endpoint)
         catch (HttpRequestException) { throw new RemoteAccessException("RemoteBrokerUnavailable"); }
         catch (JsonException) { throw new RemoteAccessException("RemoteBrokerInvalid"); }
     }
+    private sealed record BrokerError(string Error);
     private sealed record BrokerResponse(string InstanceId, string Url, string State, int OriginPort, string? TunnelToken);
 }

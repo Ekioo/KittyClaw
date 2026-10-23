@@ -18,14 +18,19 @@ public sealed class RemoteAccessConnector(RemoteAccessStore store, RemoteAccessB
     private void SetStatus(string state, string? error = null) => Volatile.Write(ref _status, new(state, error));
     private void Wake() { if (_wake.CurrentCount == 0) try { _wake.Release(); } catch (SemaphoreFullException) { } }
 
-    public async Task ActivateAsync(string invitation, CancellationToken ct)
+    public async Task ActivateAsync(string invitation, CancellationToken ct, string? subdomain = null)
     {
         await _commands.WaitAsync(ct);
         try
         {
             if (!access.Enabled) throw new RemoteAccessException("RemoteAuthenticationRequired");
-            var identity = store.Prepare(broker.Origin, origin.Port);
-            if (!identity.Registered) await broker.RegisterAsync(identity, invitation.Trim(), ct);
+            var identity = store.Prepare(broker.Origin, origin.Port, subdomain);
+            if (!identity.Registered)
+            {
+                try { await broker.RegisterAsync(identity, invitation.Trim(), ct); }
+                catch (RemoteAccessException error) when (error.Code is "RemoteNameUnavailable" or "RemoteNameInvalid")
+                { store.ReleaseNameForRetry(); throw; }
+            }
             store.Enable();
             SetStatus(NeedsRestart ? "RestartRequired" : "Connecting");
             Wake();

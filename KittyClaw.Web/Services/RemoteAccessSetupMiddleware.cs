@@ -24,7 +24,7 @@ public sealed class RemoteAccessSetupMiddleware(RequestDelegate next)
             {
                 if (form["action"] == "pause") await connector.PauseAsync(context.RequestAborted);
                 else if (form["action"] == "activate" && form["consent"] == "yes")
-                    await connector.ActivateAsync(form["invitation"].ToString(), context.RequestAborted);
+                    await connector.ActivateAsync(form["invitation"].ToString(), context.RequestAborted, form["subdomain"].ToString());
                 else { context.Response.StatusCode = 400; return; }
             }
             catch (RemoteAccessException ex) { error = l[ex.Code]; }
@@ -60,7 +60,12 @@ public sealed class RemoteAccessSetupMiddleware(RequestDelegate next)
             {
                 content += "<input type='hidden' name='action' value='activate'>";
                 if (!snapshot.Registered)
+                {
+                    var pending = store.Identity;
+                    var readOnly = pending is not null && !pending.NameRetryAllowed ? " readonly" : "";
+                    content += $"<p><label for='subdomain'>{E(l["RemoteName"])}</label><input id='subdomain' name='subdomain' value='{E(pending?.Subdomain ?? "")}' autocomplete='off' autocapitalize='none' spellcheck='false' pattern='[A-Za-z0-9][A-Za-z0-9-]{{1,30}}[A-Za-z0-9]' minlength='3' maxlength='32'{readOnly}><span>.kittyclaw.dev</span></p><p>{E(l["RemoteNameHint"])}</p>";
                     content += $"<p><label for='invitation'>{E(l["RemoteInvitation"])}</label><input id='invitation' name='invitation' type='password' autocomplete='off' spellcheck='false' pattern='[a-f0-9]{{64}}' minlength='64' maxlength='64' required></p>";
+                }
                 content += $"<p><label><input type='checkbox' name='consent' value='yes' required> {E(l["RemoteConsent"])}</label></p><button>{E(l[snapshot.Registered ? "RemoteResume" : "RemoteActivate"])}</button>";
             }
             content += "</form>";

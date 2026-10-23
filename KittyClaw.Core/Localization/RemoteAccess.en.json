@@ -27,5 +27,10 @@
   "RemotePlatformUnsupported": "The managed connector is not available for this operating system and processor yet.",
   "RemoteBinaryInvalid": "The Cloudflare connector did not pass its integrity check. It was not executed.",
   "RemoteConnectorUnavailable": "The connector could not stay connected. Check this PC's Internet connection and try again.",
-  "RemoteStatusError": "Internet access needs attention. See the message below."
+  "RemoteStatusError": "Internet access needs attention. See the message below.",
+  "RemoteName": "Public address name (optional)",
+  "RemoteNameHint": "For example, my-office gives my-office.kittyclaw.dev. Use 3–32 letters, digits or hyphens. Leave blank for an automatic name. The reserved address is kept when you stop or resume access. The name cannot be changed after activation.",
+  "RemoteNameInvalid": "Choose a valid, available name with 3–32 letters, digits or hyphens. Service names and prefixes kc- and xn-- are reserved.",
+  "RemoteNameUnavailable": "This address is already reserved or in use. Choose another name; your invitation has not been consumed.",
+  "RemoteNameLocked": "This installation already has a name pending registration. Retry with the saved name; assigned addresses cannot be renamed."
 }

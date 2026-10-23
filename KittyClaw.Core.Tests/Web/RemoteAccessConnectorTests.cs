@@ -27,7 +27,7 @@ public sealed class RemoteAccessConnectorTests
         using var dir = new TempDir();
         var protection = new EphemeralDataProtectionProvider();
         var store = new RemoteAccessStore(dir.Path, protection);
-        var identity = store.Prepare(BrokerOrigin, 5234);
+        var identity = store.Prepare(BrokerOrigin, 5234, "My-Office");
         store.Enable();
         var protectedFile = File.ReadAllText(Path.Combine(dir.Path, "remote-access.json"));
         Assert.DoesNotContain(identity.Credential, protectedFile);
@@ -36,6 +36,7 @@ public sealed class RemoteAccessConnectorTests
         Assert.Equal(identity.InstanceId, reloaded.Identity!.InstanceId);
         Assert.Equal(identity.Credential, reloaded.Identity.Credential);
         Assert.True(reloaded.Snapshot.Enabled);
+        Assert.Equal("https://my-office.kittyclaw.dev", reloaded.Snapshot.Url);
         reloaded.Pause();
         Assert.True(reloaded.Snapshot.Registered);
         Assert.Equal(store.Snapshot.Url, reloaded.Snapshot.Url);
@@ -280,6 +281,56 @@ public sealed class RemoteAccessConnectorTests
         finally { await f.Connector.StopAsync(default); }
     }
 
+    [Fact]
+    public async Task Chosen_name_survives_restart_and_unavailable_names_can_retry_without_new_credentials()
+    {
+        using var f = new Fixture();
+        f.Handler.NameTaken = true;
+        Assert.Equal("RemoteNameUnavailable", (await Assert.ThrowsAsync<RemoteAccessException>(() =>
+            f.Connector.ActivateAsync(Invitation, default, "My-Office"))).Code);
+        var first = f.Store.Identity!;
+        Assert.True(first.NameRetryAllowed);
+        f.Handler.NameTaken = false;
+        await f.Connector.ActivateAsync(Invitation, default, "Another-Office");
+        Assert.Equal(first.Credential, f.Store.Identity!.Credential);
+        Assert.Equal(first.InstanceId, f.Store.Identity.InstanceId);
+        Assert.Equal("https://another-office.kittyclaw.dev", f.Store.Snapshot.Url);
+        Assert.Equal("another-office.kittyclaw.dev", f.Store.OriginOptions(new()).Hostname);
+        await f.Connector.PauseAsync(default);
+        await f.Connector.ActivateAsync("", default);
+        Assert.Equal("https://another-office.kittyclaw.dev", f.Store.Snapshot.Url);
+    }
+
+    [Fact]
+    public async Task Ambiguous_registration_keeps_its_original_name_for_retry()
+    {
+        using var f = new Fixture();
+        f.Handler.FailRegistration = true;
+        await Assert.ThrowsAsync<RemoteAccessException>(() => f.Connector.ActivateAsync(Invitation, default, "my-office"));
+        Assert.False(f.Store.Identity!.NameRetryAllowed);
+        Assert.Equal("RemoteNameLocked", (await Assert.ThrowsAsync<RemoteAccessException>(() =>
+            f.Connector.ActivateAsync(Invitation, default, "another-office"))).Code);
+        f.Handler.FailRegistration = false;
+        await f.Connector.ActivateAsync(Invitation, default);
+        Assert.Equal("https://my-office.kittyclaw.dev", f.Store.Snapshot.Url);
+    }
+
+    [Theory]
+    [InlineData("www")]
+    [InlineData("remote-api")]
+    [InlineData("kc-other")]
+    [InlineData("a.b")]
+    [InlineData("-office")]
+    [InlineData("ab")]
+    public async Task Invalid_names_are_refused_before_identity_allocation(string name)
+    {
+        using var f = new Fixture();
+        Assert.Equal("RemoteNameInvalid", (await Assert.ThrowsAsync<RemoteAccessException>(() =>
+            f.Connector.ActivateAsync(Invitation, default, name))).Code);
+        Assert.Null(f.Store.Identity);
+        Assert.Equal(0, f.Handler.Requests);
+    }
+
     private static async Task WaitUntil(Func<bool> predicate)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -312,6 +363,7 @@ public sealed class RemoteAccessConnectorTests
         public bool WrongHost;
         public bool Redirect;
         public bool Retired;
+        public bool NameTaken;
         public int Requests;
         public int Registrations;
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
@@ -322,11 +374,13 @@ public sealed class RemoteAccessConnectorTests
             var connect = request.RequestUri!.AbsolutePath.EndsWith("/connect");
             if (connect && Retired) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Gone));
             if (!connect) Interlocked.Increment(ref Registrations);
+            if (!connect && NameTaken) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Conflict)
+                { Content = JsonContent.Create(new { error = "name_unavailable" }) });
             if (FailRegistration && !connect) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new
             {
                 instanceId = store.Identity.InstanceId,
-                url = WrongHost ? "https://evil.test" : $"https://kc-{store.Identity.InstanceId}.kittyclaw.dev",
+                url = WrongHost ? "https://evil.test" : $"https://{RemoteAccessName.Hostname(store.Identity)}",
                 state = connect ? "active" : "pending", originPort = store.Identity.Port,
                 tunnelToken = connect ? "private-tunnel-token" : null
             }) });
