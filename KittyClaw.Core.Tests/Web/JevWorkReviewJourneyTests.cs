@@ -139,7 +139,7 @@ public sealed class JevWorkReviewJourneyTests(ITestOutputHelper output)
             await panel.EvaluateAsync("element => element.scrollIntoView({block:'center'})");
             await page.ScreenshotAsync(new() { Path = Path.Combine(data, "criteria-evidence-and-missing.png"), FullPage = true });
             await panel.GetByTestId("jev-work-confirm").ClickAsync();
-            await Expect(page.GetByTestId("jev-work-history")).ToContainTextAsync("Rejected");
+            await Expect(page.GetByTestId("jev-work-history").Filter(new() { HasText = "Rejected" })).ToBeVisibleAsync();
             var corrected = (await http.GetFromJsonAsync<Ticket>($"/api/projects/{slug}/tickets/{ticket.Id}", json))!;
             Assert.Equal(todo.Id, corrected.ColumnId); Assert.Contains(corrected.Comments, c => c.Content.Contains("Login works") && c.Content.Contains("Tests pass"));
 
