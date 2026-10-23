@@ -1,0 +1,19 @@
+{
+  "NetworkTitle": "Accesso alla rete locale",
+  "NetworkHint": "Apri KittyClaw sul telefono o su un altro dispositivo con un codice della tua app di autenticazione. Non serve una password.",
+  "NetworkConfigure": "Configura accesso di rete",
+  "NetworkLocalSetup": "Configura o reimposta l’accesso da localhost su questo PC.",
+  "NetworkLogin": "Connetti",
+  "NetworkLoginHint": "Inserisci il codice attuale di sei cifre della tua app di autenticazione.",
+  "NetworkCode": "Codice di autenticazione",
+  "NetworkInvalidCode": "Codice non valido, scaduto o già utilizzato. Attendi un nuovo codice e riprova. Dopo cinque tentativi non riusciti, attendi un minuto.",
+  "NetworkEnabled": "L’accesso di rete è attivo. Usa uno di questi indirizzi sul telefono.",
+  "NetworkRestart": "La protezione è configurata. Riavvia KittyClaw per avviare il servizio HTTPS di rete.",
+  "NetworkCertificate": "La connessione usa un certificato generato da questo PC. Alla prima visita, verifica il certificato e autorizzalo sul dispositivo. Il firewall deve consentire la porta HTTPS indicata sulla rete privata.",
+  "NetworkDisable": "Disattiva accesso e reimposta autenticatore",
+  "NetworkEnroll": "Nella tua app di autenticazione, aggiungi un account con questa chiave di configurazione (basata sul tempo, sei cifre, ogni 30 secondi), poi inserisci il codice attuale.",
+  "NetworkOpenApp": "Apri in un’app di autenticazione",
+  "NetworkEnable": "Convalida codice e attiva accesso di rete",
+  "NetworkRecovery": "Se perdi l’autenticatore, apri questa pagina tramite localhost su questo PC per disattivare l’accesso e associare una nuova app. La disattivazione revoca anche le sessioni esistenti.",
+  "NetworkLogout": "Disconnetti questo dispositivo"
+}

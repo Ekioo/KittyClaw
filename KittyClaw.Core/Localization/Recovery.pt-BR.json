@@ -1,0 +1,9 @@
+{
+  "RecoveryMemoryPending": "A memória precisa ser salva",
+  "RecoveryRetryMemory": "Tentar novamente apenas a memória",
+  "RecoveryFailed": "Falha no processamento",
+  "RecoveryRetrying": "Nova tentativa agendada",
+  "RecoveryWaitingForChildren": "Aguardando subtarefas",
+  "RecoveryRetry": "Tentar processar novamente",
+  "RecoveryRelease": "Liberar a reserva e reavaliar"
+}

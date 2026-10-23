@@ -122,6 +122,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         // Column execution runtime
         "GET /api/projects/{slug}/column-executions",
         "POST /api/projects/{slug}/column-executions/{executionId}/retry",
+        "POST /api/projects/{slug}/column-executions/{executionId}/retry-memory",
         "POST /api/projects/{slug}/column-executions/{executionId}/cancel",
         // Ollama
         "GET /api/projects/{slug}/ollama-models",

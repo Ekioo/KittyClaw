@@ -1,0 +1,9 @@
+{
+  "RecoveryMemoryPending": "メモリの保存が必要です",
+  "RecoveryRetryMemory": "メモリ保存のみ再試行",
+  "RecoveryFailed": "処理に失敗しました",
+  "RecoveryRetrying": "再試行を予約しました",
+  "RecoveryWaitingForChildren": "子タスクの完了を待機中",
+  "RecoveryRetry": "処理を再試行",
+  "RecoveryRelease": "予約を解除して再評価"
+}
