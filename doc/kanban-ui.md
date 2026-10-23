@@ -35,7 +35,7 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 - Multi-pipeline Kanban with drag-and-drop; processor routing lightly highlights allowed destinations and subdues forbidden columns while dragging.
 - Project and unified boards apply only the latest overlapping ticket refresh, keeping externally moved tickets in their current column without disturbing the selected pipeline, filters, sorting, sub-kanban, or open ticket panel.
 - The unified Kanban sends its shell on the first render and defers lane loading until afterward; lanes appear progressively as projects are processed sequentially.
-- Ticket detail panel with comments and activity timeline.
+- Ticket detail panel with comments and activity timeline. The initial ticket render includes its column selector and acceptance criteria; ancillary history, processor files and Git inspection load afterward without hiding the criteria.
 - Owner-action ticket panels expose a concise evidence decision brief and record the selected accept, correction, or stop decision in ticket history before moving the ticket.
 - Live agent run drawer (SSE stream of provider output, steer + stop controls). The context section shows the trigger signal, triggering owner comment, consumed ticket version, and machine-readable refusal reason when a stale or unreadable context blocks Success. Failed steer, stop, and retry requests leave the drawer open and display a concise French error so the action can be attempted again.
 - Animated spinner badge on project cards (`Home.razor`) when one or more agent runs are active for that project (sourced from `AgentRunsState`).

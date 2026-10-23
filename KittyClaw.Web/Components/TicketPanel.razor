@@ -370,10 +370,7 @@
                     }
                 </div>
 
-                @if (!_detailsLoading)
-                {
-                    <TicketAcceptanceCriteria Slug="@Slug" Ticket="@_ticket" OnChanged="@RefreshAsync" />
-                }
+                <TicketAcceptanceCriteria Slug="@Slug" Ticket="@_ticket" OnChanged="@RefreshAsync" />
 
                 @if (CurrentColumn() is { } guidanceColumn &&
                     guidanceColumn.Role is ColumnRole.Waiting or ColumnRole.OwnerAction)
@@ -752,25 +749,29 @@
         {
             _ticket = await TicketService.GetTicketAsync(Slug, TicketId);
             if (_disposed || _ticket is null) return;
-            // Show the ticket before loading ancillary history, processor files and Git state.
+            // Load the column selector with the ticket; ancillary work must not delay its options.
+            _columns = await ColumnService.ListColumnsAsync(Slug, _ticket.PipelineId);
+            if (_disposed) return;
+            // Show the ticket and its criteria before loading history, processor files and Git state.
             _worktreeState = null; _mergeRequest = null; _mergePosition = null; _worktreeLoadError = null;
             StateHasChanged();
             await Task.Yield();
             if (_disposed) return;
             var summaries = TicketService.ListTicketsAsync(Slug);
-            var columns = ColumnService.ListColumnsAsync(Slug, _ticket.PipelineId);
             var labels = LabelService.ListLabelsAsync(Slug);
             var members = MemberService.ListMembersAsync(Slug);
             var slug = Slug;
             var processors = Task.Run(() => ProcessorService.ListAsync(slug));
-            await Task.WhenAll(summaries, columns, labels, members, processors);
+            await Task.WhenAll(summaries, labels, members, processors);
             if (_disposed) return;
             _summaries = await summaries;
-            _columns = await columns;
             _allLabels = await labels;
             _allMembers = await members;
             _processorNames = (await processors)
                 .ToDictionary(processor => processor.ColumnId, processor => processor.Name);
+            StateHasChanged();
+            await Task.Yield();
+            if (_disposed) return;
             await LoadJevHistoryAsync();
             await LoadWorktreeAsync();
             await RebuildPipelineAsync();
