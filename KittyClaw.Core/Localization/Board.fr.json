@@ -485,6 +485,8 @@
   "JevSettings": "Aide JEV",
   "JevConfirm": "Confirmer",
   "JevNextAction": "JEV · Prochaine étape",
+  "JevValidateNextStep": "Validez la prochaine étape du ticket",
+  "JevMoveTo": "Déplacer vers {0}",
   "JevAsk": "Que faire de ce ticket ?",
   "JevThinking": "JEV examine le ticket…",
   "JevClassicFallback": "JEV n'a pas de réponse suffisamment sûre. Le fonctionnement habituel sans JEV s'applique.",

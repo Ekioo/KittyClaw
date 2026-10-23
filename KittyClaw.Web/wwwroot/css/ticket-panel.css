@@ -1439,3 +1439,6 @@ select:focus-visible,
 .jev-route-assistance .jev-verdict { margin: .6rem 0; }
 .jev-route-assistance .jev-decision-controls { border: 0; padding: 0; margin: .5rem 0; }
 .jev-history-entry > p { margin: .4rem 0; }
+
+.jev-next-action { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+.jev-next-action .jev-decision-controls { margin: 0; }

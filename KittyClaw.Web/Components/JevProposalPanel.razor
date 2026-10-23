@@ -4,17 +4,18 @@
 @inject JevDecisionStore Decisions
 @inject LocalizationService L
 @inject TicketService Tickets
+@inject ColumnExecutionService Executions
 @inject ColumnProcessorService Processors
 @inject ProjectService Projects
 @implements IAsyncDisposable
 
-@if (_processor is { Enabled: true, HasBusinessRouting: true, JevAcceptanceValidation: false })
+@if (_eligible && _processor is not null)
 {
     <section class="jev-route-assistance" data-testid="jev-assistance" aria-label="@L["JevNextAction"]">
         <div class="jev-card-heading">
-            <strong>@L["JevNextAction"]</strong>
-            <button class="settings-browse" disabled="@_busy" @onclick="RecommendAsync" data-testid="jev-ask">@L[_busy ? "JevThinking" : "JevAsk"]</button>
+            <strong>@L["JevValidateNextStep"]</strong>
         </div>
+        @if (_busy) { <p role="status">@L["JevThinking"]</p> }
         @if (_proposal is not null)
         {
             <div data-testid="jev-proposal">
@@ -24,8 +25,10 @@
                 }
                 else if (JevCertainty.Routing(_proposal, _processor.JevConfidenceThreshold))
                 {
+                    <div class="jev-next-action">
                     <p class="jev-verdict">@L["JevSuggestedRoute"]: <strong>@DestinationName(_proposal)</strong></p>
-                    <JevProposalDecisionPanel @key="JevDecisionStore.ProposalId(_proposal)" Slug="@Slug" TicketId="@TicketId" Proposal="@_proposal" OnDecided="DecisionTakenAsync" />
+                    <JevProposalDecisionPanel @key="JevDecisionStore.ProposalId(_proposal)" Slug="@Slug" TicketId="@TicketId" Proposal="@_proposal" AcceptLabel="@L.Get("JevMoveTo", DestinationName(_proposal))" OnDecided="DecisionTakenAsync" />
+                    </div>
                 }
                 else { <p role="status">@L["JevClassicFallback"]</p> }
                 <details class="jev-disclosure jev-technical">
@@ -61,6 +64,10 @@
     private Dictionary<int, string> _columnNames = [];
     private bool _busy;
     private bool _automatic;
+    private bool _eligible;
+    private string? _contextKey, _attemptedContext;
+    private int _observedTicket;
+    private int? _observedColumn;
     private string? _error;
     private readonly CancellationTokenSource _stop = new();
     private Task? _poll;
@@ -75,44 +82,62 @@
         await ReloadAsync();
         _poll ??= PollAsync();
     }
-    private async Task ReloadAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_eligible && _proposal is null && !_busy && _attemptedContext != _contextKey)
+            await RecommendAsync();
+    }
+    private async Task ReloadAsync(bool notifyColumnChanges = false)
     {
         var ticket = await Tickets.GetTicketAsync(Slug, TicketId);
+        var moved = ticket is not null && _observedTicket == TicketId && _observedColumn != ticket.ColumnId;
+        if (_observedTicket != TicketId || notifyColumnChanges)
+        { _observedTicket = TicketId; _observedColumn = ticket?.ColumnId; }
         var configured = ticket?.ColumnId is int columnId ? await Processors.GetAsync(Slug, columnId) : null;
         await using var db = Projects.GetProjectDb(Slug);
         var columns = await db.BoardColumns.AsNoTracking().ToListAsync(_stop.Token);
         _automatic = configured?.UsesAutomaticJevRouting ?? false;
         _processor = columns.FirstOrDefault(c => c.Id == ticket?.ColumnId) is { } source
             ? JevQualificationService.RecommendationProcessor(configured, source, columns) : null;
+        var activeExecution = (await Executions.ListAsync(Slug, TicketId)).Any(e =>
+            e.Status is ColumnExecutionStatus.Running or ColumnExecutionStatus.Retrying or ColumnExecutionStatus.WaitingForChildren);
+        _eligible = !activeExecution && _processor is { HasBusinessRouting: true, JevAcceptanceValidation: false } &&
+            columns.FirstOrDefault(c => c.Id == ticket?.ColumnId)?.Role is not (ColumnRole.Success or ColumnRole.Failure);
         _columnNames = columns.ToDictionary(c => c.Id, c => c.Name);
         var decisions = await Decisions.ListAsync(Slug, TicketId, _stop.Token);
         var proposal = await Qualification.GetAsync(Slug, TicketId, _stop.Token);
         var feedback = ticket is not null && _processor is not null ? JevQualificationService.RejectionFeedback(decisions, _processor, ticket) : [];
+        _contextKey = ticket is not null && _processor is not null
+            ? $"{Slug}:{TicketId}:" + JevQualificationService.Fingerprint(_processor, ticket, columns, feedback.Count > 0 ? feedback : null) : null;
         _proposal = proposal is not null && ticket is not null && _processor is { Enabled: true } &&
             proposal.SourceColumnId == ticket.ColumnId &&
             !decisions.Any(d => d.ProposalId == JevDecisionStore.ProposalId(proposal)) &&
             proposal.Fingerprint == JevQualificationService.Fingerprint(_processor, ticket, columns, feedback.Count > 0 ? feedback : null, proposal.RoutingResult)
                 ? proposal : null;
+        if (notifyColumnChanges && moved && !_stop.IsCancellationRequested) await OnDecisionTaken.InvokeAsync();
     }
     private async Task RecommendAsync()
     {
         if (_busy) return;
         _busy = true; _error = null;
+        _attemptedContext = _contextKey;
+        var slug = Slug; var ticketId = TicketId;
+        StateHasChanged();
         try
         {
-            var ticket = await Tickets.GetTicketAsync(Slug, TicketId);
-            var processor = ticket?.ColumnId is int id ? await Processors.GetAsync(Slug, id) : null;
+            var ticket = await Tickets.GetTicketAsync(slug, ticketId);
+            var processor = ticket?.ColumnId is int id ? await Processors.GetAsync(slug, id) : null;
             if (ticket is null) return;
-            await using var db = Projects.GetProjectDb(Slug);
+            await using var db = Projects.GetProjectDb(slug);
             var columns = await db.BoardColumns.AsNoTracking().ToListAsync(_stop.Token);
             if (columns.FirstOrDefault(c => c.Id == ticket.ColumnId) is not { } source) return;
             processor = JevQualificationService.RecommendationProcessor(processor, source, columns);
-            await Qualification.ObserveAsync(Slug, processor, ticket, columns, _stop.Token);
-            await ReloadAsync();
+            await Qualification.ObserveAsync(slug, processor, ticket, columns, _stop.Token);
+            await ReloadAsync(notifyColumnChanges: true);
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
         catch (Exception) { _error = L["JevDecisionError"]; }
-        finally { _busy = false; }
+        finally { _busy = false; if (!_stop.IsCancellationRequested) StateHasChanged(); }
     }
     private async Task DecisionTakenAsync()
     {
@@ -125,7 +150,7 @@
         {
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
             while (await timer.WaitForNextTickAsync(_stop.Token))
-                await InvokeAsync(async () => { if (!_busy) { await ReloadAsync(); StateHasChanged(); } });
+                await InvokeAsync(async () => { if (!_busy) { await ReloadAsync(notifyColumnChanges: true); StateHasChanged(); } });
         }
         catch (OperationCanceledException) { }
     }

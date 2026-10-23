@@ -485,6 +485,8 @@
   "JevSettings": "JEV assistance",
   "JevConfirm": "Confirm",
   "JevNextAction": "JEV · Next step",
+  "JevValidateNextStep": "Confirm the ticket’s next step",
+  "JevMoveTo": "Move to {0}",
   "JevAsk": "What should I do with this ticket?",
   "JevThinking": "JEV is reviewing…",
   "JevClassicFallback": "JEV has no sufficiently confident answer. Normal processing without JEV applies.",

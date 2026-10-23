@@ -89,7 +89,7 @@ policy uses this returned confidence, rather than the selected option’s probab
 `JevObservationJourneyTests` starts the real Blazor/Kestrel app on an ephemeral port with
 isolated data under `%APPDATA%/KittyClaw-debug/jev-e2e-*`. It replaces TypeSafe with a
 fixture, disables host-key detection and saves a fake global key through settings. The
-browser configures qualification while leaving the processor disabled, asks for a current
+browser configures qualification while leaving the processor disabled, automatically displays a current
 recommendation, checks deduplication and manually applies it. Reload retains the JEV entry
 alongside comments. Enabling the processor then proves automatic routing for a second ticket
 without the legacy automatic-routing flag. Screenshots and debug data are retained there.
@@ -183,8 +183,10 @@ outcome/default routing. Missing credentials also preserve classic routing. No a
 agent dispatch or manual hold is introduced by this fallback.
 Post-run observations are historical comparisons, not a second automatic routing pass.
 
-The ticket presents one compact **JEV · Next step** area with **What should I do with this
-ticket?**. It requests a fresh recommendation from the ticket's current routing context;
+The ticket leads with **Confirm the ticket’s next step**, the suggested destination and an
+explicit **Move to [destination]** action. Opening the ticket automatically requests a current
+recommendation after interactive rendering; no preliminary request button is required.
+Suggestions are hidden during active processing and in success/failure columns;
 unchanged inputs use the stored result. Only an undecided recommendation matching the current
 column, ticket and processor fingerprint appears here. Rejected, applied and outdated results
 appear as JEV entries alongside comments in the activity timeline, with technical details
@@ -193,7 +195,7 @@ timeline rendering does not add agent-triggering comments or mutate ticket fresh
 
 `AutomaticJevColumnRoutingTests` covers agent-before-routing order, destination selection,
 uncertainty/abstention/API-error fallback, stale inputs, success evidence and audit rollback. The isolated
-`JevObservationJourneyTests` exercises the on-demand control in a column whose processor is
+`JevObservationJourneyTests` exercises the directly visible recommendation and action in a column whose processor is
 disabled, comment history after reload, and automatic application after enabling qualification,
 without the legacy automatic-routing flag.
 Use `KITTYCLAW_JEV_DEBUG_E2E=1` for that browser journey; it uses fixture providers only.

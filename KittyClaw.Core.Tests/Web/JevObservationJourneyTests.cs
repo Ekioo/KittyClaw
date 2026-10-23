@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using KittyClaw.Core.Automation;
 using KittyClaw.Core.Services;
 using KittyClaw.Core.Tests.Helpers;
 using KittyClaw.Web.Api;
@@ -125,9 +127,11 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
             Assert.True(processor.JevObservationOnly);
             await page.GotoAsync($"{baseUrl}/board/{slug}/ticket/{ticket!.Id}");
             var proposal = page.GetByTestId("jev-proposal");
-            await Expect(page.GetByTestId("jev-ask")).ToBeVisibleAsync();
-            await page.GetByTestId("jev-ask").ClickAsync();
+            await Expect(page.GetByTestId("jev-ask")).ToHaveCountAsync(0);
+            await Expect(page.GetByTestId("jev-assistance")).ToContainTextAsync("Confirm the ticket’s next step");
             await Expect(proposal).ToContainTextAsync("Suggested destination: Review", new() { Timeout = 60000 });
+            await Expect(proposal.GetByTestId("jev-accept")).ToHaveTextAsync("Move to Review");
+            await CaptureTicketAsync("02-direct-suggestion-and-action.png");
             await proposal.Locator("details > summary").First.ClickAsync();
             await Expect(proposal).ToContainTextAsync("Confidence: 90");
             await Expect(page.GetByTestId("ticket-worktree-error")).Not.ToBeVisibleAsync();
@@ -153,7 +157,7 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
             await proposal.GetByTestId("jev-accept").ClickAsync();
             var history = page.GetByTestId("jev-history-entry");
             await Expect(history).ToContainTextAsync("Accepted");
-            await Expect(page.GetByTestId("jev-proposal")).Not.ToBeVisibleAsync();
+            await Expect(page.GetByTestId("jev-assistance")).Not.ToContainTextAsync("Suggested destination: Review");
             await Expect(page.GetByTestId("jev-post-run-proposal")).Not.ToBeVisibleAsync();
             await page.ReloadAsync();
             await Expect(page.GetByTestId("jev-history-entry")).ToContainTextAsync("Accepted");
@@ -172,10 +176,95 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
             await Expect(page.GetByTestId("jev-history-entry")).ToContainTextAsync("Automatically applied by JEV", new() { Timeout = 60000 });
             Assert.Equal(target.Id, (await http.GetFromJsonAsync<Ticket>($"/api/projects/{slug}/tickets/{automaticTicket.Id}", json))!.ColumnId);
             await page.ScreenshotAsync(new() { Path = Path.Combine(dataDir, "04-automatic-route-comment.png"), FullPage = true });
+
+            var classicTarget = columns!.Single(c => c.Name == "Todo");
+            var done = columns!.Single(c => c.Name == "Done");
+            var normalProcessor = await http.PutAsJsonAsync($"/api/projects/{slug}/columns/{source.Id}/processor",
+                new SaveColumnProcessorRequest("Implementation", "Complete the work and choose its next destination.",
+                    DefaultTargetColumnId: classicTarget.Id, Routes: [new("review", target.Id)],
+                    JevObservationOnly: false, JevConfidenceThreshold: .9));
+            normalProcessor.EnsureSuccessStatusCode();
+            var reviewer = await http.PutAsJsonAsync($"/api/projects/{slug}/columns/{target.Id}/processor",
+                new SaveColumnProcessorRequest("Reviewer", "Review the completed work.", DefaultTargetColumnId: done.Id));
+            reviewer.EnsureSuccessStatusCode();
+            var chainResponse = await http.PostAsJsonAsync($"/api/projects/{slug}/tickets",
+                new CreateTicketRequest("Complete implementation and review", "owner", source.Name,
+                    "Implement the change, review it, and finish the ticket.", PipelineId: source.PipelineId, ColumnId: source.Id));
+            chainResponse.EnsureSuccessStatusCode();
+            var chainTicket = (await chainResponse.Content.ReadFromJsonAsync<Ticket>(json))!;
+            await page.GotoAsync($"{baseUrl}/board/{slug}/ticket/{chainTicket.Id}");
+            await WaitForColumnAsync(chainTicket.Id, done.Id);
+            await Expect(page.GetByTestId("jev-history-entry")).ToHaveCountAsync(2, new() { Timeout = 45000 });
+            var chainExecutions = (await http.GetFromJsonAsync<List<ColumnExecution>>($"/api/projects/{slug}/column-executions?ticketId={chainTicket.Id}", json))!;
+            Assert.Equal(2, chainExecutions.Count);
+            Assert.All(chainExecutions, e => Assert.Equal(ColumnExecutionStatus.Completed, e.Status));
+            Assert.Contains(chainExecutions, e => e.TargetColumnId == target.Id);
+            Assert.Contains(chainExecutions, e => e.TargetColumnId == done.Id);
+            Assert.Equal(2, factory.Dispatcher.Calls[chainTicket.Id]);
+            var chainDecisions = await factory.Services.GetRequiredService<JevDecisionStore>().ListAsync(slug, chainTicket.Id);
+            Assert.Equal(2, chainDecisions.Count);
+            Assert.All(chainDecisions, d => Assert.True(d.Automatic));
+            await page.ReloadAsync();
+            await Expect(page.GetByTestId("jev-history-entry")).ToHaveCountAsync(2);
+            await CaptureTicketAsync("05-complete-agent-review-done.png");
+
+            var stricter = await http.PutAsJsonAsync($"/api/projects/{slug}/columns/{source.Id}/processor",
+                new SaveColumnProcessorRequest("Implementation", "Complete the work and choose its next destination.",
+                    DefaultTargetColumnId: classicTarget.Id, Routes: [new("review", target.Id)], JevConfidenceThreshold: 1));
+            stricter.EnsureSuccessStatusCode();
+            var fallbackResponse = await http.PostAsJsonAsync($"/api/projects/{slug}/tickets",
+                new CreateTicketRequest("Classic routing when JEV is uncertain", "owner", source.Name,
+                    "Use the normal route when JEV is below the configured confidence threshold.", PipelineId: source.PipelineId, ColumnId: source.Id));
+            fallbackResponse.EnsureSuccessStatusCode();
+            var fallbackTicket = (await fallbackResponse.Content.ReadFromJsonAsync<Ticket>(json))!;
+            await page.GotoAsync($"{baseUrl}/board/{slug}/ticket/{fallbackTicket.Id}");
+            await WaitForColumnAsync(fallbackTicket.Id, classicTarget.Id);
+            await page.ReloadAsync();
+            await Expect(page.Locator(".timeline-event").Filter(new() { HasText = "Continuing with normal processing and classic routing" })).ToBeVisibleAsync();
+            var fallbackExecution = Assert.Single((await http.GetFromJsonAsync<List<ColumnExecution>>($"/api/projects/{slug}/column-executions?ticketId={fallbackTicket.Id}", json))!);
+            Assert.Equal(ColumnExecutionStatus.Completed, fallbackExecution.Status);
+            Assert.True(fallbackExecution.JevClassicFallback);
+            Assert.Equal(classicTarget.Id, fallbackExecution.TargetColumnId);
+            Assert.Empty(await factory.Services.GetRequiredService<JevDecisionStore>().ListAsync(slug, fallbackTicket.Id));
+            await Expect(page.Locator("[data-testid=jev-accept]:disabled")).ToHaveCountAsync(0);
+            await CaptureTicketAsync("06-uncertain-jev-classic-route.png");
+            await Task.Delay(TimeSpan.FromSeconds(16));
+            Assert.Equal(1, factory.Dispatcher.Calls[fallbackTicket.Id]);
+            Assert.Equal(2, factory.Dispatcher.Calls[chainTicket.Id]);
+            Assert.Equal(classicTarget.Id, (await http.GetFromJsonAsync<Ticket>($"/api/projects/{slug}/tickets/{fallbackTicket.Id}", json))!.ColumnId);
             Assert.Empty(browserErrors);
             output.WriteLine($"PASS: {baseUrl}/board/{slug}/ticket/{ticket.Id}");
             output.WriteLine($"Data and screenshots retained at {dataDir}");
-            output.WriteLine($"Ticket remained in {source.Name} (#{source.Id}); proposed {target.Name} (#{target.Id}); one mock API call; zero executions.");
+            output.WriteLine($"PASS: manual recommendation and persistent comment history; automatic qualification; agent → JEV Review → agent → JEV Done; uncertain JEV → classic Todo. No repeated dispatches or browser errors.");
+
+            async Task WaitForColumnAsync(int id, int expectedColumn)
+            {
+                var deadline = DateTime.UtcNow.AddSeconds(60);
+                while (DateTime.UtcNow < deadline)
+                {
+                    if ((await http.GetFromJsonAsync<Ticket>($"/api/projects/{slug}/tickets/{id}", json))?.ColumnId == expectedColumn) return;
+                    await Task.Delay(500);
+                }
+                Assert.Fail($"Ticket #{id} did not reach column #{expectedColumn}.");
+            }
+
+            async Task CaptureTicketAsync(string name)
+            {
+                // Blazor replaces the prerendered panel when the circuit reconnects after reload.
+                // Acquire a fresh element if that replacement interrupts screenshot capture.
+                for (var attempt = 0; ; attempt++)
+                {
+                    try
+                    {
+                        await page.Locator(".ticket-panel").ScreenshotAsync(new() { Path = Path.Combine(dataDir, name) });
+                        return;
+                    }
+                    catch (PlaywrightException ex) when (attempt < 4 && ex.Message.Contains("not attached to the DOM", StringComparison.Ordinal))
+                    {
+                        await Task.Delay(250);
+                    }
+                }
+            }
             }
             catch
             {
@@ -218,11 +307,14 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
     private sealed class DebugFactory(string dataDir) : WebApplicationFactory<CreateProjectRequest>
     {
         public FixtureHandler Handler { get; } = new();
+        public FixtureDispatcher Dispatcher { get; } = new();
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Development");
             builder.ConfigureTestServices(services =>
             {
+                services.RemoveAll<IColumnAgentDispatcher>();
+                services.AddSingleton<IColumnAgentDispatcher>(Dispatcher);
                 services.RemoveAll<JevConfigurationService>();
                 services.AddSingleton(sp => new JevConfigurationService(sp.GetRequiredService<ProjectSecretVault>(), dataDir, () => null));
                 services.RemoveAll<JevQualificationService>();
@@ -241,16 +333,32 @@ public sealed class JevObservationJourneyTests(ITestOutputHelper output)
             Assert.Equal("debug-only-fake-key", request.Headers.Authorization!.Parameter);
             using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
             var options = body.RootElement.GetProperty("questions").GetProperty("routing").GetProperty("criteria");
-            var selected = options.EnumerateObject().Single(p => p.Name != "none").Name;
+            var candidates = options.EnumerateObject().Where(p => p.Name != "none").ToList();
+            var selected = candidates.OrderByDescending(p => p.Value.GetString()!.StartsWith("Review:")).First().Name;
+            var answers = JsonSerializer.SerializeToNode(JevResponseFixture.Answers(selected))!;
+            answers["routing"]!["probabilities"] = JsonSerializer.SerializeToNode(options.EnumerateObject().ToDictionary(p => p.Name,
+                p => p.Name == selected ? .95 : .05 / (options.EnumerateObject().Count() - 1)));
             Interlocked.Increment(ref Count);
             return new(HttpStatusCode.OK)
             {
                 Content = JsonContent.Create(new
                 {
-                    model = "jev-debug-fixture", answers = JevResponseFixture.Answers(selected),
+                    model = "jev-debug-fixture", answers,
                     usage = new { input_tokens = 450, output_tokens = 70 }
                 })
             };
+        }
+    }
+
+    private sealed class FixtureDispatcher : IColumnAgentDispatcher
+    {
+        public System.Collections.Concurrent.ConcurrentDictionary<int, int> Calls { get; } = new();
+        public Task<ColumnDispatchResult> DispatchAsync(string slug, ColumnProcessor processor, ColumnExecution execution, Ticket ticket, CancellationToken ct)
+        {
+            Calls.AddOrUpdate(ticket.Id, 1, (_, count) => count + 1);
+            return Task.FromResult(new ColumnDispatchResult(new AgentRun { RunId = execution.Id, ProjectSlug = slug, TicketId = ticket.Id,
+                AgentName = processor.Name, SkillFile = "", ConcurrencyGroup = "debug-fixture", StartedAt = DateTime.UtcNow },
+                new ColumnAgentResult("completed", processor.RequiredSkills, "Completed by the isolated fixture", Evidence: new(ticket.UpdatedAt)), null));
         }
     }
 }
