@@ -67,6 +67,8 @@ internal sealed class WindowsDesktopLifetime : IDisposable
                 _dispatcher = dispatcher;
                 using var menu = new Forms.ContextMenuStrip();
                 menu.Items.Add("Open KittyClaw", null, (_, _) => OpenBrowser(url));
+                var checkUpdates = menu.Items.Add("Check for updates");
+                menu.Items.Add(new Forms.ToolStripSeparator());
                 menu.Items.Add("Quit KittyClaw", null, (_, _) => app.Lifetime.StopApplication());
                 using var icon = new Forms.NotifyIcon
                 {
@@ -77,6 +79,39 @@ internal sealed class WindowsDesktopLifetime : IDisposable
                     Visible = true,
                 };
                 icon.DoubleClick += (_, _) => OpenBrowser(url);
+                icon.BalloonTipClicked += (_, _) => OpenBrowser(url);
+                checkUpdates.Click += async (_, _) =>
+                {
+                    checkUpdates.Enabled = false;
+                    checkUpdates.Text = "Checking for updates…";
+                    try
+                    {
+                        var updates = app.Services.GetRequiredService<InstalledUpdateService>();
+                        var succeeded = await updates.CheckAsync();
+                        if (app.Lifetime.ApplicationStopping.IsCancellationRequested) return;
+                        var message = updates.IsReady
+                            ? $"Version {updates.AvailableVersion} is ready. Open KittyClaw to confirm installation and restart."
+                            : updates.IsBusy ? "An update is already downloading in the background."
+                            : succeeded ? "KittyClaw is up to date."
+                            : "Updates could not be checked or downloaded. Please try again later.";
+                        icon.ShowBalloonTip(5000, "KittyClaw updates", message,
+                            succeeded || updates.IsBusy || updates.IsReady ? Forms.ToolTipIcon.Info : Forms.ToolTipIcon.Warning);
+                    }
+                    catch (Exception ex)
+                    {
+                        Trace.TraceWarning("Could not check for updates from tray: {0}", ex.Message);
+                        if (!app.Lifetime.ApplicationStopping.IsCancellationRequested)
+                            icon.ShowBalloonTip(5000, "KittyClaw updates", "Updates could not be checked. Please try again later.", Forms.ToolTipIcon.Warning);
+                    }
+                    finally
+                    {
+                        if (!checkUpdates.IsDisposed)
+                        {
+                            checkUpdates.Text = "Check for updates";
+                            checkUpdates.Enabled = true;
+                        }
+                    }
+                };
                 OpenBrowser(url);
                 Forms.Application.Run(_context);
                 icon.Visible = false;

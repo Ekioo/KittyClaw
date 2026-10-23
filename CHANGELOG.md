@@ -4,6 +4,14 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+### Added
+
+- A "Check for updates" action in the Windows notification-area icon menu, with background download and result notifications.
+
+### Changed
+
+- Installed Windows builds download available updates automatically in the background; installation and restart still require owner confirmation.
+
 ## [v0.20] — 2026-10-23
 
 Optional JEV qualification, editable workflows, and self-contained Windows installation with incremental updates.

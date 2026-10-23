@@ -9,8 +9,8 @@
         <span class="update-banner-icon">✨</span>
         <span class="update-banner-text">
             A new version is available
-            <a href="@($"https://github.com/Ekioo/KittyClaw/releases/tag/{UpdateCheck.LatestVersion}")"
-               target="_blank" rel="noopener">@UpdateCheck.LatestVersion</a>
+            <a href="@($"https://github.com/Ekioo/KittyClaw/releases/tag/{ReleaseTag}")"
+               target="_blank" rel="noopener">@AvailableVersion</a>
             (current: @UpdateCheck.CurrentVersion)
         </span>
         @if (Installer.IsSupported)
@@ -27,10 +27,6 @@
             {
                 <button type="button" class="btn btn-primary" @onclick="Installer.InstallAndRestart">Update and restart</button>
             }
-            else
-            {
-                <button type="button" class="btn btn-primary" @onclick="Installer.DownloadAsync">Download update</button>
-            }
             @if (Installer.Error is not null)
             {
                 <span role="alert">@Installer.Error</span>
@@ -41,6 +37,10 @@
 }
 
 @code {
+    private string? AvailableVersion => Installer.IsSupported ? Installer.AvailableVersion : UpdateCheck.LatestVersion;
+    private string? ReleaseTag => AvailableVersion is { } version
+        ? "v" + version.TrimStart('v', 'V') : null;
+
     protected override void OnInitialized()
     {
         UpdateCheck.OnChange += HandleChange;

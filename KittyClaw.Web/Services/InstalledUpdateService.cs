@@ -55,41 +55,31 @@ public sealed class InstalledUpdateService(
     public string? Error { get; private set; }
     public event Action? OnChange;
 
-    public async Task CheckAsync()
+    public async Task<bool> CheckAsync()
     {
-        if (!IsSupported || !await _operation.WaitAsync(0)) return;
-        try
-        {
-            // A prepared package remains actionable if GitHub is temporarily unavailable.
-            AvailableVersion = client.PendingVersion;
-            AvailableVersion ??= await client.CheckAsync();
-        }
-        finally
-        {
-            _operation.Release();
-            OnChange?.Invoke();
-        }
-    }
-
-    public async Task DownloadAsync()
-    {
-        if (!IsSupported || IsRestarting || !await _operation.WaitAsync(0)) return;
+        if (!IsSupported || IsRestarting || !await _operation.WaitAsync(0)) return false;
         try
         {
             Error = null;
-            IsBusy = true;
-            Progress = 0;
-            OnChange?.Invoke();
+            // A prepared package remains actionable if GitHub is temporarily unavailable.
             AvailableVersion = client.PendingVersion ?? await client.CheckAsync();
-            if (AvailableVersion is null) return;
+            if (AvailableVersion is null) return true;
             if (!IsReady)
+            {
+                IsBusy = true;
+                Progress = 0;
+                OnChange?.Invoke();
                 await client.DownloadAsync(p => { Progress = p; OnChange?.Invoke(); }, lifetime.ApplicationStopping);
+            }
+            return true;
         }
-        catch (OperationCanceledException) when (lifetime.ApplicationStopping.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (lifetime.ApplicationStopping.IsCancellationRequested) { return false; }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Update download failed");
-            Error = "The update could not be downloaded. Please try again.";
+            Error = AvailableVersion is null ? null
+                : "The update could not be downloaded. KittyClaw will retry automatically at the next update check.";
+            return false;
         }
         finally
         {
