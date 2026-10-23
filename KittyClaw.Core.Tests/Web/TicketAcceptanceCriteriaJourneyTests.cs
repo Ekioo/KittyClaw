@@ -48,9 +48,15 @@ public sealed class TicketAcceptanceCriteriaJourneyTests
         await Expect(area.Locator("pre")).ToHaveTextAsync("{\"passed\":true}");
         await page.ReloadAsync();
         await Expect(area.GetByLabel("Status: Login works", new() { Exact = true })).ToHaveValueAsync("PARTIAL");
-        var description = await page.Locator(".ticket-desc").BoundingBoxAsync();
-        var criteria = await area.BoundingBoxAsync();
-        Assert.True(criteria!.Y >= description!.Y + description.Height);
+        await page.WaitForFunctionAsync("""
+            () => {
+                const description = document.querySelector('.ticket-desc');
+                const criteria = document.querySelector('[data-testid="ticket-acceptance-criteria"]');
+                if (!description || !criteria) return false;
+                const above = description.getBoundingClientRect(), below = criteria.getBoundingClientRect();
+                return above.height > 0 && below.height > 0 && below.top >= above.bottom;
+            }
+            """);
         await OpenEditor("Edit criterion and evidence");
         await area.Locator(".acceptance-editor select").SelectOptionAsync("image/png");
         await area.Locator("input[type=file]").SetInputFilesAsync(new FilePayload {
