@@ -1,4 +1,12 @@
 {
+  "DashboardTiles": "Riquadri della dashboard",
+  "JevNextAction": "JEV · Passaggio successivo",
+  "JevValidateNextStep": "Conferma il passaggio successivo del ticket",
+  "JevMoveTo": "Sposta in {0}",
+  "JevAsk": "Cosa devo fare con questo ticket?",
+  "JevThinking": "JEV sta esaminando…",
+  "JevClassicFallback": "JEV non ha una risposta sufficientemente affidabile. Si applica la normale elaborazione senza JEV.",
+  "JevRoutingAutomaticDefault": "JEV sceglie e applica automaticamente i percorsi configurati dopo l'elaborazione quando la sua confidenza raggiunge questa soglia. In caso di risultati incerti, astensione o indisponibilità di JEV viene usato l'instradamento classico.",
   "CardActiveRunTooltip": "Apri l'agente in esecuzione: {0}",
   "CardLastRunTooltip": "Visualizza l'ultima esecuzione: {0} · {1}",
   "SortMenuTitle": "Ordina i biglietti",

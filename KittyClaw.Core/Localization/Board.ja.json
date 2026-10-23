@@ -1,4 +1,12 @@
 {
+  "DashboardTiles": "ダッシュボードのタイル",
+  "JevNextAction": "JEV · 次のステップ",
+  "JevValidateNextStep": "チケットの次のステップを確認",
+  "JevMoveTo": "{0} に移動",
+  "JevAsk": "このチケットをどうすればよいですか？",
+  "JevThinking": "JEV が確認中…",
+  "JevClassicFallback": "JEV に十分な確信のある回答がありません。JEV を使わない通常の処理が適用されます。",
+  "JevRoutingAutomaticDefault": "処理後、JEV の確信度がこのしきい値に達すると、設定済みのルートを自動的に選択して適用します。結果が不確実、判断保留、または JEV が利用できない場合は、従来のルーティングを使用します。",
   "CardActiveRunTooltip": "実行中のエージェントを開く: {0}",
   "CardLastRunTooltip": "前回の実行を表示: {0} · {1}",
   "SortMenuTitle": "チケットをソート",
