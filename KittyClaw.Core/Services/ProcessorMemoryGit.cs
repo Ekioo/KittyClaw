@@ -15,7 +15,11 @@ internal static class ProcessorMemoryGit
         var repository = await GitAsync(workspace, ["rev-parse", "--show-toplevel"], ct);
         if (repository.Code != 0) return; // Non-Git workspaces have no commit boundary.
         var root = repository.Output.Trim();
-        var relative = Path.GetRelativePath(root, memory).Replace('\\', '/');
+        // Git resolves junctions and Windows MSIX virtualized paths to their physical root.
+        // Ask Git for the prefix rather than comparing physical and virtual path strings.
+        var prefix = await GitAsync(workspace, ["rev-parse", "--show-prefix"], ct);
+        EnsureSuccess(prefix);
+        var relative = prefix.Output.Trim() + $".agents/processors/column-{columnId}/memory";
         if (Path.IsPathRooted(relative) || relative == ".." || relative.StartsWith("../", StringComparison.Ordinal))
             throw new InvalidOperationException("Processor memory is outside its Git repository.");
         var gate = Gates.GetOrAdd(root, _ => new SemaphoreSlim(1, 1));
