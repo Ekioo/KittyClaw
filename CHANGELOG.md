@@ -4,6 +4,37 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.23] — 2026-10-23
+
+Secured local network access, clearer acceptance criteria, and reliable workflow recovery.
+
+### Highlights
+
+Optional HTTPS access lets other devices on the local network connect after authenticator enrollment. Local automation remains accessible through localhost, while remote sessions protect the UI, APIs, uploads, and MCP endpoints.
+
+Columns can require acceptance criteria before a ticket enters. Criteria use clearer localized statuses and preserve evidence across desktop and mobile layouts. Workflow recovery distinguishes agent retries from memory-only recovery so a failed memory checkpoint does not undo successful routing.
+
+### Added
+
+- Local-network HTTPS access with TOTP enrollment, protected sessions, replay protection, throttling, and local-only setup.
+- Optional acceptance-criteria requirements for column entry, preserved by pipeline import and export.
+- Visible execution recovery actions, including retrying saved memory without rerunning the agent.
+- Isolated performance benchmarks for core operations, SQLite concurrency, complex boards, and API reads, with regression comparison in CI.
+
+### Changed
+
+- Clearer acceptance-criteria layout and localized statuses with desktop and mobile coverage.
+- Memory persistence and recovery are tracked independently from completed business routing.
+
+### Fixed
+
+- Resume tickets after owner feedback and workflow interruptions without losing their durable execution context.
+- Inspect ticket worktrees safely when a project has no Git repository.
+- Keep board context menus within the viewport.
+- Report QA runtime failures as structured results and isolate update checks in test instances.
+
+---
+
 ## [v0.22] — 2026-10-23
 
 Configurable column capacity, recoverable ticket drafts, and smoother update restarts.
