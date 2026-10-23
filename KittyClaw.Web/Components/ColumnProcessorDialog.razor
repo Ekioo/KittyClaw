@@ -126,6 +126,7 @@
                         {
                             <div class="processor-draft-notice" role="status">@L["ProcessorDraftNotice"]</div>
                         }
+                        <label class="workflow-check"><input type="checkbox" data-testid="evaluate-acceptance-criteria" @bind="_evaluateAcceptanceCriteria" /> <FieldHelp Label="@L["ProcessorEvaluateAcceptance"]" Help="@L["ProcessorEvaluateAcceptanceHelp"]" /></label>
                         <details class="jev-settings jev-disclosure" data-testid="jev-settings">
                             <summary title="@L["JevSettingsHelp"]">@L["JevSettings"]</summary>
                         <label class="workflow-check"><input type="checkbox" data-testid="jev-acceptance-mode" @bind="_jevAcceptanceValidation" @bind:after="AcceptanceModeChanged" disabled="@(!_jevAvailability.Available && !_jevAcceptanceValidation)" /> <FieldHelp Label="@L["JevAcceptanceMode"]" Help="@L["JevAcceptanceHelp"]" /></label>
@@ -382,6 +383,7 @@
     private JevAvailability _jevAvailability = new(false, false, null);
     private bool _jevAcceptanceValidation;
     private bool _jevExecutionSelection;
+    private bool _evaluateAcceptanceCriteria;
     private string _jevCriteriaText = "";
     private List<JevProfileDraft> _jevProfiles = [];
     private sealed class JevProfileDraft
@@ -521,6 +523,7 @@
         _enabled = processor?.Enabled ?? true;
         _jevAcceptanceValidation = processor?.JevAcceptanceValidation ?? false;
         _jevExecutionSelection = processor?.JevExecutionSelection ?? false;
+        _evaluateAcceptanceCriteria = processor?.EvaluateAcceptanceCriteria ?? false;
         _jevCriteriaText = string.Join("\n", processor?.JevAcceptanceCriteria ?? []);
         _jevProfiles = processor?.JevExecutionProfiles.Select(p => new JevProfileDraft { Name = p.Name, Model = p.Model, Description = p.Description, Skills = new(p.Skills, StringComparer.OrdinalIgnoreCase) }).ToList() ?? [];
         _jevObservationOnly = processor?.JevObservationOnly ?? false;
@@ -592,6 +595,7 @@
                     jevConfidenceThreshold: _jevConfidencePercent / 100,
                     jevAcceptanceValidation: _jevAcceptanceValidation,
                     jevExecutionSelection: _jevExecutionSelection,
+                    evaluateAcceptanceCriteria: _evaluateAcceptanceCriteria,
                     jevAcceptanceCriteria: _jevCriteriaText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
                     jevExecutionProfiles: _jevProfiles.Select(p => new JevExecutionProfile(p.Name, p.Model, p.Skills.Union(_requiredSkills, StringComparer.OrdinalIgnoreCase).ToList(), p.Description)).ToList());
             }

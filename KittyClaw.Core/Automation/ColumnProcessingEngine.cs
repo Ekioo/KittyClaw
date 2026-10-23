@@ -242,7 +242,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
                         $"Skills obligatoires non exécutés : {string.Join(", ", missing)}.", activityAuthor);
                     return;
                 }
-                await _executions.SaveAgentResultAsync(slug, execution, result);
+                await _executions.SaveAgentResultAsync(slug, execution, result, processor);
             }
 
             if (execution.CapitalizationStatus is not (MemoryCapitalizationStatus.Succeeded or MemoryCapitalizationStatus.NoChange))

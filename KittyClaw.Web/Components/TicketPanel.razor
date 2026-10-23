@@ -358,6 +358,8 @@
                     }
                 </div>
 
+                <TicketAcceptanceCriteria Slug="@Slug" Ticket="@_ticket" OnChanged="@RefreshAsync" />
+
                 @if (CurrentColumn() is { } guidanceColumn &&
                     guidanceColumn.Role is ColumnRole.Waiting or ColumnRole.OwnerAction)
                 {
@@ -1183,7 +1185,11 @@
         {
             var restored = await TicketService.CreateTicketAsync(Slug, t.Title, t.Description, t.CreatedBy, t.Status, labelIds, t.Priority, t.AssignedTo, t.ParentId, t.PipelineId, t.ColumnId, t.BlocksParent);
             if (restored is not null)
+            {
+                foreach (var criterion in t.AcceptanceCriteria)
+                    await TicketService.SaveAcceptanceCriterionAsync(Slug, restored.Id, null, new(criterion.Text, criterion.Status, criterion.Evidence));
                 await OnMutatedTicket.InvokeAsync(restored.Id);
+            }
         });
         _confirmDelete = false;
         await OnDeleted.InvokeAsync();

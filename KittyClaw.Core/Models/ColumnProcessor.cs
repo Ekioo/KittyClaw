@@ -15,6 +15,7 @@ public class ColumnProcessor
     public string Prompt { get; set; } = "";
     public string? Model { get; set; }
     public bool Enabled { get; set; } = true;
+    public bool EvaluateAcceptanceCriteria { get; set; }
     public bool JevObservationOnly { get; set; }
     public bool JevAutomaticRouting { get; set; }
     [NotMapped] public bool HasBusinessRouting => Routes.Count > 0 || DefaultTargetColumnId.HasValue;
@@ -259,7 +260,10 @@ public sealed record ColumnAgentResult(
     DateTime? FireAt = null,
     string? ScheduleTarget = null,
     ColumnResultEvidence? Evidence = null,
-    List<string>? Lessons = null);
+    List<string>? Lessons = null,
+    List<AcceptanceCriterionEvaluation>? AcceptanceCriteria = null);
+
+public sealed record AcceptanceCriterionEvaluation(string Id, AcceptanceStatus Status, CriterionEvidence? Evidence = null);
 
 public sealed record ColumnResultEvidence(
     DateTime? TicketUpdatedAt = null,

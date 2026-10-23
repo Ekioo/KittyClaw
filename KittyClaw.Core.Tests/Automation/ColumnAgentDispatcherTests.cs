@@ -6,6 +6,19 @@ namespace KittyClaw.Core.Tests.Automation;
 public sealed class ColumnAgentDispatcherTests
 {
     [Fact]
+    public void Result_parser_preserves_criterion_assessments_and_their_proof()
+    {
+        var parsed = ColumnAgentDispatcher.TryParseResult("""
+            {"outcome":"completed","skillsUsed":[],"acceptanceCriteria":[{"id":"criterion-1","status":"PARTIAL","evidence":{"content":"One check remains","mediaType":"text/plain"}}]}
+            """, out var result, out var error);
+        Assert.True(parsed, error);
+        var assessment = Assert.Single(result!.AcceptanceCriteria!);
+        Assert.Equal("criterion-1", assessment.Id);
+        Assert.Equal(AcceptanceStatus.PARTIAL, assessment.Status);
+        Assert.Equal("One check remains", assessment.Evidence!.Content);
+    }
+
+    [Fact]
     public void Approved_JEV_profile_prevents_silent_escalation_to_the_project_fallback()
     {
         var project = new Project { Name = "Profiles", Slug = "profiles", FallbackModel = "claude-sonnet-4-6" };

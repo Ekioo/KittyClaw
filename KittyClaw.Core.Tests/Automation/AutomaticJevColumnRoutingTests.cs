@@ -12,6 +12,7 @@ public sealed class AutomaticJevColumnRoutingTests
 {
     [Theory]
     [InlineData("route", true)]
+    [InlineData("assessments", true)]
     [InlineData("uncertain", false)]
     [InlineData("none", false)]
     [InlineData("api-error", false)]
@@ -34,11 +35,13 @@ public sealed class AutomaticJevColumnRoutingTests
         var processors = new ColumnProcessorService(projects, new ProjectSkillService(projects));
         var processor = await processors.SaveAsync(project.Slug, source.Id, "Worker", "Process and route the ticket", null,
             true, 20, [], [], [], defaultTargetColumnId: original.Id, routes: [new("alternative", chosen.Id)],
-            afterActions: [new("after", new AddCommentActionSpec { Content = "Action after routing" })]);
+            afterActions: [new("after", new AddCommentActionSpec { Content = "Action after routing" })],
+            evaluateAcceptanceCriteria: scenario == "assessments");
         Assert.False(processor.JevAutomaticRouting);
         Assert.True(processor.UsesAutomaticJevRouting);
         var ticket = await tickets.CreateTicketAsync(project.Slug, "Choose the right next step", status: source.Name,
             pipelineId: source.PipelineId, columnId: source.Id);
+        if (scenario == "assessments") await tickets.SaveAcceptanceCriterionAsync(project.Slug, ticket.Id, null, new("Checks pass"));
         var executions = new ColumnExecutionService(projects, tickets);
         var execution = (await executions.ClaimNextAsync(project.Slug, processor, DateTime.UtcNow))!;
         if (scenario == "success-without-evidence")
@@ -58,6 +61,15 @@ public sealed class AutomaticJevColumnRoutingTests
             Assert.Equal(source.Id, (await tickets.GetTicketAsync(project.Slug, ticket.Id))!.ColumnId);
             var input = JsonNode.Parse(await request.Content!.ReadAsStringAsync())!;
             Assert.Equal("original", input["state"]!["agentClaims"]!["outcome"]!.GetValue<string>());
+            if (scenario == "assessments")
+            {
+                var saved = (await tickets.GetTicketAsync(project.Slug, ticket.Id))!;
+                Assert.Equal(AcceptanceStatus.PASS, Assert.Single(saved.AcceptanceCriteria).Status);
+                Assert.Equal("All checks passed", saved.AcceptanceCriteria[0].Evidence?.Content);
+                Assert.True(Assert.Single(await executions.ListAsync(project.Slug, ticket.Id)).AgentCompleted);
+                Assert.Equal("PASS", input["state"]!["ticket"]!["acceptanceCriteria"]![0]!["status"]!.GetValue<string>());
+                Assert.Equal("All checks passed", input["state"]!["ticket"]!["acceptanceCriteria"]![0]!["evidence"]!["content"]!.GetValue<string>());
+            }
             var options = input["questions"]!["routing"]!["criteria"]!.AsObject().Select(p => p.Key).ToArray();
             var choice = scenario == "none" ? "none" : $"column-{chosen.Id}";
             var answers = System.Text.Json.JsonSerializer.SerializeToNode(JevResponseFixture.Answers(choice))!;
@@ -114,7 +126,9 @@ public sealed class AutomaticJevColumnRoutingTests
             Calls++;
             return Task.FromResult(new ColumnDispatchResult(new AgentRun { RunId = execution.Id, ProjectSlug = slug,
                 TicketId = ticket.Id, AgentName = processor.Name, SkillFile = "", ConcurrencyGroup = "test", StartedAt = DateTime.UtcNow },
-                new("original", [], "Agent finished its work"), null));
+                new("original", [], "Agent finished its work",
+                    Evidence: processor.EvaluateAcceptanceCriteria ? new(ticket.UpdatedAt) : null,
+                    AcceptanceCriteria: processor.EvaluateAcceptanceCriteria ? [new(ticket.AcceptanceCriteria[0].Id, AcceptanceStatus.PASS, new("All checks passed"))] : null), null));
         }
     }
 }

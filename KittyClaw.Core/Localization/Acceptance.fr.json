@@ -1,0 +1,13 @@
+{
+  "TicketAcceptanceCriteria": "Critères d’acceptation",
+  "AddCriterion": "Ajouter un critère",
+  "CriterionStatus": "Statut",
+  "EditCriterion": "Modifier le critère et sa preuve",
+  "DeleteCriterion": "Supprimer le critère",
+  "CriterionEvidence": "Preuve",
+  "CriterionText": "Critère",
+  "CriterionNotEvaluated": "Non évalué",
+  "RemoveEvidence": "Supprimer la preuve",
+  "ProcessorEvaluateAcceptance": "Évaluer les critères d’acceptation du ticket",
+  "ProcessorEvaluateAcceptanceHelp": "Confier à ce processor l’évaluation des critères pertinents et de leurs preuves. Le bilan est enregistré avant le routage. Désactivé par défaut."
+}

@@ -1,0 +1,11 @@
+{
+  "TicketAcceptanceCriteria": "受け入れ基準",
+  "AddCriterion": "基準を追加",
+  "CriterionStatus": "状態",
+  "EditCriterion": "基準と証拠を編集",
+  "DeleteCriterion": "基準を削除",
+  "CriterionEvidence": "証拠",
+  "CriterionText": "基準",
+  "CriterionNotEvaluated": "未評価",
+  "RemoveEvidence": "証拠を削除"
+}

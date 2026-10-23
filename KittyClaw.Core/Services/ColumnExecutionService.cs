@@ -491,15 +491,57 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
     }
 
     public async Task SaveAgentResultAsync(
-        string projectSlug, ColumnExecution execution, ColumnAgentResult result)
+        string projectSlug, ColumnExecution execution, ColumnAgentResult result, ColumnProcessor? processor = null)
     {
         await using var db = projects.GetProjectDb(projectSlug);
         await EnsureTableAsync(db);
+        await using var transaction = await db.Database.BeginTransactionAsync();
         var row = await db.ColumnExecutions.FindAsync(execution.Id)
             ?? throw new InvalidOperationException($"L’exécution '{execution.Id}' n’existe plus.");
+        if (row.AgentCompleted)
+        {
+            execution.AgentCompleted = true;
+            execution.AgentResult = row.AgentResult;
+            return;
+        }
+        if (processor?.EvaluateAcceptanceCriteria == true)
+        {
+            if (row.Status != ColumnExecutionStatus.Running)
+                throw new InvalidOperationException("Only a running execution can record acceptance assessments.");
+            var ticket = await db.Tickets.FindAsync(execution.TicketId)
+                ?? throw new InvalidOperationException("The ticket no longer exists.");
+            var criteria = ticket.AcceptanceCriteria;
+            if (criteria.Count > 0 && result.AcceptanceCriteria is null)
+                throw new InvalidOperationException("The processor must return acceptanceCriteria before routing.");
+            var evaluations = result.AcceptanceCriteria ?? [];
+            if (evaluations.Count > 0)
+            {
+                var consumed = result.Evidence?.TicketUpdatedAt ?? row.TriggerTicketUpdatedAt;
+                if (consumed is null || NormalizeUtcInstant(consumed.Value) != NormalizeUtcInstant(ticket.UpdatedAt))
+                    throw new InvalidOperationException("stale_ticket_context");
+                if (evaluations.Any(e => e is null) || evaluations.Select(e => e.Id).Distinct(StringComparer.Ordinal).Count() != evaluations.Count)
+                    throw new InvalidOperationException("Acceptance criterion IDs must be unique.");
+                foreach (var evaluation in evaluations)
+                {
+                    var index = criteria.FindIndex(c => c.Id == evaluation.Id);
+                    if (index < 0) throw new InvalidOperationException("Unknown acceptance criterion ID.");
+                    if (evaluation.Status != AcceptanceStatus.NotEvaluated && evaluation.Evidence is null)
+                        throw new InvalidOperationException("Evaluated criteria require evidence.");
+                    TicketService.ValidateAcceptanceCriterion(new(criteria[index].Text, evaluation.Status, evaluation.Evidence));
+                    criteria[index] = criteria[index] with { Status = evaluation.Status, Evidence = evaluation.Evidence };
+                }
+                ticket.AcceptanceCriteria = criteria;
+                // Assessments are session metadata. Preserve the consumed ticket revision so
+                // success/owner-feedback guards still validate the agent's actual delivery.
+                await TicketService.EnsureActivityTableAsync(db);
+                db.ActivityEntries.Add(new ActivityEntry { TicketId = ticket.Id, Author = processor.Name,
+                    Text = $"Recorded {evaluations.Count} acceptance criterion assessments for execution {execution.Id}." });
+            }
+        }
         row.AgentCompleted = true;
         row.AgentResult = result;
         await db.SaveChangesAsync();
+        await transaction.CommitAsync();
         execution.AgentCompleted = true;
         execution.AgentResult = result;
     }

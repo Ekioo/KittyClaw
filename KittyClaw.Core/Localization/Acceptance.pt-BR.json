@@ -1,0 +1,11 @@
+{
+  "TicketAcceptanceCriteria": "Critérios de aceitação",
+  "AddCriterion": "Adicionar critério",
+  "CriterionStatus": "Status",
+  "EditCriterion": "Editar critério e evidências",
+  "DeleteCriterion": "Excluir critério",
+  "CriterionEvidence": "Evidências",
+  "CriterionText": "Critério",
+  "CriterionNotEvaluated": "Não avaliado",
+  "RemoveEvidence": "Remover evidência"
+}

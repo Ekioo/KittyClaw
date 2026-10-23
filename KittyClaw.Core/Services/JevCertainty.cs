@@ -6,7 +6,7 @@ public static class JevCertainty
     public static string Configuration(KittyClaw.Core.Models.ColumnProcessor processor) => JevWorkReviewService.Hash(new
     {
         processor.Id, processor.ColumnId, processor.Name, processor.Enabled, processor.Mission, processor.Prompt, processor.Model,
-        processor.JevObservationOnly, processor.JevAcceptanceValidation, processor.JevExecutionSelection, processor.JevConfidenceThreshold,
+        processor.EvaluateAcceptanceCriteria, processor.JevObservationOnly, processor.JevAcceptanceValidation, processor.JevExecutionSelection, processor.JevConfidenceThreshold,
         processor.JevAcceptanceCriteria, processor.JevExecutionProfiles, processor.AvailableSkills, processor.RecommendedSkills, processor.RequiredSkills,
         processor.Routes, processor.DefaultTargetColumnId, processor.TechnicalFailureColumnId, processor.BeforeActions, processor.AfterActions
     });

@@ -9,6 +9,14 @@ public class Ticket
     public int? ColumnId { get; set; }
     public required string Title { get; set; }
     public string Description { get; set; } = "";
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string AcceptanceCriteriaJson { get; set; } = "[]";
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public List<TicketAcceptanceCriterion> AcceptanceCriteria
+    {
+        get => System.Text.Json.JsonSerializer.Deserialize<List<TicketAcceptanceCriterion>>(AcceptanceCriteriaJson) ?? [];
+        set => AcceptanceCriteriaJson = System.Text.Json.JsonSerializer.Serialize(value);
+    }
     public string Status { get; set; } = "Backlog";
     public TicketPriority Priority { get; set; } = TicketPriority.NiceToHave;
     public int SortOrder { get; set; }

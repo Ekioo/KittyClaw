@@ -368,7 +368,8 @@ public sealed partial class PipelineImportService(
                     MapColumn(processor.Routing.Default), MapColumn(processor.Routing.TechnicalFailure),
                     processor.Routing.Routes.Select(route => new ColumnRoute(route.Outcome, columnIds[route.Target])).ToList(),
                     processor.Prompt,
-                    MapActions(processor.BeforeActions), MapActions(processor.AfterActions));
+                    MapActions(processor.BeforeActions), MapActions(processor.AfterActions),
+                    evaluateAcceptanceCriteria: processor.EvaluateAcceptanceCriteria);
             }
             await FaultAsync("processors-installed");
 

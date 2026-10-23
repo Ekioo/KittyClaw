@@ -106,7 +106,7 @@ public sealed class JevQualificationService(ProjectService projects, ProjectSecr
 
     private static object BuildState(ColumnProcessor processor, Ticket ticket, Dictionary<string, string> destinations, IReadOnlyList<JevRejectionFeedback>? feedback = null, ColumnAgentResult? routingResult = null) => new
     {
-        ticket = new { ticket.Id, ticket.Title, ticket.Description, ticket.Priority, updatedAt = DateTime.SpecifyKind(ticket.UpdatedAt, DateTimeKind.Utc),
+        ticket = new { ticket.Id, ticket.Title, ticket.Description, acceptanceCriteria = ticket.AcceptanceCriteria.Select(c => c.ToRoutingContext()), ticket.Priority, updatedAt = DateTime.SpecifyKind(ticket.UpdatedAt, DateTimeKind.Utc),
             comments = ticket.Comments.TakeLast(20).Select(c => new { c.Author, c.Content }) },
         mission = processor.Mission, instructions = processor.Prompt,
         sourceColumnId = processor.ColumnId, destinations, ownerFeedback = feedback, agentClaims = routingResult

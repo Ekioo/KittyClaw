@@ -37,6 +37,8 @@ public sealed class TicketTransferServiceTests
         await tickets.AddCommentAsync(source, root.Id, "A preserved comment", "owner");
         await tickets.AddActivityAsync(source, root.Id, "Manual audit entry", "programmer");
 
+        var criterion = await tickets.SaveAcceptanceCriterionAsync(source, root.Id, null,
+            new("Transfer retains proof", AcceptanceStatus.PASS, new("Verified")));
         var createdAt = new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc);
         var updatedAt = createdAt.AddHours(1);
         await using (var db = projects.GetProjectDb(source))
@@ -52,6 +54,7 @@ public sealed class TicketTransferServiceTests
         }
 
         var result = await transfers.TransferAsync(source, root.Id, target, "owner");
+        Assert.Equal(criterion, Assert.Single((await tickets.GetTicketAsync(target, root.Id))!.AcceptanceCriteria));
 
         Assert.Equal(root.Id, result.TicketId);
         Assert.Equal(2, result.TicketCount);

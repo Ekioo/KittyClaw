@@ -60,6 +60,8 @@ public sealed class ColumnProcessorService(
                 CREATE UNIQUE INDEX IF NOT EXISTS IX_ColumnProcessors_ColumnId
                     ON ColumnProcessors(ColumnId);
                 """));
+        await MigrationGate.RunOnceAsync(db, "column-processors-evaluate-acceptance-v1", static d =>
+            MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN EvaluateAcceptanceCriteria INTEGER NOT NULL DEFAULT 0"));
         await MigrationGate.RunOnceAsync(db, "column-processors-jev-v1", static d =>
             MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnProcessors ADD COLUMN JevObservationOnly INTEGER NOT NULL DEFAULT 0"));
         await MigrationGate.RunOnceAsync(db, "column-processors-jev-post-run-v1", static d =>
@@ -124,7 +126,7 @@ public sealed class ColumnProcessorService(
         bool? jevObservationOnly = null, bool? jevPostRunObservation = null,
         bool? jevAutomaticRouting = null, double? jevConfidenceThreshold = null,
         bool? jevAcceptanceValidation = null, bool? jevExecutionSelection = null,
-        List<string>? jevAcceptanceCriteria = null, List<JevExecutionProfile>? jevExecutionProfiles = null)
+        List<string>? jevAcceptanceCriteria = null, List<JevExecutionProfile>? jevExecutionProfiles = null, bool? evaluateAcceptanceCriteria = null)
     {
         var gate = ProjectGates.GetOrAdd(projectSlug, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync();
@@ -148,6 +150,7 @@ public sealed class ColumnProcessorService(
                 JevPostRunObservationSince = jevPostRunObservation is null ? previous?.JevPostRunObservationSince
                     : jevPostRunObservation.Value ? previous?.JevPostRunObservationSince ?? DateTime.UtcNow : null,
                 JevAcceptanceValidation = jevAcceptanceValidation ?? previous?.JevAcceptanceValidation ?? false,
+                EvaluateAcceptanceCriteria = evaluateAcceptanceCriteria ?? previous?.EvaluateAcceptanceCriteria ?? false,
                 JevExecutionSelection = jevExecutionSelection ?? previous?.JevExecutionSelection ?? false,
                 JevAcceptanceCriteria = jevAcceptanceCriteria ?? previous?.JevAcceptanceCriteria ?? [],
                 JevExecutionProfiles = jevExecutionProfiles ?? previous?.JevExecutionProfiles ?? [],
@@ -503,6 +506,7 @@ public sealed class ColumnProcessorService(
         processor.JevObservationOnly = definition.JevObservationOnly;
         processor.JevAutomaticRouting = definition.JevAutomaticRouting;
         processor.JevAcceptanceValidation = definition.JevAcceptanceValidation;
+        processor.EvaluateAcceptanceCriteria = definition.EvaluateAcceptanceCriteria;
         processor.JevExecutionSelection = definition.JevExecutionSelection;
         processor.JevAcceptanceCriteria = definition.JevAcceptanceCriteria;
         processor.JevExecutionProfiles = definition.JevExecutionProfiles;
@@ -649,6 +653,7 @@ public sealed class ColumnProcessorService(
         JevObservationOnly = processor.JevObservationOnly,
         JevAutomaticRouting = processor.JevAutomaticRouting,
         JevAcceptanceValidation = processor.JevAcceptanceValidation,
+        EvaluateAcceptanceCriteria = processor.EvaluateAcceptanceCriteria,
         JevExecutionSelection = processor.JevExecutionSelection,
         JevAcceptanceCriteria = processor.JevAcceptanceCriteria,
         JevExecutionProfiles = processor.JevExecutionProfiles,
@@ -739,6 +744,7 @@ public sealed class ColumnProcessorService(
         public bool JevObservationOnly { get; set; }
         public bool JevAutomaticRouting { get; set; }
         public bool JevAcceptanceValidation { get; set; }
+        public bool EvaluateAcceptanceCriteria { get; set; }
         public bool JevExecutionSelection { get; set; }
         public List<string> JevAcceptanceCriteria { get; set; } = [];
         public List<JevExecutionProfile> JevExecutionProfiles { get; set; } = [];

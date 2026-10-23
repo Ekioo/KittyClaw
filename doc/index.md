@@ -35,6 +35,7 @@ For a high-level overview see the root [README.md](../README.md). For repo layou
 - [Project secrets vault](./project-secrets.md) — per-project write-only secrets, native encryption on Windows/macOS/Linux, subprocess-only injection, fail-closed behavior.
 - [Kanban UI](./kanban-ui.md) — Blazor Server board, ticket panel, agent run drawer.
 - [Evidence decision briefs](./evidence-decision-briefs.md) — traceable run evidence, recovery guidance, and human accept/correct/stop decisions in owner-action columns.
+- [Ticket acceptance criteria](./acceptance-criteria.md) — independent assessments, evidence and read/write REST/MCP access.
 - [Ticket scheduling](./ticket-scheduling.md) — park tickets until a future time, then promote them into the workflow.
 - [Lossless ticket transfer](./ticket-transfer.md) — atomically move a complete ticket tree and its history between projects.
 - [Dashboard](./dashboard.md) — free-form tile view backed by `.dashboard/` Markdown files with drag-and-drop layout.

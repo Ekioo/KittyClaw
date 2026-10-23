@@ -1,4 +1,4 @@
-﻿using KittyClaw.Core.Models;
+using KittyClaw.Core.Models;
 
 using KittyClaw.Core.Automation;
 
@@ -37,7 +37,8 @@ public record SaveColumnProcessorRequest(
     bool? JevAcceptanceValidation = null,
     bool? JevExecutionSelection = null,
     List<string>? JevAcceptanceCriteria = null,
-    List<JevExecutionProfile>? JevExecutionProfiles = null);
+    List<JevExecutionProfile>? JevExecutionProfiles = null,
+    bool? EvaluateAcceptanceCriteria = null);
 public record CreateTicketRequest(
     string Title, string CreatedBy, string Status, string Description = "",
     List<int>? LabelIds = null, TicketPriority Priority = TicketPriority.NiceToHave,

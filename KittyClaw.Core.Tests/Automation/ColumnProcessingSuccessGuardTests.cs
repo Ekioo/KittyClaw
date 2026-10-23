@@ -85,6 +85,65 @@ public sealed class ColumnProcessingSuccessGuardTests : IDisposable
             activity.Text.Contains("traitement de colonne terminé", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Acceptance_assessments_are_committed_before_routing_only_when_enabled(bool enabled)
+    {
+        var f = await CreateFixtureAsync("Assessment routing");
+        f.Processor.EvaluateAcceptanceCriteria = enabled;
+        var criterion = (await f.Tickets.SaveAcceptanceCriterionAsync(f.Project.Slug, f.Ticket.Id, null, new("Works")))!;
+        var unrelated = (await f.Tickets.SaveAcceptanceCriterionAsync(f.Project.Slug, f.Ticket.Id, null, new("Unrelated")))!;
+        f.Dispatcher.Handler = (_, _, _, ticket, _) => Task.FromResult(new ColumnAgentResult("completed", [],
+            Evidence: new(ticket.UpdatedAt), AcceptanceCriteria: [new(criterion.Id, AcceptanceStatus.PASS, new("All checks passed"))]));
+        await f.Engine.ProcessAsync(f.Project.Slug, f.Processor, f.Execution, CancellationToken.None);
+        var read = (await f.Tickets.GetTicketAsync(f.Project.Slug, f.Ticket.Id))!;
+        Assert.Equal(enabled ? AcceptanceStatus.PASS : AcceptanceStatus.NotEvaluated, read.AcceptanceCriteria[0].Status);
+        Assert.Equal(enabled ? "All checks passed" : null, read.AcceptanceCriteria[0].Evidence?.Content);
+        Assert.Equal(unrelated, read.AcceptanceCriteria[1]);
+        var execution = (await f.Executions.ListAsync(f.Project.Slug, f.Ticket.Id)).Single();
+        Assert.Equal(ColumnExecutionStatus.Completed, execution.Status);
+        Assert.NotEqual(f.Source.Id, read.ColumnId);
+        if (enabled)
+        {
+            var assessment = Assert.Single(read.Activities, a => a.Text.Contains("acceptance criterion assessments"));
+            Assert.True(assessment.CreatedAt <= execution.EndedAt);
+            // Replaying a checkpoint must not overwrite a newer human assessment.
+            await f.Tickets.SaveAcceptanceCriterionAsync(f.Project.Slug, f.Ticket.Id, criterion.Id, new("Works", AcceptanceStatus.FAIL, new("Owner correction")));
+            await f.Executions.SaveAgentResultAsync(f.Project.Slug, f.Execution, f.Execution.AgentResult!, f.Processor);
+            Assert.Equal(AcceptanceStatus.FAIL, (await f.Tickets.GetTicketAsync(f.Project.Slug, f.Ticket.Id))!.AcceptanceCriteria[0].Status);
+        }
+    }
+
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("unknown")]
+    [InlineData("proof")]
+    [InlineData("duplicate")]
+    [InlineData("stale")]
+    public async Task Invalid_acceptance_reports_leave_criteria_and_routing_unchanged(string scenario)
+    {
+        var f = await CreateFixtureAsync("Invalid assessments");
+        f.Processor.EvaluateAcceptanceCriteria = true;
+        var criterion = (await f.Tickets.SaveAcceptanceCriterionAsync(f.Project.Slug, f.Ticket.Id, null, new("Works")))!;
+        f.Dispatcher.Handler = async (_, _, _, ticket, _) => {
+            if (scenario == "stale") await f.Tickets.UpdateTicketAsync(f.Project.Slug, ticket.Id, description: "New requirement");
+            return new ColumnAgentResult("completed", [], Evidence: new(ticket.UpdatedAt),
+                AcceptanceCriteria: scenario == "missing" ? null : scenario == "proof" ? [new(criterion.Id, AcceptanceStatus.FAIL)] : [
+                    new(criterion.Id, AcceptanceStatus.PASS, new("Good proof")),
+                    new(scenario == "unknown" ? "unknown-id" : criterion.Id, AcceptanceStatus.FAIL,
+                        scenario == "proof" ? null : new("More proof"))]);
+        };
+        await f.Engine.ProcessAsync(f.Project.Slug, f.Processor, f.Execution, CancellationToken.None);
+        var read = (await f.Tickets.GetTicketAsync(f.Project.Slug, f.Ticket.Id))!;
+        Assert.Equal(criterion, Assert.Single(read.AcceptanceCriteria));
+        Assert.Equal(f.Source.Id, read.ColumnId);
+        Assert.DoesNotContain(read.Comments, c => c.Content == "success side effect");
+        var execution = (await f.Executions.ListAsync(f.Project.Slug, f.Ticket.Id)).Single();
+        Assert.False(execution.AgentCompleted);
+        Assert.NotEqual(ColumnExecutionStatus.Completed, execution.Status);
+    }
+
     private async Task<Fixture> CreateFixtureAsync(string name, bool useCustomRoute = false)
     {
         var projects = new ProjectService(_temp.Path);
