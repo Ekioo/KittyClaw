@@ -139,11 +139,6 @@
     color: #14b8a6;
     white-space: nowrap;
 }
-.ticket-author {
-    font-size: 0.7rem;
-    color: var(--text-muted);
-    margin-left: auto;
-}
 
 /* Sub-ticket indicator on cards */
 .sub-ticket-indicator {
