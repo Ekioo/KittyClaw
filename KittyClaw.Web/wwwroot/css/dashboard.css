@@ -1207,7 +1207,11 @@
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     box-shadow: 0 14px 36px rgba(0,0,0,0.5);
-    min-width: 220px;
+    min-width: min(220px, calc(100vw - 16px));
+    max-width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    box-sizing: border-box;
+    overflow: auto;
     padding: 6px 0;
     font-size: 13px;
 }
@@ -1272,8 +1276,8 @@
     margin: 4px 0;
 }
 .ticket-context-menu {
-    max-height: min(70vh, 620px);
-    min-width: 250px;
+    max-height: min(70vh, 620px, calc(100vh - 16px));
+    min-width: min(250px, calc(100vw - 16px));
     overflow-y: auto;
 }
 .ticket-context-menu-pipeline {

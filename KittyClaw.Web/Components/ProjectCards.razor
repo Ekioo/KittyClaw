@@ -166,6 +166,9 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (_sortMenuVisible)
+            await JS.InvokeVoidAsync("fitBoardContextMenus");
+
         if (firstRender && !_sortLoaded)
         {
             _sortLoaded = true;

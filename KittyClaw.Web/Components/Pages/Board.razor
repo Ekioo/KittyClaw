@@ -872,6 +872,9 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (_sortMenuOpenFor is not null || _ticketMenuTicket is not null)
+            await JS.InvokeVoidAsync("fitBoardContextMenus");
+
         if (firstRender)
         {
             _dotNetRef = DotNetObjectReference.Create(this);

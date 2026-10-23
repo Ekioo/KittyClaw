@@ -526,6 +526,9 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (_sortMenuSlug is not null && _sortMenuColumn is not null)
+            await JS.InvokeVoidAsync("fitBoardContextMenus");
+
         if (_attachTicketDraft && _newTicketProjectSlug is not null)
         {
             _attachTicketDraft = false;
