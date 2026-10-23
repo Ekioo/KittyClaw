@@ -48,6 +48,37 @@ runs before the candidate window so other eligible cards can be selected. Once a
 reach success, the next engine scan can claim the card. `Blocked` is reserved for obstacles
 requiring external intervention or an indispensable decision, rather than ordinary delivery dependencies.
 
+### Explicit execution states
+
+`ColumnWorkFlow` resolves admission from the same `ColumnProcessingState` used by the editor:
+None is disabled; triage waits for routing; review waits for the owner; profile selection waits
+for an approved profile. A current inconclusive JEV result can admit an agent only when the
+mode permits its fallback. Entry, dependency and concurrency gates still run in the claim service.
+Retries and child-wait resumption keep their existing durable claim instead of creating new work.
+
+After admission, `ColumnProcessingEngine.RunStagesAsync` executes one stage at a time.
+`ColumnExecutionFlow.Next` is the transition table:
+
+```mermaid
+flowchart TD
+    Preparation --> Agent --> Result --> RoutingAnalysis --> RoutingValidation
+    RoutingValidation -->|Success or JEV route| TransitionFirst[Transition]
+    TransitionFirst -->|Committed as Completed| FinalActions[Finalization] --> Stopped
+    RoutingValidation -->|Other route| DeferredPreparation --> Finalization --> Transition --> Stopped
+```
+
+Preparation defers before-actions whenever a Success destination exists. Deferred preparation
+runs them only when they were deferred; finalization includes them after a guarded transition.
+Any rejected stage stops the flow. Result recording includes the durable agent result, acceptance
+evidence and memory capitalization, before routing analysis. A failed final compare-and-swap cannot
+enter finalization on the guarded path.
+
+These orchestration states are transient: `ColumnExecutionStatus`, `AgentCompleted`, completed
+action IDs and `CurrentActionId` remain the durable recovery authority. A saved agent result skips
+dispatch; an indeterminate external action is held/routed before entering the flow and never replayed.
+Child completion clears the prior wait result so the agent can make a new decision. JEV triage and
+review workers resolve the same admission states; the review decision remains owner controlled.
+
 ### Native processor-memory capitalization
 
 Processor lessons use a single canonical `.agents/processors/column-<column-id>/memory/MEMORY.md`.

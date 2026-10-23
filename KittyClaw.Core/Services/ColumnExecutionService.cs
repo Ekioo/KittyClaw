@@ -1,3 +1,4 @@
+using KittyClaw.Core.Automation;
 using KittyClaw.Core.Data;
 using KittyClaw.Core.Models;
 using Microsoft.EntityFrameworkCore;
@@ -123,6 +124,8 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
     public async Task<ColumnExecution?> ClaimNextAsync(string projectSlug, ColumnProcessor processor, DateTime now,
         IReadOnlyDictionary<int, int>? ownerFeedbackSignals = null)
     {
+        var configuration = ColumnProcessingState.From(processor);
+        if (ColumnWorkFlow.Resolve(configuration) == ColumnWorkState.Disabled) return null;
         if (processor.JevObservationOnly && qualification is null || processor.JevAcceptanceValidation && jevReviews is null) return null;
         await using var db = projects.GetProjectDb(projectSlug);
         await ColumnService.EnsureBoardColumnsTableAsync(db);
@@ -260,13 +263,13 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         foreach (var candidate in window)
         {
             selectedFallback = await UsesClassicFallbackAsync(projectSlug, processor, candidate);
-            if ((processor.JevObservationOnly || processor.JevAcceptanceValidation) && !selectedFallback) continue;
             if (processor.JevExecutionSelection)
             {
                 selectedProfile = jevReviews is null ? null : await jevReviews.ApprovedProfileAsync(projectSlug, processor, candidate);
                 if (selectedFallback) selectedProfile = null;
-                else if (selectedProfile is null) continue;
             }
+            if (ColumnWorkFlow.Resolve(configuration, selectedFallback, selectedProfile is not null) != ColumnWorkState.ReadyForAgent)
+                continue;
             var blockingChildren = await db.Tickets.Where(t => t.ParentId == candidate.Id && t.BlocksParent)
                 .Select(t => t.ColumnId).Distinct().ToListAsync();
             if (blockingChildren.Count == 0)

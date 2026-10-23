@@ -1,3 +1,4 @@
+using KittyClaw.Core.Models;
 using KittyClaw.Core.Services;
 using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
@@ -18,7 +19,7 @@ public sealed class JevObservationEngine(ProjectService projects, ColumnProcesso
             {
                 foreach (var project in (await projects.ListProjectsAsync()).Where(p => !p.IsPaused))
                 {
-                    foreach (var processor in (await processors.ListAsync(project.Slug)).Where(p => p.Enabled && (p.JevObservationOnly || p.JevPostRunObservation)))
+                    foreach (var processor in (await processors.ListAsync(project.Slug)).Where(p => ColumnWorkFlow.Resolve(ColumnProcessingState.From(p)) == ColumnWorkState.AwaitingRouting || p.Enabled && p.JevPostRunObservation))
                     {
                         await using var db = projects.GetProjectDb(project.Slug);
                         var destinations = await db.BoardColumns.AsNoTracking().ToListAsync(stoppingToken);

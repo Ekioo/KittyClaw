@@ -144,7 +144,61 @@ public sealed class ColumnProcessingSuccessGuardTests : IDisposable
         Assert.NotEqual(ColumnExecutionStatus.Completed, execution.Status);
     }
 
-    private async Task<Fixture> CreateFixtureAsync(string name, bool useCustomRoute = false)
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Real_execution_records_evidence_before_routing_and_orders_side_effects_by_policy(bool successTarget)
+    {
+        var f = await CreateFixtureAsync("Stage ordering", successTarget: successTarget);
+        var visited = new List<ColumnExecutionStage>();
+        f.Engine.StageChanged = visited.Add;
+        f.Dispatcher.Handler = (_, _, _, ticket, _) => Task.FromResult(
+            new ColumnAgentResult("completed", [], "Done", Evidence: new(ticket.UpdatedAt)));
+        await f.Engine.ProcessAsync(f.Project.Slug, f.Processor, f.Execution, CancellationToken.None);
+        Assert.Equal(ColumnExecutionStatus.Completed, (await f.Executions.GetAsync(f.Project.Slug, f.Execution.Id))!.Status);
+        Assert.Equal(successTarget, visited.IndexOf(ColumnExecutionStage.Transition) < visited.IndexOf(ColumnExecutionStage.Finalization));
+        Assert.True(visited.IndexOf(ColumnExecutionStage.Result) < visited.IndexOf(ColumnExecutionStage.RoutingValidation));
+        var ticket = (await f.Tickets.GetTicketAsync(f.Project.Slug, f.Ticket.Id))!;
+        Assert.NotEqual(f.Source.Id, ticket.ColumnId);
+        Assert.Equal(2, ticket.Comments.Count(c => c.Content == "success side effect"));
+    }
+
+    [Fact]
+    public async Task Saved_agent_result_resumes_without_dispatch_and_indeterminate_action_stops_before_stages()
+    {
+        var f = await CreateFixtureAsync("Stage recovery");
+        await f.Executions.SaveAgentResultAsync(f.Project.Slug, f.Execution,
+            new("completed", [], "Recovered", Evidence: new(f.Ticket.UpdatedAt)), f.Processor);
+        f.Dispatcher.Handler = (_, _, _, _, _) => throw new InvalidOperationException("Must not redispatch a checkpoint");
+        await f.Engine.ProcessAsync(f.Project.Slug, f.Processor, f.Execution, CancellationToken.None);
+        Assert.Equal(ColumnExecutionStatus.Completed, (await f.Executions.GetAsync(f.Project.Slug, f.Execution.Id))!.Status);
+
+        var interrupted = await CreateFixtureAsync("Interrupted stage");
+        interrupted.Execution.CurrentActionId = "must-not-run";
+        var visited = new List<ColumnExecutionStage>();
+        interrupted.Engine.StageChanged = visited.Add;
+        await interrupted.Engine.ProcessAsync(interrupted.Project.Slug, interrupted.Processor, interrupted.Execution, CancellationToken.None);
+        Assert.Empty(visited);
+        Assert.Equal(ColumnExecutionStatus.Failed,
+            (await interrupted.Executions.GetAsync(interrupted.Project.Slug, interrupted.Execution.Id))!.Status);
+        Assert.Empty((await interrupted.Tickets.GetTicketAsync(interrupted.Project.Slug, interrupted.Ticket.Id))!.Comments);
+    }
+
+    [Fact]
+    public async Task Rejected_final_transition_never_enters_finalization()
+    {
+        var f = await CreateFixtureAsync("Stopped transition");
+        var visited = new List<ColumnExecutionStage>();
+        f.Engine.StageChanged = visited.Add;
+        f.Engine.BeforeFinalSuccessValidationAsync = () => f.Tickets.UpdateTicketAsync(
+            f.Project.Slug, f.Ticket.Id, description: "Changed after validation");
+        await f.Engine.ProcessAsync(f.Project.Slug, f.Processor, f.Execution, CancellationToken.None);
+        Assert.Contains(ColumnExecutionStage.Transition, visited);
+        Assert.DoesNotContain(ColumnExecutionStage.Finalization, visited);
+        Assert.Empty((await f.Tickets.GetTicketAsync(f.Project.Slug, f.Ticket.Id))!.Comments);
+    }
+
+    private async Task<Fixture> CreateFixtureAsync(string name, bool useCustomRoute = false, bool successTarget = true)
     {
         var projects = new ProjectService(_temp.Path);
         var project = await projects.CreateProjectAsync(name);
@@ -156,7 +210,7 @@ public sealed class ColumnProcessingSuccessGuardTests : IDisposable
         var pipeline = await pipelines.CreateAsync(project.Slug, "Delivery");
         var source = await columns.CreateColumnAsync(project.Slug, "Work", pipelineId: pipeline.Id);
         var success = await columns.CreateColumnAsync(
-            project.Slug, "Success", pipelineId: pipeline.Id, role: ColumnRole.Success);
+            project.Slug, "Success", pipelineId: pipeline.Id, role: successTarget ? ColumnRole.Success : ColumnRole.Normal);
         var action = new ColumnProcessorAction(
             "must-not-run", new AddCommentActionSpec { Content = "success side effect" });
         var processor = await processors.SaveAsync(

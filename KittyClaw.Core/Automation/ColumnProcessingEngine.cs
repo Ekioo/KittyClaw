@@ -203,104 +203,9 @@ public sealed class ColumnProcessingEngine : BackgroundService
                 return;
             }
 
-            var hasSuccessRoute = await HasSuccessRouteAsync(slug, processor);
-            if (!hasSuccessRoute && !await ExecuteActionsAsync(
-                    slug, processor, execution, ticket, processor.BeforeActions, null,
-                    activityAuthor, cancellationToken))
-                return;
-
-            ColumnAgentResult result;
-            if (execution.AgentCompleted)
-            {
-                result = execution.AgentResult
-                    ?? throw new InvalidOperationException("Le checkpoint de l’agent ne contient aucun résultat.");
-            }
-            else
-            {
-                await _executions.SetRunIdAsync(slug, execution.Id, execution.Id);
-                var dispatch = await _dispatcher.DispatchAsync(slug, processor, execution, ticket, cancellationToken);
-                if (dispatch.Result is null)
-                {
-                    // Leave the durable execution running for startup recovery, without
-                    // consuming a retry or routing the ticket to a failure column.
-                    if (_runs?.IsUpdating == true || cancellationToken.IsCancellationRequested) return;
-                    await _executions.FailAttemptAsync(slug, execution, processor,
-                        dispatch.Error ?? "Échec inconnu du processeur.", activityAuthor);
-                    return;
-                }
-                result = dispatch.Result;
-                var required = processor.RequiredSkills.ToHashSet(StringComparer.OrdinalIgnoreCase);
-                if (!required.IsSubsetOf(result.SkillsUsed.ToHashSet(StringComparer.OrdinalIgnoreCase)))
-                {
-                    var missing = required.Except(result.SkillsUsed, StringComparer.OrdinalIgnoreCase);
-                    await _executions.FailAttemptAsync(slug, execution, processor,
-                        $"Skills obligatoires non exécutés : {string.Join(", ", missing)}.", activityAuthor);
-                    return;
-                }
-                await _executions.SaveAgentResultAsync(slug, execution, result, processor);
-            }
-
-            await CapitalizeAsync(slug, processor, execution, result, cancellationToken);
-
-            if (await _executions.StopSupersededAsync(slug, execution, processor)) return;
-            JevRoutingProposal? routingProposal = null;
-            if (processor.UsesAutomaticJevRouting && _jev is not null && _jevConfiguration is not null &&
-                !string.Equals(result.Outcome, "scheduled", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(result.Outcome, "wait_for_children", StringComparison.OrdinalIgnoreCase) &&
-                (await _jevConfiguration.GetAsync(slug, cancellationToken)).Available)
-            {
-                ticket = await _tickets.GetTicketAsync(slug, execution.TicketId)
-                    ?? throw new InvalidOperationException("The ticket no longer exists.");
-                await using var routingDb = _projects.GetProjectDb(slug);
-                var columns = await routingDb.BoardColumns.AsNoTracking().ToListAsync(cancellationToken);
-                await _jev.ObserveAsync(slug, processor, ticket, columns, cancellationToken, routingResult: result);
-                routingProposal = await _jev.GetAsync(slug, ticket.Id, cancellationToken);
-                if (!JevCertainty.Routing(routingProposal, processor.JevConfidenceThreshold))
-                {
-                    routingProposal = null;
-                    await _executions.RecordClassicFallbackAsync(slug, execution);
-                    processor = processor.WithoutJev();
-                }
-            }
-            var jevTarget = routingProposal is null ? (int?)null : int.Parse(routingProposal.Choice![7..]);
-            var contextRejection = await _executions.ValidateSuccessContextAsync(
-                slug, execution, processor, result, jevTarget);
-            if (contextRejection is not null)
-            {
-                await _executions.FailAttemptAsync(slug, execution, processor,
-                    contextRejection, activityAuthor);
-                return;
-            }
-
-            ticket = await _tickets.GetTicketAsync(slug, execution.TicketId)
-                ?? throw new InvalidOperationException($"Le ticket #{execution.TicketId} n’existe plus.");
-            if (routingProposal is not null || hasSuccessRoute && await IsSuccessOutcomeAsync(slug, processor, result, jevTarget))
-            {
-                // Success-context validation and routing must win before any configured action
-                // can emit an irreversible side effect. CompleteAsync performs the final check
-                // and persists the transition atomically; rejected outcomes execute no action.
-                if (BeforeFinalSuccessValidationAsync is not null)
-                    await BeforeFinalSuccessValidationAsync();
-                await _executions.CompleteAsync(slug, execution, processor, result, activityAuthor, routingProposal);
-                var completed = (await _executions.ListAsync(slug, execution.TicketId))
-                    .FirstOrDefault(item => item.Id == execution.Id);
-                if (completed?.Status != ColumnExecutionStatus.Completed)
-                    return;
-                await ExecuteActionsAsync(
-                    slug, processor, execution, ticket,
-                    processor.BeforeActions.Concat(processor.AfterActions).ToList(), result,
-                    activityAuthor, cancellationToken);
-                return;
-            }
-            if (hasSuccessRoute && !await ExecuteActionsAsync(
-                    slug, processor, execution, ticket, processor.BeforeActions, null,
-                    activityAuthor, cancellationToken))
-                return;
-            if (!await ExecuteActionsAsync(
-                    slug, processor, execution, ticket, processor.AfterActions, result,
-                    activityAuthor, cancellationToken))
-                return;
-            await _executions.CompleteAsync(slug, execution, processor, result, activityAuthor, routingProposal);
+            var context = new ExecutionContext(slug, processor, execution, ticket, cancellationToken,
+                await HasSuccessRouteAsync(slug, processor));
+            await RunStagesAsync(context);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         catch (Exception ex)
@@ -321,6 +226,140 @@ public sealed class ColumnProcessingEngine : BackgroundService
                 }
             }
         }
+    }
+
+    internal Action<ColumnExecutionStage>? StageChanged { get; set; }
+
+    private sealed class ExecutionContext(string slug, ColumnProcessor processor, ColumnExecution execution,
+        Ticket ticket, CancellationToken cancellationToken, bool hasSuccessRoute)
+    {
+        public string Slug { get; } = slug;
+        public ColumnProcessor Processor { get; set; } = processor;
+        public ColumnExecution Execution { get; } = execution;
+        public Ticket Ticket { get; set; } = ticket;
+        public CancellationToken CancellationToken { get; } = cancellationToken;
+        public bool HasSuccessRoute { get; } = hasSuccessRoute;
+        public ColumnAgentResult Result { get; set; } = null!;
+        public JevRoutingProposal? RoutingProposal { get; set; }
+        public int? JevTarget => RoutingProposal is null ? null : int.Parse(RoutingProposal.Choice![7..]);
+        public bool TransitionBeforeActions { get; set; }
+    }
+
+    private async Task RunStagesAsync(ExecutionContext context)
+    {
+        var stage = ColumnExecutionStage.Preparation;
+        while (stage != ColumnExecutionStage.Stopped)
+        {
+            StageChanged?.Invoke(stage);
+            var proceed = stage switch
+            {
+                ColumnExecutionStage.Preparation => context.HasSuccessRoute || await RunBeforeActionsAsync(context),
+                ColumnExecutionStage.Agent => await RunAgentAsync(context),
+                ColumnExecutionStage.Result => await RecordResultAsync(context),
+                ColumnExecutionStage.RoutingAnalysis => await AnalyzeRoutingAsync(context),
+                ColumnExecutionStage.RoutingValidation => await ValidateRoutingAsync(context),
+                ColumnExecutionStage.DeferredPreparation => !context.HasSuccessRoute || await RunBeforeActionsAsync(context),
+                ColumnExecutionStage.Finalization => await RunFinalActionsAsync(context),
+                ColumnExecutionStage.Transition => await CommitTransitionAsync(context),
+                _ => throw new ArgumentOutOfRangeException(nameof(stage))
+            };
+            stage = ColumnExecutionFlow.Next(stage, context.TransitionBeforeActions, proceed);
+        }
+    }
+
+    private Task<bool> RunBeforeActionsAsync(ExecutionContext context) => ExecuteActionsAsync(
+        context.Slug, context.Processor, context.Execution, context.Ticket,
+        context.Processor.BeforeActions, null, context.Processor.Name, context.CancellationToken);
+
+    private async Task<bool> RunAgentAsync(ExecutionContext context)
+    {
+        if (context.Execution.AgentCompleted)
+        {
+            context.Result = context.Execution.AgentResult
+                ?? throw new InvalidOperationException("The agent checkpoint contains no result.");
+            return true;
+        }
+        await _executions.SetRunIdAsync(context.Slug, context.Execution.Id, context.Execution.Id);
+        var dispatch = await _dispatcher.DispatchAsync(context.Slug, context.Processor, context.Execution,
+            context.Ticket, context.CancellationToken);
+        if (dispatch.Result is null)
+        {
+            // An update/shutdown leaves the durable claim for startup recovery.
+            if (_runs?.IsUpdating == true || context.CancellationToken.IsCancellationRequested) return false;
+            await _executions.FailAttemptAsync(context.Slug, context.Execution, context.Processor,
+                dispatch.Error ?? "Unknown processor failure.", context.Processor.Name);
+            return false;
+        }
+        context.Result = dispatch.Result;
+        var missing = context.Processor.RequiredSkills.Except(context.Result.SkillsUsed, StringComparer.OrdinalIgnoreCase).ToList();
+        if (missing.Count == 0) return true;
+        await _executions.FailAttemptAsync(context.Slug, context.Execution, context.Processor,
+            $"Required skills were not executed: {string.Join(", ", missing)}.", context.Processor.Name);
+        return false;
+    }
+
+    private async Task<bool> RecordResultAsync(ExecutionContext context)
+    {
+        if (!context.Execution.AgentCompleted)
+            await _executions.SaveAgentResultAsync(context.Slug, context.Execution, context.Result, context.Processor);
+        await CapitalizeAsync(context.Slug, context.Processor, context.Execution, context.Result, context.CancellationToken);
+        return true;
+    }
+
+    private async Task<bool> AnalyzeRoutingAsync(ExecutionContext context)
+    {
+        if (await _executions.StopSupersededAsync(context.Slug, context.Execution, context.Processor)) return false;
+        var processor = context.Processor;
+        if (!processor.UsesAutomaticJevRouting || _jev is null || _jevConfiguration is null ||
+            string.Equals(context.Result.Outcome, "scheduled", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(context.Result.Outcome, "wait_for_children", StringComparison.OrdinalIgnoreCase) ||
+            !(await _jevConfiguration.GetAsync(context.Slug, context.CancellationToken)).Available) return true;
+        context.Ticket = await _tickets.GetTicketAsync(context.Slug, context.Execution.TicketId)
+            ?? throw new InvalidOperationException("The ticket no longer exists.");
+        await using var db = _projects.GetProjectDb(context.Slug);
+        var columns = await db.BoardColumns.AsNoTracking().ToListAsync(context.CancellationToken);
+        await _jev.ObserveAsync(context.Slug, processor, context.Ticket, columns, context.CancellationToken, routingResult: context.Result);
+        context.RoutingProposal = await _jev.GetAsync(context.Slug, context.Ticket.Id, context.CancellationToken);
+        if (JevCertainty.Routing(context.RoutingProposal, processor.JevConfidenceThreshold)) return true;
+        context.RoutingProposal = null;
+        await _executions.RecordClassicFallbackAsync(context.Slug, context.Execution);
+        context.Processor = processor.WithoutJev();
+        return true;
+    }
+
+    private async Task<bool> ValidateRoutingAsync(ExecutionContext context)
+    {
+        var rejection = await _executions.ValidateSuccessContextAsync(context.Slug, context.Execution,
+            context.Processor, context.Result, context.JevTarget);
+        if (rejection is not null)
+        {
+            await _executions.FailAttemptAsync(context.Slug, context.Execution, context.Processor, rejection, context.Processor.Name);
+            return false;
+        }
+        context.Ticket = await _tickets.GetTicketAsync(context.Slug, context.Execution.TicketId)
+            ?? throw new InvalidOperationException("The ticket no longer exists.");
+        context.TransitionBeforeActions = context.RoutingProposal is not null || context.HasSuccessRoute &&
+            await IsSuccessOutcomeAsync(context.Slug, context.Processor, context.Result, context.JevTarget);
+        return true;
+    }
+
+    private Task<bool> RunFinalActionsAsync(ExecutionContext context) => ExecuteActionsAsync(
+        context.Slug, context.Processor, context.Execution, context.Ticket,
+        context.TransitionBeforeActions
+            ? context.Processor.BeforeActions.Concat(context.Processor.AfterActions).ToList()
+            : context.Processor.AfterActions,
+        context.Result, context.Processor.Name, context.CancellationToken);
+
+    private async Task<bool> CommitTransitionAsync(ExecutionContext context)
+    {
+        // Success and JEV transitions must win atomically before external effects.
+        if (context.TransitionBeforeActions && BeforeFinalSuccessValidationAsync is not null)
+            await BeforeFinalSuccessValidationAsync();
+        await _executions.CompleteAsync(context.Slug, context.Execution, context.Processor,
+            context.Result, context.Processor.Name, context.RoutingProposal);
+        if (!context.TransitionBeforeActions) return true;
+        var completed = await _executions.GetAsync(context.Slug, context.Execution.Id);
+        return completed?.Status == ColumnExecutionStatus.Completed;
     }
 
     private readonly SemaphoreSlim _memoryRetryGate = new(1, 1);

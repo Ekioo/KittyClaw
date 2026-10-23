@@ -1,3 +1,4 @@
+using KittyClaw.Core.Models;
 using KittyClaw.Core.Services;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -16,7 +17,7 @@ public sealed class JevWorkReviewEngine(ProjectService projects, ColumnProcessor
             try
             {
                 foreach (var project in (await projects.ListProjectsAsync()).Where(p => !p.IsPaused))
-                foreach (var processor in (await processors.ListAsync(project.Slug)).Where(p => p.Enabled && (p.JevAcceptanceValidation || p.JevExecutionSelection)))
+                foreach (var processor in (await processors.ListAsync(project.Slug)).Where(p => ColumnWorkFlow.Resolve(ColumnProcessingState.From(p)) is ColumnWorkState.AwaitingOwnerReview or ColumnWorkState.AwaitingProfileApproval))
                 foreach (var summary in (await tickets.ListTicketsAsync(project.Slug)).Where(t => t.ColumnId == processor.ColumnId))
                 {
                     var ticket = await tickets.GetTicketAsync(project.Slug, summary.Id);
