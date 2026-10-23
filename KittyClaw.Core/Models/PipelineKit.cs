@@ -102,6 +102,8 @@ public sealed class PortableColumn
     public ColumnRole Role { get; set; } = ColumnRole.Normal;
     public int MaxTickets { get; set; }
     public bool CapacityBlocking { get; set; }
+    public bool RequireAcceptanceCriteria { get; set; }
+    public bool RequireValidatedAcceptanceCriteria { get; set; }
     public string UserGuidance { get; set; } = "";
     public PortableProcessor? Processor { get; set; }
 }

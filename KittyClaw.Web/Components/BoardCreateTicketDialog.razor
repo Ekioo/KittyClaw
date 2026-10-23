@@ -177,7 +177,7 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Manual ticket creation failed for {Project}", Slug);
-            _creationError = ex.GetBaseException().Message.Contains("column_capacity_reached") ? L["ColumnCapacityError"] : ex.Message;
+            _creationError = ex.GetBaseException().Message.Contains("column_acceptance_criteria_not_validated") ? L["ColumnAcceptanceCriteriaNotValidatedError"] : ex.GetBaseException().Message.Contains("column_acceptance_criteria_required") ? L["ColumnAcceptanceCriteriaRequiredError"] : ex.GetBaseException().Message.Contains("column_capacity_reached") ? L["ColumnCapacityError"] : ex.Message;
             return;
         }
         finally { _creating = false; }

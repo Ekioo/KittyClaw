@@ -135,7 +135,7 @@ public sealed class PipelineExportHttpTests : IClassFixture<PipelineExportHttpTe
         var (sourceSlug, pipelineId, sourceColumnId, targetColumnId) =
             await CreatePipelineAsync("Portable source");
         (await _client.PatchAsJsonAsync($"/api/projects/{sourceSlug}/columns/{sourceColumnId}",
-            new { maxTickets = 3, capacityBlocking = true })).EnsureSuccessStatusCode();
+            new { maxTickets = 3, capacityBlocking = true, requireAcceptanceCriteria = true, requireValidatedAcceptanceCriteria = true })).EnsureSuccessStatusCode();
         var secretValue = "vault-only-" + Guid.NewGuid().ToString("N");
         var secret = await _client.PutAsJsonAsync($"/api/projects/{sourceSlug}/secrets/DEPLOY_TOKEN",
             new { value = secretValue });
@@ -234,6 +234,8 @@ public sealed class PipelineExportHttpTests : IClassFixture<PipelineExportHttpTe
         var importedSource = targetColumns!.Single(column => column.GetProperty("id").GetInt32() == importedSourceId);
         Assert.Equal(3, importedSource.GetProperty("maxTickets").GetInt32());
         Assert.True(importedSource.GetProperty("capacityBlocking").GetBoolean());
+        Assert.True(importedSource.GetProperty("requireAcceptanceCriteria").GetBoolean());
+        Assert.True(importedSource.GetProperty("requireValidatedAcceptanceCriteria").GetBoolean());
         var importedProcessor = await _client.GetFromJsonAsync<JsonElement>(
             $"/api/projects/{targetSlug}/columns/{importedSourceId}/processor");
         Assert.Equal(importedTargetId,

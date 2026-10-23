@@ -81,6 +81,8 @@
                         </label>
                     </div>
                     <p class="settings-hint">@L["ColumnCapacityHelp"]</p>
+                    <label class="workflow-check"><input type="checkbox" data-testid="require-acceptance-criteria" @bind="_requireAcceptanceCriteria" /> <FieldHelp Label="@L["ColumnRequireAcceptanceCriteria"]" Help="@L["ColumnRequireAcceptanceCriteriaHelp"]" /></label>
+                    <label class="workflow-check"><input type="checkbox" data-testid="require-validated-acceptance-criteria" @bind="_requireValidatedAcceptanceCriteria" /> <FieldHelp Label="@L["ColumnRequireValidatedAcceptanceCriteria"]" Help="@L["ColumnRequireValidatedAcceptanceCriteriaHelp"]" /></label>
                     <label class="column-guidance-field">
                         <FieldHelp Label="@L["ColumnUserGuidance"]" Help="@L["ColumnUserGuidanceHelp"]" />
                         <textarea class="settings-input workflow-textarea" @bind="_userGuidance"
@@ -423,6 +425,8 @@
     private int _positionIndex;
     private int _maxTickets;
     private bool _capacityBlocking;
+    private bool _requireAcceptanceCriteria;
+    private bool _requireValidatedAcceptanceCriteria;
     private string CapacityBlockingValue
     {
         get => _capacityBlocking ? "true" : "false";
@@ -482,6 +486,8 @@
             _userGuidance = source?.UserGuidance ?? "";
             _maxTickets = source?.MaxTickets ?? 0;
             _capacityBlocking = source?.CapacityBlocking ?? false;
+            _requireAcceptanceCriteria = source?.RequireAcceptanceCriteria ?? false;
+            _requireValidatedAcceptanceCriteria = source?.RequireValidatedAcceptanceCriteria ?? false;
             var sourceIndex = source is null ? PipelineColumns.Count : PipelineColumns.FindIndex(column => column.Id == source.Id);
             _positionIndex = Math.Clamp(InsertIndex >= 0 ? InsertIndex : Math.Max(0, sourceIndex), 0, SiblingColumns.Count);
             _deleteTargetId = SiblingColumns.FirstOrDefault()?.Id ?? 0;
@@ -497,7 +503,7 @@
         }
         catch (Exception ex)
         {
-            _message = ex.Message;
+            _message = ex.GetBaseException().Message.Contains("column_acceptance_criteria_not_validated") ? L["ColumnAcceptanceCriteriaNotValidatedError"] : ex.GetBaseException().Message.Contains("column_acceptance_criteria_required") ? L["ColumnAcceptanceCriteriaRequiredError"] : ex.Message;
             _isError = true;
         }
         finally
@@ -584,12 +590,12 @@
             if (IsCreating)
             {
                 savedColumn = await ColumnService.CreateColumnAsync(Slug, trimmedName, _columnColor, PipelineId,
-                    _columnRole, _positionIndex, _userGuidance, _maxTickets, _capacityBlocking);
+                    _columnRole, _positionIndex, _userGuidance, _maxTickets, _capacityBlocking, _requireAcceptanceCriteria, _requireValidatedAcceptanceCriteria);
             }
             else
             {
                 savedColumn = await ColumnService.UpdateColumnAsync(Slug, Column!.Id, trimmedName, _columnColor,
-                    _columnRole, _userGuidance, _maxTickets, _capacityBlocking)
+                    _columnRole, _userGuidance, _maxTickets, _capacityBlocking, _requireAcceptanceCriteria, _requireValidatedAcceptanceCriteria)
                     ?? throw new InvalidOperationException(L["ColumnNameAlreadyExists"]);
                 await ColumnService.ReorderColumnAsync(Slug, savedColumn.Id, _positionIndex);
             }
@@ -626,7 +632,7 @@
         }
         catch (Exception ex)
         {
-            _message = ex.Message;
+            _message = ex.GetBaseException().Message.Contains("column_acceptance_criteria_not_validated") ? L["ColumnAcceptanceCriteriaNotValidatedError"] : ex.GetBaseException().Message.Contains("column_acceptance_criteria_required") ? L["ColumnAcceptanceCriteriaRequiredError"] : ex.Message;
             _isError = true;
         }
         finally
@@ -648,7 +654,7 @@
         }
         catch (Exception ex)
         {
-            _message = ex.Message;
+            _message = ex.GetBaseException().Message.Contains("column_acceptance_criteria_not_validated") ? L["ColumnAcceptanceCriteriaNotValidatedError"] : ex.GetBaseException().Message.Contains("column_acceptance_criteria_required") ? L["ColumnAcceptanceCriteriaRequiredError"] : ex.Message;
             _isError = true;
         }
     }

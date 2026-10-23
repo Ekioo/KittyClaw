@@ -67,9 +67,9 @@ public record UpdateLabelRequest(string? Name = null, string? Color = null);
 public record SetTicketLabelsRequest(List<int> LabelIds);
 public record ReorderTicketRequest(string Status, int Index);
 public record CreateColumnRequest(string Name, string Color = "#5a6a80", int? PipelineId = null,
-    ColumnRole Role = ColumnRole.Normal, string UserGuidance = "", int MaxTickets = 0, bool CapacityBlocking = false);
+    ColumnRole Role = ColumnRole.Normal, string UserGuidance = "", int MaxTickets = 0, bool CapacityBlocking = false, bool RequireAcceptanceCriteria = false, bool RequireValidatedAcceptanceCriteria = false);
 public record UpdateColumnRequest(string? Name = null, string? Color = null, ColumnRole? Role = null,
-    string? UserGuidance = null, int? MaxTickets = null, bool? CapacityBlocking = null);
+    string? UserGuidance = null, int? MaxTickets = null, bool? CapacityBlocking = null, bool? RequireAcceptanceCriteria = null, bool? RequireValidatedAcceptanceCriteria = null);
 public record ReorderColumnRequest(int ColumnId, int Index);
 public record CreateMemberRequest(string Name);
 public record UpdateMemberRequest(string? Name = null, string? DefaultModel = null);

@@ -86,6 +86,52 @@ public class ColumnService
                 BEGIN SELECT RAISE(ABORT, 'column_capacity_reached'); END;
                 """));
 
+        await MigrationGate.RunOnceAsync(db, "board-column-required-criteria-v1", static async d =>
+        {
+            var columns = await d.Database.SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('BoardColumns')").ToListAsync();
+            if (!columns.Contains("RequireAcceptanceCriteria", StringComparer.OrdinalIgnoreCase))
+                await d.Database.ExecuteSqlRawAsync("ALTER TABLE BoardColumns ADD COLUMN RequireAcceptanceCriteria INTEGER NOT NULL DEFAULT 0");
+            // Enforce entry for all writers, including routing, scheduling, transfers and bulk moves.
+            await d.Database.ExecuteSqlRawAsync("""
+                CREATE TRIGGER IF NOT EXISTS TicketColumnCriteriaInsert BEFORE INSERT ON Tickets
+                WHEN EXISTS (SELECT 1 FROM BoardColumns WHERE Id = NEW.ColumnId AND RequireAcceptanceCriteria = 1)
+                    AND NOT EXISTS (SELECT 1 FROM json_each(NEW.AcceptanceCriteriaJson)
+                        WHERE length(trim(json_extract(value, '$.Text'))) > 0)
+                BEGIN SELECT RAISE(ABORT, 'column_acceptance_criteria_required'); END;
+                CREATE TRIGGER IF NOT EXISTS TicketColumnCriteriaMove BEFORE UPDATE OF ColumnId ON Tickets
+                WHEN NEW.ColumnId IS NOT OLD.ColumnId
+                    AND EXISTS (SELECT 1 FROM BoardColumns WHERE Id = NEW.ColumnId AND RequireAcceptanceCriteria = 1)
+                    AND NOT EXISTS (SELECT 1 FROM json_each(NEW.AcceptanceCriteriaJson)
+                        WHERE length(trim(json_extract(value, '$.Text'))) > 0)
+                BEGIN SELECT RAISE(ABORT, 'column_acceptance_criteria_required'); END;
+                """);
+        });
+
+        await MigrationGate.RunOnceAsync(db, "board-column-validated-criteria-v1", static async d =>
+        {
+            var columns = await d.Database.SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('BoardColumns')").ToListAsync();
+            if (!columns.Contains("RequireValidatedAcceptanceCriteria", StringComparer.OrdinalIgnoreCase))
+                await d.Database.ExecuteSqlRawAsync("ALTER TABLE BoardColumns ADD COLUMN RequireValidatedAcceptanceCriteria INTEGER NOT NULL DEFAULT 0");
+            // Empty checklists never satisfy validation. Only an explicit PASS for every criterion permits entry.
+            await d.Database.ExecuteSqlRawAsync("""
+                CREATE TRIGGER IF NOT EXISTS TicketColumnValidatedCriteriaInsert BEFORE INSERT ON Tickets
+                WHEN EXISTS (SELECT 1 FROM BoardColumns WHERE Id = NEW.ColumnId AND RequireValidatedAcceptanceCriteria = 1)
+                    AND (json_array_length(NEW.AcceptanceCriteriaJson) = 0
+                        OR EXISTS (SELECT 1 FROM json_each(NEW.AcceptanceCriteriaJson)
+                            WHERE coalesce(json_extract(value, '$.Status'), '') != 'PASS'
+                                OR length(trim(coalesce(json_extract(value, '$.Text'), ''))) = 0))
+                BEGIN SELECT RAISE(ABORT, 'column_acceptance_criteria_not_validated'); END;
+                CREATE TRIGGER IF NOT EXISTS TicketColumnValidatedCriteriaMove BEFORE UPDATE OF ColumnId ON Tickets
+                WHEN NEW.ColumnId IS NOT OLD.ColumnId
+                    AND EXISTS (SELECT 1 FROM BoardColumns WHERE Id = NEW.ColumnId AND RequireValidatedAcceptanceCriteria = 1)
+                    AND (json_array_length(NEW.AcceptanceCriteriaJson) = 0
+                        OR EXISTS (SELECT 1 FROM json_each(NEW.AcceptanceCriteriaJson)
+                            WHERE coalesce(json_extract(value, '$.Status'), '') != 'PASS'
+                                OR length(trim(coalesce(json_extract(value, '$.Text'), ''))) = 0))
+                BEGIN SELECT RAISE(ABORT, 'column_acceptance_criteria_not_validated'); END;
+                """);
+        });
+
         // Duplicate column names crash the board (ToDictionary by name) and make ticket
         // Status ambiguous. Heal boards that already contain duplicates (the pre-index
         // EnsureScheduledColumnAsync check-then-insert could race), then lock the invariant in.
@@ -186,7 +232,7 @@ public class ColumnService
     public async Task<BoardColumn> CreateColumnAsync(
         string projectSlug, string name, string color = "#5a6a80",
         int? pipelineId = null, ColumnRole role = ColumnRole.Normal, int? insertIndex = null,
-        string userGuidance = "", int maxTickets = 0, bool capacityBlocking = false)
+        string userGuidance = "", int maxTickets = 0, bool capacityBlocking = false, bool requireAcceptanceCriteria = false, bool requireValidatedAcceptanceCriteria = false)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureBoardColumnsTableAsync(db);
@@ -213,6 +259,8 @@ public class ColumnService
             UserGuidance = userGuidance.Trim(),
             MaxTickets = maxTickets,
             CapacityBlocking = capacityBlocking,
+            RequireAcceptanceCriteria = requireAcceptanceCriteria,
+            RequireValidatedAcceptanceCriteria = requireValidatedAcceptanceCriteria,
         };
         db.BoardColumns.Add(column);
         try { await db.SaveChangesAsync(); }
@@ -226,7 +274,7 @@ public class ColumnService
 
     public async Task<BoardColumn?> UpdateColumnAsync(
         string projectSlug, int columnId, string? name = null, string? color = null,
-        ColumnRole? role = null, string? userGuidance = null, int? maxTickets = null, bool? capacityBlocking = null)
+        ColumnRole? role = null, string? userGuidance = null, int? maxTickets = null, bool? capacityBlocking = null, bool? requireAcceptanceCriteria = null, bool? requireValidatedAcceptanceCriteria = null)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureBoardColumnsTableAsync(db);
@@ -255,6 +303,8 @@ public class ColumnService
         if (maxTickets < 0) throw new InvalidOperationException("The ticket limit cannot be negative.");
         if (maxTickets is not null) column.MaxTickets = maxTickets.Value;
         if (capacityBlocking is not null) column.CapacityBlocking = capacityBlocking.Value;
+        if (requireAcceptanceCriteria is not null) column.RequireAcceptanceCriteria = requireAcceptanceCriteria.Value;
+        if (requireValidatedAcceptanceCriteria is not null) column.RequireValidatedAcceptanceCriteria = requireValidatedAcceptanceCriteria.Value;
         if (color is not null) column.Color = color;
         if (role is not null) column.Role = role.Value;
         if (userGuidance is not null) column.UserGuidance = userGuidance.Trim();

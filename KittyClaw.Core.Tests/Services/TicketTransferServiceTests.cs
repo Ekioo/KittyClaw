@@ -9,6 +9,34 @@ namespace KittyClaw.Core.Tests.Services;
 
 public sealed class TicketTransferServiceTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TransferToCriteriaRequiredColumn_IsAtomicAndSucceedsAfterAddingCriterion(bool requireValidated)
+    {
+        using var temp = new TempDir();
+        var (transfers, tickets, projects, source, target) = await BuildSut(temp);
+        var columns = new ColumnService(projects);
+        var todo = (await columns.ListColumnsAsync(target)).Single(c => c.Name == "Todo");
+        await columns.UpdateColumnAsync(target, todo.Id, requireAcceptanceCriteria: !requireValidated, requireValidatedAcceptanceCriteria: requireValidated);
+        var ticket = await tickets.CreateTicketAsync(source, "Protected transfer", status: "Todo");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => transfers.TransferAsync(source, ticket.Id, target, "owner"));
+        Assert.NotNull(await tickets.GetTicketAsync(source, ticket.Id));
+        Assert.Empty(await tickets.ListTicketsAsync(target));
+        var criterion = (await tickets.SaveAcceptanceCriterionAsync(source, ticket.Id, null, new SaveAcceptanceCriterionRequest("Behavior is verified")))!;
+        if (requireValidated)
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() => transfers.TransferAsync(source, ticket.Id, target, "owner"));
+            Assert.NotNull(await tickets.GetTicketAsync(source, ticket.Id));
+            Assert.Empty(await tickets.ListTicketsAsync(target));
+            await tickets.SaveAcceptanceCriterionAsync(source, ticket.Id, criterion.Id,
+                new SaveAcceptanceCriterionRequest("Behavior is verified", AcceptanceStatus.PASS));
+        }
+        await transfers.TransferAsync(source, ticket.Id, target, "owner");
+        Assert.Null(await tickets.GetTicketAsync(source, ticket.Id));
+        Assert.Single((await tickets.GetTicketAsync(target, ticket.Id))!.AcceptanceCriteria);
+    }
+
     private static async Task<(TicketTransferService transfers, TicketService tickets, ProjectService projects, string source, string target)> BuildSut(TempDir temp)
     {
         var projects = new ProjectService(temp.Path);

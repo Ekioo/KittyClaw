@@ -1,0 +1,8 @@
+{
+  "ColumnRequireAcceptanceCriteria": "列への移動時に受け入れ条件を必須にする",
+  "ColumnRequireAcceptanceCriteriaHelp": "この列に入るチケットには、作成時も含めて少なくとも1つの受け入れ条件が必要です。既存のチケットには影響しません。",
+  "ColumnAcceptanceCriteriaRequiredError": "この列には少なくとも1つの受け入れ条件が必要です。移動する前にチケットに条件を追加してください。",
+  "ColumnRequireValidatedAcceptanceCriteria": "列への移動時にすべての受け入れ条件の検証を必須にする",
+  "ColumnRequireValidatedAcceptanceCriteriaHelp": "少なくとも1つの受け入れ条件が必要で、すべての条件がPASSである必要があります。FAIL、PARTIAL、未評価の条件がある場合は移動できません。既存のチケットには影響しません。",
+  "ColumnAcceptanceCriteriaNotValidatedError": "この列には少なくとも1つの受け入れ条件が必要です。移動する前にすべての条件を検証してPASSにしてください。"
+}

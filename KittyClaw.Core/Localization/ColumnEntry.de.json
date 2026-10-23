@@ -1,0 +1,8 @@
+{
+  "ColumnRequireAcceptanceCriteria": "Beim Eintritt mindestens ein Akzeptanzkriterium verlangen",
+  "ColumnRequireAcceptanceCriteriaHelp": "Tickets benötigen beim Eintritt in diese Spalte mindestens ein Akzeptanzkriterium, auch bei der Erstellung. Bestehende Tickets sind nicht betroffen.",
+  "ColumnAcceptanceCriteriaRequiredError": "Diese Spalte erfordert mindestens ein Akzeptanzkriterium. Fügen Sie dem Ticket vor dem Verschieben eines hinzu.",
+  "ColumnRequireValidatedAcceptanceCriteria": "Beim Eintritt alle Akzeptanzkriterien als bestanden verlangen",
+  "ColumnRequireValidatedAcceptanceCriteriaHelp": "Erfordert mindestens ein Akzeptanzkriterium und den Status PASS für jedes Kriterium. FAIL, PARTIAL und ungeprüfte Kriterien blockieren den Eintritt. Bestehende Tickets sind nicht betroffen.",
+  "ColumnAcceptanceCriteriaNotValidatedError": "Diese Spalte erfordert mindestens ein Akzeptanzkriterium und den Status PASS für alle Kriterien. Validieren Sie alle Kriterien vor dem Verschieben."
+}

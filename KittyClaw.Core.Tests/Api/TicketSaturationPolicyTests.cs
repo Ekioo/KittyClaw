@@ -26,6 +26,46 @@ public sealed class TicketSaturationPolicyTests : IClassFixture<TicketSaturation
     public void Dispose() => _client.Dispose();
 
     [Fact]
+    public async Task RequiredCriteriaColumnOption_PersistsThroughApiAndRejectsEmptyCreation()
+    {
+        var (slug, column) = await CreateProjectWithCustomBlockedColumnAsync();
+        (await _client.PatchAsJsonAsync($"/api/projects/{slug}/columns/{column.Id}",
+            new { requireAcceptanceCriteria = true })).EnsureSuccessStatusCode();
+        // Unrelated updates must preserve the rule.
+        (await _client.PatchAsJsonAsync($"/api/projects/{slug}/columns/{column.Id}",
+            new { color = "#abcdef" })).EnsureSuccessStatusCode();
+        var saved = await _factory.Services.GetRequiredService<ColumnService>().ListColumnsAsync(slug, column.PipelineId);
+        Assert.True(saved.Single(c => c.Id == column.Id).RequireAcceptanceCriteria);
+        var response = await _client.PostAsJsonAsync($"/api/projects/{slug}/tickets",
+            new CreateTicketRequest("No criteria", "owner", column.Name, PipelineId: column.PipelineId, ColumnId: column.Id));
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("at least one acceptance criterion", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task ValidatedCriteriaColumnOption_IsIndependentAndPreservedByPartialUpdates()
+    {
+        var (slug, column) = await CreateProjectWithCustomBlockedColumnAsync();
+        (await _client.PatchAsJsonAsync($"/api/projects/{slug}/columns/{column.Id}",
+            new { requireValidatedAcceptanceCriteria = true })).EnsureSuccessStatusCode();
+        (await _client.PatchAsJsonAsync($"/api/projects/{slug}/columns/{column.Id}",
+            new { color = "#abcdef" })).EnsureSuccessStatusCode();
+        var saved = (await _factory.Services.GetRequiredService<ColumnService>().ListColumnsAsync(slug, column.PipelineId))
+            .Single(c => c.Id == column.Id);
+        Assert.True(saved.RequireValidatedAcceptanceCriteria);
+        Assert.False(saved.RequireAcceptanceCriteria);
+        var response = await _client.PostAsJsonAsync($"/api/projects/{slug}/tickets",
+            new CreateTicketRequest("No criteria", "owner", column.Name, PipelineId: column.PipelineId, ColumnId: column.Id));
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("all acceptance criteria", await response.Content.ReadAsStringAsync());
+        (await _client.PatchAsJsonAsync($"/api/projects/{slug}/columns/{column.Id}",
+            new { requireValidatedAcceptanceCriteria = false })).EnsureSuccessStatusCode();
+        (await _client.PostAsJsonAsync($"/api/projects/{slug}/tickets",
+            new CreateTicketRequest("Allowed", "owner", column.Name, PipelineId: column.PipelineId, ColumnId: column.Id)))
+            .EnsureSuccessStatusCode();
+    }
+
+    [Fact]
     public async Task TicketCreationRemainsAvailableWithManyBlockedTickets()
     {
         var (slug, blocked) = await CreateProjectWithCustomBlockedColumnAsync();

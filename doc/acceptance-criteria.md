@@ -68,3 +68,24 @@ These session assessments preserve the consumed ticket timestamp: they are sessi
 metadata, not a new requirement or delivery. Their content/hashes still participate in
 routing and review fingerprints. This preserves the existing success and owner-feedback
 freshness guards while making the updated assessments visible to the routing decision.
+
+## Required criteria on column entry
+
+Column settings → General exposes `RequireAcceptanceCriteria` (REST/MCP:
+`requireAcceptanceCriteria`), disabled by default. When enabled, a ticket must have
+at least one structured acceptance criterion with non-empty text to enter the column.
+Criterion status and evidence are not required. Markdown checkboxes in the description
+alone do not meet this requirement. Pipeline kits preserve this setting.
+
+A second independent setting, `RequireValidatedAcceptanceCriteria` (REST/MCP:
+`requireValidatedAcceptanceCriteria`), requires a non-empty checklist with every criterion
+at `PASS`. `NotEvaluated`, `FAIL`, `PARTIAL`, missing statuses and blank criterion text
+block entry. This option implies presence even when `RequireAcceptanceCriteria` is off.
+It checks recorded statuses; it does not run an evaluation or require JEV owner approval.
+Both options default to off and are preserved in portable pipeline kits.
+
+SQLite insert and column-change triggers enforce these rules for all writers, including
+manual moves, automation, scheduling, creation, transfers and column deletion bulk moves.
+Rejected writes roll back. Enabling the option does not modify existing tickets or block
+edits, reordering within the column, or departures. Add criteria while the ticket is in
+another column before moving it to a protected column.
