@@ -449,6 +449,29 @@ public sealed class AgentRunRegistry
         }
     }
 
+    public bool IsUpdating { get { lock (_updateLock) return _updateInProgress; } }
+
+    /// <summary>Close dispatch admission before graceful host shutdown cancels active work.</summary>
+    public bool BeginUpdateShutdown()
+    {
+        lock (_updateLock)
+        {
+            if (_updateInProgress) return false;
+            _updateInProgress = true;
+            return true;
+        }
+    }
+
+    public async Task WaitForExecutionsAsync(CancellationToken ct)
+    {
+        while (true)
+        {
+            lock (_updateLock)
+                if (_executingTasks == 0 && !AllActive().Any()) return;
+            await Task.Delay(50, ct);
+        }
+    }
+
     public void CancelUpdate()
     {
         lock (_updateLock) _updateInProgress = false;
@@ -539,6 +562,9 @@ public sealed class AgentRunRegistry
         if (!_runs.TryGetValue(runId, out var run)) return;
         // Idempotent: a terminal status must never be downgraded by a stray second call.
         if (run.Status != AgentRunStatus.Running) return;
+        if (status == AgentRunStatus.Stopped && IsUpdating && !string.IsNullOrWhiteSpace(run.ChatTarget))
+            run.Push(new StreamEvent(DateTime.UtcNow, "interrupted",
+                "Paused to install an update. This conversation will resume after restart."));
         run.Status = status;
         run.EndedAt = DateTime.UtcNow;
         run.ExitCode = exitCode;

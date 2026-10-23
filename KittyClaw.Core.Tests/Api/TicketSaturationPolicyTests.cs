@@ -26,10 +26,10 @@ public sealed class TicketSaturationPolicyTests : IClassFixture<TicketSaturation
     public void Dispose() => _client.Dispose();
 
     [Fact]
-    public async Task EighthTicketIsRejectedBeforePersistenceForCustomBlockedRole()
+    public async Task TicketCreationRemainsAvailableWithManyBlockedTickets()
     {
         var (slug, blocked) = await CreateProjectWithCustomBlockedColumnAsync();
-        for (var i = 1; i <= 7; i++)
+        for (var i = 1; i <= 10; i++)
             (await _client.PostAsJsonAsync($"/api/projects/{slug}/tickets",
                 new CreateTicketRequest($"Blocked {i}", "owner", blocked.Name, PipelineId: blocked.PipelineId, ColumnId: blocked.Id)))
                 .EnsureSuccessStatusCode();
@@ -37,61 +37,64 @@ public sealed class TicketSaturationPolicyTests : IClassFixture<TicketSaturation
         var response = await _client.PostAsJsonAsync($"/api/projects/{slug}/tickets",
             new CreateTicketRequest("Ticket eight", "owner", "Todo"));
 
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        var error = await response.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal("blocked_ticket_limit_reached", error.GetProperty("code").GetString());
-        Assert.Equal(7, error.GetProperty("blockedCount").GetInt32());
-        Assert.Equal(7, error.GetProperty("blockedLimit").GetInt32());
-        Assert.Contains(blocked.Id, error.GetProperty("blockedColumnIds").EnumerateArray().Select(x => x.GetInt32()));
-
-        var projects = _factory.Services.GetRequiredService<ProjectService>();
-        await using var db = projects.GetProjectDb(slug);
-        Assert.Equal(7, await db.Tickets.CountAsync());
-        Assert.Equal(7, await db.ActivityEntries.CountAsync());
-    }
-
-    [Fact]
-    public async Task OwnerRecoveryOverrideCreatesTicketAndWritesAuditActivity()
-    {
-        var (slug, blocked) = await CreateProjectWithCustomBlockedColumnAsync();
-        for (var i = 1; i <= 7; i++)
-            (await _client.PostAsJsonAsync($"/api/projects/{slug}/tickets",
-                new CreateTicketRequest($"Blocked {i}", "owner", blocked.Name, PipelineId: blocked.PipelineId, ColumnId: blocked.Id)))
-                .EnsureSuccessStatusCode();
-
-        var response = await _client.PostAsJsonAsync($"/api/projects/{slug}/tickets", new
-        {
-            title = "Unblock dependency",
-            createdBy = "owner",
-            status = "Todo",
-            saturationOverride = new { kind = "recovery", reason = "Creates the task that clears the blocked queue" }
-        });
-
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        var ticketId = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt32();
-        var ticket = await _client.GetFromJsonAsync<JsonElement>($"/api/projects/{slug}/tickets/{ticketId}");
-        Assert.Contains(ticket.GetProperty("activities").EnumerateArray(), a =>
-            a.GetProperty("text").GetString()!.Contains("recovery saturation override")
-            && a.GetProperty("author").GetString() == "owner");
+
+        var projects = _factory.Services.GetRequiredService<ProjectService>();
+        await using var db = projects.GetProjectDb(slug);
+        Assert.Equal(11, await db.Tickets.CountAsync());
+        Assert.Equal(11, await db.ActivityEntries.CountAsync());
     }
 
     [Fact]
-    public async Task RecoveryOverrideRequiresOwnerAndReason()
+    public async Task ColumnCapacityIsOptionalAndWarningModeDoesNotBlock()
     {
-        var (slug, _) = await CreateProjectWithCustomBlockedColumnAsync();
-        var response = await _client.PostAsJsonAsync($"/api/projects/{slug}/tickets", new
-        {
-            title = "Not authorized",
-            createdBy = "automation",
-            status = "Todo",
-            saturationOverride = new { kind = "recovery", reason = "bypass" }
-        });
+        var (slug, column) = await CreateProjectWithCustomBlockedColumnAsync();
+        var service = _factory.Services.GetRequiredService<ColumnService>();
+        await service.UpdateColumnAsync(slug, column.Id, maxTickets: 1, capacityBlocking: false);
+        for (var i = 0; i < 3; i++)
+            (await _client.PostAsJsonAsync($"/api/projects/{slug}/tickets",
+                new CreateTicketRequest($"Warning {i}", "owner", column.Name, PipelineId: column.PipelineId, ColumnId: column.Id)))
+                .EnsureSuccessStatusCode();
+        var saved = (await service.ListColumnsAsync(slug, column.PipelineId)).Single(c => c.Id == column.Id);
+        Assert.Equal(1, saved.MaxTickets);
+        Assert.False(saved.CapacityBlocking);
+    }
 
+    [Fact]
+    public async Task BlockingCapacityRejectsArrivalsButAllowsEditsAndDeparture()
+    {
+        var (slug, column) = await CreateProjectWithCustomBlockedColumnAsync();
+        var columns = _factory.Services.GetRequiredService<ColumnService>();
+        var tickets = _factory.Services.GetRequiredService<TicketService>();
+        await columns.UpdateColumnAsync(slug, column.Id, maxTickets: 1, capacityBlocking: true);
+        var first = await tickets.CreateTicketAsync(slug, "First", status: column.Name, pipelineId: column.PipelineId, columnId: column.Id);
+        var response = await _client.PostAsJsonAsync($"/api/projects/{slug}/tickets",
+            new CreateTicketRequest("Rejected", "owner", column.Name, PipelineId: column.PipelineId, ColumnId: column.Id));
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        var projects = _factory.Services.GetRequiredService<ProjectService>();
-        await using var db = projects.GetProjectDb(slug);
-        Assert.Empty(await db.Tickets.ToListAsync());
-        Assert.Empty(await db.ActivityEntries.ToListAsync());
+        await tickets.UpdateTicketAsync(slug, first.Id, description: "Preserved edit");
+        await tickets.ReorderTicketAsync(slug, first.Id, column.Name, 0);
+        var outside = await columns.CreateColumnAsync(slug, "Outside", pipelineId: column.PipelineId);
+        var second = await tickets.CreateTicketAsync(slug, "Second", status: outside.Name, pipelineId: outside.PipelineId, columnId: outside.Id);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => tickets.MoveTicketAsync(slug, second.Id, column.Name));
+        Assert.Equal(outside.Id, (await tickets.GetTicketAsync(slug, second.Id))!.ColumnId);
+        await tickets.MoveTicketAsync(slug, first.Id, outside.Name);
+        await tickets.MoveTicketAsync(slug, second.Id, column.Name);
+        Assert.Equal("Preserved edit", (await tickets.GetTicketAsync(slug, first.Id))!.Description);
+        await columns.UpdateColumnAsync(slug, column.Id, maxTickets: 0);
+        await tickets.CreateTicketAsync(slug, "Unlimited again", status: column.Name, pipelineId: column.PipelineId, columnId: column.Id);
+    }
+
+    [Fact]
+    public async Task BlockingCapacitySerializesConcurrentArrivals()
+    {
+        var (slug, column) = await CreateProjectWithCustomBlockedColumnAsync();
+        await _factory.Services.GetRequiredService<ColumnService>()
+            .UpdateColumnAsync(slug, column.Id, maxTickets: 1, capacityBlocking: true);
+        var responses = await Task.WhenAll(Enumerable.Range(0, 4).Select(i =>
+            _client.PostAsJsonAsync($"/api/projects/{slug}/tickets",
+                new CreateTicketRequest($"Concurrent {i}", "owner", column.Name, PipelineId: column.PipelineId, ColumnId: column.Id))));
+        Assert.Single(responses, r => r.StatusCode == HttpStatusCode.Created);
+        Assert.Equal(3, responses.Count(r => r.StatusCode == HttpStatusCode.BadRequest));
     }
 
     private async Task<(string Slug, BoardColumn Blocked)> CreateProjectWithCustomBlockedColumnAsync()

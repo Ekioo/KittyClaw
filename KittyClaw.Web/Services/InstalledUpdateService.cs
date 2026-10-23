@@ -97,9 +97,8 @@ public sealed class InstalledUpdateService(
         {
             Error = null;
             if (!IsReady) return;
-            if (!(gated = runs.TryBeginUpdate()))
+            if (!(gated = runs.BeginUpdateShutdown()))
             {
-                Error = "Agents are still running. Wait for them to finish, then try again.";
                 return;
             }
             // The updater waits for process exit; stop the host gracefully to flush SQLite

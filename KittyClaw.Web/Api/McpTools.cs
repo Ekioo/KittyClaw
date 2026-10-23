@@ -115,11 +115,6 @@ public sealed class McpTools(
             notifier.NotifyProjectUpdated(project);
             return ticket;
         }
-        catch (TicketCreationSaturationException ex)
-        {
-            throw new McpException(
-                $"{ex.Message} (blocked: {ex.BlockedCount}/{ex.BlockedLimit} — resolve blocked tickets before creating new ones)");
-        }
         catch (InvalidOperationException ex)
         {
             throw new McpException(ex.Message);

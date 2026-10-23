@@ -151,6 +151,7 @@ else
                         <span class="column-sort-indicator" title="@SortLabel(_sortHere.Mode) @DirectionLabel(_sortHere.Direction)">@(_sortHere.Direction == KittyClaw.Web.Services.SortDirection.Ascending ? "▲" : "▼")</span>
                     }
                     <span class="count">@GetTickets(col.Name).Count</span>
+                    <ColumnCapacityIndicator Column="col" Count="@_tickets.Count(t => t.ColumnId == col.Id)" />
                 </div>
                 <div class="column-body">
                     @{
@@ -1311,7 +1312,14 @@ else
             return;
         }
 
-        await TicketService.ReorderTicketAsync(Slug, ticketId, newStatus, targetIndex, enforceRouting: true);
+        try { await TicketService.ReorderTicketAsync(Slug, ticketId, newStatus, targetIndex, enforceRouting: true); }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Ticket move refused");
+            OnDragEnd();
+            await JS.InvokeVoidAsync("alert", ex.GetBaseException().Message.Contains("column_capacity_reached") ? L["ColumnCapacityError"] : ex.Message);
+            return;
+        }
         PushUndo($"{L["UndoMove"]} #{ticketId}", async () =>
             await TicketService.ReorderTicketAsync(Slug, ticketId, oldStatus, oldIndex, enforceRouting: false), ticketId);
         await RefreshTicketsAsync();

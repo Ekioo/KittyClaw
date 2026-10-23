@@ -7,7 +7,7 @@
 @implements IDisposable
 
 <div class="ticket-modal-overlay">
-    <div class="create-popup">
+    <div class="create-popup" @ref="_popup">
         <div class="create-popup-header">
             <h2>@L["NewTicket"]</h2>
             <button class="close-btn" @onclick="CloseAsync">&times;</button>
@@ -69,8 +69,12 @@
             </div>
         </div>
         <div class="create-popup-footer">
+            @if (_creationError is not null)
+            {
+                <p role="alert">@_creationError</p>
+            }
             <button class="cancel-btn" @onclick="CloseAsync">@L["Cancel"]</button>
-            <button @onclick="CreateAsync" disabled="@string.IsNullOrWhiteSpace(_title)">@L["CreateTicket"]</button>
+            <button @onclick="CreateAsync" disabled="@(_creating || string.IsNullOrWhiteSpace(_title))">@L["CreateTicket"]</button>
         </div>
     </div>
 </div>
@@ -94,6 +98,10 @@
     private string _newLabelColor = "#6366f1";
     private string _assignedTo = "";
     private ElementReference _descTextarea;
+    private ElementReference _popup;
+    private bool _creating;
+    private string? _creationError;
+    private string DraftKey => $"kittyclaw.ticket-draft:{Slug}:{SelectedPipelineId}:{SubKanbanParentId}";
     private IDisposable? _escHandle;
 
     protected override async Task OnInitializedAsync()
@@ -105,6 +113,17 @@
     {
         if (firstRender)
         {
+            try
+            {
+                var draft = await JS.InvokeAsync<string[]?>("ticketDraft.attach", _popup, DraftKey);
+                if (draft is { Length: 2 })
+                {
+                    _title = draft[0];
+                    _description = draft[1];
+                    StateHasChanged();
+                }
+            }
+            catch (Exception ex) { Logger.LogWarning(ex, "Ticket draft initialization failed"); }
             _escHandle = EscapeStack.PushWithFocus(JS,
                 () => InvokeAsync(async () => { await OnClosed.InvokeAsync(); }));
             try { await JS.InvokeVoidAsync("attachImagePaste", _descTextarea, "/api/images"); }
@@ -138,9 +157,14 @@
 
     private async Task CreateAsync()
     {
-        if (string.IsNullOrWhiteSpace(_title) || Columns.Count == 0) return;
+        if (_creating || string.IsNullOrWhiteSpace(_title) || Columns.Count == 0) return;
+        _creating = true;
+        _creationError = null;
+        Ticket ticket;
+        try
+        {
         var status = Columns[0].Name;
-        var ticket = await TicketService.CreateTicketAsync(
+        ticket = await TicketService.CreateTicketAsync(
             Slug, _title.Trim(), _description.Trim(),
             status: status,
             labelIds: _labelIds,
@@ -149,6 +173,16 @@
             parentId: SubKanbanParentId,
             pipelineId: SelectedPipelineId,
             columnId: Columns[0].Id);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Manual ticket creation failed for {Project}", Slug);
+            _creationError = ex.GetBaseException().Message.Contains("column_capacity_reached") ? L["ColumnCapacityError"] : ex.Message;
+            return;
+        }
+        finally { _creating = false; }
+        try { await JS.InvokeVoidAsync("ticketDraft.clear", DraftKey); }
+        catch (Exception ex) { Logger.LogWarning(ex, "Ticket draft cleanup failed"); }
         await OnCreated.InvokeAsync(ticket);
     }
 

@@ -608,14 +608,10 @@ public class TicketService
         string status = "Backlog", List<int>? labelIds = null,
         TicketPriority priority = TicketPriority.NiceToHave, string? assignedTo = null,
         int? parentId = null, int? pipelineId = null, int? columnId = null,
-        bool blocksParent = true, bool recoveryOverride = false, string? overrideReason = null)
+        bool blocksParent = true)
     {
         if (string.IsNullOrWhiteSpace(createdBy))
             throw new InvalidOperationException("Le champ 'createdBy' est requis.");
-        if (recoveryOverride && (!string.Equals(createdBy, "owner", StringComparison.OrdinalIgnoreCase)
-            || string.IsNullOrWhiteSpace(overrideReason)))
-            throw new InvalidOperationException("A recovery override requires createdBy 'owner' and a non-empty reason.");
-
         var creationGate = _creationGates.GetOrAdd(projectSlug, _ => new SemaphoreSlim(1, 1));
         await creationGate.WaitAsync();
         try
@@ -632,23 +628,6 @@ public class TicketService
         var column = await RequireColumnAsync(db, status, pipelineId, columnId);
         status = column.Name;
         pipelineId = column.PipelineId;
-        var blockedLimit = _automationStore is null
-            ? 7
-            : (await _automationStore.LoadAsync(projectSlug)).Config.BlockedTicketLimit ?? 7;
-        var blockedColumnIds = await db.BoardColumns
-            .Where(c => c.Role == ColumnRole.Blocked || c.Name == "Blocked")
-            .Select(c => c.Id)
-            .ToListAsync();
-        var blockedCount = blockedLimit > 0 && blockedColumnIds.Count > 0
-            ? await db.Tickets.CountAsync(t => t.ColumnId != null && blockedColumnIds.Contains(t.ColumnId.Value))
-            : 0;
-        if (blockedLimit > 0 && blockedCount >= blockedLimit && !recoveryOverride)
-        {
-            _logger?.LogWarning(
-                "Ticket creation refused for project {ProjectSlug}: {BlockedCount} blocked tickets reached limit {BlockedLimit}",
-                projectSlug, blockedCount, blockedLimit);
-            throw new TicketCreationSaturationException(projectSlug, blockedCount, blockedLimit, blockedColumnIds);
-        }
         if (parentId is not null)
         {
             var parentExists = await db.Tickets.AnyAsync(t => t.Id == parentId.Value);
@@ -688,18 +667,6 @@ public class TicketService
             Author = createdBy,
             Text = "a créé le ticket"
         });
-        if (recoveryOverride)
-        {
-            db.ActivityEntries.Add(new ActivityEntry
-            {
-                TicketId = ticket.Id,
-                Author = createdBy,
-                Text = $"used recovery saturation override: {overrideReason!.Trim()}"
-            });
-            _logger?.LogWarning(
-                "Recovery saturation override used for project {ProjectSlug} by {Author}: {Reason}",
-                projectSlug, createdBy, overrideReason.Trim());
-        }
         await db.SaveChangesAsync();
         await tx.CommitAsync();
         TicketCreated?.Invoke(projectSlug, ticket.Id);

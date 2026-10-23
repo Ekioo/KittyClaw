@@ -1,3 +1,8 @@
+let updateRequested = false;
+document.addEventListener("click", event => {
+    if (event.target.closest?.("[data-update-restart]")) updateRequested = true;
+});
+
 // Set up event handlers
 const reconnectModal = document.getElementById("components-reconnect-modal");
 reconnectModal.addEventListener("components-reconnect-state-changed", handleReconnectStateChanged);
@@ -22,11 +27,16 @@ if (fatalErrorUi) {
 
 function handleReconnectStateChanged(event) {
     if (event.detail.state === "show") {
+        if (updateRequested) {
+            reconnectModal.querySelector(".components-reconnect-first-attempt-visible").textContent =
+                "Updating KittyClaw… Your agents will resume after restart.";
+        }
         reconnectModal.showModal();
     } else if (event.detail.state === "hide") {
         reconnectModal.close();
     } else if (event.detail.state === "failed") {
         document.addEventListener("visibilitychange", retryWhenDocumentBecomesVisible);
+        scheduleRetry();
     } else if (event.detail.state === "rejected") {
         location.reload();
     }
@@ -54,6 +64,7 @@ async function retry() {
     } catch (err) {
         // We got an exception, server is currently unavailable
         document.addEventListener("visibilitychange", retryWhenDocumentBecomesVisible);
+        scheduleRetry();
     }
 }
 
@@ -93,4 +104,15 @@ async function recoverStaleCircuit() {
     } catch {
         // The server is still unavailable. Keep the actionable banner visible.
     }
+}
+
+// Keep recovering while an installer replaces the server, even in a visible tab.
+let retryTimer;
+function scheduleRetry() {
+    clearTimeout(retryTimer);
+    retryTimer = setTimeout(async () => {
+        if (!reconnectModal.open) return;
+        await retry();
+        if (reconnectModal.open) scheduleRetry();
+    }, 3000);
 }

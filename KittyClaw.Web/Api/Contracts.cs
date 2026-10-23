@@ -43,9 +43,7 @@ public record CreateTicketRequest(
     string Title, string CreatedBy, string Status, string Description = "",
     List<int>? LabelIds = null, TicketPriority Priority = TicketPriority.NiceToHave,
     string? AssignedTo = null, int? ParentId = null, int? PipelineId = null,
-    int? ColumnId = null, bool BlocksParent = true,
-    TicketCreationOverride? SaturationOverride = null);
-public record TicketCreationOverride(string Kind, string Reason);
+    int? ColumnId = null, bool BlocksParent = true);
 // The root PATCH applies every provided field — Status included — in ONE atomic write,
 // through the same semantics as the dedicated /status endpoint (column validation,
 // Scheduled cleanup, activity, engine signal after commit). This is the hand-off
@@ -69,9 +67,9 @@ public record UpdateLabelRequest(string? Name = null, string? Color = null);
 public record SetTicketLabelsRequest(List<int> LabelIds);
 public record ReorderTicketRequest(string Status, int Index);
 public record CreateColumnRequest(string Name, string Color = "#5a6a80", int? PipelineId = null,
-    ColumnRole Role = ColumnRole.Normal, string UserGuidance = "");
+    ColumnRole Role = ColumnRole.Normal, string UserGuidance = "", int MaxTickets = 0, bool CapacityBlocking = false);
 public record UpdateColumnRequest(string? Name = null, string? Color = null, ColumnRole? Role = null,
-    string? UserGuidance = null);
+    string? UserGuidance = null, int? MaxTickets = null, bool? CapacityBlocking = null);
 public record ReorderColumnRequest(int ColumnId, int Index);
 public record CreateMemberRequest(string Name);
 public record UpdateMemberRequest(string? Name = null, string? DefaultModel = null);

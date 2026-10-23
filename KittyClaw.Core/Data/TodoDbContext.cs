@@ -29,6 +29,15 @@ public class TodoDbContext : DbContext
         _dbPath = dbPath;
     }
 
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        try { return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken); }
+        catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("column_capacity_reached") == true)
+        {
+            throw new InvalidOperationException("The destination column has reached its configured ticket limit. Choose another column or change its limit in column settings.", ex);
+        }
+    }
+
     protected override void OnConfiguring(DbContextOptionsBuilder options)
     {
         options.UseSqlite($"Data Source={_dbPath}")

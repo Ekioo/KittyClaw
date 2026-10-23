@@ -181,3 +181,7 @@ Ticket creation and update accept stable `pipelineId` and `columnId`. Ticket upd
 Existing databases are migrated into a default `main` pipeline. Existing columns and tickets receive stable links, while legacy status strings and APIs continue to work. `.agents/automations.json`, polling triggers, cron/interval triggers, and legacy agent directories are not removed.
 
 Existing pipelines can be opened with **Edit with assistant** on the Workflows page. This starts from the selected pipeline’s current columns, supports natural-language refinements and a final review, and applies scoped changes while preserving unspecified configuration. This mode does not migrate legacy automations or reconfigure other pipelines.
+
+## Optional column capacity
+
+Each column has an optional `MaxTickets` (0 = unlimited) and `CapacityBlocking` (false = warning only), editable in the column settings General tab and through REST/MCP column requests. The board shows the configured capacity and a warning when reached, counting all tickets regardless of display filters. Warning mode permits new arrivals; blocking mode refuses creation and movement into that column at capacity. Editing, reordering within, and moving out remain available. SQLite triggers enforce blocking limits atomically across all writers. Existing columns have no limit. There is no project-wide blocked-ticket creation limit.
