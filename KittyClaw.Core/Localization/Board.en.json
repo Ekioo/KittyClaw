@@ -9,6 +9,7 @@
   "SortByAssignee": "Assignee",
   "SortByCreated": "Created date",
   "SortByUpdated": "Modified date",
+  "SortByTokens": "Token count",
   "SortAsc": "Ascending",
   "SortDesc": "Descending",
   "KanbanView": "Kanban",

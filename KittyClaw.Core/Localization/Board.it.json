@@ -8,6 +8,7 @@
   "SortByAssignee": "Assegnatario",
   "SortByCreated": "Data di creazione",
   "SortByUpdated": "Data modificata",
+  "SortByTokens": "Numero di token",
   "SortAsc": "Ascendente",
   "SortDesc": "Discendente",
   "KanbanView": "Kanban",

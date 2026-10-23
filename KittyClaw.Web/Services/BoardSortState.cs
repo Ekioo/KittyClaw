@@ -12,7 +12,8 @@ public enum ColumnSortMode
     Priority,
     Assignee,
     CreatedAt,
-    UpdatedAt
+    UpdatedAt,
+    Tokens
 }
 
 public enum SortDirection
@@ -79,6 +80,7 @@ public sealed class BoardSortState
                 direction),
             ColumnSortMode.CreatedAt => OrderBy(list, t => t.CreatedAt, Comparer<DateTime>.Default, direction, nullsLast: false),
             ColumnSortMode.UpdatedAt => OrderBy(list, t => t.UpdatedAt, Comparer<DateTime>.Default, direction, nullsLast: false),
+            ColumnSortMode.Tokens => OrderBy(list, t => t.AgentTokens, Comparer<long>.Default, direction, nullsLast: false),
             _ => list
         };
     }
