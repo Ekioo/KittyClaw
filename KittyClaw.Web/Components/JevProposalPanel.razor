@@ -72,7 +72,10 @@
     private int? _observedColumn;
     private string? _error;
     private readonly CancellationTokenSource _stop = new();
+    private readonly CancellationToken _stopToken;
     private Task? _poll;
+
+    public JevProposalPanel() => _stopToken = _stop.Token;
 
     private string DestinationName(JevRoutingProposal proposal)
         => proposal.Choice?.StartsWith("column-") == true && int.TryParse(proposal.Choice[7..], out var id)
@@ -81,8 +84,12 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        await ReloadAsync();
-        _poll ??= PollAsync();
+        try
+        {
+            await ReloadAsync();
+            if (!_stop.IsCancellationRequested) _poll ??= PollAsync();
+        }
+        catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
     }
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -97,7 +104,7 @@
         { _observedTicket = TicketId; _observedColumn = ticket?.ColumnId; }
         var configured = ticket?.ColumnId is int columnId ? await Processors.GetAsync(Slug, columnId) : null;
         await using var db = Projects.GetProjectDb(Slug);
-        var columns = await db.BoardColumns.AsNoTracking().ToListAsync(_stop.Token);
+        var columns = await db.BoardColumns.AsNoTracking().ToListAsync(_stopToken);
         _automatic = configured?.UsesAutomaticJevRouting ?? false;
         _processor = columns.FirstOrDefault(c => c.Id == ticket?.ColumnId) is { } source
             ? JevQualificationService.RecommendationProcessor(configured, source, columns) : null;
@@ -106,13 +113,13 @@
         _eligible = !activeExecution && _processor is { HasBusinessRouting: true, JevAcceptanceValidation: false } &&
             columns.FirstOrDefault(c => c.Id == ticket?.ColumnId)?.Role is not (ColumnRole.Success or ColumnRole.Failure);
         _columnNames = columns.ToDictionary(c => c.Id, c => c.Name);
-        var decisions = await Decisions.ListAsync(Slug, TicketId, _stop.Token);
-        var history = await Qualification.GetPostRunAsync(Slug, TicketId, _stop.Token);
+        var decisions = await Decisions.ListAsync(Slug, TicketId, _stopToken);
+        var history = await Qualification.GetPostRunAsync(Slug, TicketId, _stopToken);
         var historyKey = $"{Slug}:{TicketId}:" + string.Join(";", history.Select(JevDecisionStore.ProposalId).Order()) +
             ":" + string.Join(";", decisions.Select(d => $"{d.ProposalId}:{d.DecidedAt:O}").Order());
         var historyChanged = _historyKey != historyKey;
         _historyKey = historyKey;
-        var proposal = await Qualification.GetAsync(Slug, TicketId, _stop.Token);
+        var proposal = await Qualification.GetAsync(Slug, TicketId, _stopToken);
         var feedback = ticket is not null && _processor is not null ? JevQualificationService.RejectionFeedback(decisions, _processor, ticket) : [];
         _contextKey = ticket is not null && _processor is not null
             ? $"{Slug}:{TicketId}:" + JevQualificationService.Fingerprint(_processor, ticket, columns, feedback.Count > 0 ? feedback : null) : null;
@@ -137,10 +144,10 @@
             var processor = ticket?.ColumnId is int id ? await Processors.GetAsync(slug, id) : null;
             if (ticket is null) return;
             await using var db = Projects.GetProjectDb(slug);
-            var columns = await db.BoardColumns.AsNoTracking().ToListAsync(_stop.Token);
+            var columns = await db.BoardColumns.AsNoTracking().ToListAsync(_stopToken);
             if (columns.FirstOrDefault(c => c.Id == ticket.ColumnId) is not { } source) return;
             processor = JevQualificationService.RecommendationProcessor(processor, source, columns);
-            await Qualification.ObserveAsync(slug, processor, ticket, columns, _stop.Token);
+            await Qualification.ObserveAsync(slug, processor, ticket, columns, _stopToken);
             await ReloadAsync(notifyColumnChanges: true);
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
@@ -157,7 +164,7 @@
         try
         {
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
-            while (await timer.WaitForNextTickAsync(_stop.Token))
+            while (await timer.WaitForNextTickAsync(_stopToken))
                 await InvokeAsync(async () => { if (!_busy) { await ReloadAsync(notifyColumnChanges: true); StateHasChanged(); } });
         }
         catch (OperationCanceledException) { }
