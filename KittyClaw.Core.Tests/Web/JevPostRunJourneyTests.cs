@@ -31,6 +31,7 @@ public sealed class JevPostRunJourneyTests(ITestOutputHelper output)
         try
         {
             await using var factory = new Factory();
+            factory.Handler.Confidence = 0.8;
             factory.UseKestrel(0);
             using var http = factory.CreateClient();
             var json = new JsonSerializerOptions(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };

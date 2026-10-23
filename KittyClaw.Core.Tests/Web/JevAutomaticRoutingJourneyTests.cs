@@ -18,7 +18,7 @@ namespace KittyClaw.Core.Tests.Web;
 public sealed class JevAutomaticRoutingJourneyTests(ITestOutputHelper output)
 {
     [DebugBrowserFact]
-    public async Task Automatic_opt_in_routes_above_threshold_and_lower_confidence_remains_manual()
+    public async Task Automatic_routing_honors_the_threshold_and_keeps_lower_confidence_for_review()
     {
         var data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "KittyClaw-debug", "jev-auto-" + Guid.NewGuid().ToString("N"));
@@ -31,6 +31,7 @@ public sealed class JevAutomaticRoutingJourneyTests(ITestOutputHelper output)
         try
         {
             await using var factory = new Factory();
+            factory.Handler.Confidence = 0.8;
             factory.UseKestrel(0);
             using var http = factory.CreateClient();
             var json = new JsonSerializerOptions(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
@@ -105,10 +106,10 @@ public sealed class JevAutomaticRoutingJourneyTests(ITestOutputHelper output)
             Assert.Equal(1, factory.Handler.Count);
             var executions = (await http.GetFromJsonAsync<List<ColumnExecution>>($"/api/projects/{slug}/column-executions", json))!;
             Assert.Equal(ColumnExecutionStatus.Completed, Assert.Single(executions).Status);
-            // Explicit automatic opt-in applies the proposed move and lets the ordinary destination processor run.
+            // Lowering the automatic routing threshold applies the proposed move and lets the ordinary destination processor run.
             (await http.PutAsJsonAsync($"/api/projects/{slug}/columns/{suggestion.Id}/processor",
                 new SaveColumnProcessorRequest("Follow-up worker", "Handle the explicitly accepted ticket", DefaultTargetColumnId: actualTarget.Id))).EnsureSuccessStatusCode();
-            // Turn on automatic routing explicitly in the column dialog, using an inclusive 100% threshold.
+            // Turn on automatic routing explicitly in the column dialog, using an inclusive 80% threshold.
             await page.GotoAsync(new Uri(http.BaseAddress!, $"/board/{slug}").ToString());
             for (var i = 0; i < 20 && !await page.Locator(".column-context-menu-configure").IsVisibleAsync(); i++)
             {
@@ -119,13 +120,11 @@ public sealed class JevAutomaticRoutingJourneyTests(ITestOutputHelper output)
             dialog = page.GetByRole(AriaRole.Dialog);
             await dialog.Locator(".column-editor-tabs button").Nth(1).ClickAsync();
             await dialog.GetByTestId("jev-settings").Locator("summary").First.ClickAsync();
-            await Expect(dialog.GetByTestId("jev-automatic-routing")).Not.ToBeCheckedAsync();
-            await dialog.GetByTestId("jev-automatic-routing").CheckAsync();
-            await dialog.GetByTestId("jev-confidence-threshold").FillAsync("100");
+            await dialog.GetByTestId("jev-confidence-threshold").FillAsync("80");
             await dialog.Locator(".processor-dialog-footer .settings-primary").ClickAsync();
             await Expect(dialog).Not.ToBeVisibleAsync();
             processor = await http.GetFromJsonAsync<ColumnProcessor>($"/api/projects/{slug}/columns/{source.Id}/processor", json);
-            Assert.True(processor!.JevAutomaticRouting); Assert.Equal(1, processor.JevConfidenceThreshold);
+            Assert.True(processor!.UsesAutomaticJevRouting); Assert.Equal(0.8, processor.JevConfidenceThreshold);
             await page.GotoAsync(new Uri(http.BaseAddress!, $"/board/{slug}/ticket/{ticket.Id}").ToString());
             await Expect(page.GetByTestId("jev-history-entry").Filter(new() { HasText = "Suggested destination: Todo" }).First).ToContainTextAsync("Automatically applied by JEV", new() { Timeout = 45000 });
             var acceptedUntil = DateTime.UtcNow.AddSeconds(30);
@@ -136,7 +135,7 @@ public sealed class JevAutomaticRoutingJourneyTests(ITestOutputHelper output)
             var reviews = factory.Services.GetRequiredService<JevDecisionStore>();
             var acceptedReview = Assert.Single(await reviews.ListAsync(slug, ticket.Id));
             Assert.True(acceptedReview.Accepted);
-            Assert.True(acceptedReview.Automatic); Assert.Equal(1, acceptedReview.ConfidenceThreshold);
+            Assert.True(acceptedReview.Automatic); Assert.Equal(0.8, acceptedReview.ConfidenceThreshold);
             Assert.Equal(suggestion.Id, acceptedReview.AppliedTargetColumnId);
             await page.ReloadAsync();
             await Expect(page.GetByTestId("jev-history-entry").Filter(new() { HasText = "Suggested destination: Todo" }).First).ToContainTextAsync("Automatically applied by JEV", new() { Timeout = 45000 });
@@ -145,7 +144,7 @@ public sealed class JevAutomaticRoutingJourneyTests(ITestOutputHelper output)
             await page.ScreenshotAsync(new() { Path = Path.Combine(data, "jev-accepted-history.png"), FullPage = true });
 
             // A second ticket exercises functional rejection without launching another agent.
-            factory.Handler.Confidence = 0.8;
+            factory.Handler.Confidence = 0.7;
             var secondResponse = await http.PostAsJsonAsync($"/api/projects/{slug}/tickets",
                 new CreateTicketRequest("Inspect a rejected proposal", "owner", source.Name,
                     PipelineId: source.PipelineId, ColumnId: source.Id));
@@ -154,7 +153,7 @@ public sealed class JevAutomaticRoutingJourneyTests(ITestOutputHelper output)
             await page.GotoAsync(new Uri(http.BaseAddress!, $"/board/{slug}/ticket/{secondTicket.Id}").ToString());
             proposal = page.GetByTestId("jev-history-entry").Filter(new() { HasText = "Suggested destination: Todo" }).First;
             await Expect(proposal).ToContainTextAsync("Suggested destination: Todo", new() { Timeout = 60000 });
-            Assert.Equal(1, (await http.GetFromJsonAsync<ColumnProcessor>($"/api/projects/{slug}/columns/{source.Id}/processor", json))!.JevConfidenceThreshold);
+            Assert.Equal(0.8, (await http.GetFromJsonAsync<ColumnProcessor>($"/api/projects/{slug}/columns/{source.Id}/processor", json))!.JevConfidenceThreshold);
             var lowConfidenceUntil = DateTime.UtcNow.AddSeconds(32);
             while (DateTime.UtcNow < lowConfidenceUntil)
             {
@@ -181,7 +180,7 @@ public sealed class JevAutomaticRoutingJourneyTests(ITestOutputHelper output)
             await proposal.GetByTestId("jev-decision-history").ScrollIntoViewIfNeededAsync();
             await page.ScreenshotAsync(new() { Path = Path.Combine(data, "jev-rejected-and-requalified.png"), FullPage = true });
             Assert.Empty(errors);
-            output.WriteLine($"PASS: {http.BaseAddress} — manual default respected; explicit automatic opt-in started the destination processor; rejection produced an alternative with owner feedback.");
+            output.WriteLine($"PASS: {http.BaseAddress} — confidence gate respected; automatic routing started the destination processor; rejection produced an alternative with owner feedback.");
             output.WriteLine($"Screenshot and isolated debug data: {data}");
         }
         finally
