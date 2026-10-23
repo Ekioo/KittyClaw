@@ -57,7 +57,7 @@ public sealed class JevPostRunJourneyTests(ITestOutputHelper output)
             var saved = await http.PutAsJsonAsync($"/api/projects/{slug}/columns/{source.Id}/processor",
                 new SaveColumnProcessorRequest("Worker", "Implement the ticket", Enabled: false,
                     DefaultTargetColumnId: actualTarget.Id, Routes: [new("needs_revision", suggestion.Id)]));
-            saved.EnsureSuccessStatusCode();
+            Assert.True(saved.IsSuccessStatusCode, await saved.Content.ReadAsStringAsync());
             (await http.PutAsJsonAsync($"/api/projects/{slug}/secrets/TYPESAFE_API_KEY", new { value = "debug-only-key" })).EnsureSuccessStatusCode();
             using var pw = await Playwright.CreateAsync();
             await using var browser = await pw.Chromium.LaunchAsync(new() { Headless = true });

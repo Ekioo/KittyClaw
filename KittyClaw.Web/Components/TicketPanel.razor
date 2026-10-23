@@ -398,7 +398,7 @@
                 }
 
                 <JevWorkReviewPanel Slug="@Slug" TicketId="@TicketId" OnDecided="RefreshAsync" />
-                <JevProposalPanel Slug="@Slug" TicketId="@TicketId" OnDecisionTaken="RefreshAsync" />
+                <JevProposalPanel Slug="@Slug" TicketId="@TicketId" OnDecisionTaken="RefreshAsync" OnHistoryChanged="RefreshJevHistoryAsync" />
                 <div class="thread-section-divider">
                     <div class="activity-header">
                         <span class="section-label">@L["Activity"]</span>
@@ -945,6 +945,11 @@
     private record TimelineItem(DateTime At, string Author, bool IsComment, string Text, int? Id,
         JevRoutingProposal? Proposal = null, JevProposalDecision? Decision = null, JevWorkDecision? WorkDecision = null);
     private List<TimelineItem> _jevHistory = [];
+    private async Task RefreshJevHistoryAsync()
+    {
+        await LoadJevHistoryAsync();
+        StateHasChanged();
+    }
     private async Task LoadJevHistoryAsync()
     {
         var decisions = await JevDecisions.ListAsync(Slug, TicketId);

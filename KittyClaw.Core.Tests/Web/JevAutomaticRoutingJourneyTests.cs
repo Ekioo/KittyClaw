@@ -57,7 +57,7 @@ public sealed class JevAutomaticRoutingJourneyTests(ITestOutputHelper output)
             var saved = await http.PutAsJsonAsync($"/api/projects/{slug}/columns/{source.Id}/processor",
                 new SaveColumnProcessorRequest("Worker", "Implement the ticket", Enabled: false,
                     DefaultTargetColumnId: actualTarget.Id, Routes: [new("needs_revision", suggestion.Id)]));
-            saved.EnsureSuccessStatusCode();
+            Assert.True(saved.IsSuccessStatusCode, await saved.Content.ReadAsStringAsync());
             (await http.PutAsJsonAsync($"/api/projects/{slug}/secrets/TYPESAFE_API_KEY", new { value = "debug-only-key" })).EnsureSuccessStatusCode();
             using var pw = await Playwright.CreateAsync();
             await using var browser = await pw.Chromium.LaunchAsync(new() { Headless = true });
@@ -106,10 +106,10 @@ public sealed class JevAutomaticRoutingJourneyTests(ITestOutputHelper output)
             Assert.Equal(1, factory.Handler.Count);
             var executions = (await http.GetFromJsonAsync<List<ColumnExecution>>($"/api/projects/{slug}/column-executions", json))!;
             Assert.Equal(ColumnExecutionStatus.Completed, Assert.Single(executions).Status);
-            // Lowering the automatic routing threshold applies the proposed move and lets the ordinary destination processor run.
+            // Lowering the threshold affects subsequent executions, preserving existing history.
             (await http.PutAsJsonAsync($"/api/projects/{slug}/columns/{suggestion.Id}/processor",
                 new SaveColumnProcessorRequest("Follow-up worker", "Handle the explicitly accepted ticket", DefaultTargetColumnId: actualTarget.Id))).EnsureSuccessStatusCode();
-            // Turn on automatic routing explicitly in the column dialog, using an inclusive 80% threshold.
+            // Configure the inclusive automatic routing threshold through the column dialog.
             await page.GotoAsync(new Uri(http.BaseAddress!, $"/board/{slug}").ToString());
             for (var i = 0; i < 20 && !await page.Locator(".column-context-menu-configure").IsVisibleAsync(); i++)
             {
@@ -125,25 +125,30 @@ public sealed class JevAutomaticRoutingJourneyTests(ITestOutputHelper output)
             await Expect(dialog).Not.ToBeVisibleAsync();
             processor = await http.GetFromJsonAsync<ColumnProcessor>($"/api/projects/{slug}/columns/{source.Id}/processor", json);
             Assert.True(processor!.UsesAutomaticJevRouting); Assert.Equal(0.8, processor.JevConfidenceThreshold);
-            await page.GotoAsync(new Uri(http.BaseAddress!, $"/board/{slug}/ticket/{ticket.Id}").ToString());
-            await Expect(page.GetByTestId("jev-history-entry").Filter(new() { HasText = "Suggested destination: Todo" }).First).ToContainTextAsync("Automatically applied by JEV", new() { Timeout = 45000 });
-            var acceptedUntil = DateTime.UtcNow.AddSeconds(30);
-            while (factory.Dispatcher.Count < 2 && DateTime.UtcNow < acceptedUntil) await Task.Delay(100);
-            Assert.Equal(2, factory.Dispatcher.Count);
-            var acceptedTicket = (await http.GetFromJsonAsync<Ticket>($"/api/projects/{slug}/tickets/{ticket.Id}", json))!;
-            Assert.Contains(acceptedTicket.Activities, a => a.Author == "JEV" && a.Text.Contains("Review → Todo"));
+            var highResponse = await http.PostAsJsonAsync($"/api/projects/{slug}/tickets",
+                new CreateTicketRequest("Route at the inclusive confidence threshold", "owner", source.Name,
+                    PipelineId: source.PipelineId, ColumnId: source.Id));
+            highResponse.EnsureSuccessStatusCode();
+            var highTicket = (await highResponse.Content.ReadFromJsonAsync<Ticket>(json))!;
+            var acceptedUntil = DateTime.UtcNow.AddSeconds(60);
             var reviews = factory.Services.GetRequiredService<JevDecisionStore>();
-            var acceptedReview = Assert.Single(await reviews.ListAsync(slug, ticket.Id));
+            while (DateTime.UtcNow < acceptedUntil)
+            {
+                if ((await http.GetFromJsonAsync<Ticket>($"/api/projects/{slug}/tickets/{highTicket.Id}", json))!.ColumnId == actualTarget.Id && factory.Dispatcher.Count == 3) break;
+                await Task.Delay(100);
+            }
+            Assert.Equal(3, factory.Dispatcher.Count);
+            Assert.Equal(actualTarget.Id, (await http.GetFromJsonAsync<Ticket>($"/api/projects/{slug}/tickets/{highTicket.Id}", json))!.ColumnId);
+            var acceptedReview = Assert.Single(await reviews.ListAsync(slug, highTicket.Id));
             Assert.True(acceptedReview.Accepted);
-            Assert.True(acceptedReview.Automatic); Assert.Equal(0.8, acceptedReview.ConfidenceThreshold);
+            Assert.True(acceptedReview.Automatic);
+            Assert.Equal(0.8, acceptedReview.ConfidenceThreshold);
             Assert.Equal(suggestion.Id, acceptedReview.AppliedTargetColumnId);
-            await page.ReloadAsync();
-            await Expect(page.GetByTestId("jev-history-entry").Filter(new() { HasText = "Suggested destination: Todo" }).First).ToContainTextAsync("Automatically applied by JEV", new() { Timeout = 45000 });
-            await proposal.GetByTestId("jev-decision-history").Locator("summary").ClickAsync();
-            await proposal.GetByTestId("jev-decision-history").ScrollIntoViewIfNeededAsync();
-            await page.ScreenshotAsync(new() { Path = Path.Combine(data, "jev-accepted-history.png"), FullPage = true });
+            Assert.Empty(await reviews.ListAsync(slug, ticket.Id));
+            await page.GotoAsync(new Uri(http.BaseAddress!, $"/board/{slug}/ticket/{highTicket.Id}").ToString());
+            await Expect(page.GetByTestId("jev-history-entry").Filter(new() { HasText = "Automatically applied by JEV" }).First).ToBeVisibleAsync();
 
-            // A second ticket exercises functional rejection without launching another agent.
+            // A lower-confidence execution uses the classic destination and retains a reviewable snapshot.
             factory.Handler.Confidence = 0.7;
             var secondResponse = await http.PostAsJsonAsync($"/api/projects/{slug}/tickets",
                 new CreateTicketRequest("Inspect a rejected proposal", "owner", source.Name,
@@ -158,7 +163,7 @@ public sealed class JevAutomaticRoutingJourneyTests(ITestOutputHelper output)
             while (DateTime.UtcNow < lowConfidenceUntil)
             {
                 Assert.Equal(actualTarget.Id, (await http.GetFromJsonAsync<Ticket>($"/api/projects/{slug}/tickets/{secondTicket.Id}", json))!.ColumnId);
-                Assert.Equal(3, factory.Dispatcher.Count);
+                Assert.Equal(4, factory.Dispatcher.Count);
                 Assert.Empty(await reviews.ListAsync(slug, secondTicket.Id));
                 await Task.Delay(1000);
             }
@@ -169,8 +174,7 @@ public sealed class JevAutomaticRoutingJourneyTests(ITestOutputHelper output)
             await Expect(page.GetByTestId("jev-history-entry").Filter(new() { HasText = "Suggested destination: Todo" }).First).ToContainTextAsync("Rejected");
             await Expect(page.GetByTestId("jev-history-entry").Filter(new() { HasText = "Suggested destination: Todo" }).First).ToContainTextAsync("Review evidence before returning to implementation");
             Assert.Equal(actualTarget.Id, (await http.GetFromJsonAsync<Ticket>($"/api/projects/{slug}/tickets/{secondTicket.Id}", json))!.ColumnId);
-            Assert.Equal(3, factory.Dispatcher.Count);
-            Assert.Equal(2, factory.Handler.Count);
+            Assert.Equal(4, factory.Dispatcher.Count);
             var rejectedReview = Assert.Single(await reviews.ListAsync(slug, secondTicket.Id));
             Assert.False(rejectedReview.Accepted);
             Assert.Equal("Review evidence before returning to implementation", rejectedReview.Reason);

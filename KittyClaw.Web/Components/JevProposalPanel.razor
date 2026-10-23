@@ -59,6 +59,8 @@
     [Parameter] public string Slug { get; set; } = "";
     [Parameter] public int TicketId { get; set; }
     [Parameter] public EventCallback OnDecisionTaken { get; set; }
+    [Parameter] public EventCallback OnHistoryChanged { get; set; }
+    private string? _historyKey;
     private JevRoutingProposal? _proposal;
     private KittyClaw.Core.Models.ColumnProcessor? _processor;
     private Dictionary<int, string> _columnNames = [];
@@ -105,6 +107,11 @@
             columns.FirstOrDefault(c => c.Id == ticket?.ColumnId)?.Role is not (ColumnRole.Success or ColumnRole.Failure);
         _columnNames = columns.ToDictionary(c => c.Id, c => c.Name);
         var decisions = await Decisions.ListAsync(Slug, TicketId, _stop.Token);
+        var history = await Qualification.GetPostRunAsync(Slug, TicketId, _stop.Token);
+        var historyKey = $"{Slug}:{TicketId}:" + string.Join(";", history.Select(JevDecisionStore.ProposalId).Order()) +
+            ":" + string.Join(";", decisions.Select(d => $"{d.ProposalId}:{d.DecidedAt:O}").Order());
+        var historyChanged = _historyKey != historyKey;
+        _historyKey = historyKey;
         var proposal = await Qualification.GetAsync(Slug, TicketId, _stop.Token);
         var feedback = ticket is not null && _processor is not null ? JevQualificationService.RejectionFeedback(decisions, _processor, ticket) : [];
         _contextKey = ticket is not null && _processor is not null
@@ -115,6 +122,7 @@
             proposal.Fingerprint == JevQualificationService.Fingerprint(_processor, ticket, columns, feedback.Count > 0 ? feedback : null, proposal.RoutingResult)
                 ? proposal : null;
         if (notifyColumnChanges && moved && !_stop.IsCancellationRequested) await OnDecisionTaken.InvokeAsync();
+        else if (notifyColumnChanges && historyChanged && !_stop.IsCancellationRequested) await OnHistoryChanged.InvokeAsync();
     }
     private async Task RecommendAsync()
     {

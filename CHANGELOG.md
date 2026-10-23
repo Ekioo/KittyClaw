@@ -33,6 +33,9 @@ Tickets gain acceptance criteria and optional processor assessments. JEV recomme
 - Repair audited ticket-transfer, budget, and dashboard-worktree defects.
 - Complete localization across supported languages and align the API and MCP documentation with the implemented endpoints and tools.
 - Recognize root-relative ticket cover images consistently on Windows and Linux.
+- Commit native processor-memory changes immediately, including replay repairs and writes without new lessons, while preserving unrelated staged work.
+- Preserve new-instruction drafts during server refreshes and asynchronous submissions, and avoid server keydown events for ordinary typing.
+- Refresh the ticket timeline when delayed JEV observations or routing decisions arrive.
 
 ---
 

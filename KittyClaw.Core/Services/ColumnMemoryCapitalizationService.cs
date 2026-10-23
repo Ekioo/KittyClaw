@@ -19,13 +19,11 @@ public class ColumnMemoryCapitalizationService(ProjectService projects, DurableW
         var normalized = (lessons ?? [])
             .Select(Normalize).Where(x => x.Length >= 12)
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        if (normalized.Count == 0)
-            return new(MemoryCapitalizationStatus.NoChange, 0);
-
         var project = await projects.GetProjectAsync(projectSlug);
         if (project is null) return new(MemoryCapitalizationStatus.Failed, 0, $"Project '{projectSlug}' not found.");
         var relativeMemoryDir = Path.Combine(".agents", "processors", $"column-{columnId}", "memory");
         var root = projects.ResolveWorkspacePath(project);
+        await ProcessorMemoryGit.CommitAsync(root, columnId, cancellationToken);
         DurableWriteRoute? route = null;
         if (durableWrites is not null && project.WorktreesEnabled)
         {
@@ -37,10 +35,28 @@ public class ColumnMemoryCapitalizationService(ProjectService projects, DurableW
         var topicPath = Path.Combine(memoryDir, "pipeline-lessons.md");
         var indexPath = Path.Combine(memoryDir, "MEMORY.md");
         var marker = $"<!-- checkpoint:{checkpointId} -->";
+        var routeFinalized = false;
+
+        async Task<MemoryCapitalizationResult> PersistAsync(MemoryCapitalizationStatus status, int added)
+        {
+            if (route?.Kind == DurableWriteKind.Maintenance && durableWrites is not null)
+            {
+                routeFinalized = true;
+                var validation = await durableWrites.CommitAndQueueAsync(projectSlug, route,
+                    $"chore(memory): capitalize column {columnId} lessons", cancellationToken);
+                if (validation.Status != DurableWriteValidationStatus.Ready)
+                    return new(MemoryCapitalizationStatus.Failed, 0,
+                        validation.Error ?? "Durable memory changes require review before integration.");
+            }
+            else await ProcessorMemoryGit.CommitAsync(root, columnId, cancellationToken);
+            return new(status, added);
+        }
 
         await WriteLock.WaitAsync(cancellationToken);
         try
         {
+            if (normalized.Count == 0)
+                return await PersistAsync(MemoryCapitalizationStatus.NoChange, 0);
             Directory.CreateDirectory(memoryDir);
             var existing = File.Exists(topicPath) ? await File.ReadAllTextAsync(topicPath, cancellationToken) : "";
             if (existing.Contains(marker, StringComparison.Ordinal))
@@ -49,14 +65,14 @@ public class ColumnMemoryCapitalizationService(ProjectService projects, DurableW
                 // but before replacing the injectable index, so every replay repairs the derived
                 // index before declaring the checkpoint complete.
                 await WriteIndexAsync(indexPath, ParseEntries(existing), cancellationToken);
-                return new(MemoryCapitalizationStatus.Succeeded, 0);
+                return await PersistAsync(MemoryCapitalizationStatus.Succeeded, 0);
             }
 
             var entries = ParseEntries(existing);
             var known = entries.Select(e => e.Text).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var added = normalized.Where(known.Add).Select(text => new Lesson(checkpointId, text)).ToList();
             if (added.Count == 0)
-                return new(MemoryCapitalizationStatus.NoChange, 0);
+                return await PersistAsync(MemoryCapitalizationStatus.NoChange, 0);
             entries.AddRange(added);
             entries = entries.TakeLast(MaximumLessons).ToList();
 
@@ -65,21 +81,18 @@ public class ColumnMemoryCapitalizationService(ProjectService projects, DurableW
                 topic.AppendLine($"<!-- checkpoint:{entry.Checkpoint} -->\n- {entry.Text}\n");
             await WriteAtomicallyAsync(topicPath, topic.ToString(), cancellationToken);
             await WriteIndexAsync(indexPath, entries, cancellationToken);
-            if (route?.Kind == DurableWriteKind.Maintenance && durableWrites is not null)
-            {
-                var validation = await durableWrites.CommitAndQueueAsync(projectSlug, route,
-                    $"chore(memory): capitalize column {columnId} lessons", cancellationToken);
-                if (validation.Status != DurableWriteValidationStatus.Ready)
-                    return new(MemoryCapitalizationStatus.Failed, 0,
-                        validation.Error ?? "Durable memory changes require review before integration.");
-            }
-            return new(MemoryCapitalizationStatus.Succeeded, added.Count);
+            return await PersistAsync(MemoryCapitalizationStatus.Succeeded, added.Count);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             return new(MemoryCapitalizationStatus.Failed, 0, ex.Message);
         }
-        finally { WriteLock.Release(); }
+        finally
+        {
+            WriteLock.Release();
+            if (route is not null && !routeFinalized && durableWrites is not null)
+                await durableWrites.PreserveExecutionAsync(projectSlug, route, "Processor memory write interrupted before commit.");
+        }
     }
 
     private static string Normalize(string value) =>
