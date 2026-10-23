@@ -108,8 +108,8 @@ public sealed class JevPostRunObservationTests
             if (questions.EnumerateObject().Count() > 1)
             {
                 var answers = JsonSerializer.SerializeToNode(KittyClaw.Core.Tests.Helpers.JevResponseFixture.Answers(selected))!;
-                answers["routing"] = JsonSerializer.SerializeToNode(new { type = "choice", choice = selected, confidence = 1.0,
-                    probabilities = options.ToDictionary(k => k, k => k == selected ? 1.0 : 0.0) });
+                answers["routing"] = JsonSerializer.SerializeToNode(new { type = "choice", choice = "none", confidence = 1.0,
+                    probabilities = options.ToDictionary(k => k, k => k == "none" ? 1.0 : 0.0) });
                 return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { model = "jev-owner-fixture", answers }) };
             }
             Count++;
