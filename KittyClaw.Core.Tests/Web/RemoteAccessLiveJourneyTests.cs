@@ -77,7 +77,7 @@ public sealed class RemoteAccessLiveJourneyTests(ITestOutputHelper output)
             await owner.GetByRole(AriaRole.Checkbox).CheckAsync();
             await owner.GetByRole(AriaRole.Button, new() { Name = "Activate Internet access" }).ClickAsync();
             await Expect(owner.GetByText("Your address is reserved.", new() { Exact = false })).ToBeVisibleAsync(new() { Timeout = 100000 });
-            publicUrl = await owner.Locator("a[href^='https://'][href$='.kittyclaw.dev']").GetAttributeAsync("href");
+            publicUrl = await owner.Locator("a[href^='https://'][href$='.kittyclaw.dev']").First.GetAttributeAsync("href");
             Assert.Equal($"https://{requestedSubdomain}.kittyclaw.dev", publicUrl);
             var protection = DataProtectionProvider.Create(new DirectoryInfo(Path.Combine(dataDir, "network-keys")), options =>
             { if (OperatingSystem.IsWindows()) options.ProtectKeysWithDpapi(); });
@@ -151,7 +151,7 @@ public sealed class RemoteAccessLiveJourneyTests(ITestOutputHelper output)
             }
             await owner.GetByRole(AriaRole.Checkbox).CheckAsync();
             await owner.GetByRole(AriaRole.Button, new() { Name = "Resume Internet access" }).ClickAsync();
-            await Expect(owner.Locator("a[href^='https://'][href$='.kittyclaw.dev']")).ToHaveAttributeAsync("href", publicUrl!);
+            await Expect(owner.Locator("a[href^='https://'][href$='.kittyclaw.dev']").First).ToHaveAttributeAsync("href", publicUrl!);
             await WaitUntilAsync(async () => (await localHttp.GetStringAsync(local + "/remote-setup")).Contains("Connected to Cloudflare."), TimeSpan.FromMinutes(2));
             using (var oldSession = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }))
             {

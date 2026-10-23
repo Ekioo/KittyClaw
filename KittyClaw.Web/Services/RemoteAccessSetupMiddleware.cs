@@ -1,7 +1,6 @@
 using System.Net;
 using KittyClaw.Core.Services;
 using Microsoft.AspNetCore.Antiforgery;
-using QRCoder;
 
 namespace KittyClaw.Web.Services;
 
@@ -44,9 +43,7 @@ public sealed class RemoteAccessSetupMiddleware(RequestDelegate next)
         if (snapshot.Url is { } url)
         {
             content += $"<p><a href='{E(url)}' target='_blank' rel='noreferrer'>{E(url)}</a></p>";
-            using var data = QRCodeGenerator.GenerateQrCode(url, QRCodeGenerator.ECCLevel.Q);
-            using var qr = new PngByteQRCode(data);
-            content += $"<p><img width='220' height='220' src='data:image/png;base64,{Convert.ToBase64String(qr.GetGraphic(5))}' alt='{E(l["RemoteUrlQr"])}'></p>";
+            content += $"<figure style='margin:24px 0'><a href='{E(url)}' target='_blank' rel='noopener noreferrer'><img width='256' height='256' style='display:block;max-width:100%;height:auto;background:white;border-radius:8px' src='{RemoteAccessQrCode.DataUrl(url)}' alt='{E(l["RemoteUrlQr"])}' data-testid='remote-url-qr'></a><figcaption><h2 style='font-size:1.1rem'>{E(l["RemoteQrTitle"])}</h2><p>{E(l["RemoteQrInstructions"])}</p><p>{E(l["RemoteQrAuthentication"])}</p></figcaption></figure>";
         }
         if (!access.Enabled)
             content += $"<p>{E(l["RemoteAuthenticationRequired"])}</p><p><a href='/network-setup'>{E(l["NetworkConfigure"])}</a></p>";

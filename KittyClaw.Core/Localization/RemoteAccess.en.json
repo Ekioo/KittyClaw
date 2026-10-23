@@ -32,5 +32,8 @@
   "RemoteNameHint": "For example, my-office gives my-office.kittyclaw.dev. Use 3–32 letters, digits or hyphens. Leave blank for an automatic name. The reserved address is kept when you stop or resume access. The name cannot be changed after activation.",
   "RemoteNameInvalid": "Choose a valid, available name with 3–32 letters, digits or hyphens. Service names and prefixes kc- and xn-- are reserved.",
   "RemoteNameUnavailable": "This address is already reserved or in use. Choose another name; your invitation has not been consumed.",
-  "RemoteNameLocked": "This installation already has a name pending registration. Retry with the saved name; assigned addresses cannot be renamed."
+  "RemoteNameLocked": "This installation already has a name pending registration. Retry with the saved name; assigned addresses cannot be renamed.",
+  "RemoteQrTitle": "Open on your smartphone",
+  "RemoteQrInstructions": "Open the camera on your smartphone, point it at this QR code, then tap the link to open KittyClaw.",
+  "RemoteQrAuthentication": "Then enter the code from your authenticator app to sign in."
 }

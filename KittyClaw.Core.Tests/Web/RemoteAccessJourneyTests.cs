@@ -40,6 +40,7 @@ public sealed class RemoteAccessJourneyTests
             var page = await browser.NewPageAsync(new() { ViewportSize = new() { Width = 1200, Height = 1000 } });
             await page.GotoAsync(baseUrl + "/settings");
             await Expect(page.GetByTestId("remote-global-settings")).ToBeVisibleAsync();
+            await Expect(page.GetByTestId("remote-url-qr")).ToHaveCountAsync(0);
             await page.GetByText("Configure Internet access", new() { Exact = true }).ClickAsync();
             await Expect(page.GetByText("First configure an authenticator", new() { Exact = false })).ToBeVisibleAsync();
             await page.GetByText("Configure network access", new() { Exact = true }).ClickAsync();
@@ -51,15 +52,21 @@ public sealed class RemoteAccessJourneyTests
             await page.GetByRole(AriaRole.Button, new() { Name = "Validate code and enable network access" }).ClickAsync();
             await Expect(page.GetByText("SHA-256:", new() { Exact = false })).ToBeVisibleAsync();
             await page.GotoAsync(baseUrl + "/remote-setup");
+            await page.GetByLabel("Public address name (optional)").FillAsync("my-office");
             await page.GetByLabel("Private beta invitation code").FillAsync(new string('e', 64));
             await page.GetByRole(AriaRole.Checkbox).CheckAsync();
             await page.GetByRole(AriaRole.Button, new() { Name = "Activate Internet access" }).ClickAsync();
             await Expect(page.GetByText("Your address is reserved.", new() { Exact = false })).ToBeVisibleAsync();
-            var publicLink = page.Locator("a[href^='https://kc-']");
+            var publicLink = page.Locator("a[href^='https://'][href$='.kittyclaw.dev']").First;
             var url = await publicLink.GetAttributeAsync("href");
-            Assert.NotNull(url);
+            Assert.Equal("https://my-office.kittyclaw.dev", url);
+            await Expect(page.GetByTestId("remote-url-qr")).ToBeVisibleAsync();
+            await Expect(page.GetByText("Open the camera on your smartphone", new() { Exact = false })).ToBeVisibleAsync();
+            var setupQr = await page.GetByTestId("remote-url-qr").GetAttributeAsync("src");
+            Assert.StartsWith("data:image/png;base64,", setupQr);
             var screenshots = Path.Combine(RepoRoot(), ".artifacts", "remote-access-ui");
             Directory.CreateDirectory(screenshots);
+            await File.WriteAllBytesAsync(Path.Combine(screenshots, "setup-qr.png"), Convert.FromBase64String(setupQr!["data:image/png;base64,".Length..]));
             await page.ScreenshotAsync(new() { Path = Path.Combine(screenshots, "desktop.png"), FullPage = true });
             await page.SetViewportSizeAsync(390, 844);
             await page.ScreenshotAsync(new() { Path = Path.Combine(screenshots, "mobile.png"), FullPage = true });
@@ -69,7 +76,21 @@ public sealed class RemoteAccessJourneyTests
             await Expect(page.GetByLabel("Private beta invitation code")).ToHaveCountAsync(0);
             await page.GetByRole(AriaRole.Checkbox).CheckAsync();
             await page.GetByRole(AriaRole.Button, new() { Name = "Resume Internet access" }).ClickAsync();
-            await Expect(page.Locator("a[href^='https://kc-']")).ToHaveAttributeAsync("href", url!);
+            await Expect(page.Locator("a[href^='https://'][href$='.kittyclaw.dev']").First).ToHaveAttributeAsync("href", url!);
+            await Expect(page.GetByTestId("remote-url-qr")).ToHaveAttributeAsync("src", setupQr!);
+            await page.GotoAsync(baseUrl + "/settings");
+            var qrCard = page.GetByTestId("remote-access-qr");
+            await Expect(qrCard).ToBeVisibleAsync();
+            await Expect(qrCard.GetByRole(AriaRole.Link, new() { Name = url, Exact = true })).ToHaveAttributeAsync("href", url!);
+            await Expect(qrCard.GetByTestId("remote-url-qr")).ToHaveAttributeAsync("src", setupQr!);
+            await Expect(page.GetByTestId("jev-api-key")).ToBeEnabledAsync();
+            await page.GetByRole(AriaRole.Combobox, new() { Name = "Language", Exact = true }).SelectOptionAsync("fr");
+            await Expect(qrCard).ToContainTextAsync("Ouvrir sur ton smartphone");
+            await page.ScreenshotAsync(new() { Path = Path.Combine(screenshots, "qr-settings-mobile.png"), FullPage = true });
+            Assert.True(await page.EvaluateAsync<bool>("document.documentElement.scrollWidth <= window.innerWidth"));
+            await page.GetByTestId("remote-url-qr").ScreenshotAsync(new() { Path = Path.Combine(screenshots, "settings-qr-rendered.png") });
+            await page.SetViewportSizeAsync(1200, 1000);
+            await page.ScreenshotAsync(new() { Path = Path.Combine(screenshots, "qr-settings-desktop.png"), FullPage = true });
             var content = await page.ContentAsync();
             Assert.DoesNotContain(factory.Services.GetRequiredService<RemoteAccessStore>().Identity!.Credential, content);
         }
@@ -104,7 +125,7 @@ public sealed class RemoteAccessJourneyTests
             Assert.Equal("https://remote-api.kittyclaw.dev/v1/instances", request.RequestUri!.ToString());
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Accepted) { Content = JsonContent.Create(new
             {
-                instanceId = store.Identity!.InstanceId, url = $"https://kc-{store.Identity.InstanceId}.kittyclaw.dev",
+                instanceId = store.Identity!.InstanceId, url = $"https://{RemoteAccessName.Hostname(store.Identity)}",
                 state = "pending", originPort = store.Identity.Port
             }) });
         }

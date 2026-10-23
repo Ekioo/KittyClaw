@@ -51,7 +51,12 @@ installation keeps the dedicated origin bound and closed so resume is immediate.
 Disabling the authenticator cancels the connector and prevents startup or resume.
 
 The setup page displays the public URL and its QR code, state, error explanation,
-and a refresh link. It never renders the installation credential or tunnel token.
+and a refresh link. Global settings also show the public address and a locally
+generated QR code after registration, with phone-camera instructions and the
+required authenticator step. The QR payload contains only the public HTTPS URL;
+no invitation, installation credential or session is embedded. Paused access keeps
+the same QR code and displays the paused state. No external QR service is called.
+The setup page never renders the installation credential or tunnel token.
 
 ## Components and configuration
 

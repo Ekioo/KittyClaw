@@ -32,5 +32,8 @@
   "RemoteNameHint": "Par exemple, mon-bureau donne mon-bureau.kittyclaw.dev. Utilise 3 à 32 lettres, chiffres ou tirets. Laisse vide pour un nom automatique. L’adresse réservée est conservée à l’arrêt et à la reprise. Le nom ne pourra pas être modifié après activation.",
   "RemoteNameInvalid": "Choisis un nom valide et disponible de 3 à 32 lettres, chiffres ou tirets. Les noms de service et les préfixes kc- et xn-- sont réservés.",
   "RemoteNameUnavailable": "Cette adresse est déjà réservée ou utilisée. Choisis un autre nom ; ton invitation n’a pas été consommée.",
-  "RemoteNameLocked": "Cette installation a déjà un nom en cours d’enregistrement. Réessaie avec le nom sauvegardé ; une adresse attribuée ne peut pas être renommée."
+  "RemoteNameLocked": "Cette installation a déjà un nom en cours d’enregistrement. Réessaie avec le nom sauvegardé ; une adresse attribuée ne peut pas être renommée.",
+  "RemoteQrTitle": "Ouvrir sur ton smartphone",
+  "RemoteQrInstructions": "Ouvre l’appareil photo de ton smartphone, vise ce QR code, puis touche le lien pour ouvrir KittyClaw.",
+  "RemoteQrAuthentication": "Saisis ensuite le code de ton application d’authentification pour te connecter."
 }

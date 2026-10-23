@@ -156,3 +156,11 @@
 .provider-readiness-card[data-testid="jev-settings"] .settings-row { flex-wrap: wrap; }
 .provider-readiness-card[data-testid="jev-settings"] label { display: flex; flex-direction: column; gap: 0.4rem; }
 .provider-readiness-card[data-testid="jev-settings"] .settings-input { width: 100%; min-width: 0; box-sizing: border-box; }
+
+/* Public URL handoff to a phone camera. */
+.remote-access-qr { display: flex; flex-wrap: wrap; align-items: center; gap: 1.25rem; margin: 1rem 0; }
+.remote-access-qr-image { display: block; flex: 0 1 256px; max-width: 100%; padding: 8px; box-sizing: border-box; border-radius: 8px; background: #fff; }
+.remote-access-qr-image img { display: block; width: 100%; max-width: 256px; height: auto; image-rendering: pixelated; }
+.remote-access-qr figcaption { flex: 1 1 220px; min-width: 0; }
+.remote-access-qr figcaption .settings-hint { margin: 0.65rem 0; }
+.remote-access-url { display: inline-block; max-width: 100%; overflow-wrap: anywhere; color: var(--accent, #3ecf8e); }
