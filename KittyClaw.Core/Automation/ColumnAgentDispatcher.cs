@@ -53,6 +53,7 @@ public sealed class ColumnAgentDispatcher(
             Target = target,
             FallbackTarget = fallback,
             SessionScope = "column-processor",
+            SessionGeneration = $"{ticket.PipelineId}:{processor.ColumnId}:{ticket.ColumnVisit}",
             TriggerOwnerCommentId = execution.TriggerOwnerCommentId,
             RetryOnResumeFailure = true,
             PresetRunId = execution.Id,

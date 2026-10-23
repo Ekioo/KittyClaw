@@ -129,6 +129,34 @@ public class TicketPromptSpotlightTests
         Assert.Contains("triggerOwnerCommentId", prompt);
     }
 
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(77, true)]
+    [InlineData(null, false)]
+    [InlineData(77, false)]
+    public async Task ColumnProcessorDispatch_IncludesCurrentProfileAndTicketContext(int? ownerCommentId, bool isResume)
+    {
+        using var tmp = new TempDir();
+        var ctx = new AgentRunContext
+        {
+            ProjectSlug = "spotlight-test",
+            WorkspacePath = tmp.Path,
+            AgentName = "column-2",
+            SkillFile = "(column processor)",
+            TicketId = 33,
+            SessionScope = "column-processor",
+            TriggerOwnerCommentId = ownerCommentId,
+            ExtraContext = "Current ticket acceptanceCriteria: []",
+        };
+        const string updatedProfile = "Create missing native acceptance criteria before routing. Current result contract.";
+
+        var prompt = await AgentRunner.BuildPromptAsync(ctx, updatedProfile, isResume, CancellationToken.None);
+
+        Assert.Contains(updatedProfile, prompt);
+        if (isResume) Assert.Contains("supersedes earlier profile instructions", prompt);
+        Assert.Contains(ctx.ExtraContext, prompt);
+    }
+
     [Fact]
     public void SpotlightTicketField_StripsEmbeddedDelimiters()
     {

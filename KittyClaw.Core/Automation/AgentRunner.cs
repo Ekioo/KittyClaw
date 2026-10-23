@@ -110,6 +110,7 @@ public sealed class AgentRunContext
         InlineSkillContent = InlineSkillContent,
         TriggerOwnerCommentId = TriggerOwnerCommentId,
         SessionScope = SessionScope,
+        SessionGeneration = SessionGeneration,
         // A replay can race the provider's session finalization. Preserve the normal
         // expired-resume recovery so a late steer starts a fresh turn instead of changing
         // an otherwise successful run to Failed.
@@ -148,6 +149,7 @@ public sealed class AgentRunContext
         InlineSkillContent = InlineSkillContent,
         TriggerOwnerCommentId = TriggerOwnerCommentId,
         SessionScope = SessionScope,
+        SessionGeneration = SessionGeneration,
         RetryOnResumeFailure = RetryOnResumeFailure,
         PersistSession = PersistSession,
         OnEventHook = OnEventHook,
@@ -161,6 +163,8 @@ public sealed class AgentRunContext
 
     /// <summary>Optional namespace prefix for the SessionRegistry key (e.g. "chat" → "chat:agent:sweep"). Keeps chat sessions isolated from automation sessions for the same agent.</summary>
     public string? SessionScope { get; init; }
+    /// <summary>Durable workflow visit identity; sessions are reused only within this visit.</summary>
+    public string? SessionGeneration { get; init; }
 
     /// <summary>If true and the run was a --resume that produced no assistant output and exited non-zero, the runner will silently invalidate the session and respawn with a fresh one in the same AgentRun.</summary>
     public bool RetryOnResumeFailure { get; init; }
@@ -488,7 +492,7 @@ public sealed class AgentRunner
         // sessions don't collide with automation sessions for the same agent. Provider prefixes
         // prevent a session id from one CLI being resumed by another.
         var backend = AgentCliBackend.For(ctx.Target.Provider);
-        var scopedAgent = SessionScopeKey(ctx.AgentName, ctx.SessionScope, ctx.Target.Provider);
+        var scopedAgent = SessionScopeKey(ctx.AgentName, ctx.SessionScope, ctx.Target.Provider, ctx.SessionGeneration);
         var existingSessionId = ctx.PersistSession
             ? _sessions.GetSessionId(ctx.WorkspacePath, scopedAgent, ctx.TicketId)
             : null;
@@ -606,7 +610,7 @@ public sealed class AgentRunner
                 var fallbackCtx = ctx.WithFallback();
                 replayBaseContext = fallbackCtx;
                 var fallbackScoped = SessionScopeKey(
-                    fallbackCtx.AgentName, fallbackCtx.SessionScope, fallbackCtx.Target.Provider);
+                    fallbackCtx.AgentName, fallbackCtx.SessionScope, fallbackCtx.Target.Provider, fallbackCtx.SessionGeneration);
                 replayScopedAgent = fallbackScoped;
                 sessionId = Guid.NewGuid().ToString();
                 var fallbackBackend = AgentCliBackend.For(fallbackCtx.Target.Provider);
@@ -619,7 +623,7 @@ public sealed class AgentRunner
                 attempt = await SpawnAndWaitAsync(fallbackCtx, run, skillContent, sessionId, isResume: false, ct);
                 if (attempt.Cancelled) return run;
                 PersistDiscoveredSession(fallbackCtx,
-                    SessionScopeKey(fallbackCtx.AgentName, fallbackCtx.SessionScope, fallbackCtx.Target.Provider), run);
+                    SessionScopeKey(fallbackCtx.AgentName, fallbackCtx.SessionScope, fallbackCtx.Target.Provider, fallbackCtx.SessionGeneration), run);
                 sessionId = ResolveEffectiveSessionId(fallbackCtx.Target.Provider, sessionId, run.SessionId);
             }
 
@@ -683,6 +687,7 @@ public sealed class AgentRunner
                     ConcurrencyGroup = ctx.ConcurrencyGroup,
                     BoundaryEnforcement = ctx.BoundaryEnforcement,
                     SessionScope = ctx.SessionScope,
+                    SessionGeneration = ctx.SessionGeneration,
                     TicketId = ctx.TicketId,
                     TicketTitle = ctx.TicketTitle,
                     TicketStatus = ctx.TicketStatus,
@@ -1367,10 +1372,11 @@ public sealed class AgentRunner
     /// <summary>
     /// Builds the SessionRegistry key for a dispatch, namespaced by CLI provider.
     /// </summary>
-    public static string SessionScopeKey(string agentName, string? sessionScope, CliProvider provider)
+    public static string SessionScopeKey(string agentName, string? sessionScope, CliProvider provider, string? generation = null)
     {
         var scoped = sessionScope is null ? agentName : $"{sessionScope}:{agentName}";
-        return AgentCliBackend.For(provider).SessionPrefix + scoped;
+        return AgentCliBackend.For(provider).SessionPrefix + scoped +
+            (generation is null ? "" : $":visit:{generation}");
     }
 
     // How long to wait for stdout/stderr to reach EOF after the claude process exits before
@@ -1457,7 +1463,11 @@ public sealed class AgentRunner
         {
             if (ctx.SessionScope != "column-processor")
                 return $"The owner has posted feedback on ticket #{ctx.TicketId}: {SpotlightTicketField(ctx.TicketTitle)}\n{TicketUntrustedNotice}\nRead ALL owner comments on this ticket and address them.";
-            var resumeContext = string.IsNullOrWhiteSpace(ctx.ExtraContext) ? "" : $"\n\n{ctx.ExtraContext}";
+            // A persisted session retains its old profile. Always supply the current
+            // configuration so edits to missions, skills and result contracts take effect.
+            var resumeContext = $"\n\n## Current column profile (supersedes earlier profile instructions)\n{skillContent}";
+            if (!string.IsNullOrWhiteSpace(ctx.ExtraContext))
+                resumeContext += $"\n\n{ctx.ExtraContext}";
             if (ctx.TriggerOwnerCommentId is int ownerCommentId)
                 return $"The owner has posted feedback (comment #{ownerCommentId}) on ticket #{ctx.TicketId}: {SpotlightTicketField(ctx.TicketTitle)}\n{TicketUntrustedNotice}\nRead ALL owner comments on this ticket and address them.{resumeContext}";
             return $"Execution resumed on ticket #{ctx.TicketId}: {SpotlightTicketField(ctx.TicketTitle)}\n{TicketUntrustedNotice}\nNo owner feedback triggered this resume. Re-read the current ticket state via the API, finish the column mission for this ticket, and return the result contract JSON from the column profile.{resumeContext}";
@@ -1466,7 +1476,9 @@ public sealed class AgentRunner
         var prefix = await BuildPreambleAsync(ctx, uiLanguage, ct);
 
         if (ctx.TicketId is not null && ctx.SessionScope != "chat")
-            return $"{prefix}{skillContent}\n\n{TicketUntrustedNotice}\n\nFocus on ticket #{ctx.TicketId}: {SpotlightTicketField(ctx.TicketTitle)}";
+            return $"{prefix}{skillContent}\n\n{TicketUntrustedNotice}\n\nFocus on ticket #{ctx.TicketId}: {SpotlightTicketField(ctx.TicketTitle)}" +
+                (ctx.SessionScope == "column-processor" && !string.IsNullOrWhiteSpace(ctx.ExtraContext)
+                    ? $"\n\n{ctx.ExtraContext}" : "");
         var conversationHandoff = string.IsNullOrWhiteSpace(ctx.ConversationHandoff)
             ? ""
             : $"\n\n{ctx.ConversationHandoff}";

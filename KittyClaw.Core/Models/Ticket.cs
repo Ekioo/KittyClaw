@@ -7,6 +7,8 @@ public class Ticket
     public int PipelineId { get; set; }
     /// <summary>Stable column identity. <see cref="Status"/> remains synchronized for legacy clients.</summary>
     public int? ColumnId { get; set; }
+    /// <summary>Incremented by SQLite on every column change, including away-and-back moves.</summary>
+    public long ColumnVisit { get; set; }
     public required string Title { get; set; }
     public string Description { get; set; } = "";
     [System.Text.Json.Serialization.JsonIgnore]
