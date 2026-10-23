@@ -1,0 +1,9 @@
+{
+  "RecoveryMemoryPending": "Mémoire à enregistrer",
+  "RecoveryRetryMemory": "Réessayer la mémoire seule",
+  "RecoveryFailed": "Traitement en échec",
+  "RecoveryRetrying": "Nouvelle tentative prévue",
+  "RecoveryWaitingForChildren": "En attente des sous-tickets",
+  "RecoveryRetry": "Réessayer le traitement",
+  "RecoveryRelease": "Libérer la prise en charge et réévaluer"
+}

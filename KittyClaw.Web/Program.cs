@@ -6,6 +6,9 @@ using KittyClaw.Core.Services;
 using KittyClaw.Web.Api;
 using KittyClaw.Web.Components;
 using Velopack;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HostFiltering;
+using KittyClaw.Web.Services;
 
 // Installer hooks must exit before the web host or any data services are created.
 // Applying updates is explicit, so a second launch cannot update a running server.
@@ -59,6 +62,30 @@ if (!Directory.Exists(dataDir) && Directory.Exists(legacyDataDir))
     Directory.Move(legacyDataDir, dataDir);
 }
 var appSettings = new KittyClaw.Core.Services.AppSettingsService(dataDir);
+var webProtection = builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(dataDir, "web-keys")));
+if (OperatingSystem.IsWindows()) webProtection.ProtectKeysWithDpapi();
+var networkProtection = DataProtectionProvider.Create(new DirectoryInfo(Path.Combine(dataDir, "network-keys")), options =>
+{
+    if (OperatingSystem.IsWindows()) options.ProtectKeysWithDpapi();
+});
+var networkAccess = new NetworkAccessService(dataDir, networkProtection,
+    builder.Configuration.GetValue("NetworkAccess:HttpsPort", 5233));
+builder.Services.AddSingleton(networkAccess);
+if (networkAccess.Enabled)
+{
+    var certificate = networkAccess.Certificate();
+    builder.WebHost.ConfigureKestrel(options => options.ConfigureHttpsDefaults(https => https.ServerCertificate = certificate));
+    var urls = builder.Configuration["urls"] ?? "http://localhost:5230";
+    builder.WebHost.UseUrls($"{urls};https://*:{networkAccess.Port}");
+    // Keep DNS-rebinding protection: allow concrete machine names and interface addresses only.
+    builder.Services.PostConfigure<HostFilteringOptions>(options =>
+    {
+        options.AllowedHosts = new[] { "localhost", "127.0.0.1", "[::1]", Environment.MachineName }
+            .Concat(networkAccess.Addresses.Select(address => address.ToString())).ToArray();
+    });
+    networkAccess.Listening = true;
+}
 builder.Services.AddSingleton(appSettings);
 builder.Services.AddSingleton(new KittyClaw.Core.Services.LocalizationService(appSettings));
 var projectSecretVault = new ProjectSecretVault(dataDir);
@@ -241,6 +268,9 @@ builder.Services.AddRazorComponents()
 
 var app = builder.Build();
 
+// Gate all remote traffic, including uploads, APIs, MCP and Blazor connections.
+app.UseMiddleware<NetworkAccessMiddleware>();
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
@@ -319,6 +349,16 @@ if (app.Environment.IsDevelopment())
 app.MapGet("/api/docs", async (HttpContext ctx) =>
 {
     var baseUrl = $"{ctx.Request.Scheme}://{ctx.Request.Host}";
+    // The self-call is local automation, not a second remote browser session.
+    if (networkAccess.Enabled && !NetworkAccessMiddleware.IsLocal(ctx))
+    {
+        var httpListener = app.Urls.FirstOrDefault(url => url.StartsWith("http://", StringComparison.OrdinalIgnoreCase));
+        if (httpListener is not null)
+        {
+            var listener = new Uri(httpListener.Replace("*", "localhost").Replace("+", "localhost"));
+            baseUrl = $"http://localhost:{listener.Port}";
+        }
+    }
     using var client = new HttpClient();
     var json = await client.GetStringAsync($"{baseUrl}/openapi/v1.json");
     using var doc = JsonDocument.Parse(json);

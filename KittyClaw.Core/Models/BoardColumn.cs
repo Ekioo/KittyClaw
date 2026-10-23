@@ -11,6 +11,8 @@ public class BoardColumn
     /// <summary>Zero disables the optional per-column capacity.</summary>
     public int MaxTickets { get; set; }
     public bool CapacityBlocking { get; set; }
+    public bool RequireAcceptanceCriteria { get; set; }
+    public bool RequireValidatedAcceptanceCriteria { get; set; }
     public int SortOrder { get; set; }
     public ColumnRole Role { get; set; } = ColumnRole.Normal;
     /// <summary>

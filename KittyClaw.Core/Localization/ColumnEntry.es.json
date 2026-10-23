@@ -1,0 +1,8 @@
+{
+  "ColumnRequireAcceptanceCriteria": "Exigir al menos un criterio de aceptación al entrar",
+  "ColumnRequireAcceptanceCriteriaHelp": "Los tickets deben tener al menos un criterio de aceptación para entrar en esta columna, incluso al crearlos. Los tickets existentes no se ven afectados.",
+  "ColumnAcceptanceCriteriaRequiredError": "Esta columna exige al menos un criterio de aceptación. Añada uno al ticket antes de moverlo aquí.",
+  "ColumnRequireValidatedAcceptanceCriteria": "Exigir todos los criterios de aceptación validados al entrar",
+  "ColumnRequireValidatedAcceptanceCriteriaHelp": "Exige al menos un criterio y el estado PASS para todos. FAIL, PARTIAL y los criterios sin evaluar bloquean la entrada. Los tickets existentes no se ven afectados.",
+  "ColumnAcceptanceCriteriaNotValidatedError": "Esta columna exige al menos un criterio de aceptación y todos validados (PASS). Valídelos antes de mover el ticket aquí."
+}

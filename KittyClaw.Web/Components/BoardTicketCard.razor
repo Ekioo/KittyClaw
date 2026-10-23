@@ -58,6 +58,7 @@
     <button type="button" class="ticket-title ticket-open-btn" aria-label="@($"#{Ticket.Id} {Ticket.Title}")"
             @onclick="OnClickHandler" @onclick:stopPropagation>@Ticket.Title</button>
     <AutomationQueueSummary Slug="@Slug" TicketId="@Ticket.Id" Compact="true" />
+    <ColumnExecutionRecovery Slug="@Slug" TicketId="@Ticket.Id" />
     @if (Ticket.Labels.Count > 0)
     {
         <div class="label-list">

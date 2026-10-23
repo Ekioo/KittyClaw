@@ -181,6 +181,7 @@ public sealed class TicketWorktreeService(ProjectService projects, TicketService
                 UseShellExecute = false,
                 CreateNoWindow = true,
             };
+            startInfo.Environment["LC_ALL"] = "C";
             foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
             using var process = Process.Start(startInfo)
                 ?? throw new InvalidOperationException("Git process could not be started.");
@@ -213,6 +214,14 @@ public sealed class TicketWorktreeService(ProjectService projects, TicketService
 
         var rootTicketId = await ResolveRootTicketIdAsync(projectSlug, ticketId);
         var repositoryRoot = projects.ResolveRepositoryPath(project);
+        // A new project can enable worktrees before its workspace has a repository.
+        // Check ancestors too: Git supports both parent repositories and .git files.
+        // Existing metadata must still be inspected so corruption remains an error.
+        var repository = RunGit(repositoryRoot, ["rev-parse", "--git-dir"], throwOnError: false);
+        if (repository.ExitCode == 128
+            && repository.Error.Contains("not a git repository", StringComparison.Ordinal)
+            && !HasGitMetadata(repositoryRoot))
+            return null;
         var branch = $"ticket/{rootTicketId}";
         var repositoryName = Path.GetFileName(Path.TrimEndingDirectorySeparator(repositoryRoot));
         var parent = Directory.GetParent(repositoryRoot)?.FullName
@@ -235,4 +244,19 @@ public sealed class TicketWorktreeService(ProjectService projects, TicketService
     }
 
     private sealed record GitResult(int ExitCode, string Output, string Error);
+
+    private static bool HasGitMetadata(string path)
+    {
+        for (var directory = new DirectoryInfo(path); directory is not null; directory = directory.Parent)
+        {
+            try
+            {
+                File.GetAttributes(Path.Combine(directory.FullName, ".git"));
+                return true;
+            }
+            catch (FileNotFoundException) { }
+            catch (DirectoryNotFoundException) { }
+        }
+        return false;
+    }
 }

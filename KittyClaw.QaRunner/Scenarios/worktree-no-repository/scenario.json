@@ -1,0 +1,14 @@
+{
+  "setup": [
+    { "type": "createTemporaryDirectory", "saveAs": "workspace" },
+    { "type": "createProject", "name": "qa-worktree-no-repository", "workspacePath": "{workspace}" },
+    { "type": "createTicket", "project": "qa-worktree-no-repository", "title": "Ticket without Git", "status": "Backlog" }
+  ],
+  "actions": [
+    { "type": "navigate", "url": "/board/qa-worktree-no-repository/ticket/1" },
+    { "type": "wait", "ms": 1200 },
+    { "type": "assertCount", "selector": ".ticket-panel", "expected": "1" },
+    { "type": "assertCount", "selector": "[data-testid='ticket-worktree-error']", "expected": "0" },
+    { "type": "assertCount", "selector": ".worktree-summary", "expected": "0" }
+  ]
+}

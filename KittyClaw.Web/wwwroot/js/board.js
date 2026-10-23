@@ -1,5 +1,18 @@
 const _savedScrolls = {};
 
+// Measure rendered menus, including destinations loaded after opening them.
+window.fitBoardContextMenus = function () {
+    const margin = 8;
+    document.querySelectorAll('.column-context-menu').forEach(menu => {
+        const rect = menu.getBoundingClientRect();
+        const left = Math.max(margin, Math.min(rect.left, document.documentElement.clientWidth - rect.width - margin));
+        const top = Math.max(margin, Math.min(rect.top, window.innerHeight - rect.height - margin));
+        menu.style.left = `${left}px`;
+        menu.style.top = `${top}px`;
+    });
+};
+window.addEventListener('resize', window.fitBoardContextMenus);
+
 window.saveColumnScrollPositions = function () {
     document.querySelectorAll('.column-body').forEach((el, i) => {
         _savedScrolls[i] = el.scrollTop;

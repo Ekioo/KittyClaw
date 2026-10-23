@@ -9,5 +9,11 @@
   "CriterionNotEvaluated": "Não avaliado",
   "RemoveEvidence": "Remover evidência",
   "ProcessorEvaluateAcceptance": "Avaliar os critérios de aceitação do ticket",
-  "ProcessorEvaluateAcceptanceHelp": "Pedir a este processador que avalie os critérios relevantes do ticket e anexe evidências. Os resultados são salvos antes do roteamento. Desativado por padrão."
+  "ProcessorEvaluateAcceptanceHelp": "Pedir a este processador que avalie os critérios relevantes do ticket e anexe evidências. Os resultados são salvos antes do roteamento. Desativado por padrão.",
+  "CriterionValidated": "Validado",
+  "CriterionFailed": "Não validado",
+  "CriterionPartial": "Parcial",
+  "CriteriaValidatedCount": "{0} / {1} validados",
+  "CriteriaEmpty": "Nenhum critério ainda. Adicione as condições necessárias para validar este ticket.",
+  "CriterionEvidenceText": "Texto"
 }

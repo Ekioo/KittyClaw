@@ -32,6 +32,14 @@ public class TodoDbContext : DbContext
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
         try { return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken); }
+        catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("column_acceptance_criteria_not_validated") == true)
+        {
+            throw new InvalidOperationException("The destination column requires all acceptance criteria to be validated (PASS). Add at least one criterion and validate every criterion before moving the ticket here.", ex);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("column_acceptance_criteria_required") == true)
+        {
+            throw new InvalidOperationException("The destination column requires at least one acceptance criterion. Add a criterion in the ticket before moving it here.", ex);
+        }
         catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("column_capacity_reached") == true)
         {
             throw new InvalidOperationException("The destination column has reached its configured ticket limit. Choose another column or change its limit in column settings.", ex);

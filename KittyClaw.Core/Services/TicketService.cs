@@ -981,6 +981,8 @@ public class TicketService
             await atomicDecision(db, ticket);
         }
         ticket.UpdatedAt = DateTime.UtcNow;
+        if (destination is not null && db.Entry(ticket).Property(t => t.ColumnId).OriginalValue != ticket.ColumnId)
+            await ColumnExecutionService.SupersedeForManualMoveAsync(db, ticketId);
         await db.SaveChangesAsync();
         if (decisionTransaction is not null) await decisionTransaction.CommitAsync();
         // Signal AFTER commit: the engine can only ever observe the fully-written state.
@@ -1254,6 +1256,7 @@ public class TicketService
             });
         }
 
+        if (statusChanged) await ColumnExecutionService.SupersedeForManualMoveAsync(db, ticketId);
         await db.SaveChangesAsync();
         if (statusChanged)
             TicketStatusChanged?.Invoke(projectSlug, ticketId, oldStatus, newStatus);

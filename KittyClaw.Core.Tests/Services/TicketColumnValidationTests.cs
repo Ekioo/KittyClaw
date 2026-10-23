@@ -6,6 +6,99 @@ namespace KittyClaw.Core.Tests.Services;
 
 public sealed class TicketColumnValidationTests
 {
+    [Fact]
+    public async Task RequiredCriteria_RejectsAllEntryPaths_AndPreservesRejectedUpdate()
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("criteria-entry");
+        var slug = project.Slug;
+        var columns = new ColumnService(projects);
+        var tickets = new TicketService(projects, new MemberService(projects));
+        await columns.ListColumnsAsync(slug);
+        var destination = await columns.CreateColumnAsync(slug, "Protected", requireAcceptanceCriteria: true);
+        Assert.True((await columns.ListColumnsAsync(slug)).Single(c => c.Id == destination.Id).RequireAcceptanceCriteria);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => tickets.CreateTicketAsync(slug, "Rejected", status: destination.Name));
+        var ticket = await tickets.CreateTicketAsync(slug, "Work", status: "Todo", description: "- [ ] Markdown alone is insufficient");
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => tickets.MoveTicketAsync(slug, ticket.Id, destination.Name));
+        Assert.Contains("at least one acceptance criterion", error.Message);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => tickets.ReorderTicketAsync(slug, ticket.Id, destination.Name, 0));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => tickets.UpdateTicketAsync(slug, ticket.Id,
+            status: destination.Name, description: "Must roll back", comment: "Must not persist"));
+        var unchanged = (await tickets.GetTicketAsync(slug, ticket.Id))!;
+        Assert.Equal("Todo", unchanged.Status);
+        Assert.Equal("- [ ] Markdown alone is insufficient", unchanged.Description);
+        Assert.DoesNotContain(unchanged.Comments, c => c.Content == "Must not persist");
+        await tickets.SaveAcceptanceCriterionAsync(slug, ticket.Id, null, new SaveAcceptanceCriterionRequest("The output is correct"));
+        await tickets.MoveTicketAsync(slug, ticket.Id, destination.Name);
+        Assert.Equal(destination.Id, (await tickets.GetTicketAsync(slug, ticket.Id))!.ColumnId);
+        await columns.UpdateColumnAsync(slug, destination.Id, requireAcceptanceCriteria: false);
+        await tickets.CreateTicketAsync(slug, "Allowed again", status: destination.Name);
+    }
+
+    [Fact]
+    public async Task RequiredCriteria_ExistingTicketsCanEditReorderAndLeave_AndBulkEntryIsBlocked()
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("criteria-existing");
+        var slug = project.Slug;
+        var columns = new ColumnService(projects);
+        var tickets = new TicketService(projects, new MemberService(projects));
+        await columns.ListColumnsAsync(slug);
+        var destination = await columns.CreateColumnAsync(slug, "Protected");
+        Assert.False(destination.RequireAcceptanceCriteria);
+        var existing = await tickets.CreateTicketAsync(slug, "Existing", status: destination.Name);
+        await columns.UpdateColumnAsync(slug, destination.Id, requireAcceptanceCriteria: true);
+        await columns.UpdateColumnAsync(slug, destination.Id, color: "#ffffff");
+        Assert.True((await columns.ListColumnsAsync(slug)).Single(c => c.Id == destination.Id).RequireAcceptanceCriteria);
+        await tickets.UpdateTicketAsync(slug, existing.Id, description: "Allowed edit");
+        await tickets.ReorderTicketAsync(slug, existing.Id, destination.Name, 0);
+        await tickets.MoveTicketAsync(slug, existing.Id, "Todo");
+        var source = (await columns.ListColumnsAsync(slug)).Single(c => c.Name == "Todo");
+        await Assert.ThrowsAnyAsync<Exception>(() => columns.DeleteColumnAsync(slug, source.Id, destination.Name));
+        Assert.Contains(await columns.ListColumnsAsync(slug), c => c.Id == source.Id);
+        Assert.Equal(source.Id, (await tickets.GetTicketAsync(slug, existing.Id))!.ColumnId);
+    }
+
+    [Theory]
+    [InlineData(AcceptanceStatus.NotEvaluated)]
+    [InlineData(AcceptanceStatus.FAIL)]
+    [InlineData(AcceptanceStatus.PARTIAL)]
+    public async Task ValidatedCriteria_RequiresNonemptyChecklistAndEveryCriterionPassing(AcceptanceStatus pendingStatus)
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("validated-entry");
+        var slug = project.Slug;
+        var columns = new ColumnService(projects);
+        var tickets = new TicketService(projects, new MemberService(projects));
+        await columns.ListColumnsAsync(slug);
+        var destination = await columns.CreateColumnAsync(slug, "Validated", requireValidatedAcceptanceCriteria: true);
+        Assert.False(destination.RequireAcceptanceCriteria); // Validation also implies presence independently.
+        await Assert.ThrowsAsync<InvalidOperationException>(() => tickets.CreateTicketAsync(slug, "Empty", status: destination.Name));
+        var ticket = await tickets.CreateTicketAsync(slug, "Work", status: "Todo");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => tickets.MoveTicketAsync(slug, ticket.Id, destination.Name));
+        await tickets.SaveAcceptanceCriterionAsync(slug, ticket.Id, null, new SaveAcceptanceCriterionRequest("First", AcceptanceStatus.PASS));
+        var pending = (await tickets.SaveAcceptanceCriterionAsync(slug, ticket.Id, null, new SaveAcceptanceCriterionRequest("Second", pendingStatus)))!;
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => tickets.MoveTicketAsync(slug, ticket.Id, destination.Name));
+        Assert.Contains("all acceptance criteria", error.Message);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => tickets.ReorderTicketAsync(slug, ticket.Id, destination.Name, 0));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => tickets.UpdateTicketAsync(slug, ticket.Id,
+            status: destination.Name, comment: "Must roll back"));
+        var unchanged = (await tickets.GetTicketAsync(slug, ticket.Id))!;
+        Assert.Equal("Todo", unchanged.Status);
+        Assert.DoesNotContain(unchanged.Comments, c => c.Content == "Must roll back");
+        await tickets.SaveAcceptanceCriterionAsync(slug, ticket.Id, pending.Id, new SaveAcceptanceCriterionRequest("Second", AcceptanceStatus.PASS));
+        await tickets.MoveTicketAsync(slug, ticket.Id, destination.Name);
+        await tickets.SaveAcceptanceCriterionAsync(slug, ticket.Id, pending.Id, new SaveAcceptanceCriterionRequest("Second", pendingStatus));
+        await tickets.UpdateTicketAsync(slug, ticket.Id, description: "Existing tickets remain editable");
+        await tickets.ReorderTicketAsync(slug, ticket.Id, destination.Name, 0);
+        await tickets.MoveTicketAsync(slug, ticket.Id, "Todo");
+        await columns.UpdateColumnAsync(slug, destination.Id, requireValidatedAcceptanceCriteria: false);
+        await tickets.MoveTicketAsync(slug, ticket.Id, destination.Name);
+    }
+
     private static (TicketService tickets, string slug) BuildSut(TempDir tmp)
     {
         var projects = new ProjectService(tmp.Path);

@@ -526,6 +526,9 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (_sortMenuSlug is not null && _sortMenuColumn is not null)
+            await JS.InvokeVoidAsync("fitBoardContextMenus");
+
         if (_attachTicketDraft && _newTicketProjectSlug is not null)
         {
             _attachTicketDraft = false;
@@ -865,7 +868,7 @@ else
         }
         catch (Exception ex)
         {
-            _newTicketError = ex.GetBaseException().Message.Contains("column_capacity_reached") ? L["ColumnCapacityError"] : ex.Message;
+            _newTicketError = ex.GetBaseException().Message.Contains("column_acceptance_criteria_not_validated") ? L["ColumnAcceptanceCriteriaNotValidatedError"] : ex.GetBaseException().Message.Contains("column_acceptance_criteria_required") ? L["ColumnAcceptanceCriteriaRequiredError"] : ex.GetBaseException().Message.Contains("column_capacity_reached") ? L["ColumnCapacityError"] : ex.Message;
         }
         finally
         {
@@ -998,7 +1001,7 @@ else
         {
             Logger.LogWarning(ex, "Ticket move refused");
             OnDragEnd();
-            await JS.InvokeVoidAsync("alert", ex.GetBaseException().Message.Contains("column_capacity_reached") ? L["ColumnCapacityError"] : ex.Message);
+            await JS.InvokeVoidAsync("alert", ex.GetBaseException().Message.Contains("column_acceptance_criteria_not_validated") ? L["ColumnAcceptanceCriteriaNotValidatedError"] : ex.GetBaseException().Message.Contains("column_acceptance_criteria_required") ? L["ColumnAcceptanceCriteriaRequiredError"] : ex.GetBaseException().Message.Contains("column_capacity_reached") ? L["ColumnCapacityError"] : ex.Message);
             return;
         }
         OnDragEnd();

@@ -9,5 +9,11 @@
   "CriterionNotEvaluated": "未評価",
   "RemoveEvidence": "証拠を削除",
   "ProcessorEvaluateAcceptance": "チケットの受け入れ基準を評価",
-  "ProcessorEvaluateAcceptanceHelp": "このプロセッサーに、関連するチケットの基準の評価と証拠の添付を依頼します。結果はルーティング前に保存されます。既定では無効です。"
+  "ProcessorEvaluateAcceptanceHelp": "このプロセッサーに、関連するチケットの基準の評価と証拠の添付を依頼します。結果はルーティング前に保存されます。既定では無効です。",
+  "CriterionValidated": "検証済み",
+  "CriterionFailed": "未達成",
+  "CriterionPartial": "一部達成",
+  "CriteriaValidatedCount": "{0} / {1} 検証済み",
+  "CriteriaEmpty": "条件はまだありません。このチケットを検証するための条件を追加してください。",
+  "CriterionEvidenceText": "テキスト"
 }

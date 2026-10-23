@@ -9,99 +9,116 @@ using KittyClaw.QaRunner;
 //
 // Exit codes: 0 = PASS, 1 = FAIL, 2 = scenario / runtime error.
 
-string? scenarioPath = null;
-string? targetApi = null;
-int? ticketId = null;
-string? webExe = null;
-
-for (int i = 0; i < args.Length - 1; i++)
-{
-    switch (args[i])
-    {
-        case "--scenario": scenarioPath = args[++i]; break;
-        case "--target-api": targetApi = args[++i].TrimEnd('/'); break;
-        case "--ticket": ticketId = int.Parse(args[++i]); break;
-        case "--web-exe": webExe = args[++i]; break;
-    }
-}
-
-if (scenarioPath is null || targetApi is null)
-{
-    await Console.Error.WriteLineAsync("usage: KittyClaw.QaRunner --scenario <path> --target-api <url> [--ticket <id>] [--web-exe <path>]");
-    return 2;
-}
-
-webExe ??= Environment.GetEnvironmentVariable("KITTYCLAW_WEB_EXE");
-webExe ??= ResolveWebExe();
-if (webExe is null || !File.Exists(webExe))
-{
-    await Console.Error.WriteLineAsync($"KittyClaw.Web executable not found (tried: {webExe ?? "auto-discovery"}). Pass --web-exe.");
-    return 2;
-}
-
-// First-run Playwright bootstrap: download Chromium if missing.
-await EnsurePlaywrightAsync();
-
-Scenario scenario;
 try
 {
-    var json = await File.ReadAllTextAsync(scenarioPath);
-    scenario = JsonSerializer.Deserialize<Scenario>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-        ?? throw new InvalidOperationException("scenario file deserialized to null");
+    return await RunAsync(args);
 }
 catch (Exception ex)
 {
-    await Console.Error.WriteLineAsync($"failed to load scenario: {ex.Message}");
+    await Console.Error.WriteLineAsync($"[qa-runner] runtime error: {ex}");
+    Console.Out.WriteLine(JsonSerializer.Serialize(new ScenarioResult
+    {
+        Verdict = "FAIL",
+        Notes = $"QA runtime error: {ex}",
+    }, new JsonSerializerOptions { WriteIndented = true }));
     return 2;
 }
 
-var screenshotDir = Path.Combine(Path.GetTempPath(), "kittyclaw-qa-shots-" + Guid.NewGuid().ToString("N"));
-Directory.CreateDirectory(screenshotDir);
-var scenarioVariables = new Dictionary<string, string>(StringComparer.Ordinal)
+static async Task<int> RunAsync(string[] args)
 {
-    ["scenarioDirectory"] = Path.GetDirectoryName(Path.GetFullPath(scenarioPath))!,
-};
-var scenarioEnvironment = scenario.Environment.ToDictionary(
-    pair => pair.Key,
-    pair => ScenarioRunner.ResolveText(pair.Value, scenarioVariables),
-    StringComparer.Ordinal);
+    string? scenarioPath = null;
+    string? targetApi = null;
+    int? ticketId = null;
+    string? webExe = null;
 
-ScenarioResult result;
-await using (var instance = await TestInstance.StartAsync(webExe, scenarioEnvironment, scenario.Instance))
-{
-    Console.Error.WriteLine($"[qa-runner] test instance up at {instance.ApiUrl}");
-    var runner = new ScenarioRunner(instance.ApiUrl, screenshotDir,
-        initialVariables: scenarioVariables,
-        providerReadinessFile: instance.ProviderReadinessFile);
-    result = await runner.RunAsync(scenario);
-    result.Journey = await runner.BuildJourneyReportAsync(scenario.Report);
-    if (result.Verdict != "PASS")
-        result.Notes = $"{result.Notes}\n{instance.DiagnosticOutput}";
-}
+    for (int i = 0; i < args.Length - 1; i++)
+    {
+        switch (args[i])
+        {
+            case "--scenario": scenarioPath = args[++i]; break;
+            case "--target-api": targetApi = args[++i].TrimEnd('/'); break;
+            case "--ticket": ticketId = int.Parse(args[++i]); break;
+            case "--web-exe": webExe = args[++i]; break;
+        }
+    }
 
-// Upload screenshots to the *target* API (the orchestrator that holds the ticket).
-var uploader = new ScreenshotUploader(targetApi);
-foreach (var s in result.Screenshots)
-{
-    if (s.LocalPath is null) continue;
+    if (scenarioPath is null || targetApi is null)
+    {
+        await Console.Error.WriteLineAsync("usage: KittyClaw.QaRunner --scenario <path> --target-api <url> [--ticket <id>] [--web-exe <path>]");
+        return 2;
+    }
+
+    webExe ??= Environment.GetEnvironmentVariable("KITTYCLAW_WEB_EXE");
+    webExe ??= ResolveWebExe();
+    if (webExe is null || !File.Exists(webExe))
+    {
+        await Console.Error.WriteLineAsync($"KittyClaw.Web executable not found (tried: {webExe ?? "auto-discovery"}). Pass --web-exe.");
+        return 2;
+    }
+
+    // First-run Playwright bootstrap: download Chromium if missing.
+    await EnsurePlaywrightAsync();
+
+    Scenario scenario;
     try
     {
-        s.UploadedUrl = await uploader.UploadAsync(s.LocalPath);
+        var json = await File.ReadAllTextAsync(scenarioPath);
+        scenario = JsonSerializer.Deserialize<Scenario>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            ?? throw new InvalidOperationException("scenario file deserialized to null");
     }
     catch (Exception ex)
     {
-        Console.Error.WriteLine($"[qa-runner] upload failed for {s.Name}: {ex.Message}");
+        await Console.Error.WriteLineAsync($"failed to load scenario: {ex.Message}");
+        return 2;
     }
+
+    var screenshotDir = Path.Combine(Path.GetTempPath(), "kittyclaw-qa-shots-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(screenshotDir);
+    var scenarioVariables = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["scenarioDirectory"] = Path.GetDirectoryName(Path.GetFullPath(scenarioPath))!,
+    };
+    var scenarioEnvironment = scenario.Environment.ToDictionary(
+        pair => pair.Key,
+        pair => ScenarioRunner.ResolveText(pair.Value, scenarioVariables),
+        StringComparer.Ordinal);
+
+    ScenarioResult result;
+    await using (var instance = await TestInstance.StartAsync(webExe, scenarioEnvironment, scenario.Instance))
+    {
+        Console.Error.WriteLine($"[qa-runner] test instance up at {instance.ApiUrl}");
+        var runner = new ScenarioRunner(instance.ApiUrl, screenshotDir,
+            initialVariables: scenarioVariables,
+            providerReadinessFile: instance.ProviderReadinessFile);
+        result = await runner.RunAsync(scenario);
+        result.Journey = await runner.BuildJourneyReportAsync(scenario.Report);
+        if (result.Verdict != "PASS")
+            result.Notes = $"{result.Notes}\n{instance.DiagnosticOutput}";
+    }
+
+    // Upload screenshots to the *target* API (the orchestrator that holds the ticket).
+    var uploader = new ScreenshotUploader(targetApi);
+    foreach (var s in result.Screenshots)
+    {
+        if (s.LocalPath is null) continue;
+        try
+        {
+            s.UploadedUrl = await uploader.UploadAsync(s.LocalPath);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[qa-runner] upload failed for {s.Name}: {ex.Message}");
+        }
+    }
+
+    // Cleanup the local screenshot dir; uploaded copies are now on the host.
+    try { Directory.Delete(screenshotDir, recursive: true); } catch { }
+
+    var output = JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+    Console.Out.WriteLine(output);
+
+    return result.Verdict == "PASS" ? 0 : 1;
 }
-
-// Cleanup the local screenshot dir; uploaded copies are now on the host.
-try { Directory.Delete(screenshotDir, recursive: true); } catch { }
-
-var output = JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
-Console.Out.WriteLine(output);
-
-return result.Verdict == "PASS" ? 0 : 1;
-
 
 // ---------- helpers ----------
 

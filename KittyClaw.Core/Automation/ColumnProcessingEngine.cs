@@ -29,7 +29,6 @@ public sealed class ColumnProcessingEngine : BackgroundService
     private readonly JevQualificationService? _jev;
     private readonly JevConfigurationService? _jevConfiguration;
     private readonly ConcurrentDictionary<string, byte> _pendingProjects = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, ConcurrentDictionary<int, int>> _ownerFeedbackSignals = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Task> _activeProcessors = new();
     private readonly SemaphoreSlim _wake = new(0);
     internal Func<Task>? BeforeFinalSuccessValidationAsync { get; set; }
@@ -69,12 +68,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
 
     private void OnTicketChanged(string slug, int _, string __, string ___) => Signal(slug);
     private void OnTicketCreated(string slug, int _) => Signal(slug);
-    private void OnTicketCommentAdded(string slug, int ticketId, int commentId, string author, string _)
-    {
-        if (string.Equals(author, "owner", StringComparison.OrdinalIgnoreCase))
-            _ownerFeedbackSignals.GetOrAdd(slug, _ => new())[ticketId] = commentId;
-        Signal(slug);
-    }
+    private void OnTicketCommentAdded(string slug, int ticketId, int commentId, string author, string _) => Signal(slug);
 
     public void Signal(string projectSlug)
     {
@@ -130,10 +124,8 @@ public sealed class ColumnProcessingEngine : BackgroundService
         {
             var key = $"{slug}:{processor.Id}";
             if (_activeProcessors.TryGetValue(key, out var active) && !active.IsCompleted) continue;
-            _ownerFeedbackSignals.TryGetValue(slug, out var feedbackSignals);
-            var execution = await _executions.ClaimNextAsync(slug, processor, DateTime.UtcNow, feedbackSignals);
+            var execution = await _executions.ClaimNextAsync(slug, processor, DateTime.UtcNow);
             if (execution is null) continue;
-            feedbackSignals?.TryRemove(execution.TicketId, out _);
             var task = ProcessAsync(slug, processor, execution, stoppingToken);
             _activeProcessors[key] = task;
             _ = task.ContinueWith(completedTask =>
@@ -248,50 +240,9 @@ public sealed class ColumnProcessingEngine : BackgroundService
                 await _executions.SaveAgentResultAsync(slug, execution, result, processor);
             }
 
-            if (execution.CapitalizationStatus is not (MemoryCapitalizationStatus.Succeeded or MemoryCapitalizationStatus.NoChange))
-            {
-                var capitalization = await _memory.CapitalizeAsync(
-                    slug, processor.ColumnId, execution.Id, result.Lessons, cancellationToken, execution.TicketId);
-                if (capitalization.Status == MemoryCapitalizationStatus.Failed)
-                {
-                    await _executions.SetCapitalizationAsync(slug, execution,
-                        MemoryCapitalizationStatus.RetryRequired, capitalization.Error);
-                    await _executions.FailAttemptAsync(slug, execution, processor,
-                        $"Capitalisation de la mémoire en échec : {capitalization.Error}", activityAuthor);
-                    return;
-                }
-                await _executions.SetCapitalizationAsync(slug, execution, capitalization.Status);
+            await CapitalizeAsync(slug, processor, execution, result, cancellationToken);
 
-                // A validation rejection teaches the processor that most recently routed the
-                // ticket into this column. The current validation processor still owns its own lessons.
-                if (string.Equals(result.Outcome, "changes_requested", StringComparison.OrdinalIgnoreCase))
-                {
-                    var upstream = await _executions.FindUpstreamExecutionAsync(
-                        slug, execution.TicketId, processor.ColumnId, execution.Id);
-                    if (upstream is not null)
-                    {
-                        var upstreamColumnId = await _executions.FindProcessorColumnIdAsync(
-                            slug, upstream.ProcessorId);
-                        if (upstreamColumnId is int attributedColumnId)
-                        {
-                            var feedback = result.Lessons is { Count: > 0 }
-                                ? result.Lessons
-                                : string.IsNullOrWhiteSpace(result.Summary) ? [] : [result.Summary];
-                            var attributed = await _memory.CapitalizeAsync(slug, attributedColumnId,
-                                $"{execution.Id}-feedback-{upstream.Id}", feedback, cancellationToken, execution.TicketId);
-                            if (attributed.Status == MemoryCapitalizationStatus.Failed)
-                            {
-                                await _executions.SetCapitalizationAsync(slug, execution,
-                                    MemoryCapitalizationStatus.RetryRequired, attributed.Error);
-                                await _executions.FailAttemptAsync(slug, execution, processor,
-                                    $"Attribution du retour aval en échec : {attributed.Error}", activityAuthor);
-                                return;
-                            }
-                        }
-                    }
-                }
-            }
-
+            if (await _executions.StopSupersededAsync(slug, execution, processor)) return;
             JevRoutingProposal? routingProposal = null;
             if (processor.UsesAutomaticJevRouting && _jev is not null && _jevConfiguration is not null &&
                 !string.Equals(result.Outcome, "scheduled", StringComparison.OrdinalIgnoreCase) &&
@@ -372,6 +323,85 @@ public sealed class ColumnProcessingEngine : BackgroundService
         }
     }
 
+    private readonly SemaphoreSlim _memoryRetryGate = new(1, 1);
+
+    /// <summary>Retries knowledge persistence only; never dispatches or routes a ticket.</summary>
+    public async Task<bool> RetryMemoryAsync(string slug, string executionId, CancellationToken ct = default)
+    {
+        await _memoryRetryGate.WaitAsync(ct);
+        try
+        {
+            var execution = await _executions.GetAsync(slug, executionId);
+            if (execution?.AgentResult is not { } result
+                || execution.Status is ColumnExecutionStatus.Running or ColumnExecutionStatus.Retrying or ColumnExecutionStatus.WaitingForChildren
+                || execution.CapitalizationStatus is MemoryCapitalizationStatus.Succeeded or MemoryCapitalizationStatus.NoChange)
+                return false;
+            var columnId = await _executions.FindProcessorColumnIdAsync(slug, execution.ProcessorId);
+            var processor = columnId is int id ? await _processors.GetAsync(slug, id) : null;
+            if (processor is null) return false;
+            using var updateLease = _runs?.TrackExecution();
+            var rootTicketId = _worktrees is not null
+                ? await _worktrees.ResolveRootTicketIdAsync(slug, execution.TicketId) : execution.TicketId;
+            using var finalizationLease = _finalization?.Enter(slug, rootTicketId);
+            await CapitalizeAsync(slug, processor, execution, result, ct);
+            return true;
+        }
+        finally { _memoryRetryGate.Release(); }
+    }
+
+    private async Task CapitalizeAsync(string slug, ColumnProcessor processor, ColumnExecution execution,
+        ColumnAgentResult result, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (execution.CapitalizationStatus is not (MemoryCapitalizationStatus.Succeeded or MemoryCapitalizationStatus.NoChange))
+            {
+                var capitalization = await _memory.CapitalizeAsync(
+                    slug, processor.ColumnId, execution.Id, result.Lessons, cancellationToken, execution.TicketId);
+                if (capitalization.Status == MemoryCapitalizationStatus.Failed)
+                {
+                    await _executions.SetCapitalizationAsync(slug, execution,
+                        MemoryCapitalizationStatus.RetryRequired, capitalization.Error);
+                    return;
+                }
+
+                // A validation rejection teaches the processor that most recently routed the
+                // ticket into this column. The current validation processor still owns its own lessons.
+                if (string.Equals(result.Outcome, "changes_requested", StringComparison.OrdinalIgnoreCase))
+                {
+                    var upstream = await _executions.FindUpstreamExecutionAsync(
+                        slug, execution.TicketId, processor.ColumnId, execution.Id);
+                    if (upstream is not null)
+                    {
+                        var upstreamColumnId = await _executions.FindProcessorColumnIdAsync(
+                            slug, upstream.ProcessorId);
+                        if (upstreamColumnId is int attributedColumnId)
+                        {
+                            var feedback = result.Lessons is { Count: > 0 }
+                                ? result.Lessons
+                                : string.IsNullOrWhiteSpace(result.Summary) ? [] : [result.Summary];
+                            var attributed = await _memory.CapitalizeAsync(slug, attributedColumnId,
+                                $"{execution.Id}-feedback-{upstream.Id}", feedback, cancellationToken, execution.TicketId);
+                            if (attributed.Status == MemoryCapitalizationStatus.Failed)
+                            {
+                                await _executions.SetCapitalizationAsync(slug, execution,
+                                    MemoryCapitalizationStatus.RetryRequired, attributed.Error);
+                                return;
+                            }
+                        }
+                    }
+                }
+                await _executions.SetCapitalizationAsync(slug, execution, capitalization.Status);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            await _executions.SetCapitalizationAsync(slug, execution, MemoryCapitalizationStatus.RetryRequired, ex.Message);
+            _logger.LogWarning(ex, "Memory persistence needs recovery for execution {ExecutionId}", execution.Id);
+        }
+    }
+
     private async Task<bool> HasSuccessRouteAsync(string slug, ColumnProcessor processor)
     {
         await using var db = _projects.GetProjectDb(slug);
@@ -409,10 +439,12 @@ public sealed class ColumnProcessingEngine : BackgroundService
         string activityAuthor,
         CancellationToken cancellationToken)
     {
+        if (await _executions.StopSupersededAsync(slug, execution, processor)) return false;
         var completed = execution.CompletedActionIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var action in actions)
         {
             if (completed.Contains(action.Id)) continue;
+            if (await _executions.StopSupersededAsync(slug, execution, processor)) return false;
             await _executions.BeginActionAsync(slug, execution, action.Id);
             var result = await _actions.ExecuteAsync(
                 slug, processor, execution, ticket, action, agentResult, cancellationToken);

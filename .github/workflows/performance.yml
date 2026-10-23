@@ -1,0 +1,48 @@
+name: Performance regression
+
+on:
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      DOTNET_TieredCompilation: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: candidate
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: baseline
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      # Use identical workloads on both revisions, including when the base predates the harness.
+      - name: Prepare identical harness
+        run: |
+          rm -rf baseline/KittyClaw.Benchmarks
+          cp -r candidate/KittyClaw.Benchmarks baseline/KittyClaw.Benchmarks
+      - name: Build both revisions before measuring
+        run: |
+          dotnet build baseline/KittyClaw.Benchmarks -c Release --nologo
+          dotnet build candidate/KittyClaw.Benchmarks -c Release --nologo
+      - name: Measure base on the isolated host
+        working-directory: baseline
+        run: dotnet KittyClaw.Benchmarks/bin/Release/net10.0/KittyClaw.Benchmarks.dll run ../reports/baseline.json
+      - name: Measure candidate on the same runner
+        working-directory: candidate
+        run: dotnet KittyClaw.Benchmarks/bin/Release/net10.0/KittyClaw.Benchmarks.dll run ../reports/current.json
+      - name: Reject regressions above 25 percent
+        run: dotnet candidate/KittyClaw.Benchmarks/bin/Release/net10.0/KittyClaw.Benchmarks.dll compare reports/baseline.json reports/current.json 25
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: performance-reports
+          path: reports/*.json

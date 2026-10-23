@@ -12,6 +12,8 @@ namespace KittyClaw.Core.Services;
 public sealed class ColumnExecutionService(ProjectService projects, TicketService tickets, JevWorkReviewService? jevReviews = null,
     JevQualificationService? qualification = null)
 {
+    public event Action<string, int>? ExecutionChanged;
+
     internal Func<Task>? BeforeSuccessCompareAndSwapAsync { get; set; }
     internal static readonly TimeSpan RoutingLoopWindow = TimeSpan.FromMinutes(10);
     internal static readonly TimeSpan RoutingLoopEvidenceWindow = TimeSpan.FromHours(24);
@@ -146,6 +148,14 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             .OrderBy(e => e.ClaimedAt).ToListAsync();
         foreach (var candidate in waiting)
         {
+            var current = await db.Tickets.AsNoTracking().FirstOrDefaultAsync(t => t.Id == candidate.TicketId);
+            if (candidate.ContextRejectionReason == "manual_transition" || current?.ColumnId != processor.ColumnId)
+            {
+                candidate.Status = ColumnExecutionStatus.Cancelled;
+                candidate.EndedAt = now;
+                await db.SaveChangesAsync();
+                continue;
+            }
             var childColumnIds = await db.Tickets
                 .Where(t => t.ParentId == candidate.TicketId && t.BlocksParent)
                 .Select(t => t.ColumnId).Distinct().ToListAsync();
@@ -185,7 +195,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         {
             var ticket = await db.Tickets.AsNoTracking().FirstOrDefaultAsync(ticket =>
                 ticket.Id == retry.TicketId && ticket.ColumnId == processor.ColumnId);
-            var triggerIsCurrent = ticket is not null
+            var triggerIsCurrent = retry.ContextRejectionReason != "manual_transition" && ticket is not null
                 && (retry.TriggerTicketUpdatedAt == null
                     || ticket.UpdatedAt == retry.TriggerTicketUpdatedAt
                     // A completed processor may have advanced UpdatedAt itself by publishing
@@ -364,10 +374,10 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             }
         }
 
-        Comment? triggerOwnerComment = null;
-        if (ownerFeedbackSignals?.TryGetValue(selected.Id, out var ownerCommentId) == true)
-            triggerOwnerComment = await db.Comments.AsNoTracking().FirstOrDefaultAsync(comment =>
-                comment.Id == ownerCommentId && comment.TicketId == selected.Id && comment.Author == "owner");
+        // Owner decisions are durable; process-local signals can be lost or delivered out of order.
+        var triggerOwnerComment = await db.Comments.AsNoTracking()
+            .Where(c => c.TicketId == selected.Id && c.Author == "owner")
+            .OrderByDescending(c => c.CreatedAt).ThenByDescending(c => c.Id).FirstOrDefaultAsync();
         var execution = new ColumnExecution
         {
             Id = Guid.NewGuid().ToString("N"),
@@ -403,6 +413,41 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             return null;
         }
         return execution;
+    }
+
+    // Called in the ticket mutation's SaveChanges transaction. Running claims retain their
+    // unique reservation until the worker observes supersession and stops post-processing.
+    internal static async Task SupersedeForManualMoveAsync(TodoDbContext db, int ticketId)
+    {
+        await EnsureTableAsync(db);
+        var claims = await db.ColumnExecutions.Where(e => e.TicketId == ticketId &&
+            (e.Status == ColumnExecutionStatus.Running || e.Status == ColumnExecutionStatus.Retrying ||
+             e.Status == ColumnExecutionStatus.Failed || e.Status == ColumnExecutionStatus.WaitingForChildren)).ToListAsync();
+        foreach (var claim in claims)
+        {
+            claim.ContextRejectionReason = "manual_transition";
+            if (claim.Status == ColumnExecutionStatus.Running) continue;
+            claim.Status = ColumnExecutionStatus.Cancelled;
+            claim.AvailableAt = null;
+            claim.EndedAt = DateTime.UtcNow;
+        }
+    }
+
+    public async Task<bool> StopSupersededAsync(string slug, ColumnExecution execution, ColumnProcessor processor)
+    {
+        await using var db = projects.GetProjectDb(slug);
+        await EnsureTableAsync(db);
+        var row = await db.ColumnExecutions.FindAsync(execution.Id);
+        var ticket = await db.Tickets.FindAsync(execution.TicketId);
+        if (row is null || row.Status is ColumnExecutionStatus.Cancelled) return true;
+        if (row.ContextRejectionReason != "manual_transition" &&
+            (row.Status == ColumnExecutionStatus.Completed || ticket?.ColumnId == processor.ColumnId)) return false;
+        row.Status = ColumnExecutionStatus.Cancelled;
+        row.ContextRejectionReason = "manual_transition";
+        row.AvailableAt = null;
+        row.EndedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return true;
     }
 
     private static void AddClassicFallbackActivity(TodoDbContext db, int ticketId) => db.ActivityEntries.Add(new()
@@ -571,6 +616,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         row.CapitalizedAt = status is MemoryCapitalizationStatus.Succeeded or MemoryCapitalizationStatus.NoChange
             ? DateTime.UtcNow : null;
         await db.SaveChangesAsync();
+        ExecutionChanged?.Invoke(projectSlug, execution.TicketId);
         execution.CapitalizationStatus = row.CapitalizationStatus;
         execution.CapitalizationError = row.CapitalizationError;
         execution.CapitalizedAt = row.CapitalizedAt;
@@ -599,6 +645,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         string projectSlug, ColumnExecution execution, ColumnProcessor processor,
         ColumnProcessorAction action, string error, string author, bool outcomeUncertain = false)
     {
+        if (await StopSupersededAsync(projectSlug, execution, processor)) return;
         await using var db = projects.GetProjectDb(projectSlug);
         await ColumnService.EnsureBoardColumnsTableAsync(db);
         await TicketService.EnsureActivityTableAsync(db);
@@ -643,6 +690,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
                 : $"action '{action.Id}' en échec : {oldStatus} → {target.Name}",
         });
         await db.SaveChangesAsync();
+        ExecutionChanged?.Invoke(projectSlug, execution.TicketId);
         tickets.NotifyStatusChanged(projectSlug, ticket.Id, oldStatus, target.Name);
     }
 
@@ -650,6 +698,8 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         string projectSlug, ColumnExecution execution, ColumnProcessor processor,
         ColumnAgentResult result, string author, JevRoutingProposal? routingProposal = null)
     {
+        if ((await GetAsync(projectSlug, execution.Id))?.Status != ColumnExecutionStatus.Running) return;
+        if (await StopSupersededAsync(projectSlug, execution, processor)) return;
         var required = processor.RequiredSkills.ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (!required.IsSubsetOf(result.SkillsUsed.ToHashSet(StringComparer.OrdinalIgnoreCase)))
         {
@@ -676,6 +726,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             waitingRow.Outcome = result.Outcome;
             waitingRow.Summary = result.Summary;
             await waitingDb.SaveChangesAsync();
+            ExecutionChanged?.Invoke(projectSlug, execution.TicketId);
             return;
         }
 
@@ -807,13 +858,23 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         }
         if (target.Role != ColumnRole.Success)
         {
-            if (routingProposal is not null)
+            successTransaction = await db.Database.BeginTransactionAsync();
+            // Manual transitions and routing compete for the same SQLite write lock. Check
+            // the durable claim as well as the ticket, including an away-and-back move.
+            var expectedVersion = routingProposal?.TicketUpdatedAt ?? ticket.UpdatedAt;
+            var unchanged = await db.Tickets.Where(t => t.Id == ticket.Id && t.UpdatedAt == expectedVersion
+                && t.ColumnId == processor.ColumnId && db.ColumnExecutions.Any(e => e.Id == execution.Id
+                    && e.Status == ColumnExecutionStatus.Running && e.ContextRejectionReason != "manual_transition"))
+                .ExecuteUpdateAsync(setters => setters.SetProperty(t => t.UpdatedAt, ticket.UpdatedAt));
+            if (unchanged == 0)
             {
-                successTransaction = await db.Database.BeginTransactionAsync();
-                // Acquire the write lock and compare the inference snapshot before moving.
-                var unchanged = await db.Tickets.Where(t => t.Id == ticket.Id && t.UpdatedAt == routingProposal.TicketUpdatedAt && t.ColumnId == routingProposal.TicketColumnId)
-                    .ExecuteUpdateAsync(s => s.SetProperty(t => t.UpdatedAt, ticket.UpdatedAt));
-                if (unchanged == 0) throw new InvalidOperationException("The ticket changed while JEV was choosing its route.");
+                await successTransaction.RollbackAsync();
+                await successTransaction.DisposeAsync();
+                row.Status = ColumnExecutionStatus.Cancelled;
+                row.ContextRejectionReason = "stale_trigger_context";
+                row.EndedAt = DateTime.UtcNow;
+                await db.SaveChangesAsync();
+                return;
             }
             ColumnAssignmentPolicy.Apply(ticket, source, target);
             ticket.PipelineId = target.PipelineId;
@@ -852,6 +913,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             await successTransaction.CommitAsync();
             await successTransaction.DisposeAsync();
         }
+        ExecutionChanged?.Invoke(projectSlug, execution.TicketId);
         tickets.NotifyStatusChanged(projectSlug, ticket.Id, oldStatus, target.Name);
     }
 
@@ -999,6 +1061,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         string projectSlug, ColumnExecution execution, ColumnProcessor processor,
         string error, string author)
     {
+        if (await StopSupersededAsync(projectSlug, execution, processor)) return;
         await using var db = projects.GetProjectDb(projectSlug);
         await ColumnService.EnsureBoardColumnsTableAsync(db);
         await TicketService.EnsureActivityTableAsync(db);
@@ -1012,6 +1075,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             var factor = Math.Pow(2, Math.Max(0, row.Attempt - 1));
             row.AvailableAt = DateTime.UtcNow.AddSeconds(Math.Min(86400, processor.RetryBackoffSeconds * factor));
             await db.SaveChangesAsync();
+            ExecutionChanged?.Invoke(projectSlug, execution.TicketId);
             return;
         }
 
@@ -1051,8 +1115,27 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             }
         }
         await db.SaveChangesAsync();
+        ExecutionChanged?.Invoke(projectSlug, execution.TicketId);
         if (movedTicketId is int ticketId)
             tickets.NotifyStatusChanged(projectSlug, ticketId, movedFrom!, movedTo!);
+    }
+
+    public async Task<ColumnExecution?> GetAsync(string slug, string executionId)
+    {
+        await using var db = projects.GetProjectDb(slug);
+        await EnsureTableAsync(db);
+        return await db.ColumnExecutions.AsNoTracking().FirstOrDefaultAsync(e => e.Id == executionId);
+    }
+
+    public async Task<List<ColumnExecution>> ListRecoveryAsync(string slug, int ticketId)
+    {
+        await using var db = projects.GetProjectDb(slug);
+        await EnsureTableAsync(db);
+        return await db.ColumnExecutions.AsNoTracking().Where(e => e.TicketId == ticketId &&
+            (e.Status == ColumnExecutionStatus.Failed || e.Status == ColumnExecutionStatus.Retrying ||
+             e.Status == ColumnExecutionStatus.WaitingForChildren ||
+             e.CapitalizationStatus == MemoryCapitalizationStatus.RetryRequired || e.CapitalizationStatus == MemoryCapitalizationStatus.Failed))
+            .OrderByDescending(e => e.ClaimedAt).ToListAsync();
     }
 
     public async Task<List<ColumnExecution>> ListAsync(string projectSlug, int? ticketId = null)

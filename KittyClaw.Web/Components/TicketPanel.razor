@@ -353,6 +353,7 @@
                     <span class="section-label">@L["AutomationQueue"]</span>
                 </div>
                 <AutomationQueueSummary Slug="@Slug" TicketId="@_ticket.Id" />
+                <ColumnExecutionRecovery Slug="@Slug" TicketId="@_ticket.Id" />
                 <div class="section-header">
                     <span class="section-label">@L["Description"]</span>
                     <button class="icon-btn pencil-btn" title="@L["EditDescription"]" @onclick="StartEditDescription">&#9998;</button>
@@ -636,7 +637,7 @@
             await RefreshAsync();
             BoardUpdateNotifier.NotifyProjectUpdated(Slug);
         }
-        catch (InvalidOperationException ex) { _columnMoveError = ex.Message; }
+        catch (InvalidOperationException ex) { _columnMoveError = ex.GetBaseException().Message.Contains("column_acceptance_criteria_not_validated") ? L["ColumnAcceptanceCriteriaNotValidatedError"] : ex.GetBaseException().Message.Contains("column_acceptance_criteria_required") ? L["ColumnAcceptanceCriteriaRequiredError"] : ex.Message; }
         finally { _movingColumn = false; }
     }
 

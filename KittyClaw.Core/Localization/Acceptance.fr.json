@@ -9,5 +9,11 @@
   "CriterionNotEvaluated": "Non évalué",
   "RemoveEvidence": "Supprimer la preuve",
   "ProcessorEvaluateAcceptance": "Évaluer les critères d’acceptation du ticket",
-  "ProcessorEvaluateAcceptanceHelp": "Confier à ce processor l’évaluation des critères pertinents et de leurs preuves. Le bilan est enregistré avant le routage. Désactivé par défaut."
+  "ProcessorEvaluateAcceptanceHelp": "Confier à ce processor l’évaluation des critères pertinents et de leurs preuves. Le bilan est enregistré avant le routage. Désactivé par défaut.",
+  "CriterionValidated": "Validé",
+  "CriterionFailed": "Non validé",
+  "CriterionPartial": "Partiel",
+  "CriteriaValidatedCount": "{0} / {1} validés",
+  "CriteriaEmpty": "Aucun critère pour le moment. Ajoutez les conditions qui permettront de valider ce ticket.",
+  "CriterionEvidenceText": "Texte"
 }

@@ -108,8 +108,6 @@ public sealed class ColumnProcessorService(
     public async Task<List<ColumnProcessor>> ListEnabledAsync(string projectSlug)
     {
         var enabled = (await ListAsync(projectSlug)).Where(p => p.Enabled).ToList();
-        foreach (var processor in enabled.Where(p => !p.JevObservationOnly && !p.JevAcceptanceValidation))
-            await EnsureMemoryAsync(projectSlug, processor);
         return enabled;
     }
 
@@ -575,7 +573,6 @@ public sealed class ColumnProcessorService(
             ?? throw new InvalidOperationException($"Le projet '{projectSlug}' n'existe pas.");
         var workspace = projects.ResolveWorkspacePath(project);
         var relativeMemoryDir = Path.Combine(".agents", "processors", ColumnReference(processor.ColumnId), "memory");
-        await ProcessorMemoryGit.CommitAsync(workspace, processor.ColumnId);
         var primaryIndex = Path.Combine(workspace, relativeMemoryDir, "MEMORY.md");
         DurableWriteRoute? route = null;
         var root = workspace;
@@ -589,6 +586,7 @@ public sealed class ColumnProcessorService(
 
         var memoryDir = Path.Combine(root, relativeMemoryDir);
         var index = Path.Combine(memoryDir, "MEMORY.md");
+        var previousMemory = File.Exists(index) ? await File.ReadAllTextAsync(index) : null;
         try
         {
             Directory.CreateDirectory(memoryDir);
@@ -613,7 +611,8 @@ public sealed class ColumnProcessorService(
                     $"Processor memory migration durable write requires review ({validation.Status}).");
         }
 
-        else await ProcessorMemoryGit.CommitAsync(root, processor.ColumnId);
+        else if (previousMemory != await File.ReadAllTextAsync(index))
+            await ProcessorMemoryGit.CommitAsync(root, processor.ColumnId);
 
         return index;
     }

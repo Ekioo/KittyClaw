@@ -54,34 +54,35 @@ public sealed class ColumnMemoryCapitalizationServiceTests : IDisposable
         Assert.Equal(MemoryCapitalizationStatus.Succeeded, replay.Status);
         Assert.Equal(MemoryCapitalizationStatus.NoChange, duplicate.Status);
         var topic = Path.Combine(projects.ResolveWorkspacePath(project), ".agents", "processors",
-            "column-4", "memory", "pipeline-lessons.md");
+            "column-4", "memory", "MEMORY.md");
         Assert.Equal(1, (await File.ReadAllTextAsync(topic)).Split("- Persist").Length - 1);
     }
 
     [Fact]
-    public async Task Replay_repairs_index_when_first_attempt_stops_between_topic_and_index_writes()
+    public async Task Legacy_journal_migrates_atomically_and_preserves_handwritten_memory_after_interruption()
     {
         var projects = new ProjectService(_temp.Path);
-        var project = await projects.CreateProjectAsync("Interrupted memory commit");
+        var project = await projects.CreateProjectAsync("Interrupted memory migration");
+        var memory = Path.Combine(projects.ResolveWorkspacePath(project), ".agents", "processors", "column-6", "memory");
+        Directory.CreateDirectory(memory);
+        const string lesson = "Retain the saved delivery when the Git publication is temporarily refused.";
+        await File.WriteAllTextAsync(Path.Combine(memory, "pipeline-lessons.md"),
+            "---\ntitle: Pipeline lessons\n---\n\n# Pipeline lessons\n\n<!-- checkpoint:legacy -->\n- " + lesson + "\n");
+        await File.WriteAllTextAsync(Path.Combine(memory, "MEMORY.md"),
+            "# Processor memory\n\nHandwritten knowledge must survive.\n[5] [Pipeline lesson](pipeline-lessons.md) — " + lesson + "\n");
         var service = new FailFirstIndexWriteService(projects);
-        const string lesson = "Rebuild every derived memory index from the durable lesson journal after interruption.";
-
-        var interrupted = await service.CapitalizeAsync(project.Slug, 6, "run-interrupted", [lesson]);
-
+        var interrupted = await service.CapitalizeAsync(project.Slug, 6, "legacy", [lesson]);
         Assert.Equal(MemoryCapitalizationStatus.Failed, interrupted.Status);
-        var memory = Path.Combine(projects.ResolveWorkspacePath(project), ".agents", "processors",
-            "column-6", "memory");
-        Assert.Contains("checkpoint:run-interrupted",
-            await File.ReadAllTextAsync(Path.Combine(memory, "pipeline-lessons.md")));
-        Assert.False(File.Exists(Path.Combine(memory, "MEMORY.md")));
-
-        var resumed = await service.CapitalizeAsync(project.Slug, 6, "run-interrupted", [lesson]);
-
+        Assert.True(File.Exists(Path.Combine(memory, "pipeline-lessons.md")));
+        var resumed = await service.CapitalizeAsync(project.Slug, 6, "legacy", [lesson]);
         Assert.Equal(MemoryCapitalizationStatus.Succeeded, resumed.Status);
         Assert.Equal(0, resumed.Added);
-        Assert.Contains(lesson, await File.ReadAllTextAsync(Path.Combine(memory, "MEMORY.md")));
-        Assert.Equal(1, (await File.ReadAllTextAsync(Path.Combine(memory, "pipeline-lessons.md")))
-            .Split("checkpoint:run-interrupted").Length - 1);
+        var canonical = await File.ReadAllTextAsync(Path.Combine(memory, "MEMORY.md"));
+        Assert.Contains("Handwritten knowledge must survive.", canonical);
+        Assert.Equal(1, canonical.Split(lesson).Length - 1);
+        Assert.False(File.Exists(Path.Combine(memory, "pipeline-lessons.md")));
+        Assert.Equal(MemoryCapitalizationStatus.Succeeded,
+            (await service.CapitalizeAsync(project.Slug, 6, "legacy", [lesson])).Status);
     }
 
     [Fact]
@@ -95,7 +96,7 @@ public sealed class ColumnMemoryCapitalizationServiceTests : IDisposable
                 [$"Reusable lesson number {i:D2} with enough concrete detail."]);
 
         var topic = Path.Combine(projects.ResolveWorkspacePath(project), ".agents", "processors",
-            "column-9", "memory", "pipeline-lessons.md");
+            "column-9", "memory", "MEMORY.md");
         var content = await File.ReadAllTextAsync(topic);
         Assert.DoesNotContain("lesson number 00", content);
         Assert.Contains("lesson number 52", content);

@@ -56,12 +56,20 @@ public sealed class TicketCreationJourneyTests
         await Expect(editor).ToBeVisibleAsync();
         await editor.GetByLabel("Maximum tickets (0 = unlimited)", new() { Exact = true }).FillAsync("2");
         await editor.GetByLabel("When the limit is reached", new() { Exact = true }).SelectOptionAsync("false");
+        await editor.GetByTestId("require-acceptance-criteria").CheckAsync();
+        await editor.GetByTestId("require-validated-acceptance-criteria").CheckAsync();
         await editor.Locator(".processor-dialog-footer .settings-primary").ClickAsync();
         await Expect(editor).ToHaveCountAsync(0);
         var saved = (await columns.ListColumnsAsync(slug)).First();
         Assert.Equal(2, saved.MaxTickets);
         Assert.False(saved.CapacityBlocking);
+        Assert.True(saved.RequireAcceptanceCriteria);
+        Assert.True(saved.RequireValidatedAcceptanceCriteria);
         await Expect(page.Locator(".column-capacity--full").First).ToContainTextAsync("2 / 2");
+        await page.Locator(".column-header").First.ClickAsync(new() { Button = MouseButton.Right });
+        await page.Locator(".column-context-menu-configure").ClickAsync();
+        await Expect(editor.GetByTestId("require-acceptance-criteria")).ToBeCheckedAsync();
+        await Expect(editor.GetByTestId("require-validated-acceptance-criteria")).ToBeCheckedAsync();
 
     }
     private static async Task OpenCreateAsync(IPage page)

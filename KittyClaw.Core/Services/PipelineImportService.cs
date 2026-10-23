@@ -322,7 +322,7 @@ public sealed partial class PipelineImportService(
                     projectSlug, column.Name.Trim(),
                     string.IsNullOrWhiteSpace(column.Color) ? "#5a6a80" : column.Color,
                     pipeline.Id, column.Role, userGuidance: column.UserGuidance ?? "",
-                    maxTickets: column.MaxTickets, capacityBlocking: column.CapacityBlocking);
+                    maxTickets: column.MaxTickets, capacityBlocking: column.CapacityBlocking, requireAcceptanceCriteria: column.RequireAcceptanceCriteria, requireValidatedAcceptanceCriteria: column.RequireValidatedAcceptanceCriteria);
                 columnIds[column.Key] = created.Id;
             }
             await FaultAsync("columns-created");
