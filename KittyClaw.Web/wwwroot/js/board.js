@@ -28,3 +28,65 @@ window.kittyClaw.downloadBase64 = (fileName, contentType, base64) => {
     link.click();
     link.remove();
 };
+
+// Keep swipe feedback local so it follows native scrolling without a server round trip.
+window.mobileColumnNavigation = (() => {
+    const bindings = new WeakMap();
+    function detach(nav) {
+        bindings.get(nav)?.dispose();
+        bindings.delete(nav);
+    }
+    function attach(nav, boardId) {
+        const board = document.getElementById(boardId);
+        if (!board) return;
+        const previousBinding = bindings.get(nav);
+        if (previousBinding?.board === board) {
+            previousBinding.update();
+            return;
+        }
+        detach(nav);
+        const previous = nav.querySelector('.mobile-column-previous');
+        const next = nav.querySelector('.mobile-column-next');
+        const position = nav.querySelector('.mobile-column-position');
+        let columns = [], current = 0;
+        function update() {
+            columns = [...board.children].filter(child => child.classList.contains('column'));
+            nav.hidden = columns.length < 2;
+            if (!columns.length || !board.clientWidth) return;
+            const left = board.getBoundingClientRect().left;
+            current = columns.reduce((closest, column, index) =>
+                Math.abs(column.getBoundingClientRect().left - left) <
+                Math.abs(columns[closest].getBoundingClientRect().left - left) ? index : closest, 0);
+            const text = `${current + 1} / ${columns.length} · ${columns[current].dataset.columnStatus}`;
+            if (position.textContent !== text) position.textContent = text;
+            previous.disabled = current === 0;
+            next.disabled = current === columns.length - 1;
+        }
+        function move(direction) {
+            update();
+            const target = columns[current + direction];
+            if (target) board.scrollBy({
+                left: target.getBoundingClientRect().left - board.getBoundingClientRect().left,
+                behavior: 'instant'
+            });
+            update();
+        }
+        const back = () => move(-1), forward = () => move(1);
+        previous.addEventListener('click', back);
+        next.addEventListener('click', forward);
+        board.addEventListener('scroll', update, { passive: true });
+        const resize = new ResizeObserver(update);
+        resize.observe(board);
+        const mutations = new MutationObserver(update);
+        mutations.observe(board, { childList: true });
+        bindings.set(nav, { board, update, dispose() {
+            previous.removeEventListener('click', back);
+            next.removeEventListener('click', forward);
+            board.removeEventListener('scroll', update);
+            resize.disconnect();
+            mutations.disconnect();
+        }});
+        update();
+    }
+    return { attach, detach };
+})();

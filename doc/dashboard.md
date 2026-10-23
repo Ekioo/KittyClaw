@@ -7,6 +7,15 @@ The first-use guidance banner is shown only while the project has no tickets, ru
 
 The empty dashboard invites users to **Add tile** and offers clickable examples (tickets by column, recent Git activity, and a README summary). Examples open the creation chat with an editable request; sending it generates a proposal that must be reviewed before creation.
 
+## Mobile presentation
+
+At widths up to 767px, `css/mobile.css` displays tiles as a vertical list fitted
+to the screen, removing overlaps and unused canvas space. Content can scroll
+inside tall tiles. Desktop inline positions and sizes remain intact; drag and
+resize entry points in `dashboard.js` ignore mobile layouts so reading a tile
+cannot rewrite the saved desktop canvas. Tile selection and editing remain
+available. See the [graphic charter](./graphic-charter.md) for responsive rules.
+
 ## Folder-per-tile layout
 
 Each tile owns a dedicated subfolder under `.dashboard/`:

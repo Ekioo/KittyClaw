@@ -198,6 +198,16 @@ select:focus-visible,
     font-size: 0.83rem;
     font-weight: 600;
 }
+.ticket-column-select {
+    min-width: 0;
+    max-width: 100%;
+    border: 0;
+    background: var(--surface2);
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+    padding: .25rem;
+}
 .header-actions {
     display: flex;
     align-items: center;

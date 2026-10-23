@@ -204,7 +204,8 @@ else
                 }
                 else
                 {
-                    <div class="board board-lane-columns">
+                    <MobileColumnNavigation BoardId="@($"kanban-{slug}")" />
+                    <div class="board board-lane-columns" id="@($"kanban-{slug}")">
                         @foreach (var col in lane.Columns)
                         {
                             var colTickets = GetTickets(lane, col.Name);

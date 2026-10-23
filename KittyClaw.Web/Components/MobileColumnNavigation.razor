@@ -1,0 +1,31 @@
+@inject IJSRuntime JS
+@inject KittyClaw.Core.Services.LocalizationService L
+@implements IAsyncDisposable
+
+<nav class="mobile-column-navigation" @ref="_navigation" aria-label="@L["MobileColumnNavigation"]">
+    <button type="button" class="mobile-column-previous" aria-label="@L["MobilePreviousColumn"]">&#8592;</button>
+    <div class="mobile-column-location">
+        <span class="mobile-column-position" aria-live="polite" aria-atomic="true"></span>
+        <span class="mobile-column-hint">@L["MobileColumnSwipeHint"]</span>
+    </div>
+    <button type="button" class="mobile-column-next" aria-label="@L["MobileNextColumn"]">&#8594;</button>
+</nav>
+
+@code {
+    [Parameter, EditorRequired] public string BoardId { get; set; } = "";
+    private ElementReference _navigation;
+    private bool _attached;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await JS.InvokeVoidAsync("mobileColumnNavigation.attach", _navigation, BoardId);
+        _attached = true;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!_attached) return;
+        try { await JS.InvokeVoidAsync("mobileColumnNavigation.detach", _navigation); }
+        catch (JSDisconnectedException) { }
+    }
+}

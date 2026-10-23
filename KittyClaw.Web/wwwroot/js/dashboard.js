@@ -13,6 +13,7 @@ window.dashboardInitDnd = (dotnetRef) => { _dotnet = dotnetRef; };
 let _drag = null;
 
 window.dashboardStartDrag = (fileName, tileId, mouseX, mouseY, tileX, tileY) => {
+    if (window.matchMedia('(max-width: 767px)').matches) return;
     const tile = document.getElementById(tileId);
     if (!tile) return;
     tile.classList.add('tile-dragging');
@@ -25,6 +26,7 @@ window.dashboardStartDrag = (fileName, tileId, mouseX, mouseY, tileX, tileY) => 
 let _resize = null;
 
 window.dashboardStartResize = (fileName, tileId, mouseX, mouseY, tileW, tileH) => {
+    if (window.matchMedia('(max-width: 767px)').matches) return;
     const tile = document.getElementById(tileId);
     if (!tile) return;
     tile.classList.add('tile-resizing');

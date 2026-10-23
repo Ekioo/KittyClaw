@@ -1,4 +1,5 @@
 ﻿/* Board */
+.page-header .mobile-actions-toggle { display: none; }
 .board-layout {
     height: 100vh;
     min-height: 0;

@@ -71,10 +71,20 @@
 
         <div class="ticket-properties-row">
         <div class="ticket-column-row" data-testid="ticket-current-column">
-            <span class="ticket-column-badge" title="@L["TicketCurrentColumn"]" aria-label="@(L["TicketCurrentColumn"] + ": " + (CurrentColumn()?.Name ?? _ticket.Status))">
+            <label class="ticket-column-badge" title="@L["TicketCurrentColumn"]">
                 <span class="sub-ticket-status-dot" style="background: @(CurrentColumn()?.Color ?? GetColumnColor(_ticket.Status))" aria-hidden="true"></span>
-                @(CurrentColumn()?.Name ?? _ticket.Status)
-            </span>
+                <select class="ticket-column-select" aria-label="@L["TicketCurrentColumn"]"
+                        value="@CurrentColumn()?.Id" @onchange="ChangeColumnAsync" disabled="@_movingColumn">
+                    @foreach (var column in _columns)
+                    {
+                        <option value="@column.Id">@column.Name</option>
+                    }
+                </select>
+            </label>
+            @if (_columnMoveError is not null)
+            {
+                <span class="dep-error" role="alert">@_columnMoveError</span>
+            }
         </div>
 
         @* ── Labels row ── *@
@@ -593,6 +603,34 @@
         ? null
         : _columns.FirstOrDefault(column => column.Id == _ticket.ColumnId)
           ?? _columns.FirstOrDefault(column => column.Name.Equals(_ticket.Status, StringComparison.OrdinalIgnoreCase));
+
+    private bool _movingColumn;
+    private string? _columnMoveError;
+
+    private async Task ChangeColumnAsync(ChangeEventArgs args)
+    {
+        if (_movingColumn || _ticket is null || !int.TryParse(args.Value?.ToString(), out var id)) return;
+        var column = _columns.FirstOrDefault(c => c.Id == id);
+        if (column is null || column.Id == CurrentColumn()?.Id) return;
+        var ticketId = _ticket.Id;
+        var oldStatus = _ticket.Status;
+        var oldColumnId = _ticket.ColumnId;
+        var pipelineId = _ticket.PipelineId;
+        _movingColumn = true;
+        _columnMoveError = null;
+        try
+        {
+            await TicketService.UpdateTicketAsync(Slug, ticketId, author: "owner",
+                status: column.Name, pipelineId: pipelineId, columnId: column.Id, enforceRouting: true);
+            PushUndo?.Invoke($"{L["UndoMove"]} #{ticketId}", async () =>
+                await TicketService.UpdateTicketAsync(Slug, ticketId, author: "owner",
+                    status: oldStatus, pipelineId: pipelineId, columnId: oldColumnId));
+            await RefreshAsync();
+            BoardUpdateNotifier.NotifyProjectUpdated(Slug);
+        }
+        catch (InvalidOperationException ex) { _columnMoveError = ex.Message; }
+        finally { _movingColumn = false; }
+    }
 
     private string WaitingGuidance(BoardColumn column)
     {
