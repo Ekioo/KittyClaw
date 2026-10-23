@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
 using KittyClaw.Core.Models;
 using KittyClaw.Core.Evidence;
 using Microsoft.EntityFrameworkCore;
@@ -30,6 +31,27 @@ public sealed class JevQualificationService(ProjectService projects, ProjectSecr
     private readonly JevConfigurationService _configuration = configuration ?? new(vault, projects.DataDir);
     public const string SecretName = "TYPESAFE_API_KEY";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    internal static JsonNode FitCommentContext(string stateJson)
+    {
+        const int limit = 48000;
+        var state = JsonNode.Parse(stateJson)!;
+        if (stateJson.Length <= limit) return state;
+        var ticket = state["context"]?["ticket"] ?? state["ticket"]!;
+        var comments = ticket["comments"]!.AsArray();
+        var candidates = comments.Select(c => c!.DeepClone()).ToArray();
+        comments.Clear();
+        // Reserve the omission notice before adding comments, including JSON escaping in the budget.
+        ticket["commentContextNotice"] = "Some comments were omitted to fit the context budget. Included comments are complete and favor recent exchanges. Do not infer missing facts; choose none or unknown when essential evidence is missing.";
+        if (state.ToJsonString(Json).Length > limit)
+            throw new InvalidOperationException("Ticket context exceeds 48,000 characters even without comments. Shorten the description, criteria or processor context.");
+        for (var i = candidates.Length - 1; i >= 0; i--)
+        {
+            comments.Insert(0, candidates[i]);
+            if (state.ToJsonString(Json).Length > limit) comments.RemoveAt(0);
+        }
+        return state;
+    }
 
     internal static async Task InitializeAsync(KittyClaw.Core.Data.TodoDbContext db) =>
         await db.Database.ExecuteSqlRawAsync("""
@@ -176,7 +198,7 @@ public sealed class JevQualificationService(ProjectService projects, ProjectSecr
             var key = await _configuration.ResolveKeyAsync(slug, ct);
             if (string.IsNullOrWhiteSpace(key))
                 throw new InvalidOperationException("JEV is unavailable. Configure a TypeSafe API key in KittyClaw settings, project secrets or the machine environment.");
-            if (stateJson.Length > 48000) throw new InvalidOperationException("Ticket context is too large for qualification (48,000 characters maximum).");
+            state = FitCommentContext(stateJson);
             using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.typesafe.ai/v1/systemone");
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
             request.Content = JsonContent.Create(new

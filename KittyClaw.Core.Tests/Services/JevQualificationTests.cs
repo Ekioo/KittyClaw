@@ -6,6 +6,45 @@ namespace KittyClaw.Core.Tests.Services;
 
 public sealed class JevQualificationTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Comment_budget_preserves_essential_context_and_recent_complete_comments(bool postRun)
+    {
+        var context = new { ticket = new { title = "Goal", description = "Essential request",
+            acceptanceCriteria = new[] { "Must pass" },
+            comments = Enumerable.Range(0, 20).Select(i => new { author = "owner", content = $"{i}:" + new string('é', 2000) }) },
+            mission = "Implement", destinations = new { none = "Insufficient evidence" } };
+        object state = postRun ? new { context, execution = new { summary = new string('x', 6000) } } : context;
+        var json = System.Text.Json.JsonSerializer.Serialize(state);
+        var compact = JevQualificationService.FitCommentContext(json);
+        Assert.True(compact.ToJsonString().Length <= 48000);
+        var ticket = (postRun ? compact["context"] : compact)!["ticket"]!;
+        Assert.Equal("Essential request", ticket["description"]!.GetValue<string>());
+        Assert.Equal("Must pass", ticket["acceptanceCriteria"]![0]!.GetValue<string>());
+        Assert.NotNull(ticket["commentContextNotice"]);
+        var comments = ticket["comments"]!.AsArray();
+        Assert.InRange(comments.Count, 1, 19);
+        Assert.Equal("19:" + new string('é', 2000), comments.Last()!["content"]!.GetValue<string>());
+        var next = new { author = "owner", content = "extra:" + new string('é', 2000) };
+        comments.Insert(0, System.Text.Json.JsonSerializer.SerializeToNode(next));
+        Assert.True(compact.ToJsonString().Length > 48000);
+    }
+
+    [Fact]
+    public void Oversized_comment_does_not_exclude_other_comments_and_small_context_is_unchanged()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(new { ticket = new { description = "Keep",
+            comments = new[] { new { content = "Older but useful" }, new { content = new string('x', 60000) }, new { content = "Latest" } } } });
+        var state = JevQualificationService.FitCommentContext(json);
+        Assert.Equal(new[] { "Older but useful", "Latest" }, state["ticket"]!["comments"]!.AsArray()
+            .Select(c => c!["content"]!.GetValue<string>()));
+        const string small = "{\"ticket\":{\"comments\":[]}}";
+        Assert.Equal(small, JevQualificationService.FitCommentContext(small).ToJsonString());
+        Assert.Throws<InvalidOperationException>(() => JevQualificationService.FitCommentContext(
+            System.Text.Json.JsonSerializer.Serialize(new { ticket = new { description = new string('x', 50000), comments = Array.Empty<object>() } })));
+    }
+
     [Fact]
     public async Task Worker_routing_does_not_request_Jev_before_the_agent_result()
     {
@@ -123,6 +162,8 @@ public sealed class JevQualificationTests
         var vault = new ProjectSecretVault(temp.Path, new TestSecretProtector());
         await vault.SetAsync(project.Slug, JevQualificationService.SecretName, "test-secret");
         var handler = new FakeHandler(target.Id, invalidTriage);
+        ticket.Comments = Enumerable.Range(0, 20).Select(i => new KittyClaw.Core.Models.Comment
+            { Content = $"Comment {i}:" + new string('x', 8000) }).ToList();
         using var client = new HttpClient(handler);
         var service = new JevQualificationService(projects, vault, client);
         await service.ObserveAsync(project.Slug, processor, ticket, board, CancellationToken.None);
@@ -237,6 +278,7 @@ public sealed class JevQualificationTests
             Assert.Equal("https://api.typesafe.ai/v1/systemone", request.RequestUri!.ToString());
             Assert.Equal("Bearer", request.Headers.Authorization!.Scheme);
             using var body = System.Text.Json.JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct));
+            Assert.True(body.RootElement.GetProperty("state").GetRawText().Length <= 48000);
             Assert.Equal(4, body.RootElement.GetProperty("questions").EnumerateObject().Count());
             var payload = System.Text.Json.JsonSerializer.Serialize(new
             {

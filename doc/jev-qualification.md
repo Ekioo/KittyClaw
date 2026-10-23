@@ -43,7 +43,13 @@ The flag is versioned in the authoritative `processor.json` and projected into S
 
 Ticket title, description, priority and the latest twenty comments are sent to TypeSafe, together
 with the column mission, instructions and candidate destination names/outcomes. Contexts above
-48,000 characters are rejected locally. Only explicitly configured business routes/defaults are
+48,000 serialized characters retain as many complete comments as fit from the latest twenty,
+trying the most recent first and keeping chronological order. Oversized comments can be skipped
+so smaller comments still fit. An omission notice tells JEV that history is incomplete. The budget
+includes JSON escaping and, for post-run observations, execution and evidence context. Ticket
+description, acceptance criteria, mission and routing options remain intact; if these exceed the
+budget even without comments, qualification reports an explicit local error. Fingerprints still
+cover the full latest-twenty-comment context, including omitted text. Only explicitly configured business routes/defaults are
 candidates; technical/action failure routes are excluded. `none` is always available.
 
 ## Structured triage
