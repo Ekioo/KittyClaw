@@ -1,0 +1,11 @@
+{
+  "TrayOpen": "Abrir KittyClaw",
+  "TrayCheckUpdates": "Buscar actualizaciones",
+  "TrayQuit": "Salir de KittyClaw",
+  "TrayCheckingUpdates": "Buscando actualizaciones…",
+  "TrayUpdateReady": "La versión {0} está lista. Abre KittyClaw para confirmar la instalación y el reinicio.",
+  "TrayUpdateDownloading": "Ya se está descargando una actualización en segundo plano.",
+  "TrayUpToDate": "KittyClaw está actualizado.",
+  "TrayUpdateFailed": "No se pudieron buscar o descargar actualizaciones. Inténtalo de nuevo más tarde.",
+  "TrayUpdatesTitle": "Actualizaciones de KittyClaw"
+}

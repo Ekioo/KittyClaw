@@ -1,0 +1,11 @@
+{
+  "TrayOpen": "KittyClaw を開く",
+  "TrayCheckUpdates": "更新を確認",
+  "TrayQuit": "KittyClaw を終了",
+  "TrayCheckingUpdates": "更新を確認中…",
+  "TrayUpdateReady": "バージョン {0} の準備ができました。KittyClaw を開いてインストールと再起動を確認してください。",
+  "TrayUpdateDownloading": "更新をバックグラウンドでダウンロード中です。",
+  "TrayUpToDate": "KittyClaw は最新です。",
+  "TrayUpdateFailed": "更新の確認またはダウンロードができませんでした。後でもう一度お試しください。",
+  "TrayUpdatesTitle": "KittyClaw の更新"
+}

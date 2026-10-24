@@ -1,5 +1,6 @@
 #if WINDOWS
 using System.Diagnostics;
+using KittyClaw.Core.Services;
 using System.Security.Cryptography;
 using System.Text;
 using Forms = System.Windows.Forms;
@@ -86,10 +87,22 @@ internal sealed class WindowsDesktopLifetime : IDisposable
                     catch (InvalidOperationException) { }
                 }, null, Timeout.Infinite, false);
                 using var menu = new Forms.ContextMenuStrip();
-                menu.Items.Add("Open KittyClaw", null, (_, _) => window.ShowAndActivate());
-                var checkUpdates = menu.Items.Add("Check for updates");
+                var localization = app.Services.GetRequiredService<LocalizationService>();
+                var open = menu.Items.Add(localization["TrayOpen"], null, (_, _) => window.ShowAndActivate());
+                var checkUpdates = menu.Items.Add(localization["TrayCheckUpdates"]);
                 menu.Items.Add(new Forms.ToolStripSeparator());
-                menu.Items.Add("Quit KittyClaw", null, (_, _) => app.Lifetime.StopApplication());
+                var quit = menu.Items.Add(localization["TrayQuit"], null, (_, _) => app.Lifetime.StopApplication());
+                void RefreshLanguage()
+                {
+                    open.Text = localization["TrayOpen"];
+                    quit.Text = localization["TrayQuit"];
+                    checkUpdates.Text = localization[checkUpdates.Enabled ? "TrayCheckUpdates" : "TrayCheckingUpdates"];
+                }
+                void LanguageChanged()
+                {
+                    try { dispatcher.BeginInvoke(RefreshLanguage); }
+                    catch (InvalidOperationException) { }
+                }
                 using var icon = new Forms.NotifyIcon
                 {
                     Text = "KittyClaw",
@@ -103,37 +116,43 @@ internal sealed class WindowsDesktopLifetime : IDisposable
                 checkUpdates.Click += async (_, _) =>
                 {
                     checkUpdates.Enabled = false;
-                    checkUpdates.Text = "Checking for updates…";
+                    checkUpdates.Text = localization["TrayCheckingUpdates"];
                     try
                     {
                         var updates = app.Services.GetRequiredService<InstalledUpdateService>();
                         var succeeded = await updates.CheckAsync();
                         if (app.Lifetime.ApplicationStopping.IsCancellationRequested) return;
                         var message = updates.IsReady
-                            ? $"Version {updates.AvailableVersion} is ready. Open KittyClaw to confirm installation and restart."
-                            : updates.IsBusy ? "An update is already downloading in the background."
-                            : succeeded ? "KittyClaw is up to date."
-                            : "Updates could not be checked or downloaded. Please try again later.";
-                        icon.ShowBalloonTip(5000, "KittyClaw updates", message,
+                            ? localization.Get("TrayUpdateReady", updates.AvailableVersion ?? "")
+                            : updates.IsBusy ? localization["TrayUpdateDownloading"]
+                            : succeeded ? localization["TrayUpToDate"]
+                            : localization["TrayUpdateFailed"];
+                        icon.ShowBalloonTip(5000, localization["TrayUpdatesTitle"], message,
                             succeeded || updates.IsBusy || updates.IsReady ? Forms.ToolTipIcon.Info : Forms.ToolTipIcon.Warning);
                     }
                     catch (Exception ex)
                     {
                         Trace.TraceWarning("Could not check for updates from tray: {0}", ex.Message);
                         if (!app.Lifetime.ApplicationStopping.IsCancellationRequested)
-                            icon.ShowBalloonTip(5000, "KittyClaw updates", "Updates could not be checked. Please try again later.", Forms.ToolTipIcon.Warning);
+                            icon.ShowBalloonTip(5000, localization["TrayUpdatesTitle"], localization["TrayUpdateFailed"], Forms.ToolTipIcon.Warning);
                     }
                     finally
                     {
                         if (!checkUpdates.IsDisposed)
                         {
-                            checkUpdates.Text = "Check for updates";
+                            checkUpdates.Text = localization["TrayCheckUpdates"];
                             checkUpdates.Enabled = true;
                         }
                     }
                 };
                 window.ShowAndActivate();
-                Forms.Application.Run(_context);
+                localization.OnLanguageChanged += LanguageChanged;
+                try
+                {
+                    RefreshLanguage();
+                    Forms.Application.Run(_context);
+                }
+                finally { localization.OnLanguageChanged -= LanguageChanged; }
                 _openRegistration.Unregister(null);
                 icon.Visible = false;
                 _dispatcher = null;

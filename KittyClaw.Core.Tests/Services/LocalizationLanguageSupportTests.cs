@@ -59,6 +59,24 @@ public class LocalizationLanguageSupportTests
         Assert.Equal("Language", localization["Language"]);
     }
 
+    [Fact]
+    public void Desktop_strings_follow_language_changes_and_fall_back_to_English()
+    {
+        using var data = new TemporaryDirectory();
+        var settings = new AppSettingsService(data.Path) { Language = "en" };
+        var localization = new LocalizationService(settings);
+        var changes = 0;
+        localization.OnLanguageChanged += () => changes++;
+
+        Assert.Equal("Open KittyClaw", localization["TrayOpen"]);
+        settings.Language = "fr";
+        Assert.Equal("Ouvrir KittyClaw", localization["TrayOpen"]);
+        Assert.Contains("1.2.3", localization.Get("TrayUpdateReady", "1.2.3"));
+        settings.Language = "unsupported";
+        Assert.Equal("Check for updates", localization["TrayCheckUpdates"]);
+        Assert.Equal(2, changes);
+    }
+
     private static Dictionary<string, string> Read(string path) =>
         JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path))!;
 
