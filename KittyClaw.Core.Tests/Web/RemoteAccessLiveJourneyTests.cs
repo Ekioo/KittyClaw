@@ -35,10 +35,19 @@ public sealed class RemoteAccessLiveJourneyTests(ITestOutputHelper output)
         var owner = await context.NewPageAsync();
         var remote = await context.NewPageAsync();
         var interactiveConnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        IWebSocket? activeRemoteTransport = null;
+        TaskCompletionSource? logoutTransportClosed = null;
         remote.WebSocket += (_, socket) =>
         {
             if (new Uri(socket.Url).AbsolutePath == "/_blazor")
+            {
+                activeRemoteTransport = socket;
                 socket.FrameReceived += (_, _) => interactiveConnected.TrySetResult();
+                socket.Close += (_, _) =>
+                {
+                    if (ReferenceEquals(socket, activeRemoteTransport)) logoutTransportClosed?.TrySetResult();
+                };
+            }
         };
         remote.Response += (_, response) =>
         {
@@ -137,6 +146,29 @@ public sealed class RemoteAccessLiveJourneyTests(ITestOutputHelper output)
                 badOrigin.Headers.Add("Origin", "https://unrelated.example");
                 Assert.Equal(HttpStatusCode.Forbidden, (await authenticated.SendAsync(badOrigin)).StatusCode);
             }
+            // Keep the browser's live circuit open while a separate HTTP client
+            // signs out with the same cookie. The captured cookie must stop working.
+            logoutTransportClosed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            using (var logoutClient = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }))
+            {
+                logoutClient.DefaultRequestHeaders.Add("Cookie", cookie);
+                var formHtml = await logoutClient.GetStringAsync(publicUrl + "/access");
+                var csrf = WebUtility.HtmlDecode(System.Text.RegularExpressions.Regex.Match(formHtml,
+                    "name='__RequestVerificationToken' value='([^']+)'").Groups[1].Value);
+                Assert.NotEmpty(csrf);
+                using var logoutRequest = new HttpRequestMessage(HttpMethod.Post, publicUrl + "/access/logout");
+                logoutRequest.Headers.Add("Origin", publicUrl);
+                logoutRequest.Content = new FormUrlEncodedContent(new Dictionary<string, string> { ["__RequestVerificationToken"] = csrf });
+                Assert.Equal(HttpStatusCode.Found, (await logoutClient.SendAsync(logoutRequest)).StatusCode);
+                await logoutTransportClosed.Task.WaitAsync(TimeSpan.FromSeconds(30));
+                Assert.Equal(HttpStatusCode.Unauthorized, (await logoutClient.GetAsync(publicUrl + "/api/engine/health")).StatusCode);
+            }
+            output.WriteLine("Logout revoked the captured cookie and closed the live public Blazor WebSocket.");
+            await LoginAsync();
+            cookies = await context.CookiesAsync([publicUrl!]);
+            cookie = string.Join("; ", cookies.Select(c => c.Name + "=" + c.Value));
+            await remote.GotoAsync(publicUrl + "/settings");
+            await Expect(remote.GetByTestId("remote-global-settings")).ToBeVisibleAsync();
             await remote.SetViewportSizeAsync(390, 844);
             await remote.ScreenshotAsync(new() { Path = Path.Combine(dataDir, "public-mobile.png"), FullPage = true });
             await owner.GotoAsync(local + "/remote-setup");
@@ -167,7 +199,7 @@ public sealed class RemoteAccessLiveJourneyTests(ITestOutputHelper output)
             retired = true;
             output.WriteLine("Cloudflare accepted secret update, connector disconnection and permanent retirement.");
             await File.WriteAllTextAsync(Path.Combine(dataDir, "result.json"), JsonSerializer.Serialize(new
-            { passed = true, publicUrl, retired = true, completedAt = DateTimeOffset.UtcNow, providerMode = "mock" }, new JsonSerializerOptions { WriteIndented = true }));
+            { passed = true, publicUrl, retired = true, logoutCookieRevoked = true, logoutTransportClosed = true, completedAt = DateTimeOffset.UtcNow, providerMode = "mock" }, new JsonSerializerOptions { WriteIndented = true }));
             output.WriteLine("Acceptance evidence retained under " + dataDir);
 
             async Task<string> NextCodeAsync()

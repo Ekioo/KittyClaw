@@ -16,7 +16,7 @@ public static class TileRenderer
     // Soft-line breaks become <br> so agents can output multi-line content (haikus, lists,
     // ASCII art) without having to remember Markdown's two-space line-break trick.
     private static readonly MarkdownPipeline _md =
-        new MarkdownPipelineBuilder().UseAdvancedExtensions().UseSoftlineBreakAsHardlineBreak().DisableHtml().Build();
+        SafeMarkdown.Build(softLineBreaks: true);
 
     private static readonly string[] _palette =
     [

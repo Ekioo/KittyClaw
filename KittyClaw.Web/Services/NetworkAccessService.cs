@@ -16,9 +16,10 @@ public sealed class NetworkAccessService
     private readonly string _path;
     private readonly IDataProtector _protector;
     private State _state = new();
-    private int _failures;
-    private DateTimeOffset _blockedUntil;
+    private const int MaximumLoginSources = 1024;
+    private readonly Dictionary<string, LoginAttempt> _loginAttempts = new(StringComparer.Ordinal);
     public event Action? SessionsRevoked;
+    public event Action<string>? SessionRevoked;
     public bool Enabled { get { lock (_gate) return _state.Secret is not null; } }
     public bool Listening { get; set; }
     public int Port { get; }
@@ -80,28 +81,37 @@ public sealed class NetworkAccessService
     {
         lock (_gate)
         {
-            var next = _state with { Generation = Guid.NewGuid().ToString("N") };
+            var next = _state with { Generation = Guid.NewGuid().ToString("N"), RevokedSessions = [] };
             Save(next);
             _state = next;
         }
         SessionsRevoked?.Invoke();
     }
 
-    public string? Authenticate(string code, DateTimeOffset now)
+    public string? Authenticate(string code, DateTimeOffset now, string clientKey = "unspecified")
     {
+        var source = SessionKey(clientKey);
         lock (_gate)
         {
-            if (_state.Secret is null || now < _blockedUntil) return null;
+            if (_state.Secret is null) return null;
+            foreach (var key in _loginAttempts.Where(p => p.Value.LastAttempt < now.AddMinutes(-10)).Select(p => p.Key).ToArray())
+                _loginAttempts.Remove(key);
+            _loginAttempts.TryGetValue(source, out var attempt);
+            if (attempt is not null && now < attempt.BlockedUntil) return null;
             var step = MatchStep(_state.Secret, code, now);
             if (step is null || step <= _state.LastStep)
             {
-                if (++_failures >= 5) { _blockedUntil = now.AddMinutes(1); _failures = 0; }
+                if (attempt is null && _loginAttempts.Count >= MaximumLoginSources)
+                    _loginAttempts.Remove(_loginAttempts.MinBy(p => p.Value.LastAttempt).Key);
+                var failures = (attempt?.Failures ?? 0) + 1;
+                _loginAttempts[source] = failures >= 5
+                    ? new(0, now.AddMinutes(1), now) : new(failures, DateTimeOffset.MinValue, now);
                 return null;
             }
-            var next = _state with { LastStep = step.Value };
+            var next = _state with { LastStep = step.Value, RevokedSessions = ActiveRevocations(now) };
             Save(next);
             _state = next;
-            _failures = 0;
+            _loginAttempts.Remove(source);
             return _protector.Protect(JsonSerializer.Serialize(new Session(_state.Generation, now.AddHours(12))));
         }
     }
@@ -110,12 +120,39 @@ public sealed class NetworkAccessService
 
     public DateTimeOffset? SessionExpiry(string? token, DateTimeOffset now)
     {
-        if (string.IsNullOrEmpty(token)) return null;
-        try
+        var session = ReadSession(token);
+        lock (_gate) return session is not null && Enabled && session.Generation == _state.Generation
+            && session.Expires > now && !_state.RevokedSessions.ContainsKey(SessionKey(token!)) ? session.Expires : null;
+    }
+
+    public void RevokeSession(string? token, DateTimeOffset now)
+    {
+        string key;
+        lock (_gate)
         {
-            var session = JsonSerializer.Deserialize<Session>(_protector.Unprotect(token));
-            lock (_gate) return Enabled && session?.Generation == _state.Generation && session.Expires > now ? session.Expires : null;
+            if (SessionExpiry(token, now) is null) return;
+            var session = ReadSession(token)!;
+            key = SessionKey(token!);
+            var revoked = ActiveRevocations(now);
+            revoked[key] = session.Expires;
+            var next = _state with { RevokedSessions = revoked };
+            Save(next);
+            _state = next;
         }
+        SessionRevoked?.Invoke(key);
+    }
+
+    // This identifier is only a revocation lookup key and never authenticates a request.
+    internal static string SessionKey(string token) =>
+        Convert.ToHexStringLower(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token)));
+
+    private Dictionary<string, DateTimeOffset> ActiveRevocations(DateTimeOffset now) =>
+        _state.RevokedSessions.Where(p => p.Value > now).ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
+
+    private Session? ReadSession(string? token)
+    {
+        if (string.IsNullOrEmpty(token) || token.Length > 8192) return null;
+        try { return JsonSerializer.Deserialize<Session>(_protector.Unprotect(token)); }
         catch (Exception ex) when (ex is CryptographicException or JsonException or FormatException) { return null; }
     }
 
@@ -197,7 +234,9 @@ public sealed class NetworkAccessService
         public string? Secret { get; init; }
         public long LastStep { get; init; } = -1;
         public string Generation { get; init; } = Guid.NewGuid().ToString("N");
+        public Dictionary<string, DateTimeOffset> RevokedSessions { get; init; } = [];
     }
+    private sealed record LoginAttempt(int Failures, DateTimeOffset BlockedUntil, DateTimeOffset LastAttempt);
     private sealed record Enrollment(string Secret, DateTimeOffset Expires);
     private sealed record Session(string Generation, DateTimeOffset Expires);
 }

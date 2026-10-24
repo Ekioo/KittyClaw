@@ -12,7 +12,9 @@ body is generated from it.
    ending with a `---` separator. The one-line summary doubles as the release
    title. Changelog headings intentionally use the short `vX.Y` release line;
    the corresponding MinVer tag includes the patch component (for example,
-   heading `v0.13` maps to tag `v0.13.0`). Commit and push.
+   heading `v0.13` maps to tag `v0.13.0`). For a patch release, use an exact
+   `vX.Y.Z` heading; the publisher prefers it over the older minor entry so
+   patch notes do not repeat the original feature release. Commit and push.
 2. **Merge** — merge `dev` into `main` and push.
 3. **Tag** — on `main`:
    ```

@@ -22,8 +22,33 @@ public sealed class NetworkAccessMiddleware(RequestDelegate next)
             || IPAddress.TryParse(context.Request.Host.Host.Trim('[', ']'), out var host) && IPAddress.IsLoopback(host));
     }
 
+    internal static bool IsCrossOriginBrowserRequest(HttpContext context)
+    {
+        var origin = context.Request.Headers.Origin.ToString();
+        if (origin.Length > 0 && origin != $"{context.Request.Scheme}://{context.Request.Host}") return true;
+        var site = context.Request.Headers["Sec-Fetch-Site"].ToString();
+        return !HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method)
+            && !HttpMethods.IsOptions(context.Request.Method) && site is "cross-site" or "same-site";
+    }
+
+    internal static string LoginSource(HttpContext context)
+    {
+        // Cloudflare overwrites this header at the edge. Trust it only on the
+        // dedicated loopback tunnel origin, never on LAN or ordinary listeners.
+        if (context.Features.Get<RemoteTunnelRequest>() is not null
+            && IPAddress.TryParse(context.Request.Headers["CF-Connecting-IP"].ToString(), out var edgePeer))
+            return "tunnel:" + Normalize(edgePeer);
+        return "peer:" + (context.Connection.RemoteIpAddress is { } peer ? Normalize(peer) : "in-process");
+
+        static string Normalize(IPAddress address) =>
+            (address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address).ToString();
+    }
+
     public async Task InvokeAsync(HttpContext context, NetworkAccessService access, IAntiforgery antiforgery, LocalizationService l)
     {
+        // Local automation remains trusted, but an external browser is not local
+        // automation merely because its form or WebSocket targets localhost.
+        if (IsCrossOriginBrowserRequest(context)) { context.Response.StatusCode = 403; return; }
         var local = IsLocal(context);
         var setup = context.Request.Path.StartsWithSegments("/network-setup");
         var login = context.Request.Path == "/access";
@@ -48,11 +73,6 @@ public sealed class NetworkAccessMiddleware(RequestDelegate next)
         }
         if (!access.Enabled || !context.Request.IsHttps) { context.Response.StatusCode = 403; return; }
 
-        // Reject cross-origin browser writes, including WebSocket/SignalR handshakes.
-        var origin = context.Request.Headers.Origin.ToString();
-        if (origin.Length > 0 && origin != $"{context.Request.Scheme}://{context.Request.Host}")
-        { context.Response.StatusCode = 403; return; }
-
         if (login || logout)
         {
             context.Response.Headers.CacheControl = "no-store";
@@ -61,12 +81,13 @@ public sealed class NetworkAccessMiddleware(RequestDelegate next)
                 if (!await ValidForm(context, antiforgery)) return;
                 if (logout)
                 {
+                    access.RevokeSession(context.Request.Cookies[Cookie], DateTimeOffset.UtcNow);
                     context.Response.Cookies.Delete(Cookie, new CookieOptions { Secure = true, Path = "/" });
                     context.Response.Redirect("/access");
                     return;
                 }
                 var form = await context.Request.ReadFormAsync();
-                var session = access.Authenticate(form["code"].ToString(), DateTimeOffset.UtcNow);
+                var session = access.Authenticate(form["code"].ToString(), DateTimeOffset.UtcNow, LoginSource(context));
                 if (session is not null)
                 {
                     context.Response.Cookies.Append(Cookie, session, new CookieOptions
@@ -97,7 +118,10 @@ public sealed class NetworkAccessMiddleware(RequestDelegate next)
         using var expiration = new CancellationTokenSource();
         using var registration = expiration.Token.Register(context.Abort);
         void Revoke() => context.Abort();
+        var sessionKey = NetworkAccessService.SessionKey(context.Request.Cookies[Cookie]!);
+        void RevokeOne(string revokedKey) { if (revokedKey == sessionKey) context.Abort(); }
         access.SessionsRevoked += Revoke;
+        access.SessionRevoked += RevokeOne;
         try
         {
             var expires = access.SessionExpiry(context.Request.Cookies[Cookie], DateTimeOffset.UtcNow);
@@ -105,7 +129,11 @@ public sealed class NetworkAccessMiddleware(RequestDelegate next)
             expiration.CancelAfter(TimeSpan.FromMilliseconds(Math.Max(0, (expires.Value - DateTimeOffset.UtcNow).TotalMilliseconds)));
             await next(context);
         }
-        finally { access.SessionsRevoked -= Revoke; }
+        finally
+        {
+            access.SessionsRevoked -= Revoke;
+            access.SessionRevoked -= RevokeOne;
+        }
     }
 
     private static async Task Setup(HttpContext context, NetworkAccessService access, IAntiforgery antiforgery, LocalizationService l)

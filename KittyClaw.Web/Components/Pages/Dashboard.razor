@@ -442,7 +442,7 @@ else
     private string? _activeRunDrawerId;
 
     private static readonly MarkdownPipeline _markdownPipeline =
-        new MarkdownPipelineBuilder().UseAdvancedExtensions().DisableHtml().Build();
+        KittyClaw.Core.Services.SafeMarkdown.Build();
 
     // ── Tile chat ──
 
