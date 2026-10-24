@@ -20,7 +20,7 @@ The response includes the preserved root ticket ID, the number of transferred ti
 
 ## Fidelity guarantees
 
-The operation preserves ticket and history identifiers, immutable timestamps, fields, status, priority, assignment, scheduling, comments, activities, labels, parent/child relationships, run metadata, token/cost metadata, and audit data. It adds one provenance activity to the transferred root ticket identifying the source project, target project, actor, and transfer time.
+The operation preserves ticket and history identifiers, immutable timestamps, fields, column visit counters, status, priority, assignment, scheduling, comments, activities, labels, parent/child relationships, run metadata, token/cost metadata, and audit data. It adds one provenance activity to the transferred root ticket identifying the source project, target project, actor, and transfer time.
 
 The source is removed only as part of the same successful operation that writes the target. A failed target write rolls both databases back, so the source remains untouched and no partial or duplicate copy is left behind.
 
