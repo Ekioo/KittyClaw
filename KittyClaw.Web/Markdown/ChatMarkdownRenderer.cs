@@ -6,7 +6,7 @@ namespace KittyClaw.Web.Markdown;
 public static class ChatMarkdownRenderer
 {
     private static readonly MarkdownPipeline Pipeline =
-        new MarkdownPipelineBuilder().UseAdvancedExtensions().DisableHtml().Build();
+        KittyClaw.Core.Services.SafeMarkdown.Build();
 
     public static string Render(string? text)
     {

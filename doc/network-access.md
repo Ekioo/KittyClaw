@@ -31,15 +31,26 @@ local automation.
 `NetworkAccessMiddleware` runs before application endpoints and uploaded files.
 All non-loopback requests require enabled access, HTTPS and a valid session,
 including REST APIs, MCP and Blazor/SignalR handshakes. Only the login form is
-anonymous. APIs receive 401 rather than HTML redirects. Cross-origin browser
-requests are rejected. Remote HTTP requests are rejected, never used for login.
+anonymous. APIs receive 401 rather than HTML redirects. Cross-origin browser requests are rejected before local trust is applied, including
+forms and WebSocket handshakes targeting localhost. Browser fetch metadata rejects
+cross-site writes with no Origin; ordinary headerless local agent clients and
+user-initiated local navigation remain supported. Remote HTTP requests are rejected, never used for login.
 
 Login uses RFC 6238 TOTP, accepting a one-step clock drift. Accepted time steps are
-persisted to prevent reuse across restarts. Five failed attempts cause a global
-one-minute cooldown. Authenticated sessions expire after 12 hours and use a
+persisted to prevent reuse across restarts. Five failed attempts cause a one-minute cooldown for that source address. Sources
+are hashed, kept in a bounded in-memory registry and expire after inactivity. Direct
+LAN requests use the actual socket peer; only the dedicated tunnel boundary uses
+Cloudflare's overwritten `CF-Connecting-IP` header. `X-Forwarded-For` is never used.
+A failed login from one source does not block a valid login from another source. Authenticated sessions expire after 12 hours and use a
 protected `__Host-` cookie with Secure, HttpOnly and SameSite=Strict. There are no
 anonymous exceptions for agent APIs or MCP; local integrations continue to use
 localhost.
+
+Logout persists a SHA-256 revocation key for the current protected cookie until
+its expiration and immediately aborts that session's active remote transports.
+Other sessions and the connector remain online. Existing protected cookies keep
+their format, so upgrading does not require re-enrollment. Expired revocation
+entries are pruned when authenticating or revoking a session.
 
 Disabling access from localhost immediately revokes sessions and closes active
 remote transports, including Blazor WebSockets. It also removes the authenticator

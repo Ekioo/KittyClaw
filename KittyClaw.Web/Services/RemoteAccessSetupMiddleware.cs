@@ -11,7 +11,7 @@ public sealed class RemoteAccessSetupMiddleware(RequestDelegate next)
         NetworkAccessService access, IAntiforgery antiforgery, LocalizationService l)
     {
         if (context.Request.Path != "/remote-setup") { await next(context); return; }
-        if (!NetworkAccessMiddleware.IsLocal(context)) { context.Response.StatusCode = 403; return; }
+        if (!NetworkAccessMiddleware.IsLocal(context) || NetworkAccessMiddleware.IsCrossOriginBrowserRequest(context)) { context.Response.StatusCode = 403; return; }
         context.Response.Headers.CacheControl = "no-store";
         string? error = null;
         if (HttpMethods.IsPost(context.Request.Method))

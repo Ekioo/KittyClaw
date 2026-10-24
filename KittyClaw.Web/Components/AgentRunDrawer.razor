@@ -431,7 +431,7 @@
     private static string HighlightJson(string? json) => SharedRenderHelpers.HighlightJson(json);
 
     private static readonly MarkdownPipeline _mdPipeline =
-        new MarkdownPipelineBuilder().UseAdvancedExtensions().DisableHtml().Build();
+        KittyClaw.Core.Services.SafeMarkdown.Build();
 
     private static string RenderMarkdown(string? text) =>
         string.IsNullOrEmpty(text) ? "" : Markdig.Markdown.ToHtml(text, _mdPipeline);
