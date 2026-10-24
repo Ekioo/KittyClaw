@@ -40,15 +40,15 @@
             @if (activeRun is not null)
             {
                 <button type="button" class="agent-spinner"
-                      aria-label="@L.Get("CardActiveRunTooltip", activeRun.AgentName)"
-                      title="@L.Get("CardActiveRunTooltip", activeRun.AgentName)"
+                      aria-label="@L.Get("CardActiveRunTooltip", RunName(activeRun.AgentName))"
+                      title="@L.Get("CardActiveRunTooltip", RunName(activeRun.AgentName))"
                       @onclick="() => OnOpenRunDrawer.InvokeAsync(activeRun.RunId)"
                       @onclick:stopPropagation></button>
             }
             else if (lastRun is not null)
             {
                 <button class="agent-log-btn agent-log-@lastRun.Status.ToString().ToLowerInvariant()"
-                        title="@L.Get("CardLastRunTooltip", lastRun.AgentName, lastRun.Status)"
+                        title="@L.Get("CardLastRunTooltip", RunName(lastRun.AgentName), lastRun.Status)"
                         @onclick="() => OnOpenRunDrawer.InvokeAsync(lastRun.RunId)"
                         @onclick:stopPropagation>log</button>
             }
@@ -95,6 +95,7 @@
 </div>
 
 @code {
+    private string RunName(string name) => ColumnDisplayName.Resolve(name, Columns, L["TicketCurrentColumn"]);
     [Parameter] public TicketSummary Ticket { get; set; } = null!;
     [Parameter] public bool IsSelected { get; set; }
     [Parameter] public bool IsDragging { get; set; }

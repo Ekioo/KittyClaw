@@ -2,15 +2,16 @@
 @inject LocalizationService L
 @inject IJSRuntime JS
 @inject EscapeKeyStack EscapeStack
+@inject ColumnService Columns
 @implements IDisposable
 
 <div class="chat-drawer-overlay conversation-overlay" @onclick="OnClose"></div>
 <section class="chat-drawer agent-conversation @CssClass @(_showTimes ? "conversation-show-times" : "")"
-         aria-label="@Title">
+         aria-label="@DisplayTitle">
     <header class="conversation-header agent-drawer-header" @oncontextmenu="OpenMenu" @oncontextmenu:preventDefault>
         <div class="conversation-heading agent-drawer-title">
             @HeaderLeading
-            <span class="agent-name">@Title</span>
+            <span class="agent-name">@DisplayTitle</span>
             @if ((TicketId ?? Run?.TicketId) is int ticketId)
             {
                 <span class="agent-ticket">#@ticketId</span>
@@ -30,7 +31,7 @@
             <div class="agent-drawer-meta">
                 <span title="@L["ConversationSkill"]">@Run.SkillFile</span>
                 <span title="@L["ConversationSession"]">@ShortSession(Run.SessionId)</span>
-                <span title="@L["ConversationGroup"]">@Run.ConcurrencyGroup</span>
+                <span title="@L["ConversationGroup"]">@ColumnLabel(Run.ConcurrencyGroup)</span>
                 @if (!string.IsNullOrWhiteSpace(Run.Model ?? Model))
                 {
                     <span title="@L["ConversationModel"]">@(Run.Model ?? Model)</span>
@@ -72,6 +73,18 @@
 }
 
 @code {
+    private List<BoardColumn> _displayColumns = [];
+    private string DisplayTitle => Run is not null && Title == Run.AgentName ? ColumnLabel(Title) : Title;
+    private string ColumnLabel(string value) => ColumnDisplayName.Resolve(value, _displayColumns, L["TicketCurrentColumn"]);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Run is not null && (ColumnDisplayName.IsColumn(Run.AgentName) || ColumnDisplayName.IsColumn(Run.ConcurrencyGroup)))
+            _displayColumns = await Columns.ListColumnsAsync(Run.ProjectSlug);
+        else
+            _displayColumns = [];
+    }
+
     [Parameter] public string Title { get; set; } = "";
     [Parameter] public string? CssClass { get; set; }
     [Parameter] public string? Context { get; set; }
