@@ -4,6 +4,14 @@
 .windows-desktop .board-layout { height: calc(100dvh - var(--desktop-topbar-height)); }
 .windows-desktop .unified-page { min-height: calc(100dvh - var(--desktop-topbar-height)); }
 
+/* Shared conversations use the content viewport below the persistent window toolbar. */
+.windows-desktop :is(.agent-conversation.chat-drawer, .conversation-overlay) {
+    top: var(--desktop-topbar-height);
+}
+.windows-desktop .agent-conversation.chat-drawer {
+    height: calc(100dvh - var(--desktop-topbar-height));
+}
+
 .windows-desktop .desktop-window-header {
     position: fixed;
     inset: 0 0 auto;

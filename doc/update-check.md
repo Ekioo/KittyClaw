@@ -26,6 +26,8 @@ Source installations retain the dismissible release-link banner described below.
   to every view, with the KittyClaw home link on the left and window controls on the right.
   A matching fallback keeps the shell visible during loading and on error/not-found pages.
   Browser views retain their regular layout; viewport-sized boards account for the fixed header.
+  Shared conversation drawers and their overlays start below it and use the remaining viewport height,
+  keeping the conversation header and composer visible even in compact windows.
   Long toolbars scroll between the fixed logo and window controls, using arrow buttons or
   the mouse wheel. Search help opens below the header so the scrolling strip cannot clip it.
   Free header space supports native dragging; interactive controls remain clickable.
