@@ -8,25 +8,57 @@
 @implements IDisposable
 
 <div class="ticket-improvement-overlay">
-    <section class="ticket-improvement-dialog" role="dialog" aria-modal="true" aria-label="@L["ImproveTicket"]" aria-busy="@_busy">
-        <h3>@L["ImproveTicket"]</h3>
+    <section class="ticket-improvement-dialog" role="dialog" aria-modal="true" aria-label="@L[Split ? "SplitTicket" : "ImproveTicket"]" aria-busy="@_busy">
+        <h3>@L[Split ? "SplitTicket" : "ImproveTicket"]</h3>
         @if (_busy) { <p role="status">@L["ImprovingTicket"]</p> }
         @if (_proposal is not null)
         {
-            <p>@L["ImprovementReview"]</p>
+            @if (!Split) { <p>@L["ImprovementReview"]</p> }
+            @if (Split && _proposal.SuggestedTickets is { Count: > 1 } drafts)
+            {
+                <p>@L["ImprovementSplitHint"]</p>
+                <div class="ticket-improvement-drafts">
+                    @foreach (var draft in drafts)
+                    {
+                        <details class="ticket-improvement-draft">
+                            <summary>@draft.Title</summary>
+                            <div class="ticket-improvement-draft-body">
+                                <p>@draft.Description</p>
+                                <strong>@L["TicketAcceptanceCriteria"]</strong>
+                                <ul>@foreach (var criterion in draft.AcceptanceCriteria) { <li>@criterion</li> }</ul>
+                            </div>
+                        </details>
+                    }
+                </div>
+            }
+            @if (!Split)
+            {
             <label>@L["Description"]<textarea class="settings-input" rows="12" @bind="_description" @bind:event="oninput"></textarea></label>
             <label>@L["TicketAcceptanceCriteria"]<textarea class="settings-input" rows="7" @bind="_criteria" @bind:event="oninput"></textarea></label>
             <p>@L["ImprovementCriteriaHint"]</p>
-            <button class="settings-primary" disabled="@_busy" @onclick="Apply">@L["Save"]</button>
+            }
+            @if (Split && _proposal.SuggestedTickets is { Count: > 1 })
+            {
+                <button class="settings-primary" disabled="@_busy" @onclick="() => Apply(true)">@L["ImprovementCreateTickets"]</button>
+            }
+            else if (!Split)
+            {
+                <button class="settings-primary" disabled="@_busy" @onclick="() => Apply(false)">@L["Save"]</button>
+            }
+            else
+            {
+                <p role="status">@L["ImprovementNoSplitNeeded"]</p>
+            }
         }
         @if (_error is not null) { <p class="dep-error" role="alert">@_error</p> }
-        <button class="tile-config-cancel" @onclick="() => OnClose.InvokeAsync()">@L["Cancel"]</button>
+        <button class="tile-config-cancel" disabled="@(_busy && _proposal is not null)" @onclick="() => OnClose.InvokeAsync()">@L["Cancel"]</button>
     </section>
 </div>
 
 @code {
     [Parameter] public string Slug { get; set; } = "";
     [Parameter] public int TicketId { get; set; }
+    [Parameter] public bool Split { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
     private readonly CancellationTokenSource _cts = new();
@@ -42,7 +74,7 @@
         _busy = true;
         try {
             _original = await Tickets.GetTicketAsync(Slug, TicketId) ?? throw new InvalidOperationException("Ticket no longer exists.");
-            _proposal = await Improvements.AnalyzeAsync(Slug, _original, _cts.Token);
+            _proposal = await Improvements.AnalyzeAsync(Slug, _original, _cts.Token, Split);
             _description = _proposal.Description;
             _criteria = string.Join("\n", _proposal.AcceptanceCriteria);
         }
@@ -50,13 +82,17 @@
         catch (Exception ex) { _error = ex.Message; }
         finally { _busy = false; }
     }
-    private async Task Apply()
+    private async Task Apply(bool split)
     {
-        if (_original is null) return;
+        if (_original is null || _busy) return;
         _busy = true; _error = null;
         try {
-            await Tickets.ApplyImprovementAsync(Slug, TicketId, _original.Description, _original.AcceptanceCriteriaJson,
-                _description, _criteria.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList());
+            if (split)
+                await Tickets.SplitTicketAsync(Slug, _original, _proposal!.SuggestedTickets!);
+            else
+                await Tickets.ApplyImprovementAsync(Slug, TicketId, _original.Description, _original.AcceptanceCriteriaJson,
+                    _description, _criteria.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList(),
+                    _original.UpdatedAt);
             await OnChanged.InvokeAsync();
             await OnClose.InvokeAsync();
         }

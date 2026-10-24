@@ -2,5 +2,9 @@
   "ImproveTicket": "Mit KI verbessern",
   "ImprovingTicket": "Das Ticket wird analysiert und ein Vorschlag vorbereitet…",
   "ImprovementReview": "Prüfen und bearbeiten Sie den Vorschlag vor dem Speichern.",
-  "ImprovementCriteriaHint": "Ein Kriterium pro Zeile. Neu formulierte Kriterien müssen bewertet werden."
+  "ImprovementCriteriaHint": "Ein Kriterium pro Zeile. Neu formulierte Kriterien müssen bewertet werden.",
+  "ImprovementSplitHint": "Der Umfang ist groß. Klicken Sie auf einen Titel, um die Details zu prüfen. Die Bestätigung erstellt verknüpfte Untertickets in derselben Spalte.",
+  "ImprovementCreateTickets": "Bestätigen und Tickets erstellen",
+  "SplitTicket": "In mehrere Tickets aufteilen",
+  "ImprovementNoSplitNeeded": "Der Umfang ist bereits klar begrenzt. Es werden keine zusätzlichen Tickets vorgeschlagen."
 }

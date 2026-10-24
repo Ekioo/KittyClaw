@@ -9,6 +9,30 @@ row. Status labels, icons and colors distinguish validated (green), partial (amb
 unmet (red) and unevaluated (gray) criteria. A count summarizes validated criteria.
 Controls wrap below the text on mobile; underlying status values remain unchanged.
 
+## AI ticket improvement
+
+The ticket panel's **Improve with AI** action proposes a clearer description and a minimal
+set of acceptance criteria for owner review. The prompt targets 1–3 essential criteria
+(fewer for simple tickets), allowing more only for distinct, explicitly requested outcomes.
+It asks the model to merge overlaps, remove low-value criteria, and retain only observable
+results with a practical pass/fail check whose effort is proportionate to its value.
+Unverifiable, subjective or very difficult-to-verify criteria are excluded, along with
+invented requirements and scope expansion. This is prompt guidance, not an automatic
+semantic validation of the generated proposal.
+
+**Split into tickets** is a separate action from **Improve with AI**, on desktop and mobile.
+Improvement only rewrites the existing ticket; it never proposes or creates other tickets.
+Only tickets whose scope is too broad receive a structured `suggestedTickets` breakdown
+when the owner explicitly selects the split action.
+Technical difficulty alone does not justify splitting a well-scoped ticket. The proposal
+contains the smallest useful set of 2–10 dedicated tasks, each with a title, description
+and 1–3 practical criteria. The dialog shows a collapsed block per title, with details
+on click, and a global approval button to create all proposed subtickets linked to the
+original ticket in its current column. If scope is already focused, the dialog explains
+that no breakdown is needed and offers no creation action. The original ticket retains
+its description and criteria. Child creation commits atomically; stale proposals are rejected. No tickets
+are created during analysis or before owner approval.
+
 Evidence contains `content`, `mediaType` and optional `fileName`. Supported media types
 are `text/plain`, `application/json`, `image/png`, `image/jpeg`, `image/gif` and `image/webp`.
 Image content is base64 encoded without a data-URL prefix; the UI previews it inline.

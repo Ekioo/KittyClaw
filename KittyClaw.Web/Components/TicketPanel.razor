@@ -65,7 +65,8 @@
                 }
             </div>
             <div class="header-actions">
-                <button class="tile-config-revise" @onclick="() => _showImprovement = true">✦ @L["ImproveTicket"]</button>
+                <button class="tile-config-revise" @onclick="() => OpenImprovement(false)">✦ @L["ImproveTicket"]</button>
+                <button class="tile-config-revise" @onclick="() => OpenImprovement(true)">@L["SplitTicket"]</button>
                 <button class="close-btn" @onclick="CloseAsync">&times;</button>
             </div>
         </div>
@@ -486,11 +487,13 @@
 
 @if (_showImprovement)
 {
-    <TicketImprovementDialog Slug="@Slug" TicketId="@TicketId" OnClose="() => _showImprovement = false" OnChanged="RefreshAsync" />
+    <TicketImprovementDialog Slug="@Slug" TicketId="@TicketId" Split="@_splitTicket" OnClose="() => _showImprovement = false" OnChanged="RefreshAsync" />
 }
 
 @code {
     private bool _showImprovement;
+    private bool _splitTicket;
+    private void OpenImprovement(bool split) { _splitTicket = split; _showImprovement = true; }
 
     private string CostTooltip(long tokens, double cost, bool estimated)
     {
