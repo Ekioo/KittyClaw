@@ -424,6 +424,10 @@
                             </div>
                         }
                     }
+                    @if (_ticket?.HasMoreComments == true)
+                    {
+                        <button type="button" class="add-comment-btn-sm" disabled="@_loadingMoreComments" @onclick="LoadMoreCommentsAsync">@L["LoadMoreComments"]</button>
+                    }
                 </div>
 
                 <div class="panel-footer-actions">
@@ -715,6 +719,7 @@
     {
         var key = $"{Slug}/{TicketId}/{RefreshToken}";
         if (key == _loadedKey) return;
+        if (_loadedKey?.StartsWith($"{Slug}/{TicketId}/", StringComparison.Ordinal) != true) _commentLimit = 30;
         _loadedKey = key;
         ResetEditingState();
         await LoadAsync();
@@ -741,6 +746,27 @@
         _escPriorityPicker?.Dispose();
         _escLabelDropdown?.Dispose();
         _escChatDrawer?.Dispose();
+    }
+
+    private int _commentLimit = 30;
+    private bool _loadingMoreComments;
+
+    private async Task LoadMoreCommentsAsync()
+    {
+        if (_loadingMoreComments) return;
+        _loadingMoreComments = true;
+        var slug = Slug;
+        var ticketId = TicketId;
+        var limit = _commentLimit + 30;
+        try
+        {
+            var ticket = await TicketService.GetTicketAsync(slug, ticketId, limit);
+            if (_disposed || Slug != slug || TicketId != ticketId || ticket is null) return;
+            _commentLimit = limit;
+            _ticket = ticket;
+            await RebuildPipelineAsync();
+        }
+        finally { _loadingMoreComments = false; }
     }
 
     private void ResetEditingState()
@@ -778,7 +804,7 @@
                 return;
             }
             else
-                _ticket = await Task.Run(() => TicketService.GetTicketAsync(Slug, TicketId));
+                _ticket = await Task.Run(() => TicketService.GetTicketAsync(Slug, TicketId, _commentLimit));
             if (_disposed || _ticket is null) return;
             // Load the column selector with the ticket; ancillary work must not delay its options.
             if (!restored)
@@ -814,7 +840,7 @@
     /// <summary>Reload after a local mutation, then let the parent refresh its lists.</summary>
     private async Task RefreshAsync()
     {
-        _ticket = await TicketService.GetTicketAsync(Slug, TicketId);
+        _ticket = await TicketService.GetTicketAsync(Slug, TicketId, _commentLimit);
         await LoadJevHistoryAsync();
         _summaries = await TicketService.ListTicketsAsync(Slug);
         if (_ticket is not null)
@@ -950,7 +976,7 @@
         InvokeAsync(async () =>
         {
             if (_disposed) return;
-            _ticket = await TicketService.GetTicketAsync(Slug, TicketId);
+            _ticket = await TicketService.GetTicketAsync(Slug, TicketId, _commentLimit);
             if (_ticket is null)
             {
                 // Ticket deleted from elsewhere (API, agent) — close rather than show a husk.
