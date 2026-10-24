@@ -22,7 +22,18 @@ Exposes the project, ticket, comment, member, label, column, and workflow data o
 - `GET /api/projects/{slug}/tickets/{id}` exposes both dependency directions as `blockedBy` and `blocks` (each entry: dependency id, ticket id, title, status); the [kanban UI](./kanban-ui.md) renders them in the ticket panel.
 - `GET /api/projects/{slug}/git` — Git status of the project's configured workspace (`GitRepositoryStatus`: workspace configured/exists, git availability, `.git` metadata detection, resolved repository root and current branch). `404` if the project does not exist.
 - `POST /api/projects/{slug}/git/init` — runs `git init` strictly inside the configured workspace (no client-supplied path); see [per-ticket worktree workflow](./worktree-workflow.md#initializing-a-missing-repository). Returns `200` on creation, `409` if Git metadata already exists (directory or file `.git`), `400` for a missing/unconfigured workspace or unavailable git.
-- `POST /api/projects/{slug}/chat/start` accepts an optional `images` array (`ChatImageDto[]`). Each DTO carries `dataUrl` (base64 data URL), `mime`, `name`, and `sizeBytes`. Server-side: MIME allow-list (JPEG, PNG, GIF, WebP), 5 MB per-image cap, 5 images per turn cap, base64 decoded and persisted to `<workspace>/.agents/channel/tmp/chat-{runId}-{i}.{ext}` before being forwarded as `ImagePaths` to `AgentRunContext`. Invalid images return HTTP 400 `image_rejected`.
+- `POST /api/projects/{slug}/chat/start` accepts an optional `images` array (`ChatImageDto[]`). Each DTO carries `dataUrl` (base64 data URL), `mime`, `name`, and `sizeBytes`. Server-side: MIME allow-list (JPEG, PNG, GIF, WebP), 5 MB per-image cap, 5 images per turn cap, base64 decoded and persisted as temporary files before being forwarded as `ImagePaths` to `AgentRunContext`. Invalid images return HTTP 400 `image_rejected`.
+  Image bytes must have a signature matching the declared MIME type; the encoded
+  length is capped before base64 allocation, independently of `sizeBytes`.
+  Files are stored outside the repository under the system temporary directory
+  (`KittyClaw/chat-images/<runId>/`), and rejected batches remove partial files.
+
+- Pipeline-kit request streams are bounded to 8 MiB before parsing the archive,
+  including when Content-Length is absent. Oversized confirmation uploads return
+  413; empty or oversized analysis bodies return 400.
+- Raw dashboard outputs use a sandboxed content security policy, including SVG
+  files opened directly as documents. Generated SVG scripts cannot execute in
+  the application origin.
 
 - `GET /api/projects/{slug}/runs` accepts `includeCompleted`, `ticketId`, and `limit` (1-500 when specified; MCP defaults to 100); it returns active runs by default and retained terminal runs when requested.
 

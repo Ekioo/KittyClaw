@@ -6,6 +6,12 @@ Per-project, write-only secret storage. Owners register named secrets (environme
 names) through the API/UI; KittyClaw injects the values only into agent and automation
 subprocesses that belong to the same project, and redacts them from run streams and logs.
 Saved values are never returned by the API or UI.
+Names must match the entire environment-variable identifier, including at the end
+of the string; trailing line breaks are rejected. Values containing NUL are
+rejected before storage because subprocess environments cannot preserve them.
+Run redaction covers literal values and both default .NET and relaxed JSON
+escaping, including escaped forward slashes. Encoded variants are processed
+before shorter literal values.
 
 ## Key components
 

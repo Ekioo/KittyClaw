@@ -46,6 +46,7 @@ public sealed partial class ProjectSecretVault
         ValidateSecretName(name);
         if (string.IsNullOrEmpty(value)) throw new ArgumentException("Secret value cannot be empty.", nameof(value));
         if (value.Length > 64 * 1024) throw new ArgumentException("Secret value is too large.", nameof(value));
+        if (value.Contains('\0')) throw new ArgumentException("Secret values cannot contain null characters.", nameof(value));
 
         await WithLockAsync(projectSlug, async () =>
         {
@@ -210,27 +211,38 @@ public sealed partial class ProjectSecretVault
 
     private sealed record SecretEntry(string Value, DateTime UpdatedAt);
 
-    [GeneratedRegex("^[a-z0-9][a-z0-9-]{0,62}$", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\A[a-z0-9][a-z0-9-]{0,62}\z", RegexOptions.IgnoreCase)]
     private static partial Regex ProjectSlugRegex();
 
-    [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]{0,127}$")]
+    [GeneratedRegex(@"\A[A-Za-z_][A-Za-z0-9_]{0,127}\z")]
     private static partial Regex SecretNameRegex();
 }
 
 public static class SecretRedactor
 {
     public const string Replacement = "[REDACTED]";
+    private static readonly JsonSerializerOptions RelaxedJson = new()
+    {
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
 
     public static string Redact(string? text, IEnumerable<string> values)
     {
         if (string.IsNullOrEmpty(text)) return text ?? string.Empty;
         var result = text;
-        foreach (var value in values.Where(value => !string.IsNullOrEmpty(value)).Distinct().OrderByDescending(value => value.Length))
+        var variants = values.Where(value => !string.IsNullOrEmpty(value))
+            .SelectMany(value => new[]
+            {
+                value,
+                JsonSerializer.Serialize(value)[1..^1],
+                JsonSerializer.Serialize(value, RelaxedJson)[1..^1],
+                JsonSerializer.Serialize(value, RelaxedJson)[1..^1].Replace("/", "\\/", StringComparison.Ordinal)
+            })
+            .Distinct(StringComparer.Ordinal).OrderByDescending(value => value.Length);
+        // Replace escaped representations before shorter raw substrings can split them.
+        foreach (var value in variants)
         {
             result = result.Replace(value, Replacement, StringComparison.Ordinal);
-            var jsonEscaped = JsonSerializer.Serialize(value)[1..^1];
-            if (!string.Equals(jsonEscaped, value, StringComparison.Ordinal))
-                result = result.Replace(jsonEscaped, Replacement, StringComparison.Ordinal);
         }
         return result;
     }

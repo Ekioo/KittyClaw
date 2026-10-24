@@ -6,6 +6,7 @@ namespace KittyClaw.Web.Api;
 
 public static partial class Endpoints
 {
+    private const int MaxPipelineUploadBytes = 8 * 1024 * 1024;
     private static void MapPipelines(RouteGroupBuilder api)
     {
         api.MapGet("/projects/{slug}/pipelines", HandleListPipelines).Produces<List<Pipeline>>()
@@ -68,6 +69,8 @@ public static partial class Endpoints
             var file = form.Files.GetFile("kit");
             if (file is null || file.Length == 0)
                 return Results.BadRequest(new { error = "A non-empty 'kit' file is required." });
+            if (file.Length > MaxPipelineUploadBytes)
+                return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
             PipelineImportConfirmation? confirmation;
             try
             {
@@ -86,9 +89,9 @@ public static partial class Endpoints
             try
             {
                 await using var stream = file.OpenReadStream();
-                using var buffer = new MemoryStream();
-                await stream.CopyToAsync(buffer);
-                var result = await importer.InstallAsync(slug, buffer.ToArray(), confirmation);
+                var archive = await ReadBoundedPipelineArchiveAsync(stream, request.HttpContext.RequestAborted);
+                if (archive is null) return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+                var result = await importer.InstallAsync(slug, archive, confirmation);
                 if (result is null) return Results.NotFound();
                 notifier.NotifyProjectUpdated(slug);
                 return Results.Created($"/api/projects/{slug}/pipelines/{result.PipelineId}", result);
@@ -123,15 +126,27 @@ public static partial class Endpoints
         {
             var form = await request.ReadFormAsync();
             var file = form.Files.GetFile("kit") ?? form.Files.FirstOrDefault();
-            if (file is null || file.Length == 0) return null;
+            if (file is null || file.Length == 0 || file.Length > MaxPipelineUploadBytes) return null;
             await using var source = file.OpenReadStream();
-            using var buffer = new MemoryStream();
-            await source.CopyToAsync(buffer);
-            return buffer.ToArray();
+            return await ReadBoundedPipelineArchiveAsync(source, request.HttpContext.RequestAborted);
         }
+        if (request.ContentLength > MaxPipelineUploadBytes) return null;
+        return await ReadBoundedPipelineArchiveAsync(request.Body, request.HttpContext.RequestAborted);
+    }
+
+    internal static async Task<byte[]?> ReadBoundedPipelineArchiveAsync(Stream source, CancellationToken ct)
+    {
         using var body = new MemoryStream();
-        await request.Body.CopyToAsync(body);
-        return body.Length == 0 ? null : body.ToArray();
+        var buffer = new byte[64 * 1024];
+        while (true)
+        {
+            // Read one extra byte to reject chunked uploads without trusting Content-Length.
+            var read = await source.ReadAsync(buffer.AsMemory(0,
+                (int)Math.Min(buffer.Length, MaxPipelineUploadBytes + 1L - body.Length)), ct);
+            if (read == 0) return body.Length == 0 ? null : body.ToArray();
+            if (body.Length + read > MaxPipelineUploadBytes) return null;
+            await body.WriteAsync(buffer.AsMemory(0, read), ct);
+        }
     }
 
     // Shared application handlers used by REST endpoints and MCP tools.

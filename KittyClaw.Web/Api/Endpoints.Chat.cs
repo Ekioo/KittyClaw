@@ -401,7 +401,7 @@ public static partial class Endpoints
     /// Returns the list of absolute paths to forward to <see cref="AgentRunContext.ImagePaths"/>,
     /// or a non-null reason string for a 400 "image_rejected" response.
     /// </summary>
-    private static async Task<(IReadOnlyList<string>? Paths, string? RejectReason)> PersistChatImagesAsync(
+    internal static async Task<(IReadOnlyList<string>? Paths, string? RejectReason)> PersistChatImagesAsync(
         IReadOnlyList<ChatImageDto>? images, string workspacePath, string runId)
     {
         if (images is null || images.Count == 0) return (null, null);
@@ -410,41 +410,57 @@ public static partial class Endpoints
 
         _ = workspacePath; // Kept in the signature for compatibility with existing callers/tests.
         var tmpDir = Path.Combine(Path.GetTempPath(), "KittyClaw", "chat-images", runId);
-        Directory.CreateDirectory(tmpDir);
-
         var paths = new List<string>(images.Count);
-        for (var i = 0; i < images.Count; i++)
+        var completed = false;
+        try
         {
-            var img = images[i];
-            if (string.IsNullOrWhiteSpace(img.Mime) || !ChatImageAllowedMime.Contains(img.Mime))
-                return (null, $"unsupported MIME type: {img.Mime}");
-            if (img.SizeBytes > ChatImageMaxBytes)
-                return (null, $"image too large (max {ChatImageMaxBytes} bytes)");
-            if (string.IsNullOrWhiteSpace(img.DataUrl))
-                return (null, "empty data URL");
-
-            // data:image/png;base64,XXXX  →  XXXX
-            var commaIdx = img.DataUrl.IndexOf(',');
-            var base64 = commaIdx > 0 ? img.DataUrl[(commaIdx + 1)..] : img.DataUrl;
-            byte[] bytes;
-            try { bytes = Convert.FromBase64String(base64); }
-            catch { return (null, "malformed base64 payload"); }
-            if (bytes.LongLength > ChatImageMaxBytes)
-                return (null, $"image too large (max {ChatImageMaxBytes} bytes)");
-
-            var ext = img.Mime switch
+            for (var i = 0; i < images.Count; i++)
             {
-                "image/jpeg" => "jpg",
-                "image/png" => "png",
-                "image/gif" => "gif",
-                "image/webp" => "webp",
-                _ => "bin",
-            };
-            var path = Path.Combine(tmpDir, $"chat-{runId}-{i}.{ext}");
-            await File.WriteAllBytesAsync(path, bytes);
-            paths.Add(path);
+                var img = images[i];
+                if (img is null) return (null, "empty image");
+                if (string.IsNullOrWhiteSpace(img.Mime) || !ChatImageAllowedMime.Contains(img.Mime))
+                    return (null, $"unsupported MIME type: {img.Mime}");
+                if (img.SizeBytes > ChatImageMaxBytes)
+                    return (null, $"image too large (max {ChatImageMaxBytes} bytes)");
+                if (string.IsNullOrWhiteSpace(img.DataUrl))
+                    return (null, "empty data URL");
+
+                // data:image/png;base64,XXXX  →  XXXX
+                var commaIdx = img.DataUrl.IndexOf(',');
+                // Bound allocation before decoding, even when SizeBytes is forged.
+                const long maxBase64Characters = ((ChatImageMaxBytes + 2) / 3) * 4;
+                if (img.DataUrl.Length > maxBase64Characters + 128)
+                    return (null, $"image too large (max {ChatImageMaxBytes} bytes)");
+                var base64 = commaIdx > 0 ? img.DataUrl[(commaIdx + 1)..] : img.DataUrl;
+                byte[] bytes;
+                try { bytes = Convert.FromBase64String(base64); }
+                catch (FormatException) { return (null, "malformed base64 payload"); }
+                if (bytes.LongLength > ChatImageMaxBytes)
+                    return (null, $"image too large (max {ChatImageMaxBytes} bytes)");
+
+                var ext = SniffImageExtension(bytes);
+                var expectedExtension = img.Mime.ToLowerInvariant() switch
+                {
+                    "image/jpeg" => "jpg",
+                    "image/png" => "png",
+                    "image/gif" => "gif",
+                    "image/webp" => "webp",
+                    _ => "bin",
+                };
+                if (ext is null || ext != expectedExtension)
+                    return (null, "image content does not match an allowed MIME type");
+                Directory.CreateDirectory(tmpDir);
+                var path = Path.Combine(tmpDir, $"chat-{runId}-{i}.{ext}");
+                paths.Add(path);
+                await File.WriteAllBytesAsync(path, bytes);
+            }
+            completed = true;
+            return (paths, null);
         }
-        return (paths, null);
+        finally
+        {
+            if (!completed) CleanupChatImageFiles(paths);
+        }
     }
 
     private static void CleanupChatImageFiles(IReadOnlyList<string> imagePaths)
