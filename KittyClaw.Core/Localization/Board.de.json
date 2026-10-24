@@ -45,6 +45,8 @@
   "DeleteColumnConfirm": "Spalte löschen",
   "MoveTicketsTo": "Tickets werden verschoben nach:",
   "TicketMenuOpen": "Ticket öffnen",
+  "TicketUrlCopied": "URL kopiert",
+  "TicketMenuCopyUrl": "Ticket-URL kopieren",
   "TicketMenuMoveTo": "In Pipeline / Spalte verschieben",
   "TicketMenuRoutingRestricted": "Die Ziele sind durch das Routing dieser Spalte begrenzt.",
   "ColumnDeleteDestinationHelp": "Diese Spalte erhält vor dem Löschen alle Tickets. KittyClaw entfernt außerdem Routen, die auf die gelöschte Spalte zeigten.",

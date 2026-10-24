@@ -284,6 +284,13 @@ else
         </div>
     }
 
+    <div class="board-copy-notification" role="status" aria-live="polite" aria-atomic="true">
+        @if (_ticketUrlCopied)
+        {
+            <span>✓ @L["TicketUrlCopied"]</span>
+        }
+    </div>
+
     @* ── Ticket context menu ── *@
     @if (_ticketMenuTicket is not null)
     {
@@ -293,6 +300,10 @@ else
             <button class="column-context-menu-item column-context-menu-configure" @onclick="OpenTicketFromMenuAsync">
                 <span class="column-context-menu-check">↗</span>
                 <span>@L["TicketMenuOpen"]</span>
+            </button>
+            <button class="column-context-menu-item" @onclick="CopyTicketUrlAsync">
+                <span class="column-context-menu-check">🔗</span>
+                <span>@L["TicketMenuCopyUrl"]</span>
             </button>
             <div class="column-context-menu-separator"></div>
             <button class="column-context-menu-item" @onclick="() => { _improvementTicketId = menuTicket.Id; CloseTicketMenu(); }">✦ @L["ImproveTicket"]</button>
@@ -418,6 +429,7 @@ else
     {
         <TicketPanel Slug="@Slug"
                      TicketId="openTicketId"
+                     SubKanbanParentId="_subKanbanParentId"
                      RefreshToken="_panelRefreshToken"
                      PushUndo="PushTicketUndo"
                      OnClose="ClosePanel"
@@ -849,6 +861,8 @@ else
 
     public void Dispose()
     {
+        _copyNotificationCts?.Cancel();
+        _copyNotificationCts?.Dispose();
         _initialStateSubscription.Dispose();
         BoardUpdateNotifier.OnProjectUpdated -= OnProjectUpdatedExternal;
         AgentRuns.OnChange -= OnAgentRunsChanged;
@@ -1066,6 +1080,46 @@ else
     }
 
     private void CloseTicketMenu() => _ticketMenuTicket = null;
+
+    private bool _ticketUrlCopied;
+    private CancellationTokenSource? _copyNotificationCts;
+
+    private async Task CopyTicketUrlAsync()
+    {
+        var ticket = _ticketMenuTicket;
+        CloseTicketMenu();
+        if (ticket is null) return;
+
+        var url = Navigation.ToAbsoluteUri(BoardUrl(_subKanbanParentId, ticket.Id)).AbsoluteUri;
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+        }
+        catch (JSException ex)
+        {
+            Logger.LogWarning(ex, "Could not copy the URL for ticket {TicketId}", ticket.Id);
+            await JS.InvokeVoidAsync("prompt", L["TicketMenuCopyUrl"], url);
+            return;
+        }
+
+        _copyNotificationCts?.Cancel();
+        _copyNotificationCts?.Dispose();
+        using var notificationCts = new CancellationTokenSource();
+        _copyNotificationCts = notificationCts;
+        _ticketUrlCopied = true;
+        StateHasChanged();
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2), notificationCts.Token);
+            _ticketUrlCopied = false;
+        }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            if (_copyNotificationCts == notificationCts)
+                _copyNotificationCts = null;
+        }
+    }
 
     private async Task OpenTicketFromMenuAsync()
     {

@@ -45,6 +45,8 @@
   "DeleteColumnConfirm": "Elimina colonna",
   "MoveTicketsTo": "I biglietti verranno spostati in:",
   "TicketMenuOpen": "Apri ticket",
+  "TicketUrlCopied": "URL copiato",
+  "TicketMenuCopyUrl": "Copia URL del ticket",
   "TicketMenuMoveTo": "Sposta in pipeline / colonna",
   "TicketMenuRoutingRestricted": "Le destinazioni sono limitate dall'instradamento di questa colonna.",
   "ColumnDeleteDestinationHelp": "Colonna che riceverà tutti i ticket prima dell’eliminazione. KittyClaw rimuove anche le route che puntavano alla colonna eliminata.",

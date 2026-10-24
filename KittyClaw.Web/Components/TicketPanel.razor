@@ -16,6 +16,7 @@
 @inject TicketWorktreeService TicketWorktreeService
 @inject WorktreeMergeQueueService WorktreeMergeQueueService
 @inject KittyClaw.Web.Services.BoardUpdateNotifier BoardUpdateNotifier
+@inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject PersistentComponentState InitialState
 @inject LocalizationService L
@@ -27,6 +28,13 @@
    so both the project board and the unified home can open a ticket without loading a
    different page underneath. Parents react through OnClose / OnChanged / OnDeleted /
    OnEnterSubKanban; undoable actions are offered to the optional PushUndo sink. *@
+
+<div class="board-copy-notification" role="status" aria-live="polite" aria-atomic="true">
+    @if (_ticketUrlCopied)
+    {
+        <span>✓ @L["TicketUrlCopied"]</span>
+    }
+</div>
 
 @if (_ticket is not null)
 {
@@ -64,6 +72,7 @@
                 }
             </div>
             <div class="header-actions">
+                <button type="button" class="icon-btn" title="@L["TicketMenuCopyUrl"]" aria-label="@L["TicketMenuCopyUrl"]" @onclick="CopyTicketUrlAsync">🔗</button>
                 <button class="tile-config-revise" @onclick="() => OpenImprovement(false)">✦ @L["ImproveTicket"]</button>
                 <button class="tile-config-revise" @onclick="() => OpenImprovement(true)">@L["SplitTicket"]</button>
                 <button class="close-btn" aria-label="@L["Close"]" @onclick="CloseAsync">&times;</button>
@@ -477,7 +486,7 @@
                                    EditingTitle="@_editingTitle" DesktopHeader="@desktopHeader"
                                    Priority="@priority" TitleEditor="@titleEditor" Properties="@properties" Column="@column" Labels="@labels"
                                    Context="@context" DependencyEditor="@dependencyEditor" Content="@content"
-                                   OnClose="CloseAsync" OnImprove="() => OpenImprovement(false)" OnSplit="() => OpenImprovement(true)" OnEditTitle="StartEditTitle" />
+                                   OnClose="CloseAsync" OnImprove="() => OpenImprovement(false)" OnSplit="() => OpenImprovement(true)" OnEditTitle="StartEditTitle" OnCopyUrl="CopyTicketUrlAsync" />
     </div>
 }
 
@@ -552,6 +561,7 @@
 
     [Parameter, EditorRequired] public string Slug { get; set; } = "";
     [Parameter, EditorRequired] public int TicketId { get; set; }
+    [Parameter] public int? SubKanbanParentId { get; set; }
     /// <summary>Bumped by the parent to force a full reload (e.g. after an undo).</summary>
     [Parameter] public int RefreshToken { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
@@ -738,6 +748,8 @@
 
     public void Dispose()
     {
+        _copyNotificationCts?.Cancel();
+        _copyNotificationCts?.Dispose();
         _disposed = true;
         _initialStateSubscription.Dispose();
         BoardUpdateNotifier.OnProjectUpdated -= OnProjectUpdatedExternal;
@@ -990,6 +1002,44 @@
             await RebuildPipelineAsync();
             if (!_disposed) StateHasChanged();
         });
+    }
+
+    private bool _ticketUrlCopied;
+    private CancellationTokenSource? _copyNotificationCts;
+
+    private async Task CopyTicketUrlAsync()
+    {
+        var boardPath = $"board/{Uri.EscapeDataString(Slug)}";
+        if (SubKanbanParentId is int parentId)
+            boardPath += $"/sub/{parentId}";
+        var url = Navigation.ToAbsoluteUri($"{boardPath}/ticket/{TicketId}").AbsoluteUri;
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+        }
+        catch (JSException)
+        {
+            await JS.InvokeVoidAsync("prompt", L["TicketMenuCopyUrl"], url);
+            return;
+        }
+
+        _copyNotificationCts?.Cancel();
+        _copyNotificationCts?.Dispose();
+        using var notificationCts = new CancellationTokenSource();
+        _copyNotificationCts = notificationCts;
+        _ticketUrlCopied = true;
+        StateHasChanged();
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2), notificationCts.Token);
+            _ticketUrlCopied = false;
+        }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            if (_copyNotificationCts == notificationCts)
+                _copyNotificationCts = null;
+        }
     }
 
     private async Task CloseAsync() => await OnClose.InvokeAsync();

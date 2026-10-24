@@ -45,6 +45,8 @@
   "DeleteColumnConfirm": "Excluir coluna",
   "MoveTicketsTo": "Os tickets serão movidos para:",
   "TicketMenuOpen": "Abrir ticket",
+  "TicketUrlCopied": "URL copiada",
+  "TicketMenuCopyUrl": "Copiar URL do ticket",
   "TicketMenuMoveTo": "Mover para pipeline / coluna",
   "TicketMenuRoutingRestricted": "As destinações estão limitadas pela roteirização desta coluna.",
   "ColumnDeleteDestinationHelp": "A coluna que recebe todos os tickets antes da exclusão. O KittyClaw também remove rotas que almejavam a coluna excluída.",

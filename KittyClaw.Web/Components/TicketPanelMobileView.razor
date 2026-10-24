@@ -11,6 +11,7 @@
                 <button @onclick="Split">@L["SplitTicket"]</button>
             </div>
         </details>
+        <button type="button" class="icon-btn" title="@L["TicketMenuCopyUrl"]" aria-label="@L["TicketMenuCopyUrl"]" @onclick="OnCopyUrl">🔗</button>
         <button class="ticket-mobile-close" aria-label="@L["Close"]" @onclick="OnClose">×</button>
     </header>
     <section class="ticket-mobile-heading">
@@ -54,6 +55,7 @@
     [Parameter] public RenderFragment? Context { get; set; }
     [Parameter] public RenderFragment? DependencyEditor { get; set; }
     [Parameter] public RenderFragment? Content { get; set; }
+    [Parameter] public EventCallback OnCopyUrl { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback OnImprove { get; set; }
     [Parameter] public EventCallback OnSplit { get; set; }

@@ -45,6 +45,8 @@
   "DeleteColumnConfirm": "列を削除",
   "MoveTicketsTo": "チケットは次の場所へ移動します:",
   "TicketMenuOpen": "チケットを開く",
+  "TicketUrlCopied": "URLをコピーしました",
+  "TicketMenuCopyUrl": "チケットのURLをコピー",
   "TicketMenuMoveTo": "パイプライン/列に移動",
   "TicketMenuRoutingRestricted": "この列のルーティングにより、目的地が制限されます。",
   "ColumnDeleteDestinationHelp": "削除対象の列は、すべてのチケットを受け取る列となります。また、削除された列をターゲットにしていたルートも削除されます。",

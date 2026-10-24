@@ -377,3 +377,22 @@
     to   { opacity: 1; height: 36px; margin: 2px 0; }
 }
 
+
+.board-copy-notification {
+    position: fixed;
+    bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2000;
+    pointer-events: none;
+}
+.board-copy-notification > span {
+    display: block;
+    padding: 0.6rem 1rem;
+    border: 1px solid var(--accent-success);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.875rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
