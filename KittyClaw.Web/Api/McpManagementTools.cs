@@ -14,6 +14,12 @@ namespace KittyClaw.Web.Api;
 [McpServerToolType]
 public sealed class McpManagementTools(IServiceProvider services, ProjectService projects)
 {
+    [McpServerTool(Name = "focus_ticket", ReadOnly = false, Destructive = false, Idempotent = false)]
+    [Description("Bring a ticket card into view and highlight it in connected kanban views of the same project, selecting its pipeline and parent board. Does not open the detail panel or change the ticket. Returns a URL usable when no project view is connected.")]
+    public Task<JsonElement> FocusTicket(string project, int id) =>
+        ExecuteAsync(project, () => Endpoints.HandleFocusTicket(project, id,
+            services.GetRequiredService<TicketService>(), services.GetRequiredService<BoardFocusService>(), projects));
+
     [McpServerTool(Name = "ask_ticket_question", ReadOnly = false, Destructive = false, Idempotent = false)]
     [Description("Ask the owner a persistent multiple-choice question in the ticket automation queue. Pauses the current column execution. Supply its executionId when available. After this tool succeeds, stop work and finish the run; KittyClaw resumes the processor after the owner's answer. Requires an enabled processor in the ticket's current column. Never bury confirmation requests in comments.")]
     public Task<JsonElement> AskTicketQuestion(string project, int id, AskTicketQuestionRequest request) =>
@@ -34,20 +40,20 @@ public sealed class McpManagementTools(IServiceProvider services, ProjectService
             services.GetRequiredService<BoardUpdateNotifier>()));
 
     [McpServerTool(Name = "update_ticket", ReadOnly = false, Destructive = true, Idempotent = false)]
-    [Description("Update ticket fields together, including status and assignee. Use expectedStatus to detect concurrent transitions.")]
+    [Description("Update ticket fields together, including status and assignee. Use expectedStatus to detect concurrent transitions. Set request.focus=true to reveal the card in its resulting kanban column without opening the detail panel.")]
     public Task<JsonElement> UpdateTicket(
         [Description("Project slug from list_projects.")] string project,
         [Description("Ticket id.")] int id,
         [Description("Fields for this operation.")] UpdateTicketRequest request) =>
-        ExecuteAsync(project, () => Endpoints.HandleUpdateTicket(project, id, request, services.GetRequiredService<TicketService>(), services.GetRequiredService<BoardUpdateNotifier>()));
+        ExecuteAsync(project, () => Endpoints.HandleUpdateTicket(project, id, request, services.GetRequiredService<TicketService>(), services.GetRequiredService<BoardUpdateNotifier>(), services.GetRequiredService<BoardFocusService>()));
 
     [McpServerTool(Name = "schedule_ticket", ReadOnly = false, Destructive = true, Idempotent = false)]
-    [Description("Schedule a ticket for a future time and target status.")]
+    [Description("Schedule a ticket for a future time and target status. Set request.focus=true to highlight its card in Scheduled after success without opening the detail panel. Defaults to false.")]
     public Task<JsonElement> ScheduleTicket(
         [Description("Project slug from list_projects.")] string project,
         [Description("Ticket id.")] int id,
         [Description("Fields for this operation.")] ScheduleTicketRequest request) =>
-        ExecuteAsync(project, () => Endpoints.HandleScheduleTicket(project, id, request, services.GetRequiredService<TicketService>(), services.GetRequiredService<BoardUpdateNotifier>()));
+        ExecuteAsync(project, () => Endpoints.HandleScheduleTicket(project, id, request, services.GetRequiredService<TicketService>(), services.GetRequiredService<BoardUpdateNotifier>(), services.GetRequiredService<BoardFocusService>()));
 
     [McpServerTool(Name = "delete_ticket", ReadOnly = false, Destructive = true, Idempotent = true)]
     [Description("Permanently delete a ticket.")]
@@ -57,19 +63,20 @@ public sealed class McpManagementTools(IServiceProvider services, ProjectService
         ExecuteAsync(project, () => Endpoints.HandleDeleteTicket(project, id, services.GetRequiredService<TicketService>(), services.GetRequiredService<BoardUpdateNotifier>()));
 
     [McpServerTool(Name = "set_ticket_parent", ReadOnly = false, Destructive = false, Idempotent = true)]
-    [Description("Attach a ticket to a parent ticket, validating the hierarchy.")]
+    [Description("Attach a ticket to a parent ticket, validating the hierarchy. Set request.focus=true to highlight its card in the parent's kanban without opening the detail panel. Defaults to false.")]
     public Task<JsonElement> SetTicketParent(
         [Description("Project slug from list_projects.")] string project,
         [Description("Ticket id.")] int id,
         [Description("Fields for this operation.")] SetParentRequest request) =>
-        ExecuteAsync(project, () => Endpoints.HandleSetTicketParent(project, id, request, services.GetRequiredService<TicketService>(), services.GetRequiredService<BoardUpdateNotifier>()));
+        ExecuteAsync(project, () => Endpoints.HandleSetTicketParent(project, id, request, services.GetRequiredService<TicketService>(), services.GetRequiredService<BoardUpdateNotifier>(), services.GetRequiredService<BoardFocusService>()));
 
     [McpServerTool(Name = "remove_ticket_parent", ReadOnly = false, Destructive = true, Idempotent = true)]
-    [Description("Detach a ticket from its parent.")]
+    [Description("Detach a ticket from its parent. Set focus=true to highlight its card in the main kanban without opening the detail panel. Defaults to false.")]
     public Task<JsonElement> RemoveTicketParent(
         [Description("Project slug from list_projects.")] string project,
-        [Description("Ticket id.")] int id) =>
-        ExecuteAsync(project, () => Endpoints.HandleRemoveTicketParent(project, id, services.GetRequiredService<TicketService>(), services.GetRequiredService<BoardUpdateNotifier>()));
+        [Description("Ticket id.")] int id,
+        [Description("Focus the detached card in the main kanban. Defaults to false.")] bool focus = false) =>
+        ExecuteAsync(project, () => Endpoints.HandleRemoveTicketParent(project, id, services.GetRequiredService<TicketService>(), services.GetRequiredService<BoardUpdateNotifier>(), services.GetRequiredService<BoardFocusService>(), focus));
 
     [McpServerTool(Name = "add_ticket_dependency", ReadOnly = false, Destructive = false, Idempotent = false)]
     [Description("Add a blocking dependency, validating cycles and ticket ownership.")]
@@ -105,20 +112,21 @@ public sealed class McpManagementTools(IServiceProvider services, ProjectService
         ExecuteAsync(project, () => Endpoints.HandleDeleteTicketComment(project, id, commentId, services.GetRequiredService<TicketService>(), services.GetRequiredService<BoardUpdateNotifier>()));
 
     [McpServerTool(Name = "reorder_ticket", ReadOnly = false, Destructive = true, Idempotent = false)]
-    [Description("Change ticket position and status using workflow routing validation.")]
+    [Description("Change ticket position and status using workflow routing validation. Set request.focus=true to highlight the card in its destination kanban column without opening the detail panel.")]
     public Task<JsonElement> ReorderTicket(
         [Description("Project slug from list_projects.")] string project,
         [Description("Ticket id.")] int id,
         [Description("Fields for this operation.")] ReorderTicketRequest request) =>
-        ExecuteAsync(project, () => Endpoints.HandleReorderTicket(project, id, request, services.GetRequiredService<TicketService>(), services.GetRequiredService<BoardUpdateNotifier>()));
+        ExecuteAsync(project, () => Endpoints.HandleReorderTicket(project, id, request, services.GetRequiredService<TicketService>(), services.GetRequiredService<BoardUpdateNotifier>(), services.GetRequiredService<BoardFocusService>()));
 
     [McpServerTool(Name = "transfer_ticket", ReadOnly = false, Destructive = true, Idempotent = false)]
-    [Description("Transfer a complete ticket tree and history to another project.")]
+    [Description("Transfer a complete ticket tree and history to another project. Set request.focus=true to highlight the transferred card in the target project's kanban without opening the detail panel. Connected source and target project views navigate to the destination card.")]
     public Task<JsonElement> TransferTicket(
         [Description("Project slug from list_projects.")] string project,
         [Description("Ticket id.")] int id,
         [Description("Fields for this operation.")] TransferTicketRequest request) =>
-        ExecuteAsync(project, () => Endpoints.HandleTransferTicket(project, id, request, services.GetRequiredService<TicketTransferService>(), services.GetRequiredService<BoardUpdateNotifier>()));
+        ExecuteAsync(project, () => Endpoints.HandleTransferTicket(project, id, request, services.GetRequiredService<TicketTransferService>(), services.GetRequiredService<BoardUpdateNotifier>(),
+            services.GetRequiredService<TicketService>(), services.GetRequiredService<BoardFocusService>()));
 
     [McpServerTool(Name = "get_ticket_evidence", ReadOnly = true, Destructive = false, Idempotent = true)]
     [Description("Read ticket evidence with current staleness indicators.")]

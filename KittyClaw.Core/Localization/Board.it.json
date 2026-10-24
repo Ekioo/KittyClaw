@@ -1,4 +1,13 @@
 {
+  "UpdateReviewManual": "Analizza le novità ora",
+  "UpdateReviewManualHint": "Crea un ticket di analisi dell’ultima versione, anche se già analizzata. Salva prima le modifiche alla destinazione. I processori della colonna controllano l’esecuzione; i progetti in pausa restano in pausa.",
+  "UpdateReviewRequesting": "Creazione del ticket di analisi…",
+  "UpdateReviewQueued": "Ticket di analisi n. {0} creato in {1}.",
+  "UpdateReviewSettings": "Analisi delle novità",
+  "UpdateReviewHint": "Scegli dove inserire i ticket di analisi dopo gli aggiornamenti. I processori esistenti ne controllano l’avvio. Sono disponibili colonne di lavoro e decisione umana senza obbligo di criteri già convalidati. Se la destinazione non è disponibile, le analisi attendono una correzione.",
+  "UpdateReviewColumn": "Colonna di destinazione",
+  "UpdateReviewAutomatic": "Automatico — prima colonna di ingresso",
+  "UpdateReviewUnavailable": "Destinazione non disponibile — scegli un’altra colonna",
   "DashboardTiles": "Riquadri della dashboard",
   "JevNextAction": "JEV · Passaggio successivo",
   "JevValidateNextStep": "Conferma il passaggio successivo del ticket",

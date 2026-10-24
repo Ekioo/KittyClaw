@@ -50,7 +50,7 @@ public sealed class TicketAcceptanceCriteriaTests
         var slug = (await projects.CreateProjectAsync("acceptance")).Slug;
         var members = new MemberService(projects);
         var tickets = new TicketService(projects, members);
-        var tools = new McpTools(projects, tickets, new ColumnService(projects), members, new BoardUpdateNotifier());
+        var tools = new McpTools(projects, tickets, new ColumnService(projects), members, new BoardUpdateNotifier(), new BoardFocusService());
         var ticket = await tickets.CreateTicketAsync(slug, "Feature");
         var first = await tools.SaveAcceptanceCriterion(slug, ticket.Id, new("Renders", Evidence: new("{\"count\":1}", "application/json")));
         var second = await tools.SaveAcceptanceCriterion(slug, ticket.Id, new("Saves"));

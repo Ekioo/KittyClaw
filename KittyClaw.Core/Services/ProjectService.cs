@@ -65,6 +65,8 @@ public partial class ProjectService
             catch { /* column already exists */ }
             try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN RepositoryPath TEXT NULL"); }
             catch { /* column already exists */ }
+            try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN UpdateReviewColumnId INTEGER NULL"); }
+            catch { /* column already exists */ }
             _dbInitialized = true;
         }
         finally
@@ -185,8 +187,11 @@ public partial class ProjectService
         bool? worktreesEnabled = null,
         string? integrationBranch = null,
         string? repositoryPath = null,
-        BoundaryEnforcementMode? boundaryEnforcement = null)
+        BoundaryEnforcementMode? boundaryEnforcement = null,
+        int? updateReviewColumnId = null,
+        bool updateReviewColumn = false)
     {
+        updateReviewColumn |= updateReviewColumnId.HasValue;
         if (!string.IsNullOrWhiteSpace(workspacePath))
             ValidateWorkspacePath(workspacePath.Trim());
         await EnsureRegistryInitializedAsync();
@@ -197,7 +202,7 @@ public partial class ProjectService
         // A worktree-only PATCH must not clear the workspace merely because WorkspacePath
         // was omitted from JSON. Preserve the historical clear behavior for ordinary patches.
         var updatesWorktreeSettings = worktreesEnabled.HasValue || integrationBranch is not null || repositoryPath is not null;
-        if (!updatesWorktreeSettings || workspacePath is not null)
+        if ((!updatesWorktreeSettings && !updateReviewColumn) || workspacePath is not null)
             project.WorkspacePath = string.IsNullOrWhiteSpace(workspacePath) ? null : workspacePath.Trim();
 
         var normalizedBranch = integrationBranch?.Trim();
@@ -225,6 +230,18 @@ public partial class ProjectService
         if (updateFallback)
         {
             project.FallbackModel = string.IsNullOrWhiteSpace(fallbackModel) ? null : fallbackModel.Trim();
+        }
+        if (updateReviewColumn)
+        {
+            if (updateReviewColumnId.HasValue)
+            {
+                await using var projectDb = GetProjectDb(slug);
+                await ColumnService.EnsureBoardColumnsTableAsync(projectDb);
+                var column = await projectDb.BoardColumns.FindAsync(updateReviewColumnId.Value);
+                if (column is null || !ProjectUpdateReviewService.IsEligibleTarget(column))
+                    throw new InvalidOperationException("Select an analysis or owner-action column without a validated-criteria entry requirement.");
+            }
+            project.UpdateReviewColumnId = updateReviewColumnId;
         }
         project.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();

@@ -1,0 +1,26 @@
+@using KittyClaw.Web.Services
+@inject BoardFocusService FocusRequests
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+@implements IDisposable
+
+@code {
+    protected override void OnInitialized() => FocusRequests.Requested += OnRequested;
+
+    private void OnRequested(string slug, string url)
+    {
+        _ = InvokeAsync(() =>
+        {
+            var path = new Uri(Navigation.Uri).AbsolutePath;
+            if (BoardFocusService.MatchesProjectView(path, slug))
+            {
+                // A cross-project navigation must initialize a fresh board component;
+                // reusing its current route instance would retain the source project state.
+                var destinationPath = Navigation.ToAbsoluteUri(url).AbsolutePath;
+                Navigation.NavigateTo(url, forceLoad: !BoardFocusService.MatchesProjectView(destinationPath, slug));
+            }
+        });
+    }
+
+    public void Dispose() => FocusRequests.Requested -= OnRequested;
+}

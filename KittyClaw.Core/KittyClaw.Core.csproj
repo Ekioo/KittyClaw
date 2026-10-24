@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="..\CHANGELOG.md" LogicalName="KittyClaw.ReleaseNotes.md" />
     <EmbeddedResource Include="Localization\*.json">
       <LogicalName>KittyClaw.Core.Localization.%(Filename)%(Extension)</LogicalName>
       <WithCulture>false</WithCulture>

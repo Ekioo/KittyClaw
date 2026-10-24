@@ -85,6 +85,53 @@ Source installations retain the dismissible release-link banner described below.
   Its wait is limited to 60 seconds; the ordinary host shutdown timeout is shorter.
   No immediate `Environment.Exit` is used. The desktop host reopens the desktop window after restart.
 
+## Project improvement reviews
+
+`ProjectUpdateReviewEngine` scans initialized projects after host startup and every
+five minutes. The bundled `CHANGELOG.md` provides the installed release and notes,
+without a network request; Unreleased content is excluded. Each project's database
+stores its last observed release in `ProjectUpdateReviewState`. The first scan
+establishes a baseline. A newer release queues one analysis ticket containing all
+missed release sections, then advances the checkpoint in the same transaction.
+Restarts, concurrent scans and downgrades do not create duplicate tickets. Failed
+insertions leave the checkpoint unchanged for retry. Paused projects receive the
+ticket, but their normal workflow remains paused.
+
+Project settings → Release analysis selects a target column, grouped by pipeline.
+`Project.UpdateReviewColumnId` stores the stable project-local column ID in the
+registry. Normal and owner-action columns are eligible unless entry requires
+already validated acceptance criteria. Tickets include a pending analysis criterion,
+so columns requiring criteria are supported. Renaming a column preserves the target.
+A deleted or incompatible target defers reviews without falling back or advancing
+the checkpoint; selecting a valid target or Automatic resumes them on the next scan.
+
+Automatic (the default) uses the first normal column without mandatory acceptance
+criteria in the first pipeline by sort order. Existing column processors control
+whether and when analysis runs; a Backlog without a processor requires manual
+promotion. Projects without a suitable column are retried. The prompt requests project-specific
+proposals, evidence, benefits, effort, risks and acceptance criteria, avoiding existing
+tickets. It instructs the agent to seek owner approval before implementation; this
+instruction is not a separate execution permission boundary.
+
+`ProjectUpdateReviewTests` cover baselining, skipped releases, duplicate prevention,
+concurrent scans, downgrade handling and embedded release notes.
+They also cover target persistence, cross-pipeline routing, workspace preservation,
+criteria requirements, invalid targets and recovery after target deletion.
+
+REST/MCP project updates accept `updateReviewColumnId` to select a target. Omission
+preserves it. To reset to Automatic, pass `updateReviewColumn: true` with a null
+`updateReviewColumnId`. A target-only update preserves the workspace path.
+
+The **Analyze release notes now** button creates an analysis ticket immediately
+through `RequestManualAsync`, including on first use or an already reviewed version.
+It uses the saved target; unsaved target changes disable the button until saved or
+reverted. The request includes the latest release and any missed releases, excludes
+Unreleased content, and leaves an existing automatic checkpoint unchanged. Repeated
+completed requests intentionally create new tickets. The button is disabled while
+creating a ticket, then navigates to its kanban and focuses the card without opening
+the detail panel. An unavailable target displays an error. Normal processors and
+project pause still govern execution.
+
 ## Publication and verification
 
 - `tools/publish-release.ps1` builds Windows artifacts before creating a release and

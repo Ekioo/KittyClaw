@@ -43,17 +43,17 @@ public record CreateTicketRequest(
     string Title, string CreatedBy, string Status, string Description = "",
     List<int>? LabelIds = null, TicketPriority Priority = TicketPriority.NiceToHave,
     string? AssignedTo = null, int? ParentId = null, int? PipelineId = null,
-    int? ColumnId = null, bool BlocksParent = true);
+    int? ColumnId = null, bool BlocksParent = true, bool Focus = false);
 // The root PATCH applies every provided field — Status included — in ONE atomic write,
 // through the same semantics as the dedicated /status endpoint (column validation,
 // Scheduled cleanup, activity, engine signal after commit). This is the hand-off
 // primitive: {"status":"Todo","assignedTo":"programmer"} can never be observed
 // half-applied by the automation engine. ExpectedStatus is optimistic concurrency:
 // when set, the update only applies while the ticket is still in that status (else 409).
-public record UpdateTicketRequest(string Author, string? Title = null, string? Description = null, TicketPriority? Priority = null, string? AssignedTo = null, List<int>? LabelIds = null, string? Status = null, string? ExpectedStatus = null, int? PipelineId = null, int? ColumnId = null, bool? BlocksParent = null);
-public record MoveTicketRequest(string Status, string Author);
-public record TransferTicketRequest(string TargetProject, string Actor);
-public record ScheduleTicketRequest(DateTime FireAt, string Author, string? TargetStatus = "Todo");
+public record UpdateTicketRequest(string Author, string? Title = null, string? Description = null, TicketPriority? Priority = null, string? AssignedTo = null, List<int>? LabelIds = null, string? Status = null, string? ExpectedStatus = null, int? PipelineId = null, int? ColumnId = null, bool? BlocksParent = null, bool Focus = false);
+public record MoveTicketRequest(string Status, string Author, bool Focus = false);
+public record TransferTicketRequest(string TargetProject, string Actor, bool Focus = false);
+public record ScheduleTicketRequest(DateTime FireAt, string Author, string? TargetStatus = "Todo", bool Focus = false);
 // Content/Author are nullable so missing JSON fields deserialize cleanly; the service
 // rejects null/whitespace with 400 rather than letting SQLite throw NOT NULL (500).
 public record AddCommentRequest(string? Content, string? Author);
@@ -65,15 +65,16 @@ public record CreateLabelRequest(string Name, string Color = "#6366f1");
 public record PatchTicketLabelsRequest(string Author, List<string>? Add = null, List<string>? Remove = null);
 public record UpdateLabelRequest(string? Name = null, string? Color = null);
 public record SetTicketLabelsRequest(List<int> LabelIds);
-public record ReorderTicketRequest(string Status, int Index);
+public record ReorderTicketRequest(string Status, int Index, bool Focus = false);
 public record CreateColumnRequest(string Name, string Color = "#5a6a80", int? PipelineId = null,
     ColumnRole Role = ColumnRole.Normal, string UserGuidance = "", int MaxTickets = 0, bool CapacityBlocking = false, bool RequireAcceptanceCriteria = false, bool RequireValidatedAcceptanceCriteria = false);
 public record UpdateColumnRequest(string? Name = null, string? Color = null, ColumnRole? Role = null,
     string? UserGuidance = null, int? MaxTickets = null, bool? CapacityBlocking = null, bool? RequireAcceptanceCriteria = null, bool? RequireValidatedAcceptanceCriteria = null);
 public record ReorderColumnRequest(int ColumnId, int Index);
+public record TicketFocusResponse(int TicketId, int PipelineId, int? ColumnId, string Url);
 public record CreateMemberRequest(string Name);
 public record UpdateMemberRequest(string? Name = null, string? DefaultModel = null);
-public record SetParentRequest(int ParentId);
+public record SetParentRequest(int ParentId, bool Focus = false);
 public record UpdateProjectRequest(
     string? WorkspacePath = null,
     string? FallbackModel = null,
@@ -81,7 +82,9 @@ public record UpdateProjectRequest(
     bool? WorktreesEnabled = null,
     string? IntegrationBranch = null,
     string? RepositoryPath = null,
-    BoundaryEnforcementMode? BoundaryEnforcement = null);
+    BoundaryEnforcementMode? BoundaryEnforcement = null,
+    int? UpdateReviewColumnId = null,
+    bool UpdateReviewColumn = false);
 public record SaveLocalModelConfigRequest(string? LocalModelBaseUrl = null, string? LocalModelName = null);
 public record SaveRtkConfigRequest(bool Enabled);
 public record SteerRunRequest(string Text, IReadOnlyList<ChatImageDto>? Images = null);

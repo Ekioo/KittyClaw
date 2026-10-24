@@ -5,6 +5,9 @@
 @inject ProjectService ProjectService
 @inject MemberService MemberService
 @inject LabelService LabelService
+@inject ColumnService ColumnService
+@inject PipelineService PipelineService
+@inject ProjectUpdateReviewService UpdateReviews
 @inject NavigationManager Nav
 @inject IHttpClientFactory HttpFactory
 @inject LocalizationService L
@@ -124,6 +127,44 @@ else
             @if (_workspaceStatus is not null)
             {
                 <div class="settings-status @_workspaceStatus.Value.css">@_workspaceStatus.Value.text</div>
+            }
+        </section>
+
+        <section class="settings-section mobile-section-panel @(_mobileSection == "updates" ? "mobile-section-active" : "")" data-testid="update-review-settings">
+            <h2>@L["UpdateReviewSettings"]</h2>
+            <p class="settings-hint">@L["UpdateReviewHint"]</p>
+            <label class="settings-label" for="update-review-column">@L["UpdateReviewColumn"]</label>
+            <div class="settings-row">
+                <select id="update-review-column" class="settings-input" @bind="_updateReviewColumnId" disabled="@_requestingUpdateReview">
+                    <option value="">@L["UpdateReviewAutomatic"]</option>
+                    @if (_project.UpdateReviewColumnId is int savedId && !_updateReviewColumns.Any(c => c.Id == savedId))
+                    {
+                        <option value="@savedId">@L["UpdateReviewUnavailable"] (#@savedId)</option>
+                    }
+                    @foreach (var pipeline in _updateReviewPipelines)
+                    {
+                        <optgroup label="@pipeline.Name">
+                            @foreach (var column in _updateReviewColumns.Where(c => c.PipelineId == pipeline.Id))
+                            {
+                                <option value="@column.Id">@column.Name</option>
+                            }
+                        </optgroup>
+                    }
+                </select>
+                <button class="settings-primary" @onclick="SaveUpdateReviewColumn" disabled="@(_savingUpdateReview || _requestingUpdateReview)">@(_savingUpdateReview ? "…" : L["Save"])</button>
+            </div>
+            <p class="settings-hint">@L["UpdateReviewManualHint"]</p>
+            <button class="settings-primary" type="button" data-testid="request-update-review"
+                    @onclick="RequestUpdateReview" disabled="@(_requestingUpdateReview || _savingUpdateReview || _updateReviewColumnId != _project.UpdateReviewColumnId)">
+                @(_requestingUpdateReview ? L["UpdateReviewRequesting"] : L["UpdateReviewManual"])
+            </button>
+            @if (_manualUpdateReviewStatus is not null)
+            {
+                <div class="settings-status @_manualUpdateReviewStatus.Value.css" role="status">@_manualUpdateReviewStatus.Value.text</div>
+            }
+            @if (_updateReviewStatus is not null)
+            {
+                <div class="settings-status @_updateReviewStatus.Value.css" role="status">@_updateReviewStatus.Value.text</div>
             }
         </section>
 
@@ -547,6 +588,7 @@ else
     [
         new("worktrees", L["WorktreeSettings"]),
         new("workspace", L["WorkspacePath"]),
+        new("updates", L["UpdateReviewSettings"]),
         new("models", L["FallbackModel"]),
         new("local", L["LocalModel"]),
         new("rtk", L["RtkTitle"]),
@@ -560,6 +602,13 @@ else
     [Parameter] public string Slug { get; set; } = "";
 
     private Project? _project;
+    private int? _updateReviewColumnId;
+    private List<BoardColumn> _updateReviewColumns = [];
+    private List<Pipeline> _updateReviewPipelines = [];
+    private bool _savingUpdateReview;
+    private bool _requestingUpdateReview;
+    private (string text, string css)? _manualUpdateReviewStatus;
+    private (string text, string css)? _updateReviewStatus;
     private string _workspacePath = "";
     private bool _savingWorkspace, _folderPickerOpen;
     private (string text, string css)? _workspaceStatus;
@@ -621,6 +670,11 @@ else
         L.OnLanguageChanged += OnLanguageChanged;
         _project = await ProjectService.GetProjectAsync(Slug);
         if (_project is null) return;
+        _updateReviewColumnId = _project.UpdateReviewColumnId;
+        _updateReviewPipelines = await PipelineService.ListAsync(Slug);
+        foreach (var pipeline in _updateReviewPipelines)
+            _updateReviewColumns.AddRange((await ColumnService.ListColumnsAsync(Slug, pipeline.Id))
+                .Where(ProjectUpdateReviewService.IsEligibleTarget));
         await ActivationMetrics.RecordSettingsOpenedAsync(Slug);
         _workspacePath = _project.WorkspacePath ?? "";
         _worktreesEnabled = _project.WorktreesEnabled;
@@ -767,6 +821,37 @@ else
             }
         }
         finally { _savingWorktrees = false; }
+    }
+
+    private async Task RequestUpdateReview()
+    {
+        if (_requestingUpdateReview || _savingUpdateReview || _updateReviewColumnId != _project?.UpdateReviewColumnId) return;
+        _requestingUpdateReview = true;
+        _manualUpdateReviewStatus = null;
+        try
+        {
+            var ticket = await UpdateReviews.RequestManualAsync(Slug);
+            Nav.NavigateTo(KittyClaw.Web.Services.BoardFocusService.TicketUrl(Slug, ticket));
+        }
+        catch (Exception ex) { _manualUpdateReviewStatus = ($"{L["Error"]}: {ex.Message}", "settings-status-err"); }
+        finally { _requestingUpdateReview = false; }
+    }
+
+    private async Task SaveUpdateReviewColumn()
+    {
+        _savingUpdateReview = true;
+        _updateReviewStatus = null;
+        try
+        {
+            var updated = await ProjectService.UpdateProjectAsync(Slug, null,
+                updateReviewColumnId: _updateReviewColumnId, updateReviewColumn: true);
+            if (updated is null) throw new InvalidOperationException(L["ProjectNotFound"]);
+            _project = updated;
+            _updateReviewColumnId = updated.UpdateReviewColumnId;
+            _updateReviewStatus = (L["Saved"], "settings-status-ok");
+        }
+        catch (Exception ex) { _updateReviewStatus = ($"{L["Error"]}: {ex.Message}", "settings-status-err"); }
+        finally { _savingUpdateReview = false; }
     }
 
     private async Task SaveFallbackModel()

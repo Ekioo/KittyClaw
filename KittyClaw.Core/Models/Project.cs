@@ -19,6 +19,7 @@ public class Project
     public BoundaryEnforcementMode BoundaryEnforcement { get; set; } = BoundaryEnforcementMode.Observe;
     public bool WorktreesEnabled { get; set; }
     public string? IntegrationBranch { get; set; }
+    public int? UpdateReviewColumnId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

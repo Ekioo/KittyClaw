@@ -157,6 +157,7 @@ builder.Services.AddSingleton<AgentCliReadinessService>();
 builder.Services.AddScoped<KittyClaw.Web.Services.BoardFilterState>();
 builder.Services.AddScoped<KittyClaw.Web.Services.BoardSortState>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.BoardUpdateNotifier>();
+builder.Services.AddSingleton<KittyClaw.Web.Services.BoardFocusService>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.WorkflowMigrationPlanner>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.TicketImprovementService>();
 builder.Services.AddScoped<KittyClaw.Web.Services.EscapeKeyStack>();
@@ -229,6 +230,8 @@ builder.Services.AddSingleton<KittyClaw.Core.Services.DashboardRefreshService>()
 builder.Services.AddHostedService(sp => sp.GetRequiredService<KittyClaw.Core.Services.DashboardRefreshService>());
 // Auto-promote Scheduled tickets to their target column once FireAt fires (feature #99).
 builder.Services.AddHostedService<KittyClaw.Core.Services.ScheduledPromotionService>();
+builder.Services.AddSingleton<ProjectUpdateReviewService>();
+builder.Services.AddHostedService<ProjectUpdateReviewEngine>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.AgentRunsState>();
 builder.Services.AddHttpClient();
 builder.Services.AddHttpClient("KittyClawLocal", (sp, http) =>

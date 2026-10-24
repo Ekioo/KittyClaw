@@ -95,7 +95,8 @@ public static partial class Endpoints
         {
             var project = await ps.UpdateProjectAsync(
                 slug, req.WorkspacePath, req.FallbackModel, req.UpdateFallbackModel,
-                req.WorktreesEnabled, req.IntegrationBranch, req.RepositoryPath, req.BoundaryEnforcement);
+                req.WorktreesEnabled, req.IntegrationBranch, req.RepositoryPath, req.BoundaryEnforcement,
+                req.UpdateReviewColumnId, req.UpdateReviewColumn);
             return project is null ? Results.NotFound() : Results.Ok(project);
         }
         catch (InvalidOperationException ex)

@@ -188,7 +188,7 @@ else
                                 @key="ticket.Id"
                                 Ticket="ticket"
                                 ColRole="col.Role"
-                                IsSelected="@(_openTicketId == ticket.Id)"
+                                IsSelected="@(_openTicketId == ticket.Id || _focusedTicketId == ticket.Id)"
                                 IsDragging="@(_draggedTicket?.Id == ticket.Id)"
                                 IsCardTarget="@isCardTarget"
                                 IsUpdated="@IsTicketUpdated(ticket)"
@@ -495,6 +495,13 @@ else
     public int? PipelineId { get; set; }
     [SupplyParameterFromQuery(Name = "column")]
     public int? ColumnId { get; set; }
+    [SupplyParameterFromQuery(Name = "focus")]
+    public int? FocusTicketId { get; set; }
+    [SupplyParameterFromQuery(Name = "focusRequest")]
+    public string? FocusRequest { get; set; }
+    private (string Slug, int? Id, string? Request)? _lastFocusTarget;
+    private int? _focusedTicketId;
+    private int? _pendingTicketFocus;
 
     private Project? _project;
     private List<TicketSummary> _tickets = [];
@@ -925,6 +932,30 @@ else
             _linkedColumnId = _columns.FirstOrDefault(column => column.Id == ColumnId)?.Id;
             _pendingColumnFocus = _linkedColumnId;
         }
+        var focusTarget = (Slug, FocusTicketId, FocusRequest);
+        if (_lastFocusTarget != focusTarget)
+        {
+            _lastFocusTarget = focusTarget;
+            _focusedTicketId = null;
+            if (FocusTicketId is int focusId)
+            {
+                await RefreshTicketsAsync();
+                var focused = _tickets.FirstOrDefault(t => t.Id == focusId);
+                if (focused is not null)
+                {
+                    _selectedPipelineId = focused.PipelineId;
+                    await LoadSelectedPipelineColumnsAsync();
+                    _subKanbanParentId = focused.ParentId;
+                    _subKanbanParent = _tickets.FirstOrDefault(t => t.Id == focused.ParentId);
+                    FilterState.FilterText = "";
+                    ResetLoadedColumns();
+                    _loadedPerColumn[focused.Status] = GetTickets(focused.Status).Count;
+                    _openTicketId = null;
+                    _focusedTicketId = focusId;
+                    _pendingTicketFocus = focusId;
+                }
+            }
+        }
         await Task.CompletedTask;
     }
 
@@ -981,6 +1012,11 @@ else
         {
             _pendingColumnFocus = null;
             await TryInvokeBoardJsAsync("focusBoardColumn", "project-kanban", columnId);
+        }
+        if (_pendingTicketFocus is int focusId)
+        {
+            _pendingTicketFocus = null;
+            await TryInvokeBoardJsAsync("focusBoardTicket", "project-kanban", focusId);
         }
     }
 
@@ -1523,6 +1559,7 @@ else
 
     private async Task SelectTicket(TicketSummary ticket)
     {
+        _focusedTicketId = null;
         await TryInvokeBoardJsAsync("saveColumnScrollPositions");
         _restoreScrollAfterRender = true;
         _openTicketId = ticket.Id;

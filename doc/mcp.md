@@ -1,5 +1,34 @@
 # MCP server
 
+`set_ticket_parent` accepts `request.focus: true` to highlight the card in its new
+parent's sub-kanban. `remove_ticket_parent` accepts optional `focus: true` to
+highlight the detached card in the main kanban. Both default to false and request
+focus only after success, without opening the detail panel.
+
+`schedule_ticket` accepts `request.focus: true` (default false) to highlight the
+card in **Scheduled** after successful scheduling, without opening its detail panel.
+
+`transfer_ticket` accepts `request.focus: true` (default false) to highlight the
+transferred card in the destination project's kanban after success. Connected
+source and target project views navigate to the destination card. See
+[REST API transfer focus](rest-api.md) for the full behavior.
+
+`move_ticket` accepts optional `focus: true` (default false) to reveal the moved
+card in its destination kanban. The `update_ticket` and `reorder_ticket` request
+objects support the same option. Rejected moves do not request focus.
+
+`create_ticket` accepts optional `focus: true` (default false) to focus the newly
+created card using the same behavior as `focus_ticket` below. It still returns the
+created ticket. Failed creation does not request focus.
+
+`focus_ticket(project, id)` shares `POST /api/projects/{slug}/tickets/{id}/focus`.
+It requests card focus in connected views of that project, selecting the owning
+pipeline and parent kanban, revealing the card and highlighting it without opening
+the detail panel. Active text filters are cleared to reveal the target. Other project
+views are unaffected. Returns `ticketId`, `pipelineId`, `columnId` and a focus `url`;
+the URL remains usable when no matching view is connected. Requests are transient
+and do not update ticket data. Repeated requests refocus the card.
+
 ## Purpose
 Exposes project management and supervision over the [Model Context Protocol](https://modelcontextprotocol.io) so any MCP client — Claude Code, Claude Desktop, or anything speaking Streamable HTTP — can drive projects and tickets without knowing the REST API. The endpoint is embedded in `KittyClaw.Web`: no separate process or secondary port. It is disabled by default.
 

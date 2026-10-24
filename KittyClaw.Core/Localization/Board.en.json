@@ -1,4 +1,13 @@
 {
+  "UpdateReviewManual": "Analyze release notes now",
+  "UpdateReviewManualHint": "Create an analysis ticket for the latest release, even if already reviewed. Save any target changes first. Existing column processors control when it runs; paused projects remain paused.",
+  "UpdateReviewRequesting": "Creating analysis ticket…",
+  "UpdateReviewQueued": "Analysis ticket #{0} created in {1}.",
+  "UpdateReviewSettings": "Release analysis",
+  "UpdateReviewHint": "Choose where release analysis tickets enter this project. Existing processors control when analysis runs. Analysis and owner-action columns are available, except those requiring validated criteria. An unavailable target keeps new reviews pending until corrected.",
+  "UpdateReviewColumn": "Target column",
+  "UpdateReviewAutomatic": "Automatic — first intake column",
+  "UpdateReviewUnavailable": "Target unavailable — select another column",
   "DashboardTiles": "Dashboard tiles",
   "CardActiveRunTooltip": "Open the running agent: {0}",
   "CardLastRunTooltip": "View the last run: {0} · {1}",

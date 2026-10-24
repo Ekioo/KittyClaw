@@ -1,4 +1,13 @@
 {
+  "UpdateReviewManual": "Neuerungen jetzt analysieren",
+  "UpdateReviewManualHint": "Erstellt ein Analyse-Ticket für die neueste Version, auch wenn diese bereits geprüft wurde. Zieländerungen zuerst speichern. Spaltenprozessoren steuern die Ausführung; pausierte Projekte bleiben pausiert.",
+  "UpdateReviewRequesting": "Analyse-Ticket wird erstellt…",
+  "UpdateReviewQueued": "Analyse-Ticket #{0} in {1} erstellt.",
+  "UpdateReviewSettings": "Neuerungen analysieren",
+  "UpdateReviewHint": "Wählen Sie die Zielspalte für Analyse-Tickets nach Updates. Vorhandene Prozessoren steuern den Start. Verfügbar sind Arbeits- und Entscheidungsspalten ohne Pflicht zu bereits validierten Kriterien. Bei einem ungültigen Ziel warten neue Analysen auf eine Korrektur.",
+  "UpdateReviewColumn": "Zielspalte",
+  "UpdateReviewAutomatic": "Automatisch — erste Eingangsspalte",
+  "UpdateReviewUnavailable": "Ziel nicht verfügbar — andere Spalte wählen",
   "DashboardTiles": "Dashboard-Kacheln",
   "JevNextAction": "JEV · Nächster Schritt",
   "JevValidateNextStep": "Nächsten Schritt des Tickets bestätigen",

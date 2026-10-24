@@ -1,4 +1,13 @@
 {
+  "UpdateReviewManual": "今すぐ新機能を分析",
+  "UpdateReviewManualHint": "分析済みでも、最新リリースの分析チケットを作成します。移動先の変更は先に保存してください。列のプロセッサーが実行を制御し、一時停止中のプロジェクトは停止したままです。",
+  "UpdateReviewRequesting": "分析チケットを作成中…",
+  "UpdateReviewQueued": "分析チケット #{0} を {1} に作成しました。",
+  "UpdateReviewSettings": "新機能の分析",
+  "UpdateReviewHint": "更新後の分析チケットの移動先を選択します。既存のプロセッサーが分析の開始を制御します。検証済みの基準を必要としない作業列と人による判断列を選択できます。移動先が利用できない場合、修正されるまで分析は保留されます。",
+  "UpdateReviewColumn": "移動先の列",
+  "UpdateReviewAutomatic": "自動 — 最初の受付列",
+  "UpdateReviewUnavailable": "移動先が利用できません — 別の列を選択してください",
   "DashboardTiles": "ダッシュボードのタイル",
   "JevNextAction": "JEV · 次のステップ",
   "JevValidateNextStep": "チケットの次のステップを確認",

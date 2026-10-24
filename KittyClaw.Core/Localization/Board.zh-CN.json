@@ -1,4 +1,13 @@
 {
+  "UpdateReviewManual": "立即分析新功能",
+  "UpdateReviewManualHint": "为最新版本创建分析工单，即使此前已分析。请先保存目标更改。列处理器控制执行时间；已暂停的项目仍保持暂停。",
+  "UpdateReviewRequesting": "正在创建分析工单…",
+  "UpdateReviewQueued": "已在 {1} 创建分析工单 #{0}。",
+  "UpdateReviewSettings": "新功能分析",
+  "UpdateReviewHint": "选择更新后分析工单的目标列。现有处理器决定何时开始分析。可选择不要求已验证验收标准的工作列和人工决策列。目标不可用时，分析将等待配置修正。",
+  "UpdateReviewColumn": "目标列",
+  "UpdateReviewAutomatic": "自动 — 第一个接收列",
+  "UpdateReviewUnavailable": "目标不可用 — 请选择其他列",
   "DashboardTiles": "仪表盘卡片",
   "CardActiveRunTooltip": "打开运行中的智能体：{0}",
   "CardLastRunTooltip": "查看上次运行：{0} · {1}",

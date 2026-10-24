@@ -1,5 +1,47 @@
 # REST API
 
+Parent association (`PUT /api/projects/{slug}/tickets/{id}/parent`) accepts
+`{"parentId":123,"focus":true}` to highlight the associated card in that parent's
+sub-kanban. Detachment (`DELETE /api/projects/{slug}/tickets/{id}/parent?focus=true`)
+uses the optional **query parameter** and highlights the detached card in the main
+kanban. Both default to false and preserve their 204 success response. Rejected
+operations do not request focus; detail panels remain closed.
+
+Scheduling (`PATCH /api/projects/{slug}/tickets/{id}/schedule`) accepts optional
+`focus: true` in its request body alongside `fireAt`, `author` and `targetStatus`.
+After success it highlights the card in **Scheduled**, not the eventual promotion
+column, without opening the detail panel. Omitted or false leaves navigation
+unchanged. Invalid scheduling and missing tickets never request focus. The response
+remains the scheduled ticket.
+
+Transfers (`POST /api/projects/{slug}/tickets/{id}/transfer`) accept optional
+`focus: true`, for example `{"targetProject":"destination","actor":"owner","focus":true}`.
+After a successful transfer, connected views of the source or target project focus
+the transferred card in the target project's kanban. Other project views are
+unaffected. Focus uses the destination pipeline and column without opening the
+detail panel. The transfer response is unchanged. Omitted or false leaves navigation
+unchanged; rejected transfers never request focus.
+
+Ticket moves also accept optional `focus: true`: `PATCH .../tickets/{id}/status`,
+the root `PATCH .../tickets/{id}` (including moves by `pipelineId`/`columnId`), and
+`PATCH .../tickets/{id}/reorder`. For example, the status endpoint accepts
+`{"status":"Todo","author":"owner","focus":true}`. Focus is requested only after
+a successful operation and targets the resulting pipeline and column. Omitted or
+false leaves navigation unchanged; existing response formats are preserved.
+
+Ticket creation (`POST /api/projects/{slug}/tickets`) accepts optional `focus: true`
+in the JSON body. After successful creation it requests the same kanban card focus
+as the dedicated focus endpoint below. Omitted or false preserves the existing
+behavior. The response remains HTTP 201 with the created ticket and its Location
+header. For example: `{"title":"Analyze release notes","createdBy":"owner","status":"Backlog","focus":true}`.
+
+`POST /api/projects/{slug}/tickets/{id}/focus` focuses the ticket card in connected
+views of that project without opening its detail panel or changing ticket data.
+Returns `{ ticketId, pipelineId, columnId, url }`, or 404 for a missing project/ticket.
+The URL selects the ticket's pipeline and parent kanban, reveals paginated cards,
+clears text filters, scrolls to and highlights the card. With no matching connected
+view, callers can still open the returned URL. The MCP equivalent is `focus_ticket`.
+
 ## Purpose
 Exposes the project, ticket, comment, member, label, column, and workflow data over HTTP so that AI agents (and the Blazor UI) can read and mutate the board programmatically.
 

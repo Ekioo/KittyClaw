@@ -1,4 +1,13 @@
 {
+  "UpdateReviewManual": "Analyser les nouveautés maintenant",
+  "UpdateReviewManualHint": "Crée un ticket d’analyse de la dernière version, même si elle a déjà été analysée. Enregistrez d’abord les changements de cible. Les processeurs de la colonne déterminent quand il sera traité ; les projets en pause le restent.",
+  "UpdateReviewRequesting": "Création du ticket d’analyse…",
+  "UpdateReviewQueued": "Ticket d’analyse n° {0} créé dans {1}.",
+  "UpdateReviewSettings": "Analyse des nouveautés",
+  "UpdateReviewHint": "Choisissez où arrivent les tickets d’analyse des nouveautés. Les processeurs existants déterminent quand l’analyse démarre. Les colonnes de travail et de validation humaine sont proposées, sauf celles exigeant des critères déjà validés. Une cible indisponible laisse les analyses en attente jusqu’à correction.",
+  "UpdateReviewColumn": "Colonne cible",
+  "UpdateReviewAutomatic": "Automatique — première colonne d’entrée",
+  "UpdateReviewUnavailable": "Cible indisponible — choisissez une autre colonne",
   "DashboardTiles": "Tuiles du tableau de bord",
   "CardActiveRunTooltip": "Ouvrir l'agent en cours : {0}",
   "CardLastRunTooltip": "Voir la dernière exécution : {0} · {1}",

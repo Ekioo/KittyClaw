@@ -30,7 +30,7 @@ public sealed class McpToolsTests : IDisposable
         _members = new MemberService(_projects);
         _columns = new ColumnService(_projects);
         _tickets = new TicketService(_projects, _members);
-        _tools = new McpTools(_projects, _tickets, _columns, _members, _notifier);
+        _tools = new McpTools(_projects, _tickets, _columns, _members, _notifier, new BoardFocusService());
     }
 
     public void Dispose() => _dir.Dispose();
