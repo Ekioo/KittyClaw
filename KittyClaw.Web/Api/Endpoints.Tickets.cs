@@ -121,7 +121,10 @@ public static partial class Endpoints
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        }).WithTags("Comments");
+        }).WithTags("Comments")
+        .Produces<Comment>(StatusCodes.Status201Created)
+        .Produces(StatusCodes.Status400BadRequest)
+        .Produces(StatusCodes.Status404NotFound);
 
         api.MapPatch("/projects/{slug}/tickets/{id:int}/comments/{commentId:int}", HandleUpdateTicketComment).WithTags("Comments");
 

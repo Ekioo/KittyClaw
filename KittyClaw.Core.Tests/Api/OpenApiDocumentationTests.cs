@@ -82,6 +82,21 @@ public sealed class OpenApiDocumentationTests : IClassFixture<OpenApiDocumentati
         Assert.True(responses.TryGetProperty("404", out _), "404 NotFound must be declared on DELETE");
     }
 
+    [Fact]
+    public async Task OpenApiSpec_PostComments_Has201WithCommentSchemaAndErrors()
+    {
+        using var doc = await FetchOpenApiDoc();
+        var op = FindOperation(doc, "/tickets/{id}/comments", "post");
+        Assert.NotNull(op);
+        var responses = op!.Value.GetProperty("responses");
+        var schema = responses.GetProperty("201").GetProperty("content")
+            .GetProperty("application/json").GetProperty("schema");
+        Assert.EndsWith("/Comment", schema.GetProperty("$ref").GetString());
+        Assert.True(responses.TryGetProperty("400", out _));
+        Assert.True(responses.TryGetProperty("404", out _));
+        Assert.False(responses.TryGetProperty("200", out _));
+    }
+
     private async Task<JsonDocument> FetchOpenApiDoc()
     {
         var json = await _client.GetStringAsync("/openapi/v1.json");

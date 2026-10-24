@@ -38,6 +38,7 @@ Exposes the project, ticket, comment, member, label, column, and workflow data o
 - `GET /api/projects/{slug}/runs` accepts `includeCompleted`, `ticketId`, and `limit` (1-500 when specified; MCP defaults to 100); it returns active runs by default and retained terminal runs when requested.
 
 ## Conventions
+- Comment creation returns HTTP `201` with the created `Comment` and a `Location` header; invalid content returns `400`, and a missing ticket returns `404`. Clients must treat `201` as success and reconcile an uncertain write before retrying it.
 - `author` is **required** on every mutating endpoint; omitting it returns HTTP 400. Use `"owner"` for the human user, plain agent name (e.g. `"programmer"`) for AI agents.
 - Ticket statuses must match an existing column name in the project — fetch columns before moving tickets.
 - Cross-project ticket reference syntax in comments: `#id` (same project) and `#{slug}:{id}` (other project).
