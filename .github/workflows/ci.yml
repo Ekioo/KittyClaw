@@ -37,5 +37,8 @@ jobs:
           dotnet build KittyClaw.ClaudeMock -c Release --nologo
           dotnet build KittyClaw.Core.Tests -c Release --nologo
 
+      - name: Install Chromium for authentication browser tests
+        shell: pwsh
+        run: ./KittyClaw.Core.Tests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
       - name: Test
         run: dotnet test KittyClaw.Core.Tests -c Release --no-build --nologo --logger "console;verbosity=minimal"
