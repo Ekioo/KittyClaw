@@ -25,6 +25,23 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 - Components consume the [storage](./storage.md) services directly via DI rather than self-calling the [REST API](./rest-api.md).
 
 ## Features
+- Instruction chat, ticket run logs, and tile-creation chat share `ConversationDrawer`,
+  `ConversationView`, `ConversationMessage`, `ConversationComposer`,
+  `ConversationActivity`, and `ConversationTimestamp`. The view owns the common
+  transcript surface; no entry point applies the legacy console layout to it.
+  The common header retains run status, ticket, skill, session, concurrency group,
+  model, duration and usage. The composer uses the application's navy surface tokens
+  with compact attachment, model, inject and send/stop controls. Timestamp visibility
+  is a browser preference shared across all three entry points, toggled from
+  the conversation's context menu. Times sit inside message bubbles after the text,
+  aligned right for outgoing messages and left for incoming messages. The composer
+  keeps the native browser editing menu.
+  Technical events are grouped chronologically behind activity disclosures; errors,
+  user messages and agent replies remain visible. Raw payloads and diagnostic copying
+  stay available. Each entry point retains its own session, streaming and submission
+  lifecycle, including image paste, interactive questions, log retry, and tile
+  configuration review. Tile creation also exposes live activity, model selection
+  and cancellation without changing its configuration or script-validation flow.
 - Ticket creation and detail panels no longer offer manual member assignment. Existing assignment data is no longer used by the ticket interface.
 - Ticket cards display the first Markdown image from their description as a full-width cover above the card content, preserving its aspect ratio. Inline and reference-style images are supported; code samples and unsafe URL schemes are excluded.
 - Phone layouts use `css/mobile.css`, loaded after component styles and scoped to widths up to 767px. Headers wrap actions into touch-sized rows with a full-width search field. Project and nested Kanbans show one full-width column at a time with mandatory horizontal snapping and a stop at each column; tickets scroll vertically within their column. Ticket details stack in a full-screen panel, and chat/run drawers fill the screen. Dynamic viewport heights and safe-area padding accommodate mobile browser chrome. Desktop layouts and saved dashboard coordinates remain unchanged.

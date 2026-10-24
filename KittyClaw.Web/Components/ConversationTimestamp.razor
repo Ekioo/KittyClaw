@@ -1,0 +1,8 @@
+@if (At is DateTime at)
+{
+    <time class="conversation-time" datetime="@at.ToUniversalTime().ToString("O")">@at.ToLocalTime().ToString("HH:mm:ss")</time>
+}
+
+@code {
+    [Parameter] public DateTime? At { get; set; }
+}

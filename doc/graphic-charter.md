@@ -132,6 +132,13 @@ remain accessible after responsive changes.
 
 ## Form controls
 
+Agent conversations share `css/conversation.css`. Their rounded composer uses
+`--surface2`, `--border-strong`, `--text` and `--text-muted`, with the shared focus
+ring and accent focus border. Attachment and inject controls are quiet ghost
+actions; the rounded send/stop button uses the text/surface color pair and a vector
+icon. Its position is always at the far right of the toolbar. Keep these
+controls consistent in instruction chat, run logs and tile creation.
+
 Inputs, textareas, and selects in popups must use this exact pattern (see
 `.tile-config-field input/textarea/select` in `dashboard.css`):
 

@@ -37,6 +37,47 @@ window.chatDrawerInstallPasteHandler = function (el, dotnetRef) {
     var MAX_BYTES = 5 * 1024 * 1024; // 5 MB per image
     var MAX_IMAGES = 5;
 
+    el.__acceptImageFiles = async function (files) {
+        var bridge = el.__pasteDotnetRef;
+        if (!bridge || !files.length) return;
+        if (files.length > MAX_IMAGES) {
+            await bridge.invokeMethodAsync('OnImagePasteError', 'too_many');
+            return;
+        }
+        await bridge.invokeMethodAsync('OnImagePasteStarted', files.length);
+        try {
+            for (var index = 0; index < files.length; index++) {
+                var file = files[index];
+                if (!ALLOWED[file.type]) {
+                    await bridge.invokeMethodAsync('OnImagePasteError', 'unsupported_type');
+                    continue;
+                }
+                if (file.size > MAX_BYTES) {
+                    await bridge.invokeMethodAsync('OnImagePasteError', 'too_large');
+                    continue;
+                }
+                try {
+                    var dataUrl = await new Promise(function (resolve, reject) {
+                        var reader = new FileReader();
+                        reader.onload = function () { resolve(reader.result); };
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                    });
+                    await bridge.invokeMethodAsync('OnImagePasted', {
+                        dataUrl: dataUrl,
+                        mime: file.type,
+                        name: file.name || 'pasted-image',
+                        sizeBytes: file.size
+                    });
+                } catch (_) {
+                    await bridge.invokeMethodAsync('OnImagePasteError', 'read_failed');
+                }
+            }
+        } finally {
+            await bridge.invokeMethodAsync('OnImagePasteCompleted');
+        }
+    };
+
     el.addEventListener('paste', function (e) {
         var cd = e.clipboardData;
         if (!cd || !cd.items) return;
@@ -70,41 +111,26 @@ window.chatDrawerInstallPasteHandler = function (el, dotnetRef) {
             return;
         }
 
-        (async function () {
-            await bridge.invokeMethodAsync('OnImagePasteStarted', files.length);
-            try {
-                for (var index = 0; index < files.length; index++) {
-                    var file = files[index];
-                    if (!ALLOWED[file.type]) {
-                        await bridge.invokeMethodAsync('OnImagePasteError', 'unsupported_type');
-                        continue;
-                    }
-                    if (file.size > MAX_BYTES) {
-                        await bridge.invokeMethodAsync('OnImagePasteError', 'too_large');
-                        continue;
-                    }
-                    try {
-                        var dataUrl = await new Promise(function (resolve, reject) {
-                            var reader = new FileReader();
-                            reader.onload = function () { resolve(reader.result); };
-                            reader.onerror = reject;
-                            reader.readAsDataURL(file);
-                        });
-                        await bridge.invokeMethodAsync('OnImagePasted', {
-                            dataUrl: dataUrl,
-                            mime: file.type,
-                            name: file.name || 'pasted-image',
-                            sizeBytes: file.size
-                        });
-                    } catch (_) {
-                        await bridge.invokeMethodAsync('OnImagePasteError', 'read_failed');
-                    }
-                }
-            } finally {
-                await bridge.invokeMethodAsync('OnImagePasteCompleted');
-            }
-        })().catch(function (error) {
+        el.__acceptImageFiles(files).catch(function (error) {
             console.warn('KittyClaw image paste failed', error);
         });
     });
+};
+
+// File selection uses exactly the same validation and callbacks as clipboard images.
+window.chatDrawerPickImages = function (el) {
+    if (!el || !el.__acceptImageFiles) return;
+    var picker = document.createElement('input');
+    picker.type = 'file';
+    picker.accept = 'image/png,image/jpeg,image/gif,image/webp';
+    picker.multiple = true;
+    picker.hidden = true;
+    picker.addEventListener('change', function () {
+        var files = Array.from(picker.files || []);
+        picker.remove();
+        el.__acceptImageFiles(files).catch(function (error) { console.warn('KittyClaw image selection failed', error); });
+    }, { once: true });
+    picker.addEventListener('cancel', function () { picker.remove(); }, { once: true });
+    document.body.appendChild(picker);
+    picker.click();
 };

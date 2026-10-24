@@ -1,0 +1,8 @@
+<div class="conversation-messages chat-messages" @ref="Element">
+    @ChildContent
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    public ElementReference Element { get; private set; }
+}

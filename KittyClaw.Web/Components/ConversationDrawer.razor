@@ -1,0 +1,156 @@
+@using KittyClaw.Core.Automation
+@inject LocalizationService L
+@inject IJSRuntime JS
+@inject EscapeKeyStack EscapeStack
+@implements IDisposable
+
+<div class="chat-drawer-overlay conversation-overlay" @onclick="OnClose"></div>
+<section class="chat-drawer agent-conversation @CssClass @(_showTimes ? "conversation-show-times" : "")"
+         aria-label="@Title">
+    <header class="conversation-header agent-drawer-header" @oncontextmenu="OpenMenu" @oncontextmenu:preventDefault>
+        <div class="conversation-heading agent-drawer-title">
+            @HeaderLeading
+            <span class="agent-name">@Title</span>
+            @if ((TicketId ?? Run?.TicketId) is int ticketId)
+            {
+                <span class="agent-ticket">#@ticketId</span>
+            }
+            @if (Run is not null || IsBusy)
+            {
+                var status = IsBusy ? AgentRunStatus.Running : Run!.Status;
+                <span class="agent-status agent-status-@status.ToString().ToLowerInvariant()" role="status">@L[$"ConversationStatus{status}"]</span>
+            }
+        </div>
+        <div class="conversation-header-actions agent-drawer-actions">
+            @HeaderActions
+            <button class="agent-close-btn" @onclick="OnClose" title="@L["Close"]" aria-label="@L["Close"]">×</button>
+        </div>
+        @if (Run is not null)
+        {
+            <div class="agent-drawer-meta">
+                <span title="@L["ConversationSkill"]">@Run.SkillFile</span>
+                <span title="@L["ConversationSession"]">@ShortSession(Run.SessionId)</span>
+                <span title="@L["ConversationGroup"]">@Run.ConcurrencyGroup</span>
+                @if (!string.IsNullOrWhiteSpace(Run.Model ?? Model))
+                {
+                    <span title="@L["ConversationModel"]">@(Run.Model ?? Model)</span>
+                }
+                @if (Run.HasUsage)
+                {
+                    <span title="@UsageTooltip">⛁ @TokenDisplay.Compact(Run.TotalTokens)@(Run.TotalCostUsd is decimal cost ? $" · {(Run.CostIsEstimated ? "≈ " : "")}{TokenDisplay.Usd((double)cost)}" : "")</span>
+                }
+                <span title="@L["ConversationDuration"]">@Elapsed(Run)</span>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(Model))
+        {
+            <div class="agent-drawer-meta"><span title="@L["ConversationModel"]">@Model</span></div>
+        }
+        @if (!string.IsNullOrWhiteSpace(Context))
+        {
+            <div class="conversation-context">@Context</div>
+        }
+    </header>
+    <div class="conversation-content" @oncontextmenu="OpenMenu" @oncontextmenu:preventDefault>
+        @ChildContent
+    </div>
+    @Composer
+    @if (Footer is not null)
+    {
+        <footer class="conversation-footer">@Footer</footer>
+    }
+</section>
+@if (_menuOpen)
+{
+    <div class="conversation-menu-dismiss" @onclick="CloseMenu" @oncontextmenu="CloseMenu" @oncontextmenu:preventDefault></div>
+    <div class="conversation-menu" style="@MenuPosition" role="menu" aria-label="@L["ConversationActivity"]">
+        <button @ref="_menuButton" type="button" role="menuitemcheckbox" aria-checked="@_showTimes.ToString().ToLowerInvariant()" @onclick="ToggleTimes">
+            <span class="conversation-menu-check" aria-hidden="true">@(_showTimes ? "✓" : "")</span>
+            @L["ConversationTimestamps"]
+        </button>
+    </div>
+}
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string? CssClass { get; set; }
+    [Parameter] public string? Context { get; set; }
+    [Parameter] public int? TicketId { get; set; }
+    [Parameter] public string? Model { get; set; }
+    [Parameter] public AgentRun? Run { get; set; }
+    [Parameter] public bool IsBusy { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public RenderFragment? HeaderLeading { get; set; }
+    [Parameter] public RenderFragment? HeaderActions { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? Composer { get; set; }
+    [Parameter] public RenderFragment? Footer { get; set; }
+    private bool _showTimes;
+    private bool _menuOpen;
+    private bool _focusMenu;
+    private double _menuX, _menuY;
+    private ElementReference _menuButton;
+    private IDisposable? _menuEscape;
+    private const string TimesStorageKey = "kc-conversation-timestamps";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusMenu)
+        {
+            _focusMenu = false;
+            await _menuButton.FocusAsync();
+        }
+        if (!firstRender) return;
+        try
+        {
+            _showTimes = await JS.InvokeAsync<string?>("localStorage.getItem", TimesStorageKey) == "true";
+            StateHasChanged();
+        }
+        catch (JSException) { /* Storage can be unavailable in a private browser session. */ }
+    }
+
+    private string MenuPosition => _menuX == 0 && _menuY == 0 ? "right:1rem;top:5rem" :
+        FormattableString.Invariant($"left:clamp(.5rem,{_menuX}px,calc(100vw - 230px));top:clamp(.5rem,{_menuY}px,calc(100dvh - 60px))");
+
+    private void OpenMenu(MouseEventArgs e)
+    {
+        _menuX = e.ClientX;
+        _menuY = e.ClientY;
+        _menuOpen = true;
+        _focusMenu = true;
+        _menuEscape?.Dispose();
+        _menuEscape = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseMenu(); StateHasChanged(); }));
+    }
+
+    private void CloseMenu()
+    {
+        _menuOpen = false;
+        _menuEscape?.Dispose();
+        _menuEscape = null;
+    }
+
+    private async Task ToggleTimes()
+    {
+        _showTimes = !_showTimes;
+        await PersistTimes();
+        CloseMenu();
+    }
+
+    private async Task PersistTimes()
+    {
+        try { await JS.InvokeVoidAsync("localStorage.setItem", TimesStorageKey, _showTimes ? "true" : "false"); }
+        catch (JSException) { /* Keep the preference for the current drawer. */ }
+    }
+
+    private string UsageTooltip => Run is null ? "" :
+        $"{Run.TotalTokens:N0} tokens (in {Run.InputTokens:N0} / out {Run.OutputTokens:N0} / cache {Run.CacheReadTokens + Run.CacheWriteTokens:N0})" +
+        (Run.CostIsEstimated ? $" · {L["EstimatedCostTooltip"]}" : "");
+    private static string ShortSession(string? session) => string.IsNullOrEmpty(session) ? "—" : session[..Math.Min(session.Length, 8)];
+    private static string Elapsed(AgentRun run)
+    {
+        var duration = (run.EndedAt ?? DateTime.UtcNow) - run.StartedAt;
+        return duration.TotalHours >= 1 ? $"{(int)duration.TotalHours}h{duration.Minutes:D2}" : $"{duration.Minutes:D2}:{duration.Seconds:D2}";
+    }
+
+    public void Dispose() => _menuEscape?.Dispose();
+}

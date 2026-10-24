@@ -1,0 +1,74 @@
+@using KittyClaw.Core.Automation
+@inject LocalizationService L
+@inject IJSRuntime JS
+
+<details class="conversation-activity">
+    <summary>@L["ConversationActivity"] <span>· @L.Get("ConversationActions", Events.Count)</span>
+        @if (Events.LastOrDefault(ev => ev.Kind == "tool_use") is { } latestTool)
+        {
+            <span class="conversation-activity-preview">· @EventSummary(latestTool)</span>
+        }
+    </summary>
+    <div class="conversation-activity-content">
+        @foreach (var entry in RunDrawerEventPresentation.Group(Events))
+        {
+            var ev = entry.Event;
+            <details class="conversation-activity-event">
+                <summary>
+                    <span>@EventSummary(ev)</span>
+                </summary>
+                @if (entry.Stderr is { } stderr)
+                {
+                    <pre>@stderr.Raw</pre>
+                }
+                else
+                {
+                    <pre>@ev.Text</pre>
+                    @if (!string.IsNullOrWhiteSpace(ev.Detail))
+                    {
+                        <pre>@((MarkupString)SharedRenderHelpers.HighlightJson(ev.Detail))</pre>
+                    }
+                }
+                <button type="button" class="conversation-copy" @onclick="() => Copy(RawText(entry))">@L["ConversationCopy"]</button>
+                <ConversationTimestamp At="ev.At" />
+            </details>
+        }
+    </div>
+</details>
+
+@code {
+    [Parameter] public IReadOnlyList<StreamEvent> Events { get; set; } = [];
+    private static string RawText(RunDrawerEntry entry) => entry.Stderr?.Raw ??
+        entry.Event.Text + (entry.Event.Detail is null ? "" : "\n" + entry.Event.Detail);
+
+    private async Task Copy(string text)
+    {
+        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", text); }
+        catch (JSException) { /* Clipboard permissions are owned by the browser. */ }
+    }
+
+    private string EventSummary(StreamEvent ev)
+    {
+        if (ev.Kind == "tool_use")
+        {
+            var preview = SharedRenderHelpers.GetToolPreview(ev.Text, ev.Detail);
+            var action = L[ev.Text.ToLowerInvariant() switch
+            {
+                "read" or "read_file" => "ConversationReading",
+                "grep" or "glob" or "search" => "ConversationSearching",
+                "bash" or "shell" or "exec_command" => "ConversationCommand",
+                "write" or "edit" or "apply_patch" => "ConversationEditing",
+                _ => "ConversationTool"
+            }];
+            return $"{action} · {ev.Text}{(string.IsNullOrWhiteSpace(preview) ? "" : $" · {preview}")}";
+        }
+        return L[ev.Kind switch
+        {
+            "stderr" => "ConversationDiagnostics",
+            "system" => "ConversationSystem",
+            "result" => "ConversationResult",
+            "rate_limit_event" => "ConversationRateLimit",
+            _ => "ConversationEvent"
+        }];
+    }
+}

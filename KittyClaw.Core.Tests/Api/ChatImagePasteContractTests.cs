@@ -161,7 +161,7 @@ public class ChatImagePasteContractTests
         // Browsers neuter DataTransferItems once the paste handler returns, so getAsFile()
         // must run before the async pipeline starts — otherwise real pastes lose every image.
         var getAsFile = src.IndexOf("getAsFile()", StringComparison.Ordinal);
-        var asyncStart = src.IndexOf("(async function", StringComparison.Ordinal);
+        var asyncStart = src.IndexOf("el.__acceptImageFiles(files)", StringComparison.Ordinal);
         Assert.True(getAsFile >= 0 && asyncStart > getAsFile,
             "getAsFile() must be called synchronously in the paste handler, before the async block");
         Assert.DoesNotContain("getAsFile", src[asyncStart..]);
@@ -220,9 +220,12 @@ public class ChatImagePasteContractTests
     public void ChatDrawer_places_paste_state_and_previews_above_the_prompt_box()
     {
         var src = Read("KittyClaw.Web/Components/ChatDrawer.razor");
-        var composer = src.IndexOf("class=\"chat-composer\"", StringComparison.Ordinal);
-        var tray = src.IndexOf("class=\"chat-paste-tray\"", composer, StringComparison.Ordinal);
-        var prompt = src.IndexOf("class=\"chat-input-area", composer, StringComparison.Ordinal);
+        Assert.Contains("<ConversationComposer", src);
+        Assert.Contains("class=\"chat-paste-tray\"", src);
+        var shared = Read("KittyClaw.Web/Components/ConversationComposer.razor");
+        var composer = shared.IndexOf("class=\"chat-composer", StringComparison.Ordinal);
+        var tray = shared.IndexOf("@Tray", composer, StringComparison.Ordinal);
+        var prompt = shared.IndexOf("class=\"chat-input-area", composer, StringComparison.Ordinal);
 
         Assert.True(composer >= 0 && tray > composer && prompt > tray);
         Assert.Contains("aria-live=\"polite\"", src);
