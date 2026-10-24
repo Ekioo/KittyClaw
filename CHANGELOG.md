@@ -4,6 +4,40 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.26] — 2026-10-24
+
+Persistent agent questions, a redesigned Windows desktop, and Simplified Chinese support.
+
+### Highlights
+
+Agents can ask durable questions with multiple-choice answers, wait for the owner, and resume processing after an answer. A borderless Windows window keeps navigation in a persistent toolbar, while dedicated mobile layouts and unified conversations improve everyday project work.
+
+### Added
+
+- Persistent ticket questions, owner answers, and processor resumption through the UI, REST API, and MCP.
+- Borderless Windows desktop window with a persistent toolbar and localized tray menus and update notifications.
+- Simplified Chinese localization and automatic system language detection.
+
+### Changed
+
+- Unify agent conversations across project instructions, run logs, and dashboard tile creation.
+- Simplify project navigation, add dedicated mobile layouts, and refine project creation.
+- Separate AI ticket improvement from scoped ticket breakdown.
+- Remove the legacy automation engine and associated unused code.
+
+### Fixed
+
+- Preserve JEV review continuity during ticket startup.
+- Keep conversation drawers below the Windows toolbar and preserve toolbar styling after logo navigation.
+- Correct ticket recovery overflow and dashboard example focus and hover styles.
+
+### Security
+
+- Harden browser responses, local documentation requests, file intake, and secret handling.
+- Bound native secret processes and server-sent event subscriber queues.
+
+---
+
 ## [v0.25.2] — 2026-10-24
 
 Security hardening for remote access and untrusted project content.
