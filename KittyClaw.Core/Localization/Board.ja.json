@@ -397,6 +397,7 @@
   "JevApproveCriteria": "承認して続行",
   "JevAutomaticPolicy": "自動ルーティング有効 · 最低信頼度: {0}%。このしきい値未満では手動の確認が必要です。",
   "JevAutomaticRouting": "ルーティングを自動適用",
+  "JevAutomaticRoutingMode": "エージェントの完了後にJEVにルーティングを任せる",
   "JevAutomaticRoutingHelp": "しきい値未満の提案は承認を待ちます。",
   "JevAvailable": "JEV利用可能: TypeSafeキーが設定されています。",
   "JevChooseAnotherProfile": "別のプロファイルを選択",

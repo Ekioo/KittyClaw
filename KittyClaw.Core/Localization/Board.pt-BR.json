@@ -397,6 +397,7 @@
   "JevApproveCriteria": "Aprovar e continuar",
   "JevAutomaticPolicy": "Roteamento automático ativado · confiança mínima: {0}%. Abaixo desse limite, é necessária validação manual.",
   "JevAutomaticRouting": "Aplicar roteamento automaticamente",
+  "JevAutomaticRoutingMode": "Deixar o JEV escolher o destino quando o agente terminar",
   "JevAutomaticRoutingHelp": "Sugestões abaixo do limite aguardam sua aprovação.",
   "JevAvailable": "JEV disponível: uma chave TypeSafe está configurada.",
   "JevChooseAnotherProfile": "Escolher outro perfil",

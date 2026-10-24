@@ -389,6 +389,7 @@
   "JevApproveCriteria": "Genehmigen und fortfahren",
   "JevAutomaticPolicy": "Automatische Weiterleitung aktiv · Mindestkonfidenz: {0}%. Unterhalb dieses Schwellenwerts ist eine manuelle Bestätigung erforderlich.",
   "JevAutomaticRouting": "Weiterleitung automatisch anwenden",
+  "JevAutomaticRoutingMode": "JEV nach Abschluss des Agenten routen lassen",
   "JevAutomaticRoutingHelp": "Vorschläge unterhalb des Schwellenwerts warten auf Ihre Zustimmung.",
   "JevAvailable": "JEV verfügbar: Ein TypeSafe-Schlüssel ist konfiguriert.",
   "JevChooseAnotherProfile": "Anderes Profil wählen",
