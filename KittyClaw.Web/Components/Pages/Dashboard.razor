@@ -125,10 +125,11 @@ else
                             }
                             @if (_refreshRunIds.TryGetValue(t.Slug, out var activeRunId))
                             {
-                                <span class="agent-spinner dashboard-tile-spinner"
+                                <button type="button" class="agent-spinner dashboard-tile-spinner"
                                       title="@L["RefreshRunning"]"
+                                      aria-label="@L["RefreshRunning"]"
                                       @onclick="() => OpenRunDrawer(activeRunId)"
-                                      @onmousedown:stopPropagation></span>
+                                      @onmousedown:stopPropagation></button>
                             }
                             else if (tileQueued)
                             {

@@ -16,7 +16,7 @@
 
 @* Project creation, extracted from Home.razor so every host page shares one flow that
    cannot diverge. A single button opens the modal; the name lives inside the modal. *@
-<button class="header-action-btn settings-primary" data-testid="create-project-open" @onclick="OpenCreation">+ @L["CreateProjectButton"]</button>
+<button class="header-action-btn settings-primary" data-testid="create-project-open" disabled="@(!_interactive)" @onclick="OpenCreation">+ @L["CreateProjectButton"]</button>
 
 @if (_open)
 {
@@ -154,9 +154,15 @@ else if (_createdProject is not null)
     private bool _firstTicketConfirmed;
     private int? _firstTicketId;
     private string? _providerGuidance;
+    private bool _interactive;
 
     protected override Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            _interactive = true;
+            StateHasChanged();
+        }
         if (_open && _escPending is null)
             _escPending = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CancelCreation(); StateHasChanged(); }));
         else if (!_open && _escPending is not null)

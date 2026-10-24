@@ -13,6 +13,8 @@ and API/MCP documentation.
 
 ## Features
 
+- [Mobile UX audit](../docs/audits/2026-10-24-mobile-ux-audit.md) — complete view inventory, phone compositions, desktop preservation and verification coverage.
+
 - [Managed public instance access](./public-instance-access.md) — dedicated tunnel origin boundary and Cloudflare delivery milestones.
 
 - [Local network access](./network-access.md) — opt-in HTTPS access from phones, authenticator-only login, local enrollment and session revocation.

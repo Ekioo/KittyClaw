@@ -16,8 +16,10 @@
     <h1>@L["GlobalSettingsTitle"]</h1>
 </div>
 
+<MobileSectionNavigation Sections="@MobileSections" @bind-Active="_mobileSection" />
+
 <div class="settings-container">
-    <section class="settings-section" data-testid="network-global-settings">
+    <section class="settings-section mobile-section-panel @(_mobileSection == "network" ? "mobile-section-active" : "")" data-testid="network-global-settings">
         <h2>@L["NetworkTitle"]</h2>
         <p class="settings-hint">@L["NetworkHint"]</p>
         <a class="settings-browse" href="/network-setup">@L["NetworkConfigure"]</a>
@@ -27,7 +29,7 @@
             <button type="submit" class="settings-browse">@L["NetworkLogout"]</button>
         </form>
     </section>
-    <section class="settings-section" data-testid="remote-global-settings">
+    <section class="settings-section mobile-section-panel @(_mobileSection == "remote" ? "mobile-section-active" : "")" data-testid="remote-global-settings">
         <h2>@L["RemoteTitle"]</h2>
         <p class="settings-hint">@L["RemoteHint"]</p>
         @if (RemoteAccess.Snapshot.Url is { } publicUrl)
@@ -37,7 +39,7 @@
         <a class="settings-browse" href="/remote-setup">@L["RemoteConfigure"]</a>
         <p class="settings-hint">@L["NetworkLocalSetup"]</p>
     </section>
-    <section class="settings-section" data-testid="language-global-settings">
+    <section class="settings-section mobile-section-panel @(_mobileSection == "language" ? "mobile-section-active" : "")" data-testid="language-global-settings">
         <h2>@L["Language"]</h2>
         <div class="settings-row">
             <select aria-label="@L["Language"]" class="settings-input" style="max-width:200px" value="@L.Lang" @onchange="OnLangChanged">
@@ -52,7 +54,7 @@
         </div>
     </section>
 
-    <section class="settings-section" data-testid="agent-provider-settings">
+    <section class="settings-section mobile-section-panel @(_mobileSection == "providers" ? "mobile-section-active" : "")" data-testid="agent-provider-settings">
         <div class="provider-section-heading">
             <div>
                 <h2>@L["AgentProvidersTitle"]</h2>
@@ -99,7 +101,7 @@
         <p class="provider-readiness-note">@L["AgentProvidersDetectionNote"]</p>
     </section>
 
-    <section class="settings-section" data-testid="mcp-global-settings">
+    <section class="settings-section mobile-section-panel @(_mobileSection == "mcp" ? "mobile-section-active" : "")" data-testid="mcp-global-settings">
         <h2>@L["McpServerTitle"]</h2>
         <p class="settings-hint">@L["McpServerHint"]</p>
 
@@ -124,6 +126,16 @@
 </div>
 
 @code {
+    private string _mobileSection = "network";
+    private IReadOnlyList<MobileSectionNavigation.Section> MobileSections =>
+    [
+        new("network", L["NetworkTitle"]),
+        new("remote", L["RemoteTitle"]),
+        new("language", L["Language"]),
+        new("providers", L["AgentProvidersTitle"]),
+        new("mcp", L["McpServerTitle"]),
+    ];
+
     protected override void OnInitialized() => L.OnLanguageChanged += OnLanguageChanged;
     private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
     private void OnLangChanged(ChangeEventArgs e) => AppSettings.Language = (string?)e.Value ?? "fr";

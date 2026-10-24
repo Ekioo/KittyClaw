@@ -157,19 +157,15 @@ public sealed class ColumnProcessorDialogTests
     }
 
     [Fact]
-    public void Boards_replace_the_decorative_dot_with_processor_state()
+    public void Project_board_replaces_the_decorative_dot_with_processor_state()
     {
         var board = File.ReadAllText(Path.Combine(
             RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Board.razor"));
-        var unified = File.ReadAllText(Path.Combine(
-            RepoRoot(), "KittyClaw.Web", "Components", "Pages", "UnifiedBoard.razor"));
         var css = KittyClaw.Core.Tests.Helpers.AppCssHelper.ReadAll(RepoRoot());
 
         Assert.Contains("column-processor-indicator", board);
         Assert.Contains("_activeProcessorColumnIds.Contains(col.Id)", board);
-        Assert.Contains("lane.ActiveProcessorColumnIds.Contains(col.Id)", unified);
         Assert.Contains("ProcessorService.ListAsync", board);
-        Assert.Contains("ProcessorService.ListAsync", unified);
         Assert.DoesNotContain(".status-pill::before", css);
     }
 
@@ -248,20 +244,16 @@ public sealed class ColumnProcessorDialogTests
     }
 
     [Fact]
-    public void OwnerAction_tickets_are_emphasized_on_project_and_unified_boards()
+    public void OwnerAction_tickets_are_emphasized_on_the_project_board()
     {
         var board = File.ReadAllText(Path.Combine(
             RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Board.razor"))
             + File.ReadAllText(Path.Combine(
             RepoRoot(), "KittyClaw.Web", "Components", "BoardTicketCard.razor"));
-        var unified = File.ReadAllText(Path.Combine(
-            RepoRoot(), "KittyClaw.Web", "Components", "Pages", "UnifiedBoard.razor"));
         var css = KittyClaw.Core.Tests.Helpers.AppCssHelper.ReadAll(RepoRoot());
 
         Assert.Contains("ColRole == ColumnRole.OwnerAction", board);
         Assert.Contains("owner-action-badge", board);
-        Assert.Contains("col.Role == ColumnRole.OwnerAction", unified);
-        Assert.Contains("owner-action-badge", unified);
         Assert.Contains(".ticket-card.ticket-owner-action", css);
     }
 

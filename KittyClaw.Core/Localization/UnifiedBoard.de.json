@@ -1,14 +1,18 @@
 {
-  "UnifiedBoardTitle": "Alle Foren",
-  "AllBoardsNavLabel": "Alle Foren",
-  "UnifiedBoardLoading": "Lade Boards…",
+  "UnifiedBoardTitle": "Projekte",
+  "AllBoardsNavLabel": "Projekte",
+  "UnifiedBoardLoading": "Projekte werden geladen…",
   "UnifiedBoardNoProjects": "Noch keine Projekte.",
-  "UnifiedBoardNoMatches": "Zu dieser Suche passen keine Tickets.",
-  "UnifiedBoardSearchPlaceholder": "Durchsuchen Sie jedes Projekt…",
+  "UnifiedBoardNoMatches": "Keine Projekte entsprechen dieser Suche.",
+  "UnifiedBoardSearchPlaceholder": "Projekte oder Spalten suchen…",
   "ClearSearch": "Suche löschen",
   "CreateProjectButton": "Erstellen Sie ein Projekt",
   "ProjectName": "Projektname",
   "UnifiedBoardCollapseLane": "Fahrspur einklappen",
   "UnifiedBoardExpandLane": "Spur erweitern",
-  "UnifiedBoardCrossLaneBlocked": "Tickets können nicht zwischen Projekten verschoben werden."
+  "UnifiedBoardCrossLaneBlocked": "Tickets können nicht zwischen Projekten verschoben werden.",
+  "ProjectQuickAccess": "Schnellzugriff auf {0}",
+  "ProjectAgentsRunning": "Agenten aktiv",
+  "ProjectColumns": "Projektspalten",
+  "ProjectOpenColumn": "{0} / {1} / {2} öffnen"
 }

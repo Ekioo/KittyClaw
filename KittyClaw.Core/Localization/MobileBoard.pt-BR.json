@@ -2,5 +2,8 @@
   "MobileColumnNavigation": "Colunas do quadro",
   "MobilePreviousColumn": "Coluna anterior",
   "MobileNextColumn": "Próxima coluna",
-  "MobileColumnSwipeHint": "Deslize para mudar de coluna"
+  "MobileColumnSwipeHint": "Deslize para mudar de coluna",
+  "MobileTicketDetails": "Detalhes",
+  "MobileTicketActions": "Ações do ticket",
+  "MobileSections": "Seção"
 }

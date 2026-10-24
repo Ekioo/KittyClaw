@@ -2,5 +2,8 @@
   "MobileColumnNavigation": "Board columns",
   "MobilePreviousColumn": "Previous column",
   "MobileNextColumn": "Next column",
-  "MobileColumnSwipeHint": "Swipe to change columns"
+  "MobileColumnSwipeHint": "Swipe to change columns",
+  "MobileTicketDetails": "Details",
+  "MobileTicketActions": "Ticket actions",
+  "MobileSections": "Section"
 }

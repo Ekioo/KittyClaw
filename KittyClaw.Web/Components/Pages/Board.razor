@@ -36,7 +36,7 @@ else
 {
     <div class="board-layout">
     <div class="page-header">
-        <a href="@_homeHref" class="back-link">&larr; @L["BackToProjects"]</a>
+        <a href="/" class="back-link">&larr; @L["BackToProjects"]</a>
         <h1>@_project.Name</h1>
         @if (_subKanbanParentId is not null && _subKanbanParent is not null)
         {
@@ -115,7 +115,8 @@ else
                 <button class="column-insert-btn" title="@L["InsertColumnHere"]" aria-label="@L["InsertColumnHere"]"
                         @onclick="() => OpenCreateColumn(colIndex)">+</button>
             </div>
-            <div @key="col.Id" class="column @(_draggedColumn?.Id == col.Id ? "column-dragging" : "") @ticketDropClass"
+            <div @key="col.Id" class="column @(_draggedColumn?.Id == col.Id ? "column-dragging" : "") @ticketDropClass @(_linkedColumnId == col.Id ? "column-linked" : "")"
+                 data-column-id="@col.Id" role="region" aria-label="@col.Name" tabindex="-1"
                  data-column-status="@col.Name"
                  style="--col-color: @col.Color"
                  @ondragover="(e) => OnDragOverColumn(col.Name, e)"
@@ -151,6 +152,8 @@ else
                     }
                     <span class="count">@GetTickets(col.Name).Count</span>
                     <ColumnCapacityIndicator Column="col" Count="@_tickets.Count(t => t.ColumnId == col.Id)" />
+                    <button type="button" class="mobile-column-menu" aria-label="@L["ConfigureColumn"]"
+                            @onclick="e => OpenSortMenu(col.Name, e)" @onclick:stopPropagation>···</button>
                 </div>
                 <div class="column-body">
                     @{
@@ -477,6 +480,8 @@ else
     [Parameter] public int? ParentId { get; set; }
     [SupplyParameterFromQuery(Name = "pipeline")]
     public int? PipelineId { get; set; }
+    [SupplyParameterFromQuery(Name = "column")]
+    public int? ColumnId { get; set; }
 
     private Project? _project;
     private List<TicketSummary> _tickets = [];
@@ -486,8 +491,9 @@ else
     private List<Pipeline> _pipelines = [];
     private int? _selectedPipelineId;
     private bool _restoreScrollAfterRender;
-    // "← Projects" target: the home route matching the display mode last used there.
-    private string _homeHref = "/";
+    private int? _linkedColumnId;
+    private int? _pendingColumnFocus;
+    private (string Slug, int? ParentId, int? PipelineId, int? ColumnId)? _lastColumnTarget;
     // The ticket detail itself lives in the extracted TicketPanel component; the board only
     // tracks WHICH ticket is open and bumps _panelRefreshToken to force a panel reload
     // after board-side mutations the panel can't observe (undo).
@@ -857,6 +863,14 @@ else
 
         // Sync the open panel with the URL (deep links, browser navigation).
         _openTicketId = TicketId;
+
+        var columnTarget = (Slug, ParentId, _selectedPipelineId, ColumnId);
+        if (_lastColumnTarget != columnTarget)
+        {
+            _lastColumnTarget = columnTarget;
+            _linkedColumnId = _columns.FirstOrDefault(column => column.Id == ColumnId)?.Id;
+            _pendingColumnFocus = _linkedColumnId;
+        }
         await Task.CompletedTask;
     }
 
@@ -902,17 +916,17 @@ else
 
             await LoadSortAsync();
 
-            // Point "← Projects" at the home mode the user last used ("/" is the unified
-            // kanban, "/projects" the cards grid — the route carries the mode).
-            var homeView = await JS.InvokeAsync<string?>("localStorage.getItem", "unified-board-view");
-            if (homeView == "cards") _homeHref = "/projects";
-
             StateHasChanged();
         }
         if (_restoreScrollAfterRender)
         {
             _restoreScrollAfterRender = false;
             await TryInvokeBoardJsAsync("restoreColumnScrollPositions");
+        }
+        if (_pendingColumnFocus is int columnId)
+        {
+            _pendingColumnFocus = null;
+            await TryInvokeBoardJsAsync("focusBoardColumn", "project-kanban", columnId);
         }
     }
 

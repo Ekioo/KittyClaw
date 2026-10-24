@@ -29,9 +29,7 @@
 
 @if (_ticket is not null)
 {
-    <div class="ticket-modal-overlay">
-        <div class="ticket-panel" aria-busy="@(_detailsLoading ? "true" : "false")">
-        <div class="ticket-panel-header">
+    RenderFragment desktopHeader = @<div class="ticket-panel-header">
             <div class="editable-field">
                 <button type="button" class="priority-dot-btn" @onclick="TogglePriorityPicker"
                         title="@L["ChangePriority"]" aria-label="@L["ChangePriority"]"
@@ -67,12 +65,11 @@
             <div class="header-actions">
                 <button class="tile-config-revise" @onclick="() => OpenImprovement(false)">✦ @L["ImproveTicket"]</button>
                 <button class="tile-config-revise" @onclick="() => OpenImprovement(true)">@L["SplitTicket"]</button>
-                <button class="close-btn" @onclick="CloseAsync">&times;</button>
+                <button class="close-btn" aria-label="@L["Close"]" @onclick="CloseAsync">&times;</button>
             </div>
-        </div>
+        </div>;
 
-        <div class="ticket-properties-row">
-        <div class="ticket-column-row" data-testid="ticket-current-column">
+    RenderFragment column = @<div class="ticket-column-row" data-testid="ticket-current-column">
             <label class="ticket-column-badge" title="@L["TicketCurrentColumn"]">
                 <span class="sub-ticket-status-dot" style="background: @(CurrentColumn()?.Color ?? GetColumnColor(_ticket.Status))" aria-hidden="true"></span>
                 <select class="ticket-column-select" aria-label="@L["TicketCurrentColumn"]"
@@ -87,9 +84,10 @@
             {
                 <span class="dep-error" role="alert">@_columnMoveError</span>
             }
-        </div>
+        </div>;
 
-        @* ── Labels row ── *@
+    RenderFragment properties = @<text>
+@* ── Labels row ── *@
         <div class="ticket-labels-row" title="@L["Labels"]">
             @foreach (var label in _ticket.Labels)
             {
@@ -171,10 +169,17 @@
                     <span class="token-badge" title="@CostTooltip(_ticket.AgentTokens, _ticket.AgentCostUsd, _ticket.AgentCostEstimated)">⛁ @KittyClaw.Web.Services.TokenDisplay.Compact(_ticket.AgentTokens)@(_ticket.AgentCostUsd > 0 ? $" · {(_ticket.AgentCostEstimated ? "≈ " : "")}{KittyClaw.Web.Services.TokenDisplay.Usd(_ticket.AgentCostUsd)}" : "")</span>
                 }
             </div>
+</text>;
 
-        </div>
+    RenderFragment labels = @<text>
+        @foreach (var label in _ticket.Labels)
+        {
+            <span class="label-pill" style="--lc: @label.Color">@label.Name</span>
+        }
+    </text>;
 
-        @if (_worktreeState is not null)
+    RenderFragment context = @<div class="ticket-context">
+@if (_worktreeState is not null)
         {
             <section class="worktree-summary" data-testid="ticket-worktree-summary">
                 <div class="worktree-summary-title"><strong>@L["WorktreeTitle"]</strong></div>
@@ -302,7 +307,11 @@
                 </div>
             </div>
         }
-        <div class="dep-add-row">
+
+</div>;
+
+    RenderFragment dependencyEditor = @<div class="ticket-dependency-editor">
+        <div class="dep-add-row" id="ticket-dependency-editor">
             <span class="section-label-sm">@L["BlockedBy"]:</span>
             <input class="dep-add-input" type="number" min="1" placeholder="@L["BlockerIdPlaceholder"]"
                    @bind="_addBlockerIdText" @bind:event="oninput"
@@ -316,7 +325,9 @@
         }
 
         @* ── Ticket body (thread layout) ── *@
-            <div class="ticket-panel-thread">
+</div>;
+
+    RenderFragment content = @<div class="ticket-panel-thread">
                 <ColumnExecutionRecovery Slug="@Slug" TicketId="@_ticket.Id" />
                 <div class="section-header">
                     <span class="section-label">@L["Description"]</span>
@@ -429,8 +440,42 @@
                         <button class="delete-btn" @onclick="() => _confirmDelete = true">@L["DeleteThisTicket"]</button>
                     }
                 </div>
-            </div>
-        </div>
+            </div>;
+
+    RenderFragment priority = @<div class="ticket-mobile-priority">
+<button type="button" class="priority-dot-btn" @onclick="TogglePriorityPicker"
+                        title="@L["ChangePriority"]" aria-label="@L["ChangePriority"]"
+                        aria-expanded="@(_showPriorityPicker ? "true" : "false")">
+                    <span class="priority-dot priority-@GetPriorityClass(_ticket.Priority)"></span>
+                </button>
+                @if (_showPriorityPicker)
+                {
+                    <div class="priority-dropdown">
+                        @foreach (var p in Enum.GetValues<TicketPriority>())
+                        {
+                            <button class="priority-option @(_ticket.Priority == p ? "active" : "")"
+                                    @onclick="() => SetPriorityAndClose(p)">
+                                <span class="priority-dot priority-@GetPriorityClass(p)"></span>
+                                @GetPriorityLabel(p)
+                            </button>
+                        }
+                    </div>
+                }
+</div>;
+
+    RenderFragment titleEditor = @<div class="editable-field">
+<span class="ticket-id-prefix">#@_ticket.Id &mdash;</span>
+                    <input class="edit-title-input" @bind="_editTitle" @onkeydown="HandleTitleKeyDown" />
+                    <button class="icon-btn save-btn" title="@L["Save"]" @onclick="SaveTitle">&#10003;</button>
+                    <button class="icon-btn cancel-icon-btn" title="@L["Cancel"]" @onclick="() => _editingTitle = false">&#10005;</button>
+</div>;
+
+    <div class="ticket-modal-overlay">
+        <TicketPanelResponsiveView TicketId="@_ticket.Id" Title="@_ticket.Title" Loading="@_detailsLoading"
+                                   EditingTitle="@_editingTitle" DesktopHeader="@desktopHeader"
+                                   Priority="@priority" TitleEditor="@titleEditor" Properties="@properties" Column="@column" Labels="@labels"
+                                   Context="@context" DependencyEditor="@dependencyEditor" Content="@content"
+                                   OnClose="CloseAsync" OnImprove="() => OpenImprovement(false)" OnSplit="() => OpenImprovement(true)" OnEditTitle="StartEditTitle" />
     </div>
 }
 

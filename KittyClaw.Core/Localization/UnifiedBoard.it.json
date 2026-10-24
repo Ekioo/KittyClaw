@@ -1,14 +1,18 @@
 {
-  "UnifiedBoardTitle": "Tutte le bacheche",
-  "AllBoardsNavLabel": "Tutte le bacheche",
-  "UnifiedBoardLoading": "Caricamento schede…",
+  "UnifiedBoardTitle": "Progetti",
+  "AllBoardsNavLabel": "Progetti",
+  "UnifiedBoardLoading": "Caricamento dei progetti…",
   "UnifiedBoardNoProjects": "Nessun progetto ancora",
-  "UnifiedBoardNoMatches": "Nessun biglietto corrisponde a questa ricerca.",
-  "UnifiedBoardSearchPlaceholder": "Cerca ogni progetto...",
+  "UnifiedBoardNoMatches": "Nessun progetto corrisponde alla ricerca.",
+  "UnifiedBoardSearchPlaceholder": "Cerca progetti o colonne…",
   "ClearSearch": "Cancella ricerca",
   "CreateProjectButton": "Crea un progetto",
   "ProjectName": "Nome del progetto",
   "UnifiedBoardCollapseLane": "Corsia di collasso",
   "UnifiedBoardExpandLane": "Espandi corsia",
-  "UnifiedBoardCrossLaneBlocked": "I ticket non possono essere spostati tra progetti."
+  "UnifiedBoardCrossLaneBlocked": "I ticket non possono essere spostati tra progetti.",
+  "ProjectQuickAccess": "Accesso rapido a {0}",
+  "ProjectAgentsRunning": "Agenti attivi",
+  "ProjectColumns": "Colonne del progetto",
+  "ProjectOpenColumn": "Apri {0} / {1} / {2}"
 }

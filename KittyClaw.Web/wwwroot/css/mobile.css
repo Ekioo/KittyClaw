@@ -122,20 +122,6 @@
     .project-list { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; padding: .75rem; }
     .project-card-wrap { width: 100%; min-height: 140px; }
 
-    .ticket-modal-overlay { padding: 0; }
-    .ticket-panel {
-        width: 100%; max-width: none; height: 100dvh;
-        min-height: 0; max-height: 100dvh; border-radius: 0;
-        padding-bottom: env(safe-area-inset-bottom);
-    }
-    .ticket-panel-header, .ticket-properties-row { padding: .65rem .75rem; gap: .5rem; }
-    .ticket-panel-header .header-actions { flex-wrap: wrap; }
-    .ticket-panel-columns { display: block; overflow-y: auto; overscroll-behavior-y: contain; }
-    .ticket-col-left, .ticket-col-right { overflow: visible; padding: .75rem; }
-    .ticket-col-right { border-left: 0; border-top: 1px solid var(--border); }
-    .ticket-col-right .activity-scroll { flex: none; overflow: visible; }
-    .ticket-properties-row { max-height: 25dvh; overflow-y: auto; }
-    .ticket-panel-thread, .ticket-panel-body { padding: .75rem; min-height: 0; }
     .chat-drawer, .agent-drawer { width: 100%; max-width: none; padding-bottom: env(safe-area-inset-bottom); }
     .chat-drawer-header { flex-wrap: wrap; gap: .35rem; }
     .chat-drawer-title { flex: 1; }

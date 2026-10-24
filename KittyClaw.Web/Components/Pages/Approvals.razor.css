@@ -64,3 +64,21 @@
     .approval-history-card > summary > span:last-child { grid-column: 2; }
     .approval-deny { margin-left: 0; }
 }
+
+@media (max-width: 767px) {
+    .approval-intro { margin: .75rem 1rem; padding: .85rem; align-items: flex-start; }
+    .approval-intro > div:last-child { min-width: 0; overflow-wrap: anywhere; }
+    .approval-summary { margin: 1rem; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .5rem; }
+    .approval-summary-card { flex-direction: column; gap: .25rem; padding: .75rem; }
+    .approval-section { margin: 1.5rem 1rem; min-width: 0; }
+    .approval-card { padding: .85rem; min-width: 0; overflow-wrap: anywhere; }
+    .approval-card header, .approval-card header > div { flex-wrap: wrap; gap: .5rem; }
+    .approval-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
+    .approval-actions button { min-height: 44px; white-space: normal; }
+    .approval-header-actions { flex-wrap: wrap; }
+    .approval-header-actions > * { min-height: 44px; flex: 1; justify-content: center; white-space: normal; }
+    .approval-technical summary { display: flex; align-items: center; min-height: 44px; }
+    .approval-history-card > summary { min-height: 44px; grid-template-columns: minmax(0, 1fr); }
+    .approval-history-card > summary > span:last-child { grid-column: 1; }
+    .approval-error { inset: auto 1rem max(1rem, env(safe-area-inset-bottom)); max-width: none; overflow-wrap: anywhere; }
+}
