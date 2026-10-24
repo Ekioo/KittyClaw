@@ -103,6 +103,9 @@
     };
     document.addEventListener('DOMContentLoaded', () => {
         install();
+        // Enhanced navigation can reset attributes without changing any body children.
+        // Reapply the shell even when the home link points to the current page.
+        window.Blazor?.addEventListener('enhancedload', install);
         new MutationObserver(install).observe(document.body, { childList: true, subtree: true });
     });
 })();
