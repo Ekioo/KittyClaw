@@ -82,6 +82,52 @@
 .agent-conversation .conversation-composer-submit .conversation-submit-action { order: 1; margin-left: .25rem; }
 .agent-conversation .conversation-composer-submit { flex: 0 0 auto; margin-left: auto; justify-content: flex-end; }
 .conversation-message-content { min-width: 0; }
+/* Use a styled, viewport-bounded popup where customizable selects are supported. */
+@supports (appearance: base-select) {
+    .agent-conversation .conversation-composer-submit select,
+    .agent-conversation .conversation-composer-submit select::picker(select) {
+        appearance: base-select;
+    }
+    .agent-conversation .conversation-composer-submit select {
+        background-image: none;
+        padding: .35rem .5rem;
+        gap: .5rem;
+        font-family: inherit;
+    }
+    .agent-conversation .conversation-composer-submit select::picker(select) {
+        box-sizing: border-box;
+        width: max-content;
+        min-width: anchor-size(width);
+        max-width: calc(100vw - 2rem);
+        max-height: min(420px, 60dvh);
+        overflow-y: auto;
+        padding: .35rem;
+        background: var(--surface2);
+        color: var(--text);
+        border: 1px solid var(--border-strong);
+        border-radius: 8px;
+        box-shadow: 0 8px 24px rgba(0,0,0,.35);
+        font: .8rem/1.5 Inter, "Segoe UI", sans-serif;
+    }
+    .agent-conversation .conversation-composer-submit select optgroup {
+        padding: .35rem .25rem;
+        color: var(--text-muted);
+    }
+    .agent-conversation .conversation-composer-submit select option {
+        padding: .45rem .6rem;
+        border-radius: 4px;
+        color: var(--text);
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+    .agent-conversation .conversation-composer-submit select option:hover,
+    .agent-conversation .conversation-composer-submit select option:focus {
+        background: var(--surface3);
+    }
+    .agent-conversation .conversation-composer-submit select option:checked {
+        background: var(--accent-dim);
+    }
+}
 @media (max-width: 767px) {
     .agent-conversation.chat-drawer { width: 100%; height: 100dvh; padding-bottom: env(safe-area-inset-bottom); }
     .conversation-header { padding: .55rem .7rem; gap: .4rem; }

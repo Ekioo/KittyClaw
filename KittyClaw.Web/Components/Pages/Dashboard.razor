@@ -208,9 +208,14 @@ else
                     <ModelPicker>
                         <select @bind="_chatModel" aria-label="@L["ConversationModel"]" disabled="@_chatLoading">
                             <optgroup label="Claude">@foreach (var model in AvailableModels) { <option value="@model">@model</option> }</optgroup>
-                            @foreach (var catalog in new[] { _codexModels, _grokModels, _mistralModels, _deepSeekModels, _ollamaModels })
+                            @foreach (var (label, catalog) in new[] { ("OpenAI Codex", _codexModels), ("Grok", _grokModels), ("Mistral Vibe", _mistralModels), ("DeepSeek", _deepSeekModels), ("Local (Ollama)", _ollamaModels) })
                             {
-                                @foreach (var model in catalog) { <option value="@model">@model</option> }
+                                @if (catalog.Count > 0)
+                                {
+                                    <optgroup label="@label">
+                                        @foreach (var model in catalog) { <option value="@model">@model</option> }
+                                    </optgroup>
+                                }
                             }
                         </select>
                     </ModelPicker>
