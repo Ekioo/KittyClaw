@@ -11,6 +11,7 @@ param(
     [string] $Tag,                    # defaults to the exact vX.Y.Z tag on HEAD
     [string] $Title,                  # defaults to "vX.Y — <changelog one-line summary>"
     [string] $Configuration = 'Release',
+    [switch] $KeepDraft,              # upload assets without publishing the release
     [string] $SignTemplate = $env:KITTYCLAW_SIGN_TEMPLATE
 )
 
@@ -111,9 +112,13 @@ if (-not ($windowsAssets | Where-Object { $_ -like '*Setup.exe' }) -or
 }
 gh release upload $Tag $zip @windowsAssets --clobber
 if ($LASTEXITCODE -ne 0) { throw 'gh release upload failed' }
-if ($createdDraft) {
+if ($createdDraft -and -not $KeepDraft) {
     gh release edit $Tag --draft=false
     if ($LASTEXITCODE -ne 0) { throw 'Could not publish the prepared release.' }
 }
 
-Write-Host "`nDone: https://github.com/Ekioo/KittyClaw/releases/tag/$Tag" -ForegroundColor Green
+if ($KeepDraft) {
+    Write-Host "Draft ready: https://github.com/Ekioo/KittyClaw/releases/tag/$Tag" -ForegroundColor Green
+} else {
+    Write-Host "`nDone: https://github.com/Ekioo/KittyClaw/releases/tag/$Tag" -ForegroundColor Green
+}

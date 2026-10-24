@@ -1,0 +1,6 @@
+{
+  "ImproveTicket": "AIで改善",
+  "ImprovingTicket": "チケットを分析して提案を作成しています…",
+  "ImprovementReview": "保存する前に提案を確認し、編集してください。",
+  "ImprovementCriteriaHint": "1行に1つの条件を入力します。書き換えた条件は再評価が必要です。"
+}

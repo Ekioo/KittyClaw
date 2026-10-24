@@ -27,7 +27,7 @@
   "ColumnPhaseReviewHint": "Uses existing evidence; does not run additional tests.",
   "ColumnPhaseTriage": "Analyze the ticket with JEV",
   "ColumnPhaseTriageHint": "On arrival, before any agent execution.",
-  "ColumnPhaseOwnerDecision": "Wait for the ownerâ€™s decision",
+  "ColumnPhaseOwnerDecision": "Wait for the owner’s decision",
   "ColumnPhaseOwnerDecisionHint": "Approve or request corrections after the JEV review.",
   "ColumnOwnerApprovalDestination": "If the owner approves",
   "ColumnOwnerCorrectionsDestination": "If the owner requests corrections",

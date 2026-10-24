@@ -4,6 +4,43 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.25] — 2026-10-24
+
+Public instance URLs, smartphone access, and clearer column workflows.
+
+### Highlights
+
+Opted-in installations can open a stable HTTPS address through Cloudflare, choose an available public name, and display a QR code for smartphone access. The invitation-only beta keeps authenticator login mandatory and requires the host PC to remain running.
+
+Column configuration follows the ticket journey from entry checks to processing, evidence, routing, and final actions. Explicit execution states improve recovery, while optional AI ticket improvements remain editable before saving.
+
+### Added
+
+- Invitation-only public instance access with a verified Cloudflare connector, local activation, pause/resume, and a stable address per installation.
+- Optional public address names and locally generated QR codes in settings and the access setup page.
+- Editable AI proposals for ticket descriptions and acceptance criteria, available from ticket actions and board context menus.
+- A column workflow editor organized by processing phase, with explicit agent, JEV triage, and evidence-review modes.
+
+### Changed
+
+- Track column execution through explicit states and transitions, and preserve saved settings for inactive processing stages.
+- Present ticket diagnostics as collapsible context and simplify board cards.
+- Keep JEV context within budget by selecting recent comments.
+
+### Fixed
+
+- Restore network login origin handling and provide mobile-friendly six-digit code entry with automatic submission.
+- Load tickets promptly when their activity history is large, and restore initial column and acceptance criteria content.
+- Preserve column visit counters when transferring tickets and their sub-tickets between projects.
+- Complete new feature translations in every supported language and repair malformed column-editor accents.
+- Restore the normal cursor over empty board columns.
+
+### Security
+
+- Keep the public tunnel origin separate from localhost trust, require authenticator sessions for remote UI and API access, and revoke sessions when access is paused.
+- Keep Cloudflare account credentials in the provisioning service; installations receive only their own protected connector identity.
+
+---
 ## [v0.24] — 2026-10-23
 
 Authenticator QR enrollment, reliable processor sessions, and explicit JEV routing.

@@ -29,6 +29,9 @@ body is generated from it.
    and uploads `KittyClaw-v0.13.0.zip` (substituting the version being released),
    `Ekioo.KittyClaw-win-Setup.exe`, the full `.nupkg`, `releases.win.json`, and `RELEASES`.
    New releases are created as drafts and published only after all assets upload.
+   Pass `-KeepDraft` to retain the uploaded release as a draft while checking the
+   installer and delta package. Publish the verified draft with
+   `gh release edit vX.Y.Z --draft=false --latest`.
    Keep the package and feed attached to the same release: installed clients use
    Velopack's GitHub source, while source installations use the legacy release link.
    Before packaging, `Get-WindowsReleaseBaseline.ps1` downloads the newest older stable
