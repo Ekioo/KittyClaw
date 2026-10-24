@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text.Json;
 using KittyClaw.Core.Services;
+using KittyClaw.Core.Evidence;
 using KittyClaw.Core.Tests.Helpers;
 using KittyClaw.Core.Tests.Services;
 using KittyClaw.Web.Api;
@@ -14,6 +15,72 @@ namespace KittyClaw.Core.Tests.Web;
 
 public sealed class TicketOpeningJourneyTests(ITestOutputHelper output)
 {
+    [DebugBrowserFact]
+    public async Task Existing_jev_review_survives_interactive_startup_and_its_controls_work()
+    {
+        using var factory = new Api.TicketLabelsPatchTests.ApiFactory();
+        factory.UseKestrel(0);
+        using var http = factory.CreateClient();
+        var projects = factory.Services.GetRequiredService<ProjectService>();
+        var project = await projects.CreateProjectAsync("JEV opening continuity");
+        await projects.TogglePauseAsync(project.Slug);
+        var columns = await factory.Services.GetRequiredService<ColumnService>().ListColumnsAsync(project.Slug);
+        var source = columns.First();
+        var tickets = factory.Services.GetRequiredService<TicketService>();
+        var ticket = await tickets.CreateTicketAsync(project.Slug, "Review remains visible", status: source.Name,
+            pipelineId: source.PipelineId, columnId: source.Id);
+        var processor = await factory.Services.GetRequiredService<ColumnProcessorService>().SaveAsync(
+            project.Slug, source.Id, "Evidence review", "Review the existing evidence", null, true, 20, [], [], [],
+            jevAcceptanceValidation: true, jevAcceptanceCriteria: ["Opening remains responsive"]);
+        var at = DateTime.UtcNow;
+        new EvidenceStore(projects.DataDir).SaveTicket(new()
+        {
+            TicketId = ticket.Id.ToString(), ProjectSlug = project.Slug, CapturedAt = at,
+            Status = EvidenceStatus.Complete, RunIds = ["opening-proof"],
+            CommandsRun = [new("fixture tests", null, 0, true, null, 1, 0,
+                new("process-exit", "unknown", "opening-proof", at, EvidenceTrust.Verified))]
+        });
+        using var mockClient = new HttpClient(new JevWorkReviewTests.Handler());
+        var configuration = new JevConfigurationService(factory.Services.GetRequiredService<ProjectSecretVault>(),
+            projects.DataDir, () => "debug-only-fixture");
+        var reviews = new JevWorkReviewService(projects, configuration, mockClient);
+        await reviews.ObserveAsync(project.Slug, processor, ticket, CancellationToken.None);
+        Assert.True(processor.Enabled);
+        Assert.True(processor.JevAcceptanceValidation);
+        var stored = await factory.Services.GetRequiredService<JevWorkReviewService>().GetAsync(project.Slug, ticket.Id, source.Id);
+        Assert.NotNull(stored);
+        Assert.Null(stored.Error);
+        Assert.Equal("Opening remains responsive", Assert.Single(stored.Criteria).Criterion);
+        var url = new Uri(http.BaseAddress!, $"/board/{project.Slug}/ticket/{ticket.Id}").ToString();
+        Assert.Contains("Opening remains responsive", await http.GetStringAsync(url));
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new() { Headless = true });
+        var page = await browser.NewPageAsync();
+        await page.AddInitScriptAsync("""
+            window.reviewContinuity = { seen: false, missingFrames: 0 };
+            function sampleReview() {
+                const visible = !!document.querySelector('[data-testid="jev-criteria-results"]');
+                if (window.reviewContinuity.seen && !visible) window.reviewContinuity.missingFrames++;
+                if (visible) window.reviewContinuity.seen = true;
+                requestAnimationFrame(sampleReview);
+            }
+            requestAnimationFrame(sampleReview);
+            """);
+        await page.GotoAsync(url);
+        var review = page.GetByTestId("jev-work-review");
+        await Expect(review.GetByTestId("jev-criteria-results")).ToContainTextAsync("Opening remains responsive");
+        // Retry only while the server-rendered controls are waiting for the circuit to connect.
+        for (var attempt = 0; attempt < 20 && !await page.GetByTestId("jev-work-reason").IsVisibleAsync(); attempt++)
+        {
+            await review.GetByTestId("jev-work-reject").ClickAsync();
+            await page.WaitForTimeoutAsync(250);
+        }
+        await Expect(page.GetByTestId("jev-work-reason")).ToBeVisibleAsync();
+        await review.GetByTestId("jev-work-cancel").ClickAsync();
+        await Expect(page.GetByTestId("jev-work-reason")).ToHaveCountAsync(0);
+        Assert.Equal(0, await page.EvaluateAsync<int>("window.reviewContinuity.missingFrames"));
+    }
+
     [DebugBrowserFact]
     public async Task Direct_link_keeps_ticket_visible_while_viewport_module_is_loading()
     {
