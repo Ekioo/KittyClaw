@@ -41,7 +41,7 @@ try {
     $packArgs = @('vpk', 'pack', '--packId', 'Ekioo.KittyClaw', '--packVersion', $Version,
         '--packDir', $stage, '--mainExe', 'KittyClaw.Web.exe', '--packTitle', 'KittyClaw',
         '--packAuthors', 'Ekioo', '--runtime', 'win-x64', '--channel', 'win', '--delta', 'BestSpeed',
-        '--icon', (Join-Path $repo 'branding/KittyClaw.ico'),
+        '--icon', (Join-Path $repo 'branding/KittyClaw.ico'), '--framework', 'webview2',
         '--shortcuts', 'Desktop,StartMenuRoot', '--outputDir', $OutputDir)
     if ($ReleaseNotes) { $packArgs += @('--releaseNotes', (Resolve-Path $ReleaseNotes).Path) }
     if ($SignTemplate) { $packArgs += @('--signTemplate', $SignTemplate) }

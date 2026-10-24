@@ -11,7 +11,7 @@ Source installations retain the dismissible release-link banner described below.
   `KittyClawWindowsInstaller=true`, `win-x64`, and `--self-contained true`, then calls
   the pinned `vpk pack` tool. It produces the installer, full package, portable ZIP,
   and `releases.win.json`. It does not publish externally.
-- Only installer builds target `net10.0-windows`, use WinForms for the notification
+- Only installer builds target `net10.0-windows`, use WinForms and WebView2 for the desktop window and notification
   icon, and hide the console. Normal source builds still target `net10.0`.
 - `branding/KittyClaw.ico` contains transparent 16–256 px versions of the Posture 07 KittyClaw
   pictogram. `ApplicationIcon` embeds it in the Windows executable and `vpk --icon`
@@ -19,8 +19,20 @@ Source installations retain the dismissible release-link banner described below.
 - `Program.cs` calls `VelopackApp.Build().SetAutoApplyOnStartup(false).Run()` before
   creating the host. Installer hooks exit before touching application data.
   Startup auto-apply is disabled so a second launch cannot replace a running server.
-- `WindowsDesktopLifetime` owns a per-data-directory named mutex, opens the browser
+- `WindowsDesktopLifetime` owns a per-data-directory named mutex, opens a borderless WebView2 window
   after startup, and provides Open, Check for updates, and Quit actions in the notification area.
+  Window controls are integrated into the existing page header without an extra title bar.
+  `WindowsDesktopShell.js` applies one fixed-height header style from `windows-desktop.css`
+  to every view, with the KittyClaw home link on the left and window controls on the right.
+  A matching fallback keeps the shell visible during loading and on error/not-found pages.
+  Browser views retain their regular layout; viewport-sized boards account for the fixed header.
+  Long toolbars scroll between the fixed logo and window controls, using arrow buttons or
+  the mouse wheel. Search help opens below the header so the scrolling strip cannot clip it.
+  Free header space supports native dragging; interactive controls remain clickable.
+  Closing hides the window while agents continue running. Relaunching the shortcut signals
+  the existing instance to restore its window. External HTTP(S) and mail links open externally.
+  WebView2 profile data is isolated per data directory under `%LOCALAPPDATA%/Ekioo.KittyClaw/WebView2`.
+  Setup installs the Evergreen WebView2 runtime if missing; portable users must install it separately.
   The manual check downloads available updates in the background and reports the result
   in a notification. Clicking the notification opens KittyClaw, where installation and
   restart still require owner confirmation. The menu action is disabled during its check.
@@ -64,7 +76,7 @@ Source installations retain the dismissible release-link banner described below.
 - `WaitExitThenApplyUpdates` starts the updater, then `StopApplication()` stops the host
   gracefully. Velopack waits for process exit, applies the package, and restarts the app.
   Its wait is limited to 60 seconds; the ordinary host shutdown timeout is shorter.
-  No immediate `Environment.Exit` is used. The desktop host reopens the browser after restart.
+  No immediate `Environment.Exit` is used. The desktop host reopens the desktop window after restart.
 
 ## Publication and verification
 
