@@ -118,7 +118,7 @@ public sealed class RemoteSecurityRegressionTests(ITestOutputHelper output)
             ["dashboard"] = value => TileRenderer.RenderByExtension(value, "audit.md")
         };
         using var playwright = await Playwright.CreateAsync();
-        await using var browser = await playwright.Chromium.LaunchAsync(new() { Headless = true, Channel = "msedge" });
+        await using var browser = await playwright.Chromium.LaunchAsync(new() { Headless = true, Channel = Environment.GetEnvironmentVariable("KITTYCLAW_TEST_BROWSER_CHANNEL") });
         var page = await browser.NewPageAsync();
         await page.RouteAsync("**/*", route => route.AbortAsync());
         foreach (var (name, render) in renderers)

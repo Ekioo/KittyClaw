@@ -4,6 +4,28 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.25.2] — 2026-10-24
+
+Security hardening for remote access and untrusted project content.
+
+### Highlights
+
+This security update prevents script injection through Markdown attributes, protects the local API from cross-origin browser actions, revokes sessions on logout, and isolates failed-login cooldowns by source address. Existing authenticator enrollment and public instance URLs remain compatible.
+
+### Security
+
+- Reject active Markdown attributes across chats, ticket descriptions and comments, agent logs, and dashboards while preserving rich text formatting.
+- Validate browser origins before granting local API trust and reject cross-site form actions against localhost.
+- Revoke the signed-out session on the server, persist revocation across restarts, and close its active remote transports without signing out other devices.
+- Apply failed-login cooldowns per verified source address so one source cannot globally block valid logins.
+
+### Verification
+
+- Added regression coverage for the four security issues and compatibility with existing enrollment and session data.
+- Verified a real Cloudflare tunnel with trusted HTTPS, authenticator login, interactive Blazor, uploads, logout, and pause/resume.
+
+---
+
 ## [v0.25] — 2026-10-24
 
 Public instance URLs, smartphone access, and clearer column workflows.

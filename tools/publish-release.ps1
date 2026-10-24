@@ -27,7 +27,7 @@ if (-not $Tag) {
     if ($LASTEXITCODE -ne 0) { throw 'HEAD is not tagged. Tag first (git tag vX.Y.Z && git push origin vX.Y.Z) or pass -Tag.' }
 }
 if ($Tag -notmatch '^v(\d+)\.(\d+)\.(\d+)$') { throw "Tag '$Tag' does not match vX.Y.Z." }
-$shortVersion = "v$($Matches[1]).$($Matches[2])"   # CHANGELOG headings use vX.Y
+$shortVersion = "v$($Matches[1]).$($Matches[2])"   # fallback for older minor-only changelog headings
 $releaseVersion = $Tag.TrimStart('v')
 if (-not $IsWindows) { throw 'Release packaging requires Windows to build the Velopack installer.' }
 
@@ -82,14 +82,22 @@ $createdDraft = $false
 gh release view $Tag *> $null
 if ($LASTEXITCODE -ne 0) {
     $changelog = Get-Content (Join-Path $repo 'CHANGELOG.md') -Raw
-    $pattern = "(?ms)^## \[$([regex]::Escape($shortVersion))\][^\r\n]*\r?\n(.*?)(?=^## \[|\z)"
-    if ($changelog -notmatch $pattern) { throw "No '## [$shortVersion]' entry found in CHANGELOG.md." }
-    # Release bodies use ## headings where the CHANGELOG uses ###; drop the trailing --- separator.
-    $notes = ($Matches[1] -replace '(?m)^### ', '## ').Trim() -replace '---\s*$', ''
+    $entryVersion = $null
+    $notes = $null
+    foreach ($candidate in @($Tag, $shortVersion) | Select-Object -Unique) {
+        $pattern = "(?ms)^## \[$([regex]::Escape($candidate))\][^\r\n]*\r?\n(.*?)(?=^## \[|\z)"
+        if ($changelog -match $pattern) {
+            $entryVersion = $candidate
+            # Prefer exact patch notes; older minor headings remain supported.
+            $notes = ($Matches[1] -replace '(?m)^### ', '## ').Trim() -replace '---\s*$', ''
+            break
+        }
+    }
+    if (-not $entryVersion) { throw "No CHANGELOG.md entry found for '$Tag' or '$shortVersion'." }
     $notes = $notes.Trim()
     if (-not $Title) {
         $summary = ($notes -split '\r?\n' | Where-Object { $_ } | Select-Object -First 1).TrimEnd('.')
-        $Title = "$shortVersion — $summary"
+        $Title = "$entryVersion — $summary"
     }
     $notesFile = Join-Path ([System.IO.Path]::GetTempPath()) "kittyclaw-release-notes-$Tag.md"
     Set-Content $notesFile $notes
