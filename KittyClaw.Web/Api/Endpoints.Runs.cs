@@ -167,8 +167,8 @@ public static partial class Endpoints
                 sinceUtc = parsed.ToUniversalTime();
             }
 
-            var queue = System.Threading.Channels.Channel.CreateUnbounded<StreamEvent>();
-            void handler(StreamEvent ev) => queue.Writer.TryWrite(ev);
+            var queue = new KittyClaw.Web.Services.RunEventStreamBuffer(http.Abort);
+            void handler(StreamEvent ev) => queue.Add(ev);
             run.OnEvent += handler;
 
             try

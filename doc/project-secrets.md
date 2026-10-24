@@ -62,6 +62,14 @@ both mechanisms.
 
 ## Fail-closed behavior
 
+Native CLI calls drain stdout and stderr concurrently and enforce one 30-second
+deadline over stdin writes, output reads and process exit. Each output stream is
+limited to 64 Ki characters. Timeout, excessive output and pipe failures fail
+closed; running processes are terminated, including descendants where supported.
+Native stdout/stderr diagnostics are never appended to user-facing key-store
+errors: a failed command may echo master-key material. Errors retain the store
+name, exit code and unlock/install guidance.
+
 There is no plaintext fallback under any circumstance. When the native mechanism is missing,
 locked, or mismatched, operations throw `ProjectSecretProtectionUnavailableException` (or
 `PlatformNotSupportedException` on unsupported platforms); the REST endpoints translate both

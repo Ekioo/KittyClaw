@@ -43,3 +43,30 @@ fully decode images or scan them for malware. Redaction covers the listed litera
 and JSON forms, not arbitrary transformations such as base64 or deliberately
 split values. This was a scoped source audit and regression run, not a complete
 penetration test or dependency-vulnerability assessment.
+
+## Follow-up: native secret processes and SSE subscribers
+
+Three additional findings were confirmed and corrected:
+
+- Native secret-store commands performed synchronous pipe reads before their
+  timeout check. A blocked read or stdin write could therefore bypass the
+  nominal 30-second timeout, and sequential stdout/stderr reads could deadlock.
+  The deadline now covers concurrent pipe drains, stdin and process exit.
+  Output is capped at 64 Ki characters per stream. Failed calls terminate the
+  running process tree on a best-effort basis, with a Windows job boundary.
+- Keychain and Secret Service failures appended raw native stderr to exceptions
+  returned by the API. A command diagnostic could echo master-key input.
+  Errors now contain only fixed guidance, the store identity and the exit code;
+  tests inject key material into both native output streams to verify exclusion.
+- REST SSE connections used an unbounded event channel. A slow subscriber could
+  retain an increasing number of events. Each subscriber now has a bounded
+  256-event queue and is disconnected on overflow, without blocking the shared
+  producer or silently discarding events on an open connection.
+
+Final verification: 32 tests passed across `SecretToolProcessSecurityTests`,
+`ProjectSecretProtectionTests`, `ProjectSecretsHttpTests` and
+`RunEventStreamBufferTests`. Actual subprocess tests exercised concurrent pipe
+drains, blocked stdin, hung commands, excessive output and successful stdin
+delivery. Native platform key stores were simulated; Windows ran the subprocess
+tests through PowerShell. SSE queue tests covered saturation, ordering and
+subscriber isolation; a real slow-network browser test was not performed.

@@ -40,6 +40,28 @@ public sealed class ProjectSecretProtectionTests
 
     private static byte[] SampleKey() => Enumerable.Range(0, 32).Select(i => (byte)(i * 7 + 1)).ToArray();
 
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public void Native_diagnostics_cannot_expose_master_keys_in_API_errors(bool mac, bool write)
+    {
+        var encodedKey = Convert.ToBase64String(SampleKey());
+        var runner = new FakeSecretToolRunner
+        {
+            Handler = (_, _, _) => new SecretToolResult(1, encodedKey, "failed command containing " + encodedKey)
+        };
+        IProjectSecretKeyStore store = mac ? new MacOsKeychainKeyStore(runner) : new LinuxSecretServiceKeyStore(runner);
+        var error = Assert.Throws<ProjectSecretProtectionUnavailableException>(() =>
+        {
+            if (write) store.StoreKey(SampleKey());
+            else store.TryGetKey();
+        });
+        Assert.DoesNotContain(encodedKey, error.ToString());
+        Assert.Contains("code 1", error.Message);
+    }
+
     [Fact]
     public void AesGcm_protector_round_trips_without_exposing_plaintext_and_randomizes_nonces()
     {
