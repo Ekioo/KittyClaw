@@ -14,7 +14,7 @@ You can continue when an optional provider is missing, and the board remains usa
 2. Enter a project name and choose its workspace. **Browse** opens KittyClaw's integrated folder browser, not an operating-system dialog. It works on Windows, macOS, and Linux and provides home/root shortcuts, mounted drives, breadcrumbs, parent navigation, and direct path entry. You can still type an absolute path manually; use **Create folder** if it does not exist yet.
 3. Select **Initialize**. KittyClaw then:
    - creates the project registry entry and its board database;
-   - copies the built-in skills, memory files, and `automations.json` into `<workspace>/.agents/`, plus `CLAUDE.md` into the workspace root;
+   - copies the built-in skills, memory files, and `agent-budget.json` into `<workspace>/.agents/`, plus `CLAUDE.md` into the workspace root;
    - runs `git init` if the workspace is not already a repository and Git is available;
    - creates one board member for each built-in agent role; and
    - opens the project workflow setup wizard.
@@ -36,7 +36,7 @@ The proposal remains editable inside the wizard:
 - move backward without losing the proposal; and
 - review the complete workflow before selecting **Create the workflow**.
 
-No pipeline or processor is created during analysis. The final action applies the approved plan, verifies it, and keeps progress and errors in the wizard until completion. The interface consistently calls this **project setup**; **migration** is reserved for converting an existing legacy-automation board.
+No pipeline or processor is created during analysis. The final action applies the approved plan, verifies it, and keeps progress and errors in the wizard until completion.
 
 ## Your first 10 minutes
 
@@ -92,9 +92,7 @@ Routing is also the source of truth for allowed manual moves. A processor with d
 
 > Create a technical writer agent for this project. It should keep the English documentation aligned with repository changes without modifying product code. Let me review the setup before the agent runs for the first time.
 
-Creating a member alone only adds an assignable board identity. A runnable custom agent also needs `<workspace>/.agents/<member-slug>/SKILL.md`, and automatic dispatch needs a `runAgent` rule that targets the same slug. Asking for the new rule to stay disabled lets you inspect it before the first run.
-
-Review the member and default model in **Settings → Members**, then review and enable the rule directly in the trusted `<workspace>/.agents/automations.json` file. The REST API cannot create, edit, or re-enable a rule. If the skill file is missing, a run fails instead of launching an unconfigured agent. See [project template](./project-template.md) for the workspace layout and [automation engine](./automation-engine.md) for rule configuration.
+A custom agent needs a skill and a configured model. Review its identity in **Settings → Members**, then configure the column processor and project skills that own the work. Keep that processor disabled until the setup is reviewed. Recurring work belongs in column scheduled tasks. See [project template](./project-template.md) and [column processing](./column-workflows.md).
 
 ### Add a useful dashboard tile
 
@@ -134,10 +132,6 @@ Move the ticket to **Done** only when you accept the result. In the default temp
 Runs that fail because of quota or spending limits are parked in **Blocked** to prevent a retry loop. Once the provider is usable again, move the ticket back to **Todo**.
 
 The default provider is Claude Code. KittyClaw can also route explicitly selected models through Grok Build, OpenAI Codex CLI, Mistral Vibe, DeepSeek V4, or local Ollama models. Each provider must be installed or configured before its models can run; see the [agent-provider installation guide](./agent-providers.md).
-
-## Legacy automations
-
-Legacy rules remain supported for compatibility but no longer have an in-app editor. Author and edit rules in the trusted `<workspace>/.agents/automations.json` file. The REST API can only inspect, disable, or delete existing rules. Prefer pipeline and column processors for new business workflows, and read [automation engine](./automation-engine.md) before changing existing legacy rules.
 
 ## Dashboard and ad-hoc instructions
 

@@ -289,7 +289,7 @@ public static partial class Endpoints
     {
         var run = reg.Get(runId);
         if (run is null || run.ProjectSlug != slug) return Results.NotFound();
-        await AutomationEngine.CancelAndWaitForRunsAsync([run], ct);
+        await AgentRunLifecycle.CancelAndWaitForRunsAsync([run], ct);
         return Results.NoContent();
     }
 
@@ -316,7 +316,7 @@ public static partial class Endpoints
 
         var newRunId = Guid.NewGuid().ToString("N");
         var routing = ModelRouting.Resolve(run.Model, project.LocalModelBaseUrl);
-        // Same cross-provider fallback resolution as ActionExecutor: an unusable fallback
+        // Same cross-provider fallback resolution as column dispatch: an unusable fallback
         // is dropped rather than failing the retry.
         var fallbackModel = project.FallbackModel;
         var fallbackRouting = fallbackModel is null ? null : ModelRouting.Resolve(fallbackModel, project.LocalModelBaseUrl);

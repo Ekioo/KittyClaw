@@ -1,0 +1,8 @@
+{
+  "Enabled": "Ativado",
+  "InitializeConfirmTitle": "Substituir arquivos existentes?",
+  "InitializeConfirmIntro": "Alguns arquivos já existem na pasta alvo .agents/. Escolha como proceder:",
+  "InitializeOverwrite": "Sobrescrever",
+  "InitializeSkip": "Ignorar existente",
+  "GitMissingWarning": "O Git não está disponível neste host. O workspace será inicializado, mas nenhum repositório Git será criado. Instale o Git em https://git-scm.com/downloads e tente novamente se desejar rastreamento de versão."
+}

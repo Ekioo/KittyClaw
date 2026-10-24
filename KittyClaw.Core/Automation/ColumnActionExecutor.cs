@@ -14,7 +14,7 @@ public sealed record ColumnActionResult(bool Succeeded, string? Error = null)
 
 /// <summary>
 /// Executes the deterministic actions surrounding a column's single implicit agent.
-/// Unlike legacy automation chains, every failure is surfaced to the durable column engine.
+/// Every failure is surfaced to the durable column engine.
 /// </summary>
 public sealed class ColumnActionExecutor(
     ProjectService projects,
@@ -122,7 +122,7 @@ public sealed class ColumnActionExecutor(
     {
         var now = DateTime.Now;
         string Resolve(string value) => Render(
-            ActionExecutor.ResolveCreateTicketPlaceholders(value, now), projectSlug, currentTicket, agentResult);
+            ColumnActionTemplates.ResolveCreateTicketPlaceholders(value, now), projectSlug, currentTicket, agentResult);
         var title = Resolve(spec.Title);
         if (string.IsNullOrWhiteSpace(title))
             return ColumnActionResult.Failure("Le titre du ticket créé est vide après résolution des variables.");

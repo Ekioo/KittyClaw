@@ -1,0 +1,8 @@
+{
+  "Enabled": "Activé",
+  "InitializeConfirmTitle": "Écraser les fichiers existants ?",
+  "InitializeConfirmIntro": "Certains fichiers existent déjà dans le dossier .agents/ cible. Choisissez comment procéder :",
+  "InitializeOverwrite": "Écraser",
+  "InitializeSkip": "Ignorer les existants",
+  "GitMissingWarning": "Git n'est pas disponible sur cette machine. Le workspace sera initialisé mais aucun dépôt git ne sera créé. Installe Git depuis https://git-scm.com/downloads puis réessaie si tu veux le versionnage."
+}

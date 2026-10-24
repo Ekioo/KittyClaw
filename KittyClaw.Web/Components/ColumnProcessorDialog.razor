@@ -769,9 +769,7 @@
                 </header>
                 <ActionEditor Action="action.Action"
                               Columns="AllColumnNames"
-                              Members="EmptyMembers"
                               Slug="@Slug"
-                              ProcessorMode="true"
                               OnReplace="replacement => ReplaceAction(action, replacement)"
                               OnDelete="() => actions.Remove(action)" />
                 <label class="processor-action-failure">
@@ -784,7 +782,6 @@
 
     private List<string> AllColumnNames => TargetColumns.Select(target => target.Column.Name)
         .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-    private static readonly List<string> EmptyMembers = [];
 
     private void AddProcessorAction(List<ColumnActionDraft> actions) => actions.Add(new ColumnActionDraft
     {
@@ -822,8 +819,7 @@
         {
             var action = task.Actions[index];
             <article class="processor-action-card" @key="action.Id">
-                <ActionEditor Action="action.Action" Columns="AllColumnNames" Members="EmptyMembers" Slug="@Slug"
-                    ProcessorMode="true"
+                <ActionEditor Action="action.Action" Columns="AllColumnNames" Slug="@Slug"
                     OnReplace="replacement => ReplaceScheduledAction(task, action, replacement)"
                     OnDelete="() => RemoveScheduledAction(task, action)" />
                 @if (task.TicketScope == ScheduledTaskTicketScope.FirstTicket)

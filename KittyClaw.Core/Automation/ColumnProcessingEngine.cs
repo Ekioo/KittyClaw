@@ -8,11 +8,13 @@ using Microsoft.Extensions.Logging;
 namespace KittyClaw.Core.Automation;
 
 /// <summary>
-/// Event-driven primary workflow engine. It claims at most one ticket per active column;
-/// the legacy trigger engine remains registered independently for backward compatibility.
+/// Event-driven workflow engine. It claims at most one ticket per active column.
 /// </summary>
 public sealed class ColumnProcessingEngine : BackgroundService
 {
+    public DateTime StartedAt { get; } = DateTime.UtcNow;
+    public DateTime? LastTickAt { get; private set; }
+
     private readonly ProjectService _projects;
     private readonly TicketService _tickets;
     private readonly ColumnProcessorService _processors;
@@ -113,6 +115,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception ex) { _logger.LogError(ex, "Column processing engine loop failed"); }
+            LastTickAt = DateTime.UtcNow;
         }
     }
 

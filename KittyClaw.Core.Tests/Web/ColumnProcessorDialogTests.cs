@@ -46,7 +46,7 @@ public sealed class ColumnProcessorDialogTests
         Assert.Contains("DeleteColumnAsync", dialog);
         Assert.Contains("processor?.BeforeActions", dialog);
         Assert.Contains("processor?.AfterActions", dialog);
-        Assert.Contains("ProcessorMode=\"true\"", dialog);
+        Assert.Contains("<ActionEditor", dialog);
         Assert.Contains("column-insert-slot", board);
         Assert.Contains("AddColumnFromBoard", board);
         Assert.Contains("InsertColumnBeforeFromMenu", board);
@@ -218,13 +218,10 @@ public sealed class ColumnProcessorDialogTests
     {
         var dialog = File.ReadAllText(Path.Combine(
             RepoRoot(), "KittyClaw.Web", "Components", "ColumnProcessorDialog.razor"));
-        var trigger = File.ReadAllText(Path.Combine(
-            RepoRoot(), "KittyClaw.Web", "Components", "TriggerEditor.razor"));
         var builder = File.ReadAllText(Path.Combine(
             RepoRoot(), "KittyClaw.Web", "Components", "CronScheduleEditor.razor"));
 
         Assert.Contains("<CronScheduleEditor", dialog);
-        Assert.Contains("<CronScheduleEditor", trigger);
         Assert.DoesNotContain("@bind=\"task.Cron\"", dialog);
         Assert.Contains("type=\"time\"", builder);
         Assert.Contains("weekday-picker", builder);

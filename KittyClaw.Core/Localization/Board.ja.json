@@ -80,7 +80,6 @@
   "DescriptionPlaceholder": "説明...",
   "Priority": "優先度",
   "Labels": "ラベル",
-  "AssignTo": "割り当てる",
   "Unassigned": "— 分配されていません —",
   "CreateTicket": "チケットを作成",
   "ChangePriority": "優先度を変更",

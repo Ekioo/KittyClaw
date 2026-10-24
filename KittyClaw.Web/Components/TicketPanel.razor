@@ -122,40 +122,6 @@
             </div>
         </div>
 
-        @* ── Assignee row ── *@
-        <div class="ticket-assignee-row" title="@L["AssignedToLabel"]">
-            @if (!string.IsNullOrEmpty(_ticket.AssignedTo))
-            {
-                <span class="assignee-pill">
-                    @MemberDisplayName(_ticket.AssignedTo)
-                    <button class="label-remove-btn" @onclick="RemoveAssignee">&times;</button>
-                </span>
-            }
-            <div class="label-autocomplete">
-                <input class="label-autocomplete-input"
-                       placeholder="@(string.IsNullOrEmpty(_ticket.AssignedTo) ? L["AssignPlaceholder"] : L["ChangePlaceholder"])"
-                       aria-label="@L["AssignedToLabel"]"
-                       @bind="_assigneeSearch"
-                       @bind:event="oninput"
-                       @onfocus="OpenAssigneeDropdown"
-                       @onblur="OnAssigneeBlur"
-                       @onkeydown="HandleAssigneeKeyDown" />
-                @if (_assigneeDropdownOpen && GetAssigneeSuggestions().Any())
-                {
-                    <div class="label-dropdown">
-                        @foreach (var member in GetAssigneeSuggestions())
-                        {
-                            <button class="label-dropdown-item" @onmousedown="() => SetAssignee(member.Slug)">
-                                <span class="assignee-pill">@member.Name</span>
-                                <span class="member-slug-hint">@member.Slug</span>
-                            </button>
-                        }
-                    </div>
-                }
-            </div>
-
-        </div>
-
         @* ── Schedule row ── *@
         @if (_editingSchedule)
         {
@@ -350,10 +316,6 @@
 
         @* ── Ticket body (thread layout) ── *@
             <div class="ticket-panel-thread">
-                <div class="section-header">
-                    <span class="section-label">@L["AutomationQueue"]</span>
-                </div>
-                <AutomationQueueSummary Slug="@Slug" TicketId="@_ticket.Id" />
                 <ColumnExecutionRecovery Slug="@Slug" TicketId="@_ticket.Id" />
                 <div class="section-header">
                     <span class="section-label">@L["Description"]</span>
@@ -411,9 +373,7 @@
                             <button class="add-comment-btn-sm" @onclick="StartNewComment">@L["AddComment"]</button>
                             <button class="chat-with-agent-btn"
                                     @onclick="OpenTicketChat"
-                                    title="@(CanChatWithAssignee()
-                                        ? L.Get("ChatWithAssigneeTooltip", _chatInitialAgentNameForTooltip())
-                                        : L["ChatPickAgentTooltip"])">
+                                    title="@L["ChatPickAgentTooltip"]">
                                 💬 @L["ChatWithAssignee"]
                             </button>
                         </div>
@@ -582,8 +542,6 @@
     private bool _showPriorityPicker;
     private string _labelSearch = "";
     private bool _labelDropdownOpen;
-    private string _assigneeSearch = "";
-    private bool _assigneeDropdownOpen;
 
     // Fullscreen editor
     private string _fullscreenTarget = ""; // "description", "newComment", "editComment"
@@ -607,7 +565,6 @@
     private IDisposable? _escFullscreenEditor;
     private IDisposable? _escPriorityPicker;
     private IDisposable? _escLabelDropdown;
-    private IDisposable? _escAssigneeDropdown;
     private IDisposable? _escChatDrawer;
 
     private string _loadedKey = "";
@@ -721,7 +678,6 @@
         _escFullscreenEditor?.Dispose();
         _escPriorityPicker?.Dispose();
         _escLabelDropdown?.Dispose();
-        _escAssigneeDropdown?.Dispose();
         _escChatDrawer?.Dispose();
     }
 
@@ -734,12 +690,10 @@
         _fullscreenTarget = "";
         _pasteListenerAttached = false;
         _labelSearch = "";
-        _assigneeSearch = "";
         _addBlockerIdText = "";
         _depError = null;
         ClosePriorityPicker();
         CloseLabelDropdown();
-        CloseAssigneeDropdown();
     }
 
     private async Task LoadAsync()
@@ -1416,112 +1370,13 @@
         else if (e.Key == "Escape") { _addBlockerIdText = ""; _depError = null; }
     }
 
-    // ── Assignee ──
-
-    private List<Member> GetAssigneeSuggestions()
-    {
-        var query = _assigneeSearch?.Trim() ?? "";
-        return _allMembers
-            .Where(m => string.IsNullOrEmpty(query)
-                || m.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
-                || m.Slug.Contains(query, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-    }
-
-    private string MemberDisplayName(string? slug)
-    {
-        if (string.IsNullOrEmpty(slug)) return "";
-        var member = _allMembers.FirstOrDefault(m => m.Slug == slug);
-        return member?.Name ?? slug;
-    }
-
-    private async Task SetAssignee(string slug)
-    {
-        if (_ticket is null) return;
-        var oldAssignee = _ticket.AssignedTo ?? "";
-        var ticketId = _ticket.Id;
-        await TicketService.UpdateTicketAsync(Slug, ticketId, assignedTo: slug);
-        PushUndo?.Invoke($"{L["UndoAssign"]} #{ticketId}", async () =>
-            await TicketService.UpdateTicketAsync(Slug, ticketId, assignedTo: oldAssignee));
-        _assigneeSearch = "";
-        CloseAssigneeDropdown();
-        await RefreshAsync();
-    }
-
-    private async Task RemoveAssignee()
-    {
-        if (_ticket is null) return;
-        var oldAssignee = _ticket.AssignedTo ?? "";
-        var ticketId = _ticket.Id;
-        await TicketService.UpdateTicketAsync(Slug, ticketId, assignedTo: "");
-        PushUndo?.Invoke($"{L["UndoUnassign"]} #{ticketId}", async () =>
-            await TicketService.UpdateTicketAsync(Slug, ticketId, assignedTo: oldAssignee));
-        await RefreshAsync();
-    }
-
-    private async Task CreateAndAssign()
-    {
-        if (_ticket is null || string.IsNullOrWhiteSpace(_assigneeSearch)) return;
-        var name = _assigneeSearch.Trim();
-        var created = await MemberService.CreateMemberAsync(Slug, name);
-        _allMembers = await MemberService.ListMembersAsync(Slug);
-        await SetAssignee(created.Slug);
-    }
-
-    private async Task HandleAssigneeKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_assigneeSearch))
-        {
-            var suggestions = GetAssigneeSuggestions();
-            if (suggestions.Count > 0)
-                await SetAssignee(suggestions[0].Slug);
-            else
-                await CreateAndAssign();
-        }
-        else if (e.Key == "Escape")
-        {
-            _assigneeSearch = "";
-            CloseAssigneeDropdown();
-        }
-    }
-
-    private void OpenAssigneeDropdown()
-    {
-        if (_assigneeDropdownOpen) return;
-        _assigneeDropdownOpen = true;
-        _escAssigneeDropdown?.Dispose();
-        _escAssigneeDropdown = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseAssigneeDropdown(); StateHasChanged(); }));
-    }
-
-    private void CloseAssigneeDropdown()
-    {
-        _assigneeDropdownOpen = false;
-        _escAssigneeDropdown?.Dispose();
-        _escAssigneeDropdown = null;
-    }
-
-    private void OnAssigneeBlur() => CloseAssigneeDropdown();
-
     // ── Ticket chat ──
 
     private void OpenTicketChat()
     {
         if (_ticket is null) return;
-        var assignee = _ticket.AssignedTo;
-        // With an assignee: jump straight into the conversation with that agent.
-        // Without: leave InitialAgent null so the drawer shows the picker — the ticket
-        // context still propagates through the TicketId/TicketTitle parameters.
-        if (!string.IsNullOrWhiteSpace(assignee) && assignee != "owner")
-        {
-            var member = _allMembers.FirstOrDefault(m => m.Slug == assignee);
-            _chatInitialAgent = assignee;
-            _chatInitialAgentName = member?.Name ?? assignee;
-        }
-        else
-        {
-            _chatInitialAgent = null;
-            _chatInitialAgentName = null;
-        }
+        _chatInitialAgent = null;
+        _chatInitialAgentName = null;
         _showChatDrawer = true;
         _escChatDrawer?.Dispose();
         _escChatDrawer = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseChatDrawer(); StateHasChanged(); }));
@@ -1534,19 +1389,6 @@
         _chatInitialAgentName = null;
         _escChatDrawer?.Dispose();
         _escChatDrawer = null;
-    }
-
-    private bool CanChatWithAssignee()
-    {
-        var a = _ticket?.AssignedTo;
-        return !string.IsNullOrWhiteSpace(a) && a != "owner";
-    }
-
-    private string _chatInitialAgentNameForTooltip()
-    {
-        var a = _ticket?.AssignedTo;
-        if (string.IsNullOrWhiteSpace(a)) return "";
-        return _allMembers.FirstOrDefault(m => m.Slug == a)?.Name ?? a;
     }
 
     private string GetColumnColor(string status) =>

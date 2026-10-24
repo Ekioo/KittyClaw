@@ -23,7 +23,7 @@
   "Tip21": "Le skill del progetto descrivono procedure tecniche e operative riutilizzabili. Un processore può renderle disponibili, consigliate o obbligatorie per il suo agente generico.",
   "Tip22": "Ogni processore e attività pianificata può scegliere il modello. Le nuove istruzioni riutilizzano l'ultima scelta, mentre una conversazione conserva il modello iniziale.",
   "Tip23": "Il badge arancione di una pipeline conta i ticket visibili non letti. Fai clic destro su una colonna e scegli Segna tutto come letto per azzerarlo.",
-  "Tip24": "Un vecchio board basato sulle automazioni può essere migrato con il wizard. Controlla pipeline e colonne passo dopo passo prima di avviare la migrazione.",
+  "Tip24": "Usa Modifica con l’assistente per rivedere un pipeline, perfezionare le colonne e applicare solo le modifiche approvate.",
   "Tip25": "La pagina Costi usa un report memorizzato nella cache. Parti da un intervallo rapido, poi filtra per progetto, pipeline o modello.",
   "Tip26": "In Costi, il verde indica valori misurati, l'arancione tratteggiato le stime e il gradiente ciano-verde i risparmi RTK.",
   "Tip27": "Attiva RTK nelle impostazioni del progetto per condensare l'output dei comandi prima che raggiunga l'agente. I risparmi stimati appariranno in Costi.",

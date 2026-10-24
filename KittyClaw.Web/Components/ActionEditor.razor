@@ -1,28 +1,11 @@
-@using System.Net.Http.Json
 @using KittyClaw.Core.Automation
 @inject LocalizationService L
-@inject IHttpClientFactory HttpFactory
-@inject NavigationManager Nav
 
 <div class="node-editor">
     <label><FieldHelp Label="@L["ActionType"]" Help="@L["ActionTypeHelp"]" />
         <select value="@CurrentType" @onchange="OnTypeChanged">
-            @if (!ProcessorMode)
-            {
-                <option value="runAgent">@L["ActionRunAgent"]</option>
-                <option value="moveTicketStatus">@L["ActionMoveTicket"]</option>
-            }
             <option value="setLabels">@L["ActionSetLabels"]</option>
-            @if (!ProcessorMode)
-            {
-                <option value="assignTicket">@L["ActionAssignTicket"]</option>
-            }
             <option value="addComment">@L["ActionEditorAddComment"]</option>
-            @if (!ProcessorMode)
-            {
-                <option value="commitAgentMemory">@L["ActionCommitAgentMemory"]</option>
-                <option value="consolidateAgentMemory">@L["ActionConsolidateAgentMemory"]</option>
-            }
             <option value="executePowerShell">@L["ActionEditorExecutePowerShell"]</option>
             <option value="createTicket">@L["ActionCreateTicket"]</option>
             <option value="httpRequest">@L["ActionHttpRequest"]</option>
@@ -31,95 +14,6 @@
 
     @switch (Action)
     {
-        case RunAgentActionSpec s:
-            <label>@L["Agent"]
-                <select value="@s.Agent" @onchange="e => s.Agent = (string)e.Value!">
-                    @foreach (var m in Members) { <option value="@m">@m</option> }
-                    @if (!Members.Contains(s.Agent) && !string.IsNullOrEmpty(s.Agent))
-                    {
-                        <option value="@s.Agent">@s.Agent @L["ModelCustom"]</option>
-                    }
-                </select>
-            </label>
-            <label>@L["MaxTurns"]
-                <input type="number" @bind="s.MaxTurns" />
-            </label>
-            <label>@L["ConcurrencyGroup"]
-                <input placeholder="@L["ConcurrencyPlaceholder"]" value="@(s.ConcurrencyGroup ?? "")"
-                       @onchange="e => s.ConcurrencyGroup = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!" />
-            </label>
-            <label>@L["MutuallyExclusive"]
-                <input value="@JoinGroups(s.MutuallyExclusiveWith)"
-                       @onchange="e => s.MutuallyExclusiveWith = SplitGroups((string?)e.Value)" />
-            </label>
-            <label>@L["Model"]
-                <select @key="@($"{s.Model}#{AllModels.Count}")" value="@(s.Model ?? "")" @onchange="e => s.Model = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
-                    <option value="">@L["ModelDefault"]</option>
-                    <optgroup label="Claude">
-                        @foreach (var m in ClaudeModels)
-                        {
-                            <option value="@m">@m</option>
-                        }
-                    </optgroup>
-                    @if (_grokModels.Count > 0)
-                    {
-                        <optgroup label="Grok">
-                            @foreach (var m in _grokModels)
-                            {
-                                <option value="@m">@m</option>
-                            }
-                        </optgroup>
-                    }
-                    @if (_codexModels.Count > 0)
-                    {
-                        <optgroup label="OpenAI Codex">
-                            @foreach (var m in _codexModels)
-                            {
-                                <option value="@m">@m</option>
-                            }
-                        </optgroup>
-                    }
-                    @if (_mistralModels.Count > 0)
-                    {
-                        <optgroup label="Mistral Vibe">
-                            @foreach (var m in _mistralModels)
-                            {
-                                <option value="@m">@m</option>
-                            }
-                        </optgroup>
-                    }
-                    @if (_deepSeekModels.Count > 0)
-                    {
-                        <optgroup label="DeepSeek">
-                            @foreach (var m in _deepSeekModels)
-                            {
-                                <option value="@m">@m</option>
-                            }
-                        </optgroup>
-                    }
-                    @if (_ollamaModels.Count > 0)
-                    {
-                        <optgroup label="Local (Ollama)">
-                            @foreach (var m in _ollamaModels)
-                            {
-                                <option value="@m">@m</option>
-                            }
-                        </optgroup>
-                    }
-                    @if (!string.IsNullOrEmpty(s.Model) && !AllModels.Contains(s.Model))
-                    {
-                        <option value="@s.Model">@s.Model @L["ModelCustom"]</option>
-                    }
-                </select>
-            </label>
-            break;
-        case MoveTicketStatusActionSpec s:
-            <label>@L["NewColumn"]
-                <select @bind="s.To">
-                    @foreach (var c in Columns) { <option value="@c">@c</option> }
-                </select>
-            </label>
-            break;
         case SetLabelsActionSpec s:
             <label><FieldHelp Label="@L["LabelsToAdd"]" Help="@L["LabelsToAddHelp"]" />
                 <input placeholder="@L["LabelsCsvPlaceholder"]" value="@JoinGroups(s.Add)"
@@ -130,58 +24,12 @@
                        @onchange="e => s.Remove = SplitGroups((string?)e.Value)" />
             </label>
             break;
-        case AssignTicketActionSpec s:
-            <label>@L["AssignTo"]
-                <select value="@(s.Slug ?? "")" @onchange="e => s.Slug = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
-                    <option value="">— @L["Nobody"] —</option>
-                    @foreach (var m in Members) { <option value="@m">@m</option> }
-                    <option value="{previousAssignee}">{previousAssignee}</option>
-                </select>
-            </label>
-            break;
         case AddCommentActionSpec s:
             <label><FieldHelp Label="@L["CommentContent"]" Help="@L["CommentContentHelp"]" />
                 <textarea @bind="s.Content" placeholder="@L["CommentContentPlaceholder"]"></textarea>
             </label>
             <label><FieldHelp Label="@L["CommentAuthor"]" Help="@L["CommentAuthorHelp"]" />
-                @if (ProcessorMode)
-                {
-                    <input @bind="s.Author" placeholder="processor" />
-                }
-                else
-                {
-                    <select @bind="s.Author">
-                        @foreach (var m in Members) { <option value="@m">@m</option> }
-                    </select>
-                }
-            </label>
-            break;
-        case CommitAgentMemoryActionSpec s:
-            <label>@L["Agent"]
-                <select value="@s.Agent" @onchange="e => s.Agent = (string)e.Value!">
-                    @foreach (var m in Members) { <option value="@m">@m</option> }
-                    @if (!Members.Contains(s.Agent) && !string.IsNullOrEmpty(s.Agent))
-                    {
-                        <option value="@s.Agent">@s.Agent @L["ModelCustom"]</option>
-                    }
-                </select>
-            </label>
-            break;
-        case ConsolidateAgentMemoryActionSpec s:
-            <label>@L["Agent"]
-                <select value="@s.Agent" @onchange="e => s.Agent = (string)e.Value!">
-                    @foreach (var m in Members) { <option value="@m">@m</option> }
-                    @if (!Members.Contains(s.Agent) && !string.IsNullOrEmpty(s.Agent))
-                    {
-                        <option value="@s.Agent">@s.Agent @L["ModelCustom"]</option>
-                    }
-                </select>
-            </label>
-            <label>@L["MaxTurns"]
-                <input type="number" @bind="s.MaxTurns" />
-            </label>
-            <label>@L["CsmInstructionFile"]
-                <input placeholder=".agents/memory-consolidation.md" @bind="s.InstructionFile" />
+                <input @bind="s.Author" placeholder="processor" />
             </label>
             break;
         case CreateTicketActionSpec s:
@@ -196,15 +44,6 @@
                     @foreach (var c in Columns) { <option value="@c">@c</option> }
                 </select>
             </label>
-            @if (!ProcessorMode)
-            {
-                <label>@L["AssignTo"]
-                    <select value="@(s.AssignedTo ?? "")" @onchange="e => s.AssignedTo = string.IsNullOrEmpty((string?)e.Value) ? null : (string)e.Value!">
-                        <option value="">— @L["Nobody"] —</option>
-                        @foreach (var m in Members) { <option value="@m">@m</option> }
-                    </select>
-                </label>
-            }
             <label><FieldHelp Label="@L["CtPriority"]" Help="@L["CtPriorityHelp"]" />
                 <select @bind="s.Priority">
                     <option value="Idea">@L["PriorityIdea"]</option>
@@ -240,17 +79,6 @@
             <label><FieldHelp Label="@L["PsTimeout"]" Help="@L["PsTimeoutHelp"]" />
                 <input type="number" @bind="s.TimeoutSeconds" />
             </label>
-            @if (!ProcessorMode)
-            {
-                <label class="checkbox-label">
-                    <input type="checkbox" @bind="s.AbortOnFailure" />
-                    @L["PsAbortOnFailure"]
-                </label>
-                <label class="checkbox-label" title="@L["PsCoalesceOverlappingHint"]">
-                    <input type="checkbox" @bind="s.CoalesceOverlapping" />
-                    @L["PsCoalesceOverlapping"]
-                </label>
-            }
             break;
         case HttpRequestActionSpec s:
             <label><FieldHelp Label="@L["HttpMethod"]" Help="@L["HttpMethodHelp"]" />
@@ -274,13 +102,6 @@
             <label><FieldHelp Label="@L["HttpTimeout"]" Help="@L["HttpTimeoutHelp"]" />
                 <input type="number" @bind="s.TimeoutSeconds" />
             </label>
-            @if (!ProcessorMode)
-            {
-                <label class="checkbox-label">
-                    <input type="checkbox" @bind="s.AbortOnFailure" />
-                    @L["PsAbortOnFailure"]
-                </label>
-            }
             <label class="checkbox-label" title="@L["HttpAllowLocalTargetsHint"]">
                 <input type="checkbox" @bind="s.AllowLocalTargets" />
                 @L["HttpAllowLocalTargets"]
@@ -295,49 +116,15 @@
 
 @code {
     [Parameter] public ActionSpec Action { get; set; } = default!;
-    [Parameter] public List<string> Skills { get; set; } = new();
     [Parameter] public List<string> Columns { get; set; } = new();
-    [Parameter] public List<string> Members { get; set; } = new();
     [Parameter] public string Slug { get; set; } = "";
-    [Parameter] public bool ProcessorMode { get; set; }
     [Parameter] public EventCallback<ActionSpec> OnReplace { get; set; }
     [Parameter] public EventCallback OnDelete { get; set; }
 
-    private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
-
-    private List<string> _ollamaModels = new();
-    private List<string> _grokModels = new();
-    private List<string> _mistralModels = new();
-    private List<string> _codexModels = new();
-    private List<string> _deepSeekModels = new();
-    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_mistralModels).Concat(_deepSeekModels).Concat(_ollamaModels).ToList();
-
-    protected override async Task OnInitializedAsync()
-    {
-        if (!string.IsNullOrWhiteSpace(Slug))
-        {
-            try
-            {
-                var http = HttpFactory.CreateClient("KittyClawLocal");
-                _ollamaModels = await http.GetFromJsonAsync<List<string>>($"/api/projects/{Slug}/ollama-models") ?? new();
-                _grokModels = await http.GetFromJsonAsync<List<string>>("/api/grok-models") ?? new();
-                _mistralModels = await http.GetFromJsonAsync<List<string>>("/api/mistral-models") ?? new();
-                _codexModels = await http.GetFromJsonAsync<List<string>>("/api/codex-models") ?? new();
-                _deepSeekModels = await http.GetFromJsonAsync<List<string>>("/api/deepseek-models") ?? new();
-            }
-            catch { /* non-blocking */ }
-        }
-    }
-
     private string CurrentType => Action switch
     {
-        RunAgentActionSpec => "runAgent",
-        MoveTicketStatusActionSpec => "moveTicketStatus",
         SetLabelsActionSpec => "setLabels",
-        AssignTicketActionSpec => "assignTicket",
         AddCommentActionSpec => "addComment",
-        CommitAgentMemoryActionSpec => "commitAgentMemory",
-        ConsolidateAgentMemoryActionSpec => "consolidateAgentMemory",
         ExecutePowerShellActionSpec => "executePowerShell",
         CreateTicketActionSpec => "createTicket",
         HttpRequestActionSpec => "httpRequest",
@@ -354,13 +141,8 @@
     {
         ActionSpec spec = (string?)e.Value switch
         {
-            "runAgent" => new RunAgentActionSpec { Agent = Members.FirstOrDefault() ?? "producer" },
-            "moveTicketStatus" => new MoveTicketStatusActionSpec { To = Columns.FirstOrDefault() ?? "Todo" },
             "setLabels" => new SetLabelsActionSpec(),
-            "assignTicket" => new AssignTicketActionSpec(),
             "addComment" => new AddCommentActionSpec(),
-            "commitAgentMemory" => new CommitAgentMemoryActionSpec { Agent = Members.FirstOrDefault() ?? "programmer" },
-            "consolidateAgentMemory" => new ConsolidateAgentMemoryActionSpec { Agent = Members.FirstOrDefault() ?? "programmer" },
             "executePowerShell" => new ExecutePowerShellActionSpec(),
             "createTicket" => new CreateTicketActionSpec(),
             "httpRequest" => new HttpRequestActionSpec(),

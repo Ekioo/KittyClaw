@@ -195,13 +195,31 @@ public static class OpenApiMarkdownGenerator
         sb.AppendLine("- This documentation is auto-generated from the OpenAPI spec.");
         sb.AppendLine();
 
-        // Automations guide
-        AppendAutomationsGuide(sb);
+
+        AppendColumnActionsGuide(sb);
 
         // Dashboard tiles guide
         AppendDashboardTilesGuide(sb);
 
         return sb.ToString();
+    }
+
+    private static void AppendColumnActionsGuide(StringBuilder sb)
+    {
+        sb.AppendLine("## Guide: Column and scheduled-task actions");
+        sb.AppendLine();
+        sb.AppendLine("Processors and scheduled tasks use ordered deterministic actions. Each action has an id, an action object with a type discriminator, and an optional failureTargetColumnId. Agent execution and successful routing belong to the processor configuration.");
+        sb.AppendLine();
+        sb.AppendLine("| Type | Purpose | Fields |");
+        sb.AppendLine("|------|---------|--------|");
+        sb.AppendLine("| `setLabels` | Add or remove ticket labels | add, remove |");
+        sb.AppendLine("| `addComment` | Post a ticket comment | content, author |");
+        sb.AppendLine("| `executePowerShell` | Run a script or script file | script or scriptFile, arguments, timeoutSeconds, env |");
+        sb.AppendLine("| `createTicket` | Create a ticket | title, description, status, priority, labels, parentId, createdBy, skipIfExists |");
+        sb.AppendLine("| `httpRequest` | Send an HTTP request | method, url, headers, body, contentType, timeoutSeconds, allowLocalTargets |");
+        sb.AppendLine();
+        sb.AppendLine("Ticket comments and labels require a ticket target. Use a scheduled task's FirstTicket scope for these actions. Failures stop the chain and follow its configured failure route; completed scheduled actions are checkpointed for restart recovery.");
+        sb.AppendLine();
     }
 
     private static void AppendDashboardTilesGuide(StringBuilder sb)
@@ -278,145 +296,6 @@ public static class OpenApiMarkdownGenerator
         ["image"]        = "Static or generated PNG/JPG/SVG.",
         ["mermaid"]      = "Mermaid diagram (flowchart, sequence, gantt, …).",
     };
-
-    private static void AppendAutomationsGuide(StringBuilder sb)
-    {
-        sb.AppendLine("---");
-        sb.AppendLine();
-        sb.AppendLine("## Guide: Managing legacy automations");
-        sb.AppendLine();
-        sb.AppendLine("Automations let you trigger actions automatically (launch a Claude agent, move a ticket) in response to events on the board.");
-        sb.AppendLine();
-        sb.AppendLine("### `automations.json` file");
-        sb.AppendLine();
-        sb.AppendLine("Automations are declared in `{WorkspacePath}/.agents/automations.json`. The public API can inspect, disable, or delete existing definitions, but cannot create or arbitrarily edit them.");
-        sb.AppendLine();
-        sb.AppendLine("General structure:");
-        sb.AppendLine();
-        sb.AppendLine("```json");
-        sb.AppendLine("{");
-        sb.AppendLine("  \"dailyBudgetUsd\": 70,");
-        sb.AppendLine("  \"minDescriptionLength\": 50,");
-        sb.AppendLine("  \"automations\": [");
-        sb.AppendLine("    {");
-        sb.AppendLine("      \"id\": \"unique-id\",");
-        sb.AppendLine("      \"name\": \"Human-readable name (optional)\",");
-        sb.AppendLine("      \"enabled\": true,");
-        sb.AppendLine("      \"trigger\": { \"type\": \"...\", ... },");
-        sb.AppendLine("      \"conditions\": [ { \"type\": \"...\", ... } ],");
-        sb.AppendLine("      \"actions\": [ { \"type\": \"...\", ... } ]");
-        sb.AppendLine("    }");
-        sb.AppendLine("  ]");
-        sb.AppendLine("}");
-        sb.AppendLine("```");
-        sb.AppendLine();
-        sb.AppendLine("**Root fields:**");
-        sb.AppendLine();
-        sb.AppendLine("| Field | Type | Description |");
-        sb.AppendLine("|-------|------|-------------|");
-        sb.AppendLine("| `automations` | array | List of automations |");
-        sb.AppendLine("| `dailyBudgetUsd` | number | Daily budget cap (blocks non-CEO dispatches beyond this) |");
-        sb.AppendLine("| `minDescriptionLength` | integer | Minimum description length required to allow dispatch |");
-        sb.AppendLine();
-        sb.AppendLine();
-        sb.AppendLine("Recovery work may use the explicit request field `saturationOverride: { \"kind\": \"recovery\", \"reason\": \"...\" }`. It is accepted only with `createdBy: \"owner\"` and a non-empty reason, and the created ticket receives a dedicated audit activity. This override is for work that reduces or clears saturation, not ordinary portfolio expansion.");
-        sb.AppendLine();
-        sb.AppendLine("**Automation fields:**");
-        sb.AppendLine();
-        sb.AppendLine("| Field | Required | Description |");
-        sb.AppendLine("|-------|----------|-------------|");
-        sb.AppendLine("| `id` | yes | Unique identifier (string) |");
-        sb.AppendLine("| `name` | no | Label shown in the UI |");
-        sb.AppendLine("| `enabled` | no | `true` by default. Set to `false` to disable without removing |");
-        sb.AppendLine("| `trigger` | yes | Trigger event (one per automation) |");
-        sb.AppendLine("| `conditions` | no | Extra conditions to check before execution |");
-        sb.AppendLine("| `actions` | no | Actions to run when trigger + conditions are satisfied |");
-        sb.AppendLine();
-        sb.AppendLine("### Available triggers");
-        sb.AppendLine();
-        sb.AppendLine("| Type | Params | Description |");
-        sb.AppendLine("|------|--------|-------------|");
-        sb.AppendLine("| `ticketInColumn` | `columns` (string[]), `assigneeSlug?`, `seconds` | Fires when an assigned ticket sits in one of the given columns |");
-        sb.AppendLine("| `statusChange` | `from?`, `to?`, `pollSeconds`, `debounceSeconds?` | Fires when a ticket changes status |");
-        sb.AppendLine("| `interval` | `cron` (5-field cron expression) | Fires on a schedule; the trigger editor UI builds the expression from day/time pickers |");
-        sb.AppendLine("| `gitCommit` | `pollSeconds` | Fires after a new commit is detected |");
-        sb.AppendLine("| `subTicketStatus` | `parentColumn?`, `pollSeconds`, `debounceSeconds?` | Fires when a parent's sub-tickets change |");
-        sb.AppendLine("| `boardIdle` | `idleColumns[]`, `pollSeconds` | Fires when every ticket is in an idle column |");
-        sb.AppendLine("| `agentInactivity` | `minutesIdle`, `pollSeconds` | Fires when no agent has run for N minutes |");
-        sb.AppendLine();
-        sb.AppendLine("### Available conditions");
-        sb.AppendLine();
-        sb.AppendLine("| Type | Params | Description |");
-        sb.AppendLine("|------|--------|-------------|");
-        sb.AppendLine("| `ticketInColumn` | `columns[]`, `assigneeSlug?`, `negate?` | Checks the ticket is in one of the given columns |");
-        sb.AppendLine("| `ticketCountInColumn` | `columns[]`, `assigneeSlug?`, `sameAssignee?`, `operator`, `value` | Counts tickets in columns and compares to a threshold (e.g. `== 0` = no pending) |");
-        sb.AppendLine("| `minDescriptionLength` | `length` | Checks the ticket description is long enough |");
-        sb.AppendLine("| `fieldLength` | `field`, `mode` (min/max), `length`, `negate?` | Checks the length of a field |");
-        sb.AppendLine("| `assignedTo` | `slugs[]`, `negate?` | Checks the ticket assignment |");
-        sb.AppendLine("| `labels` | `labels[]`, `negate?` | Checks the ticket labels |");
-        sb.AppendLine("| `priority` | `priorities[]`, `negate?` | Checks the ticket priority |");
-        sb.AppendLine();
-        sb.AppendLine("### Available actions");
-        sb.AppendLine();
-        sb.AppendLine("| Type | Params | Description |");
-        sb.AppendLine("|------|--------|-------------|");
-        sb.AppendLine("| `runAgent` | `agent`, `maxTurns?`, `concurrencyGroup?`, `mutuallyExclusiveWith[]`, `context?`, `env?`, `model?`, `versionedWritePaths[]` | Launches the named agent; its skill is resolved by convention to `.agents/{agent}/SKILL.md`. Ticketless runs use the durable maintenance worktree and queue only the declared paths. |");
-        sb.AppendLine("| `moveTicketStatus` | `to` | Moves the ticket to the given column |");
-        sb.AppendLine("| `setLabels` | `add[]`, `remove[]` | Adds or removes labels on the ticket |");
-        sb.AppendLine("| `assignTicket` | `slug?` | Assigns or unassigns the ticket |");
-        sb.AppendLine("| `addComment` | `content`, `author` | Adds a comment to the ticket |");
-        sb.AppendLine("| `commitAgentMemory` | `agent` | Commits the selected agent's memory changes |");
-        sb.AppendLine("| `consolidateAgentMemory` | `agent`, `model?`, `maxTurns?`, `instructionFile?` | Consolidates an agent's persistent memory |");
-        sb.AppendLine("| `executePowerShell` | `script?`, `scriptFile?`, `arguments[]`, `timeoutSeconds?`, `abortOnFailure?`, `coalesceOverlapping?`, `env?` | Runs a PowerShell script in the project workspace |");
-        sb.AppendLine("| `createTicket` | `title`, `description?`, `status?`, `assignedTo?`, `priority?`, `labels[]`, `parentId?`, `createdBy?`, `skipIfExists?` | Creates a ticket |");
-        sb.AppendLine("| `httpRequest` | `method?`, `url`, `headers?`, `body?`, `contentType?`, `timeoutSeconds?`, `abortOnFailure?`, `allowLocalTargets?` | Sends an outbound HTTP request with local targets blocked by default |");
-        sb.AppendLine();
-        sb.AppendLine("### Concurrency");
-        sb.AppendLine();
-        sb.AppendLine("- **`concurrencyGroup`**: only one active run per group at a time (e.g. `\"code\"`, `\"producer\"`).");
-        sb.AppendLine("- **`mutuallyExclusiveWith`**: list of groups blocked while this one runs.");
-        sb.AppendLine("- **Implicit dedup**: no second active run for the same `(agent, ticketId)`.");
-        sb.AppendLine();
-        sb.AppendLine("### Life cycle");
-        sb.AppendLine();
-        sb.AppendLine("1. **Inspect**: `GET /api/projects/{slug}/automations` returns the existing definitions.");
-        sb.AppendLine("2. **Disable**: `POST /api/projects/{slug}/automations/{automationId}/disable` changes only the targeted definition's enabled flag.");
-        sb.AppendLine("3. **Delete**: `DELETE /api/projects/{slug}/automations/{automationId}` explicitly removes only the targeted definition.");
-        sb.AppendLine("4. **Execute**: the engine evaluates triggers continuously.");
-        sb.AppendLine("5. **Watch**: `GET /api/projects/{slug}/runs` lists active runs. `GET /api/projects/{slug}/runs/{runId}/stream` for the real-time SSE stream.");
-        sb.AppendLine("6. **Steer**: `POST /api/projects/{slug}/runs/{runId}/steer` to send a message to a running agent. `POST /api/projects/{slug}/runs/{runId}/stop` to stop it.");
-        sb.AppendLine();
-        sb.AppendLine("### Complete example");
-        sb.AppendLine();
-        sb.AppendLine("Automation that launches a `programmer` agent when a ticket is assigned to them in Todo or InProgress:");
-        sb.AppendLine();
-        sb.AppendLine("```json");
-        sb.AppendLine("{");
-        sb.AppendLine("  \"automations\": [");
-        sb.AppendLine("    {");
-        sb.AppendLine("      \"id\": \"programmer\",");
-        sb.AppendLine("      \"name\": \"Programmer\",");
-        sb.AppendLine("      \"enabled\": true,");
-        sb.AppendLine("      \"trigger\": {");
-        sb.AppendLine("        \"type\": \"ticketInColumn\",");
-        sb.AppendLine("        \"columns\": [\"Todo\", \"InProgress\"],");
-        sb.AppendLine("        \"assigneeSlug\": \"programmer\",");
-        sb.AppendLine("        \"seconds\": 30");
-        sb.AppendLine("      },");
-        sb.AppendLine("      \"actions\": [");
-        sb.AppendLine("        { \"type\": \"moveTicketStatus\", \"to\": \"InProgress\" },");
-        sb.AppendLine("        {");
-        sb.AppendLine("          \"type\": \"runAgent\",");
-        sb.AppendLine("          \"agent\": \"programmer\",");
-        sb.AppendLine("          \"maxTurns\": 200,");
-        sb.AppendLine("          \"concurrencyGroup\": \"code\"");
-        sb.AppendLine("        }");
-        sb.AppendLine("      ]");
-        sb.AppendLine("    }");
-        sb.AppendLine("  ]");
-        sb.AppendLine("}");
-        sb.AppendLine("```");
-    }
 
     private static JsonElement ResolveSchema(JsonElement schema, JsonElement root)
     {

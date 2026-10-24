@@ -10,7 +10,6 @@
   "Name": "Nombre",
   "Color": "Color",
   "Order": "Orden",
-  "Type": "Tipo",
   "Saved": "Guardado.",
   "Error": "Error",
   "Language": "Idioma",
@@ -28,7 +27,6 @@
   "AutomationQueue": "Cola de automatizaciones",
   "QueuePending": "Pendiente", "QueueRunning": "En curso", "QueueCompleted": "Completada",
   "QueueSkipped": "Omitida", "QueueFailed": "Fallida", "QueueCancelled": "Cancelada",
-  "AutomationsAhead": "{0} automatizaciones por delante",
   "SessionInterrupted": "KittyClaw se actualizó o la sesión se interrumpió.",
   "SessionInterruptedHint": "La página se recuperará automáticamente cuando sea posible. Recárguela si este mensaje sigue visible.",
   "ReloadPage": "Recargar la página",
@@ -56,5 +54,6 @@
   "ProviderDeepSeekConfiguration": "DeepSeek V4 usa Claude Code mediante la API compatible con Anthropic. Guarde DEEPSEEK_API_KEY en el vault de cada proyecto.",
   "ProviderSharedClaudeCli": "Transporte compartido: la detección confirma Claude Code; la clave DeepSeek sigue siendo específica del proyecto.",
   "AgentProvidersDetectionNote": "La detección comprueba la presencia de la CLI sin leer ni mostrar credenciales. Los secretos del proyecto permanecen en su vault.",
-  "RtkGlobalHelp": "Optimizador opcional de salida de shell. Active RTK por separado en cada proyecto. Ejecutable alternativo: KITTYCLAW_RTK_BIN."
+  "RtkGlobalHelp": "Optimizador opcional de salida de shell. Active RTK por separado en cada proyecto. Ejecutable alternativo: KITTYCLAW_RTK_BIN.",
+  "All": "- todo -"
 }

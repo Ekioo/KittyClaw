@@ -23,7 +23,7 @@
   "Tip21": "Les skills du projet décrivent les procédures techniques et opérationnelles réutilisables. Un processeur peut les rendre disponibles, recommandés ou obligatoires pour son agent générique.",
   "Tip22": "Chaque processeur et chaque tâche planifiée peut choisir son modèle. Les nouvelles instructions réutilisent le dernier modèle choisi, et une conversation conserve toujours son modèle initial.",
   "Tip23": "La pastille orange d'un pipeline compte ses tickets visibles non lus. Clic droit sur une colonne, puis Tout marquer comme lu, pour remettre son compteur à zéro.",
-  "Tip24": "Un ancien board basé sur les automatisations peut être migré par le wizard. Validez les pipelines et leurs colonnes étape par étape avant de lancer la migration.",
+  "Tip24": "Utilisez Modifier avec l’assistant pour revoir un pipeline, affiner ses colonnes et appliquer uniquement les changements approuvés.",
   "Tip25": "La page Coûts s'appuie sur un rapport mis en cache. Utilisez ses raccourcis de période, puis filtrez par projet, pipeline ou modèle.",
   "Tip26": "Dans Coûts, le vert correspond aux montants mesurés, l'orange hachuré aux estimations et le dégradé cyan-vert aux économies RTK.",
   "Tip27": "Activez RTK dans les paramètres d'un projet pour condenser les sorties de commandes avant qu'elles atteignent l'agent. Les économies estimées apparaissent ensuite dans Coûts.",

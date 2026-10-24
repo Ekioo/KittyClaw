@@ -12,7 +12,7 @@ namespace KittyClaw.Core.Data;
 ///   the default fail-fast behavior produced rare, unreproducible failures on busy boards.
 /// - <c>journal_mode = WAL</c> — readers no longer block behind a writer (and vice versa).
 ///   WAL is persisted in the database file itself, so raw SqliteConnection users
-///   (TriggerStateStore, DashboardService, …) benefit as soon as any EF connection has
+///   (ColumnExecutionService, DashboardService, …) benefit as soon as any EF connection has
 ///   touched the file. Note: WAL adds `-wal`/`-shm` sidecar files next to each `.db`.
 /// </summary>
 public sealed class SqliteConcurrencyInterceptor : DbConnectionInterceptor

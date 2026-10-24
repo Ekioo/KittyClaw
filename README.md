@@ -14,7 +14,7 @@ The product proves three things in one journey: **a live board**, **a readable r
 
 Follow the [guided five-minute demo](docs/product-journey-demo.md) to repeat the journey with a realistic software ticket. The companion [activation test protocol](docs/activation-test-protocol.md) measures whether qualified trial users reach their first run within ten minutes.
 
-A project can be split into independently named pipelines whose stable identities survive renames. Columns can own generic processors with persistent memory, reusable project skills, ordered ticket selection, durable retries, and switch-like routing to columns in any pipeline. Right-click a column and choose **Configure column** to edit its name, color, role, position, ticket guidance, processor, and routing without losing the visual context of the board. Tickets in `Waiting` or `OwnerAction` columns always show a prominent contextual block between their description and activity, explaining whether the owner must comment or move the ticket to a specific validation/refusal column, or whether KittyClaw will resume it automatically. Columns can also be inserted between existing lanes or added at the end directly from the Kanban; the Workflows page remains the global pipeline-and-skills overview. Execution state is separate from business columns, so an `InProgress` column is optional. The legacy `AutomationEngine` remains available for trigger-based rules, cron/interval work, and backward compatibility. Agents run through Claude Code, OpenAI Codex, Grok Build, Mistral Vibe, or a local Ollama model while their output streams into the app.
+A project can be split into independently named pipelines whose stable identities survive renames. Columns can own generic processors with persistent memory, reusable project skills, ordered ticket selection, durable retries, and switch-like routing to columns in any pipeline. Right-click a column and choose **Configure column** to edit its name, color, role, position, ticket guidance, processor, and routing without losing the visual context of the board. Tickets in `Waiting` or `OwnerAction` columns always show a prominent contextual block between their description and activity, explaining whether the owner must comment or move the ticket to a specific validation/refusal column, or whether KittyClaw will resume it automatically. Columns can also be inserted between existing lanes or added at the end directly from the Kanban; the Workflows page remains the global pipeline-and-skills overview. Execution state is separate from business columns, so an `InProgress` column is optional. Recurring work uses column scheduled tasks. Agents run through Claude Code, OpenAI Codex, Grok Build, Mistral Vibe, or a local Ollama model while their output streams into the app.
 
 Each processor is versioned with its project in
 `.agents/processors/column-<id>/processor.json`. This authoritative definition contains its
@@ -28,7 +28,7 @@ definition under `.agents/processors/column-<id>/memory/MEMORY.md`.
 - **SQLite** via Entity Framework Core (one DB per project)
 - **OpenAPI** with auto-generated Markdown docs
 - Agent execution: at least one supported CLI — **[Claude Code CLI](https://docs.claude.com/en/docs/claude-code/overview)**, **[OpenAI Codex CLI](doc/codex-cli.md)**, **[Grok Build](doc/grok-build.md)**, or **[Mistral Vibe](doc/mistral-vibe.md)**. **[Ollama](https://ollama.com)** and **[DeepSeek V4](doc/deepseek.md)** are supported through Claude Code. See the consolidated **[agent-provider installation guide](doc/agent-providers.md)**.
-- Optional for repository initialization, Git-aware automations, and agent commits: **[Git](https://git-scm.com/downloads)**
+- Optional for repository initialization, worktree integrations, and agent commits: **[Git](https://git-scm.com/downloads)**
 
 ## Getting Started
 
@@ -55,7 +55,7 @@ See [Windows packaging and updates](doc/update-check.md) for build and release d
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - At least one agent CLI on your `PATH`: Claude Code (`claude`), OpenAI Codex (`codex`), Grok Build (`grok`), or Mistral Vibe (`vibe`). Local-model and DeepSeek execution use Claude Code as their transport; DeepSeek additionally requires `DEEPSEEK_API_KEY` in the project's secure vault.
-- Optional: [Git](https://git-scm.com/downloads) (`git` on your `PATH`) for repository initialization, Git-aware automations, and agent commits
+- Optional: [Git](https://git-scm.com/downloads) (`git` on your `PATH`) for repository initialization, worktree integrations, and agent commits
 - Optional: [Rust Token Killer (RTK)](https://github.com/rtk-ai/rtk) (`rtk` on your `PATH`) for explicit per-project shell-output optimization. KittyClaw never installs or configures it automatically and forces its telemetry off for opted-in runs.
 
 On first launch, the onboarding popup checks Git and every supported provider CLI using the same resolved executable paths as dispatch: Claude Code (`claude` / `KITTYCLAW_CLAUDE_BIN`), OpenAI Codex (`codex` / `KITTYCLAW_CODEX_BIN`), Grok Build (`grok`, `~/.grok/bin`, or `KITTYCLAW_GROK_BIN`), and Mistral Vibe (`vibe` / `KITTYCLAW_MISTRAL_BIN`). It also reports optional Ollama availability. Any one agent provider is sufficient, failed or timed-out probes remain non-blocking, and Git-dependent features still require Git.
@@ -78,14 +78,14 @@ From the home page, select **Create a project**, enter a name, and choose its wo
 Click **Initialize** to:
 
 1. Create the project registry entry + per-project SQLite DB.
-2. Copy the project template from `ProjectTemplate/` (`preamble.md`, `{agent}/SKILL.md`, `{agent}/memory/MEMORY.md` index, `memory-consolidation.md`, `automations.json`, `CLAUDE.md`) into the workspace — agent files under `<workspace>/.agents/`, `CLAUDE.md` at the workspace root.
+2. Copy the project template from `ProjectTemplate/` (`preamble.md`, `{agent}/SKILL.md`, `{agent}/memory/MEMORY.md` index, `memory-consolidation.md`, `agent-budget.json`, `CLAUDE.md`) into the workspace — agent files under `<workspace>/.agents/`, `CLAUDE.md` at the workspace root.
 3. Run `git init` if the workspace is not already a git repo (skipped if `git` isn't installed).
 4. Create a member for each agent slug found in the template.
 5. Open the project setup wizard.
 
 The setup wizard analyzes an existing workspace and proposes distinct pipelines, columns, human hand-offs, processors, routing, and schedules. For an empty folder it first asks a few questions about the project's purpose, deliverables, human decisions, and recurring work. Proposals are graphical: you can add or remove pipelines, review each pipeline's columns, refine a step with a prompt, and move backward before approval. Nothing is created during this preparation; **Create the workflow** applies and verifies the approved plan, then opens the board.
 
-This new-project setup is intentionally separate from the legacy-board migration wizard. Migration terminology and legacy-automation cleanup are shown only when an existing automation-based board needs conversion.
+Existing pipelines can be refined through **Edit with assistant**. The legacy automation engine and its migration wizard are retired.
 
 The workspace folder itself is never deleted by KittyClaw, even when you delete a project.
 
@@ -105,8 +105,8 @@ Per-project agent state lives **in the workspace**: `<workspace>/.agents/{agent}
 
 | Path | Description |
 |---|---|
-| **KittyClaw.Core** | Domain models, EF Core contexts, services, automation engine, embedded project template |
-| **KittyClaw.Core.Tests** | xUnit tests (conditions, triggers, signals, JSON polymorphism) |
+| **KittyClaw.Core** | Domain models, EF Core contexts, services, column workflow engines, embedded project template |
+| **KittyClaw.Core.Tests** | xUnit tests (processors, scheduling, agent execution, API, storage) |
 | **KittyClaw.Web** | Blazor Server UI + REST API |
 | **KittyClaw.QaRunner** | Isolated test-instance launcher (Playwright + scenario runner) used by the qa-tester agent |
 | **KittyClaw.ClaudeMock** | Mock `claude` CLI used by `KittyClaw.QaRunner` for hermetic agent dispatch in tests |
@@ -126,13 +126,13 @@ All endpoints are under `/api`. The documentation is auto-generated from the liv
 
 ## MCP server
 
-KittyClaw can expose an embedded [MCP](https://modelcontextprotocol.io) endpoint at `http://localhost:5230/mcp` (Streamable HTTP), so MCP clients can manage projects, tickets and acceptance criteria, configure workflows and automations, supervise agent runs, and handle approvals and worktree integrations. Open **Settings** from the home page and enable the MCP server, then hook it up to Claude Code with:
+KittyClaw can expose an embedded [MCP](https://modelcontextprotocol.io) endpoint at `http://localhost:5230/mcp` (Streamable HTTP), so MCP clients can manage projects, tickets and acceptance criteria, configure column workflows and scheduled tasks, supervise agent runs, and handle approvals and worktree integrations. Open **Settings** from the home page and enable the MCP server, then hook it up to Claude Code with:
 
 ```bash
 claude mcp add --transport http kittyclaw http://localhost:5230/mcp
 ```
 
-The server exposes **78 tools**: nine board and acceptance-criteria tools plus 69 management and observability tools. Reconnect clients after upgrading to refresh their tool catalogue. The endpoint is disabled by default, can be toggled without restarting KittyClaw, and uses the same localhost trust boundary as the REST API. See the [complete tool catalogue and operation conventions](doc/mcp.md).
+The server exposes **73 tools**: nine board and acceptance-criteria tools plus 64 management and observability tools. Reconnect clients after upgrading to refresh their tool catalogue. The endpoint is disabled by default, can be toggled without restarting KittyClaw, and uses the same localhost trust boundary as the REST API. See the [complete tool catalogue and operation conventions](doc/mcp.md).
 
 ## For AI Agents
 
@@ -159,7 +159,7 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 - Onboarding popup on first launch that checks Git, Claude Code, OpenAI Codex, Grok Build, Mistral Vibe, and Ollama
 - Cross-platform in-app workspace browser with roots, breadcrumbs, direct path entry, and folder creation
 - Guided new-project setup that analyzes the workspace and proposes editable pipelines and columns before creating the workflow
-- Guided legacy-board migration that preserves completed tickets and retires replaced automations only after verification
+- Visual workflow planning and scoped pipeline refinement with preservation of completed tickets
 - Unified multi-project home with project cards and kanban swimlanes
 - Multi-pipeline Kanban with visually distinguished allowed and forbidden drop targets based on processor routing
 - Contextual column editor for structure, role, owner guidance, processor, ordered actions, scheduled tasks, and routing
@@ -174,7 +174,7 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 - Column management directly from the board (insert, duplicate, reorder, configure, and mark read)
 - Label and member management
 - Image upload in descriptions and comments
-- Local model support ([Ollama](doc/local-models.md)): per-project base URL with model autodiscovery, per-member default model, and per-action configuration in `.agents/automations.json`
+- Local model support ([Ollama](doc/local-models.md)): per-project base URL with model autodiscovery, per-member default model, and per-processor model configuration
 - Provider-aware dispatch through Claude Code, [OpenAI Codex](doc/codex-cli.md), [Grok Build](doc/grok-build.md), [Mistral Vibe](doc/mistral-vibe.md), or Ollama, with conversation handoff and unavailable-model fallback
 - Optional per-project RTK guidance for compact shell output, with bounded detection, telemetry forced off, and unchanged raw-command fallback
 

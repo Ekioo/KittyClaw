@@ -111,7 +111,7 @@ public static partial class Endpoints
         if (project?.IsPaused == true)
         {
             var active = runs.ActiveForProject(slug).ToArray();
-            await AutomationEngine.CancelAndWaitForRunsAsync(active, ct);
+            await AgentRunLifecycle.CancelAndWaitForRunsAsync(active, ct);
         }
         return project is null ? Results.NotFound() : Results.Ok(project);
     }

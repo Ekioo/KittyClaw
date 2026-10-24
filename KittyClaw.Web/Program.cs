@@ -123,7 +123,7 @@ builder.Services.AddSingleton(sp => new DashboardGuidanceService(dataDir));
 builder.Services.AddSingleton(new FirstProjectActivationMetricsService(dataDir));
 builder.Services.AddSingleton(sp => new TicketService(sp.GetRequiredService<ProjectService>(),
     sp.GetRequiredService<MemberService>(), sp.GetRequiredService<ColumnProcessorService>(),
-    sp.GetRequiredService<AutomationStore>(), sp.GetRequiredService<ILogger<TicketService>>(),
+    sp.GetRequiredService<ILogger<TicketService>>(),
     new Lazy<JevWorkReviewService>(sp.GetRequiredService<JevWorkReviewService>)));
 builder.Services.AddSingleton(sp => new FirstTicketDraftService(dataDir, sp.GetRequiredService<TicketService>()));
 builder.Services.AddSingleton(sp => new MinimalWorkflowService(dataDir,
@@ -161,10 +161,7 @@ builder.Services.AddSingleton<KittyClaw.Web.Services.WorkflowMigrationPlanner>()
 builder.Services.AddSingleton<KittyClaw.Web.Services.TicketImprovementService>();
 builder.Services.AddScoped<KittyClaw.Web.Services.EscapeKeyStack>();
 
-// Automation engine
-builder.Services.AddSingleton<AutomationStore>();
-builder.Services.AddSingleton<AutomationQueueStore>();
-builder.Services.AddSingleton<TriggerStateStore>();
+// Agent execution and column workflow services
 builder.Services.AddSingleton(new SessionRegistry(dataDir));
 builder.Services.AddSingleton(new RunLogStore(dataDir));
 builder.Services.AddSingleton<AgentRunRegistry>(sp =>
@@ -188,9 +185,9 @@ builder.Services.AddHostedService<WorktreeMergeQueueProcessor>();
 builder.Services.AddSingleton<AgentRunner>();
 builder.Services.AddSingleton<RtkIntegrationService>();
 builder.Services.AddSingleton<AgentMemoryHandler>(sp => new AgentMemoryHandler(
-    sp.GetRequiredService<TicketService>(), sp.GetRequiredService<MemberService>(),
+    sp.GetRequiredService<MemberService>(),
     sp.GetRequiredService<ProjectService>(), sp.GetRequiredService<AgentRunner>(),
-    sp.GetRequiredService<SessionRegistry>(), sp.GetRequiredService<ILogger<AgentMemoryHandler>>(),
+    sp.GetRequiredService<ILogger<AgentMemoryHandler>>(),
     sp.GetRequiredService<DurableWriteRouter>()));
 builder.Services.AddHostedService<ChatMemoryConsolidationService>();
 builder.Services.AddSingleton<IColumnAgentDispatcher, ColumnAgentDispatcher>();
@@ -202,11 +199,10 @@ builder.Services.AddSingleton<IRtkSavingsReader, RtkSavingsReader>();
 builder.Services.AddHostedService<CostReportRefreshService>();
 // Durable cost records: cost-log.jsonl (daily budget) + per-ticket token/USD totals.
 builder.Services.AddHostedService<RunCostRecorder>();
+builder.Services.AddHostedService<AgentRunLifecycle>();
 // Evidence: capture and attach verifiable evidence bundles to run and ticket records.
 builder.Services.AddSingleton(new KittyClaw.Core.Evidence.EvidenceStore(dataDir));
 builder.Services.AddHostedService<KittyClaw.Core.Evidence.RunEvidenceAttacher>();
-builder.Services.AddSingleton<AutomationEngine>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomationEngine>());
 builder.Services.AddSingleton(sp => new JevConfigurationService(sp.GetRequiredService<ProjectSecretVault>(), dataDir));
 builder.Services.AddSingleton<JevCostRecorder>();
 builder.Services.AddSingleton(sp => new JevQualificationService(
@@ -224,8 +220,6 @@ builder.Services.AddSingleton<ColumnProcessingEngine>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ColumnProcessingEngine>());
 builder.Services.AddSingleton<ColumnScheduledTaskEngine>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ColumnScheduledTaskEngine>());
-builder.Services.AddSingleton<GitRepositoryWatcher>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<GitRepositoryWatcher>());
 // Dead man's switch: force-release concurrency locks held by hung runs (ticket #98, feature #3).
 builder.Services.AddHostedService<KittyClaw.Core.Services.ConcurrencyLockReaper>();
 builder.Services.AddSingleton<KittyClaw.Core.Services.DashboardTileGate>();

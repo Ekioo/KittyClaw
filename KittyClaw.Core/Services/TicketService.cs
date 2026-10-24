@@ -14,7 +14,6 @@ public class TicketService
     private readonly ColumnProcessorService? _columnProcessors;
     private readonly Lazy<JevWorkReviewService>? _jevReviews;
     private readonly SemaphoreSlim _scheduledPromotionLock = new(1, 1);
-    private readonly AutomationStore? _automationStore;
     private readonly ILogger<TicketService>? _logger;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _creationGates = new(StringComparer.OrdinalIgnoreCase);
 
@@ -122,13 +121,11 @@ public class TicketService
         ProjectService projectService,
         MemberService memberService,
         ColumnProcessorService? columnProcessors = null,
-        AutomationStore? automationStore = null,
         ILogger<TicketService>? logger = null, Lazy<JevWorkReviewService>? jevReviews = null)
     {
         _projectService = projectService;
         _memberService = memberService;
         _columnProcessors = columnProcessors;
-        _automationStore = automationStore;
         _logger = logger;
         _jevReviews = jevReviews;
     }
@@ -774,7 +771,7 @@ public class TicketService
 
     /// <summary>
     /// Promotes a Scheduled ticket to its <c>ScheduleTarget</c> (default "Todo"), clears
-    /// <c>FireAt</c>, and fires <see cref="TicketStatusChanged"/> so automations run. No-op if the
+    /// <c>FireAt</c>, and fires <see cref="TicketStatusChanged"/> so column processors can react. No-op if the
     /// ticket is no longer in a Waiting column, which prevents a consumed wake from resurrecting
     /// completed work.
     /// </summary>

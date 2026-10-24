@@ -147,8 +147,7 @@ public sealed class CostAccountingTests
         Assert.Equal(0.00118m, result.TotalUsd);
         Assert.Equal(0, result.UnpricedRuns);
         Assert.Equal("pro", Assert.Single(result.Subscriptions!).Plan);
-        Assert.False(tracker.IsBudgetExceeded(workspace, 1m));
-        Assert.True(tracker.IsBudgetExceeded(workspace, 0.001m));
+        Assert.Equal(0.00118m, tracker.GetDailySpendUsd(workspace, []));
         Assert.Equal(2, Directory.GetFiles(channel, "cost-log*.jsonl").Sum(path => File.ReadAllLines(path).Length));
         var restarted = new CostReportService(projects, new PipelineService(projects), tickets, null, tracker);
         Assert.Equal(result.TotalUsd, (await restarted.GetReportAsync(new(day, day))).TotalUsd);

@@ -11,7 +11,6 @@
   "Name": "Name",
   "Color": "Color",
   "Order": "Order",
-  "Type": "Type",
   "Saved": "Saved.",
   "Error": "Error",
   "Language": "Language",
@@ -29,7 +28,6 @@
   "AutomationQueue": "Automation queue",
   "QueuePending": "Pending", "QueueRunning": "Running", "QueueCompleted": "Completed",
   "QueueSkipped": "Skipped", "QueueFailed": "Failed", "QueueCancelled": "Cancelled",
-  "AutomationsAhead": "{0} automations ahead",
   "SessionInterrupted": "KittyClaw was updated or the session was interrupted.",
   "SessionInterruptedHint": "The page will recover automatically when possible. Reload it if this message remains visible.",
   "ReloadPage": "Reload page",
@@ -56,5 +54,6 @@
   "ProviderOllamaConfiguration": "Install and start Ollama. Configure its address and local models per project.",
   "ProviderDeepSeekConfiguration": "DeepSeek V4 uses Claude Code through the Anthropic-compatible API. Store DEEPSEEK_API_KEY in each project's vault.",
   "ProviderSharedClaudeCli": "Shared transport: detection confirms Claude Code; the DeepSeek key remains project-specific.",
-  "AgentProvidersDetectionNote": "Detection checks that the CLI is present without reading or displaying credentials. Project-specific secrets stay in their vault."
+  "AgentProvidersDetectionNote": "Detection checks that the CLI is present without reading or displaying credentials. Project-specific secrets stay in their vault.",
+  "All": "— all —"
 }

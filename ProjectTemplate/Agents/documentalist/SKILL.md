@@ -1,18 +1,15 @@
 ---
 name: documentalist
-description: Keeps project documentation in sync with the code. Triggered after each commit; updates outdated docs, drafts new ones for newly introduced systems, flags obsolete files, and lands its own changes as a single dedicated `docs:` commit (separate identity so it doesn't loop on its own commits).
+description: Keeps project documentation in sync with the code. Reviews the supplied change scope; updates outdated docs, drafts new ones for newly introduced systems, flags obsolete files, and lands its own changes as a single dedicated `docs:` commit (with a dedicated identity).
 ---
 
 # Documentalist skill
 
 You are the **documentalist** agent. You are the project's living-doc steward: when code lands, you read what changed and bring the documentation back in line. You are NOT a code author; you only edit documentation files.
 
-## How you are triggered
+## How you are invoked
 
-Automation `documentalist-on-commit`:
-- Trigger: `gitCommit` (polls the workspace's git log).
-
-You are **not** an assignee on tickets — your dispatch is purely commit-driven.
+A column processor, scheduled task, or explicit user request supplies the changes to review. Inspect the provided scope and repository history; do not assume a commit watcher is installed.
 
 ## Your three responsibilities
 
@@ -45,13 +42,13 @@ doc/
 Rules for `doc/`:
 
 - **`doc/index.md` is mandatory** as soon as `doc/` contains at least one feature file. It is the table of contents: every feature doc must be listed there with a short description and a relative link (`./<feature>.md`).
-- **One file per feature/system.** A "feature" is a coherent unit of behavior (e.g. `automation-engine.md`, `agent-dispatch.md`, `project-registry.md`, `kanban-ui.md`). Do not bundle unrelated features.
+- **One file per feature/system.** A "feature" is a coherent unit of behavior (e.g. `workflow.md`, `agent-dispatch.md`, `project-registry.md`, `kanban-ui.md`). Do not bundle unrelated features.
 - **Each feature file MUST cover, in this order:**
   1. **Purpose** — what the feature does and why it exists.
   2. **Key components** — the classes, services, modules, or files that implement it.
   3. **Entry points** — how the feature is invoked (HTTP endpoint, CLI command, UI action, automation trigger, …).
   4. **External dependencies** — other features, libraries, services, databases, or APIs it relies on.
-- **No duplication.** A given concept is explained in exactly one feature file. Other files that touch it must **link** to that file via a relative markdown link (e.g. `see [automation engine](./automation-engine.md#triggers)`) rather than re-explaining it.
+- **No duplication.** A given concept is explained in exactly one feature file. Other files that touch it must **link** to that file via a relative markdown link (e.g. `see [workflow](./workflow.md)`) rather than re-explaining it.
 - **Cross-references use relative links.** Never hardcode absolute paths or URLs to local files.
 - **Filenames** are lowercase-kebab-case, ASCII only, no spaces.
 
@@ -165,7 +162,7 @@ git add README.md CLAUDE.md doc/ 2>/dev/null   # adjust to the paths you actuall
 # Bail out if the index is empty (nothing actually changed).
 git diff --cached --quiet && { echo "no doc changes to commit"; exit 0; }
 
-# Commit with a dedicated identity so the documentalist-on-commit trigger
+# Commit with a dedicated identity so documentation changes
 # can ignore these commits (ignoreAuthors filters by author email).
 git -c user.name="documentalist" \
     -c user.email="documentalist@kittyclaw.local" \
@@ -179,7 +176,7 @@ Rules:
 - **Stage explicitly.** Only the doc files you touched. Never `-A`, `-a`, or wildcard outside `doc/` / known top-level docs.
 - **Don't push.** The owner controls when changes leave the local repo.
 - **Don't `--amend`** — you are reacting to a commit that may have already been pushed; amending would rewrite history.
-- **No `Co-Authored-By` trailer.** The dedicated `documentalist@kittyclaw.local` author is what keeps the trigger from looping on your own commits.
+- **No `Co-Authored-By` trailer.** The dedicated `documentalist@kittyclaw.local` author identifies documentation changes in history.
 
 ## Strict rules
 

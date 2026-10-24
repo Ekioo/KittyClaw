@@ -53,7 +53,7 @@ public sealed class WorkflowMigrationPromptTests
         Assert.Contains("Reconfigure existing pipeline #42", prompt);
         Assert.Contains("Change the review model", prompt);
         Assert.Contains("Preserve all unspecified processor settings", prompt);
-        Assert.Contains("Do not modify other pipelines or legacy automations", prompt);
+        Assert.Contains("Do not modify other pipelines", prompt);
         Assert.DoesNotContain("Convert or explicitly retire every legacy", prompt);
     }
 
@@ -67,22 +67,12 @@ public sealed class WorkflowMigrationPromptTests
             id, $"Representative ticket {id}", new string('d', 2_000), id % 2 == 0 ? "Todo" : "Review",
             TicketPriority.NiceToHave, id, null, "owner", DateTime.UtcNow.AddDays(-id), DateTime.UtcNow.AddMinutes(-id),
             labels, 0, null, id % 5 == 0 ? 1 : null, []) { PipelineId = 1 }).ToList();
-        var config = new AutomationConfig
-        {
-            Automations = Enumerable.Range(1, 50).Select(id => new KittyClaw.Core.Automation.Automation
-            {
-                Id = $"automation-{id}",
-                Name = $"Automation {id}",
-                Trigger = new TicketInColumnTriggerSpec { Columns = ["Todo"] },
-                Actions = [new ExecutePowerShellActionSpec { Script = new string('x', 20_000) }],
-            }).ToList(),
-        };
 
-        var prompt = WorkflowMigrationPlanner.BuildAnalysisPrompt([pipeline], columns, tickets, config, "fr");
+        var prompt = WorkflowMigrationPlanner.BuildAnalysisPrompt([pipeline], columns, tickets, "fr");
 
         Assert.True(prompt.Length < 250_000, $"Compacted prompt is still too large: {prompt.Length} characters.");
         Assert.Contains("ticketGroups", prompt);
-        Assert.Contains("legacyAutomations", prompt);
+        Assert.DoesNotContain("legacyAutomations", prompt);
     }
 
     [Fact]
@@ -94,25 +84,13 @@ public sealed class WorkflowMigrationPromptTests
             new BoardColumn { Id = 7, PipelineId = 42, Name = "Ready", SortOrder = 0 },
             new BoardColumn { Id = 8, PipelineId = 42, Name = "Done", SortOrder = 1, Role = ColumnRole.Success },
         };
-        var config = new AutomationConfig
-        {
-            Automations =
-            [
-                new KittyClaw.Core.Automation.Automation
-                {
-                    Id = "legacy-dispatch",
-                    Trigger = new TicketInColumnTriggerSpec { Columns = ["Ready"] },
-                    Actions = [new RunAgentActionSpec { Agent = "programmer" }],
-                },
-            ],
-        };
 
-        var prompt = WorkflowMigrationPlanner.BuildAnalysisPrompt([pipeline], columns, [], config, "en");
+        var prompt = WorkflowMigrationPlanner.BuildAnalysisPrompt([pipeline], columns, [], "en");
 
         Assert.Contains("Migration mode: completeExistingPipelines", prompt);
         Assert.Contains("preserve every existing pipeline and column", prompt);
         Assert.Contains("Never propose replacement pipelines or a regenerated workflow", prompt);
-        Assert.Contains("legacy-dispatch", prompt);
+        Assert.DoesNotContain("legacy-dispatch", prompt);
     }
 
     private static string RepoRoot()
@@ -125,13 +103,11 @@ public sealed class WorkflowMigrationPromptTests
     }
 
     [Fact]
-    public void Workflow_page_opens_the_same_visual_migration_wizard_as_the_board()
+    public void Workflow_page_no_longer_offers_legacy_migration()
     {
         var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Workflows.razor"));
-
-        Assert.Contains("<WorkflowMigrationWizard", source);
-        Assert.Contains("_showMigrationWizard = true", source);
-        Assert.DoesNotContain("<ChatDrawer", source);
+        Assert.DoesNotContain("WorkflowMigrate", source);
+        Assert.Contains("ExistingPipelineId=", source);
     }
 
     [Fact]
@@ -152,7 +128,7 @@ public sealed class WorkflowMigrationPromptTests
         var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Workflows.razor"));
 
         Assert.Contains("@inject LocalizationService L", source);
-        Assert.Contains("WorkflowMigrateTitle", source);
+        Assert.Contains("PipelineKitTitle", source);
         Assert.Contains("WorkflowProjectSkills", source);
         Assert.DoesNotContain("<h2>Migrate the existing workflow</h2>", source);
         Assert.DoesNotContain("placeholder=\"New pipeline name\"", source);
@@ -186,16 +162,6 @@ public sealed class WorkflowMigrationPromptTests
         Assert.Contains("[Parameter] public string? InitialMessage", source);
         Assert.Contains("_inputText = InitialMessage ?? \"\";", source);
         Assert.DoesNotContain("Send(InitialMessage", source);
-    }
-
-    [Fact]
-    public void Legacy_board_opens_the_visual_migration_wizard_without_interrupting_deep_links()
-    {
-        var source = File.ReadAllText(Path.Combine(RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Board.razor"));
-
-        Assert.Contains("legacyConfig.Automations.Count > 0", source);
-        Assert.Contains("TicketId is null && ParentId is null", source);
-        Assert.Contains("<WorkflowMigrationWizard", source);
     }
 
     [Fact]
@@ -268,60 +234,12 @@ public sealed class WorkflowMigrationPromptTests
 
         Assert.Contains("Editorial", prompt);
         Assert.Contains("OwnerAction", prompt);
-        Assert.Contains("Do not leave any legacy automation definition, enabled or disabled", prompt);
-        Assert.Contains("fail the migration instead of silently preserving it", prompt);
+        Assert.DoesNotContain("legacy automation", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Map every existing ticket and child ticket to exactly one pipeline", prompt);
         Assert.Contains("already in a Success or Failure column is completed historical work", prompt);
         Assert.Contains("must remain in a terminal (Success or Failure) column", prompt);
         Assert.Contains("Never call any /workflow-migrations/analyze", prompt);
         Assert.Contains("Apply the plan directly through the granular pipeline", prompt);
-    }
-
-    [Fact]
-    public void Approved_application_extends_existing_pipelines_and_migrates_automations_sequentially()
-    {
-        var pipeline = new Pipeline { Id = 42, Name = "Delivery", Slug = "delivery", IsDefault = true };
-        var column = new BoardColumn { Id = 7, PipelineId = 42, Name = "Ready", SortOrder = 0 };
-        var config = new AutomationConfig
-        {
-            Automations =
-            [
-                new KittyClaw.Core.Automation.Automation
-                {
-                    Id = "legacy-dispatch",
-                    Trigger = new TicketInColumnTriggerSpec { Columns = ["Ready"] },
-                    Actions = [new RunAgentActionSpec { Agent = "programmer" }],
-                },
-            ],
-        };
-
-        var prompt = WorkflowMigrationPlanner.BuildApplicationPrompt(
-            new WorkflowMigrationPlan
-            {
-                Pipelines =
-                [
-                    new WorkflowMigrationPipeline
-                    {
-                        Name = "Delivery",
-                        Columns = [new WorkflowMigrationColumn { Name = "Ready" }],
-                    },
-                ],
-            },
-            isProjectOnboarding: false,
-            [pipeline],
-            [column],
-            config);
-
-        Assert.Contains("EXISTING WORKFLOW EXTENSION MODE IS ACTIVE", prompt);
-        Assert.Contains("Preserve every existing pipeline ID", prompt);
-        Assert.Contains("Preserve every existing column ID", prompt);
-        Assert.Contains("Migrate legacy automations sequentially", prompt);
-        Assert.Contains("then delete only that automation", prompt);
-        Assert.Contains("rerunning the migration is idempotent", prompt);
-        Assert.Contains("stop and leave that definition in place", prompt);
-        Assert.Contains("legacy-dispatch", prompt);
-        Assert.Contains("\"id\": 42", prompt);
-        Assert.Contains("\"id\": 7", prompt);
     }
 
     [Fact]
@@ -343,12 +261,11 @@ public sealed class WorkflowMigrationPromptTests
             },
             isProjectOnboarding: false,
             [pipeline],
-            [column],
-            new AutomationConfig());
+            [column]);
 
         Assert.Contains("EXISTING WORKFLOW EXTENSION MODE IS ACTIVE", prompt);
         Assert.Contains("Preserve every existing pipeline ID", prompt);
-        Assert.Contains("\"legacyAutomations\": []", prompt);
+        Assert.DoesNotContain("legacyAutomations", prompt);
 
         var regeneratedPipeline = new Pipeline
         {
@@ -688,34 +605,6 @@ public sealed class WorkflowMigrationPromptTests
         Assert.NotNull(destination);
         Assert.Equal(31, destination.Id);
         Assert.Equal(ColumnRole.Success, destination.Role);
-    }
-
-    [Fact]
-    public void Completed_migration_rejects_even_disabled_legacy_definitions()
-    {
-        var config = new AutomationConfig
-        {
-            Automations =
-            [
-                new KittyClaw.Core.Automation.Automation
-                {
-                    Id = "old-worker",
-                    Enabled = false,
-                    Trigger = new TicketInColumnTriggerSpec { Columns = ["Todo"] },
-                },
-            ],
-        };
-
-        var error = Assert.ThrowsAny<InvalidOperationException>(
-            () => WorkflowMigrationPlanner.EnsureNoLegacyAutomations(config));
-
-        Assert.Contains("old-worker", error.Message);
-    }
-
-    [Fact]
-    public void Completed_migration_accepts_an_empty_legacy_configuration()
-    {
-        WorkflowMigrationPlanner.EnsureNoLegacyAutomations(new AutomationConfig());
     }
 
     [Fact]

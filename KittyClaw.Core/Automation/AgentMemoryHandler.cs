@@ -1,23 +1,20 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
-using KittyClaw.Core.Automation.Triggers;
 using KittyClaw.Core.Services;
 
 namespace KittyClaw.Core.Automation;
 
 /// <summary>
-/// Handles agent-memory automation actions: commitAgentMemory and consolidateAgentMemory.
+/// Consolidates ad-hoc chat memory and commits it through the durable write boundary.
 /// Owns the git semaphore used to serialize in-process git operations per repository.
 /// </summary>
 public enum AdHocMemoryResult { NoChanges, Modified }
 internal enum CommitMemoryResult { NoChanges, Committed, Failed, Skipped }
 
 public sealed class AgentMemoryHandler(
-    TicketService tickets,
     MemberService members,
     ProjectService projects,
     AgentRunner runner,
-    SessionRegistry sessions,
     ILogger logger,
     DurableWriteRouter? durableWrites = null)
 {
@@ -26,56 +23,34 @@ public sealed class AgentMemoryHandler(
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> _gitLocks =
         new(StringComparer.OrdinalIgnoreCase);
 
-    internal async Task<CommitMemoryResult> ExecuteCommitAgentMemoryAsync(
-        ProjectRuntime rt,
-        CommitAgentMemoryActionSpec spec,
-        TriggerFiring? firing = null,
-        DurableWriteRoute? existingRoute = null)
+    private async Task<CommitMemoryResult> ExecuteCommitAgentMemoryAsync(
+        string projectSlug,
+        string workspace,
+        string agent)
     {
-        var route = existingRoute;
+        DurableWriteRoute? route = null;
         var routeFinalized = false;
 
         async Task FinalizeNoChangesAsync(string message)
         {
             if (route?.Kind != DurableWriteKind.Maintenance || durableWrites is null) return;
             routeFinalized = true;
-            await durableWrites.CommitAndQueueAsync(rt.Slug, route, message);
+            await durableWrites.CommitAndQueueAsync(projectSlug, route, message);
         }
 
         async Task PreserveRouteAsync(string reason)
         {
             if (route is null || durableWrites is null || routeFinalized) return;
             routeFinalized = true;
-            await durableWrites.PreserveExecutionAsync(rt.Slug, route, reason);
+            await durableWrites.PreserveExecutionAsync(projectSlug, route, reason);
         }
 
         try
         {
-            var agent = spec.Agent;
-            if (agent.Contains("{assignee}"))
-            {
-                if (firing?.TicketId is null)
-                {
-                    logger.LogInformation(
-                        "commitAgentMemory: {{assignee}} placeholder but no firing ticket — skipping");
-                    return CommitMemoryResult.Skipped;
-                }
-                var t = await tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
-                if (string.IsNullOrEmpty(t?.AssignedTo))
-                {
-                    logger.LogInformation(
-                        "commitAgentMemory: {{assignee}} placeholder but ticket #{Id} has no assignee — skipping",
-                        firing.TicketId);
-                    return CommitMemoryResult.Skipped;
-                }
-                agent = agent.Replace("{assignee}", t.AssignedTo);
-            }
-
-            var workspace = rt.Workspace!;
-            var project = await projects.GetProjectAsync(rt.Slug);
+            var project = await projects.GetProjectAsync(projectSlug);
             if (project?.WorktreesEnabled == true && durableWrites is not null && route is null)
             {
-                route = await durableWrites.ResolveAsync(rt.Slug, firing?.TicketId,
+                route = await durableWrites.ResolveAsync(projectSlug, null,
                     [Path.Combine(".agents", agent, "memory"), Path.Combine(".agents", agent, "memory.md")]);
                 workspace = route.RootPath;
             }
@@ -89,7 +64,7 @@ public sealed class AgentMemoryHandler(
             if (!hasDir && !hasLegacy)
             {
                 logger.LogInformation(
-                    "commitAgentMemory: no memory found for {Agent} under {Path}",
+                    "Chat memory commit: no memory found for {Agent} under {Path}",
                     agent, Path.GetDirectoryName(legacyAbs));
                 await FinalizeNoChangesAsync($"chore(memory): {agent}");
                 return CommitMemoryResult.Skipped;
@@ -114,7 +89,7 @@ public sealed class AgentMemoryHandler(
             else
             {
                 logger.LogDebug(
-                    "commitAgentMemory: no git repo at {Path} or {Agents} — skipping",
+                    "Chat memory commit: no git repo at {Path} or {Agents} — skipping",
                     workspace, agentsDir);
                 await FinalizeNoChangesAsync($"chore(memory): {agent}");
                 return CommitMemoryResult.Skipped;
@@ -138,7 +113,7 @@ public sealed class AgentMemoryHandler(
                 var status = await RunGitAsync(gitCwd, $"status --porcelain -- {pathArgs}");
                 if (diff.exitCode == 0 && string.IsNullOrWhiteSpace(status.stdout))
                 {
-                    logger.LogDebug("commitAgentMemory: {Agent} memory is clean, nothing to commit", agent);
+                    logger.LogDebug("Chat memory commit: {Agent} memory is clean, nothing to commit", agent);
                     await FinalizeNoChangesAsync($"chore(memory): {agent}");
                     return CommitMemoryResult.NoChanges;
                 }
@@ -147,27 +122,24 @@ public sealed class AgentMemoryHandler(
                 if (add.exitCode != 0)
                 {
                     logger.LogWarning(
-                        "commitAgentMemory: git add failed for {Agent}: {Err}", agent, add.stderr);
+                        "Chat memory commit: git add failed for {Agent}: {Err}", agent, add.stderr);
                     await PreserveRouteAsync(
                         $"Memory changes for '{agent}' could not be staged: {add.stderr.Trim()}");
                     return CommitMemoryResult.Failed;
                 }
 
-                var ticketSuffix = firing?.TicketId is int tid ? $" (#{tid})" : "";
-                var msg = $"chore(memory): {agent}{ticketSuffix}";
+                var msg = $"chore(memory): {agent}";
                 if (route?.Kind == DurableWriteKind.Maintenance && durableWrites is not null)
                 {
                     routeFinalized = true;
-                    var validation = await durableWrites.CommitAndQueueAsync(rt.Slug, route, msg);
+                    var validation = await durableWrites.CommitAndQueueAsync(projectSlug, route, msg);
                     return validation.Status == DurableWriteValidationStatus.Ready
                         ? CommitMemoryResult.Committed
                         : CommitMemoryResult.Failed;
                 }
                 // Memory commits are generated by KittyClaw, not by the workspace owner. Give
                 // them the same stable technical identity used by agents for their own commits.
-                // Besides making history explicit, this lets gitCommit triggers ignore an
-                // agent's complete post-run chain (including its memory commit) and prevents
-                // self-triggering loops such as documentalist -> commit memory -> documentalist.
+                // This keeps generated memory changes attributable in repository history.
                 var identity = BuildAgentGitIdentity(agent);
                 var commit = await RunGitAsync(
                     gitCwd,
@@ -175,185 +147,31 @@ public sealed class AgentMemoryHandler(
                 if (commit.exitCode != 0)
                 {
                     logger.LogWarning(
-                        "commitAgentMemory: git commit failed for {Agent}: {Err}", agent, commit.stderr);
+                        "Chat memory commit: git commit failed for {Agent}: {Err}", agent, commit.stderr);
                     await PreserveRouteAsync(
                         $"Memory changes for '{agent}' could not be committed: {commit.stderr.Trim()}");
                     return CommitMemoryResult.Failed;
                 }
 
-                logger.LogInformation("commitAgentMemory: committed {Agent} memory", agent);
+                logger.LogInformation("Chat memory commit: committed {Agent} memory", agent);
                 return CommitMemoryResult.Committed;
             }
             finally { gitLock.Release(); }
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "commitAgentMemory: failed to commit memory for {Agent}", spec.Agent);
+            logger.LogWarning(ex, "Chat memory commit: failed to commit memory for {Agent}", agent);
             try
             {
                 await PreserveRouteAsync(
-                    $"Memory commit for '{spec.Agent}' failed: {ex.Message}");
+                    $"Memory commit for '{agent}' failed: {ex.Message}");
             }
             catch (Exception preserveEx)
             {
                 logger.LogWarning(preserveEx,
-                    "commitAgentMemory: failed to preserve durable route for {Agent}", spec.Agent);
+                    "Chat memory commit: failed to preserve durable route for {Agent}", agent);
             }
             return CommitMemoryResult.Failed;
-        }
-    }
-
-    internal async Task ExecuteConsolidateAgentMemoryAsync(
-        ProjectRuntime rt,
-        ConsolidateAgentMemoryActionSpec spec,
-        TriggerFiring? firing,
-        AgentRun? parentRun,
-        CancellationToken ct)
-    {
-        DurableWriteRoute? route = null;
-        var routeHandedOff = false;
-        try
-        {
-            var agent = spec.Agent;
-            if (agent.Contains("{assignee}"))
-            {
-                if (firing?.TicketId is null)
-                {
-                    logger.LogInformation(
-                        "consolidateAgentMemory: {{assignee}} placeholder but no firing ticket — skipping");
-                    return;
-                }
-                var t = await tickets.GetTicketAsync(rt.Slug, firing.TicketId.Value);
-                if (string.IsNullOrEmpty(t?.AssignedTo))
-                {
-                    logger.LogInformation(
-                        "consolidateAgentMemory: {{assignee}} placeholder but ticket #{Id} has no assignee — skipping",
-                        firing.TicketId);
-                    return;
-                }
-                agent = agent.Replace("{assignee}", t.AssignedTo);
-            }
-
-            if (parentRun?.Status == AgentRunStatus.Failed && (parentRun.ExitCode ?? 0) < 0)
-            {
-                logger.LogInformation(
-                    "consolidateAgentMemory: parent run {Id} failed (exit {Exit}) — skipping",
-                    parentRun.RunId, parentRun.ExitCode);
-                return;
-            }
-
-            var executionWorkspace = rt.Workspace!;
-            var project = await projects.GetProjectAsync(rt.Slug);
-            if (project?.WorktreesEnabled == true && durableWrites is not null)
-            {
-                route = await durableWrites.ResolveAsync(rt.Slug, firing?.TicketId,
-                    [Path.Combine(".agents", agent, "memory"), Path.Combine(".agents", agent, "memory.md")], ct);
-                executionWorkspace = route.RootPath;
-            }
-
-            var instructionPath = Path.Combine(
-                executionWorkspace,
-                spec.InstructionFile.Replace('/', Path.DirectorySeparatorChar));
-
-            if (!File.Exists(instructionPath))
-            {
-                logger.LogWarning(
-                    "consolidateAgentMemory: instruction file not found: {Path}", instructionPath);
-                return;
-            }
-
-            var instructionContent = (await File.ReadAllTextAsync(instructionPath, ct))
-                .Replace("{agentSlug}", agent);
-            var eventsSummary = BuildEventsSummary(parentRun);
-
-            const string scope = "consolidate";
-            sessions.Clear(executionWorkspace, $"{scope}:{agent}", ticketId: null);
-
-            var member = await members.GetMemberBySlugAsync(rt.Slug, agent);
-            var memberModel = string.IsNullOrWhiteSpace(member?.DefaultModel) ? null : member.DefaultModel;
-            var projectFallback = string.IsNullOrWhiteSpace(project?.FallbackModel) ? null : project.FallbackModel;
-            var localDefault = string.IsNullOrWhiteSpace(project?.LocalModelName) ? null : project.LocalModelName;
-            var effectiveModel = ActionExecutor.FirstConfiguredModel(spec.Model, memberModel, projectFallback, localDefault);
-            var routing = ModelRouting.Resolve(effectiveModel, project?.LocalModelBaseUrl);
-            var target = routing.ToTarget(effectiveModel);
-
-            // Preserve the project's quota fallback when a more specific primary target won.
-            // If it is already the primary, retrying the same target would only duplicate failure.
-            AgentDispatchTarget? fallbackTarget = null;
-            if (projectFallback is not null &&
-                !string.Equals(projectFallback, effectiveModel, StringComparison.OrdinalIgnoreCase))
-            {
-                var fallbackRouting = ModelRouting.Resolve(projectFallback, project?.LocalModelBaseUrl);
-                if (fallbackRouting.Error is null)
-                    fallbackTarget = fallbackRouting.ToTarget(projectFallback);
-                else
-                    logger.LogWarning(
-                        "consolidateAgentMemory: fallback target '{Model}' is unusable for {Agent}: {Error}",
-                        projectFallback, agent, fallbackRouting.Error);
-            }
-
-            logger.LogInformation(
-                "consolidateAgentMemory: resolved {Agent} to {Provider}:{Model}{Fallback}",
-                agent, target.Provider, target.Model ?? "default",
-                fallbackTarget is null ? "" : $" (fallback {fallbackTarget.Provider}:{fallbackTarget.Model ?? "default"})");
-
-            var runCtx = new AgentRunContext
-            {
-                ProjectSlug = rt.Slug,
-                WorkspacePath = executionWorkspace,
-                AgentName = agent,
-                SkillFile = $"{agent}/SKILL.md",
-                MaxTurns = spec.MaxTurns,
-                ConcurrencyGroup = $"consolidate-{agent}",
-                InlineSkillContent = instructionContent,
-                ExtraContext = string.IsNullOrWhiteSpace(eventsSummary)
-                    ? "No events were recorded for this run."
-                    : eventsSummary,
-                SessionScope = scope,
-                Target = target,
-                FallbackTarget = fallbackTarget,
-                RetryOnResumeFailure = true,
-                MaxRunDuration = TimeSpan.FromMinutes(30),
-            };
-
-            var run = await runner.RunAsync(runCtx, ct);
-
-            var memoryPaths = $"\".agents/{agent}/memory\" \".agents/{agent}/memory.md\"";
-            var routedRuntime = new ProjectRuntime(rt.Slug) { Workspace = executionWorkspace };
-            routeHandedOff = true;
-            await ExecuteCommitAgentMemoryAsync(
-                routedRuntime,
-                new CommitAgentMemoryActionSpec { Agent = agent },
-                firing,
-                existingRoute: route);
-            var diff = await RunGitAsync(executionWorkspace, $"diff --shortstat HEAD -- {memoryPaths}");
-            var diffSummary = diff.stdout.Trim();
-            logger.LogInformation("consolidate {Agent}: run {Status} (exit {Exit}){Diff}",
-                agent, run.Status, run.ExitCode,
-                string.IsNullOrWhiteSpace(diffSummary) ? "" : $" — {diffSummary}");
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "consolidateAgentMemory: failed for {Agent}", spec.Agent);
-        }
-        finally
-        {
-            if (route is not null && !routeHandedOff && durableWrites is not null)
-            {
-                try
-                {
-                    await durableWrites.CloseOrPreserveExecutionAsync(
-                        rt.Slug,
-                        route,
-                        $"Memory consolidation for '{spec.Agent}' ended before commit.",
-                        ct);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex,
-                        "consolidateAgentMemory: failed to close durable route for {Agent}", spec.Agent);
-                }
-            }
         }
     }
 
@@ -411,8 +229,7 @@ public sealed class AgentMemoryHandler(
                 ? AdHocMemoryResult.NoChanges
                 : AdHocMemoryResult.Modified;
 
-        var rt = new ProjectRuntime(projectSlug) { Workspace = workspace };
-        var commit = await ExecuteCommitAgentMemoryAsync(rt, new CommitAgentMemoryActionSpec { Agent = agent });
+        var commit = await ExecuteCommitAgentMemoryAsync(projectSlug, workspace, agent);
         if (commit == CommitMemoryResult.Failed ||
             (!before.SequenceEqual(after) && commit != CommitMemoryResult.Committed))
             throw new InvalidOperationException($"Failed to commit memory changes for agent '{agent}'.");
@@ -428,8 +245,8 @@ public sealed class AgentMemoryHandler(
             string? localModel,
             string? localModelBaseUrl)
     {
-        var effectiveModel = ActionExecutor.FirstConfiguredModel(
-            memberModel, projectFallback, localModel);
+        var effectiveModel = new[] { memberModel, projectFallback, localModel }
+            .FirstOrDefault(model => !string.IsNullOrWhiteSpace(model))?.Trim();
         var routing = ModelRouting.Resolve(effectiveModel, localModelBaseUrl);
         if (routing.Error is not null) throw new InvalidOperationException(routing.Error);
 
@@ -467,24 +284,6 @@ public sealed class AgentMemoryHandler(
             .ToArray();
     }
 
-    internal static string BuildEventsSummary(AgentRun? run)
-    {
-        if (run is null) return "";
-        var lines = new List<string>();
-        foreach (var ev in run.SnapshotBuffer())
-        {
-            if (ev.Kind is "assistant" or "tool_use" or "result")
-            {
-                var text = ev.Kind == "tool_use"
-                    ? $"[tool_use] {ev.Text}: {TruncateDetail(ev.Detail, 120)}"
-                    : $"[{ev.Kind}] {TruncateLine(ev.Text, 200)}";
-                lines.Add(text);
-            }
-            if (lines.Count >= 80) break;
-        }
-        return lines.Count == 0 ? "" : string.Join("\n", lines);
-    }
-
     private static string BuildAgentGitIdentity(string agent)
     {
         var identity = new string(agent
@@ -503,16 +302,4 @@ public sealed class AgentMemoryHandler(
         return (res.ExitCode ?? -1, res.Stdout, res.TimedOut ? "git timed out after 2 minutes" : res.Stderr);
     }
 
-    private static string TruncateLine(string? s, int max)
-    {
-        if (string.IsNullOrEmpty(s)) return "";
-        s = s.Replace('\n', ' ').Replace('\r', ' ');
-        return s.Length <= max ? s : s[..max] + "…";
-    }
-
-    private static string TruncateDetail(string? s, int max)
-    {
-        if (string.IsNullOrEmpty(s)) return "{}";
-        return s.Length <= max ? s : s[..max] + "…";
-    }
 }

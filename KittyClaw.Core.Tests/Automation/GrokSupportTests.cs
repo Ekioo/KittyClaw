@@ -1,10 +1,8 @@
 using System.Text.Json;
 using KittyClaw.Core.Automation;
-using KittyClaw.Core.Automation.Triggers;
 using KittyClaw.Core.Services;
 using KittyClaw.Core.Tests.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
-using AutomationRule = KittyClaw.Core.Automation.Automation;
 
 namespace KittyClaw.Core.Tests.Automation;
 
@@ -351,103 +349,6 @@ public class GrokSupportTests
     }
 
     // ── Dispatch integration ────────────────────────────────────────────────
-
-    private static async Task<(ActionExecutor executor, ProjectRuntime rt, AgentRunRegistry runs)>
-        BuildExecutorAsync(string dataDir, string projectSlug)
-    {
-        var projects = new ProjectService(dataDir);
-        var project = await projects.CreateProjectAsync(projectSlug);
-        var workspace = projects.ResolveWorkspacePath(project);
-        Directory.CreateDirectory(workspace);
-        TestSkillBuilder.Create(workspace, "grok-agent", scenario: "default");
-
-        var members = new MemberService(projects);
-        var labels = new LabelService(projects);
-        var sessions = new SessionRegistry();
-        var runs = new AgentRunRegistry();
-        var gate = new RunConcurrencyGate(maxConcurrent: 4);
-        var runner = new AgentRunner(sessions, runs, gate, NullLogger<AgentRunner>.Instance);
-        var cost = new CostTracker();
-        var appSettings = new AppSettingsService(dataDir);
-        var loc = new LocalizationService(appSettings);
-        var tickets = new TicketService(projects, members);
-        var runState = new RunStateManager(runs, cost, tickets, NullLogger.Instance);
-        var executor = new ActionExecutor(
-            tickets, members, labels, sessions, runs, runner, cost, loc, projects, runState,
-            NullLogger.Instance);
-
-        var rt = new ProjectRuntime(project.Slug) { Workspace = workspace, Config = new AutomationConfig { Automations = [] } };
-        return (executor, rt, runs);
-    }
-
-    private static AutomationRule MakeAutomation(string model) => new()
-    {
-        Id = "test-grok",
-        Enabled = true,
-        Trigger = new StatusChangeTriggerSpec { From = "Todo", To = "Done", PollSeconds = 30 },
-        Conditions = [],
-        Actions = [new RunAgentActionSpec { Agent = "grok-agent", MaxTurns = 1, Model = model }],
-    };
-
-    private static async Task<AgentRun?> WaitForRunEndAsync(AgentRunRegistry runs, string slug, TimeSpan timeout)
-    {
-        using var cts = new CancellationTokenSource(timeout);
-        while (!cts.IsCancellationRequested)
-        {
-            if (!runs.ActiveForProject(slug).Any())
-                return runs.AllForProject(slug).FirstOrDefault();
-            await Task.Delay(50, cts.Token).ConfigureAwait(false);
-        }
-        return runs.AllForProject(slug).FirstOrDefault();
-    }
-
-    [Fact]
-    public async Task Dispatch_GrokModel_WithoutCli_EmitsErrorWithoutLaunch()
-    {
-        var previous = Environment.GetEnvironmentVariable("KITTYCLAW_GROK_BIN");
-        Environment.SetEnvironmentVariable("KITTYCLAW_GROK_BIN", null);
-        GrokCli.ResetForTests();
-        try
-        {
-            if (GrokCli.IsInstalled) return; // host has a real grok — nothing to assert
-
-            using var tmp = new TempDir();
-            var (executor, rt, runs) = await BuildExecutorAsync(tmp.Path, "grok-missing-cli-test");
-            await executor.ExecuteAutomationAsync(rt, MakeAutomation("grok-4"), new TriggerFiring(null, null, "Done"), CancellationToken.None);
-
-            await Task.Delay(500);
-            var run = runs.AllForProject(rt.Slug).FirstOrDefault();
-            Assert.NotNull(run);
-            var events = run.SnapshotBuffer();
-            Assert.Contains(events, e => e.Kind == "error" && e.Text.Contains("grok", StringComparison.OrdinalIgnoreCase));
-            Assert.DoesNotContain(events, e => e.Kind == "launch");
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("KITTYCLAW_GROK_BIN", previous);
-            GrokCli.ResetForTests();
-        }
-    }
-
-    [Fact]
-    public async Task Dispatch_GrokModel_WithMockBinary_RunsSubprocess()
-    {
-        // Reuse the claude mock as a stand-in grok binary: it tolerates grok's flags, ignores
-        // stdin being empty, and replays the default NDJSON scenario.
-        var mockBin = Environment.GetEnvironmentVariable("KITTYCLAW_CLAUDE_BIN");
-        Assert.False(string.IsNullOrEmpty(mockBin), "MockClaude fixture did not resolve the mock binary");
-        using var grok = new FakeGrokInstall(mockBin);
-
-        using var tmp = new TempDir();
-        var (executor, rt, runs) = await BuildExecutorAsync(tmp.Path, "grok-dispatch-test");
-        await executor.ExecuteAutomationAsync(rt, MakeAutomation("grok-4"), new TriggerFiring(null, null, "Done"), CancellationToken.None);
-
-        var run = await WaitForRunEndAsync(runs, rt.Slug, TimeSpan.FromSeconds(15));
-        Assert.NotNull(run);
-        Assert.Equal("grok-4", run.Model);
-        Assert.Equal(AgentRunStatus.Completed, run.Status);
-        Assert.Contains(run.SnapshotBuffer(), e => e.Kind == "launch");
-    }
 
     [Fact]
     public async Task QuotaFallback_ClaudeToGrok_PersistsSessionUnderGrokNamespaceOnly()

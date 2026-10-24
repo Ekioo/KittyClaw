@@ -18,7 +18,7 @@ public enum CliProvider
 /// <summary>
 /// Single place that decides, from an effective model name, which CLI provider runs the
 /// dispatch, which extra environment the subprocess needs, and whether the selection is
-/// invalid. Used by both the automation dispatcher (ActionExecutor) and the chat endpoint.
+/// invalid. Used by column dispatchers, memory consolidation, and the chat endpoint.
 /// </summary>
 public static class ModelRouting
 {

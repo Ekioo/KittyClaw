@@ -13,14 +13,6 @@ public sealed class CostTracker
 
     public CostTracker(SessionRegistry? sessions = null) => _sessions = sessions;
 
-    public bool IsBudgetExceeded(string workspacePath, decimal dailyBudgetUsd)
-    {
-        if (dailyBudgetUsd <= 0) return false;
-        var today = DateTime.UtcNow.Date;
-        var total = SumUsdForDay(workspacePath, today);
-        return total >= dailyBudgetUsd;
-    }
-
     public void LogRun(string workspacePath, CostLogEntry entry)
     {
         var path = CurrentLogPath(workspacePath);

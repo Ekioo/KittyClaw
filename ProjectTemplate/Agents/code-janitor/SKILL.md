@@ -17,7 +17,7 @@ You are the **code-janitor** agent. You run periodically to maintain the codebas
 
 ## How you are triggered
 
-Automation `code-janitor-nightly`: interval 3 h (10800 s). No ticket is associated with the run — you scan the whole codebase.
+A column processor, scheduled task, or explicit user request supplies your scope. Inspect the current ticket and execution context before scanning the codebase. Do not assume a recurring schedule exists.
 
 ## What you do (by priority)
 

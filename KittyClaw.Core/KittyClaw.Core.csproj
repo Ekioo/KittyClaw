@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -29,8 +29,8 @@
       <LogicalName>KittyClaw.Core.AgentsTemplate/preamble.md</LogicalName>
       <WithCulture>false</WithCulture>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\ProjectTemplate\Agents\automations.json">
-      <LogicalName>KittyClaw.Core.AgentsTemplate/automations.json</LogicalName>
+    <EmbeddedResource Include="..\ProjectTemplate\Agents\agent-budget.json">
+      <LogicalName>KittyClaw.Core.AgentsTemplate/agent-budget.json</LogicalName>
       <WithCulture>false</WithCulture>
     </EmbeddedResource>
     <EmbeddedResource Include="..\ProjectTemplate\Agents\**\SKILL.md">

@@ -10,11 +10,11 @@ Exposes project management and supervision over the [Model Context Protocol](htt
 claude mcp add --transport http kittyclaw http://localhost:5230/mcp
 ```
 
-The server exposes 78 tools. Reconnect clients after upgrading so they refresh their cached tool catalogue.
+The server exposes 73 tools. Reconnect clients after upgrading so they refresh their cached tool catalogue.
 
 ## Key components
 - `KittyClaw.Web/Api/McpTools.cs` supplies nine board and acceptance-criteria tools, including search, filters, pipeline-aware child creation and criteria with evidence. The original seven board tools remain available.
-- `KittyClaw.Web/Api/McpManagementTools.cs` supplies 69 management and observability tools, calling REST application handlers and the automation store directly. Validations, conflicts, reloads and board notifications are shared.
+- `KittyClaw.Web/Api/McpManagementTools.cs` supplies management and observability tools, calling REST application handlers directly. Validations, conflicts, reloads and board notifications are shared.
 - `KittyClaw.Core.Tests/Api/McpManagementEndpointTests.cs` verifies schemas and workflows over isolated Streamable HTTP.
 - `KittyClaw.Web/Program.cs` — registers the server (`AddMcpServer().WithHttpTransport().WithTools<McpTools>()`), maps `/mcp`, and dynamically gates requests through the persisted global setting.
 - `KittyClaw.Web/Components/Pages/GlobalSettings.razor` — exposes the one-click global switch.
@@ -54,7 +54,6 @@ The original seven tools keep their names and arguments. New management tools ta
 | Pipelines | `list_pipelines`, `create_pipeline`, `update_pipeline` |
 | ColumnProcessors | `get_column_processor`, `save_column_processor`, `delete_column_processor` |
 | ColumnExecutions | `list_column_executions`, `retry_column_execution`, `cancel_column_execution` |
-| Automations | `get_automations`, `disable_automation`, `delete_automation`, `get_ticket_automation_queue`, `save_automations` |
 | Runs | `list_runs`, `get_run`, `steer_run`, `stop_run`, `retry_run`, `get_run_evidence`, `list_concurrency_groups` |
 | Approvals | `list_approval_requests`, `list_approval_decisions`, `list_approval_receipts`, `decide_approval`, `get_runtime_capabilities` |
 | WorktreeMerges | `list_worktree_merges`, `get_worktree_merge`, `enqueue_worktree_merge`, `process_next_worktree_merge`, `resume_worktree_merge`, `retry_worktree_synchronization` |
@@ -72,7 +71,7 @@ missing credentials, service budget failures and service errors in both JEV-only
 
 `get_run` includes buffered log events, token usage and cost. `list_runs` defaults to active runs; `includeCompleted: true` includes retained terminal runs, with optional `ticketId` and `limit` filters (1-500, default 100). Retention follows `AgentRunRegistry` and is not an archival search. Evidence remains readable through `get_run_evidence` when the run is no longer in memory.
 
-`save_automations` is an MCP-only writer using `AutomationStore` merge semantics and reloading the engine; it does not add an arbitrary-edit REST route. Read `get_automations` first and pass its `fileStamp` as `request.baseStamp`. The store preserves missing automations on divergence and reports `preservedIds` and `diverged`; with a matching stamp, omissions are intentional deletions. Trigger, condition and action objects use their existing `type` discriminators. A rejected reload is a tool error that explicitly reports that the file was saved and the previous runtime was retained.
+The legacy automation tools and queue endpoints have been removed. Column processors and scheduled tasks are the workflow execution surface.
 
 Read-only tools advertise read-only/idempotent hints. Deletions and mutations that replace state advertise destructive hints. Retry, processing, configuration and resume operations can launch agents or modify Git state; their descriptions state those effects. These hints are client guidance, not access control. Approval decisions must reflect explicit human authorization; MCP grants no additional identity or approval rights.
 

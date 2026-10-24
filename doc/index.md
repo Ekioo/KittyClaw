@@ -32,7 +32,6 @@ and API/MCP documentation.
 - [Mistral Vibe](./mistral-vibe.md) — dispatching explicitly qualified `mistral:*` models to the `vibe` CLI.
 - [Agent provider CLIs](./agent-providers.md) — installation, detection, authentication ownership, and executable overrides for every supported provider.
 - [DeepSeek V4](./deepseek.md) — project-vault authentication and dispatch through DeepSeek's Anthropic-compatible API.
-- [Automation engine](./automation-engine.md) — triggers, conditions, and actions that dispatch agents.
 - [Pipeline and column processing](./column-workflows.md) — temporal per-option configuration, exclusive modes, multi-pipeline workflows, routing, retries, project skills, and child-ticket completion.
 - [JEV qualification](./jev-qualification.md) — routing, acceptance criteria with evidence, authorized model/skills profiles and auditable owner decisions.
 - [Pipeline kits](./pipeline-kits.md) — sanitized export plus write-free analysis and atomic installation of untrusted portable pipeline archives.

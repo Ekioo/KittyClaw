@@ -17,7 +17,6 @@
 @inject ColumnService ColumnService
 @inject PipelineService PipelineService
 @inject ColumnProcessorService ProcessorService
-@inject KittyClaw.Core.Automation.AutomationStore AutomationStore
 @inject MemberService MemberService
 @inject ApprovalRegistryService ApprovalRegistry
 @inject NavigationManager Navigation
@@ -192,7 +191,6 @@ else
                                 IsDropAllowed="@ticketDropAllowed"
                                 Columns="_columns"
                                 Slug="@Slug"
-                                AllMembers="_allMembers"
                                 OnDragStart="@(() => OnDragStart(ticket))"
                                 OnDragEnd="OnDragEnd"
                                 OnDragOverCard="@(() => OnDragOverCard(col.Name, index, ticket))"
@@ -408,7 +406,6 @@ else
             Columns="_columns"
             SubKanbanParentId="_subKanbanParentId"
             SelectedPipelineId="_selectedPipelineId"
-            AllMembers="_allMembers"
             OnCreated="OnTicketDialogCreated"
             OnClosed="CloseCreatePopup" />
     }
@@ -465,10 +462,6 @@ else
     </ErrorBoundary>
 }
 
-@if (_showMigrationWizard)
-{
-    <WorkflowMigrationWizard ProjectSlug="@Slug" OnClose="CloseMigrationWizard" />
-}
 
 @if (_improvementTicketId is int improvementId)
 {
@@ -526,7 +519,6 @@ else
     private string? _chatInitialAgentName;
     private int? _chatTicketId;
     private string? _chatTicketTitle;
-    private bool _showMigrationWizard;
 
     // Members
     private List<Member> _allMembers = [];
@@ -769,16 +761,6 @@ else
                 await RefreshPendingApprovalsAsync();
                 StateHasChanged();
             }), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
-
-            // A legacy board deserves an explicit migration path, but opening a deep-linked
-            // ticket must remain interruption-free. The wizard is shown once for this board
-            // component and can be dismissed without changing any project state.
-            if (TicketId is null && ParentId is null)
-            {
-                var (legacyConfig, _, _) = await AutomationStore.LoadAsync(Slug);
-                _showMigrationWizard = KittyClaw.Web.Services.WorkflowMigrationEligibility.ShouldOffer(
-                    legacyConfig.Automations.Count > 0);
-            }
 
             // Legacy ticket links did not carry the pipeline in the URL. Infer it from
             // the ticket so direct links still open in the pipeline that owns the card.
@@ -1069,7 +1051,6 @@ else
         await PersistViewedStateAsync();
     }
 
-    private void CloseMigrationWizard() => _showMigrationWizard = false;
 
     private void OpenColumnDialogFromMenu()
     {

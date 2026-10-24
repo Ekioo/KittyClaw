@@ -37,12 +37,12 @@ public sealed class AgentBudgetTests
             TestSkillBuilder.Create(Workspace, "budget-agent", "default");
         }
 
-        public Task SetLimitAsync(decimal? limit) => SetConfigAsync(JsonSerializer.Serialize(new { dailyBudgetUsd = limit, automations = Array.Empty<object>() }));
+        public Task SetLimitAsync(decimal? limit) => SetConfigAsync(JsonSerializer.Serialize(new { dailyBudgetUsd = limit }));
         public Task SetConfigAsync(string config)
         {
             var directory = Path.Combine(Workspace, ".agents");
             Directory.CreateDirectory(directory);
-            return File.WriteAllTextAsync(Path.Combine(directory, "automations.json"), config);
+            return File.WriteAllTextAsync(Path.Combine(directory, "agent-budget.json"), config);
         }
 
         public CostLogEntry Charge(decimal amount, string? id = null, DateTime? at = null) => new(
@@ -93,6 +93,22 @@ public sealed class AgentBudgetTests
         h.Runs.CancelUpdate();
     }
 
+    [Fact]
+    public async Task RetiredRuleFile_OnlyPreservesBudget_WhenDedicatedSettingsAreAbsent()
+    {
+        using var h = new Harness();
+        await h.InitializeAsync(5m);
+        await File.WriteAllTextAsync(Path.Combine(h.Workspace, ".agents", "automations.json"),
+            """{"dailyBudgetUsd":1,"automations":[{"trigger":{"type":"removed-trigger"}}]}""");
+        h.Costs.LogRun(h.Workspace, h.Charge(2m));
+        Assert.True((await h.Budgets.CheckAsync(h.Slug)).Allowed);
+
+        File.Delete(Path.Combine(h.Workspace, ".agents", "agent-budget.json"));
+        var decision = await h.Budgets.CheckAsync(h.Slug);
+        Assert.False(decision.Allowed);
+        Assert.Equal(1m, decision.LimitUsd);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData(0)]
@@ -103,7 +119,7 @@ public sealed class AgentBudgetTests
         await h.InitializeAsync(limit);
         h.Costs.LogRun(h.Workspace, h.Charge(100m));
         Assert.True((await h.Budgets.CheckAsync(h.Slug)).Allowed);
-        File.Delete(Path.Combine(h.Workspace, ".agents", "automations.json"));
+        File.Delete(Path.Combine(h.Workspace, ".agents", "agent-budget.json"));
         Assert.True((await h.Budgets.CheckAsync(h.Slug)).Allowed);
     }
 
@@ -167,7 +183,7 @@ public sealed class AgentBudgetTests
     {
         using var h = new Harness();
         await h.InitializeAsync();
-        var config = Path.Combine(h.Workspace, ".agents", "automations.json");
+        var config = Path.Combine(h.Workspace, ".agents", "agent-budget.json");
         File.Delete(config);
         Directory.CreateDirectory(config);
 
@@ -186,7 +202,7 @@ public sealed class AgentBudgetTests
         var project = await projects.CreateProjectAsync("Application budget fixture");
         var workspace = projects.ResolveWorkspacePath(project);
         Directory.CreateDirectory(Path.Combine(workspace, ".agents"));
-        await File.WriteAllTextAsync(Path.Combine(workspace, ".agents", "automations.json"),
+        await File.WriteAllTextAsync(Path.Combine(workspace, ".agents", "agent-budget.json"),
             """{"dailyBudgetUsd":1,"automations":[]}""");
         services.GetRequiredService<CostTracker>().LogRun(workspace,
             new CostLogEntry(DateTime.UtcNow, "fixture", null, "mock", 0, 0, 0, 0, 1m, 0, 0));

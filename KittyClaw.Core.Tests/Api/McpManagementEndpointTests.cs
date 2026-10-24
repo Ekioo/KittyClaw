@@ -23,7 +23,6 @@ public sealed partial class McpEndpointTests
         "create_project",
         "create_project_skill",
         "decide_approval",
-        "delete_automation",
         "delete_column",
         "delete_column_processor",
         "delete_label",
@@ -31,9 +30,7 @@ public sealed partial class McpEndpointTests
         "delete_project_skill",
         "delete_ticket",
         "delete_ticket_comment",
-        "disable_automation",
         "enqueue_worktree_merge",
-        "get_automations",
         "get_column_processor",
         "get_engine_health",
         "get_project",
@@ -41,7 +38,6 @@ public sealed partial class McpEndpointTests
         "get_run",
         "get_run_evidence",
         "get_runtime_capabilities",
-        "get_ticket_automation_queue",
         "get_ticket_brief",
         "get_ticket_evidence",
         "get_worktree_merge",
@@ -66,7 +62,6 @@ public sealed partial class McpEndpointTests
         "retry_column_execution",
         "retry_run",
         "retry_worktree_synchronization",
-        "save_automations",
         "save_column_processor",
         "schedule_ticket",
         "set_ticket_parent",
@@ -125,7 +120,7 @@ public sealed partial class McpEndpointTests
     {
         var spec = await _http.GetFromJsonAsync<JsonElement>("/openapi/v1.json");
         var paths = spec.GetProperty("paths");
-        Assert.False(paths.GetProperty("/api/projects/{slug}/automations").TryGetProperty("put", out _));
+        Assert.DoesNotContain(paths.EnumerateObject(), path => path.Name.Contains("/automations", StringComparison.Ordinal) || path.Name.Contains("automation-queue", StringComparison.Ordinal));
         var parameters = paths.GetProperty("/api/projects/{slug}/runs").GetProperty("get").GetProperty("parameters");
         Assert.Contains(parameters.EnumerateArray(), p => p.GetProperty("name").GetString() == "includeCompleted");
         using var document = JsonDocument.Parse(spec.GetRawText());
@@ -184,7 +179,7 @@ public sealed partial class McpEndpointTests
         Assert.Contains("409", string.Join("", conflict.Content.OfType<TextContentBlock>().Select(c => c.Text)));
         var ticket = await CallAsync("get_ticket", new() { ["project"] = project, ["id"] = id });
         Assert.Equal("Concurrent update", ticket.GetProperty("title").GetString());
-        foreach (var tool in new[] { "list_pipelines", "list_runs", "list_approval_requests", "list_worktree_merges", "get_automations" })
+        foreach (var tool in new[] { "list_pipelines", "list_runs", "list_approval_requests", "list_worktree_merges" })
         {
             var error = await _mcp.CallToolAsync(tool, new Dictionary<string, object?> { ["project"] = "unknown-mcp-management" });
             Assert.True(error.IsError);
@@ -231,33 +226,13 @@ public sealed partial class McpEndpointTests
     }
 
     [Fact]
-    public async Task Management_AutomationSave_PreservesConcurrentRules_AndRejectsInvalidInput()
+    public async Task Management_LegacyAutomations_AreNotExposed()
     {
-        var project = await NewProjectAsync();
-        var initial = await CallAsync("get_automations", new() { ["project"] = project });
-        var stamp = initial.GetProperty("fileStamp").GetString();
-        object Rule(string id) => new { id, enabled = false, trigger = new { type = "interval", seconds = 3600 }, actions = Array.Empty<object>() };
-        await CallAsync("save_automations", new()
-        {
-            ["project"] = project, ["request"] = new { baseStamp = stamp, config = new { automations = new[] { Rule("first") } } },
-        });
-        var merged = await CallAsync("save_automations", new()
-        {
-            ["project"] = project, ["request"] = new { baseStamp = stamp, config = new { automations = new[] { Rule("second") } } },
-        });
-        Assert.True(merged.GetProperty("diverged").GetBoolean());
-        Assert.Contains(merged.GetProperty("preservedIds").EnumerateArray(), x => x.GetString() == "first");
-        var invalid = await _mcp!.CallToolAsync("save_automations", new Dictionary<string, object?>
-        {
-            ["project"] = project, ["request"] = new { config = new { automations = new[] { Rule("duplicate"), Rule("duplicate") } } },
-        });
-        Assert.True(invalid.IsError);
-        var config = await CallAsync("get_automations", new() { ["project"] = project });
-        Assert.Equal(2, config.GetProperty("config").GetProperty("automations").GetArrayLength());
-        await CallAsync("disable_automation", new() { ["project"] = project, ["automationId"] = "first" });
-        await CallAsync("delete_automation", new() { ["project"] = project, ["automationId"] = "second" });
-        var viaRest = await _http.GetFromJsonAsync<JsonElement>($"/api/projects/{project}/automations");
-        Assert.Single(viaRest.GetProperty("config").GetProperty("automations").EnumerateArray());
+        var client = await ConnectAsync();
+        var tools = await client.ListToolsAsync();
+        Assert.DoesNotContain(tools, tool => tool.Name.Contains("automation", StringComparison.Ordinal));
+        var health = await CallAsync("get_engine_health");
+        Assert.Equal("column-processing", health.GetProperty("engine").GetString());
     }
 
     [Fact]

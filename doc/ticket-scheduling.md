@@ -50,4 +50,3 @@ To cancel a schedule, move the ticket out of **Scheduled** through the regular s
 
 - [Kanban UI](./kanban-ui.md) — ticket editing and card rendering.
 - [Storage](./storage.md) — per-project ticket persistence.
-- [Automation engine](./automation-engine.md) — reacts to the status signal raised after promotion.

@@ -262,7 +262,6 @@ else
                                             </div>
                                         </div>
                                         <span class="ticket-title">@ticket.Title</span>
-                                        <AutomationQueueSummary Slug="@slug" TicketId="@ticket.Id" Compact="true" />
                                         @if (ticket.Labels.Count > 0)
                                         {
                                             <div class="label-list">
@@ -272,12 +271,6 @@ else
                                                 }
                                             </div>
                                         }
-                                        <div class="ticket-card-bottom">
-                                            @if (!string.IsNullOrEmpty(ticket.AssignedTo))
-                                            {
-                                                <span class="assignee-badge" title="@ticket.AssignedTo">@MemberDisplayName(lane, ticket.AssignedTo)</span>
-                                            }
-                                        </div>
                                         </div>
                                     }
                                 </div>
@@ -904,12 +897,6 @@ else
         }
     }
 
-    private string MemberDisplayName(LaneData lane, string? slug)
-    {
-        if (string.IsNullOrEmpty(slug)) return "";
-        var member = lane.Members.FirstOrDefault(m => m.Slug == slug);
-        return member?.Name ?? slug;
-    }
 
     private string GetPriorityLabel(TicketPriority p) => p switch
     {

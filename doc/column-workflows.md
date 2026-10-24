@@ -122,9 +122,7 @@ the ticket into the validating column and also records the feedback in that upst
 memory. This attribution remains valid if either processor is later disabled because it uses stable
 processor and column identifiers.
 
-Processor memory is distinct from specialist memory under `.agents/<specialist>/memory/`. It is also
-independent of legacy `consolidateAgentMemory` and `commitAgentMemory` automation actions: no entry in
-`.agents/automations.json` is needed for the native checkpoint.
+Processor memory is distinct from specialist memory under `.agents/<specialist>/memory/`. It uses the native execution checkpoint independently of ad-hoc chat memory consolidation.
 
 Before a route with the `Success` role is applied, the execution must consume the current ticket
 version and, for an `owner-feedback` signal, the exact triggering owner comment plus fresh delivery
@@ -308,7 +306,7 @@ Column configuration is intentionally local to the board. Right-click a header a
 
 The processor editor exposes models discovered from Claude, Grok, OpenAI Codex, Mistral Vibe, and the project's Ollama endpoint; model discovery is optional, and a previously saved custom value remains selectable when it is no longer advertised. Selecting **Automatic** clears the processor override.
 
-New-project initialization launches a dedicated setup mode after the workspace template is written. KittyClaw analyzes a populated folder, or asks targeted questions for an empty one, then proposes graphical pipelines and columns. The owner can refine each step and must approve the final plan before **Create the workflow** applies it. Existing automation-based boards use a separate migration mode: it preserves tickets already in semantic `Success` columns, converts or retires legacy behavior, and refuses completion while any legacy automation definition remains. When pipelines already exist, migration extends them in place: their stable structure is preserved, equivalent processors/actions are added sequentially, and each legacy automation is removed only after its replacement has been verified.
+New-project initialization launches a dedicated setup mode after the workspace template is written. KittyClaw analyzes a populated folder, or asks targeted questions for an empty one, then proposes graphical pipelines and columns. The owner can refine each step and must approve the final plan before **Create the workflow** applies it.
 
 Relevant endpoints include:
 
@@ -326,9 +324,9 @@ Ticket creation and update accept stable `pipelineId` and `columnId`. Ticket upd
 
 ## Compatibility
 
-Existing databases are migrated into a default `main` pipeline. Existing columns and tickets receive stable links, while legacy status strings and APIs continue to work. `.agents/automations.json`, polling triggers, cron/interval triggers, and legacy agent directories are not removed.
+Existing databases are migrated into a default `main` pipeline. Existing columns and tickets receive stable links, while legacy status strings and APIs continue to work. The retired automation engine no longer reads or executes `.agents/automations.json`. Recurring work uses column scheduled tasks; legacy rule definitions and queue tables are inert and are not imported.
 
-Existing pipelines can be opened with **Edit with assistant** on the Workflows page. This starts from the selected pipeline’s current columns, supports natural-language refinements and a final review, and applies scoped changes while preserving unspecified configuration. This mode does not migrate legacy automations or reconfigure other pipelines.
+Existing pipelines can be opened with **Edit with assistant** on the Workflows page. This starts from the selected pipeline’s current columns, supports natural-language refinements and a final review, and applies scoped changes while preserving unspecified configuration. This mode preserves other pipelines.
 
 ## Optional column capacity
 

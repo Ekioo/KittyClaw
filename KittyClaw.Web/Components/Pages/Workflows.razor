@@ -22,14 +22,6 @@ else
 
     <div class="settings-container workflow-settings">
         <section class="settings-section workflow-migration-card">
-            <div>
-                <h2>@L["WorkflowMigrateTitle"]</h2>
-                <p class="settings-hint">@L["WorkflowMigrateHint"]</p>
-            </div>
-            <button class="settings-primary" @onclick="() => _showMigrationWizard = true">@L["WorkflowMigrate"]</button>
-        </section>
-
-        <section class="settings-section workflow-migration-card">
             <div><h2>@L["PipelineKitTitle"]</h2><p class="settings-hint">@L["PipelineKitManageHint"]</p></div>
             <button class="settings-primary" data-testid="open-pipeline-kits" @onclick="() => _showPipelineKit = true">@L["PipelineKitOpen"]</button>
         </section>
@@ -87,10 +79,6 @@ else
     </div>
 }
 
-@if (_showMigrationWizard)
-{
-    <WorkflowMigrationWizard ProjectSlug="@Slug" OnClose="() => _showMigrationWizard = false" />
-}
 
 @if (_showReconfigurationWizard)
 {
@@ -124,7 +112,6 @@ else
         _pipelines = await PipelineService.ListAsync(Slug);
         if (_selectedPipelineId is int id) await SelectPipelineAsync(id);
     }
-    private bool _showMigrationWizard;
     private bool _showPipelineKit;
 
     private string _newSkillName = "";
