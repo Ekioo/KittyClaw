@@ -55,6 +55,8 @@ public sealed class AcceptanceCriteriaPresentationJourneyTests
             await section.GetByRole(AriaRole.Button, new() { Name = "Enregistrer", Exact = true }).ClickAsync();
             await Expect(section.Locator(".acceptance-item")).ToHaveCountAsync(1);
             var first = section.Locator(".acceptance-item").First;
+            await Expect(first.GetByRole(AriaRole.Combobox)).ToHaveValueAsync("ReadyToEvaluate");
+            await Expect(first.Locator("option")).ToHaveCountAsync(4);
             await first.GetByRole(AriaRole.Combobox).SelectOptionAsync("PASS");
             await Expect(first).ToHaveClassAsync("acceptance-item acceptance-item--pass");
             await first.Locator("summary").ClickAsync();
@@ -62,27 +64,33 @@ public sealed class AcceptanceCriteriaPresentationJourneyTests
             var saved = (await tickets.GetTicketAsync(project.Slug, ticket.Id))!.AcceptanceCriteria.Single();
             Assert.Equal(AcceptanceStatus.PASS, saved.Status);
             Assert.NotNull(saved.Evidence);
-            await tickets.SaveAcceptanceCriterionAsync(project.Slug, ticket.Id, null, new("Le message est envoyé au destinataire", AcceptanceStatus.PARTIAL));
+            await tickets.SaveAcceptanceCriterionAsync(project.Slug, ticket.Id, null, new("Le message est envoyé au destinataire", AcceptanceStatus.NeedsRework));
             await tickets.SaveAcceptanceCriterionAsync(project.Slug, ticket.Id, null, new("Une confirmation apparaît après l’envoi"));
-            await tickets.SaveAcceptanceCriterionAsync(project.Slug, ticket.Id, null, new("Les envois répétés sont bloqués pour éviter les messages en double", AcceptanceStatus.FAIL));
+            await tickets.SaveAcceptanceCriterionAsync(project.Slug, ticket.Id, null, new("Les envois répétés sont bloqués pour éviter les messages en double", AcceptanceStatus.NeedsRework));
             await page.ReloadAsync();
             await Expect(section.Locator(".acceptance-item")).ToHaveCountAsync(4);
             await Expect(section.Locator(".acceptance-count")).ToHaveTextAsync("1 / 4 validés");
-            Assert.Equal(new[] { "Validé", "Partiel", "Non évalué", "Non validé" },
+            Assert.Equal(new[] { "Validé", "À reprendre", "En attente", "À reprendre" },
                 await section.Locator("option:checked").AllTextContentsAsync());
             await section.Locator("summary").ClickAsync();
             var screenshotDir = Environment.GetEnvironmentVariable("KITTYCLAW_CRITERIA_SCREENSHOTS");
             foreach (var width in new[] { 1440, 320, 390, 430 })
             {
                 await page.SetViewportSizeAsync(width, 1100);
-                await section.ScrollIntoViewIfNeededAsync();
-                Assert.True(await section.EvaluateAsync<bool>("el => el.scrollWidth <= el.clientWidth"), $"Criteria overflow at {width}px");
-                foreach (var row in await section.Locator(".acceptance-item").AllAsync())
-                    Assert.True(await row.EvaluateAsync<bool>("el => el.scrollWidth <= el.clientWidth"), $"Criterion overflow at {width}px");
+                // Responsive layouts replace the panel DOM; query current nodes together.
+                await page.WaitForFunctionAsync("""
+                    () => {
+                        const section = document.querySelector('[data-testid="ticket-acceptance-criteria"]');
+                        return section && section.clientWidth > 0 && section.scrollWidth <= section.clientWidth
+                            && section.querySelectorAll('.acceptance-item').length === 4
+                            && [...section.querySelectorAll('.acceptance-item')].every(row => row.scrollWidth <= row.clientWidth);
+                    }
+                    """);
                 if (screenshotDir is not null)
                 {
                     Directory.CreateDirectory(screenshotDir);
-                    await section.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, $"criteria-{width}.png") });
+                    await page.EvaluateAsync("() => document.querySelector('[data-testid=\"ticket-acceptance-criteria\"]').scrollIntoView({ block: 'center' })");
+                    await page.ScreenshotAsync(new() { Path = Path.Combine(screenshotDir, $"criteria-{width}.png") });
                 }
             }
         }

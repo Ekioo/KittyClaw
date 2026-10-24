@@ -36,7 +36,7 @@ public sealed class McpTools(
     };
 
     [McpServerTool(Name = "save_acceptance_criterion")]
-    [Description("Add or update one ticket acceptance criterion with status NotEvaluated, PASS, FAIL or PARTIAL and optional evidence. Read criteria through get_ticket. Evidence is plain text, JSON, or base64 image content with its media type. Updates replace this criterion only; supply its existing evidence to retain it.")]
+    [Description("Add or update one ticket acceptance criterion with status Pending, ReadyToEvaluate, PASS or NeedsRework and optional evidence. Read criteria through get_ticket. Evidence is plain text, JSON, or base64 image content with its media type. New or changed evidence automatically sets ReadyToEvaluate. Legacy FAIL/PARTIAL map to NeedsRework. Updates replace this criterion only; supply its existing evidence to retain it.")]
     public async Task<TicketAcceptanceCriterion> SaveAcceptanceCriterion(string project, int id, SaveAcceptanceCriterionRequest criterion, string? criterionId = null)
     {
         await RequireProjectAsync(project);

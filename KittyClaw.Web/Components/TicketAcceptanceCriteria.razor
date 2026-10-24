@@ -78,24 +78,24 @@
     private string StatusLabel(AcceptanceStatus status) => L[status switch
     {
         AcceptanceStatus.PASS => "CriterionValidated",
-        AcceptanceStatus.FAIL => "CriterionFailed",
-        AcceptanceStatus.PARTIAL => "CriterionPartial",
+        AcceptanceStatus.NeedsRework => "CriterionNeedsRework",
+        AcceptanceStatus.ReadyToEvaluate => "CriterionReadyToEvaluate",
         _ => "CriterionNotEvaluated"
     }];
     private static string StatusClass(AcceptanceStatus status) => status switch
     {
         AcceptanceStatus.PASS => "acceptance-item--pass",
-        AcceptanceStatus.FAIL => "acceptance-item--fail",
-        AcceptanceStatus.PARTIAL => "acceptance-item--partial",
+        AcceptanceStatus.NeedsRework => "acceptance-item--fail",
+        AcceptanceStatus.ReadyToEvaluate => "acceptance-item--ready",
         _ => "acceptance-item--pending"
     };
     private static string StatusIcon(AcceptanceStatus status) => status switch
     {
-        AcceptanceStatus.PASS => "✓", AcceptanceStatus.FAIL => "×", AcceptanceStatus.PARTIAL => "◐", _ => "○"
+        AcceptanceStatus.PASS => "✓", AcceptanceStatus.NeedsRework => "×", AcceptanceStatus.ReadyToEvaluate => "◷", _ => "○"
     };
     private void Edit(TicketAcceptanceCriterion? criterion)
     {
-        _id = criterion?.Id; _text = criterion?.Text ?? ""; _status = criterion?.Status ?? AcceptanceStatus.NotEvaluated;
+        _id = criterion?.Id; _text = criterion?.Text ?? ""; _status = criterion?.Status ?? AcceptanceStatus.Pending;
         _proof = criterion?.Evidence?.Content ?? ""; _mediaType = criterion?.Evidence?.MediaType ?? "text/plain";
         _fileName = criterion?.Evidence?.FileName; _editing = true; _error = null;
     }

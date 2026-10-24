@@ -98,7 +98,7 @@ public sealed class ColumnProcessingSuccessGuardTests : IDisposable
             Evidence: new(ticket.UpdatedAt), AcceptanceCriteria: [new(criterion.Id, AcceptanceStatus.PASS, new("All checks passed"))]));
         await f.Engine.ProcessAsync(f.Project.Slug, f.Processor, f.Execution, CancellationToken.None);
         var read = (await f.Tickets.GetTicketAsync(f.Project.Slug, f.Ticket.Id))!;
-        Assert.Equal(enabled ? AcceptanceStatus.PASS : AcceptanceStatus.NotEvaluated, read.AcceptanceCriteria[0].Status);
+        Assert.Equal(enabled ? AcceptanceStatus.PASS : AcceptanceStatus.Pending, read.AcceptanceCriteria[0].Status);
         Assert.Equal(enabled ? "All checks passed" : null, read.AcceptanceCriteria[0].Evidence?.Content);
         Assert.Equal(unrelated, read.AcceptanceCriteria[1]);
         var execution = (await f.Executions.ListAsync(f.Project.Slug, f.Ticket.Id)).Single();
@@ -109,9 +109,9 @@ public sealed class ColumnProcessingSuccessGuardTests : IDisposable
             var assessment = Assert.Single(read.Activities, a => a.Text.Contains("acceptance criterion assessments"));
             Assert.True(assessment.CreatedAt <= execution.EndedAt);
             // Replaying a checkpoint must not overwrite a newer human assessment.
-            await f.Tickets.SaveAcceptanceCriterionAsync(f.Project.Slug, f.Ticket.Id, criterion.Id, new("Works", AcceptanceStatus.FAIL, new("Owner correction")));
+            await f.Tickets.SaveAcceptanceCriterionAsync(f.Project.Slug, f.Ticket.Id, criterion.Id, new("Works", AcceptanceStatus.NeedsRework, new("Owner correction")));
             await f.Executions.SaveAgentResultAsync(f.Project.Slug, f.Execution, f.Execution.AgentResult!, f.Processor);
-            Assert.Equal(AcceptanceStatus.FAIL, (await f.Tickets.GetTicketAsync(f.Project.Slug, f.Ticket.Id))!.AcceptanceCriteria[0].Status);
+            Assert.Equal(AcceptanceStatus.ReadyToEvaluate, (await f.Tickets.GetTicketAsync(f.Project.Slug, f.Ticket.Id))!.AcceptanceCriteria[0].Status);
         }
     }
 
@@ -129,9 +129,9 @@ public sealed class ColumnProcessingSuccessGuardTests : IDisposable
         f.Dispatcher.Handler = async (_, _, _, ticket, _) => {
             if (scenario == "stale") await f.Tickets.UpdateTicketAsync(f.Project.Slug, ticket.Id, description: "New requirement");
             return new ColumnAgentResult("completed", [], Evidence: new(ticket.UpdatedAt),
-                AcceptanceCriteria: scenario == "missing" ? null : scenario == "proof" ? [new(criterion.Id, AcceptanceStatus.FAIL)] : [
+                AcceptanceCriteria: scenario == "missing" ? null : scenario == "proof" ? [new(criterion.Id, AcceptanceStatus.NeedsRework)] : [
                     new(criterion.Id, AcceptanceStatus.PASS, new("Good proof")),
-                    new(scenario == "unknown" ? "unknown-id" : criterion.Id, AcceptanceStatus.FAIL,
+                    new(scenario == "unknown" ? "unknown-id" : criterion.Id, AcceptanceStatus.NeedsRework,
                         scenario == "proof" ? null : new("More proof"))]);
         };
         await f.Engine.ProcessAsync(f.Project.Slug, f.Processor, f.Execution, CancellationToken.None);

@@ -42,7 +42,7 @@ public class TicketService
         var improve = suggestedTickets is not { Count: > 0 };
         if (improve && (string.IsNullOrWhiteSpace(description) || description.Length > 100000 || criteria.Count is < 1 or > 50))
             throw new InvalidOperationException("A description and 1–50 acceptance criteria are required.");
-        foreach (var text in criteria) ValidateAcceptanceCriterion(new(text, AcceptanceStatus.NotEvaluated));
+        foreach (var text in criteria) ValidateAcceptanceCriterion(new(text, AcceptanceStatus.Pending));
         if (suggestedTickets is { Count: > 0 })
         {
             if (suggestedTickets.Count is < 2 or > 10)
@@ -54,7 +54,7 @@ public class TicketService
                     draft.AcceptanceCriteria is null || draft.AcceptanceCriteria.Count is < 1 or > 3)
                     throw new InvalidOperationException("Each proposed ticket requires a title, description and 1–3 criteria.");
                 foreach (var text in draft.AcceptanceCriteria)
-                    ValidateAcceptanceCriterion(new(text, AcceptanceStatus.NotEvaluated));
+                    ValidateAcceptanceCriterion(new(text, AcceptanceStatus.Pending));
             }
         }
         await using var db = _projectService.GetProjectDb(slug);
@@ -69,7 +69,7 @@ public class TicketService
             var previous = ticket.AcceptanceCriteria;
             ticket.Description = description.Trim();
             ticket.AcceptanceCriteria = criteria.Select(text => previous.FirstOrDefault(c => c.Text == text.Trim())
-                ?? new TicketAcceptanceCriterion(Guid.NewGuid().ToString("N"), text.Trim(), AcceptanceStatus.NotEvaluated)).ToList();
+                ?? new TicketAcceptanceCriterion(Guid.NewGuid().ToString("N"), text.Trim(), AcceptanceStatus.Pending)).ToList();
             db.ActivityEntries.Add(new ActivityEntry { TicketId = ticketId, Author = "owner", Text = "Applied AI ticket improvement. New or rewritten criteria require evaluation." });
         }
         ticket.UpdatedAt = DateTime.UtcNow;
@@ -87,7 +87,7 @@ public class TicketService
                     PipelineId = ticket.PipelineId, ColumnId = column.Id, Status = column.Name,
                     Priority = ticket.Priority, ParentId = ticket.Id, SortOrder = ++sortOrder,
                     AcceptanceCriteria = draft.AcceptanceCriteria.Select(text => new TicketAcceptanceCriterion(
-                        Guid.NewGuid().ToString("N"), text.Trim(), AcceptanceStatus.NotEvaluated)).ToList()
+                        Guid.NewGuid().ToString("N"), text.Trim(), AcceptanceStatus.Pending)).ToList()
                 };
                 ColumnAssignmentPolicy.Apply(child, null, column);
                 db.Tickets.Add(child);
@@ -120,7 +120,12 @@ public class TicketService
         var criteria = ticket.AcceptanceCriteria;
         var index = criterionId is null ? -1 : criteria.FindIndex(c => c.Id == criterionId);
         if (criterionId is not null && index < 0) return null;
-        var criterion = new TicketAcceptanceCriterion(criterionId ?? Guid.NewGuid().ToString("N"), request.Text.Trim(), request.Status, request.Evidence);
+        var previousEvidence = index < 0 ? null : criteria[index].Evidence;
+        var status = request.Evidence is not null && request.Evidence != previousEvidence
+            ? AcceptanceStatus.ReadyToEvaluate
+            : request.Status == AcceptanceStatus.ReadyToEvaluate && request.Evidence is null
+                ? AcceptanceStatus.Pending : request.Status;
+        var criterion = new TicketAcceptanceCriterion(criterionId ?? Guid.NewGuid().ToString("N"), request.Text.Trim(), status, request.Evidence);
         if (index < 0) criteria.Add(criterion); else criteria[index] = criterion;
         ticket.AcceptanceCriteria = criteria;
         ticket.UpdatedAt = DateTime.UtcNow;

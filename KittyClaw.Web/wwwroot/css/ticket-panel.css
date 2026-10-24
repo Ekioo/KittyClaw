@@ -1465,7 +1465,7 @@ select:focus-visible,
 .acceptance-list { display: grid; gap: .6rem; }
 .acceptance-item { --criterion-color: var(--text-muted); border: 1px solid var(--border); border-left: 3px solid var(--criterion-color); border-radius: 8px; padding: .8rem; background: color-mix(in srgb, var(--criterion-color) 4%, var(--surface)); min-width: 0; }
 .acceptance-item--pass { --criterion-color: var(--accent-hover); }
-.acceptance-item--partial { --criterion-color: #fbbf24; }
+.acceptance-item--ready { --criterion-color: #fbbf24; }
 .acceptance-item--fail { --criterion-color: var(--s-blocked); }
 .acceptance-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: .6rem; }
 .acceptance-status-icon { color: var(--criterion-color); font-size: 1.1rem; font-weight: 700; text-align: center; }

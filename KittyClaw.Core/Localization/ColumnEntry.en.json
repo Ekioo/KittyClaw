@@ -3,6 +3,6 @@
   "ColumnRequireAcceptanceCriteriaHelp": "Tickets must have at least one acceptance criterion to enter this column, including on creation. Existing tickets are unaffected.",
   "ColumnAcceptanceCriteriaRequiredError": "This column requires at least one acceptance criterion. Add one in the ticket before moving it here.",
   "ColumnRequireValidatedAcceptanceCriteria": "Require all acceptance criteria to be validated on entry",
-  "ColumnRequireValidatedAcceptanceCriteriaHelp": "Requires at least one acceptance criterion and a PASS status for every criterion. FAIL, PARTIAL and unevaluated criteria block entry. Existing tickets are unaffected.",
+  "ColumnRequireValidatedAcceptanceCriteriaHelp": "Requires at least one acceptance criterion and a PASS status for every criterion. Pending, ready to evaluate and needs rework criteria block entry. Existing tickets are unaffected.",
   "ColumnAcceptanceCriteriaNotValidatedError": "This column requires every acceptance criterion to be validated (PASS). Add at least one criterion and validate them all before moving the ticket here."
 }

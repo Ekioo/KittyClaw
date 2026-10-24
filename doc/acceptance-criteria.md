@@ -1,13 +1,17 @@
 # Ticket acceptance criteria
 
 Tickets expose an `acceptanceCriteria` array. Each criterion has a stable `id`, `text`,
-`status` (`NotEvaluated`, `PASS`, `FAIL`, `PARTIAL`) and optional `evidence`.
+`status` (`Pending`, `ReadyToEvaluate`, `PASS`, `NeedsRework`) and optional `evidence`.
 The ticket panel displays these directly below the description, with independent status
 selectors and an editor to add, change or remove a criterion and its proof.
 Each criterion groups its text, localized status and expandable evidence in a bordered
-row. Status labels, icons and colors distinguish validated (green), partial (amber),
-unmet (red) and unevaluated (gray) criteria. A count summarizes validated criteria.
-Controls wrap below the text on mobile; underlying status values remain unchanged.
+row. Status labels, icons and colors distinguish validated (green), ready to evaluate (amber),
+needs rework (red) and pending (gray) criteria. A count summarizes validated criteria.
+Controls wrap below the text on mobile; Legacy NotEvaluated maps to Pending; FAIL and PARTIAL map to NeedsRework.
+New or changed evidence submitted through REST, MCP or the editor automatically sets
+ReadyToEvaluate, even for a previously validated criterion. Unchanged evidence preserves
+the requested status; text-only edits do not trigger readiness. Removing evidence from
+a ready criterion returns it to Pending. Processor assessments record their verdict directly.
 
 ## AI ticket improvement
 
@@ -81,8 +85,8 @@ When enabled, the final agent result includes `acceptanceCriteria`, an array of
 `{ id, status, evidence }` assessments referencing existing ticket criterion IDs. Only
 criteria relevant to this processor's mission should be included; omitted criteria stay
 unchanged. An explicit empty array means none were relevant. When a ticket has criteria,
-a missing array is rejected. PASS, FAIL and PARTIAL require non-empty evidence; an
-unverified criterion can be returned as NotEvaluated. The agent returns this report in
+a missing array is rejected. PASS and NeedsRework require non-empty evidence; an
+unverified criterion can be returned as Pending. The agent returns this report in
 its final JSON rather than writing assessments through tools during the run.
 
 `ColumnExecutionService.SaveAgentResultAsync` validates all assessments and commits them
@@ -108,7 +112,7 @@ alone do not meet this requirement. Pipeline kits preserve this setting.
 
 A second independent setting, `RequireValidatedAcceptanceCriteria` (REST/MCP:
 `requireValidatedAcceptanceCriteria`), requires a non-empty checklist with every criterion
-at `PASS`. `NotEvaluated`, `FAIL`, `PARTIAL`, missing statuses and blank criterion text
+at `PASS`. `Pending`, `ReadyToEvaluate`, `NeedsRework`, missing statuses and blank criterion text
 block entry. This option implies presence even when `RequireAcceptanceCriteria` is off.
 It checks recorded statuses; it does not run an evaluation or require JEV owner approval.
 Both options default to off and are preserved in portable pipeline kits.

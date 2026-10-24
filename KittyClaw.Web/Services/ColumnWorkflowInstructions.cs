@@ -56,8 +56,8 @@ internal static class ColumnWorkflowInstructions
            JEV-only mode. Do not imply an agent runs after successful JEV triage or review.
 
         5. SAVE RESULT AND EVIDENCE: evaluateAcceptanceCriteria requests assessments in the
-           agent's final structured result, not on entry or by moving a ticket. PASS, FAIL and
-           PARTIAL require non-empty evidence for the relevant existing criterion IDs.
+           agent's final structured result, not on entry or by moving a ticket. PASS and NeedsRework
+           require non-empty evidence for the relevant existing criterion IDs.
            Unreported criteria stay unchanged. The platform records these assessments before
            routing, then capitalizes processor lessons. JEV review is a separate examination
            of existing evidence and never substitutes an agent claim for verified evidence.

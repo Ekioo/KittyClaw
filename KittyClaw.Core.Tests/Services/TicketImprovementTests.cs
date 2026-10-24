@@ -44,7 +44,7 @@ public class TicketImprovementTests
             Assert.Equal(original.ColumnId, child.ColumnId);
             Assert.Equal(original.PipelineId, child.PipelineId);
             Assert.Single(child.AcceptanceCriteria);
-            Assert.Equal(AcceptanceStatus.NotEvaluated, child.AcceptanceCriteria[0].Status);
+            Assert.Equal(AcceptanceStatus.Pending, child.AcceptanceCriteria[0].Status);
         }
         await Assert.ThrowsAsync<InvalidOperationException>(() => tickets.SplitTicketAsync(project.Slug, original, drafts));
         Assert.Equal(2, (await tickets.GetTicketAsync(project.Slug, original.Id))!.SubTickets.Count);
@@ -113,7 +113,7 @@ public class TicketImprovementTests
         var after = (await tickets.GetTicketAsync(project.Slug, ticket.Id))!;
         Assert.Equal("Improved", after.Description);
         Assert.Equal(criterion, after.AcceptanceCriteria[0]);
-        Assert.Equal(AcceptanceStatus.NotEvaluated, after.AcceptanceCriteria[1].Status);
+        Assert.Equal(AcceptanceStatus.Pending, after.AcceptanceCriteria[1].Status);
         Assert.Null(after.AcceptanceCriteria[1].Evidence);
         await Assert.ThrowsAsync<InvalidOperationException>(() => tickets.ApplyImprovementAsync(project.Slug,
             ticket.Id, before.Description, before.AcceptanceCriteriaJson, "Stale", ["Wrong"]));
