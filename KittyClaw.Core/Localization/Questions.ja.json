@@ -1,0 +1,8 @@
+{
+  "QuestionWaiting": "回答をお待ちしています",
+  "QuestionSingle": "選択肢を1つ選んでください",
+  "QuestionMultiple": "選択肢を1つ以上選んでください",
+  "QuestionFreeText": "補足または別の回答",
+  "QuestionSubmit": "回答して再開",
+  "QuestionAnswerFailed": "回答を保存できませんでした。チケットを更新して再試行してください。"
+}

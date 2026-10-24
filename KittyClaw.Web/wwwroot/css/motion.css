@@ -1,6 +1,6 @@
 /* Preserve static state and color feedback while removing nonessential movement. */
 @media (prefers-reduced-motion: reduce) {
-    .agent-spinner, .project-card-agent-badge,
+    .agent-spinner, .agent-spinner::before, .project-card-agent-badge,
     .chat-loading-spinner, .chat-bubble-loading,
     .folder-picker-state .loading-spinner, .migration-spinner, .migration-button-spinner,
     .migration-progress-track span, .migration-progress-pulse,

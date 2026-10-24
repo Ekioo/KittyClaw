@@ -2,5 +2,9 @@
   "ImproveTicket": "Improve with AI",
   "ImprovingTicket": "Analyzing the ticket and preparing a proposal…",
   "ImprovementReview": "Review and edit the proposal before saving.",
-  "ImprovementCriteriaHint": "One criterion per line. Rewritten criteria will need evaluation."
+  "ImprovementCriteriaHint": "One criterion per line. Rewritten criteria will need evaluation.",
+  "ImprovementSplitHint": "The scope is broad. Click a title to review the details. Approval creates linked subtickets in the same column.",
+  "ImprovementCreateTickets": "Validate and create tickets",
+  "SplitTicket": "Split into tickets",
+  "ImprovementNoSplitNeeded": "The scope is already focused. No additional tickets are proposed."
 }

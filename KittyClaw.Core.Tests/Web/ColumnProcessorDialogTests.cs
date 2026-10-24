@@ -46,7 +46,7 @@ public sealed class ColumnProcessorDialogTests
         Assert.Contains("DeleteColumnAsync", dialog);
         Assert.Contains("processor?.BeforeActions", dialog);
         Assert.Contains("processor?.AfterActions", dialog);
-        Assert.Contains("ProcessorMode=\"true\"", dialog);
+        Assert.Contains("<ActionEditor", dialog);
         Assert.Contains("column-insert-slot", board);
         Assert.Contains("AddColumnFromBoard", board);
         Assert.Contains("InsertColumnBeforeFromMenu", board);
@@ -157,19 +157,15 @@ public sealed class ColumnProcessorDialogTests
     }
 
     [Fact]
-    public void Boards_replace_the_decorative_dot_with_processor_state()
+    public void Project_board_replaces_the_decorative_dot_with_processor_state()
     {
         var board = File.ReadAllText(Path.Combine(
             RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Board.razor"));
-        var unified = File.ReadAllText(Path.Combine(
-            RepoRoot(), "KittyClaw.Web", "Components", "Pages", "UnifiedBoard.razor"));
         var css = KittyClaw.Core.Tests.Helpers.AppCssHelper.ReadAll(RepoRoot());
 
         Assert.Contains("column-processor-indicator", board);
         Assert.Contains("_activeProcessorColumnIds.Contains(col.Id)", board);
-        Assert.Contains("lane.ActiveProcessorColumnIds.Contains(col.Id)", unified);
         Assert.Contains("ProcessorService.ListAsync", board);
-        Assert.Contains("ProcessorService.ListAsync", unified);
         Assert.DoesNotContain(".status-pill::before", css);
     }
 
@@ -218,13 +214,10 @@ public sealed class ColumnProcessorDialogTests
     {
         var dialog = File.ReadAllText(Path.Combine(
             RepoRoot(), "KittyClaw.Web", "Components", "ColumnProcessorDialog.razor"));
-        var trigger = File.ReadAllText(Path.Combine(
-            RepoRoot(), "KittyClaw.Web", "Components", "TriggerEditor.razor"));
         var builder = File.ReadAllText(Path.Combine(
             RepoRoot(), "KittyClaw.Web", "Components", "CronScheduleEditor.razor"));
 
         Assert.Contains("<CronScheduleEditor", dialog);
-        Assert.Contains("<CronScheduleEditor", trigger);
         Assert.DoesNotContain("@bind=\"task.Cron\"", dialog);
         Assert.Contains("type=\"time\"", builder);
         Assert.Contains("weekday-picker", builder);
@@ -251,20 +244,16 @@ public sealed class ColumnProcessorDialogTests
     }
 
     [Fact]
-    public void OwnerAction_tickets_are_emphasized_on_project_and_unified_boards()
+    public void OwnerAction_tickets_are_emphasized_on_the_project_board()
     {
         var board = File.ReadAllText(Path.Combine(
             RepoRoot(), "KittyClaw.Web", "Components", "Pages", "Board.razor"))
             + File.ReadAllText(Path.Combine(
             RepoRoot(), "KittyClaw.Web", "Components", "BoardTicketCard.razor"));
-        var unified = File.ReadAllText(Path.Combine(
-            RepoRoot(), "KittyClaw.Web", "Components", "Pages", "UnifiedBoard.razor"));
         var css = KittyClaw.Core.Tests.Helpers.AppCssHelper.ReadAll(RepoRoot());
 
         Assert.Contains("ColRole == ColumnRole.OwnerAction", board);
         Assert.Contains("owner-action-badge", board);
-        Assert.Contains("col.Role == ColumnRole.OwnerAction", unified);
-        Assert.Contains("owner-action-badge", unified);
         Assert.Contains(".ticket-card.ticket-owner-action", css);
     }
 

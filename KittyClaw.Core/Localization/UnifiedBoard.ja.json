@@ -1,14 +1,18 @@
 {
-  "UnifiedBoardTitle": "すべてのボード",
-  "AllBoardsNavLabel": "すべてのボード",
-  "UnifiedBoardLoading": "ボードを読み込んでいます…",
+  "UnifiedBoardTitle": "プロジェクト",
+  "AllBoardsNavLabel": "プロジェクト",
+  "UnifiedBoardLoading": "プロジェクトを読み込み中…",
   "UnifiedBoardNoProjects": "まだプロジェクトがありません。",
-  "UnifiedBoardNoMatches": "該当するチケットはありません。",
-  "UnifiedBoardSearchPlaceholder": "すべてのプロジェクトで検索…",
+  "UnifiedBoardNoMatches": "検索に一致するプロジェクトはありません。",
+  "UnifiedBoardSearchPlaceholder": "プロジェクトや列を検索…",
   "ClearSearch": "検索クリア",
   "CreateProjectButton": "プロジェクトを作成",
   "ProjectName": "プロジェクト名",
   "UnifiedBoardCollapseLane": "レーンを折りたたむ",
   "UnifiedBoardExpandLane": "レーンを展開する",
-  "UnifiedBoardCrossLaneBlocked": "プロジェクト間でチケットは移動できません。"
+  "UnifiedBoardCrossLaneBlocked": "プロジェクト間でチケットは移動できません。",
+  "ProjectQuickAccess": "{0}へのクイックアクセス",
+  "ProjectAgentsRunning": "エージェント実行中",
+  "ProjectColumns": "プロジェクトの列",
+  "ProjectOpenColumn": "{0} / {1} / {2} を開く"
 }

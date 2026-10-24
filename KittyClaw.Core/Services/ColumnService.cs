@@ -229,6 +229,22 @@ public class ColumnService
             .OrderBy(c => c.SortOrder).ThenBy(c => c.Id).ToListAsync();
     }
 
+    public async Task<List<BoardColumnSummary>> ListColumnSummariesAsync(string projectSlug)
+    {
+        await using var db = _projectService.GetProjectDb(projectSlug);
+        await EnsureBoardColumnsTableAsync(db);
+        // Count the same root tickets shown on the project Kanban, without loading their content.
+        return await (
+            from column in db.BoardColumns
+            join pipeline in db.Pipelines on column.PipelineId equals pipeline.Id
+            orderby pipeline.SortOrder, pipeline.Id, column.SortOrder, column.Id
+            select new BoardColumnSummary(
+                column.Id, pipeline.Id, pipeline.Name, column.Name, column.Color,
+                db.Tickets.Count(ticket => ticket.ParentId == null
+                    && ticket.PipelineId == pipeline.Id && ticket.ColumnId == column.Id)))
+            .ToListAsync();
+    }
+
     public async Task<BoardColumn> CreateColumnAsync(
         string projectSlug, string name, string color = "#5a6a80",
         int? pipelineId = null, ColumnRole role = ColumnRole.Normal, int? insertIndex = null,

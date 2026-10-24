@@ -1,14 +1,18 @@
 {
-  "UnifiedBoardTitle": "Todos los tableros",
-  "AllBoardsNavLabel": "Todos los tableros",
-  "UnifiedBoardLoading": "Cargando tableros...",
+  "UnifiedBoardTitle": "Proyectos",
+  "AllBoardsNavLabel": "Proyectos",
+  "UnifiedBoardLoading": "Cargando proyectos…",
   "UnifiedBoardNoProjects": "Aún no hay proyectos.",
-  "UnifiedBoardNoMatches": "No hay entradas que coincidan con esta búsqueda.",
-  "UnifiedBoardSearchPlaceholder": "Busca en cada proyecto...",
+  "UnifiedBoardNoMatches": "Ningún proyecto coincide con esta búsqueda.",
+  "UnifiedBoardSearchPlaceholder": "Buscar proyectos o columnas…",
   "ClearSearch": "Borrar búsqueda",
   "CreateProjectButton": "Crear un proyecto",
   "ProjectName": "Nombre del proyecto",
   "UnifiedBoardCollapseLane": "Carril colapsado",
   "UnifiedBoardExpandLane": "Ampliar carril",
-  "UnifiedBoardCrossLaneBlocked": "Los tickets no pueden moverse entre proyectos."
+  "UnifiedBoardCrossLaneBlocked": "Los tickets no pueden moverse entre proyectos.",
+  "ProjectQuickAccess": "Accesos rápidos a {0}",
+  "ProjectAgentsRunning": "Agentes activos",
+  "ProjectColumns": "Columnas del proyecto",
+  "ProjectOpenColumn": "Abrir {0} / {1} / {2}"
 }

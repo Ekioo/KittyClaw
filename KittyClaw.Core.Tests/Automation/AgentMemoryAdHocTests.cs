@@ -85,8 +85,8 @@ public sealed class AgentMemoryAdHocTests
         var sessions = new SessionRegistry();
         var runner = new AgentRunner(sessions, new AgentRunRegistry(), new RunConcurrencyGate(1),
             NullLogger<AgentRunner>.Instance);
-        var handler = new AgentMemoryHandler(new TicketService(projects, members), members, projects,
-            runner, sessions, NullLogger.Instance);
+        var handler = new AgentMemoryHandler(members, projects,
+            runner, NullLogger.Instance);
 
         var result = await handler.ConsolidateAdHocConversationAsync(project.Slug, workspace,
             "programmer", "user: remember this", CancellationToken.None);
@@ -110,9 +110,9 @@ public sealed class AgentMemoryAdHocTests
         await File.WriteAllTextAsync(Path.Combine(workspace, ".agents", "memory-consolidation.md"),
             "Consolidate. <!--scenario:error-exit-->");
         var sessions = new SessionRegistry();
-        var handler = new AgentMemoryHandler(new TicketService(projects, members), members, projects,
+        var handler = new AgentMemoryHandler(members, projects,
             new AgentRunner(sessions, new AgentRunRegistry(), new RunConcurrencyGate(1),
-                NullLogger<AgentRunner>.Instance), sessions, NullLogger.Instance);
+                NullLogger<AgentRunner>.Instance), NullLogger.Instance);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => handler.ConsolidateAdHocConversationAsync(
             project.Slug, workspace, "programmer", "user: lesson", CancellationToken.None));
@@ -294,9 +294,9 @@ public sealed class AgentMemoryAdHocTests
         var chats = new ChatService(projects);
         var runs = new AgentRunRegistry();
         var sessions = new SessionRegistry();
-        var handler = new AgentMemoryHandler(tickets, members, projects,
+        var handler = new AgentMemoryHandler(members, projects,
             new AgentRunner(sessions, runs, new RunConcurrencyGate(1), NullLogger<AgentRunner>.Instance),
-            sessions, NullLogger.Instance, router);
+            NullLogger.Instance, router);
         var service = new ChatMemoryConsolidationService(projects, chats, members, runs, handler,
             NullLogger<ChatMemoryConsolidationService>.Instance, router);
         await chats.AppendAsync(project.Slug, "programmer", "user", "Remember this durable lesson");
@@ -348,9 +348,9 @@ public sealed class AgentMemoryAdHocTests
         var chats = new ChatService(projects);
         var runs = new AgentRunRegistry();
         var sessions = new SessionRegistry();
-        var handler = new AgentMemoryHandler(tickets, members, projects,
+        var handler = new AgentMemoryHandler(members, projects,
             new AgentRunner(sessions, runs, new RunConcurrencyGate(1), NullLogger<AgentRunner>.Instance),
-            sessions, NullLogger.Instance);
+            NullLogger.Instance);
         var service = new ChatMemoryConsolidationService(projects, chats, members, runs, handler,
             NullLogger<ChatMemoryConsolidationService>.Instance, router);
         await chats.AppendAsync(project.Slug, "programmer", "user", "This attempt must fail safely");
@@ -383,9 +383,9 @@ public sealed class AgentMemoryAdHocTests
         var chats = new ChatService(projects);
         var runs = new AgentRunRegistry();
         var sessions = new SessionRegistry();
-        var handler = new AgentMemoryHandler(new TicketService(projects, members), members, projects,
+        var handler = new AgentMemoryHandler(members, projects,
             new AgentRunner(sessions, runs, new RunConcurrencyGate(1), NullLogger<AgentRunner>.Instance),
-            sessions, NullLogger.Instance);
+            NullLogger.Instance);
         var service = new ChatMemoryConsolidationService(projects, chats, members, runs, handler,
             NullLogger<ChatMemoryConsolidationService>.Instance);
         return (projects, project, workspace, members, chats, runs, service);

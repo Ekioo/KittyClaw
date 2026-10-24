@@ -1,0 +1,21 @@
+{
+  "ScheduleFrequency": "频率",
+  "ScheduleDays": "计划日期",
+  "FreqEveryMinutes": "每 N 分钟",
+  "FreqEveryHours": "每 N 小时",
+  "FreqScheduled": "指定日期",
+  "RepeatEveryLabel": "重复间隔",
+  "MinutesUnit": "分钟",
+  "HoursUnit": "小时",
+  "AtTime": "时间",
+  "AndAlsoAt": "另一个时间",
+  "AddTime": "添加时间",
+  "RemoveTime": "移除此时间",
+  "Weekday0": "周日",
+  "Weekday1": "周一",
+  "Weekday2": "周二",
+  "Weekday3": "周三",
+  "Weekday4": "周四",
+  "Weekday5": "周五",
+  "Weekday6": "周六"
+}

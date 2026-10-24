@@ -1,0 +1,31 @@
+@inject LocalizationService L
+
+<nav class="mobile-section-navigation" aria-label="@L["MobileSections"]">
+    <label>
+        <span>@L["MobileSections"]</span>
+        <select value="@Active" disabled="@(!_interactive)" @onchange="SelectSection">
+            @foreach (var section in Sections)
+            {
+                <option value="@section.Id">@section.Label</option>
+            }
+        </select>
+    </label>
+</nav>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<Section> Sections { get; set; } = [];
+    [Parameter] public string Active { get; set; } = "";
+    [Parameter] public EventCallback<string> ActiveChanged { get; set; }
+    private bool _interactive;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        _interactive = true;
+        StateHasChanged();
+    }
+
+    private Task SelectSection(ChangeEventArgs args) => ActiveChanged.InvokeAsync(args.Value?.ToString() ?? Active);
+
+    public sealed record Section(string Id, string Label);
+}

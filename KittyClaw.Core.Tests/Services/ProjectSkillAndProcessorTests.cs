@@ -11,6 +11,11 @@ namespace KittyClaw.Core.Tests.Services;
 
 public sealed class ProjectSkillAndProcessorTests : IDisposable
 {
+    private sealed class UnsupportedActionSpec : ActionSpec
+    {
+        public override string UiTypeKey => "unsupported";
+    }
+
     private readonly TempDir _temp = new();
     private readonly ProjectService _projects;
     private readonly ProjectSkillService _skills;
@@ -193,7 +198,7 @@ public sealed class ProjectSkillAndProcessorTests : IDisposable
 
         var hiddenAgent = await Assert.ThrowsAsync<InvalidOperationException>(() => _processors.SaveAsync(
             project.Slug, source.Id, "Worker", "Do work.", null, true, 20, [], [], [],
-            beforeActions: [new("another-agent", new RunAgentActionSpec { Agent = "other" })]));
+            beforeActions: [new("another-agent", new UnsupportedActionSpec())]));
         Assert.Contains("Type d’action non pris en charge", hiddenAgent.Message);
 
         var selfRoute = await Assert.ThrowsAsync<InvalidOperationException>(() => _processors.SaveAsync(

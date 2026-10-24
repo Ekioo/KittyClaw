@@ -80,8 +80,10 @@ Status-grid uses a fixed mapping: `ok` → `--accent-success`, `warn` → `#f59e
 
 ## Responsive layout: desktop and mobile
 
-Desktop layouts apply above 767px; phone overrides live in `css/mobile.css`, loaded
-after component and motion styles. Reuse the same palette and hierarchy on both.
+Desktop layouts apply above 767px. Phone foundations live in `css/mobile.css`,
+ticket layouts in `css/ticket-panel-mobile.css`, and the remaining page/dialog
+compositions in `css/mobile-views.css`, loaded after component and motion styles.
+Reuse the same palette and hierarchy on both.
 Responsive rules must override the specificity of compact desktop rules, including
 the header rules in `settings-editor.css`.
 
@@ -95,6 +97,7 @@ the header rules in `settings-editor.css`.
 | Column navigation | Columns visible together | Current name and `position / total`, swipe hint, 44px previous/next buttons disabled at the ends; hidden for one column |
 | Ticket details | Overlay with side-by-side sections | Full-screen overlay with vertically stacked sections; change column through its native selector |
 | Forms and settings | Inline rows when space permits | Inputs receive a full row; actions wrap below; long paths and identifiers wrap; wide tables scroll within their own section |
+| Settings navigation | All sections visible | A sticky section picker shows one section while preserving the other mounted forms and their drafts |
 | Dashboard | Saved free canvas with drag and resize | Tiles stack to screen width without overlaps or empty canvas space; preserve saved desktop coordinates and disable canvas drag/resize |
 | Drawers and dialogs | Bounded surfaces | Fit screen width and dynamic viewport height; preserve safe-area spacing and reachable close controls |
 
@@ -128,6 +131,13 @@ dialog opening/closing without dispatching real agents. Verify desktop controls
 remain accessible after responsive changes.
 
 ## Form controls
+
+Agent conversations share `css/conversation.css`. Their rounded composer uses
+`--surface2`, `--border-strong`, `--text` and `--text-muted`, with the shared focus
+ring and accent focus border. Attachment and inject controls are quiet ghost
+actions; the rounded send/stop button uses the text/surface color pair and a vector
+icon. Its position is always at the far right of the toolbar. Keep these
+controls consistent in instruction chat, run logs and tile creation.
 
 Inputs, textareas, and selects in popups must use this exact pattern (see
 `.tile-config-field input/textarea/select` in `dashboard.css`):

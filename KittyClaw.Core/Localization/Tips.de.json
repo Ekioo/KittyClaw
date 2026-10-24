@@ -23,7 +23,7 @@
   "Tip21": "Projekt-Skills beschreiben wiederverwendbare technische und operative Abläufe. Ein Prozessor kann sie für seinen generischen Agenten verfügbar, empfohlen oder erforderlich machen.",
   "Tip22": "Jeder Prozessor und jede geplante Aufgabe kann ein Modell wählen. Neue Anweisungen verwenden die letzte Auswahl; bestehende Unterhaltungen behalten ihr ursprüngliches Modell.",
   "Tip23": "Die orange Markierung einer Pipeline zählt sichtbare ungelesene Tickets. Wählen Sie per Rechtsklick auf eine Spalte Alle als gelesen markieren, um den Zähler zurückzusetzen.",
-  "Tip24": "Ein altes Automatisierungs-Board kann mit dem Assistenten migriert werden. Prüfen Sie Pipelines und Spalten schrittweise, bevor Sie die Migration starten.",
+  "Tip24": "Mit dem Assistenten können Sie eine bestehende Pipeline prüfen, ihre Spalten anpassen und nur genehmigte Änderungen übernehmen.",
   "Tip25": "Die Kostenseite verwendet einen zwischengespeicherten Bericht. Wählen Sie zuerst einen Schnellzeitraum und filtern Sie dann nach Projekt, Pipeline oder Modell.",
   "Tip26": "Bei den Kosten steht Grün für gemessene Werte, gestreiftes Orange für Schätzungen und der Cyan-Grün-Verlauf für RTK-Einsparungen.",
   "Tip27": "Aktivieren Sie RTK in den Projekteinstellungen, um Befehlsausgaben vor der Übergabe an den Agenten zu verdichten. Geschätzte Einsparungen erscheinen danach unter Kosten.",

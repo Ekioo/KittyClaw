@@ -6,94 +6,125 @@
 @rendermode InteractiveServer
 @implements IDisposable
 
-@* Project cards grid (the former Home view): pause toggle, live agent-run badge, and a
-   right-click sort menu persisted in localStorage. One of the two display modes of the
-   unified home — the other being the swimlane kanban. *@
-<div class="project-list" @oncontextmenu="ShowSortMenu" @oncontextmenu:preventDefault>
-    @foreach (var project in Sorted)
-    {
-        <div class="project-card-wrap @(project.IsPaused ? "project-paused" : "")">
-            @if (RunsState.ActiveForProject(project.Slug).Any())
-            {
-                <span class="project-card-agent-badge" title="Agent running"></span>
-            }
-            <a class="project-card" href="/board/@project.Slug">
-                <div class="project-card-heading">
-                    <h3>@project.Name</h3>
-                    @if (project.IsPaused)
-                    {
-                        <span class="project-paused-badge">⏸ @L["Paused"]</span>
-                    }
-                </div>
-                @{ var ownerActionCount = OwnerActionCount(project); }
-                <div class="project-card-owner-actions @(ownerActionCount > 0 ? "project-card-owner-actions--pending" : "")">
-                    <span aria-hidden="true">@(ownerActionCount > 0 ? "⚠" : "✓")</span><span>@L.Get(ownerActionCount == 1 ? "ProjectOwnerActionOne" : "ProjectOwnerActionMany", ownerActionCount)</span>
-                </div>
-                @if (IntegrationAlert(project) is { } integration)
-                {
-                    <div class="project-card-integration-alert @IntegrationAlertClass(integration)"
-                         title="@IntegrationAlertTitle(integration)">
-                        <span aria-hidden="true">⚠</span>
-                        <span>@IntegrationAlertText(integration)</span>
-                    </div>
-                }
-            </a>
-            <button class="project-pause-btn" title="@(project.IsPaused ? L["Resume"] : L["Pause"])"
-                    @onclick="() => OnTogglePause.InvokeAsync(project)" @onclick:stopPropagation>
-                <span aria-hidden="true">@(project.IsPaused ? "▶" : "⏸")</span>
-                <span class="project-pause-btn-label">@(project.IsPaused ? L["Resume"] : L["Pause"])</span>
-            </button>
-        </div>
-    }
+<div class="project-directory-tools">
+    <div class="project-directory-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4.5 4.5" /></svg>
+        <input type="search" placeholder="@L["UnifiedBoardSearchPlaceholder"]" aria-label="@L["UnifiedBoardSearchPlaceholder"]"
+               @bind="_filterText" @bind:event="oninput" disabled="@(!_interactive)" />
+    </div>
+    <label class="project-directory-sort">
+        <span>@L["SortProjectsTitle"]</span>
+        <select value="@_sortOrder" @onchange="SetSort" disabled="@(!_interactive)">
+            <option value="name">@L["SortByName"]</option>
+            <option value="updated">@L["SortByLastModified"]</option>
+            <option value="created">@L["SortByCreationDate"]</option>
+        </select>
+    </label>
 </div>
 
-@if (_sortMenuVisible)
+@{ var visibleProjects = Sorted.ToList(); }
+@if (visibleProjects.Count == 0)
 {
-    <div class="column-context-menu-backdrop" @onclick="HideSortMenu" @oncontextmenu="HideSortMenu" @oncontextmenu:preventDefault></div>
-    <div class="column-context-menu" style="left:@(_sortMenuX)px;top:@(_sortMenuY)px" @onclick:stopPropagation @oncontextmenu:preventDefault>
-        <div class="column-context-menu-title">@L["SortProjectsTitle"]</div>
-        <button class="column-context-menu-item @(_sortOrder == "name" ? "column-context-menu-item--active" : "")" @onclick='() => SetSort("name")'>
-            <span class="column-context-menu-check">@(_sortOrder == "name" ? "✓" : "")</span>
-            <span>@L["SortByName"]</span>
-        </button>
-        <button class="column-context-menu-item @(_sortOrder == "created" ? "column-context-menu-item--active" : "")" @onclick='() => SetSort("created")'>
-            <span class="column-context-menu-check">@(_sortOrder == "created" ? "✓" : "")</span>
-            <span>@L["SortByCreationDate"]</span>
-        </button>
-        <button class="column-context-menu-item @(_sortOrder == "updated" ? "column-context-menu-item--active" : "")" @onclick='() => SetSort("updated")'>
-            <span class="column-context-menu-check">@(_sortOrder == "updated" ? "✓" : "")</span>
-            <span>@L["SortByLastModified"]</span>
-        </button>
+    <p class="empty-hint" role="status">@L["UnifiedBoardNoMatches"]</p>
+}
+else
+{
+    <div class="project-list project-directory-list">
+        @foreach (var project in visibleProjects)
+        {
+            <article @key="project.Slug" class="project-card-wrap project-directory-card @(project.IsPaused ? "project-paused" : "")" data-project-slug="@project.Slug">
+                <div class="project-directory-summary">
+                    <div class="project-card-heading">
+                        <a class="project-directory-title" href="/board/@project.Slug"><h2>@project.Name</h2></a>
+                        @if (project.IsPaused)
+                        {
+                            <span class="project-paused-badge">@L["Paused"]</span>
+                        }
+                        @if (RunsState.ActiveForProject(project.Slug).Any())
+                        {
+                            <span class="project-directory-running">
+                                <span class="project-card-agent-badge" aria-hidden="true"></span>
+                                @L["ProjectAgentsRunning"]
+                            </span>
+                        }
+                    </div>
+                    @{ var pipelines = ColumnsFor(project).GroupBy(column => column.PipelineId).ToArray(); }
+                    <div class="project-directory-pipelines" aria-label="@L["ProjectColumns"]">
+                        @foreach (var pipeline in pipelines)
+                        {
+                            <div class="project-directory-pipeline" data-pipeline-id="@pipeline.Key">
+                                @if (pipelines.Length > 1)
+                                {
+                                    <span class="project-directory-pipeline-name">@pipeline.First().PipelineName</span>
+                                }
+                                <div class="project-directory-columns">
+                                    @foreach (var column in pipeline)
+                                    {
+                                        <a class="project-column-summary" style="--column-color: @column.Color"
+                                              href="@($"/board/{project.Slug}?pipeline={column.PipelineId}&column={column.ColumnId}")"
+                                              title="@L.Get("ProjectOpenColumn", project.Name, column.PipelineName, column.Name)"
+                                              data-column-id="@column.ColumnId" data-ticket-count="@column.TicketCount">
+                                            <span class="project-column-name">@column.Name</span>
+                                            <b class="project-column-count">@column.TicketCount</b>
+                                        </a>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                    @if (IntegrationAlert(project) is { } integration)
+                    {
+                        <div class="project-directory-alerts">
+                            <span class="project-card-integration-alert @IntegrationAlertClass(integration)" title="@IntegrationAlertTitle(integration)">
+                                <span aria-hidden="true">⚠</span><span>@IntegrationAlertText(integration)</span>
+                            </span>
+                        </div>
+                    }
+                </div>
+                <nav class="project-directory-actions" aria-label="@L.Get("ProjectQuickAccess", project.Name)">
+                    <a class="project-quick-link project-quick-link--primary" href="/board/@project.Slug">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16M15 4v16M5.5 8h1M11.5 8h1M17.5 8h1" /></svg>
+                        <span>@L["KanbanView"]</span>
+                    </a>
+                    <a class="project-quick-link" href="/board/@project.Slug/dashboard">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+                        <span>@L["Dashboard"]</span>
+                    </a>
+                    <a class="project-quick-link" href="/board/@project.Slug/settings">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m9.5 3-.6 2.2-2 .9-2-.6-2.4 4.1L4 11.3v2l-1.5 1.7 2.4 4.1 2-.6 2 .9.6 2.2h5l.6-2.2 2-.9 2 .6 2.4-4.1-1.5-1.7v-2l1.5-1.7-2.4-4.1-2 .6-2-.9-.6-2.2z" /><circle cx="12" cy="12" r="3" /></svg>
+                        <span>@L["ProjectSettings"]</span>
+                    </a>
+                </nav>
+            </article>
+        }
     </div>
 }
 
 @code {
     [Parameter] public IReadOnlyList<Project> Projects { get; set; } = [];
-    [Parameter] public IReadOnlyDictionary<string, int> OwnerActionCounts { get; set; } =
-        new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-    [Parameter] public EventCallback<Project> OnTogglePause { get; set; }
-
-    private int OwnerActionCount(Project project) =>
-        OwnerActionCounts.TryGetValue(project.Slug, out var count) ? count : 0;
+    [Parameter] public IReadOnlyDictionary<string, IReadOnlyList<BoardColumnSummary>> ProjectColumns { get; set; } =
+        new Dictionary<string, IReadOnlyList<BoardColumnSummary>>(StringComparer.OrdinalIgnoreCase);
 
     private string _sortOrder = "name";
-    private bool _sortMenuVisible;
-    private double _sortMenuX, _sortMenuY;
-    private bool _sortLoaded;
+    private string _filterText = "";
+    private bool _interactive;
     private readonly Dictionary<string, KittyClaw.Core.Services.WorktreeMergeAlertSummary?> _integrationAlerts =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly CancellationTokenSource _alertRefreshCancellation = new();
     private bool _refreshingAlerts;
 
-    // Paused projects sink to the bottom, mirroring the kanban view's lane ordering.
-    private IEnumerable<Project> Sorted =>
-        Projects.OrderBy(p => p.IsPaused ? 1 : 0).ThenBy(SortKey).ThenBy(p => p.Name);
+    private IReadOnlyList<BoardColumnSummary> ColumnsFor(Project project) =>
+        ProjectColumns.TryGetValue(project.Slug, out var columns) ? columns : [];
+
+    private IEnumerable<Project> Sorted => Projects
+        .Where(p => KittyClaw.Web.Services.ProjectDirectorySearch.Matches(p, ColumnsFor(p), _filterText))
+        .OrderBy(p => p.IsPaused ? 1 : 0).ThenBy(SortKey).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase);
 
     private IComparable SortKey(Project p) => _sortOrder switch
     {
         "created" => p.CreatedAt,
         "updated" => p.UpdatedAt,
-        _ => (IComparable)p.Name
+        _ => p.Name.ToUpperInvariant()
     };
 
     protected override void OnInitialized()
@@ -166,35 +197,24 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_sortMenuVisible)
-            await JS.InvokeVoidAsync("fitBoardContextMenus");
-
-        if (firstRender && !_sortLoaded)
+        if (!firstRender) return;
+        try
         {
-            _sortLoaded = true;
             var stored = await JS.InvokeAsync<string?>("localStorage.getItem", "kc-project-sort");
-            if (stored is "name" or "created" or "updated")
-            {
-                _sortOrder = stored;
-                StateHasChanged();
-            }
+            if (stored is "name" or "created" or "updated") _sortOrder = stored;
         }
+        catch (JSException) { /* Browser storage can be unavailable. */ }
+        _interactive = true;
+        StateHasChanged();
     }
 
-    private void ShowSortMenu(MouseEventArgs e)
+    private async Task SetSort(ChangeEventArgs args)
     {
-        _sortMenuX = e.ClientX;
-        _sortMenuY = e.ClientY;
-        _sortMenuVisible = true;
-    }
-
-    private void HideSortMenu() => _sortMenuVisible = false;
-
-    private async Task SetSort(string order)
-    {
+        var order = args.Value?.ToString();
+        if (order is not ("name" or "created" or "updated")) return;
         _sortOrder = order;
-        _sortMenuVisible = false;
-        await JS.InvokeVoidAsync("localStorage.setItem", "kc-project-sort", order);
+        try { await JS.InvokeVoidAsync("localStorage.setItem", "kc-project-sort", order); }
+        catch (JSException) { /* Sorting still works without persisted preferences. */ }
     }
 
     private void OnRunsChanged() => InvokeAsync(StateHasChanged);

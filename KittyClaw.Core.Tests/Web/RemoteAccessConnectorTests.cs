@@ -18,7 +18,6 @@ namespace KittyClaw.Core.Tests.Web;
 
 public sealed class RemoteAccessConnectorTests
 {
-    private const string Invitation = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
     private const string BrokerOrigin = "https://remote-api.kittyclaw.dev";
 
     [Fact]
@@ -51,11 +50,11 @@ public sealed class RemoteAccessConnectorTests
     {
         using var f = new Fixture();
         f.Handler.FailRegistration = true;
-        await Assert.ThrowsAsync<RemoteAccessException>(() => f.Connector.ActivateAsync(Invitation, default));
+        await Assert.ThrowsAsync<RemoteAccessException>(() => f.Connector.ActivateAsync(default));
         var first = f.Store.Identity!;
         Assert.False(f.Store.Snapshot.Enabled);
         f.Handler.FailRegistration = false;
-        await f.Connector.ActivateAsync(Invitation, default);
+        await f.Connector.ActivateAsync(default);
         Assert.Equal(first.Credential, f.Store.Identity!.Credential);
         Assert.Equal(first.InstanceId, f.Store.Identity.InstanceId);
         Assert.True(f.Connector.NeedsRestart);
@@ -64,11 +63,27 @@ public sealed class RemoteAccessConnectorTests
     }
 
     [Fact]
+    public async Task Full_capacity_has_a_specific_error_without_enabling_access_and_can_retry()
+    {
+        using var f = new Fixture();
+        f.Handler.CapacityFull = true;
+        var error = await Assert.ThrowsAsync<RemoteAccessException>(() => f.Connector.ActivateAsync(default));
+        Assert.Equal("RemoteCapacityExhausted", error.Code);
+        Assert.False(f.Store.Snapshot.Enabled);
+        Assert.Equal(0, f.Runtime.Starts);
+        var identity = f.Store.Identity!.InstanceId;
+        f.Handler.CapacityFull = false;
+        await f.Connector.ActivateAsync(default);
+        Assert.Equal(identity, f.Store.Identity!.InstanceId);
+        Assert.True(f.Store.Snapshot.Enabled);
+    }
+
+    [Fact]
     public async Task Activation_requires_authenticator_before_allocating_an_identity()
     {
         using var f = new Fixture(enrolled: false);
         Assert.Equal("RemoteAuthenticationRequired", (await Assert.ThrowsAsync<RemoteAccessException>(() =>
-            f.Connector.ActivateAsync(Invitation, default))).Code);
+            f.Connector.ActivateAsync(default))).Code);
         Assert.Null(f.Store.Identity);
         Assert.Equal(0, f.Handler.Requests);
     }
@@ -86,7 +101,7 @@ public sealed class RemoteAccessConnectorTests
         using var f = new Fixture();
         f.Handler.WrongHost = true;
         Assert.Equal("RemoteBrokerInvalid", (await Assert.ThrowsAsync<RemoteAccessException>(() =>
-            f.Connector.ActivateAsync(Invitation, default))).Code);
+            f.Connector.ActivateAsync(default))).Code);
         Assert.False(f.Store.Snapshot.Enabled);
         Assert.Equal(0, f.Runtime.Starts);
     }
@@ -96,7 +111,7 @@ public sealed class RemoteAccessConnectorTests
     {
         using var f = new Fixture();
         f.Handler.Redirect = true;
-        var exception = await Assert.ThrowsAsync<RemoteAccessException>(() => f.Connector.ActivateAsync(Invitation, default));
+        var exception = await Assert.ThrowsAsync<RemoteAccessException>(() => f.Connector.ActivateAsync(default));
         Assert.Equal("RemoteBrokerUnavailable", exception.Code);
         Assert.DoesNotContain(f.Store.Identity!.Credential, exception.ToString());
         Assert.Equal(1, f.Handler.Requests);
@@ -118,7 +133,7 @@ public sealed class RemoteAccessConnectorTests
             await WaitUntil(() => f.Runtime.Cancellations == 1);
             Assert.False(f.Store.Snapshot.Enabled);
             Assert.Equal("Disabled", f.Connector.Status.State);
-            await f.Connector.ActivateAsync("", default);
+            await f.Connector.ActivateAsync(default);
             await WaitUntil(() => f.Runtime.Starts == 2);
             Assert.Equal(url, f.Store.Snapshot.Url);
             Assert.Equal(0, f.Handler.Registrations);
@@ -139,7 +154,7 @@ public sealed class RemoteAccessConnectorTests
         {
             await WaitUntil(() => f.Connector.Status.State == "AuthenticationRequired");
             Assert.Equal(0, f.Runtime.Starts);
-            await Assert.ThrowsAsync<RemoteAccessException>(() => f.Connector.ActivateAsync("", default));
+            await Assert.ThrowsAsync<RemoteAccessException>(() => f.Connector.ActivateAsync(default));
         }
         finally { await f.Connector.StopAsync(default); }
     }
@@ -190,14 +205,14 @@ public sealed class RemoteAccessConnectorTests
             new FormUrlEncodedContent(new Dictionary<string, string> { ["action"] = "activate" }))).StatusCode);
         var page = await client.GetAsync("http://localhost/remote-setup");
         var html = await page.Content.ReadAsStringAsync();
-        Assert.Contains("Private beta invitation code", html);
+        Assert.DoesNotContain("name='invitation'", html);
         var csrf = Regex.Match(html, "name='__RequestVerificationToken' value='([^']+)'").Groups[1].Value;
         var cookie = page.Headers.GetValues("Set-Cookie").Single().Split(';')[0];
         using var post = new HttpRequestMessage(HttpMethod.Post, "http://localhost/remote-setup");
         post.Headers.Add("Cookie", cookie);
         post.Content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
-            ["action"] = "activate", ["invitation"] = Invitation, ["consent"] = "yes", ["__RequestVerificationToken"] = csrf
+            ["action"] = "activate", ["consent"] = "yes", ["__RequestVerificationToken"] = csrf
         });
         var result = await client.SendAsync(post);
         Assert.Equal(HttpStatusCode.Found, result.StatusCode);
@@ -205,7 +220,7 @@ public sealed class RemoteAccessConnectorTests
         Assert.Contains("Restart KittyClaw", activated);
         Assert.Contains(f.Store.Snapshot.Url!, activated);
         Assert.DoesNotContain(f.Store.Identity!.Credential, activated);
-        Assert.DoesNotContain(Invitation, activated);
+        Assert.DoesNotContain("name='invitation'", activated);
         f.Access.Disable();
         var withoutAuthenticator = await (await client.GetAsync("http://localhost/remote-setup")).Content.ReadAsStringAsync();
         Assert.Contains("Stop Internet access", withoutAuthenticator);
@@ -275,7 +290,7 @@ public sealed class RemoteAccessConnectorTests
             Assert.Equal(0, f.Runtime.Starts);
             await f.Connector.PauseAsync(default);
             f.Handler.Retired = false;
-            await f.Connector.ActivateAsync("", default);
+            await f.Connector.ActivateAsync(default);
             await WaitUntil(() => f.Runtime.Starts == 1);
         }
         finally { await f.Connector.StopAsync(default); }
@@ -287,17 +302,17 @@ public sealed class RemoteAccessConnectorTests
         using var f = new Fixture();
         f.Handler.NameTaken = true;
         Assert.Equal("RemoteNameUnavailable", (await Assert.ThrowsAsync<RemoteAccessException>(() =>
-            f.Connector.ActivateAsync(Invitation, default, "My-Office"))).Code);
+            f.Connector.ActivateAsync(default, "My-Office"))).Code);
         var first = f.Store.Identity!;
         Assert.True(first.NameRetryAllowed);
         f.Handler.NameTaken = false;
-        await f.Connector.ActivateAsync(Invitation, default, "Another-Office");
+        await f.Connector.ActivateAsync(default, "Another-Office");
         Assert.Equal(first.Credential, f.Store.Identity!.Credential);
         Assert.Equal(first.InstanceId, f.Store.Identity.InstanceId);
         Assert.Equal("https://another-office.kittyclaw.dev", f.Store.Snapshot.Url);
         Assert.Equal("another-office.kittyclaw.dev", f.Store.OriginOptions(new()).Hostname);
         await f.Connector.PauseAsync(default);
-        await f.Connector.ActivateAsync("", default);
+        await f.Connector.ActivateAsync(default);
         Assert.Equal("https://another-office.kittyclaw.dev", f.Store.Snapshot.Url);
     }
 
@@ -306,12 +321,12 @@ public sealed class RemoteAccessConnectorTests
     {
         using var f = new Fixture();
         f.Handler.FailRegistration = true;
-        await Assert.ThrowsAsync<RemoteAccessException>(() => f.Connector.ActivateAsync(Invitation, default, "my-office"));
+        await Assert.ThrowsAsync<RemoteAccessException>(() => f.Connector.ActivateAsync(default, "my-office"));
         Assert.False(f.Store.Identity!.NameRetryAllowed);
         Assert.Equal("RemoteNameLocked", (await Assert.ThrowsAsync<RemoteAccessException>(() =>
-            f.Connector.ActivateAsync(Invitation, default, "another-office"))).Code);
+            f.Connector.ActivateAsync(default, "another-office"))).Code);
         f.Handler.FailRegistration = false;
-        await f.Connector.ActivateAsync(Invitation, default);
+        await f.Connector.ActivateAsync(default);
         Assert.Equal("https://my-office.kittyclaw.dev", f.Store.Snapshot.Url);
     }
 
@@ -326,7 +341,7 @@ public sealed class RemoteAccessConnectorTests
     {
         using var f = new Fixture();
         Assert.Equal("RemoteNameInvalid", (await Assert.ThrowsAsync<RemoteAccessException>(() =>
-            f.Connector.ActivateAsync(Invitation, default, name))).Code);
+            f.Connector.ActivateAsync(default, name))).Code);
         Assert.Null(f.Store.Identity);
         Assert.Equal(0, f.Handler.Requests);
     }
@@ -360,6 +375,7 @@ public sealed class RemoteAccessConnectorTests
     private sealed class Handler(RemoteAccessStore store) : HttpMessageHandler
     {
         public bool FailRegistration;
+        public bool CapacityFull;
         public bool WrongHost;
         public bool Redirect;
         public bool Retired;
@@ -376,6 +392,8 @@ public sealed class RemoteAccessConnectorTests
             if (!connect) Interlocked.Increment(ref Registrations);
             if (!connect && NameTaken) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Conflict)
                 { Content = JsonContent.Create(new { error = "name_unavailable" }) });
+            if (CapacityFull && !connect) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                { Content = JsonContent.Create(new { error = "capacity_exhausted" }) });
             if (FailRegistration && !connect) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new
             {

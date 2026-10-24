@@ -51,7 +51,7 @@ public sealed class PipelineKitUiTests
     {
         var localization = Path.Combine(RepoRoot(), "KittyClaw.Core", "Localization");
         var english = Keys(Path.Combine(localization, "Workflows.en.json"));
-        foreach (var language in new[] { "fr", "de", "es", "it", "pt-BR", "ja" })
+        foreach (var language in new[] { "fr", "de", "es", "it", "pt-BR", "ja", "zh-CN" })
             Assert.Equal(english.Order(), Keys(Path.Combine(localization, $"Workflows.{language}.json")).Order());
     }
 

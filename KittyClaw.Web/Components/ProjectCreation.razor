@@ -6,7 +6,6 @@
 @inject MinimalWorkflowService MinimalWorkflow
 @inject FirstRunProviderService FirstRunProvider
 @inject AgentsTemplateService AgentsTemplate
-@inject AutomationEngine AutomationEngine
 @inject MemberService MemberService
 @inject LocalizationService L
 @inject NavigationManager Nav
@@ -17,34 +16,43 @@
 
 @* Project creation, extracted from Home.razor so every host page shares one flow that
    cannot diverge. A single button opens the modal; the name lives inside the modal. *@
-<button class="header-action-btn settings-primary" data-testid="create-project-open" @onclick="OpenCreation">+ @L["CreateProjectButton"]</button>
+<button class="header-action-btn settings-primary" data-testid="create-project-open" disabled="@(!_interactive)" @onclick="OpenCreation">+ @L["CreateProjectButton"]</button>
 
 @if (_open)
 {
     <div class="modal-backdrop">
-        <div class="modal-dialog" @onclick:stopPropagation>
-            <h2>@L["CreateProjectButton"]</h2>
-            <p>@L["CreationSetupIntro"]</p>
-            <p class="settings-hint">@L["RepositoryIntakeIntro"]</p>
+        <div class="modal-dialog project-creation" role="dialog" aria-modal="true" aria-labelledby="project-creation-title" aria-describedby="project-creation-intro" aria-busy="@_initializing" @onclick:stopPropagation>
+            <header class="project-creation-header">
+                <h2 id="project-creation-title">@L["CreateProjectButton"]</h2>
+                <p id="project-creation-intro">@L["RepositoryIntakeIntro"]</p>
+            </header>
 
-            <label class="settings-label">@L["ProjectName"] *</label>
+            <div class="project-creation-field">
+            <label for="new-project-name" class="settings-label">@L["ProjectName"] <span aria-hidden="true">*</span></label>
             <div class="settings-row">
                 <input id="new-project-name" class="settings-input" placeholder="@L["NewProjectPlaceholder"]"
-                       data-testid="create-project-name"
+                       required autocomplete="off" data-testid="create-project-name"
                        @bind="_newProjectName" @bind:event="oninput" @onkeydown="HandleKeyDown" />
             </div>
 
-            <label class="settings-label">@L["WorkspacePath"] *</label>
-            <p class="settings-hint">@L["WorkspaceHint"]</p>
+            </div>
+
+            <div class="project-creation-field">
+            <label for="repository-path" class="settings-label">@L["WorkspacePath"] <span aria-hidden="true">*</span></label>
+            <p id="creation-workspace-hint" class="settings-hint">@L["CreationWorkspaceHint"]</p>
             <div class="settings-row">
-                <input id="repository-path" class="settings-input" data-testid="create-project-workspace" placeholder="@L["WorkspacePlaceholder"]" @bind="_newWorkspacePath" @bind:event="oninput" @bind:after="OnWorkspaceChanged" />
+                <input id="repository-path" required aria-describedby="creation-workspace-hint" class="settings-input" data-testid="create-project-workspace" placeholder="@L["WorkspacePlaceholder"]" @bind="_newWorkspacePath" @bind:event="oninput" @bind:after="OnWorkspaceChanged" />
                 <button class="settings-browse" type="button" @onclick="OpenFolderPicker">
-                    📁 @L["Browse"]
+                    <span aria-hidden="true">📁</span> @L["Browse"]
                 </button>
             </div>
 
-            <label class="settings-label">@L["FirstObjective"] *</label>
-            <textarea id="first-objective" class="settings-input" placeholder="@L["FirstObjectiveHint"]" @bind="_objective" @bind:event="oninput"></textarea>
+            </div>
+
+            <div class="project-creation-field">
+            <label for="first-objective" class="settings-label">@L["FirstObjective"] <span aria-hidden="true">*</span></label>
+            <textarea id="first-objective" required rows="4" class="settings-input" placeholder="@L["FirstObjectiveHint"]" @bind="_objective" @bind:event="oninput"></textarea>
+            </div>
 
             @if (!string.IsNullOrWhiteSpace(_newWorkspacePath) && _workspaceExists == false)
             {
@@ -155,9 +163,15 @@ else if (_createdProject is not null)
     private bool _firstTicketConfirmed;
     private int? _firstTicketId;
     private string? _providerGuidance;
+    private bool _interactive;
 
     protected override Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            _interactive = true;
+            StateHasChanged();
+        }
         if (_open && _escPending is null)
             _escPending = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CancelCreation(); StateHasChanged(); }));
         else if (!_open && _escPending is not null)
@@ -282,7 +296,6 @@ else if (_createdProject is not null)
             var initializeGit = _gitWorkspace?.CanInitialize == true && _initializeGit;
             await AgentsTemplate.InitializeAsync(_newWorkspacePath.Trim(), overwrite, initializeGit);
             await EnsureAgentMembersAsync(project.Slug);
-            await AutomationEngine.ReloadProjectAsync(project.Slug);
 
             _newProjectName = "";
             _open = false;

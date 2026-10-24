@@ -11,7 +11,6 @@
   "Name": "Nom",
   "Color": "Couleur",
   "Order": "Ordre",
-  "Type": "Type",
   "Saved": "Enregistré.",
   "Error": "Erreur",
   "Language": "Langue",
@@ -22,6 +21,7 @@
   "LangIt": "Italiano",
   "LangPtBr": "Português (Brasil)",
   "LangJa": "日本語",
+  "LangZhCn": "简体中文",
   "DropHere": "Déposer ici",
   "Board": "Tableau",
   "Automations": "Automatisations",
@@ -29,7 +29,6 @@
   "AutomationQueue": "File des automations",
   "QueuePending": "En attente", "QueueRunning": "En cours", "QueueCompleted": "Terminée",
   "QueueSkipped": "Ignorée", "QueueFailed": "Échec", "QueueCancelled": "Annulée",
-  "AutomationsAhead": "{0} automations avant celle-ci",
   "SessionInterrupted": "KittyClaw a été mis à jour ou la session a été interrompue.",
   "SessionInterruptedHint": "La page se rétablit automatiquement lorsque c’est possible. Rechargez-la si ce message reste affiché.",
   "ReloadPage": "Recharger la page",
@@ -56,5 +55,6 @@
   "ProviderOllamaConfiguration": "Installez et démarrez Ollama. L’adresse et les modèles locaux se configurent ensuite par projet.",
   "ProviderDeepSeekConfiguration": "DeepSeek V4 utilise Claude Code avec l’API Anthropic-compatible. Enregistrez DEEPSEEK_API_KEY dans le vault de chaque projet.",
   "ProviderSharedClaudeCli": "Transport partagé : la détection confirme Claude Code ; la clé DeepSeek reste propre à chaque projet.",
-  "AgentProvidersDetectionNote": "La détection vérifie la présence du CLI sans lire ni afficher vos identifiants. Les secrets propres aux projets restent dans leur vault."
+  "AgentProvidersDetectionNote": "La détection vérifie la présence du CLI sans lire ni afficher vos identifiants. Les secrets propres aux projets restent dans leur vault.",
+  "All": "— tous —"
 }

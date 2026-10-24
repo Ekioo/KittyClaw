@@ -102,11 +102,4 @@ public class ProjectDeleteRelocationTests
         Assert.Matches(new Regex(@"try[\s\S]{0,300}DeleteProjectAsync|DeleteProjectAsync[\s\S]{0,300}catch", RegexOptions.Singleline), src);
     }
 
-    // Regression: pause button must still be in Home (not accidentally removed)
-    [Fact]
-    public void Home_StillContains_PauseButton()
-    {
-        var src = LoadHomeRazor();
-        Assert.Contains("project-pause-btn", src);
-    }
 }

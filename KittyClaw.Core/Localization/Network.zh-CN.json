@@ -1,0 +1,20 @@
+{
+  "NetworkTitle": "局域网访问",
+  "NetworkHint": "使用身份验证器应用中的验证码，在手机或其他设备上打开 KittyClaw。无需密码。",
+  "NetworkConfigure": "配置网络访问",
+  "NetworkLocalSetup": "请在此电脑上通过 localhost 配置或重置访问。",
+  "NetworkLogin": "连接",
+  "NetworkLoginHint": "输入身份验证器应用中当前的六位验证码。",
+  "NetworkCode": "验证码",
+  "NetworkInvalidCode": "验证码无效、已过期或已使用。请等待新验证码后重试。连续失败五次后，请等待一分钟。",
+  "NetworkEnabled": "网络访问已启用。在手机上使用以下地址之一。",
+  "NetworkRestart": "保护已配置。请重启 KittyClaw 以启动 HTTPS 网络监听。",
+  "NetworkCertificate": "连接使用此电脑生成的证书。首次访问时，请在设备上验证并信任此证书。防火墙必须允许专用网络上显示的 HTTPS 端口。",
+  "NetworkDisable": "禁用访问并重置身份验证器",
+  "NetworkEnroll": "使用身份验证器应用扫描二维码，或输入下方设置密钥（基于时间，六位数字，每 30 秒更新），然后输入当前验证码。",
+  "NetworkQrCode": "身份验证器设置二维码",
+  "NetworkOpenApp": "在身份验证器应用中打开",
+  "NetworkEnable": "验证代码并启用网络访问",
+  "NetworkRecovery": "如果丢失身份验证器，请在此电脑上通过 localhost 打开本页，禁用访问并关联新应用。禁用访问也会撤销现有会话。",
+  "NetworkLogout": "断开此设备"
+}

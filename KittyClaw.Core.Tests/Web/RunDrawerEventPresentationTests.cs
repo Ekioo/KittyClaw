@@ -72,16 +72,10 @@ public class RunDrawerEventPresentationTests
     }
 
     [Fact]
-    public void Chat_drawer_keeps_stderr_out_of_the_conversation()
+    public void Diagnostics_are_activity_while_errors_remain_visible_in_the_conversation()
     {
-        var source = File.ReadAllText(Path.Combine(
-            RepoRoot(), "KittyClaw.Web", "Components", "ChatDrawer.razor"));
-
-        Assert.Contains("if (m.Role == \"stderr\") continue;", source);
-        Assert.Contains("else if (kind == \"stderr\")", source);
-        Assert.Contains("Keep technical CLI diagnostics in the run log", source);
-        Assert.DoesNotContain("AddDiagnosticMessage(\"stderr\", text);", source);
-        Assert.DoesNotContain("AddStderrMessage", source);
+        Assert.True(ConversationEventPresentation.IsActivity("stderr"));
+        Assert.False(ConversationEventPresentation.IsActivity("error"));
     }
 
     [Fact]

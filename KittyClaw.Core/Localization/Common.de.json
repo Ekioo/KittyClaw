@@ -10,7 +10,6 @@
   "Name": "Name",
   "Color": "Farbe",
   "Order": "Befehl",
-  "Type": "Typ",
   "Saved": "Gespeichert.",
   "Error": "Fehler",
   "Language": "Sprache",
@@ -21,6 +20,7 @@
   "LangIt": "Italienisch",
   "LangPtBr": "Português (Brasil)",
   "LangJa": "日本語",
+  "LangZhCn": "简体中文",
   "DropHere": "Kommen Sie hier vorbei",
   "Board": "Planke",
   "Automations": "Automatisierungen",
@@ -28,7 +28,6 @@
   "AutomationQueue": "Automatisierungswarteschlange",
   "QueuePending": "Wartend", "QueueRunning": "Läuft", "QueueCompleted": "Abgeschlossen",
   "QueueSkipped": "Übersprungen", "QueueFailed": "Fehlgeschlagen", "QueueCancelled": "Abgebrochen",
-  "AutomationsAhead": "{0} Automatisierungen davor",
   "SessionInterrupted": "KittyClaw wurde aktualisiert oder die Sitzung wurde unterbrochen.",
   "SessionInterruptedHint": "Die Seite stellt sich nach Möglichkeit automatisch wieder her. Laden Sie sie neu, wenn diese Meldung sichtbar bleibt.",
   "ReloadPage": "Seite neu laden",
@@ -56,5 +55,6 @@
   "ProviderDeepSeekConfiguration": "DeepSeek V4 verwendet Claude Code über die Anthropic-kompatible API. Speichern Sie DEEPSEEK_API_KEY im Vault jedes Projekts.",
   "ProviderSharedClaudeCli": "Gemeinsamer Transport: Die Erkennung bestätigt Claude Code; der DeepSeek-Schlüssel bleibt projektspezifisch.",
   "AgentProvidersDetectionNote": "Die Erkennung prüft das CLI, ohne Zugangsdaten zu lesen oder anzuzeigen. Projektspezifische Geheimnisse bleiben im Vault.",
-  "RtkGlobalHelp": "Optionaler Optimierer für Shell-Ausgaben. Aktivieren Sie RTK separat in den Einstellungen jedes Projekts. Programmdatei überschreiben: KITTYCLAW_RTK_BIN."
+  "RtkGlobalHelp": "Optionaler Optimierer für Shell-Ausgaben. Aktivieren Sie RTK separat in den Einstellungen jedes Projekts. Programmdatei überschreiben: KITTYCLAW_RTK_BIN.",
+  "All": "- alle -"
 }

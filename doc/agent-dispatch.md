@@ -16,10 +16,12 @@ Runs an agent through the selected Claude Code, Grok Build, OpenAI Codex, Mistra
 ## Daily budget admission
 
 `AgentBudgetService` applies the project's `dailyBudgetUsd` from the control workspace's
-`.agents/automations.json` to every `AgentRunner` launch: column processors, legacy
-automations, chats, dashboard refreshes, workflow planning, memory consolidation and
+`.agents/agent-budget.json` to every `AgentRunner` launch: column processors, scheduled
+tasks, chats, dashboard refreshes, workflow planning, memory consolidation and
 manual retries. There is no chat or `ceo` exemption. A missing or non-positive limit
 preserves unlimited operation; malformed or unreadable configuration fails closed.
+
+For existing projects without the dedicated budget file, only the budget value is read from the retired `automations.json`; no rule is deserialized or executed.
 
 The runner registers the run first, then checks before preparation, and checks again
 immediately before each provider subprocess starts. Queued work, resume recovery,
@@ -52,13 +54,18 @@ KittyClaw records the effective external CLI provider, binary identity, and dete
 Projects can explicitly opt in to [Rust Token Killer (RTK)](https://github.com/rtk-ai/rtk) from project settings. `RtkIntegrationService` probes the locally installed binary with `rtk --version` using a two-second timeout. When the probe succeeds, `AgentRunner` adds a short instruction block that prefers RTK only for supported, high-volume shell reads and requires an unchanged raw-command retry whenever exact output or missing detail matters. The provider executable, arguments, stdout protocol, and permission model are never wrapped or rewritten by KittyClaw.
 
 The integration is disabled by default. An opted-in run always receives `RTK_TELEMETRY_DISABLED=1`; a missing, invalid, or timed-out binary produces a visible non-blocking event and otherwise leaves the run unchanged. KittyClaw never downloads RTK, runs `rtk init`, enables hooks, or edits user, repository, or agent configuration. Installation remains an explicit operator action. `KITTYCLAW_RTK_BIN` may pin the probe to a specific executable.
-- `KittyClaw.Core/Automation/SessionRegistry.cs` — tracks active sessions per agent for steering and inactivity detection in `.agents/channel/dispatch-state.json`. State updates are serialized as atomic read-modify-write operations. On transient filesystem `IOException` failures, writes are retried up to six times with exponential delays from 25 to 400 ms; non-I/O failures and exhausted retries are surfaced to the caller.
+- `KittyClaw.Core/Automation/SessionRegistry.cs` — tracks active sessions per agent for conversation continuity in `.agents/channel/dispatch-state.json`. State updates are serialized as atomic read-modify-write operations. On transient filesystem `IOException` failures, writes are retried up to six times with exponential delays from 25 to 400 ms; non-I/O failures and exhausted retries are surfaced to the caller.
 - `KittyClaw.Core/Services/ChatMemoryConsolidationService.cs` — watches ad-hoc **New instruction** conversations after their runs end. After 15 minutes without a new message (configurable with `KITTYCLAW_CHAT_MEMORY_IDLE_MINUTES`), it passes only the unconsolidated transcript segment to `.agents/memory-consolidation.md`, updates the target agent's canonical memory, and uses the existing memory commit path when files changed. The durable per-conversation checkpoint prevents replay after restart; failures use exponential retry without advancing it. Closing the drawer or changing conversations has no effect because detection is server-side. Targets without persistent memory are explicitly recorded as ignored.
 - `KittyClaw.Core/Automation/CostTracker.cs` — appends per-run `CostLogEntry` lines to `<workspace>/.agents/channel/cost-log.jsonl` (rotated monthly) and answers the daily-budget check (`IsBudgetExceeded`) from that file. A provider-reported monetary total is authoritative. When Codex or Grok only reports token classes, `ModelCostEstimator` applies its explicit, versioned public rate card; unknown models remain unpriced. Estimated entries carry `CostEstimated=true`.
 - `KittyClaw.Core/Automation/RunCostRecorder.cs` — hosted service subscribed to `AgentRunRegistry.OnRunEnded`. For every run that reported usage it writes the `CostLogEntry` via `CostTracker` and accumulates token/USD totals onto the ticket (`Tickets.AgentTokens` / `Tickets.AgentCostUsd` via `TicketService.AddAgentUsageAsync`) — the durable per-ticket figure shown on the board card and ticket panel, which survives the 24h run-log purge. `Tickets.AgentCostEstimated` remains true once any estimated amount contributes to that cumulative total. Run-level usage and its estimate marker also surface in the run drawer header and the `/runs` API DTOs.
 
 ## Entry points
-- `runAgent` action from the [automation engine](./automation-engine.md).
+
+Each REST SSE subscriber has a queue of at most 256 pending events. If a client
+cannot keep up, its connection is aborted so it can reconnect to the retained
+run buffer; the shared agent producer and other subscribers continue. Pending
+events are never silently dropped while keeping the connection open.
+- `runAgent` action from the [column processing](./column-workflows.md).
 - Ad-hoc owner prompts from the in-app new-instruction chat drawer ([Kanban UI](./kanban-ui.md)).
 - `POST /api/projects/{slug}/runs/{runId}/steer` — enqueues a steering message for the active run and (when the run has a `ChatTarget`) persists it to the chat thread. Messages written while the subprocess is still running are delivered via a queued file read on the next `--resume` turn. If stdin is already closed (run has ended), `AgentStreamPump` calls `AgentRun.AddPendingSteerMessage` instead of silently dropping the message. On the next `POST /chat/start`, `AgentRunRegistry.LastCompletedForChatTarget()` looks up the most recent completed run for the chat target; `Endpoints.Chat.cs` calls `DrainPendingSteerMessages()` (atomic read + clear) on that run to retrieve them exactly once, carries them into `AgentRunContext.PendingSteerMessages`, and `AgentRunner.BuildPromptAsync` prepends them as steering blocks before the new user message. Additionally, when `AgentRunner` itself completes a chat run with `PendingSteerMessages.Count > 0`, it fires an **auto-continue** follow-up turn immediately (via `Task.Run`) using a cloned context — so the agent receives pending messages without requiring another user message. `PendingSteerMessages` is also serialised into the run snapshot so messages survive app restarts.
 
@@ -72,3 +79,9 @@ The integration is disabled by default. An opted-in run always receives `RTK_TEL
 - Optionally the `rtk` CLI — project-scoped output optimization guidance with safe fallback; it is never installed or configured automatically.
 - Workspace-side `.agents/<agent>/` files (skill, memory, preamble) seeded by the [project template](./project-template.md).
 - [Storage](./storage.md) — run snapshots persisted under `%APPDATA%/KittyClaw/runs/`.
+
+## Agent run lifecycle
+
+`AgentRunLifecycle` owns run retention and bounded cancellation on shutdown. Project pause and explicit stop use the same cleanup helper. It does not dispatch work; `ColumnProcessingEngine`, `ColumnScheduledTaskEngine`, and ad-hoc conversations own launches.
+
+`GET /api/engine/health` and `get_engine_health` report the column-processing service's start time, last loop heartbeat, and project pause states. Legacy automation counts, trigger scheduling, and queue entries are no longer exposed.

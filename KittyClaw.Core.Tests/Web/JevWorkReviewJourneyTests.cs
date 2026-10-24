@@ -78,17 +78,15 @@ public sealed class JevWorkReviewJourneyTests(ITestOutputHelper output)
             }
             async Task SaveProcessorAsync(ILocator dialog)
             {
-                await dialog.Locator("label.workflow-check").Filter(new() { HasText = "Enabled" }).Locator("input").CheckAsync();
                 await dialog.Locator(".processor-dialog-footer .settings-primary").ClickAsync(); await Expect(dialog).Not.ToBeVisibleAsync();
             }
             var dialog = await OpenProcessorAsync("Review");
-            await dialog.GetByTestId("jev-settings").Locator("summary").First.ClickAsync();
-            await Expect(dialog.GetByTestId("jev-acceptance-mode")).Not.ToBeCheckedAsync();
-            await dialog.GetByTestId("jev-acceptance-mode").CheckAsync();
+            await Expect(dialog.GetByTestId("column-mode-Review")).Not.ToBeCheckedAsync();
+            await dialog.GetByTestId("column-mode-Review").CheckAsync();
             await dialog.GetByTestId("jev-column-criteria").FillAsync("Tests pass\nLogin works");
             await SaveProcessorAsync(dialog);
             dialog = await OpenProcessorAsync("Backlog");
-            await dialog.GetByTestId("jev-settings").Locator("summary").First.ClickAsync();
+            await dialog.GetByTestId("column-mode-Agent").CheckAsync();
             await Expect(dialog.GetByTestId("jev-profile-mode")).Not.ToBeCheckedAsync();
             await dialog.GetByTestId("jev-profile-mode").CheckAsync();
             await dialog.GetByTestId("jev-add-profile").ClickAsync();

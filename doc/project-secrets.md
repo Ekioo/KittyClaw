@@ -6,6 +6,12 @@ Per-project, write-only secret storage. Owners register named secrets (environme
 names) through the API/UI; KittyClaw injects the values only into agent and automation
 subprocesses that belong to the same project, and redacts them from run streams and logs.
 Saved values are never returned by the API or UI.
+Names must match the entire environment-variable identifier, including at the end
+of the string; trailing line breaks are rejected. Values containing NUL are
+rejected before storage because subprocess environments cannot preserve them.
+Run redaction covers literal values and both default .NET and relaxed JSON
+escaping, including escaped forward slashes. Encoded variants are processed
+before shorter literal values.
 
 ## Key components
 
@@ -55,6 +61,14 @@ both mechanisms.
   `account=kittyclaw`. On headless hosts, unlock or start the keyring before using secrets.
 
 ## Fail-closed behavior
+
+Native CLI calls drain stdout and stderr concurrently and enforce one 30-second
+deadline over stdin writes, output reads and process exit. Each output stream is
+limited to 64 Ki characters. Timeout, excessive output and pipe failures fail
+closed; running processes are terminated, including descendants where supported.
+Native stdout/stderr diagnostics are never appended to user-facing key-store
+errors: a failed command may echo master-key material. Errors retain the store
+name, exit code and unlock/install guidance.
 
 There is no plaintext fallback under any circumstance. When the native mechanism is missing,
 locked, or mismatched, operations throw `ProjectSecretProtectionUnavailableException` (or

@@ -39,6 +39,14 @@
 }
 
 /* Ticket drag affordances mirror the routing policy enforced by the service. */
+.column.column-linked {
+    border-color: var(--col-color);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--col-color) 32%, transparent);
+}
+.column.column-linked > .column-header {
+    background: color-mix(in srgb, var(--col-color) 8%, transparent);
+}
+
 .column.column-ticket-drop-allowed {
     border-color: color-mix(in srgb, var(--col-color) 52%, var(--border-strong));
     background: color-mix(in srgb, var(--col-color) 4%, var(--surface));

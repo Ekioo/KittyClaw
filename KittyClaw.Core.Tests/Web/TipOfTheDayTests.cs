@@ -13,7 +13,7 @@ namespace KittyClaw.Core.Tests.Web;
 /// </summary>
 public class TipOfTheDayTests
 {
-    private static readonly string[] SupportedLanguages = ["en", "fr", "de", "es", "it", "pt-BR", "ja"];
+    private static readonly string[] SupportedLanguages = ["en", "fr", "de", "es", "it", "pt-BR", "ja", "zh-CN"];
     private static string RepoRoot()
     {
         var dir = Directory.GetCurrentDirectory();
@@ -79,7 +79,7 @@ public class TipOfTheDayTests
         Assert.Contains("Owner action required", english);
         Assert.Contains("Scheduled tasks", english);
         Assert.Contains("Project skills", english);
-        Assert.Contains("migration", english, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Edit with assistant", english);
         Assert.Contains("orange badge", english);
         Assert.Contains("cached report", english);
         Assert.Contains("RTK", english);

@@ -1,5 +1,6 @@
-﻿<!DOCTYPE html>
-<html lang="en">
+@inject LocalizationService L
+<!DOCTYPE html>
+<html lang="@L.Lang">
 
 <head>
     <meta charset="utf-8" />
@@ -22,6 +23,10 @@
     <link rel="stylesheet" href="@Assets["KittyClaw.Web.styles.css"]" />
     <link rel="stylesheet" href="@Assets["css/motion.css"]" />
     <link rel="stylesheet" href="@Assets["css/mobile.css"]" />
+    <link rel="stylesheet" href="@Assets["css/ticket-panel-mobile.css"]" />
+    <link rel="stylesheet" href="@Assets["css/mobile-views.css"]" />
+    <link rel="stylesheet" href="@Assets["css/conversation.css"]" />
+    <link rel="stylesheet" href="@Assets["css/windows-desktop.css"]" />
     <ImportMap />
     <HeadOutlet />
 </head>
@@ -30,6 +35,9 @@
     <Routes />
     <ReconnectModal />
     <script>
+        window.setApplicationLanguage = function (language) {
+            document.documentElement.lang = language;
+        };
         window.__kittyClawBoardScrolls ??= {};
         window.saveColumnScrollPositions = function () {
             document.querySelectorAll('.column-body').forEach((element, index) => {

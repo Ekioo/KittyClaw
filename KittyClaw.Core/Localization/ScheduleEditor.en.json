@@ -1,0 +1,21 @@
+{
+  "ScheduleFrequency": "Frequency",
+  "ScheduleDays": "Scheduled days",
+  "FreqEveryMinutes": "Every N minutes",
+  "FreqEveryHours": "Every N hours",
+  "FreqScheduled": "On specific days",
+  "RepeatEveryLabel": "Repeat every",
+  "MinutesUnit": "minutes",
+  "HoursUnit": "hours",
+  "AtTime": "At",
+  "AndAlsoAt": "and also at",
+  "AddTime": "add a time",
+  "RemoveTime": "Remove this time",
+  "Weekday0": "Sun",
+  "Weekday1": "Mon",
+  "Weekday2": "Tue",
+  "Weekday3": "Wed",
+  "Weekday4": "Thu",
+  "Weekday5": "Fri",
+  "Weekday6": "Sat"
+}

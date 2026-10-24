@@ -1,0 +1,40 @@
+.project-creation {
+    width: min(100%, 600px);
+    min-width: 0;
+    max-width: 600px;
+    max-height: calc(100dvh - 3rem);
+    color-scheme: dark;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.project-creation-header h2 { margin: 0 0 .5rem; }
+.project-creation-header p { margin: 0; color: color-mix(in srgb, var(--text) 75%, var(--surface)); line-height: 1.6; opacity: 1; }
+.project-creation-field { display: flex; flex-direction: column; gap: .5rem; min-width: 0; }
+.project-creation .settings-label { display: block; margin: 0; color: var(--text); }
+.project-creation .settings-hint { margin: 0; color: color-mix(in srgb, var(--text) 75%, var(--surface)); line-height: 1.5; opacity: 1; }
+.project-creation .settings-row { display: flex; gap: .65rem; margin: 0; min-width: 0; }
+.project-creation .settings-input { width: 100%; min-width: 0; box-sizing: border-box; padding: .75rem; }
+.project-creation input.settings-input { flex: 1; }
+.project-creation .settings-input::placeholder { color: color-mix(in srgb, var(--text) 65%, var(--surface)); opacity: 1; }
+.project-creation #new-project-name,
+.project-creation textarea.settings-input { font-family: inherit; }
+.project-creation textarea.settings-input { display: block; min-height: 120px; resize: vertical; line-height: 1.6; }
+.project-creation .settings-browse { flex-shrink: 0; min-height: 44px; }
+.project-creation > .modal-actions { margin: 0; padding-top: 1rem; border-top: 1px solid var(--border); gap: .65rem; }
+.project-creation > .modal-actions button { min-height: 44px; }
+
+@media (max-width: 767px) {
+    .project-creation-header h2 { font-size: 1.25rem; }
+    .project-creation > .modal-actions { background: var(--panel-bg, #1e1e22); }
+}
+
+@media (max-width: 480px) {
+    .project-creation .settings-row { flex-wrap: wrap; }
+    .project-creation #repository-path { flex-basis: 100%; }
+    .project-creation .settings-browse { width: 100%; }
+    .project-creation > .modal-actions { display: flex; flex-direction: column-reverse; }
+    .project-creation > .modal-actions button { width: 100%; }
+}

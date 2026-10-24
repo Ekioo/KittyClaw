@@ -17,6 +17,7 @@
 @inject WorktreeMergeQueueService WorktreeMergeQueueService
 @inject KittyClaw.Web.Services.BoardUpdateNotifier BoardUpdateNotifier
 @inject IJSRuntime JS
+@inject PersistentComponentState InitialState
 @inject LocalizationService L
 @inject KittyClaw.Web.Services.EscapeKeyStack EscapeStack
 @implements IDisposable
@@ -29,9 +30,7 @@
 
 @if (_ticket is not null)
 {
-    <div class="ticket-modal-overlay">
-        <div class="ticket-panel" aria-busy="@(_detailsLoading ? "true" : "false")">
-        <div class="ticket-panel-header">
+    RenderFragment desktopHeader = @<div class="ticket-panel-header">
             <div class="editable-field">
                 <button type="button" class="priority-dot-btn" @onclick="TogglePriorityPicker"
                         title="@L["ChangePriority"]" aria-label="@L["ChangePriority"]"
@@ -65,13 +64,13 @@
                 }
             </div>
             <div class="header-actions">
-                <button class="tile-config-revise" @onclick="() => _showImprovement = true">✦ @L["ImproveTicket"]</button>
-                <button class="close-btn" @onclick="CloseAsync">&times;</button>
+                <button class="tile-config-revise" @onclick="() => OpenImprovement(false)">✦ @L["ImproveTicket"]</button>
+                <button class="tile-config-revise" @onclick="() => OpenImprovement(true)">@L["SplitTicket"]</button>
+                <button class="close-btn" aria-label="@L["Close"]" @onclick="CloseAsync">&times;</button>
             </div>
-        </div>
+        </div>;
 
-        <div class="ticket-properties-row">
-        <div class="ticket-column-row" data-testid="ticket-current-column">
+    RenderFragment column = @<div class="ticket-column-row" data-testid="ticket-current-column">
             <label class="ticket-column-badge" title="@L["TicketCurrentColumn"]">
                 <span class="sub-ticket-status-dot" style="background: @(CurrentColumn()?.Color ?? GetColumnColor(_ticket.Status))" aria-hidden="true"></span>
                 <select class="ticket-column-select" aria-label="@L["TicketCurrentColumn"]"
@@ -86,9 +85,10 @@
             {
                 <span class="dep-error" role="alert">@_columnMoveError</span>
             }
-        </div>
+        </div>;
 
-        @* ── Labels row ── *@
+    RenderFragment properties = @<text>
+@* ── Labels row ── *@
         <div class="ticket-labels-row" title="@L["Labels"]">
             @foreach (var label in _ticket.Labels)
             {
@@ -120,40 +120,6 @@
                     </div>
                 }
             </div>
-        </div>
-
-        @* ── Assignee row ── *@
-        <div class="ticket-assignee-row" title="@L["AssignedToLabel"]">
-            @if (!string.IsNullOrEmpty(_ticket.AssignedTo))
-            {
-                <span class="assignee-pill">
-                    @MemberDisplayName(_ticket.AssignedTo)
-                    <button class="label-remove-btn" @onclick="RemoveAssignee">&times;</button>
-                </span>
-            }
-            <div class="label-autocomplete">
-                <input class="label-autocomplete-input"
-                       placeholder="@(string.IsNullOrEmpty(_ticket.AssignedTo) ? L["AssignPlaceholder"] : L["ChangePlaceholder"])"
-                       aria-label="@L["AssignedToLabel"]"
-                       @bind="_assigneeSearch"
-                       @bind:event="oninput"
-                       @onfocus="OpenAssigneeDropdown"
-                       @onblur="OnAssigneeBlur"
-                       @onkeydown="HandleAssigneeKeyDown" />
-                @if (_assigneeDropdownOpen && GetAssigneeSuggestions().Any())
-                {
-                    <div class="label-dropdown">
-                        @foreach (var member in GetAssigneeSuggestions())
-                        {
-                            <button class="label-dropdown-item" @onmousedown="() => SetAssignee(member.Slug)">
-                                <span class="assignee-pill">@member.Name</span>
-                                <span class="member-slug-hint">@member.Slug</span>
-                            </button>
-                        }
-                    </div>
-                }
-            </div>
-
         </div>
 
         @* ── Schedule row ── *@
@@ -204,10 +170,17 @@
                     <span class="token-badge" title="@CostTooltip(_ticket.AgentTokens, _ticket.AgentCostUsd, _ticket.AgentCostEstimated)">⛁ @KittyClaw.Web.Services.TokenDisplay.Compact(_ticket.AgentTokens)@(_ticket.AgentCostUsd > 0 ? $" · {(_ticket.AgentCostEstimated ? "≈ " : "")}{KittyClaw.Web.Services.TokenDisplay.Usd(_ticket.AgentCostUsd)}" : "")</span>
                 }
             </div>
+</text>;
 
-        </div>
+    RenderFragment labels = @<text>
+        @foreach (var label in _ticket.Labels)
+        {
+            <span class="label-pill" style="--lc: @label.Color">@label.Name</span>
+        }
+    </text>;
 
-        @if (_worktreeState is not null)
+    RenderFragment context = @<div class="ticket-context">
+@if (_worktreeState is not null)
         {
             <section class="worktree-summary" data-testid="ticket-worktree-summary">
                 <div class="worktree-summary-title"><strong>@L["WorktreeTitle"]</strong></div>
@@ -335,7 +308,11 @@
                 </div>
             </div>
         }
-        <div class="dep-add-row">
+
+</div>;
+
+    RenderFragment dependencyEditor = @<div class="ticket-dependency-editor">
+        <div class="dep-add-row" id="ticket-dependency-editor">
             <span class="section-label-sm">@L["BlockedBy"]:</span>
             <input class="dep-add-input" type="number" min="1" placeholder="@L["BlockerIdPlaceholder"]"
                    @bind="_addBlockerIdText" @bind:event="oninput"
@@ -349,12 +326,9 @@
         }
 
         @* ── Ticket body (thread layout) ── *@
-            <div class="ticket-panel-thread">
-                <div class="section-header">
-                    <span class="section-label">@L["AutomationQueue"]</span>
-                </div>
-                <AutomationQueueSummary Slug="@Slug" TicketId="@_ticket.Id" />
-                <ColumnExecutionRecovery Slug="@Slug" TicketId="@_ticket.Id" />
+</div>;
+
+    RenderFragment content = @<div class="ticket-panel-thread">
                 <div class="section-header">
                     <span class="section-label">@L["Description"]</span>
                     <button class="icon-btn pencil-btn" title="@L["EditDescription"]" @onclick="StartEditDescription">&#9998;</button>
@@ -370,6 +344,7 @@
                     }
                 </div>
 
+                <ColumnExecutionRecovery Slug="@Slug" TicketId="@_ticket.Id" OnAnswered="RefreshAsync" Drafts="_questionDrafts" />
                 <TicketAcceptanceCriteria Slug="@Slug" Ticket="@_ticket" OnChanged="@RefreshAsync" />
 
                 @if (CurrentColumn() is { } guidanceColumn &&
@@ -399,11 +374,8 @@
                     }
                 }
 
-                @if (!_detailsLoading)
-                {
-                    <JevWorkReviewPanel Slug="@Slug" TicketId="@TicketId" OnDecided="RefreshAsync" />
-                    <JevProposalPanel Slug="@Slug" TicketId="@TicketId" OnDecisionTaken="RefreshAsync" OnHistoryChanged="RefreshJevHistoryAsync" />
-                }
+                <JevWorkReviewPanel Slug="@Slug" TicketId="@TicketId" InitialTicket="@_ticket" OnDecided="RefreshAsync" />
+                <JevProposalPanel Slug="@Slug" TicketId="@TicketId" InitialTicket="@_ticket" OnDecisionTaken="RefreshAsync" OnHistoryChanged="RefreshJevHistoryAsync" />
                 <div class="thread-section-divider">
                     <div class="activity-header">
                         <span class="section-label">@L["Activity"]</span>
@@ -411,9 +383,7 @@
                             <button class="add-comment-btn-sm" @onclick="StartNewComment">@L["AddComment"]</button>
                             <button class="chat-with-agent-btn"
                                     @onclick="OpenTicketChat"
-                                    title="@(CanChatWithAssignee()
-                                        ? L.Get("ChatWithAssigneeTooltip", _chatInitialAgentNameForTooltip())
-                                        : L["ChatPickAgentTooltip"])">
+                                    title="@L["ChatPickAgentTooltip"]">
                                 💬 @L["ChatWithAssignee"]
                             </button>
                         </div>
@@ -468,8 +438,42 @@
                         <button class="delete-btn" @onclick="() => _confirmDelete = true">@L["DeleteThisTicket"]</button>
                     }
                 </div>
-            </div>
-        </div>
+            </div>;
+
+    RenderFragment priority = @<div class="ticket-mobile-priority">
+<button type="button" class="priority-dot-btn" @onclick="TogglePriorityPicker"
+                        title="@L["ChangePriority"]" aria-label="@L["ChangePriority"]"
+                        aria-expanded="@(_showPriorityPicker ? "true" : "false")">
+                    <span class="priority-dot priority-@GetPriorityClass(_ticket.Priority)"></span>
+                </button>
+                @if (_showPriorityPicker)
+                {
+                    <div class="priority-dropdown">
+                        @foreach (var p in Enum.GetValues<TicketPriority>())
+                        {
+                            <button class="priority-option @(_ticket.Priority == p ? "active" : "")"
+                                    @onclick="() => SetPriorityAndClose(p)">
+                                <span class="priority-dot priority-@GetPriorityClass(p)"></span>
+                                @GetPriorityLabel(p)
+                            </button>
+                        }
+                    </div>
+                }
+</div>;
+
+    RenderFragment titleEditor = @<div class="editable-field">
+<span class="ticket-id-prefix">#@_ticket.Id &mdash;</span>
+                    <input class="edit-title-input" @bind="_editTitle" @onkeydown="HandleTitleKeyDown" />
+                    <button class="icon-btn save-btn" title="@L["Save"]" @onclick="SaveTitle">&#10003;</button>
+                    <button class="icon-btn cancel-icon-btn" title="@L["Cancel"]" @onclick="() => _editingTitle = false">&#10005;</button>
+</div>;
+
+    <div class="ticket-modal-overlay">
+        <TicketPanelResponsiveView TicketId="@_ticket.Id" Title="@_ticket.Title" Loading="@_detailsLoading"
+                                   EditingTitle="@_editingTitle" DesktopHeader="@desktopHeader"
+                                   Priority="@priority" TitleEditor="@titleEditor" Properties="@properties" Column="@column" Labels="@labels"
+                                   Context="@context" DependencyEditor="@dependencyEditor" Content="@content"
+                                   OnClose="CloseAsync" OnImprove="() => OpenImprovement(false)" OnSplit="() => OpenImprovement(true)" OnEditTitle="StartEditTitle" />
     </div>
 }
 
@@ -526,11 +530,14 @@
 
 @if (_showImprovement)
 {
-    <TicketImprovementDialog Slug="@Slug" TicketId="@TicketId" OnClose="() => _showImprovement = false" OnChanged="RefreshAsync" />
+    <TicketImprovementDialog Slug="@Slug" TicketId="@TicketId" Split="@_splitTicket" OnClose="() => _showImprovement = false" OnChanged="RefreshAsync" />
 }
 
 @code {
+    private readonly Dictionary<string, TicketQuestionAnswerDraft> _questionDrafts = [];
     private bool _showImprovement;
+    private bool _splitTicket;
+    private void OpenImprovement(bool split) { _splitTicket = split; _showImprovement = true; }
 
     private string CostTooltip(long tokens, double cost, bool estimated)
     {
@@ -582,8 +589,6 @@
     private bool _showPriorityPicker;
     private string _labelSearch = "";
     private bool _labelDropdownOpen;
-    private string _assigneeSearch = "";
-    private bool _assigneeDropdownOpen;
 
     // Fullscreen editor
     private string _fullscreenTarget = ""; // "description", "newComment", "editComment"
@@ -607,7 +612,6 @@
     private IDisposable? _escFullscreenEditor;
     private IDisposable? _escPriorityPicker;
     private IDisposable? _escLabelDropdown;
-    private IDisposable? _escAssigneeDropdown;
     private IDisposable? _escChatDrawer;
 
     private string _loadedKey = "";
@@ -691,7 +695,21 @@
     protected override void OnInitialized()
     {
         BoardUpdateNotifier.OnProjectUpdated += OnProjectUpdatedExternal;
+        _initialStateSubscription = InitialState.RegisterOnPersisting(() =>
+        {
+            if (_ticket is not null)
+                InitialState.PersistAsJson($"ticket:{Slug}:{TicketId}", new InitialTicketData(_ticket, _columns,
+                    _summaries, _allLabels, _allMembers, _processorNames, _jevHistory, _worktreeState,
+                    _mergeRequest, _mergePosition, _worktreeLoadError, _crossProjectTickets));
+            return Task.CompletedTask;
+        });
     }
+
+    private PersistingComponentStateSubscription _initialStateSubscription;
+    public sealed record InitialTicketData(Ticket Ticket, List<BoardColumn> Columns, List<TicketSummary> Summaries,
+        List<Label> Labels, List<Member> Members, Dictionary<int, string> ProcessorNames, List<TimelineItem> JevHistory,
+        TicketWorktreeState? Worktree, WorktreeMergeRequest? MergeRequest, int? MergePosition, string? WorktreeError,
+        Dictionary<string, Dictionary<int, string>> CrossProjectTickets);
 
     protected override async Task OnParametersSetAsync()
     {
@@ -716,12 +734,12 @@
     public void Dispose()
     {
         _disposed = true;
+        _initialStateSubscription.Dispose();
         BoardUpdateNotifier.OnProjectUpdated -= OnProjectUpdatedExternal;
         _escClose?.Dispose();
         _escFullscreenEditor?.Dispose();
         _escPriorityPicker?.Dispose();
         _escLabelDropdown?.Dispose();
-        _escAssigneeDropdown?.Dispose();
         _escChatDrawer?.Dispose();
     }
 
@@ -734,12 +752,10 @@
         _fullscreenTarget = "";
         _pasteListenerAttached = false;
         _labelSearch = "";
-        _assigneeSearch = "";
         _addBlockerIdText = "";
         _depError = null;
         ClosePriorityPicker();
         CloseLabelDropdown();
-        CloseAssigneeDropdown();
     }
 
     private async Task LoadAsync()
@@ -747,19 +763,35 @@
         _detailsLoading = true;
         try
         {
-            _ticket = await TicketService.GetTicketAsync(Slug, TicketId);
+            var restored = InitialState.TryTakeFromJson<InitialTicketData>($"ticket:{Slug}:{TicketId}", out var initial)
+                && initial is not null;
+            if (restored)
+            {
+                _ticket = initial!.Ticket;
+                _columns = initial.Columns;
+                _summaries = initial.Summaries; _allLabels = initial.Labels; _allMembers = initial.Members;
+                _processorNames = initial.ProcessorNames; _jevHistory = initial.JevHistory;
+                _worktreeState = initial.Worktree; _mergeRequest = initial.MergeRequest;
+                _mergePosition = initial.MergePosition; _worktreeLoadError = initial.WorktreeError;
+                foreach (var (foreignSlug, titles) in initial.CrossProjectTickets) _crossProjectTickets[foreignSlug] = titles;
+                BuildMarkdownPipeline();
+                return;
+            }
+            else
+                _ticket = await Task.Run(() => TicketService.GetTicketAsync(Slug, TicketId));
             if (_disposed || _ticket is null) return;
             // Load the column selector with the ticket; ancillary work must not delay its options.
-            _columns = await ColumnService.ListColumnsAsync(Slug, _ticket.PipelineId);
+            if (!restored)
+                _columns = await ColumnService.ListColumnsAsync(Slug, _ticket.PipelineId);
             if (_disposed) return;
             // Show the ticket and its criteria before loading history, processor files and Git state.
             _worktreeState = null; _mergeRequest = null; _mergePosition = null; _worktreeLoadError = null;
             StateHasChanged();
             await Task.Yield();
             if (_disposed) return;
-            var summaries = TicketService.ListTicketsAsync(Slug);
-            var labels = LabelService.ListLabelsAsync(Slug);
-            var members = MemberService.ListMembersAsync(Slug);
+            var summaries = Task.Run(() => TicketService.ListTicketsAsync(Slug));
+            var labels = Task.Run(() => LabelService.ListLabelsAsync(Slug));
+            var members = Task.Run(() => MemberService.ListMembersAsync(Slug));
             var slug = Slug;
             var processors = Task.Run(() => ProcessorService.ListAsync(slug));
             await Task.WhenAll(summaries, labels, members, processors);
@@ -974,6 +1006,11 @@
     private async Task RebuildPipelineAsync()
     {
         await FetchCrossProjectTicketsAsync();
+        BuildMarkdownPipeline();
+    }
+
+    private void BuildMarkdownPipeline()
+    {
         var index = _summaries.ToDictionary(t => t.Id, t => t.Title);
         var memberHandles = new HashSet<string>(_allMembers.Select(m => m.Slug), StringComparer.OrdinalIgnoreCase);
         _mdPipeline = KittyClaw.Web.Markdown.CommentMarkdownPipeline.Configure(new MarkdownPipelineBuilder())
@@ -984,7 +1021,7 @@
 
     // ── Timeline ──
 
-    private record TimelineItem(DateTime At, string Author, bool IsComment, string Text, int? Id,
+    public record TimelineItem(DateTime At, string Author, bool IsComment, string Text, int? Id,
         JevRoutingProposal? Proposal = null, JevProposalDecision? Decision = null, JevWorkDecision? WorkDecision = null);
     private List<TimelineItem> _jevHistory = [];
     private async Task RefreshJevHistoryAsync()
@@ -1416,112 +1453,13 @@
         else if (e.Key == "Escape") { _addBlockerIdText = ""; _depError = null; }
     }
 
-    // ── Assignee ──
-
-    private List<Member> GetAssigneeSuggestions()
-    {
-        var query = _assigneeSearch?.Trim() ?? "";
-        return _allMembers
-            .Where(m => string.IsNullOrEmpty(query)
-                || m.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
-                || m.Slug.Contains(query, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-    }
-
-    private string MemberDisplayName(string? slug)
-    {
-        if (string.IsNullOrEmpty(slug)) return "";
-        var member = _allMembers.FirstOrDefault(m => m.Slug == slug);
-        return member?.Name ?? slug;
-    }
-
-    private async Task SetAssignee(string slug)
-    {
-        if (_ticket is null) return;
-        var oldAssignee = _ticket.AssignedTo ?? "";
-        var ticketId = _ticket.Id;
-        await TicketService.UpdateTicketAsync(Slug, ticketId, assignedTo: slug);
-        PushUndo?.Invoke($"{L["UndoAssign"]} #{ticketId}", async () =>
-            await TicketService.UpdateTicketAsync(Slug, ticketId, assignedTo: oldAssignee));
-        _assigneeSearch = "";
-        CloseAssigneeDropdown();
-        await RefreshAsync();
-    }
-
-    private async Task RemoveAssignee()
-    {
-        if (_ticket is null) return;
-        var oldAssignee = _ticket.AssignedTo ?? "";
-        var ticketId = _ticket.Id;
-        await TicketService.UpdateTicketAsync(Slug, ticketId, assignedTo: "");
-        PushUndo?.Invoke($"{L["UndoUnassign"]} #{ticketId}", async () =>
-            await TicketService.UpdateTicketAsync(Slug, ticketId, assignedTo: oldAssignee));
-        await RefreshAsync();
-    }
-
-    private async Task CreateAndAssign()
-    {
-        if (_ticket is null || string.IsNullOrWhiteSpace(_assigneeSearch)) return;
-        var name = _assigneeSearch.Trim();
-        var created = await MemberService.CreateMemberAsync(Slug, name);
-        _allMembers = await MemberService.ListMembersAsync(Slug);
-        await SetAssignee(created.Slug);
-    }
-
-    private async Task HandleAssigneeKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_assigneeSearch))
-        {
-            var suggestions = GetAssigneeSuggestions();
-            if (suggestions.Count > 0)
-                await SetAssignee(suggestions[0].Slug);
-            else
-                await CreateAndAssign();
-        }
-        else if (e.Key == "Escape")
-        {
-            _assigneeSearch = "";
-            CloseAssigneeDropdown();
-        }
-    }
-
-    private void OpenAssigneeDropdown()
-    {
-        if (_assigneeDropdownOpen) return;
-        _assigneeDropdownOpen = true;
-        _escAssigneeDropdown?.Dispose();
-        _escAssigneeDropdown = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseAssigneeDropdown(); StateHasChanged(); }));
-    }
-
-    private void CloseAssigneeDropdown()
-    {
-        _assigneeDropdownOpen = false;
-        _escAssigneeDropdown?.Dispose();
-        _escAssigneeDropdown = null;
-    }
-
-    private void OnAssigneeBlur() => CloseAssigneeDropdown();
-
     // ── Ticket chat ──
 
     private void OpenTicketChat()
     {
         if (_ticket is null) return;
-        var assignee = _ticket.AssignedTo;
-        // With an assignee: jump straight into the conversation with that agent.
-        // Without: leave InitialAgent null so the drawer shows the picker — the ticket
-        // context still propagates through the TicketId/TicketTitle parameters.
-        if (!string.IsNullOrWhiteSpace(assignee) && assignee != "owner")
-        {
-            var member = _allMembers.FirstOrDefault(m => m.Slug == assignee);
-            _chatInitialAgent = assignee;
-            _chatInitialAgentName = member?.Name ?? assignee;
-        }
-        else
-        {
-            _chatInitialAgent = null;
-            _chatInitialAgentName = null;
-        }
+        _chatInitialAgent = null;
+        _chatInitialAgentName = null;
         _showChatDrawer = true;
         _escChatDrawer?.Dispose();
         _escChatDrawer = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseChatDrawer(); StateHasChanged(); }));
@@ -1534,19 +1472,6 @@
         _chatInitialAgentName = null;
         _escChatDrawer?.Dispose();
         _escChatDrawer = null;
-    }
-
-    private bool CanChatWithAssignee()
-    {
-        var a = _ticket?.AssignedTo;
-        return !string.IsNullOrWhiteSpace(a) && a != "owner";
-    }
-
-    private string _chatInitialAgentNameForTooltip()
-    {
-        var a = _ticket?.AssignedTo;
-        if (string.IsNullOrWhiteSpace(a)) return "";
-        return _allMembers.FirstOrDefault(m => m.Slug == a)?.Name ?? a;
     }
 
     private string GetColumnColor(string status) =>

@@ -11,7 +11,13 @@
         <h1>@L["Costs"]</h1>
     </header>
 
-    <section class="cost-filter-card" aria-label="@L["CostFilters"]">
+    <section class="cost-filter-card @(_mobileFiltersOpen ? "mobile-filters-open" : "")" aria-label="@L["CostFilters"]">
+        <button type="button" class="mobile-filter-toggle" aria-expanded="@(_mobileFiltersOpen ? "true" : "false")"
+                aria-controls="cost-filter-content" @onclick="() => _mobileFiltersOpen = !_mobileFiltersOpen">
+            <span><strong>@L["CostFilters"]</strong><small>@_from.ToString("dd/MM/yyyy") — @_to.ToString("dd/MM/yyyy")</small></span>
+            <span aria-hidden="true">@(_mobileFiltersOpen ? "−" : "+")</span>
+        </button>
+        <div class="cost-filter-content" id="cost-filter-content">
         <div class="cost-filter-grid">
             <label class="cost-field"><span>@L["FromDate"]</span><input class="cost-from" type="date" value="@_from.ToString("yyyy-MM-dd")" @onchange="OnFromChanged" /></label>
             <label class="cost-field"><span>@L["ToDate"]</span><input class="cost-to" type="date" value="@_to.ToString("yyyy-MM-dd")" @onchange="OnToChanged" /></label>
@@ -56,6 +62,7 @@
             <button type="button" class="@PresetClass(DatePreset.PreviousMonth)" @onclick="() => ApplyDatePreset(DatePreset.PreviousMonth)">@L["PreviousMonth"]</button>
             <button type="button" class="@PresetClass(DatePreset.LastThreeMonths)" @onclick="() => ApplyDatePreset(DatePreset.LastThreeMonths)">@L["LastThreeMonths"]</button>
             <button type="button" class="@PresetClass(DatePreset.CurrentYear)" @onclick="() => ApplyDatePreset(DatePreset.CurrentYear)">@L["CurrentYear"]</button>
+        </div>
         </div>
     </section>
 
@@ -166,6 +173,7 @@
 </main>
 
 @code {
+    private bool _mobileFiltersOpen;
     private DateOnly _to = DateOnly.FromDateTime(DateTime.Now);
     private DateOnly _from = DateOnly.FromDateTime(DateTime.Now).AddDays(-29);
     private DatePreset? _activePreset = DatePreset.Last30Days;

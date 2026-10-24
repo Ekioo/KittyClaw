@@ -57,7 +57,6 @@
     </div>
     <button type="button" class="ticket-title ticket-open-btn" aria-label="@($"#{Ticket.Id} {Ticket.Title}")"
             @onclick="OnClickHandler" @onclick:stopPropagation>@Ticket.Title</button>
-    <AutomationQueueSummary Slug="@Slug" TicketId="@Ticket.Id" Compact="true" />
     <ColumnExecutionRecovery Slug="@Slug" TicketId="@Ticket.Id" />
     @if (Ticket.Labels.Count > 0)
     {
@@ -92,10 +91,6 @@
         {
             <span class="token-badge" title="@CostTooltip()">⛁ @KittyClaw.Web.Services.TokenDisplay.Compact(Ticket.AgentTokens)@(Ticket.AgentCostEstimated ? " ≈" : "")</span>
         }
-        @if (!string.IsNullOrEmpty(Ticket.AssignedTo))
-        {
-            <span class="assignee-badge" title="@MemberDisplayName(Ticket.AssignedTo)">@MemberDisplayName(Ticket.AssignedTo)</span>
-        }
     </div>
 </div>
 
@@ -109,7 +104,6 @@
     [Parameter] public ColumnRole ColRole { get; set; }
     [Parameter] public List<BoardColumn> Columns { get; set; } = [];
     [Parameter] public string Slug { get; set; } = "";
-    [Parameter] public List<Member> AllMembers { get; set; } = [];
     [Parameter] public EventCallback OnDragStart { get; set; }
     [Parameter] public EventCallback OnDragEnd { get; set; }
     [Parameter] public EventCallback OnDragOverCard { get; set; }
@@ -137,11 +131,6 @@
     private Task OnClickHandler() => OnClick.InvokeAsync();
     private Task OnEnterSubKanbanHandler() => OnEnterSubKanban.InvokeAsync();
 
-    private string MemberDisplayName(string? slug)
-    {
-        if (string.IsNullOrEmpty(slug)) return "";
-        return AllMembers.FirstOrDefault(m => m.Slug == slug)?.Name ?? slug;
-    }
 
     private string CostTooltip()
     {

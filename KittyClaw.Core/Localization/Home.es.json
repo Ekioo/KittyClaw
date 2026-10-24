@@ -1,4 +1,5 @@
 {
+  "CreationWorkspaceHint": "Elige la carpeta local de tu repositorio Git o introduce su ruta completa.",
   "HomeTitle": "KittyClaw - Proyectos",
   "Projects": "Proyectos",
   "NewProjectPlaceholder": "Nuevo nombre del proyecto...",

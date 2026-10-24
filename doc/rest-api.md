@@ -1,18 +1,18 @@
 # REST API
 
 ## Purpose
-Exposes the project, ticket, comment, member, label, column, and automation data over HTTP so that AI agents (and the Blazor UI) can read and mutate the board programmatically.
+Exposes the project, ticket, comment, member, label, column, and workflow data over HTTP so that AI agents (and the Blazor UI) can read and mutate the board programmatically.
 
 ## Key components
 - `KittyClaw.Web/Api/Endpoints.cs` — `MapApiEndpoints` entry point; route definitions are split across per-domain `partial class Endpoints` files in the same folder:
-  - `Endpoints.Projects.cs`, `Endpoints.Tickets.cs`, `Endpoints.Columns.cs`, `Endpoints.Labels.cs`, `Endpoints.Members.cs`, `Endpoints.Automations.cs`, `Endpoints.Runs.cs`, `Endpoints.Chat.cs`, `Endpoints.Dashboard.cs`, `Endpoints.Skills.cs`, `Endpoints.Images.cs`, `Endpoints.Browse.cs`.
+  - `Endpoints.Projects.cs`, `Endpoints.Tickets.cs`, `Endpoints.Columns.cs`, `Endpoints.Labels.cs`, `Endpoints.Members.cs`, `Endpoints.Runs.cs`, `Endpoints.Chat.cs`, `Endpoints.Dashboard.cs`, `Endpoints.Skills.cs`, `Endpoints.Images.cs`, `Endpoints.Browse.cs`.
 - `KittyClaw.Web/Api/Contracts.cs` — request/response DTOs.
-- `KittyClaw.Web/Api/OpenApiMarkdownGenerator.cs` — renders the live OpenAPI spec as human-readable Markdown; appends embedded reference guides (automations, dashboard tiles) so agents can discover the full API surface from a single `GET /api/docs`.
+- `KittyClaw.Web/Api/OpenApiMarkdownGenerator.cs` — renders the live OpenAPI spec as human-readable Markdown; appends embedded reference guides (dashboard tiles) so agents can discover the full API surface from a single `GET /api/docs`.
 
 ## Entry points
-- `GET /api/docs` — Markdown documentation, generated at runtime from the OpenAPI spec. Includes: schema tables for all request/response types (e.g. `TileSidecar` with allowed `template` values), an **Automations guide**, and a **Dashboard tiles guide** (template catalogue, sidecar format, creation walkthrough).
+- `GET /api/docs` — Markdown documentation, generated at runtime from the OpenAPI spec. Includes: schema tables for all request/response types (e.g. `TileSidecar` with allowed `template` values), a **Dashboard tiles guide** (template catalogue, sidecar format, creation walkthrough).
 - `GET /openapi/v1.json` — machine-readable OpenAPI JSON.
-- `/api/projects/{slug}/...` — projects, tickets, comments, columns, members, labels, mentions, automations.
+- `/api/projects/{slug}/...` — projects, tickets, comments, columns, members, labels, mentions, and column workflows.
 - `GET /api/projects/{slug}/chat/model?target={target}` — returns the model bound to an existing chat conversation. For legacy conversations with history but no stored binding, it returns the model from the last completed run; otherwise it returns `null`.
 - `POST /api/projects/{slug}/tickets/{id}/transfer` — atomically transfers a ticket tree to another project while preserving identifiers and history; see [Lossless ticket transfer](./ticket-transfer.md).
 - `POST /api/projects/{slug}/tickets` — creates tickets regardless of the number of blocked tickets. An explicitly configured blocking capacity on the destination column can refuse an arrival with HTTP 400.
@@ -22,7 +22,18 @@ Exposes the project, ticket, comment, member, label, column, and automation data
 - `GET /api/projects/{slug}/tickets/{id}` exposes both dependency directions as `blockedBy` and `blocks` (each entry: dependency id, ticket id, title, status); the [kanban UI](./kanban-ui.md) renders them in the ticket panel.
 - `GET /api/projects/{slug}/git` — Git status of the project's configured workspace (`GitRepositoryStatus`: workspace configured/exists, git availability, `.git` metadata detection, resolved repository root and current branch). `404` if the project does not exist.
 - `POST /api/projects/{slug}/git/init` — runs `git init` strictly inside the configured workspace (no client-supplied path); see [per-ticket worktree workflow](./worktree-workflow.md#initializing-a-missing-repository). Returns `200` on creation, `409` if Git metadata already exists (directory or file `.git`), `400` for a missing/unconfigured workspace or unavailable git.
-- `POST /api/projects/{slug}/chat/start` accepts an optional `images` array (`ChatImageDto[]`). Each DTO carries `dataUrl` (base64 data URL), `mime`, `name`, and `sizeBytes`. Server-side: MIME allow-list (JPEG, PNG, GIF, WebP), 5 MB per-image cap, 5 images per turn cap, base64 decoded and persisted to `<workspace>/.agents/channel/tmp/chat-{runId}-{i}.{ext}` before being forwarded as `ImagePaths` to `AgentRunContext`. Invalid images return HTTP 400 `image_rejected`.
+- `POST /api/projects/{slug}/chat/start` accepts an optional `images` array (`ChatImageDto[]`). Each DTO carries `dataUrl` (base64 data URL), `mime`, `name`, and `sizeBytes`. Server-side: MIME allow-list (JPEG, PNG, GIF, WebP), 5 MB per-image cap, 5 images per turn cap, base64 decoded and persisted as temporary files before being forwarded as `ImagePaths` to `AgentRunContext`. Invalid images return HTTP 400 `image_rejected`.
+  Image bytes must have a signature matching the declared MIME type; the encoded
+  length is capped before base64 allocation, independently of `sizeBytes`.
+  Files are stored outside the repository under the system temporary directory
+  (`KittyClaw/chat-images/<runId>/`), and rejected batches remove partial files.
+
+- Pipeline-kit request streams are bounded to 8 MiB before parsing the archive,
+  including when Content-Length is absent. Oversized confirmation uploads return
+  413; empty or oversized analysis bodies return 400.
+- Raw dashboard outputs use a sandboxed content security policy, including SVG
+  files opened directly as documents. Generated SVG scripts cannot execute in
+  the application origin.
 
 - `GET /api/projects/{slug}/runs` accepts `includeCompleted`, `ticketId`, and `limit` (1-500 when specified; MCP defaults to 100); it returns active runs by default and retained terminal runs when requested.
 
@@ -42,6 +53,5 @@ Exposes the project, ticket, comment, member, label, column, and automation data
 
 ## External dependencies
 - [Storage](./storage.md) — reads/writes the per-project SQLite DBs.
-- [Automation engine](./automation-engine.md) — many writes (status changes, comments) act as triggers.
 
 Column creation/update requests accept `maxTickets` (0 = unlimited) and `capacityBlocking` (false = warning only). Both default to disabled/non-blocking.

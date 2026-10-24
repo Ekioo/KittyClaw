@@ -90,10 +90,43 @@ public sealed class ProjectSecretVaultTests
     [InlineData("BAD-NAME")]
     [InlineData("9STARTS_WITH_NUMBER")]
     [InlineData("")]
+    [InlineData("TOKEN\n")]
+    [InlineData("TOKEN\r\n")]
     public async Task Invalid_environment_variable_names_are_rejected(string name)
     {
         using var temp = new TempDir();
         var vault = new ProjectSecretVault(temp.Path, new TestSecretProtector());
         await Assert.ThrowsAsync<ArgumentException>(() => vault.SetAsync("alpha", name, "value"));
+    }
+
+    [Theory]
+    [InlineData("alpha\n")]
+    [InlineData("../alpha")]
+    public async Task Invalid_project_slugs_do_not_create_vaults(string slug)
+    {
+        using var temp = new TempDir();
+        var vault = new ProjectSecretVault(temp.Path, new TestSecretProtector());
+        await Assert.ThrowsAsync<ArgumentException>(() => vault.SetAsync(slug, "TOKEN", "value"));
+        Assert.False(Directory.Exists(vault.VaultDirectory));
+    }
+
+    [Fact]
+    public async Task Null_bytes_cannot_silently_truncate_an_injected_secret()
+    {
+        using var temp = new TempDir();
+        var vault = new ProjectSecretVault(temp.Path, new TestSecretProtector());
+        await Assert.ThrowsAsync<ArgumentException>(() => vault.SetAsync("alpha", "TOKEN", "prefix\0suffix"));
+        Assert.Empty(await vault.ListAsync("alpha"));
+    }
+
+    [Theory]
+    [InlineData("a\"b", "a\\\"b")]
+    [InlineData("a/b", "a\\/b")]
+    [InlineData("a\"b", "a\\u0022b")]
+    [InlineData("a\\b", "a\\\\b")]
+    public void Redaction_covers_JSON_encodings_used_by_provider_logs(string secret, string encoded)
+    {
+        Assert.Equal("value=" + SecretRedactor.Replacement,
+            SecretRedactor.Redact("value=" + encoded, [secret]));
     }
 }

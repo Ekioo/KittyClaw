@@ -30,6 +30,16 @@ public class DefaultLanguageDetectionTests
     [InlineData("pt-BR", "pt-BR")]
     [InlineData("pt-PT", "pt-BR")]
     [InlineData("ja-JP", "ja")]
+    [InlineData("zh-CN", "zh-CN")]
+    [InlineData("zh-SG", "zh-CN")]
+    [InlineData("zh-Hans", "zh-CN")]
+    [InlineData("zh-Hans-CN", "zh-CN")]
+    [InlineData("zh-Hans-SG", "zh-CN")]
+    [InlineData("zh-TW", "en")]
+    [InlineData("zh-HK", "en")]
+    [InlineData("zh-MO", "en")]
+    [InlineData("zh-Hant", "en")]
+    [InlineData("zh-Hant-TW", "en")]
     public void New_settings_map_new_operating_system_languages(string culture, string expected)
     {
         using var dir = new TempDir();
@@ -39,14 +49,16 @@ public class DefaultLanguageDetectionTests
         Assert.Equal(expected, settings.Language);
     }
 
-    [Fact]
-    public void Existing_language_setting_takes_precedence_over_operating_system_language()
+    [Theory]
+    [InlineData("it")]
+    [InlineData("zh-CN")]
+    public void Existing_language_setting_takes_precedence_over_operating_system_language(string language)
     {
         using var dir = new TempDir();
-        new AppSettingsService(dir.Path, CultureInfo.GetCultureInfo("de-DE")) { Language = "it" };
+        new AppSettingsService(dir.Path, CultureInfo.GetCultureInfo("de-DE")) { Language = language };
 
         var settings = new AppSettingsService(dir.Path, CultureInfo.GetCultureInfo("fr-FR"));
 
-        Assert.Equal("it", settings.Language);
+        Assert.Equal(language, settings.Language);
     }
 }

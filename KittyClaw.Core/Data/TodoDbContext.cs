@@ -13,6 +13,7 @@ public class TodoDbContext : DbContext
     public DbSet<Pipeline> Pipelines => Set<Pipeline>();
     public DbSet<ColumnProcessor> ColumnProcessors => Set<ColumnProcessor>();
     public DbSet<ColumnExecution> ColumnExecutions => Set<ColumnExecution>();
+    public DbSet<TicketQuestion> TicketQuestions => Set<TicketQuestion>();
     public DbSet<ColumnScheduledTask> ColumnScheduledTasks => Set<ColumnScheduledTask>();
     public DbSet<ColumnScheduledTaskRun> ColumnScheduledTaskRuns => Set<ColumnScheduledTaskRun>();
     public DbSet<Member> Members => Set<Member>();

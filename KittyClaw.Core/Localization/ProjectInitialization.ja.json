@@ -1,0 +1,8 @@
+{
+  "Enabled": "有効",
+  "InitializeConfirmTitle": "上書きしますか？",
+  "InitializeConfirmIntro": "目標の.agents/フォルダに既存ファイルがあります。どのように進めるか選択してください:",
+  "InitializeOverwrite": "上書き",
+  "InitializeSkip": "既存をスキップ",
+  "GitMissingWarning": "このホストではGitが利用できません。ワークスペースは初期化されますがあらかじめGitリポジトリは作成されません。バージョン管理にGitをインストールし、https://git-scm.com/downloadsからダウンロードして再試行してください。"
+}

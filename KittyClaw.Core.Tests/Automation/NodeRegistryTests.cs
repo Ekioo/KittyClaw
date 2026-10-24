@@ -18,17 +18,7 @@ public class NodeRegistryTests
         AssertUiTypeKeysMatchDiscriminators<ActionSpec>();
     }
 
-    [Fact]
-    public void All_TriggerSpec_subtypes_have_matching_UiTypeKey()
-    {
-        AssertUiTypeKeysMatchDiscriminators<TriggerSpec>();
-    }
 
-    [Fact]
-    public void All_ConditionSpec_subtypes_have_matching_UiTypeKey()
-    {
-        AssertUiTypeKeysMatchDiscriminators<ConditionSpec>();
-    }
 
     private static void AssertUiTypeKeysMatchDiscriminators<TBase>() where TBase : class
     {

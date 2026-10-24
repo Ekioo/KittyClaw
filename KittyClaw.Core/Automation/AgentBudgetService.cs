@@ -16,11 +16,19 @@ public sealed class AgentBudgetService(ProjectService projects, CostTracker cost
                 ?? throw new InvalidOperationException("The project does not exist.");
             // Resolve the control workspace, never a caller's ticket or maintenance worktree.
             var workspace = projects.ResolveWorkspacePath(project);
-            var path = Path.Combine(workspace, ".agents", "automations.json");
-            AutomationConfig? config;
+            var path = Path.Combine(workspace, ".agents", "agent-budget.json");
+            // A retired rule file may still contain the owner's budget. Read only this
+            // independent setting until they save the dedicated file; never load rules.
+            AgentBudgetSettings? config;
             try
             {
-                config = JsonSerializer.Deserialize<AutomationConfig>(await File.ReadAllTextAsync(path, ct), AutomationStore.JsonOptions)
+                string json;
+                try { json = await File.ReadAllTextAsync(path, ct); }
+                catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+                {
+                    json = await File.ReadAllTextAsync(Path.Combine(workspace, ".agents", "automations.json"), ct);
+                }
+                config = JsonSerializer.Deserialize<AgentBudgetSettings>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web))
                     ?? throw new InvalidDataException("The budget configuration is empty.");
             }
             catch (FileNotFoundException) { return new(true, null, 0m, null); }

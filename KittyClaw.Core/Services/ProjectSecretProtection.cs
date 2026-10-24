@@ -102,9 +102,17 @@ public interface ISecretToolRunner
 
 public sealed class ProcessSecretToolRunner : ISecretToolRunner
 {
-    private const int TimeoutMilliseconds = 30_000;
+    private readonly TimeSpan _timeout;
+    private const int MaxOutputCharacters = 64 * 1024;
 
-    public SecretToolResult Run(string fileName, IReadOnlyList<string> arguments, string? standardInput = null)
+    public ProcessSecretToolRunner() : this(TimeSpan.FromSeconds(30)) { }
+
+    internal ProcessSecretToolRunner(TimeSpan timeout) => _timeout = timeout;
+
+    public SecretToolResult Run(string fileName, IReadOnlyList<string> arguments, string? standardInput = null) =>
+        RunAsync(fileName, arguments, standardInput).GetAwaiter().GetResult();
+
+    private async Task<SecretToolResult> RunAsync(string fileName, IReadOnlyList<string> arguments, string? standardInput)
     {
         var startInfo = new ProcessStartInfo(fileName)
         {
@@ -112,31 +120,76 @@ public sealed class ProcessSecretToolRunner : ISecretToolRunner
             RedirectStandardError = true,
             RedirectStandardInput = standardInput is not null,
             UseShellExecute = false,
+            CreateNoWindow = true,
         };
         foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
         try
         {
             using var process = Process.Start(startInfo);
             if (process is null) return new SecretToolResult(-1, "", "") { ToolMissing = true };
-            if (standardInput is not null)
+            using var job = KittyClaw.Core.Automation.ProcessJobObject.TryCreateAndAssign(process);
+            using var deadline = new CancellationTokenSource(_timeout);
+            try
             {
-                process.StandardInput.Write(standardInput);
-                process.StandardInput.Close();
+                // Start both drains before writing stdin: any of these three pipes can block.
+                var stdout = DrainAsync(process.StandardOutput);
+                var stderr = DrainAsync(process.StandardError);
+                var input = WriteInputAsync();
+                await Task.WhenAll(stdout, stderr, input, process.WaitForExitAsync(deadline.Token))
+                    .WaitAsync(deadline.Token).ConfigureAwait(false);
+                return new SecretToolResult(process.ExitCode, await stdout.ConfigureAwait(false), await stderr.ConfigureAwait(false));
+
+                async Task WriteInputAsync()
+                {
+                    if (standardInput is null) return;
+                    await process.StandardInput.WriteAsync(standardInput.AsMemory(), deadline.Token).ConfigureAwait(false);
+                    await process.StandardInput.FlushAsync(deadline.Token).ConfigureAwait(false);
+                    process.StandardInput.Close();
+                }
+
+                async Task<string> DrainAsync(StreamReader reader)
+                {
+                    try { return await ReadBoundedAsync(reader, deadline.Token).ConfigureAwait(false); }
+                    catch
+                    {
+                        try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { /* best effort */ }
+                        throw;
+                    }
+                }
             }
-            var stdout = process.StandardOutput.ReadToEnd();
-            var stderr = process.StandardError.ReadToEnd();
-            if (!process.WaitForExit(TimeoutMilliseconds))
+            catch (OperationCanceledException)
             {
-                try { process.Kill(entireProcessTree: true); } catch { /* best effort */ }
                 throw new ProjectSecretProtectionUnavailableException(
-                    $"'{fileName}' did not answer within {TimeoutMilliseconds / 1000} seconds; " +
+                    $"'{fileName}' did not answer within {_timeout.TotalSeconds:g} seconds; " +
                     "the native secret store may be waiting for an interactive unlock prompt.");
             }
-            return new SecretToolResult(process.ExitCode, stdout, stderr);
+            catch (IOException)
+            {
+                throw new ProjectSecretProtectionUnavailableException("Communication with the native secret store failed.");
+            }
+            finally
+            {
+                deadline.Cancel();
+                try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { /* best effort */ }
+            }
         }
         catch (Win32Exception)
         {
             return new SecretToolResult(-1, "", "") { ToolMissing = true };
+        }
+    }
+
+    private static async Task<string> ReadBoundedAsync(StreamReader reader, CancellationToken ct)
+    {
+        var output = new StringBuilder();
+        var buffer = new char[4096];
+        while (true)
+        {
+            var read = await reader.ReadAsync(buffer.AsMemory(), ct).ConfigureAwait(false);
+            if (read == 0) return output.ToString();
+            if (output.Length + read > MaxOutputCharacters)
+                throw new ProjectSecretProtectionUnavailableException("The native secret store returned excessive output.");
+            output.Append(buffer, 0, read);
         }
     }
 }
@@ -159,8 +212,7 @@ public sealed class MacOsKeychainKeyStore(ISecretToolRunner? runner = null) : IP
         if (result.ExitCode != 0)
             throw new ProjectSecretProtectionUnavailableException(
                 "The macOS Keychain refused access to the KittyClaw master key (the login keychain may be " +
-                $"locked — run 'security unlock-keychain'). 'security' exited with code {result.ExitCode}: " +
-                result.StandardError.Trim());
+                $"locked — run 'security unlock-keychain'). 'security' exited with code {result.ExitCode}.");
         return MasterKeyCodec.Decode(result.StandardOutput, "macOS Keychain");
     }
 
@@ -173,7 +225,7 @@ public sealed class MacOsKeychainKeyStore(ISecretToolRunner? runner = null) : IP
         if (result.ExitCode != 0)
             throw new ProjectSecretProtectionUnavailableException(
                 "The macOS Keychain rejected the new KittyClaw master key (the login keychain may be locked). " +
-                $"'security' exited with code {result.ExitCode}: {result.StandardError.Trim()}");
+                $"'security' exited with code {result.ExitCode}.");
     }
 
     private static ProjectSecretProtectionUnavailableException MissingTool() => new(
@@ -218,7 +270,7 @@ public sealed class LinuxSecretServiceKeyStore(ISecretToolRunner? runner = null)
     private static ProjectSecretProtectionUnavailableException ServiceUnavailable(SecretToolResult result) => new(
         "The Linux Secret Service is unavailable or locked; ensure a D-Bus session bus and an unlocked " +
         "keyring daemon (e.g. gnome-keyring or KWallet) are running. " +
-        $"'{SecretToolBinary}' exited with code {result.ExitCode}: {result.StandardError.Trim()}");
+        $"'{SecretToolBinary}' exited with code {result.ExitCode}.");
 }
 
 internal static class MasterKeyCodec

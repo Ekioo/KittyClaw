@@ -13,6 +13,8 @@ and API/MCP documentation.
 
 ## Features
 
+- [Mobile UX audit](../docs/audits/2026-10-24-mobile-ux-audit.md) — complete view inventory, phone compositions, desktop preservation and verification coverage.
+
 - [Managed public instance access](./public-instance-access.md) — dedicated tunnel origin boundary and Cloudflare delivery milestones.
 
 - [Local network access](./network-access.md) — opt-in HTTPS access from phones, authenticator-only login, local enrollment and session revocation.
@@ -32,7 +34,6 @@ and API/MCP documentation.
 - [Mistral Vibe](./mistral-vibe.md) — dispatching explicitly qualified `mistral:*` models to the `vibe` CLI.
 - [Agent provider CLIs](./agent-providers.md) — installation, detection, authentication ownership, and executable overrides for every supported provider.
 - [DeepSeek V4](./deepseek.md) — project-vault authentication and dispatch through DeepSeek's Anthropic-compatible API.
-- [Automation engine](./automation-engine.md) — triggers, conditions, and actions that dispatch agents.
 - [Pipeline and column processing](./column-workflows.md) — temporal per-option configuration, exclusive modes, multi-pipeline workflows, routing, retries, project skills, and child-ticket completion.
 - [JEV qualification](./jev-qualification.md) — routing, acceptance criteria with evidence, authorized model/skills profiles and auditable owner decisions.
 - [Pipeline kits](./pipeline-kits.md) — sanitized export plus write-free analysis and atomic installation of untrusted portable pipeline archives.
@@ -48,6 +49,7 @@ and API/MCP documentation.
 - [Evidence decision briefs](./evidence-decision-briefs.md) — traceable run evidence, recovery guidance, and human accept/correct/stop decisions in owner-action columns.
 - [Ticket acceptance criteria](./acceptance-criteria.md) — independent assessments, evidence and read/write REST/MCP access.
 - [Ticket scheduling](./ticket-scheduling.md) — park tickets until a future time, then promote them into the workflow.
+- [Ticket questions](./ticket-questions.md) — persistent agent questions in the automation queue, owner answers and processor resumption through REST/MCP.
 - [Lossless ticket transfer](./ticket-transfer.md) — atomically move a complete ticket tree and its history between projects.
 - [Dashboard](./dashboard.md) — free-form tile view backed by `.dashboard/` Markdown files with drag-and-drop layout.
 - [Cost reporting](./cost-reporting.md) — global agent-cost history with date, project, and pipeline filtering.

@@ -60,11 +60,7 @@ Did the ticket pass through `Blocked` at any point? If yes, `blocked=true`.
 
 ### 1. Identify the real worker
 
-The worker who delivered the ticket is not always the current `assignedTo`. Use, in order:
-
-1. The last `assigned to X` activity before the move to `Review` or `Done`, with `X ≠ owner`.
-2. Otherwise, the author of the last substantive comment before `Review`.
-3. Otherwise, the current `assignedTo` if ≠ `owner`.
+Use the delivery execution, its processor identity, and its evidence. If execution history is unavailable, use the author of the last substantive delivery comment. Do not infer authorship from ticket assignment.
 
 If no worker can be identified → exit silently without evaluating (log "Worker unresolvable, evaluation skipped").
 

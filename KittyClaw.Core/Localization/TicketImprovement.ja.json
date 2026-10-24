@@ -2,5 +2,9 @@
   "ImproveTicket": "AIで改善",
   "ImprovingTicket": "チケットを分析して提案を作成しています…",
   "ImprovementReview": "保存する前に提案を確認し、編集してください。",
-  "ImprovementCriteriaHint": "1行に1つの条件を入力します。書き換えた条件は再評価が必要です。"
+  "ImprovementCriteriaHint": "1行に1つの条件を入力します。書き換えた条件は再評価が必要です。",
+  "ImprovementSplitHint": "対象範囲が広いため、分割を提案します。タイトルをクリックすると詳細を確認できます。承認すると同じ列に関連する子チケットが作成されます。",
+  "ImprovementCreateTickets": "承認してチケットを作成",
+  "SplitTicket": "複数のチケットに分割",
+  "ImprovementNoSplitNeeded": "対象範囲はすでに適切です。追加のチケットは提案されていません。"
 }

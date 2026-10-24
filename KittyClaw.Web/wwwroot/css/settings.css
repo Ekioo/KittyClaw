@@ -14,6 +14,29 @@
     padding: 1.2rem;
 }
 .settings-section h2 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+.global-settings > .settings-section {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+}
+.global-settings > .settings-section > h2,
+.global-settings > .settings-section > .settings-hint,
+.global-settings > .settings-section > .provider-readiness-grid,
+.global-settings > .settings-section > .provider-readiness-note,
+.global-settings > .settings-section > .settings-status {
+    margin: 0;
+}
+.global-settings .settings-hint { line-height: 1.5; }
+.global-settings > .settings-section > .settings-browse { align-self: flex-start; }
+.global-settings a.settings-browse {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    text-decoration: none;
+}
+.global-settings > .settings-section > form { margin: 0; }
 .settings-hint { color: var(--muted, #8a99b0); font-size: 0.9rem; margin-bottom: 1rem; }
 .settings-hint code { background: #11141b; padding: 0.1rem 0.35rem; border-radius: 3px; }
 .settings-row { display: flex; gap: 0.6rem; align-items: center; }

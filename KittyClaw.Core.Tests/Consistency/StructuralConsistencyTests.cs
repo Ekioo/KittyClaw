@@ -272,52 +272,11 @@ public class StructuralConsistencyTests
             Assert.Fail("Embedded agents with no memory/ directory:\n" + string.Join("\n", missing));
     }
 
-    // ── 7. Automation template ↔ agent existence ──────────────────────────────
-
-    /// <summary>
-    /// Every literal agent slug (non-placeholder) in ProjectTemplate/Agents/automations.json
-    /// must match an agent directory that has a SKILL.md. A typo or orphan reference
-    /// produces a dispatch error at runtime: the agent file is missing so the run is
-    /// aborted immediately after being queued.
-    /// </summary>
     [Fact]
-    public void TemplateAutomations_RunAgentActions_ReferenceKnownAgents()
+    public void Embedded_template_ships_budget_settings_without_legacy_automations()
     {
-        var svc = new AgentsTemplateService();
-        var knownSlugs = new HashSet<string>(svc.AgentSlugs(), StringComparer.OrdinalIgnoreCase);
-
-        var automationsPath = Path.Combine(RepoRoot(), "ProjectTemplate", "Agents", "automations.json");
-        Assert.True(File.Exists(automationsPath),
-            $"ProjectTemplate/Agents/automations.json must exist (looked in: {automationsPath}).");
-
-        var config = JsonSerializer.Deserialize<AutomationConfig>(
-            File.ReadAllText(automationsPath), AutomationStore.JsonOptions)!;
-
-        var violations = new List<string>();
-        foreach (var auto in config.Automations)
-        {
-            foreach (var action in auto.Actions)
-            {
-                var agentSlug = action switch
-                {
-                    RunAgentActionSpec a           => a.Agent,
-                    CommitAgentMemoryActionSpec a   => a.Agent,
-                    ConsolidateAgentMemoryActionSpec a => a.Agent,
-                    _                              => null,
-                };
-
-                if (agentSlug is null) continue;
-                // Skip runtime placeholders such as {assignee}.
-                if (agentSlug.StartsWith('{') && agentSlug.EndsWith('}')) continue;
-
-                if (!knownSlugs.Contains(agentSlug))
-                    violations.Add(
-                        $"  automation '{auto.Id}' action '{action.UiTypeKey}' references unknown agent '{agentSlug}' " +
-                        $"— add ProjectTemplate/Agents/{agentSlug}/SKILL.md or correct the slug");
-            }
-        }
-
-        if (violations.Count > 0)
-            Assert.Fail("Template automations reference agents that do not exist:\n" + string.Join("\n", violations));
+        var assets = new AgentsTemplateService().RelativePaths();
+        Assert.Contains("agent-budget.json", assets);
+        Assert.DoesNotContain("automations.json", assets);
     }
 }

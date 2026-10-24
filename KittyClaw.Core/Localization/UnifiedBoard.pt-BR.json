@@ -1,14 +1,18 @@
 {
-  "UnifiedBoardTitle": "Todos os Painéis",
-  "AllBoardsNavLabel": "Todos os Painéis",
-  "UnifiedBoardLoading": "Carregando painéis…",
+  "UnifiedBoardTitle": "Projetos",
+  "AllBoardsNavLabel": "Projetos",
+  "UnifiedBoardLoading": "Carregando projetos…",
   "UnifiedBoardNoProjects": "Ainda não há projetos.",
-  "UnifiedBoardNoMatches": "Nenhum ticket corresponde a esta pesquisa.",
-  "UnifiedBoardSearchPlaceholder": "Pesquisar em todos os projetos…",
+  "UnifiedBoardNoMatches": "Nenhum projeto corresponde à pesquisa.",
+  "UnifiedBoardSearchPlaceholder": "Buscar projetos ou colunas…",
   "ClearSearch": "Limpar pesquisa",
   "CreateProjectButton": "Criar um projeto",
   "ProjectName": "Nome do projeto",
   "UnifiedBoardCollapseLane": "Colapsar faixa",
   "UnifiedBoardExpandLane": "Expandir faixa",
-  "UnifiedBoardCrossLaneBlocked": "Os tickets não podem ser movidos entre projetos."
+  "UnifiedBoardCrossLaneBlocked": "Os tickets não podem ser movidos entre projetos.",
+  "ProjectQuickAccess": "Acesso rápido a {0}",
+  "ProjectAgentsRunning": "Agentes em execução",
+  "ProjectColumns": "Colunas do projeto",
+  "ProjectOpenColumn": "Abrir {0} / {1} / {2}"
 }

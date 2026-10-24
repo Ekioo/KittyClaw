@@ -16,7 +16,6 @@ These pieces are in the repo and available to every project:
 - `WorktreeMergeQueueService` — persists integration requests per project, processes them in creation order, rebases against a durable per-target integration tip, validates the result in a dedicated detached-HEAD integration worktree, and atomically advances a ref that is never checked out. The primary checkout and its branch remain unchanged; a separate synchronization step catches them up. It automatically union-merges rebases whose unresolved paths are exclusively append-only processor memory indexes or lesson files, while preserving every mixed or non-memory conflict for manual review without deleting the ticket worktree. It supports explicit resume and recovers interrupted processing after restart.
 - `tools/worktree-ensure.ps1` — idempotent. Creates a worktree from local `main` if absent, or returns the path of the existing one. Convention: branch `ticket/<N>`, folder `<repo>.worktrees/ticket-<N>`. Usage: `powershell.exe -NoProfile -File tools/worktree-ensure.ps1 <N>`; the absolute path is printed on the last stdout line.
 - `tools/worktree-merge.ps1` — rebases the local unpublished ticket branch onto `dev`, fast-forwards `dev` to it, then removes the worktree and deletes the branch. This keeps ticket integration linear without merge commits.
-- `{ticketId}` placeholder support in `concurrencyGroup` and `mutuallyExclusiveWith` (see [automation engine](./automation-engine.md)). Lets you serialize agents per-ticket without serializing across tickets.
 
 ### `worktree-merge.ps1` exit codes
 
@@ -66,4 +65,3 @@ Before a project has a Git repository, ticket inspection returns no worktree sta
 
 - `git worktree` — standard git feature; git must be on `PATH`.
 - [Agent dispatch](./agent-dispatch.md) — launches provider processes in the resolved execution directory.
-- [Automation engine](./automation-engine.md) — supplies ticket-bound runs and optional higher-level concurrency groups.

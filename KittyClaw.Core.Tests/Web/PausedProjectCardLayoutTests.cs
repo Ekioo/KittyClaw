@@ -1,99 +1,27 @@
-using System.Text.RegularExpressions;
 using KittyClaw.Core.Tests.Helpers;
-using Xunit;
 
 namespace KittyClaw.Core.Tests.Web;
 
 public sealed class PausedProjectCardLayoutTests
 {
-    private static string LoadComponent() => File.ReadAllText(Path.Combine(
+    private static string Source => File.ReadAllText(Path.Combine(
         AppCssHelper.FindRepoRoot(), "KittyClaw.Web", "Components", "ProjectCards.razor"));
 
     [Fact]
-    public void PausedCard_SeparatesHeadingStatusAndResumeAction()
+    public void ProjectDirectory_HasAllThreeDirectDestinations()
     {
-        var source = LoadComponent();
-
-        Assert.Contains("project-card-heading", source);
-        Assert.Contains("project-paused-badge", source);
-        Assert.Contains("project-pause-btn-label", source);
-        Assert.Contains("L[\"Resume\"]", source);
+        Assert.Contains("href=\"/board/@project.Slug\"", Source);
+        Assert.Contains("href=\"/board/@project.Slug/dashboard\"", Source);
+        Assert.Contains("href=\"/board/@project.Slug/settings\"", Source);
     }
 
     [Fact]
-    public void PausedCard_RemainsReadableAndUsesBottomResumePill()
+    public void ProjectDirectory_KeepsPauseStatusAndIntegrationWarningsAsTags()
     {
-        var css = AppCssHelper.ReadAll();
-        var card = Rule(css, @"\.project-card-wrap\.project-paused \.project-card");
-        var action = Rule(css, @"\.project-card-wrap\.project-paused \.project-pause-btn");
-
-        Assert.DoesNotContain("opacity", card, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("padding-bottom: 3rem", card);
-        Assert.Contains("bottom: 0.65rem", action);
-        Assert.Contains("border-radius: 999px", action);
-        Assert.Contains("opacity: 1", action);
-    }
-
-    [Fact]
-    public void ProjectList_UsesFixedDesktopTilesAndSingleColumnOnSmallScreens()
-    {
-        var css = AppCssHelper.ReadAll();
-        var list = Rule(css, @"(?m)^\.project-list");
-        var wrap = Rule(css, @"(?m)^\.project-card-wrap");
-        var card = Rule(css, @"(?m)^\.project-card");
-
-        Assert.Contains("display: grid", list);
-        Assert.Contains("grid-template-columns: repeat(auto-fill, 220px)", list);
-        Assert.Contains("grid-auto-rows: 140px", list);
-        Assert.Contains("width: 220px", wrap);
-        Assert.Contains("height: 140px", wrap);
-        Assert.Contains("width: 100%", card);
-        Assert.Contains("height: 100%", card);
-        Assert.Contains("@media (max-width: 560px)", css);
-        Assert.Contains("grid-template-columns: minmax(0, 1fr)", css);
-    }
-
-    [Fact]
-    public void ProjectCard_BoundsLongTitlesWithEllipsis()
-    {
-        var css = AppCssHelper.ReadAll();
-        var title = Rule(css, @"(?m)^\.project-card h3");
-
-        Assert.Contains("overflow: hidden", title);
-        Assert.Contains("text-overflow: ellipsis", title);
-        Assert.Contains("white-space: nowrap", title);
-        Assert.Contains("min-width: 0", title);
-    }
-
-    [Fact]
-    public void ProjectCard_ReplacesSlugWithLocalizedOwnerActionCount()
-    {
-        var source = LoadComponent();
-
-        Assert.DoesNotContain("<small>@project.Slug</small>", source);
-        Assert.Contains("project-card-owner-actions", source);
-        Assert.Contains("ProjectOwnerActionOne", source);
-        Assert.Contains("ProjectOwnerActionMany", source);
-        Assert.Contains("OwnerActionCounts", source);
-    }
-
-    [Fact]
-    public void ProjectCard_ShowsPersistentIntegrationAlertsEvenWhenPaused()
-    {
-        var source = LoadComponent();
-        var css = AppCssHelper.ReadAll();
-
-        Assert.Contains("project-card-integration-alert", source);
-        Assert.Contains("ProjectIntegrationBlockedByLocalChanges", source);
-        Assert.Contains("GetAlertSummaryAsync", source);
-        Assert.Contains(".project-card-integration-alert--warning", css);
-        Assert.Contains(".project-card-integration-alert--danger", css);
-    }
-
-    private static string Rule(string css, string selector)
-    {
-        var match = Regex.Match(css, selector + @"\s*\{(?<body>[\s\S]*?)\}");
-        Assert.True(match.Success, $"CSS rule not found: {selector}");
-        return match.Groups["body"].Value;
+        Assert.Contains("project-paused-badge", Source);
+        Assert.Contains("project-card-integration-alert", Source);
+        Assert.Contains("ProjectIntegrationBlockedByLocalChanges", Source);
+        Assert.Contains("GetAlertSummaryAsync", Source);
+        Assert.DoesNotContain("project-card-owner-actions", Source);
     }
 }

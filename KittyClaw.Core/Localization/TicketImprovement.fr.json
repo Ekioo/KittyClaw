@@ -2,5 +2,9 @@
   "ImproveTicket": "Améliorer avec l’IA",
   "ImprovingTicket": "Analyse du ticket et préparation de la proposition…",
   "ImprovementReview": "Relisez et ajustez la proposition avant de l’enregistrer.",
-  "ImprovementCriteriaHint": "Un critère par ligne. Les critères reformulés devront être réévalués."
+  "ImprovementCriteriaHint": "Un critère par ligne. Les critères reformulés devront être réévalués.",
+  "ImprovementSplitHint": "Le périmètre est large. Cliquez sur un titre pour voir le détail. La validation crée des sous-tickets liés dans la même colonne.",
+  "ImprovementCreateTickets": "Valider et créer les tickets",
+  "SplitTicket": "Découper en plusieurs tickets",
+  "ImprovementNoSplitNeeded": "Le périmètre est déjà bien délimité. Aucun ticket supplémentaire proposé."
 }

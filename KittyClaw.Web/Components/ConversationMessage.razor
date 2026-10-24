@@ -1,0 +1,15 @@
+<div class="conversation-message chat-message chat-message-@Role @CssClass">
+    <div class="conversation-bubble chat-bubble @BubbleClass @(Markdown ? "markdown-body" : "")">
+        <div class="conversation-message-content">@ChildContent</div>
+        <ConversationTimestamp At="At" />
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Role { get; set; } = "assistant";
+    [Parameter] public DateTime? At { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+    [Parameter] public string? BubbleClass { get; set; }
+    [Parameter] public bool Markdown { get; set; } = true;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

@@ -64,7 +64,7 @@ public sealed class ApprovalPageTests
             "ApprovalDecisionAudit", "ApprovalReceiptAudit", "ApprovalUntil"
         };
 
-        foreach (var language in new[] { "en", "fr", "de", "es", "it", "pt-BR", "ja" })
+        foreach (var language in new[] { "en", "fr", "de", "es", "it", "pt-BR", "ja", "zh-CN" })
         {
             var path = Path.Combine(RepoRoot(), "KittyClaw.Core", "Localization", $"Approvals.{language}.json");
             using var document = JsonDocument.Parse(File.ReadAllText(path));

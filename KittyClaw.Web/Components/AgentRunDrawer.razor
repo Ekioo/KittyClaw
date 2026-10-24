@@ -14,46 +14,18 @@
 
 @if (_run is not null)
 {
-    <div class="agent-drawer-overlay" @onclick="Close"></div>
-    <div class="agent-drawer" @onclick:stopPropagation>
-        <div class="agent-drawer-header">
-            <div class="agent-drawer-title">
-                <span class="agent-name">@_run.AgentName</span>
-                @if (_run.TicketId is not null)
-                {
-                    <span class="agent-ticket">#@_run.TicketId</span>
-                }
-                <span class="agent-status agent-status-@_run.Status.ToString().ToLowerInvariant()">@_run.Status</span>
-                @if (_run.Status is AgentRunStatus.Failed or AgentRunStatus.Stopped)
-                {
-                    <button class="agent-retry-btn" @onclick="Retry" disabled="@_retrying" title="@L["RetryAgent"]">↻ @L["Retry"]</button>
-                }
-            </div>
-            <div class="agent-drawer-meta">
-                <span title="Skill">@_run.SkillFile</span>
-                <span title="Session">@(_run.SessionId?[..8] ?? "—")</span>
-                <span title="Group">@_run.ConcurrencyGroup</span>
-                @if (!string.IsNullOrEmpty(_run.Model))
-                {
-                    <span class="agent-drawer-model" title="Model">@_run.Model</span>
-                }
-                @if (_run.HasUsage)
-                {
-                    <span class="agent-drawer-cost" title="@UsageTooltip()">
-                        ⛁ @TokenDisplay.Compact(_run.TotalTokens)@(_run.TotalCostUsd is decimal c ? $" · {(_run.CostIsEstimated ? "≈ " : "")}{TokenDisplay.Usd((double)c)}" : "")
-                    </span>
-                }
-                <span>@FormatElapsed(_run.StartedAt)</span>
-            </div>
-            <div class="agent-drawer-actions">
-                @if (_run.Status == AgentRunStatus.Running)
-                {
-                    <button class="agent-stop-btn" @onclick="Stop" title="@L["StopAgent"]">⏹ @L["Stop"]</button>
-                }
-                <button class="agent-close-btn" @onclick="Close" title="@L["Close"]">×</button>
-            </div>
-        </div>
-
+    <ConversationDrawer Title="@_run.AgentName" Run="_run" CssClass="agent-drawer" IsBusy="@(_run.Status == AgentRunStatus.Running)" OnClose="Close">
+        <HeaderActions>
+            @if (_run.Status is AgentRunStatus.Failed or AgentRunStatus.Stopped)
+            {
+                <button class="agent-retry-btn" @onclick="Retry" disabled="@_retrying" title="@L["RetryAgent"]">↻ @L["Retry"]</button>
+            }
+            @if (_run.Status == AgentRunStatus.Running)
+            {
+                <button class="agent-stop-btn" @onclick="Stop" title="@L["StopAgent"]">⏹ @L["Stop"]</button>
+            }
+        </HeaderActions>
+        <ChildContent>
         @if (!string.IsNullOrEmpty(_actionError))
         {
             <div class="agent-action-error" role="alert">@_actionError</div>
@@ -74,133 +46,58 @@
             }
         }
 
-        <div class="agent-drawer-console" @ref="_consoleRef">
-            @foreach (var entry in RunDrawerEventPresentation.Group(_events.ToList()))
-            {
-                var ev = entry.Event;
-                @if (entry.Stderr is { } stderr)
+
+            <ConversationView @ref="_messagesView">
+                @foreach (var group in ConversationEventPresentation.Group(_events))
                 {
-                    <div class="console-line console-stderr">
-                        <span class="console-time">@stderr.At.ToLocalTime().ToString("HH:mm:ss")</span>
-                        <div class="console-stderr-block">
-                            <div class="console-stderr-heading">
-                                <span class="console-stderr-icon">!</span>
-                                <span class="console-stderr-summary">@stderr.Summary</span>
-                                <span class="console-stderr-count">@stderr.EventCount line@(stderr.EventCount == 1 ? "" : "s")</span>
-                            </div>
-                            <pre class="console-stderr-preview">@stderr.Preview</pre>
-                            <details class="console-stderr-raw">
-                                <summary>Reveal full stderr</summary>
-                                <button type="button" class="console-copy-btn" @onclick="() => CopyText(stderr.Raw)">Copy raw stderr</button>
-                                <pre>@stderr.Raw</pre>
-                            </details>
-                        </div>
-                    </div>
-                }
-                else if (ev.Kind == "tool_use")
-                {
-                    <div class="console-line console-tool_use">
-                        <span class="console-time">@ev.At.ToLocalTime().ToString("HH:mm:ss")</span>
-                        <details class="console-tool-block">
-                            <summary class="console-tool-summary">
-                                <span class="console-tool-icon">⚙</span>
-                                <span class="console-tool-name">@ev.Text</span>
-                                <span class="console-tool-preview">@GetToolPreview(ev.Text, ev.Detail)</span>
-                            </summary>
-                            <pre class="console-tool-detail">@((MarkupString)HighlightJson(ev.Detail))</pre>
-                        </details>
-                    </div>
-                }
-                else if (ev.Kind == "rate_limit_event")
-                {
-                    <div class="console-line console-tool_use">
-                        <span class="console-time">@ev.At.ToLocalTime().ToString("HH:mm:ss")</span>
-                        <details class="console-tool-block console-rate-limit-block">
-                            <summary class="console-tool-summary">
-                                <span class="console-tool-icon">⏳</span>
-                                <span class="console-tool-name">rate_limit_event</span>
-                                <span class="console-tool-preview">@GetRateLimitPreview(ev.Text)</span>
-                            </summary>
-                            <pre class="console-tool-detail">@((MarkupString)HighlightJson(ev.Text))</pre>
-                        </details>
-                    </div>
-                }
-                else if (ev.Kind == "result")
-                {
-                    <div class="console-line console-tool_use">
-                        <span class="console-time">@ev.At.ToLocalTime().ToString("HH:mm:ss")</span>
-                        <details class="console-tool-block console-result-block">
-                            <summary class="console-tool-summary">
-                                <span class="console-tool-icon">✓</span>
-                                <span class="console-tool-name">result</span>
-                                <span class="console-tool-preview">@GetResultPreview(ev.Text)</span>
-                            </summary>
-                            <pre class="console-tool-detail">@((MarkupString)HighlightJson(ev.Text))</pre>
-                        </details>
-                    </div>
-                }
-                else if (ev.Kind is "user" or "assistant" or "system")
-                {
-                    var msgBody = GetMessageBody(ev.Text);
-                    if (!string.IsNullOrWhiteSpace(msgBody))
+                    if (group.IsActivity)
                     {
-                        var isShortMsg = msgBody.Length <= 300;
-                        var msgPreview = SharedRenderHelpers.Truncate(msgBody, 200);
-                        <div class="console-line console-@ev.Kind">
-                            <span class="console-time">@ev.At.ToLocalTime().ToString("HH:mm:ss")</span>
-                            <details class="console-msg-block" open="@(isShortMsg ? "open" : null)">
-                                <summary class="console-msg-summary">
-                                    <span class="console-msg-role console-msg-role-@ev.Kind">@ev.Kind</span>
-                                    @if (!isShortMsg)
-                                    {
-                                        <span class="console-msg-preview">@msgPreview</span>
-                                    }
-                                </summary>
-                                @if (SharedRenderHelpers.IsJson(msgBody))
+                        <ConversationActivity Events="group.Events" />
+                    }
+                    else
+                    {
+                        var ev = group.Events[0];
+                        var body = GetMessageBody(ev.Text);
+                        <ConversationMessage Role="@(ev.Kind is "user" or "steer" ? "user" : ev.Kind == "error" ? "error" : "assistant")"
+                                             At="ev.At" BubbleClass="@(ev.Kind == "error" ? "conversation-diagnostic" : null)" Markdown="@(ev.Kind != "error")">
+                            @if (ev.Kind == "error")
+                            {
+                                <details class="chat-diagnostic-block">
+                                    <summary class="chat-diagnostic-summary"><span class="chat-diagnostic-title">@RunDrawerEventPresentation.ExtractSummary(body)</span><span>@L["ChatTechnicalDetails"]</span></summary>
+                                    <pre class="chat-diagnostic-detail">@ev.Text</pre>
+                                    <button class="conversation-copy" @onclick="() => CopyText(ev.Text)">@L["ConversationCopy"]</button>
+                                </details>
+                            }
+                            else
+                            {
+                                @if (SharedRenderHelpers.IsJson(body))
                                 {
-                                    <pre class="console-tool-detail console-msg-json">@((MarkupString)HighlightJson(msgBody))</pre>
+                                    <pre>@body</pre>
                                 }
                                 else
                                 {
-                                    <div class="console-msg-detail markdown">@((MarkupString)RenderMarkdown(msgBody))</div>
+                                    @((MarkupString)RenderMarkdown(body))
                                 }
-                            </details>
-                        </div>
+                            }
+                        </ConversationMessage>
                     }
                 }
-                else
+                @if (_events.Count == 0)
                 {
-                    var (tag, body) = ParseBracketTag(ev.Text);
-                    <div class="console-line console-@ev.Kind">
-                        <span class="console-time">@ev.At.ToLocalTime().ToString("HH:mm:ss")</span>
-                        @if (tag is not null)
-                        {
-                            <span class="console-tag">@tag</span>
-                        }
-                        else
-                        {
-                            <span class="console-kind">@ev.Kind</span>
-                        }
-                        <span class="console-text markdown">@((MarkupString)RenderMarkdown(body))</span>
-                    </div>
+                    <div class="chat-empty">@L["WaitingForOutput"]</div>
                 }
-            }
-            @if (_events.Count == 0)
+            </ConversationView>
+        </ChildContent>
+        <Composer>
+            @if (_run.Status == AgentRunStatus.Running)
             {
-                <div class="console-empty">@L["WaitingForOutput"]</div>
+                <ConversationComposer IsBusy="true" CanSteer="true" CanSend="@(!string.IsNullOrWhiteSpace(_steerText))" OnSend="Steer" OnStop="Stop">
+                    <Editor><textarea @ref="_inputRef" @bind="_steerText" @bind:event="oninput" placeholder="@L["SteerPlaceholder"]" aria-label="@L["SteerPlaceholder"]"></textarea></Editor>
+                    <ModelPicker><span class="conversation-composer-model-label">@_run.Model</span></ModelPicker>
+                </ConversationComposer>
             }
-        </div>
-
-        @if (_run.Status == AgentRunStatus.Running)
-        {
-            <div class="agent-drawer-steer">
-                <textarea @bind="_steerText" @bind:event="oninput"
-                          placeholder="@L["SteerPlaceholder"]"
-                          @onkeydown="OnSteerKeyDown"></textarea>
-                <button @onclick="Steer" disabled="@string.IsNullOrWhiteSpace(_steerText)">@L["Send"]</button>
-            </div>
-        }
-    </div>
+        </Composer>
+    </ConversationDrawer>
 }
 
 @code {
@@ -215,18 +112,25 @@
     private bool _retrying;
     private IJSObjectReference? _sseModule;
     private string? _activeStreamId;
-    private ElementReference _consoleRef;
+    private ConversationView? _messagesView;
+    private ElementReference _inputRef;
+    private DotNetObjectReference<AgentRunDrawer>? _dotnetRef;
     private bool _needsInitScroll;
     private bool _needsScroll;
     private string? _actionError;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (_run?.Status == AgentRunStatus.Running)
+        {
+            _dotnetRef ??= DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("chatDrawerInstallEnterGuard", _inputRef, _dotnetRef);
+        }
         if (_sseModule is null) return;
         if (_needsInitScroll)
         {
             _needsInitScroll = false;
-            await _sseModule.InvokeVoidAsync("initAutoScroll", _consoleRef);
+            await _sseModule.InvokeVoidAsync("initAutoScroll", _messagesView?.Element);
         }
         if (_needsScroll)
         {
@@ -234,6 +138,13 @@
             await _sseModule.InvokeVoidAsync("scrollIfNeeded");
         }
     }
+
+    [JSInvokable]
+    public Task OnComposerEnter(string text) => InvokeAsync(async () =>
+    {
+        _steerText = text;
+        await Steer();
+    });
 
     protected override async Task OnParametersSetAsync()
     {
@@ -285,14 +196,6 @@
             try { await _sseModule.InvokeVoidAsync("disposeAutoScroll"); }
             catch (Exception ex) { Logger.LogDebug(ex, "Failed to dispose run drawer auto-scroll for run {RunId}", _activeStreamId); }
         _activeStreamId = null;
-    }
-
-    private async Task OnSteerKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter" && !e.ShiftKey)
-        {
-            await Steer();
-        }
     }
 
     private async Task Steer()
@@ -377,8 +280,6 @@
         return body;
     }
 
-    private static string Truncate(string text, int max) => SharedRenderHelpers.Truncate(text, max);
-
     private static (string? Tag, string Body) ParseBracketTag(string? text)
     {
         if (string.IsNullOrEmpty(text)) return (null, "");
@@ -389,46 +290,6 @@
         var body = text[(close + 1)..].TrimStart();
         return (tag, body);
     }
-
-    private static string GetResultPreview(string text)
-    {
-        try
-        {
-            using var doc = System.Text.Json.JsonDocument.Parse(text);
-            var root = doc.RootElement;
-            if (root.TryGetProperty("result", out var r) && r.ValueKind == System.Text.Json.JsonValueKind.String)
-                return Truncate(r.GetString() ?? "", 80);
-            if (root.TryGetProperty("subtype", out var s))
-                return s.GetString() ?? "result";
-        }
-        catch (System.Text.Json.JsonException) { /* Optional preview payload: raw text is the intended fallback. */ }
-        return Truncate(text, 80);
-    }
-
-    private static string GetRateLimitPreview(string text)
-    {
-        try
-        {
-            using var doc = System.Text.Json.JsonDocument.Parse(text);
-            var root = doc.RootElement;
-            if (root.TryGetProperty("rate_limits", out var limits) && limits.ValueKind == System.Text.Json.JsonValueKind.Array)
-            {
-                var parts = limits.EnumerateArray()
-                    .Select(l => l.TryGetProperty("name", out var n) && l.TryGetProperty("remaining", out var r)
-                        ? $"{n.GetString()}={r}" : null)
-                    .Where(s => s is not null);
-                var preview = string.Join(", ", parts);
-                return preview.Length > 0 ? preview : text;
-            }
-        }
-        catch (System.Text.Json.JsonException) { /* Optional rate-limit payload: raw text is the intended fallback. */ }
-        return Truncate(text, 80);
-    }
-
-    private static string GetToolPreview(string toolName, string? detail) =>
-        SharedRenderHelpers.GetToolPreview(toolName, detail);
-
-    private static string HighlightJson(string? json) => SharedRenderHelpers.HighlightJson(json);
 
     private static readonly MarkdownPipeline _mdPipeline =
         KittyClaw.Core.Services.SafeMarkdown.Build();
@@ -442,22 +303,10 @@
         await _sseModule.InvokeVoidAsync("copyText", text);
     }
 
-    private string UsageTooltip()
-    {
-        if (_run is null) return "";
-        var tokens = $"{_run.TotalTokens:N0} tokens (in {_run.InputTokens:N0} / out {_run.OutputTokens:N0} / cache {_run.CacheReadTokens + _run.CacheWriteTokens:N0})";
-        return _run.CostIsEstimated ? $"{tokens} · {L["EstimatedCostTooltip"]}" : tokens;
-    }
-
-    private static string FormatElapsed(DateTime start)
-    {
-        var d = DateTime.UtcNow - start;
-        return d.TotalHours >= 1 ? $"{(int)d.TotalHours}h{d.Minutes:D2}" : $"{d.Minutes:D2}:{d.Seconds:D2}";
-    }
-
     public async ValueTask DisposeAsync()
     {
         await StopStream();
+        _dotnetRef?.Dispose();
         if (_sseModule is not null)
         {
             try { await _sseModule.DisposeAsync(); }

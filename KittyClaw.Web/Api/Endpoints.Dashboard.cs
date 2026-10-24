@@ -58,7 +58,7 @@ public static partial class Endpoints
         }).WithTags("Dashboard");
 
         // Serves the raw bytes of a tile output file (used by the image template).
-        api.MapGet("/projects/{slug}/dashboard/tiles/{tileSlug}/output/raw", async (string slug, string tileSlug, ProjectService ps, DashboardService ds) =>
+        api.MapGet("/projects/{slug}/dashboard/tiles/{tileSlug}/output/raw", async (string slug, string tileSlug, HttpContext context, ProjectService ps, DashboardService ds) =>
         {
             var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
             if (workspace is null) return Results.NotFound();
@@ -75,6 +75,8 @@ public static partial class Endpoints
                 ".svg"  => "image/svg+xml",
                 _       => "application/octet-stream",
             };
+            // Agent-generated SVG can contain scripts when opened as a document.
+            context.Response.Headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
             return Results.File(path, contentType);
         }).WithTags("Dashboard");
 

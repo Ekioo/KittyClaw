@@ -1,0 +1,146 @@
+/* Windows reuses each view's header. Browser layouts retain their regular geometry. */
+.windows-desktop { --desktop-topbar-height: 64px; }
+.windows-desktop body { padding-top: var(--desktop-topbar-height); }
+.windows-desktop .board-layout { height: calc(100dvh - var(--desktop-topbar-height)); }
+.windows-desktop .unified-page { min-height: calc(100dvh - var(--desktop-topbar-height)); }
+
+/* Shared conversations use the content viewport below the persistent window toolbar. */
+.windows-desktop :is(.agent-conversation.chat-drawer, .conversation-overlay) {
+    top: var(--desktop-topbar-height);
+}
+.windows-desktop .agent-conversation.chat-drawer {
+    height: calc(100dvh - var(--desktop-topbar-height));
+}
+
+.windows-desktop .desktop-window-header {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 2100;
+    display: flex;
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: .75rem;
+    width: 100%;
+    height: var(--desktop-topbar-height);
+    min-height: var(--desktop-topbar-height);
+    max-height: var(--desktop-topbar-height);
+    margin: 0;
+    padding: 0 156px 0 168px;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    overflow-x: auto;
+    scrollbar-width: none;
+    app-region: drag;
+}
+.windows-desktop .desktop-window-header::-webkit-scrollbar { display: none; }
+.windows-desktop .desktop-window-header > * { flex-shrink: 0; }
+.windows-desktop .desktop-window-header > .home-logo-horizontal { display: none; }
+.windows-desktop .desktop-window-header h1 {
+    margin: 0;
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 1rem;
+    line-height: 1.4;
+}
+.windows-desktop .desktop-window-header .project-directory-global-actions { margin-left: auto; }
+.windows-desktop .desktop-window-header .filter-bar { flex: 0 0 240px; max-width: 240px; }
+.windows-desktop .desktop-window-header .filter-hint-popup {
+    position: fixed;
+    top: calc(var(--desktop-topbar-height) + 6px);
+    right: auto;
+    width: 320px;
+    max-width: calc(100vw - 32px);
+    app-region: no-drag;
+}
+.windows-desktop .desktop-window-header :is(button, a, input, select, textarea, [role="button"], [contenteditable]),
+.windows-desktop .desktop-window-controls { app-region: no-drag; }
+
+.windows-desktop .desktop-window-brand {
+    position: fixed;
+    inset: 0 auto auto 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    width: 156px;
+    height: var(--desktop-topbar-height);
+    padding-inline: 16px 8px;
+    background: var(--surface);
+}
+.windows-desktop .desktop-window-brand img {
+    display: block;
+    width: 132px;
+    height: auto;
+    max-height: 40px;
+    object-fit: contain;
+}
+.windows-desktop .desktop-window-brand:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: -4px;
+}
+.windows-desktop .desktop-window-controls {
+    position: fixed;
+    inset: 0 0 auto auto;
+    z-index: 1;
+    display: flex;
+    height: var(--desktop-topbar-height);
+    padding-left: 8px;
+    background: var(--surface);
+}
+.windows-desktop .desktop-window-controls button {
+    display: grid;
+    place-items: center;
+    width: 46px;
+    min-width: 46px;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--text);
+    cursor: default;
+}
+.windows-desktop .desktop-window-controls button:hover { background: var(--surface2); }
+.windows-desktop .desktop-window-controls button:active { background: var(--surface3); }
+.windows-desktop .desktop-window-controls button:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: -3px;
+}
+.windows-desktop .desktop-window-controls button:last-child:hover { background: #c42b30; color: white; }
+.windows-desktop .desktop-window-controls svg {
+    width: 12px;
+    height: 12px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.2;
+}
+
+/* Long project toolbars scroll between the fixed logo and window controls. */
+.windows-desktop .desktop-window-header--overflow { padding-inline: 192px 184px; }
+.windows-desktop .desktop-window-scroll {
+    display: none;
+    position: fixed;
+    top: 0;
+    z-index: 1;
+    place-items: center;
+    width: 28px;
+    min-width: 28px;
+    height: var(--desktop-topbar-height);
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: var(--surface);
+    color: var(--text);
+}
+.windows-desktop .desktop-window-header--overflow .desktop-window-scroll { display: grid; }
+.windows-desktop .desktop-window-scroll--back { left: 156px; }
+.windows-desktop .desktop-window-scroll--next { right: 146px; }
+.windows-desktop .desktop-window-scroll:hover:not(:disabled) { background: var(--surface2); }
+.windows-desktop .desktop-window-scroll:disabled { color: var(--text-dim); opacity: 1; cursor: default; }
+.windows-desktop .desktop-window-scroll:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -3px; }
+.windows-desktop .desktop-window-scroll svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; }

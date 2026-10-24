@@ -4,8 +4,7 @@
 
 A column processor can opt into `JevObservationOnly`. This replaces normal agent processing
 for that column with a routing suggestion. Agent dispatch, before/after actions, and
-column execution claims are bypassed. Configured business routes are applied automatically when JEV meets the column confidence threshold. Independent scheduled tasks
-and legacy automations retain their own configuration.
+column execution claims are bypassed. Configured business routes are applied automatically when JEV meets the column confidence threshold. Independent scheduled tasks retain their own configuration.
 
 ## Shared uncertainty fallback
 

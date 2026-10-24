@@ -40,14 +40,14 @@ public sealed class LatestRefreshGuardTests
     }
 
     [Fact]
-    public void BothBoards_ApplyTheLatestRefreshGuardAndLogExternalRefreshFailures()
+    public void BoardAndProjectDirectory_ApplyTheLatestRefreshGuardAndLogExternalRefreshFailures()
     {
         var root = FindRepositoryRoot();
         var board = File.ReadAllText(Path.Combine(root, "KittyClaw.Web", "Components", "Pages", "Board.razor"));
         var unified = File.ReadAllText(Path.Combine(root, "KittyClaw.Web", "Components", "Pages", "UnifiedBoard.razor"));
 
         Assert.Contains("_ticketRefreshGuard.ApplyLatestAsync", board);
-        Assert.Contains("LaneRefreshGuard(project.Slug).ApplyLatestAsync", unified);
+        Assert.Contains("guard.ApplyLatestAsync", unified);
         Assert.Contains("Logger.LogError", board);
         Assert.Contains("Logger.LogError", unified);
     }

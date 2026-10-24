@@ -125,10 +125,11 @@ else
                             }
                             @if (_refreshRunIds.TryGetValue(t.Slug, out var activeRunId))
                             {
-                                <span class="agent-spinner dashboard-tile-spinner"
+                                <button type="button" class="agent-spinner dashboard-tile-spinner"
                                       title="@L["RefreshRunning"]"
+                                      aria-label="@L["RefreshRunning"]"
                                       @onclick="() => OpenRunDrawer(activeRunId)"
-                                      @onmousedown:stopPropagation></span>
+                                      @onmousedown:stopPropagation></button>
                             }
                             else if (tileQueued)
                             {
@@ -164,49 +165,58 @@ else
 
     @if (_chatOpen)
     {
-        <div class="tile-chat-overlay" @onclick="CloseTileChat">
-            <div class="tile-chat-panel" @onclick:stopPropagation>
-                <div class="tile-chat-header">
-                    <span class="tile-chat-title">@L["TileChatTitle"]</span>
-                    <button class="tile-chat-close" @onclick="CloseTileChat">&times;</button>
-                </div>
-                <div class="tile-chat-messages" @ref="_chatMessagesRef">
-                    @foreach (var msg in _chatMessages)
+        <ConversationDrawer Title="@L["TileChatTitle"]" CssClass="tile-chat-panel" Run="_tileChatRun" Model="@_chatModel" IsBusy="@_chatLoading" OnClose="CloseTileChat">
+            <HeaderActions>
+                @if (_chatLoading)
+                {
+                    <button class="agent-stop-btn" @onclick="StopTileChat">⏹ @L["Stop"]</button>
+                }
+            </HeaderActions>
+            <ChildContent>
+                <ConversationView @ref="_chatMessagesView">
+                    @foreach (var group in ConversationEventPresentation.Group(_chatTimeline))
                     {
-                        <div class="tile-chat-msg tile-chat-msg-@msg.Role">
-                            <div class="tile-chat-bubble markdown-body">
-                                @((MarkupString)Markdown.ToHtml(msg.Text, _markdownPipeline))
-                            </div>
-                        </div>
+                        if (group.IsActivity)
+                        {
+                            <ConversationActivity Events="group.Events" />
+                        }
+                        else
+                        {
+                            var ev = group.Events[0];
+                            <ConversationMessage Role="@(ev.Kind == "user" ? "user" : ev.Kind == "error" ? "error" : "assistant")" At="ev.At">
+                                @((MarkupString)KittyClaw.Web.Markdown.ChatMarkdownRenderer.Render(TileChatText(ev)))
+                            </ConversationMessage>
+                        }
                     }
                     @if (_chatLoading)
                     {
-                        <div class="tile-chat-msg tile-chat-msg-assistant">
-                            <div class="tile-chat-bubble tile-chat-bubble-loading">…</div>
-                        </div>
+                        <ConversationMessage BubbleClass="chat-bubble-loading">…</ConversationMessage>
                     }
                     @if (_chatMessages.Count == 0 && !_chatLoading)
                     {
-                        <div class="tile-chat-empty">@L["TileChatEmpty"]</div>
+                        <div class="chat-empty">@L["TileChatEmpty"]</div>
                     }
-                </div>
+                </ConversationView>
                 @if (_chatError is not null)
                 {
-                    <div class="tile-chat-error">@_chatError</div>
+                    <div class="tile-chat-error" role="alert">@_chatError</div>
                 }
-                <div class="tile-chat-input-area">
-                    <textarea placeholder="@L["TileChatPlaceholder"]"
-                              value="@_chatInput"
-                              @oninput="OnChatInput"
-                              @onkeydown="OnChatKeyDown"
-                              disabled="@_chatLoading" rows="3"></textarea>
-                    <button class="tile-chat-send" @onclick="SendChatMessage"
-                            disabled="@(string.IsNullOrWhiteSpace(_chatInput) || _chatLoading)">
-                        @L["TileChatSend"]
-                    </button>
-                </div>
-            </div>
-        </div>
+            </ChildContent>
+            <Composer>
+                <ConversationComposer IsBusy="@_chatLoading" CanSend="@(!string.IsNullOrWhiteSpace(_chatInput))" OnSend="SendChatMessage" OnStop="StopTileChat">
+                    <Editor><textarea @ref="_tileChatInputRef" placeholder="@L["TileChatPlaceholder"]" value="@_chatInput" @oninput="OnChatInput" disabled="@_chatLoading" aria-label="@L["TileChatPlaceholder"]" rows="3"></textarea></Editor>
+                    <ModelPicker>
+                        <select @bind="_chatModel" aria-label="@L["ConversationModel"]" disabled="@_chatLoading">
+                            <optgroup label="Claude">@foreach (var model in AvailableModels) { <option value="@model">@model</option> }</optgroup>
+                            @foreach (var catalog in new[] { _codexModels, _grokModels, _mistralModels, _deepSeekModels, _ollamaModels })
+                            {
+                                @foreach (var model in catalog) { <option value="@model">@model</option> }
+                            }
+                        </select>
+                    </ModelPicker>
+                </ConversationComposer>
+            </Composer>
+        </ConversationDrawer>
     }
 
     @if (_tileConfigOpen)
@@ -452,7 +462,14 @@ else
     private string _chatInput = "";
     private bool _chatLoading;
     private string? _chatError;
-    private ElementReference _chatMessagesRef;
+    private ConversationView? _chatMessagesView;
+    private ElementReference _tileChatInputRef;
+    private readonly List<StreamEvent> _chatTimeline = [];
+    private AgentRun? _tileChatRun;
+    private CancellationTokenSource? _tileChatCts;
+    private string _chatModel = ClaudeModelCatalog.DefaultModel;
+    private IDisposable? _escTileChat;
+    private bool _disposed;
 
     // ── Tile config popup ──
 
@@ -607,6 +624,8 @@ else
             _dotNetRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("dashboardInitDnd", _dotNetRef);
         }
+        if (_chatOpen && _dotNetRef is not null)
+            await JS.InvokeVoidAsync("chatDrawerInstallEnterGuard", _tileChatInputRef, _dotNetRef);
         if (_pendingTileFocus is { } tileSlug)
         {
             _pendingTileFocus = null;
@@ -621,6 +640,9 @@ else
 
     public async ValueTask DisposeAsync()
     {
+        _disposed = true;
+        _tileChatCts?.Cancel();
+        _escTileChat?.Dispose();
         _escTileConfig?.Dispose();
         RunsState.OnChange -= OnRunsStateChanged;
         TileGate.StateChanged -= OnTileGateStateChanged;
@@ -826,13 +848,22 @@ else
 
     private void OpenTileChat()
     {
+        if (_chatLoading)
+        {
+            _chatOpen = true;
+            RegisterTileChatEscape();
+            return;
+        }
         _configEditingSlug = null;
         _chatAgentName = $"tile-chat-{Guid.NewGuid():N}"[..20];
         _chatMessages.Clear();
+        _chatTimeline.Clear();
+        _tileChatRun = null;
         _chatInput = "";
         _chatError = null;
         _chatLoading = false;
         _chatOpen = true;
+        RegisterTileChatEscape();
     }
 
     private void OpenTileChatWithPrompt(string prompt)
@@ -841,7 +872,36 @@ else
         _chatInput = prompt;
     }
 
-    private void CloseTileChat() => _chatOpen = false;
+    private void CloseTileChat()
+    {
+        _chatOpen = false;
+        _escTileChat?.Dispose();
+        _escTileChat = null;
+    }
+
+    private void RegisterTileChatEscape()
+    {
+        _escTileChat?.Dispose();
+        _escTileChat = EscapeStack.PushWithFocus(JS, () => InvokeAsync(() => { CloseTileChat(); StateHasChanged(); }));
+    }
+
+    private Task StopTileChat()
+    {
+        _tileChatCts?.Cancel();
+        _tileChatRun?.Cancellation.Cancel();
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public Task OnComposerEnter(string text) => InvokeAsync(async () =>
+    {
+        if (_chatLoading) return;
+        _chatInput = text;
+        await SendChatMessage();
+    });
+
+    private static string TileChatText(StreamEvent ev) => ev.Text.StartsWith("[assistant] ", StringComparison.Ordinal)
+        ? ev.Text[12..] : ev.Text;
 
     private async Task OnChatKeyDown(KeyboardEventArgs e)
     {
@@ -856,6 +916,7 @@ else
 
         _chatInput = "";
         _chatMessages.Add(("user", text));
+        _chatTimeline.Add(new StreamEvent(DateTime.UtcNow, "user", text));
         _chatLoading = true;
         _chatError = null;
         StateHasChanged();
@@ -868,6 +929,9 @@ else
 
             var output = new StringBuilder();
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+            _tileChatCts = cts;
+            var runId = Guid.NewGuid().ToString("N");
+            var (target, fallback) = DashboardModelRouting.Resolve(_project, _chatModel);
 
             var ctx = new AgentRunContext
             {
@@ -875,6 +939,9 @@ else
                 WorkspacePath = _workspace,
                 AgentName = _chatAgentName,
                 SkillFile = "tile-chat",
+                PresetRunId = runId,
+                Target = target,
+                FallbackTarget = fallback,
                 InlineSkillContent = TileChatSystemPrompt,
                 ExtraContext = text,
                 MaxTurns = 25,
@@ -882,6 +949,13 @@ else
                 SessionScope = "chat",
                 OnEventHook = ev =>
                 {
+                    if (ev.Kind != "content_block_delta" && !_disposed)
+                        _ = InvokeAsync(() =>
+                        {
+                            _chatTimeline.Add(ev);
+                            StateHasChanged();
+                            return ScrollChatToBottom();
+                        });
                     if (ev.Kind != "assistant" || string.IsNullOrWhiteSpace(ev.Text)) return;
                     var t = ev.Text;
                     const string prefix = "[assistant] ";
@@ -890,9 +964,13 @@ else
                 },
             };
 
-            var run = await AgentRunner.RunAsync(ctx, cts.Token);
+            var runTask = AgentRunner.RunAsync(ctx, cts.Token);
+            _tileChatRun = RunsState.Get(runId);
+            StateHasChanged();
+            var run = await runTask;
             var response = output.ToString().Trim();
 
+            if (run.Status == AgentRunStatus.Stopped || cts.IsCancellationRequested) return;
             if (run.Status == AgentRunStatus.Failed || string.IsNullOrEmpty(response))
             {
                 _chatError = L["TileChatError"];
@@ -904,7 +982,7 @@ else
                 var config = TryExtractTileConfig(response);
                 if (config is not null)
                 {
-                    _chatOpen = false;
+                    CloseTileChat();
                     _configSlug = config.Slug;
                     _configTitle = config.Title;
                     _configTemplate = config.Template;
@@ -924,21 +1002,26 @@ else
                 }
             }
         }
+        catch (OperationCanceledException) { }
         catch (Exception)
         {
             _chatError = L["TileChatError"];
         }
         finally
         {
+            _tileChatCts = null;
             _chatLoading = false;
-            StateHasChanged();
-            await ScrollChatToBottom();
+            if (!_disposed)
+            {
+                StateHasChanged();
+                await ScrollChatToBottom();
+            }
         }
     }
 
     private async Task ScrollChatToBottom()
     {
-        try { await JS.InvokeVoidAsync("tileChatScrollToBottom", _chatMessagesRef); }
+        try { await JS.InvokeVoidAsync("tileChatScrollToBottom", _chatMessagesView?.Element); }
         catch { /* best-effort */ }
     }
 
@@ -1012,6 +1095,7 @@ else
         HideTileConfigPopup();
         _configEditingSlug = null;
         _chatOpen = true;
+        RegisterTileChatEscape();
     }
 
     private async Task OpenTileEdit(string tileSlug)

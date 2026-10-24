@@ -1,18 +1,25 @@
 ﻿/* ─── Agent run spinner on ticket cards ───────────────────────────────── */
 .agent-spinner {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 0;
     background: transparent;
     width: 14px;
     height: 14px;
-    border: 2px solid #4a9eff44;
-    border-top-color: #4a9eff;
+    border: 0;
     border-radius: 50%;
-    animation: agent-spin 0.9s linear infinite;
     cursor: pointer;
     flex-shrink: 0;
 }
-.agent-spinner:hover { border-top-color: #60afff; filter: drop-shadow(0 0 3px #4a9eff88); }
+.agent-spinner::before {
+    content: "";
+    width: 14px; height: 14px; box-sizing: border-box;
+    border: 2px solid #4a9eff44; border-top-color: #4a9eff; border-radius: 50%;
+    animation: agent-spin 0.9s linear infinite;
+}
+.agent-spinner:hover { background: transparent; }
+.agent-spinner:hover::before { border-top-color: #60afff; filter: drop-shadow(0 0 3px #4a9eff88); }
 @keyframes agent-spin { to { transform: rotate(360deg); } }
 
 .project-card-agent-badge {

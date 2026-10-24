@@ -23,7 +23,7 @@
   "Tip21": "Project skills describe reusable technical and operational procedures. A processor can make them available, recommended or required for its generic agent.",
   "Tip22": "Each processor and scheduled task can choose its model. New instructions reuse your last choice, while an existing conversation always keeps its original model.",
   "Tip23": "A pipeline's orange badge counts its visible unread tickets. Right-click a column and choose Mark all as read to reset its count.",
-  "Tip24": "A legacy automation board can be migrated with the wizard. Review its pipelines and columns step by step before launching the migration.",
+  "Tip24": "Use Edit with assistant to review an existing pipeline, refine its columns, and apply only the approved changes.",
   "Tip25": "The Costs page uses a cached report. Start with a quick date range, then filter by project, pipeline or model.",
   "Tip26": "On Costs, green means measured, striped orange means estimated, and the cyan-to-green gradient shows RTK savings.",
   "Tip27": "Enable RTK in project settings to condense command output before it reaches the agent. Estimated savings then appear on Costs.",

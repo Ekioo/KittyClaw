@@ -6,6 +6,7 @@
 @inject TicketService Tickets
 @inject ColumnProcessorService Processors
 @inject LocalizationService L
+@inject PersistentComponentState InitialState
 @implements IAsyncDisposable
 
 @if (_processor is { Enabled: true } && (_processor.JevAcceptanceValidation || _processor.JevExecutionSelection))
@@ -99,16 +100,48 @@
     private string? _error;
     private readonly CancellationTokenSource _stop = new();
     private Task? _poll;
+    [Parameter] public Ticket? InitialTicket { get; set; }
+    private (string Slug, int Id, DateTime? UpdatedAt, long? Visit)? _loadedContext;
+    private int _reloadVersion;
+    private PersistingComponentStateSubscription _initialStateSubscription;
+    public sealed record InitialReviewData(ColumnProcessor? Processor, JevWorkReview? Review,
+        List<JevWorkDecision> History, bool Stale, int? ObservedColumn);
+    protected override void OnInitialized() =>
+        _initialStateSubscription = InitialState.RegisterOnPersisting(() =>
+        {
+            InitialState.PersistAsJson($"jev-review:{Slug}:{TicketId}",
+                new InitialReviewData(_processor, _review, _history, _stale, _observedColumn));
+            return Task.CompletedTask;
+        });
     protected override async Task OnParametersSetAsync()
-    { await ReloadAsync(); _poll ??= PollAsync(); }
-    private async Task ReloadAsync(bool notifyColumnChanges = false)
     {
+        var context = (Slug, TicketId, InitialTicket?.UpdatedAt, InitialTicket?.ColumnVisit);
+        if (InitialTicket is not null && _loadedContext == context) return;
+        _loadedContext = context;
+        if (InitialState.TryTakeFromJson<InitialReviewData>($"jev-review:{Slug}:{TicketId}", out var initial) && initial is not null)
+        {
+            _processor = initial.Processor; _review = initial.Review; _history = initial.History;
+            _stale = initial.Stale; _observedColumn = initial.ObservedColumn; _observedTicket = TicketId;
+        }
+        else
+            await ReloadAsync(initialTicket: InitialTicket);
+        if (!_stop.IsCancellationRequested) _poll ??= PollAsync();
+    }
+    private async Task ReloadAsync(bool notifyColumnChanges = false, Ticket? initialTicket = null)
+    {
+        var version = ++_reloadVersion;
         var slug = Slug; var ticketId = TicketId;
-        var ticket = await Tickets.GetTicketAsync(slug, ticketId);
-        var processor = ticket?.ColumnId is int column ? await Processors.GetAsync(slug, column) : null;
-        var review = processor is null ? null : await Reviews.GetAsync(slug, ticketId, processor.ColumnId);
-        var history = await Reviews.DecisionsAsync(slug, ticketId);
-        var stale = review is not null && (ticket is null || processor is null || !await Reviews.IsCurrentAsync(slug, processor, ticket, review));
+        // SQLite and repository evidence checks contain synchronous work. Keep it off the circuit.
+        var (ticket, processor, review, history, stale) = await Task.Run(async () =>
+        {
+            var ticket = initialTicket ?? await Tickets.GetTicketAsync(slug, ticketId);
+            var processor = ticket?.ColumnId is int column ? await Processors.GetAsync(slug, column) : null;
+            var review = processor is null ? null : await Reviews.GetAsync(slug, ticketId, processor.ColumnId);
+            var history = await Reviews.DecisionsAsync(slug, ticketId);
+            var stale = review is not null && (ticket is null || processor is null || !await Reviews.IsCurrentAsync(slug, processor, ticket, review));
+            return (ticket, processor, review, history, stale);
+        });
+        if (_stop.IsCancellationRequested || version != _reloadVersion) return;
         if (Slug != slug || TicketId != ticketId) return;
         var moved = ticket is not null && _observedTicket == ticketId && _observedColumn != ticket.ColumnId;
         if (_observedTicket != ticketId || notifyColumnChanges)
@@ -164,5 +197,5 @@
         catch (OperationCanceledException) { }
     }
     public async ValueTask DisposeAsync()
-    { _stop.Cancel(); if (_poll is not null) await _poll; _stop.Dispose(); }
+    { _initialStateSubscription.Dispose(); _stop.Cancel(); if (_poll is not null) await _poll; _stop.Dispose(); }
 }

@@ -1,0 +1,18 @@
+{
+  "UnifiedBoardTitle": "项目",
+  "AllBoardsNavLabel": "项目",
+  "UnifiedBoardLoading": "正在加载项目…",
+  "UnifiedBoardNoProjects": "暂无项目。",
+  "UnifiedBoardNoMatches": "没有符合此搜索的项目。",
+  "UnifiedBoardSearchPlaceholder": "搜索项目或列…",
+  "ClearSearch": "清除搜索",
+  "CreateProjectButton": "创建项目",
+  "ProjectName": "项目名称",
+  "UnifiedBoardCollapseLane": "折叠泳道",
+  "UnifiedBoardExpandLane": "展开泳道",
+  "UnifiedBoardCrossLaneBlocked": "工单不能在项目之间移动。",
+  "ProjectQuickAccess": "快速访问 {0}",
+  "ProjectAgentsRunning": "运行中的智能体",
+  "ProjectColumns": "项目列",
+  "ProjectOpenColumn": "打开 {0} / {1} / {2}"
+}

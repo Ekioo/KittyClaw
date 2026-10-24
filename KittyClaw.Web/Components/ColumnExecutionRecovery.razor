@@ -3,10 +3,38 @@
 @inject ColumnExecutionService Executions
 @inject ColumnProcessingEngine Engine
 @inject LocalizationService L
+@inject BoardUpdateNotifier Notifier
 
-@if (_entries.Count > 0)
+@if (_entries.Count > 0 || _questions.Count > 0)
 {
     <div class="automation-queue column-execution-recovery" @onclick:stopPropagation>
+        @foreach (var question in _questions)
+        {
+            <section class="automation-queue-entry automation-question" data-question-id="@question.Id" aria-label="@L["QuestionWaiting"]">
+                <strong class="automation-queue-state">@L["QuestionWaiting"]</strong>
+                <span>@question.Question</span>
+                <small class="automation-queue-reason">@question.Author · @L[question.MultiSelect ? "QuestionMultiple" : "QuestionSingle"]</small>
+                <div class="question-options" role="group" aria-label="@question.Question">
+                    @foreach (var option in question.Options)
+                    {
+                        <button type="button" disabled="@_busy" aria-pressed="@(IsSelected(question.Id, option) ? "true" : "false")"
+                                @onclick="() => Select(question, option)">@option</button>
+                    }
+                </div>
+                @if (question.AllowFreeText)
+                {
+                    <label for="question-text-@_instanceId-@question.Id">@L["QuestionFreeText"]</label>
+                    <textarea id="question-text-@_instanceId-@question.Id" rows="2" maxlength="8000" disabled="@_busy"
+                              value="@FreeText(question.Id)" @oninput="e => Draft(question.Id).FreeText = e.Value?.ToString() ?? string.Empty"></textarea>
+                }
+                <button type="button" class="question-submit" disabled="@(_busy || !CanAnswer(question.Id))"
+                        @onclick="() => Answer(question)">@L["QuestionSubmit"]</button>
+            </section>
+        }
+        @if (_error is not null)
+        {
+            <p class="question-error" role="alert">@_error</p>
+        }
         @foreach (var entry in _entries)
         {
             <div class="automation-queue-entry" data-execution-id="@entry.Id">
@@ -14,7 +42,7 @@
                 {
                     <span class="automation-queue-state">@L["RecoveryMemoryPending"]</span>
                     <span class="automation-queue-reason">@entry.CapitalizationError</span>
-                    <button type="button" disabled="@(_busy || entry.Status is ColumnExecutionStatus.Running or ColumnExecutionStatus.Retrying or ColumnExecutionStatus.WaitingForChildren)" @onclick="() => RetryMemory(entry.Id)">@L["RecoveryRetryMemory"]</button>
+                    <button type="button" disabled="@(_busy || entry.Status is ColumnExecutionStatus.Running or ColumnExecutionStatus.Retrying or ColumnExecutionStatus.WaitingForChildren or ColumnExecutionStatus.WaitingForAnswer)" @onclick="() => RetryMemory(entry.Id)">@L["RecoveryRetryMemory"]</button>
                 }
                 @if (entry.Status is ColumnExecutionStatus.Failed or ColumnExecutionStatus.Retrying or ColumnExecutionStatus.WaitingForChildren)
                 {
@@ -38,7 +66,12 @@
 @code {
     [Parameter, EditorRequired] public string Slug { get; set; } = "";
     [Parameter, EditorRequired] public int TicketId { get; set; }
+    [Parameter] public EventCallback OnAnswered { get; set; }
+    [Parameter] public Dictionary<string, TicketQuestionAnswerDraft> Drafts { get; set; } = [];
     private List<ColumnExecution> _entries = [];
+    private List<TicketQuestion> _questions = [];
+    private readonly string _instanceId = Guid.NewGuid().ToString("N");
+    private string? _error;
     private bool _busy;
 
     protected override void OnInitialized() => Executions.ExecutionChanged += OnExecutionChanged;
@@ -49,7 +82,47 @@
     }
     public void Dispose() => Executions.ExecutionChanged -= OnExecutionChanged;
     protected override async Task OnParametersSetAsync() => await Reload();
-    private async Task Reload() => _entries = await Executions.ListRecoveryAsync(Slug, TicketId);
+    private async Task Reload()
+    {
+        _entries = await Executions.ListRecoveryAsync(Slug, TicketId);
+        _questions = (await Executions.ListQuestionsAsync(Slug, TicketId)).Where(q => q.AnsweredAt is null && !q.Cancelled).ToList();
+    }
+    private TicketQuestionAnswerDraft Draft(string id)
+    {
+        if (!Drafts.TryGetValue(id, out var draft)) Drafts[id] = draft = new();
+        return draft;
+    }
+    private bool IsSelected(string id, string option) => Draft(id).SelectedOptions.Contains(option);
+    private string FreeText(string id) => Draft(id).FreeText;
+    private bool CanAnswer(string id) => Draft(id).SelectedOptions.Count > 0 || !string.IsNullOrWhiteSpace(FreeText(id));
+    private void Select(TicketQuestion question, string option)
+    {
+        var values = Draft(question.Id).SelectedOptions;
+        var wasSelected = values.Contains(option);
+        if (!question.MultiSelect) values.Clear();
+        if (wasSelected) values.Remove(option); else values.Add(option);
+    }
+    private async Task Answer(TicketQuestion question)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Executions.AnswerQuestionAsync(Slug, TicketId, question.Id,
+                new(Draft(question.Id).SelectedOptions.ToList(), FreeText(question.Id)));
+            Drafts.Remove(question.Id);
+            Engine.Signal(Slug);
+            Notifier.NotifyProjectUpdated(Slug);
+            await Reload();
+            await OnAnswered.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or KeyNotFoundException)
+        {
+            _error = L["QuestionAnswerFailed"];
+            await Reload();
+        }
+        finally { _busy = false; }
+    }
     private Task RetryMemory(string id) => Recover(() => Engine.RetryMemoryAsync(Slug, id));
     private Task Retry(string id) => Recover(() => Executions.RetryAsync(Slug, id));
     private Task Cancel(string id) => Recover(() => Executions.CancelAsync(Slug, id));

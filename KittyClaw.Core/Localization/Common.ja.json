@@ -10,7 +10,6 @@
   "Name": "名前",
   "Color": "色",
   "Order": "順序",
-  "Type": "種類",
   "Saved": "保存しました。",
   "Error": "エラー",
   "Language": "言語",
@@ -21,6 +20,7 @@
   "LangIt": "イタリア語",
   "LangPtBr": "ブラジルのポルトガル語",
   "LangJa": "日本語",
+  "LangZhCn": "简体中文",
   "DropHere": "ここにドロップしてください",
   "Board": "ボード",
   "Automations": "自動化",
@@ -32,7 +32,6 @@
   "QueueSkipped": "スキップ",
   "QueueFailed": "失敗",
   "QueueCancelled": "キャンセルされました",
-  "AutomationsAhead": "先に{0}自動化",
   "SessionInterrupted": "KittyClawが更新されたか、セッションが中断されました。",
   "SessionInterruptedHint": "メッセージが表示された場合はページを再読み込みしてください。自動回復します。",
   "ReloadPage": "ページを再読み込み",
@@ -60,5 +59,6 @@
   "ProviderDeepSeekConfiguration": "DeepSeek V4はAnthropic互換API経由でClaude Codeを使用します。各プロジェクトのvaultにDEEPSEEK_API_KEYを保存してください。",
   "ProviderSharedClaudeCli": "共有トランスポート：検出はClaude Codeを確認します。DeepSeekキーはプロジェクトごとに保持されます。",
   "AgentProvidersDetectionNote": "認証情報を読み取ったり表示したりせずにCLIの存在を確認します。プロジェクト固有の秘密はvaultに保持されます。",
-  "RtkGlobalHelp": "シェル出力の任意の最適化ツールです。各プロジェクトの設定でRTKを個別に有効にしてください。実行ファイルの上書き: KITTYCLAW_RTK_BIN。"
+  "RtkGlobalHelp": "シェル出力の任意の最適化ツールです。各プロジェクトの設定でRTKを個別に有効にしてください。実行ファイルの上書き: KITTYCLAW_RTK_BIN。",
+  "All": "— 全部 —"
 }

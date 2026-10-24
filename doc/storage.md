@@ -18,7 +18,7 @@ Inside each workspace:
 - `<workspace>/.agents/skills/{skill}/SKILL.md` — reusable project skill with a stable slug and separate display metadata.
 - `<workspace>/.agents/processors/column-{id}/memory/MEMORY.md` — persistent memory for the generic processor attached to a stable column identity.
 - `<workspace>/.agents/channel/` — session state.
-- `<workspace>/.agents/automations.json` — per-project automation config.
+- `<workspace>/.agents/agent-budget.json` — project-wide daily agent budget.
 - `<workspace>/CLAUDE.md` — workspace guide for Claude.
 
 ## Key components
@@ -29,7 +29,7 @@ Inside each workspace:
 - `KittyClaw.Core/Services/AppSettingsService.cs` — `settings.json` reader/writer.
 
 ## Entry points
-- DI-injected singletons resolved by the [REST API](./rest-api.md), the Blazor UI, and the [automation engine](./automation-engine.md).
+- DI-injected singletons resolved by the [REST API](./rest-api.md), the Blazor UI, and the [column workflow engines](./column-workflows.md).
 
 ## External dependencies
 - SQLite (via EF Core).

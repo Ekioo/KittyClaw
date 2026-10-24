@@ -14,13 +14,24 @@ namespace KittyClaw.Web.Api;
 [McpServerToolType]
 public sealed class McpManagementTools(IServiceProvider services, ProjectService projects)
 {
-    [McpServerTool(Name = "save_automations", Destructive = true)]
-    [Description("Create, edit or enable automations and reload the engine. Pass baseStamp from get_automations to preserve concurrent edits. Enabled rules may launch agents. Trigger, condition and action objects require their type discriminator.")]
-    public Task<JsonElement> SaveAutomations(
-        [Description("Project slug from list_projects.")] string project,
-        [Description("Configuration and optional baseStamp from get_automations.")] SaveAutomationsRequest request) =>
-        ExecuteAsync(project, () => Endpoints.HandleSaveAutomations(project, request,
-            services.GetRequiredService<AutomationStore>(), services.GetRequiredService<AutomationEngine>()));
+    [McpServerTool(Name = "ask_ticket_question", ReadOnly = false, Destructive = false, Idempotent = false)]
+    [Description("Ask the owner a persistent multiple-choice question in the ticket automation queue. Pauses the current column execution. Supply its executionId when available. After this tool succeeds, stop work and finish the run; KittyClaw resumes the processor after the owner's answer. Requires an enabled processor in the ticket's current column. Never bury confirmation requests in comments.")]
+    public Task<JsonElement> AskTicketQuestion(string project, int id, AskTicketQuestionRequest request) =>
+        ExecuteAsync(project, () => Endpoints.HandleAskTicketQuestion(project, id, request,
+            services.GetRequiredService<ColumnExecutionService>(), services.GetRequiredService<BoardUpdateNotifier>()));
+
+    [McpServerTool(Name = "list_ticket_questions", ReadOnly = true, Destructive = false, Idempotent = true)]
+    [Description("Read pending and answered ticket questions, including owner answers, in creation order.")]
+    public Task<JsonElement> ListTicketQuestions(string project, int id) =>
+        ExecuteAsync(project, () => Endpoints.HandleListTicketQuestions(project, id,
+            services.GetRequiredService<ColumnExecutionService>(), services.GetRequiredService<TicketService>()));
+
+    [McpServerTool(Name = "answer_ticket_question", ReadOnly = false, Destructive = false, Idempotent = false)]
+    [Description("Record the owner's explicit answer to a ticket question and queue the processor to resume (may launch an agent). Requires an actual human answer; never choose or invent an answer on the owner's behalf.")]
+    public Task<JsonElement> AnswerTicketQuestion(string project, int id, string questionId, AnswerTicketQuestionRequest request) =>
+        ExecuteAsync(project, () => Endpoints.HandleAnswerTicketQuestion(project, id, questionId, request,
+            services.GetRequiredService<ColumnExecutionService>(), services.GetRequiredService<ColumnProcessingEngine>(),
+            services.GetRequiredService<BoardUpdateNotifier>()));
 
     [McpServerTool(Name = "update_ticket", ReadOnly = false, Destructive = true, Idempotent = false)]
     [Description("Update ticket fields together, including status and assignee. Use expectedStatus to detect concurrent transitions.")]
@@ -279,33 +290,6 @@ public sealed class McpManagementTools(IServiceProvider services, ProjectService
         [Description("Column execution id from list_column_executions.")] string executionId) =>
         ExecuteAsync(project, () => Endpoints.HandleCancelColumnExecution(project, executionId, services.GetRequiredService<ColumnExecutionService>(), services.GetRequiredService<BoardUpdateNotifier>()));
 
-    [McpServerTool(Name = "get_automations", ReadOnly = true, Destructive = false, Idempotent = true)]
-    [Description("Read automation configuration and its file stamp.")]
-    public Task<JsonElement> GetAutomations(
-        [Description("Project slug from list_projects.")] string project) =>
-        ExecuteAsync(project, () => Endpoints.HandleGetAutomations(project, services.GetRequiredService<AutomationStore>()));
-
-    [McpServerTool(Name = "disable_automation", ReadOnly = false, Destructive = true, Idempotent = false)]
-    [Description("Disable an automation and reload the engine; report rejected reloads.")]
-    public Task<JsonElement> DisableAutomation(
-        [Description("Project slug from list_projects.")] string project,
-        [Description("Automation id from get_automations.")] string automationId) =>
-        ExecuteAsync(project, () => Endpoints.HandleDisableAutomation(project, automationId, services.GetRequiredService<AutomationStore>(), services.GetRequiredService<AutomationEngine>()));
-
-    [McpServerTool(Name = "delete_automation", ReadOnly = false, Destructive = true, Idempotent = true)]
-    [Description("Delete an automation and reload the engine; report rejected reloads.")]
-    public Task<JsonElement> DeleteAutomation(
-        [Description("Project slug from list_projects.")] string project,
-        [Description("Automation id from get_automations.")] string automationId) =>
-        ExecuteAsync(project, () => Endpoints.HandleDeleteAutomation(project, automationId, services.GetRequiredService<AutomationStore>(), services.GetRequiredService<AutomationEngine>()));
-
-    [McpServerTool(Name = "get_ticket_automation_queue", ReadOnly = true, Destructive = false, Idempotent = true)]
-    [Description("Read the automation queue for a ticket.")]
-    public Task<JsonElement> GetTicketAutomationQueue(
-        [Description("Project slug from list_projects.")] string project,
-        [Description("Optional ticket id filter.")] int ticketId) =>
-        ExecuteAsync(project, () => Endpoints.HandleGetTicketAutomationQueue(project, ticketId, services.GetRequiredService<AutomationQueueStore>()));
-
     [McpServerTool(Name = "list_runs", ReadOnly = true, Destructive = false, Idempotent = true)]
     [Description("List project agent runs with status and cost. Defaults to active runs; includeCompleted includes retained history. Filter by ticketId and bound results with limit (1-500, default 100).")]
     public Task<JsonElement> ListRuns(
@@ -511,9 +495,9 @@ public sealed class McpManagementTools(IServiceProvider services, ProjectService
         ExecuteAsync(project, () => Endpoints.HandleDeleteProjectSkill(project, skillSlug, services.GetRequiredService<ProjectSkillService>()));
 
     [McpServerTool(Name = "get_engine_health", ReadOnly = true, Destructive = false, Idempotent = true)]
-    [Description("Read automation engine health and overdue work across projects.")]
+    [Description("Read column-processing engine health across projects.")]
     public Task<JsonElement> GetEngineHealth() =>
-        ExecuteAsync(null, () => Endpoints.HandleGetEngineHealth(services.GetRequiredService<ProjectService>(), services.GetRequiredService<AutomationEngine>()));
+        ExecuteAsync(null, () => Endpoints.HandleGetEngineHealth(services.GetRequiredService<ProjectService>(), services.GetRequiredService<ColumnProcessingEngine>()));
 
     private async Task<JsonElement> ExecuteAsync(string? project, Func<Task<IResult>> action)
     {

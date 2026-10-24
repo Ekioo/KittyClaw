@@ -1,0 +1,19 @@
+{
+  "TicketAcceptanceCriteria": "验收标准",
+  "AddCriterion": "添加标准",
+  "CriterionStatus": "状态",
+  "EditCriterion": "编辑标准及证据",
+  "DeleteCriterion": "删除标准",
+  "CriterionEvidence": "证据",
+  "CriterionText": "标准",
+  "CriterionNotEvaluated": "未评估",
+  "RemoveEvidence": "移除证据",
+  "ProcessorEvaluateAcceptance": "评估工单验收标准",
+  "ProcessorEvaluateAcceptanceHelp": "让此处理器评估相关工单标准并附上证据。结果会在路由前保存。默认禁用。",
+  "CriterionValidated": "已验证",
+  "CriterionFailed": "未通过验证",
+  "CriterionPartial": "部分通过",
+  "CriteriaValidatedCount": "已验证 {0} / {1}",
+  "CriteriaEmpty": "暂无标准。请添加验收此工单所需的条件。",
+  "CriterionEvidenceText": "文本"
+}

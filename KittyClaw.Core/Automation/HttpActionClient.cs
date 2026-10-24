@@ -27,7 +27,7 @@ internal static class HttpActionClient
             PooledConnectionLifetime = TimeSpan.FromMinutes(5),
         };
         if (guard) handler.ConnectCallback = GuardedConnectAsync;
-        // Per-request timeouts are enforced with a linked CTS in ActionExecutor.
+        // Per-request timeouts are enforced with a linked CTS in ColumnActionExecutor.
         return new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
     }
 

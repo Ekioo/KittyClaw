@@ -8,6 +8,7 @@
 @inject ColumnExecutionService Executions
 @inject ColumnProcessorService Processors
 @inject ProjectService Projects
+@inject PersistentComponentState InitialState
 @implements IAsyncDisposable
 
 @if (_eligible && _processor is not null)
@@ -83,11 +84,34 @@
             ? _columnNames.GetValueOrDefault(id, proposal.Destinations.GetValueOrDefault(proposal.Choice, L["JevNoRoute"]))
             : L["JevNoRoute"];
 
+    [Parameter] public Ticket? InitialTicket { get; set; }
+    private (string Slug, int Id, DateTime? UpdatedAt, long? Visit)? _loadedContext;
+    private PersistingComponentStateSubscription _initialStateSubscription;
+    public sealed record InitialProposalData(ColumnProcessor? Processor, JevRoutingProposal? Proposal,
+        bool Eligible, bool Automatic, Dictionary<int, string> ColumnNames, string? ContextKey,
+        string? HistoryKey, int? ObservedColumn);
+    protected override void OnInitialized() =>
+        _initialStateSubscription = InitialState.RegisterOnPersisting(() =>
+        {
+            InitialState.PersistAsJson($"jev-proposal:{Slug}:{TicketId}", new InitialProposalData(
+                _processor, _proposal, _eligible, _automatic, _columnNames, _contextKey, _historyKey, _observedColumn));
+            return Task.CompletedTask;
+        });
     protected override async Task OnParametersSetAsync()
     {
+        var context = (Slug, TicketId, InitialTicket?.UpdatedAt, InitialTicket?.ColumnVisit);
+        if (InitialTicket is not null && _loadedContext == context) return;
+        _loadedContext = context;
         try
         {
-            await ReloadAsync();
+            if (InitialState.TryTakeFromJson<InitialProposalData>($"jev-proposal:{Slug}:{TicketId}", out var initial) && initial is not null)
+            {
+                _processor = initial.Processor; _proposal = initial.Proposal; _eligible = initial.Eligible;
+                _automatic = initial.Automatic; _columnNames = initial.ColumnNames; _contextKey = initial.ContextKey;
+                _historyKey = initial.HistoryKey; _observedColumn = initial.ObservedColumn; _observedTicket = TicketId;
+            }
+            else
+                await ReloadAsync(initialTicket: InitialTicket);
             if (!_stop.IsCancellationRequested) _poll ??= PollAsync();
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
@@ -97,13 +121,13 @@
         if (_eligible && _proposal is null && !_busy && _attemptedContext != _contextKey)
             await RecommendAsync();
     }
-    private async Task ReloadAsync(bool notifyColumnChanges = false)
+    private async Task ReloadAsync(bool notifyColumnChanges = false, Ticket? initialTicket = null)
     {
-        var ticket = await Tickets.GetTicketAsync(Slug, TicketId);
+        var ticket = initialTicket ?? await Task.Run(() => Tickets.GetTicketAsync(Slug, TicketId));
         var moved = ticket is not null && _observedTicket == TicketId && _observedColumn != ticket.ColumnId;
         if (_observedTicket != TicketId || notifyColumnChanges)
         { _observedTicket = TicketId; _observedColumn = ticket?.ColumnId; }
-        var configured = ticket?.ColumnId is int columnId ? await Processors.GetAsync(Slug, columnId) : null;
+        var configured = ticket?.ColumnId is int columnId ? await Task.Run(() => Processors.GetAsync(Slug, columnId)) : null;
         await using var db = Projects.GetProjectDb(Slug);
         var columns = await db.BoardColumns.AsNoTracking().ToListAsync(_stopToken);
         _automatic = configured?.UsesAutomaticJevRouting ?? false;
@@ -172,6 +196,7 @@
     }
     public async ValueTask DisposeAsync()
     {
+        _initialStateSubscription.Dispose();
         _stop.Cancel();
         if (_poll is not null) await _poll;
         _stop.Dispose();

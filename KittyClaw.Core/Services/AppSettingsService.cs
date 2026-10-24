@@ -19,6 +19,13 @@ public class AppSettingsService
 
     internal static string ResolveDefaultLanguage(CultureInfo culture)
     {
+        // A traditional Chinese locale must not silently select simplified Chinese.
+        for (var candidate = culture; !string.IsNullOrEmpty(candidate.Name); candidate = candidate.Parent)
+            if (candidate.Name.Equals("zh-Hans", StringComparison.OrdinalIgnoreCase)
+                || candidate.Name.Equals("zh-CN", StringComparison.OrdinalIgnoreCase)
+                || candidate.Name.Equals("zh-SG", StringComparison.OrdinalIgnoreCase))
+                return "zh-CN";
+
         var language = culture.TwoLetterISOLanguageName.ToLowerInvariant();
         if (language == "pt") return "pt-BR";
         return language is "en" or "fr" or "es" or "de" or "it" or "ja" ? language : "en";

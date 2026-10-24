@@ -2,5 +2,8 @@
   "MobileColumnNavigation": "Colonnes du kanban",
   "MobilePreviousColumn": "Colonne précédente",
   "MobileNextColumn": "Colonne suivante",
-  "MobileColumnSwipeHint": "Balayez pour changer de colonne"
+  "MobileColumnSwipeHint": "Balayez pour changer de colonne",
+  "MobileTicketDetails": "Détails",
+  "MobileTicketActions": "Actions du ticket",
+  "MobileSections": "Rubrique"
 }

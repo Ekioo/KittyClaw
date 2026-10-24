@@ -1,0 +1,75 @@
+@inject KittyClaw.Core.Services.LocalizationService L
+
+<div class="ticket-panel ticket-panel-mobile" aria-busy="@(Loading ? "true" : "false")">
+    <header class="ticket-mobile-header">
+        @Priority
+        <span class="ticket-mobile-reference">#@TicketId</span>
+        <details class="ticket-mobile-menu" open="@_menuOpen">
+            <summary aria-label="@L["MobileTicketActions"]" @onclick="() => _menuOpen = !_menuOpen" @onclick:preventDefault>···</summary>
+            <div class="ticket-mobile-menu-items">
+                <button @onclick="EditTitle">@L["EditTitle"]</button>
+                <button @onclick="Split">@L["SplitTicket"]</button>
+            </div>
+        </details>
+        <button class="ticket-mobile-close" aria-label="@L["Close"]" @onclick="OnClose">×</button>
+    </header>
+    <section class="ticket-mobile-heading">
+        @if (EditingTitle)
+        {
+            @TitleEditor
+        }
+        else
+        {
+            <h2>@Title</h2>
+        }
+        <div class="ticket-mobile-actions">
+            <button class="ticket-mobile-improve" @onclick="OnImprove">✦ @L["ImproveTicket"]</button>
+        </div>
+    </section>
+    <div class="ticket-mobile-properties">
+        <div class="ticket-mobile-summary">
+            @Column
+            <div class="ticket-mobile-labels">@Labels</div>
+        </div>
+        <details class="ticket-mobile-details" @key="TicketId">
+            <summary>@L["MobileTicketDetails"] <span aria-hidden="true">⌄</span></summary>
+            <div class="ticket-properties-row">@Properties</div>
+            @DependencyEditor
+        </details>
+    </div>
+    @Context
+    @Content
+</div>
+
+@code {
+    [Parameter] public int TicketId { get; set; }
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public bool Loading { get; set; }
+    [Parameter] public bool EditingTitle { get; set; }
+    [Parameter] public RenderFragment? Priority { get; set; }
+    [Parameter] public RenderFragment? TitleEditor { get; set; }
+    [Parameter] public RenderFragment? Column { get; set; }
+    [Parameter] public RenderFragment? Labels { get; set; }
+    [Parameter] public RenderFragment? Properties { get; set; }
+    [Parameter] public RenderFragment? Context { get; set; }
+    [Parameter] public RenderFragment? DependencyEditor { get; set; }
+    [Parameter] public RenderFragment? Content { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnImprove { get; set; }
+    [Parameter] public EventCallback OnSplit { get; set; }
+    [Parameter] public EventCallback OnEditTitle { get; set; }
+
+    private bool _menuOpen;
+
+    private async Task EditTitle()
+    {
+        _menuOpen = false;
+        await OnEditTitle.InvokeAsync();
+    }
+
+    private async Task Split()
+    {
+        _menuOpen = false;
+        await OnSplit.InvokeAsync();
+    }
+}

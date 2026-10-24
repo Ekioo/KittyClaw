@@ -1,0 +1,9 @@
+{
+  "RecoveryMemoryPending": "记忆待保存",
+  "RecoveryRetryMemory": "仅重试记忆保存",
+  "RecoveryFailed": "处理失败",
+  "RecoveryRetrying": "已安排重试",
+  "RecoveryWaitingForChildren": "等待子工单",
+  "RecoveryRetry": "重试处理",
+  "RecoveryRelease": "释放占用并重新评估"
+}

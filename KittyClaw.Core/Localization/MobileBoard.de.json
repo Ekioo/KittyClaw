@@ -2,5 +2,8 @@
   "MobileColumnNavigation": "Board-Spalten",
   "MobilePreviousColumn": "Vorherige Spalte",
   "MobileNextColumn": "Nächste Spalte",
-  "MobileColumnSwipeHint": "Wischen, um die Spalte zu wechseln"
+  "MobileColumnSwipeHint": "Wischen, um die Spalte zu wechseln",
+  "MobileTicketDetails": "Details",
+  "MobileTicketActions": "Ticket-Aktionen",
+  "MobileSections": "Bereich"
 }

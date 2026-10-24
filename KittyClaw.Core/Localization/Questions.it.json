@@ -1,0 +1,8 @@
+{
+  "QuestionWaiting": "In attesa della tua risposta",
+  "QuestionSingle": "Scegli una opzione",
+  "QuestionMultiple": "Scegli una o più opzioni",
+  "QuestionFreeText": "Precisazione o altra risposta",
+  "QuestionSubmit": "Rispondi e riprendi",
+  "QuestionAnswerFailed": "Impossibile salvare la risposta. Aggiorna il ticket e riprova."
+}

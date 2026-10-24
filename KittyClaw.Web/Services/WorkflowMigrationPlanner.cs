@@ -53,7 +53,6 @@ public sealed class WorkflowMigrationPlanner(
     PipelineService pipelines,
     ColumnService columns,
     TicketService tickets,
-    AutomationStore automations,
     AgentRunner runner,
     LocalizationService localization,
     ILogger<WorkflowMigrationPlanner>? logger = null)
@@ -222,9 +221,6 @@ public sealed class WorkflowMigrationPlanner(
             var existingColumns = new List<BoardColumn>();
             foreach (var pipeline in existingPipelines)
                 existingColumns.AddRange(await columns.ListColumnsAsync(slug, pipeline.Id));
-            var existingAutomationConfig = isProjectOnboarding
-                ? new AutomationConfig()
-                : (await automations.LoadAsync(slug)).Config;
             var extendExistingWorkflow = existingPipelines.Count > 0;
             List<CompletedTicketSnapshot> completedTickets = isProjectOnboarding
                 ? []
@@ -255,7 +251,7 @@ public sealed class WorkflowMigrationPlanner(
                 SkillFile = "(inline)",
                 InlineSkillContent = plan.ExistingPipelineId is null ? ApplicationInstructions : ReconfigurationInstructions,
                 ExtraContext = BuildApplicationPrompt(plan, isProjectOnboarding,
-                    existingPipelines, existingColumns, existingAutomationConfig),
+                    existingPipelines, existingColumns),
                 Target = target,
                 MaxTurns = 100,
                 MaxRunDuration = TimeSpan.FromMinutes(30),
@@ -302,8 +298,6 @@ public sealed class WorkflowMigrationPlanner(
 
             if (!isProjectOnboarding && plan.ExistingPipelineId is null)
             {
-                var (legacyConfig, _, _) = await automations.LoadAsync(slug);
-                EnsureNoLegacyAutomations(legacyConfig);
                 if (extendExistingWorkflow)
                     EnsureExistingWorkflowWasExtended(existingPipelines, existingColumns,
                         await pipelines.ListAsync(slug), await ListAllColumnsAsync(slug));
@@ -459,14 +453,13 @@ public sealed class WorkflowMigrationPlanner(
         foreach (var pipeline in pipelineRows)
             columnRows.AddRange(await columns.ListColumnsAsync(slug, pipeline.Id));
         var ticketRows = await tickets.ListTicketsAsync(slug);
-        var (automationConfig, _, _) = await automations.LoadAsync(slug);
 
-        return BuildAnalysisPrompt(pipelineRows, columnRows, ticketRows, automationConfig, language);
+        return BuildAnalysisPrompt(pipelineRows, columnRows, ticketRows, language);
     }
 
     internal static string BuildAnalysisPrompt(IReadOnlyCollection<Pipeline> pipelineRows,
         IReadOnlyCollection<BoardColumn> columnRows, IReadOnlyCollection<TicketSummary> ticketRows,
-        AutomationConfig automationConfig, string language)
+        string language)
     {
         var snapshot = new
         {
@@ -497,58 +490,14 @@ public sealed class WorkflowMigrationPlanner(
                 })
                 .OrderBy(group => group.PipelineId)
                 .ThenBy(group => group.Status),
-            legacyAutomations = automationConfig.Automations.Select(automation => new
-            {
-                automation.Id,
-                automation.Name,
-                automation.Enabled,
-                trigger = SummarizeTrigger(automation.Trigger),
-                conditions = automation.Conditions.Select(SummarizeCondition),
-                actions = automation.Actions.Select(SummarizeAction),
-            }),
         };
-        var migrationMode = pipelineRows.Count > 0 && automationConfig.Automations.Count > 0
+        var migrationMode = pipelineRows.Count > 0
             ? "completeExistingPipelines"
             : "designWorkflow";
         return $"Analyse this current project snapshot and propose the migration plan. Write every user-facing value in language '{language}'.\n" +
                $"Migration mode: {migrationMode}. When the mode is completeExistingPipelines, preserve every existing pipeline and column; propose only the missing processors, action chains, routes, skills, schedules, guidance, or strictly necessary columns that complete them. Never propose replacement pipelines or a regenerated workflow.\n\n" +
                JsonSerializer.Serialize(snapshot, Json);
     }
-
-    private static object SummarizeTrigger(TriggerSpec trigger) => trigger switch
-    {
-        IntervalTriggerSpec value => new { type = "interval", value.Cron, value.Seconds },
-        TicketInColumnTriggerSpec value => new { type = "ticketInColumn", value.Columns, value.AssigneeSlug },
-        StatusChangeTriggerSpec value => new { type = "statusChange", value.From, value.To },
-        SubTicketStatusTriggerSpec value => new { type = "subTicketStatus", value.ParentColumn },
-        BoardIdleTriggerSpec value => new { type = "boardIdle", value.IdleColumns },
-        AgentInactivityTriggerSpec value => new { type = "agentInactivity", value.MinutesIdle },
-        TicketCommentAddedTriggerSpec value => new { type = "ticketCommentAdded", value.Authors },
-        GitCommitTriggerSpec => new { type = "gitCommit" },
-        _ => new { type = trigger.UiTypeKey },
-    };
-
-    private static object SummarizeCondition(ConditionSpec condition) => new
-    {
-        type = condition.UiTypeKey,
-        condition.Negate,
-        details = Truncate(JsonSerializer.Serialize(condition, condition.GetType(), Json), 500),
-    };
-
-    private static object SummarizeAction(ActionSpec action) => action switch
-    {
-        RunAgentActionSpec value => new { type = "runAgent", value.Agent, value.Model, value.MaxTurns, context = Truncate(value.Context ?? "", 400) },
-        MoveTicketStatusActionSpec value => new { type = "moveTicketStatus", value.To },
-        SetLabelsActionSpec value => new { type = "setLabels", value.Add, value.Remove },
-        AssignTicketActionSpec value => new { type = "assignTicket", value.Slug },
-        AddCommentActionSpec value => new { type = "addComment", value.Author, content = Truncate(value.Content, 220) },
-        CommitAgentMemoryActionSpec value => new { type = "commitAgentMemory", value.Agent },
-        ConsolidateAgentMemoryActionSpec value => new { type = "consolidateAgentMemory", value.Agent, value.Model },
-        ExecutePowerShellActionSpec value => new { type = "executePowerShell", value.ScriptFile, script = Truncate(value.Script, 300), value.Arguments },
-        CreateTicketActionSpec value => new { type = "createTicket", value.Title, description = Truncate(value.Description, 220), value.Status, value.AssignedTo, value.Labels },
-        HttpRequestActionSpec value => new { type = "httpRequest", value.Method, value.Url, body = Truncate(value.Body, 220) },
-        _ => new { type = action.UiTypeKey },
-    };
 
     public async Task<WorkflowMigrationPlan> LoadExistingPipelineAsync(string slug, int pipelineId)
     {
@@ -572,7 +521,7 @@ public sealed class WorkflowMigrationPlanner(
     private static string BuildRefinementPrompt(WorkflowMigrationPlan plan, string instruction,
         (string Phase, int? PipelineIndex) refinement, string language) =>
         $"""
-        {(plan.ExistingPipelineId is int id ? $"RECONFIGURATION of existing pipeline #{id}. Inspect its current processors, actions, routes, schedules and skills through read-only project APIs before proposing changes. Preserve all configuration outside the user's request. Keep exactly this one pipeline in the plan. Never propose a replacement workflow or migration of legacy automations." : "")}
+        {(plan.ExistingPipelineId is int id ? $"RECONFIGURATION of existing pipeline #{id}. Inspect its current processors, actions, routes, schedules and skills through read-only project APIs before proposing changes. Preserve all configuration outside the user's request. Keep exactly this one pipeline in the plan. Never propose a replacement workflow." : "")}
         Refine the current migration plan according to the user's request. Return the complete updated plan.
         Current wizard phase: {refinement.Phase}
         Current pipeline index: {refinement.PipelineIndex?.ToString() ?? "none"}
@@ -653,16 +602,6 @@ public sealed class WorkflowMigrationPlanner(
             throw new InvalidOperationException("Proposed pipeline names must be unique.");
     }
 
-    internal static void EnsureNoLegacyAutomations(AutomationConfig config)
-    {
-        if (config.Automations.Count == 0) return;
-
-        var ids = string.Join(", ", config.Automations.Select(automation => automation.Id));
-        throw new WorkflowMigrationPlanningException(
-            "legacy-automations-remain",
-            $"Migration incomplete: legacy automations remain ({ids}). Convert or explicitly retire every legacy behavior, then remove its automation definition.");
-    }
-
     private static string Truncate(string value, int length) =>
         value.Length <= length ? value : value[..length] + "…";
 
@@ -728,15 +667,13 @@ public sealed class WorkflowMigrationPlanner(
 
     internal static string BuildApplicationPrompt(WorkflowMigrationPlan plan, bool isProjectOnboarding,
         IReadOnlyCollection<Pipeline>? existingPipelines = null,
-        IReadOnlyCollection<BoardColumn>? existingColumns = null,
-        AutomationConfig? legacyConfig = null)
+        IReadOnlyCollection<BoardColumn>? existingColumns = null)
     {
         if (plan.ExistingPipelineId is int pipelineId)
             return BuildReconfigurationPrompt(plan, pipelineId);
 
         existingPipelines ??= [];
         existingColumns ??= [];
-        legacyConfig ??= new AutomationConfig();
         var extendExistingWorkflow = !isProjectOnboarding
             && existingPipelines.Count > 0;
         var existingWorkflow = new
@@ -757,15 +694,6 @@ public sealed class WorkflowMigrationPlanner(
                 column.Role,
                 column.SortOrder,
             }),
-            legacyAutomations = legacyConfig.Automations.Select(automation => new
-            {
-                automation.Id,
-                automation.Name,
-                automation.Enabled,
-                trigger = SummarizeTrigger(automation.Trigger),
-                conditions = automation.Conditions.Select(SummarizeCondition),
-                actions = automation.Actions.Select(SummarizeAction),
-            }),
         };
         var extensionContract = extendExistingWorkflow
             ? $"""
@@ -781,13 +709,6 @@ public sealed class WorkflowMigrationPlanner(
         action chains, routes, skills, schedules, and user guidance on the existing structure.
         Treat the approved plan as intent, not permission to regenerate the structure above.
 
-        Migrate legacy automations sequentially. For each automation: inspect its complete trigger,
-        conditions, and actions; configure an equivalent action in the most appropriate existing
-        pipeline/column; verify that replacement and its routing; then delete only that automation
-        definition. Never clear the legacy file in bulk before every replacement is verified. If
-        one automation cannot be represented safely, stop and leave that definition in place so
-        the migration fails visibly. Inspect current processors, routes, skills, and schedules
-        before writing, and reuse equivalent configuration so rerunning the migration is idempotent.
         """
             : "";
 
@@ -799,11 +720,11 @@ public sealed class WorkflowMigrationPlanner(
 
         Implement this plan completely using KittyClaw's API and the project's file-backed processor and skill configuration. Preserve stable identifiers whenever an existing pipeline, column, processor, or skill can be reused. Map every existing ticket and child ticket to exactly one pipeline by purpose. A ticket that is already in a Success or Failure column is completed historical work: it must remain in a terminal (Success or Failure) column after migration and must never be routed back into an actionable, waiting, or owner-action stage. Configure processors, action chains, routing, retry/failure destinations, scheduled tasks and project skills needed by the approved flow. Use OwnerAction for every stage requiring a human decision or missing input, and save concrete userGuidance explaining the exact comment or destination-column action that unblocks each Waiting or OwnerAction stage. Do not create In Progress columns for agent execution.
 
-        You are already running inside the confirmed application job. Never call any /workflow-migrations/analyze, /workflow-migrations/refine, or /workflow-migrations/apply endpoint. Apply the plan directly through the granular pipeline, column, ticket, processor, skill, scheduled-task and automation APIs.
+        You are already running inside the confirmed application job. Never call any /workflow-migrations/analyze, /workflow-migrations/refine, or /workflow-migrations/apply endpoint. Apply the plan directly through the granular pipeline, column, ticket, processor, skill and scheduled-task APIs.
 
         {extensionContract}
 
-        {(isProjectOnboarding ? "Replace the placeholder default workflow with the approved organization. Inspect the workspace again when useful, but do not invent operational requirements that contradict the approved plan." : "Convert or explicitly retire every legacy automation behavior. Translate interval triggers into scheduled tasks that create or process tickets through a column; absorb status-change work into the responsible processor stage; replace owner-comment relaunches with an explicit OwnerAction hand-off and resubmission; and fold repository-event duties into the responsible delivery processor or a scheduled ticket when exact event semantics are unnecessary. Do not leave any legacy automation definition, enabled or disabled: remove each definition only after its replacement or intentional retirement is configured and verified. If any behavior cannot be represented safely, fail the migration instead of silently preserving it.")} Verify that all tickets remain accessible, that processors and schedules reload successfully, and summarize every applied change and remaining risk when finished.
+        {(isProjectOnboarding ? "Replace the placeholder default workflow with the approved organization." : "Complete the existing workflow through its column processors and scheduled tasks.")} Verify that all tickets remain accessible, that processors and schedules reload successfully, and summarize every applied change and remaining risk when finished.
         """;
     }
 
@@ -816,7 +737,7 @@ public sealed class WorkflowMigrationPlanner(
 
     internal const string PlannerInstructions = """
         You are KittyClaw's read-only workflow planning agent. Never modify files, databases,
-        tickets, automations, or project state during this planning turn. Infer genuinely distinct
+        tickets or project state during this planning turn. Infer genuinely distinct
         ticket lifecycles from either an existing workspace or a legacy board that mixed them into
         one set of columns.
 
@@ -853,7 +774,7 @@ public sealed class WorkflowMigrationPlanner(
         Preserve stable IDs for retained columns and the pipeline, including when renaming or
         reordering them. Preserve all unspecified processor settings, prompts, models, actions,
         routes, schedules, skills and memory. Never replace the entire workflow.
-        Do not modify other pipelines or legacy automations. Do not remap tickets unless required
+        Do not modify other pipelines. Do not remap tickets unless required
         by an explicitly approved column removal; move those tickets to a retained column in this
         pipeline. Preserve completed tickets in terminal columns. Verify the resulting configuration
         and ticket accessibility, then summarize the changes. Never call workflow-migrations endpoints.
@@ -862,8 +783,7 @@ public sealed class WorkflowMigrationPlanner(
     internal const string ReconfigurationInstructions = """
         You edit an existing KittyClaw pipeline after explicit owner approval. Read the live project
         API documentation before making granular changes. Inspect existing configuration first.
-        Preserve everything outside the approved request, including legacy automations and other
-        pipelines. Never regenerate the workflow. Verify changes before reporting completion.
+        Preserve everything outside the approved request, including other pipelines. Never regenerate the workflow. Verify changes before reporting completion.
         """ + "\n\n" + ColumnWorkflowInstructions.TemporalConfiguration;
 
     internal const string ApplicationInstructions = """
@@ -874,10 +794,7 @@ public sealed class WorkflowMigrationPlanner(
         board usable throughout the migration. You are already the application job: never invoke
         any workflow-migrations endpoint or launch another migration agent. Use only the granular
         project APIs. When pipelines already exist, extend them in place and preserve their stable
-        IDs; never regenerate the workflow. Convert legacy behaviors sequentially, verify each
-        replacement, then remove only that legacy automation definition. A successful migration must leave zero legacy
-        automations, including disabled definitions. If that cannot be achieved safely, report failure
-        instead of claiming completion. Verify API reloads, ticket accessibility, routing and scheduled
+        IDs; never regenerate the workflow. Verify API reloads, ticket accessibility, routing and scheduled
         work before reporting completion. End with a concise user-facing summary of changes and risks.
         """ + "\n\n" + ColumnWorkflowInstructions.TemporalConfiguration;
 }

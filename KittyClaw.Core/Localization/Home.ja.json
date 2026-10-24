@@ -1,4 +1,5 @@
 {
+  "CreationWorkspaceHint": "ローカルの Git リポジトリのフォルダーを選択するか、フルパスを入力してください。",
   "HomeTitle": "KittyClaw - プロジェクト",
   "Projects": "プロジェクト",
   "NewProjectPlaceholder": "新しいプロジェクト名...",

@@ -31,6 +31,19 @@ window.boardReplaceUrl = function (url) {
     window.history.replaceState(window.history.state, "", url);
 };
 
+// Reveal a linked column inside the horizontal board without moving the page header.
+window.focusBoardColumn = function (boardId, columnId) {
+    const board = document.getElementById(boardId);
+    const column = board && [...board.children].find(child =>
+        child.classList.contains('column') && child.dataset.columnId === String(columnId));
+    if (!column) return;
+    const inset = parseFloat(getComputedStyle(board).paddingLeft) || 0;
+    const offset = column.getBoundingClientRect().left - board.getBoundingClientRect().left
+        - board.clientLeft - inset;
+    board.scrollTo({ left: board.scrollLeft + offset, behavior: 'instant' });
+    column.focus({ preventScroll: true });
+};
+
 // Static assets are fingerprinted at publish time so repaired files bypass stale browser caches.
 window.kittyClaw = window.kittyClaw || {};
 window.kittyClaw.downloadBase64 = (fileName, contentType, base64) => {

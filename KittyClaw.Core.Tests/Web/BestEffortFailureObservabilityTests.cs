@@ -20,11 +20,11 @@ public sealed class BestEffortFailureObservabilityTests
     [Fact]
     public void OptionalPayloadsKeepTheirTolerantFallbacks()
     {
-        var runDrawer = Read("KittyClaw.Web", "Components", "AgentRunDrawer.razor");
         var chatDrawer = Read("KittyClaw.Web", "Components", "ChatDrawer.razor");
         var runner = Read("KittyClaw.Core", "Automation", "AgentRunner.cs");
 
-        Assert.Contains("catch (System.Text.Json.JsonException) { /* Optional preview payload", runDrawer);
+        Assert.Equal("", KittyClaw.Web.Components.SharedRenderHelpers.GetToolPreview("Bash", "{invalid"));
+        Assert.Equal("", KittyClaw.Web.Components.SharedRenderHelpers.GetToolPreview("Bash", "{}"));
         Assert.Contains("catch (System.Text.Json.JsonException) { return (\"\", []);", chatDrawer);
         Assert.Contains("catch (JsonException) { return false;", runner);
     }

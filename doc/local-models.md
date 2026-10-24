@@ -18,11 +18,11 @@ KittyClaw can dispatch agents to a local model served by Ollama instead of Anthr
 2. In the **Local model (Ollama)** section, enter the **Base URL** (e.g. `http://localhost:11434`).
 3. Click **Discover** — KittyClaw fetches the available models from Ollama's `/api/tags` endpoint.
 4. Select a default model from the dropdown and click **Save**.
-5. Automation actions can reference a discovered Ollama model through their `model` field in the trusted `.agents/automations.json` file.
+5. Select a discovered model in a column processor or an ad-hoc conversation.
 
 ## Assigning a member to use an Ollama model
 
-Set the `model` field on a `runAgent` action in the trusted `.agents/automations.json` file. Use one of the model names returned by project model discovery.
+Choose the member default model or the column processor model from project model discovery.
 
 ## Member default model
 

@@ -10,7 +10,7 @@
     <div class="create-popup" @ref="_popup">
         <div class="create-popup-header">
             <h2>@L["NewTicket"]</h2>
-            <button class="close-btn" @onclick="CloseAsync">&times;</button>
+            <button class="close-btn" aria-label="@L["Close"]" @onclick="CloseAsync">&times;</button>
         </div>
         <div class="create-popup-body">
             <label class="field-label">@L["Title"]</label>
@@ -57,16 +57,6 @@
                 }
             </div>
 
-            <label class="field-label">@L["AssignTo"]</label>
-            <div class="assignee-picker-wrapper">
-                <select class="assignee-select" @bind="_assignedTo">
-                    <option value="">@L["Unassigned"]</option>
-                    @foreach (var member in AllMembers)
-                    {
-                        <option value="@member.Slug">@member.Name (@member.Slug)</option>
-                    }
-                </select>
-            </div>
         </div>
         <div class="create-popup-footer">
             @if (_creationError is not null)
@@ -84,7 +74,6 @@
     [Parameter] public List<BoardColumn> Columns { get; set; } = [];
     [Parameter] public int? SubKanbanParentId { get; set; }
     [Parameter] public int? SelectedPipelineId { get; set; }
-    [Parameter] public List<Member> AllMembers { get; set; } = [];
     [Parameter] public EventCallback<Ticket?> OnCreated { get; set; }
     [Parameter] public EventCallback OnClosed { get; set; }
 
@@ -96,7 +85,6 @@
     private bool _showNewLabelForm;
     private string _newLabelName = "";
     private string _newLabelColor = "#6366f1";
-    private string _assignedTo = "";
     private ElementReference _descTextarea;
     private ElementReference _popup;
     private bool _creating;
@@ -169,7 +157,6 @@
             status: status,
             labelIds: _labelIds,
             priority: _priority,
-            assignedTo: string.IsNullOrEmpty(_assignedTo) ? null : _assignedTo,
             parentId: SubKanbanParentId,
             pipelineId: SelectedPipelineId,
             columnId: Columns[0].Id);

@@ -1,0 +1,10 @@
+{
+  "ImproveTicket": "使用 AI 改进",
+  "ImprovingTicket": "正在分析工单并准备建议…",
+  "ImprovementReview": "保存前请审核并编辑建议。",
+  "ImprovementCriteriaHint": "每行一条标准。重写的标准需要重新评估。",
+  "ImprovementSplitHint": "范围较广。点击标题查看详情。批准后会在同一列创建关联子工单。",
+  "ImprovementCreateTickets": "确认并创建工单",
+  "SplitTicket": "拆分为工单",
+  "ImprovementNoSplitNeeded": "范围已足够集中，未建议添加其他工单。"
+}

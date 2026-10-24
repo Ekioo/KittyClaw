@@ -2,8 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using KittyClaw.Core.Services;
 using KittyClaw.Web.Api;
 using ModelContextProtocol.Client;
@@ -213,7 +215,11 @@ public sealed partial class McpEndpointTests : IClassFixture<McpEndpointTests.Ap
         }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder) => builder
-            .UseSetting("KITTYCLAW_DATA_DIR", _dataDir);
+            .UseSetting("KITTYCLAW_DATA_DIR", _dataDir)
+            .ConfigureLogging(logging => logging.ClearProviders())
+            // Transport tests use disposable keys and must not depend on the owner's
+            // Windows DPAPI profile or permission to write to the Windows Event Log.
+            .ConfigureServices(services => services.AddSingleton<IDataProtectionProvider>(new EphemeralDataProtectionProvider()));
 
         protected override void Dispose(bool disposing)
         {

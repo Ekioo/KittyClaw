@@ -12,6 +12,8 @@ public class AgentLanguageInstructionTests
     [InlineData("it", "Italian (it)")]
     [InlineData("pt-BR", "Brazilian Portuguese (pt-BR)")]
     [InlineData("ja", "Japanese (ja)")]
+    [InlineData("zh-CN", "Simplified Chinese (zh-CN)")]
+    [InlineData("ZH-cn", "Simplified Chinese (zh-CN)")]
     public void Instruction_reflects_supported_UI_language(string language, string expected)
     {
         Assert.Contains(expected, AgentRunner.BuildLanguageInstruction(language));

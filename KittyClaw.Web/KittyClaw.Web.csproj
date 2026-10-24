@@ -41,9 +41,18 @@
     <ApplicationIcon>..\branding\KittyClaw.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup Condition="'$(KittyClawWindowsInstaller)' == 'true'">
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3650.58" />
+    <EmbeddedResource Include="Services/WindowsDesktopShell.js" />
     <Using Remove="System.Windows.Forms" />
     <Using Remove="System.Drawing" />
   </ItemGroup>
+
+  <Target Name="RemoveUnusedWebViewWpfReference" BeforeTargets="ResolveAssemblyReferences"
+          Condition="'$(KittyClawWindowsInstaller)' == 'true'">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Reference.Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
 
   <!-- .NET 10's _AddBlazorFrameworkStaticWebAssets target only runs for OutputType=Exe.
        Our tray build is WinExe, so include the matching SDK package's scripts as linked

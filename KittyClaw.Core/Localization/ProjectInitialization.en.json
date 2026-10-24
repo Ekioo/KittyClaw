@@ -1,0 +1,8 @@
+{
+  "Enabled": "Enabled",
+  "InitializeConfirmTitle": "Overwrite existing files?",
+  "InitializeConfirmIntro": "Some files already exist in the target .agents/ folder. Choose how to proceed:",
+  "InitializeOverwrite": "Overwrite",
+  "InitializeSkip": "Skip existing",
+  "GitMissingWarning": "Git is not available on this host. The workspace will be initialized but no git repository will be created. Install Git from https://git-scm.com/downloads and retry if you want version tracking."
+}

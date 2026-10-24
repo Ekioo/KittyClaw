@@ -1,0 +1,21 @@
+{
+  "ScheduleFrequency": "頻度",
+  "ScheduleDays": "スケジュール日",
+  "FreqEveryMinutes": "N分ごと",
+  "FreqEveryHours": "N時間ごと",
+  "FreqScheduled": "特定の日に",
+  "RepeatEveryLabel": "毎",
+  "MinutesUnit": "分",
+  "HoursUnit": "時間",
+  "AtTime": "時刻",
+  "AndAlsoAt": "およびその他の時刻",
+  "AddTime": "タイム追加",
+  "RemoveTime": "このタイムを削除",
+  "Weekday0": "日曜",
+  "Weekday1": "月曜",
+  "Weekday2": "火曜",
+  "Weekday3": "水曜",
+  "Weekday4": "木曜",
+  "Weekday5": "金曜",
+  "Weekday6": "土曜"
+}

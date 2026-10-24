@@ -9,14 +9,28 @@
 @inject ILogger<ChatDrawer> Logger
 @implements IAsyncDisposable
 
-<div class="chat-drawer-overlay" @onclick="Close"></div>
-<div class="chat-drawer" @onclick:stopPropagation>
+<ConversationDrawer Title="@(_view == View.Selection ? L["NewInstruction"] : _activeTarget!.Name)"
+                    Context="@TicketTitle" TicketId="TicketId" Run="@(_activeRun ?? _lastRun)" Model="@_selectedModel"
+                    IsBusy="@_loading" OnClose="Close">
+    <HeaderLeading>
+        @if (_view == View.Conversation && TicketId is null)
+        {
+            <button class="chat-back-btn" @onclick="BackToSelection" title="@L["Back"]" aria-label="@L["Back"]">‹</button>
+        }
+    </HeaderLeading>
+    <HeaderActions>
+        @if (_view == View.Conversation)
+        {
+            <button class="chat-newsession-btn" @onclick="StartNewSession" disabled="@_historyLoading" title="@L["NewSession"]" aria-label="@L["NewSession"]">＋</button>
+            @if (_loading && !string.IsNullOrEmpty(_activeStreamId))
+            {
+                <button class="agent-stop-btn" @onclick="StopActiveRun">⏹ @L["Stop"]</button>
+            }
+        }
+    </HeaderActions>
+    <ChildContent>
     @if (_view == View.Selection)
     {
-        <div class="chat-drawer-header">
-            <span class="chat-drawer-title">@L["NewInstruction"]</span>
-            <button class="agent-close-btn" @onclick="Close" title="@L["Close"]">×</button>
-        </div>
         <div class="chat-target-list">
             <h3>@L["ChatPickTarget"]</h3>
             @if (!_ready)
@@ -45,18 +59,188 @@
     }
     else
     {
-        <div class="chat-drawer-header">
-            @if (TicketId is null)
+        <ConversationView @ref="_messagesView">
+            @if (_historyLoading)
             {
-                <button class="chat-back-btn" @onclick="BackToSelection" title="@L["Back"]">‹</button>
+                <div class="chat-history-loading" role="status">
+                    <span class="chat-loading-spinner" aria-hidden="true"></span>
+                    <span>@L["ChatLoadingConversation"]</span>
+                </div>
             }
-            <span class="chat-drawer-title">
-                @_activeTarget!.Name
-                @if (TicketId is int tid)
+            @foreach (var group in MessageGroups())
+            {
+                var msg = group[0];
+                if (IsActivity(msg))
                 {
-                    <span class="chat-drawer-ticket-ref" title="@TicketTitle">· #@tid @(string.IsNullOrEmpty(TicketTitle) ? "" : "— " + SharedRenderHelpers.Truncate(TicketTitle!, 40))</span>
+                    <ConversationActivity Events="@group.Select(ToStreamEvent).ToArray()" />
                 }
-            </span>
+                else if (msg.Role == "ask_user_question")
+                {
+                    var askMsg = (AskUserQuestionMessage)msg;
+                    <ConversationMessage At="msg.At" Markdown="false" CssClass="@($"chat-ask-user {(askMsg.IsAnswered ? "chat-ask-user-answered" : "")}")">
+                            <p class="chat-ask-prompt">
+                                @if (string.IsNullOrWhiteSpace(askMsg.Prompt))
+                                {
+                                    <span>The agent is asking for input</span>
+                                }
+                                else
+                                {
+                                    @askMsg.Prompt
+                                }
+                            </p>
+                            @if (askMsg.Options.Length > 0)
+                            {
+                                @foreach (var opt in askMsg.Options)
+                                {
+                                    var optCopy = opt;
+                                    <button class="chat-ask-option" disabled="@askMsg.IsAnswered"
+                                            @onclick="() => SubmitAskUserQuestion(askMsg, optCopy)">@opt</button>
+                                }
+                            }
+                            else
+                            {
+                                <textarea class="chat-ask-textarea" disabled="@askMsg.IsAnswered"
+                                          @bind="askMsg.InputText" placeholder="Type your answer…"></textarea>
+                                <button class="chat-ask-submit" disabled="@(askMsg.IsAnswered || string.IsNullOrWhiteSpace(askMsg.InputText))"
+                                        @onclick="() => SubmitAskUserQuestion(askMsg, askMsg.InputText)">Submit</button>
+                            }
+                    </ConversationMessage>
+                }
+                else if (msg.Role == "reset")
+                {
+                    <ConversationMessage Role="reset" At="msg.At" Markdown="false">@L["ChatSessionReset"]</ConversationMessage>
+                }
+                else if (msg.Role == "inject")
+                {
+                    <ConversationMessage Role="inject" At="msg.At" Markdown="false">
+                            @if (msg.Images.Count > 0)
+                            {
+                                <div class="chat-message-images" data-testid="chat-message-images">
+                                    @foreach (var image in msg.Images)
+                                    {
+                                        <img class="chat-message-image" data-testid="chat-message-image"
+                                             src="@image.DataUrl" alt="@image.Name" loading="lazy" />
+                                    }
+                                </div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(msg.Text))
+                            {
+                                <div class="chat-message-text">↩ @msg.Text</div>
+                            }
+                    </ConversationMessage>
+                }
+                else if (msg is DiagnosticMessage diagnostic)
+                {
+                    <ConversationMessage Role="@diagnostic.Role" At="msg.At" CssClass="chat-message-diagnostic" BubbleClass="conversation-diagnostic" Markdown="false">
+                        <details class="chat-diagnostic-block">
+                            <summary class="chat-diagnostic-summary">
+                                <span class="chat-diagnostic-icon">!</span>
+                                <span class="chat-diagnostic-title">@diagnostic.Summary</span>
+                                <span class="chat-diagnostic-disclosure">@L["ChatTechnicalDetails"]</span>
+                            </summary>
+                            <pre class="chat-diagnostic-detail">@diagnostic.Text</pre>
+                        </details>
+                    </ConversationMessage>
+                }
+                else
+                {
+                    <ConversationMessage Role="@msg.Role" At="msg.At">
+                            @if (msg.Images.Count > 0)
+                            {
+                                <div class="chat-message-images" data-testid="chat-message-images">
+                                    @foreach (var image in msg.Images)
+                                    {
+                                        <img class="chat-message-image" data-testid="chat-message-image"
+                                             src="@image.DataUrl" alt="@image.Name" loading="lazy" />
+                                    }
+                                </div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(msg.Text))
+                            {
+                                <div class="chat-message-text">@((MarkupString)RenderMarkdown(msg.Text))</div>
+                            }
+                    </ConversationMessage>
+                }
+            }
+            @if (_loading)
+            {
+                <ConversationMessage At="_activeRun?.LastActivityAt" BubbleClass="chat-bubble-loading">
+                        @if (string.IsNullOrEmpty(_streamingText))
+                        {
+                            <text>…</text>
+                        }
+                        else
+                        {
+                            @((MarkupString)RenderMarkdown(_streamingText))
+                        }
+                </ConversationMessage>
+            }
+            @if (_messages.Count == 0 && !_loading && !_historyLoading)
+            {
+                <div class="chat-empty">
+                    @(_activeTarget!.Kind == "member"
+                        ? L.Get("ChatEmptyMember", _activeTarget.Name)
+                        : L["ChatEmpty"])
+                </div>
+            }
+        </ConversationView>
+
+        @if (_hitMaxTurns)
+        {
+            <div class="chat-max-turns-banner">
+                <span>@L["ChatMaxTurns"]</span>
+                <button class="chat-continue-btn" @onclick="Continue">@L["ChatContinue"]</button>
+            </div>
+        }
+
+
+    }
+    </ChildContent>
+    <Composer>
+        @if (_view == View.Conversation)
+        {
+            <ConversationComposer IsBusy="@_loading" CanSteer="@(!string.IsNullOrEmpty(_activeStreamId))"
+                                  CanSend="@(!string.IsNullOrWhiteSpace(_inputText) || _pendingImages.Count > 0)"
+                                  Disabled="@(_historyLoading || _pasteLoading || !string.IsNullOrEmpty(_pasteError))"
+                                  OnSend="SubmitComposer" OnStop="StopActiveRun" OnAttach="AttachImages">
+                <Editor>
+                <textarea @ref="_inputRef"
+                          @bind="_inputText" @bind:event="oninput"
+                          disabled="@_historyLoading"
+                          placeholder="@(_historyLoading ? L["ChatLoadingConversation"] : _loading ? L["ChatInjectPlaceholder"] : L["ChatPlaceholder"])"></textarea>
+
+                </Editor>
+                <Tray>
+            @if (!string.IsNullOrEmpty(_pasteError) || _pasteLoading || _pendingImages.Count > 0)
+            {
+                <div class="chat-paste-tray" aria-live="polite">
+                    @if (!string.IsNullOrEmpty(_pasteError))
+                    {
+                        <div class="chat-paste-error" role="alert">@_pasteError</div>
+                    }
+                    @if (_pasteLoading)
+                    {
+                        <div class="chat-paste-status" role="status">@L["ChatImageLoading"]</div>
+                    }
+                    @if (_pendingImages.Count > 0)
+                    {
+                        <div class="chat-paste-previews">
+                            @for (var i = 0; i < _pendingImages.Count; i++)
+                            {
+                                var idx = i;
+                                var img = _pendingImages[i];
+                                <div class="chat-paste-preview">
+                                    <img src="@img.DataUrl" alt="@img.Name" />
+                                    <button type="button" class="chat-paste-remove" @onclick="() => RemoveImage(idx)" title="@L.Get("ChatImageRemove", img.Name)" aria-label="@L.Get("ChatImageRemove", img.Name)">×</button>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
+                </Tray>
+                <ModelPicker>
             <select class="chat-drawer-model-select" @bind="_selectedModel" @bind:after="PersistSelectedModelAsync" disabled="@_historyLoading">
                 <optgroup label="Claude">
                     @foreach (var m in ClaudeModels)
@@ -114,209 +298,11 @@
                     <option value="@_selectedModel">@_selectedModel</option>
                 }
             </select>
-            <button class="chat-newsession-btn" @onclick="StartNewSession" disabled="@_historyLoading" title="@L["NewSession"]">＋</button>
-            <button class="agent-close-btn" @onclick="Close" title="@L["Close"]">×</button>
-        </div>
-
-        <div class="chat-messages" @ref="_messagesRef">
-            @if (_historyLoading)
-            {
-                <div class="chat-history-loading" role="status">
-                    <span class="chat-loading-spinner" aria-hidden="true"></span>
-                    <span>@L["ChatLoadingConversation"]</span>
-                </div>
-            }
-            @foreach (var msg in _messages)
-            {
-                if (msg.Role == "tool_use")
-                {
-                    var toolMsg = (ToolCallMessage)msg;
-                    <div class="chat-message chat-message-tool">
-                        <details class="tool-call-block">
-                            <summary class="tool-call-summary">
-                                <span class="tool-call-icon">⚙</span>
-                                <span class="tool-call-name">@toolMsg.ToolName</span>
-                                <span class="tool-call-preview">@toolMsg.Preview</span>
-                            </summary>
-                            <pre class="tool-call-detail">@toolMsg.Detail</pre>
-                        </details>
-                    </div>
-                }
-                else if (msg.Role == "ask_user_question")
-                {
-                    var askMsg = (AskUserQuestionMessage)msg;
-                    <div class="chat-message chat-ask-user @(askMsg.IsAnswered ? "chat-ask-user-answered" : "")">
-                        <div class="chat-bubble">
-                            <p class="chat-ask-prompt">
-                                @if (string.IsNullOrWhiteSpace(askMsg.Prompt))
-                                {
-                                    <span>The agent is asking for input</span>
-                                }
-                                else
-                                {
-                                    @askMsg.Prompt
-                                }
-                            </p>
-                            @if (askMsg.Options.Length > 0)
-                            {
-                                @foreach (var opt in askMsg.Options)
-                                {
-                                    var optCopy = opt;
-                                    <button class="chat-ask-option" disabled="@askMsg.IsAnswered"
-                                            @onclick="() => SubmitAskUserQuestion(askMsg, optCopy)">@opt</button>
-                                }
-                            }
-                            else
-                            {
-                                <textarea class="chat-ask-textarea" disabled="@askMsg.IsAnswered"
-                                          @bind="askMsg.InputText" placeholder="Type your answer…"></textarea>
-                                <button class="chat-ask-submit" disabled="@(askMsg.IsAnswered || string.IsNullOrWhiteSpace(askMsg.InputText))"
-                                        @onclick="() => SubmitAskUserQuestion(askMsg, askMsg.InputText)">Submit</button>
-                            }
-                        </div>
-                    </div>
-                }
-                else if (msg.Role == "reset")
-                {
-                    <div class="chat-message chat-message-reset">@L["ChatSessionReset"]</div>
-                }
-                else if (msg.Role == "inject")
-                {
-                    <div class="chat-message chat-message-inject">
-                        <div class="chat-bubble">
-                            @if (msg.Images.Count > 0)
-                            {
-                                <div class="chat-message-images" data-testid="chat-message-images">
-                                    @foreach (var image in msg.Images)
-                                    {
-                                        <img class="chat-message-image" data-testid="chat-message-image"
-                                             src="@image.DataUrl" alt="@image.Name" loading="lazy" />
-                                    }
-                                </div>
-                            }
-                            @if (!string.IsNullOrWhiteSpace(msg.Text))
-                            {
-                                <div class="chat-message-text">↩ @msg.Text</div>
-                            }
-                        </div>
-                    </div>
-                }
-                else if (msg is DiagnosticMessage diagnostic)
-                {
-                    <div class="chat-message chat-message-diagnostic chat-message-@diagnostic.Role">
-                        <details class="chat-diagnostic-block">
-                            <summary class="chat-diagnostic-summary">
-                                <span class="chat-diagnostic-icon">!</span>
-                                <span class="chat-diagnostic-title">@diagnostic.Summary</span>
-                                <span class="chat-diagnostic-disclosure">@L["ChatTechnicalDetails"]</span>
-                            </summary>
-                            <pre class="chat-diagnostic-detail">@diagnostic.Text</pre>
-                        </details>
-                    </div>
-                }
-                else
-                {
-                    <div class="chat-message chat-message-@msg.Role">
-                        <div class="chat-bubble markdown-body">
-                            @if (msg.Images.Count > 0)
-                            {
-                                <div class="chat-message-images" data-testid="chat-message-images">
-                                    @foreach (var image in msg.Images)
-                                    {
-                                        <img class="chat-message-image" data-testid="chat-message-image"
-                                             src="@image.DataUrl" alt="@image.Name" loading="lazy" />
-                                    }
-                                </div>
-                            }
-                            @if (!string.IsNullOrWhiteSpace(msg.Text))
-                            {
-                                <div class="chat-message-text">@((MarkupString)RenderMarkdown(msg.Text))</div>
-                            }
-                        </div>
-                    </div>
-                }
-            }
-            @if (_loading)
-            {
-                <div class="chat-message chat-message-assistant">
-                    <div class="chat-bubble chat-bubble-loading">
-                        @if (string.IsNullOrEmpty(_streamingText))
-                        {
-                            <text>…</text>
-                        }
-                        else
-                        {
-                            @((MarkupString)RenderMarkdown(_streamingText))
-                        }
-                    </div>
-                </div>
-            }
-            @if (_messages.Count == 0 && !_loading && !_historyLoading)
-            {
-                <div class="chat-empty">
-                    @(_activeTarget!.Kind == "member"
-                        ? L.Get("ChatEmptyMember", _activeTarget.Name)
-                        : L["ChatEmpty"])
-                </div>
-            }
-        </div>
-
-        @if (_hitMaxTurns)
-        {
-            <div class="chat-max-turns-banner">
-                <span>@L["ChatMaxTurns"]</span>
-                <button class="chat-continue-btn" @onclick="Continue">@L["ChatContinue"]</button>
-            </div>
+                </ModelPicker>
+            </ConversationComposer>
         }
-
-        <div class="chat-composer">
-            @if (!string.IsNullOrEmpty(_pasteError) || _pasteLoading || _pendingImages.Count > 0)
-            {
-                <div class="chat-paste-tray" aria-live="polite">
-                    @if (!string.IsNullOrEmpty(_pasteError))
-                    {
-                        <div class="chat-paste-error" role="alert">@_pasteError</div>
-                    }
-                    @if (_pasteLoading)
-                    {
-                        <div class="chat-paste-status" role="status">@L["ChatImageLoading"]</div>
-                    }
-                    @if (_pendingImages.Count > 0)
-                    {
-                        <div class="chat-paste-previews">
-                            @for (var i = 0; i < _pendingImages.Count; i++)
-                            {
-                                var idx = i;
-                                var img = _pendingImages[i];
-                                <div class="chat-paste-preview">
-                                    <img src="@img.DataUrl" alt="@img.Name" />
-                                    <button type="button" class="chat-paste-remove" @onclick="() => RemoveImage(idx)" title="@L.Get("ChatImageRemove", img.Name)" aria-label="@L.Get("ChatImageRemove", img.Name)">×</button>
-                                </div>
-                            }
-                        </div>
-                    }
-                </div>
-            }
-            <div class="chat-input-area @(_loading ? "chat-input-area-thinking" : "")">
-                <textarea @ref="_inputRef"
-                          @bind="_inputText" @bind:event="oninput"
-                          disabled="@_historyLoading"
-                          placeholder="@(_historyLoading ? L["ChatLoadingConversation"] : _loading ? L["ChatInjectPlaceholder"] : L["ChatPlaceholder"])"></textarea>
-                @if (_loading && !string.IsNullOrEmpty(_activeStreamId))
-                {
-                    <div class="chat-input-actions">
-                        <button class="chat-inject-btn" @onclick="Inject" disabled="@(string.IsNullOrWhiteSpace(_inputText) && _pendingImages.Count == 0)" title="@L["ChatInject"]">↩ @L["ChatInject"]</button>
-                        <button class="chat-stop-btn" @onclick="StopActiveRun" title="@L["Stop"]">⏹ @L["Stop"]</button>
-                    </div>
-                }
-                else
-                {
-                    <button @onclick="Send" disabled="@(_historyLoading || (string.IsNullOrWhiteSpace(_inputText) && _pendingImages.Count == 0) || _loading || _pasteLoading || !string.IsNullOrEmpty(_pasteError))">@L["Send"]</button>
-                }
-            </div>
-        </div>
-    }
-</div>
+    </Composer>
+</ConversationDrawer>
 
 @code {
     [Parameter] public string ProjectSlug { get; set; } = "";
@@ -346,9 +332,10 @@
     private readonly List<ChatMessage> _messages = [];
     private string _inputText = "";
     private bool _loading = false;
-    private ElementReference _messagesRef;
+    private ConversationView? _messagesView;
     private ElementReference _inputRef;
     private AgentRun? _activeRun;
+    private AgentRun? _lastRun;
     private IJSObjectReference? _sseModule;
     private DotNetObjectReference<ChatDrawer>? _dotnetRef;
     private string? _activeStreamId;
@@ -420,6 +407,7 @@
     private record ChatMessage(string Role, string Text, IReadOnlyList<MessageImage>? MessageImages = null)
     {
         public IReadOnlyList<MessageImage> Images { get; } = MessageImages ?? [];
+        public DateTime? At { get; init; } = DateTime.UtcNow;
     }
     private sealed record DiagnosticMessage(string DiagnosticRole, string Summary, string Detail)
         : ChatMessage(DiagnosticRole, Detail);
@@ -432,6 +420,25 @@
         public string InputText { get; set; } = "";
     }
     private sealed record ChatTarget(string Slug, string Name, string Kind);
+
+    private static bool IsActivity(ChatMessage message) => message.Role is "tool_use" or "stderr" or "system" or "result" or "rate_limit_event" or "raw";
+    private IEnumerable<IReadOnlyList<ChatMessage>> MessageGroups()
+    {
+        for (var i = 0; i < _messages.Count;)
+        {
+            var first = _messages[i++];
+            var group = new List<ChatMessage> { first };
+            if (IsActivity(first))
+                while (i < _messages.Count && IsActivity(_messages[i])) group.Add(_messages[i++]);
+            yield return group;
+        }
+    }
+    private static StreamEvent ToStreamEvent(ChatMessage message) => new(message.At ?? DateTime.UtcNow,
+        message.Role, message.Text, message is ToolCallMessage tool ? tool.Detail : null);
+    private static DateTime? ParseTime(string? value) => DateTime.TryParse(value, System.Globalization.CultureInfo.InvariantCulture,
+        System.Globalization.DateTimeStyles.RoundtripKind, out var at) ? at : null;
+    private Task SubmitComposer() => _loading && !string.IsNullOrEmpty(_activeStreamId) ? Inject() : Send();
+    private async Task AttachImages() => await JS.InvokeVoidAsync("chatDrawerPickImages", _inputRef);
 
     private string? _activeRunId => _activeStreamId;
 
@@ -536,6 +543,8 @@
     private async Task EnterConversationAsync(ChatTarget target)
     {
         _activeTarget = target;
+        _lastRun = RunsState.AllForProject(ProjectSlug).Where(run => run.ChatTarget == target.Slug)
+            .OrderByDescending(run => run.StartedAt).FirstOrDefault();
         _messages.Clear();
         _view = View.Conversation;
         _historyLoading = true;
@@ -565,6 +574,7 @@
             {
                 foreach (var m in msgs)
                 {
+                    var messageCount = _messages.Count;
                     if (m.Role == "tool_use")
                     {
                         var preview = GetToolPreview(m.ToolName ?? m.Text, m.Detail);
@@ -579,11 +589,14 @@
                     {
                         // Stderr is retained in the run log, but it is often routine CLI diagnostics
                         // and must not look like a failure in the user conversation.
-                        if (m.Role == "stderr") continue;
+                        if (m.Role == "stderr") _messages.Add(new ChatMessage(m.Role, m.Text));
+                        else
                         if (m.Role == "error") AddErrorMessage(m.Text);
                         else _messages.Add(new ChatMessage(m.Role, m.Text, m.Images?
                             .Select(i => new MessageImage(i.DataUrl, i.Mime, i.Name, i.SizeBytes)).ToList()));
                     }
+                    if (_messages.Count > messageCount)
+                        _messages[^1] = _messages[^1] with { At = ParseTime(m.CreatedAt) };
                     latestMessageAt = m.CreatedAt;
                 }
             }
@@ -617,6 +630,7 @@
             if (runId is null) return;
 
             _activeRun = RunsState.Get(runId);
+            _lastRun = _activeRun;
             _loading = true;
             _sseModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/agent-sse.js");
             _dotnetRef ??= DotNetObjectReference.Create(this);
@@ -647,6 +661,7 @@
         await StopStream();
         _view = View.Selection;
         _activeTarget = null;
+        _lastRun = null;
         _messages.Clear();
         _streamingText = null;
         _loading = false;
@@ -669,6 +684,7 @@
         _messages.Clear();
         _loading = false;
         _sessionModel = null;
+        _lastRun = null;
         await RestoreRememberedModelAsync();
         // Ticket-scoped chats stay on the same target after a reset; only the picker mode falls back to selection.
         if (string.IsNullOrWhiteSpace(InitialAgent))
@@ -702,7 +718,7 @@
         }
         try
         {
-            await JS.InvokeVoidAsync("chatDrawerScrollToBottom", _messagesRef);
+            await JS.InvokeVoidAsync("chatDrawerScrollToBottom", _messagesView?.Element);
         }
         catch (Exception ex) { Logger.LogDebug(ex, "Chat scroll update failed for project {ProjectSlug}", ProjectSlug); }
     }
@@ -831,6 +847,7 @@
             // The run is registered server-side before /chat/start responds, so the SSE
             // stream can attach on the returned id directly — no registry lookup, no race.
             _activeRun = RunsState.Get(body.RunId);
+            _lastRun = _activeRun;
             if (_activeRun is not null)
                 _activeRun.OnEvent += HandleEvent;
             _sseModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/agent-sse.js");
@@ -849,8 +866,9 @@
     }
 
     [JSInvokable]
-    public Task ReceiveSse(string kind, string text, string? detail = null)
+    public Task ReceiveSse(string kind, string text, string? detail = null, string? at = null)
     {
+        var messageCount = _messages.Count;
         // "steer" events are echoed back from PumpSteeringAsync — skip to avoid duplicating
         // the inject message already added optimistically in Inject().
         // "steer_replay" is an internal marker for auto-continuation; no UI bubble needed.
@@ -880,9 +898,7 @@
         }
         else if (kind == "stderr")
         {
-            // Keep technical CLI diagnostics in the run log. A terminal failure is emitted
-            // separately as an "error" event and remains visible in the conversation.
-            return Task.CompletedTask;
+            _messages.Add(new ChatMessage(kind, text));
         }
         else if (kind == "content_block_delta")
         {
@@ -908,6 +924,12 @@
                     _messages.Add(new ChatMessage("assistant", reply));
             }
         }
+        else if (kind is "system" or "result" or "rate_limit_event" or "raw")
+        {
+            _messages.Add(new ChatMessage(kind, text));
+        }
+        if (_messages.Count > messageCount)
+            _messages[^1] = _messages[^1] with { At = ParseTime(at) ?? DateTime.UtcNow };
         return InvokeAsync(StateHasChanged);
     }
 
@@ -932,7 +954,7 @@
         if (string.IsNullOrWhiteSpace(clean)) return;
         var summary = GetDiagnosticSummary(role, clean);
         if (_messages.Count > 0 && _messages[^1] is DiagnosticMessage previous && previous.Role == role)
-            _messages[^1] = new DiagnosticMessage(role, previous.Summary, previous.Text + "\n" + clean);
+            _messages[^1] = new DiagnosticMessage(role, previous.Summary, previous.Text + "\n" + clean) { At = previous.At };
         else
             _messages.Add(new DiagnosticMessage(role, summary, clean));
     }

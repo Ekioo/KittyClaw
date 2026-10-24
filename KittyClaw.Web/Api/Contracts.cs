@@ -5,7 +5,6 @@ using KittyClaw.Core.Automation;
 namespace KittyClaw.Web.Api;
 
 public record CreateProjectRequest(string Name);
-public record SaveAutomationsRequest(AutomationConfig Config, string? BaseStamp = null);
 public record CreatePipelineRequest(string Name);
 public record UpdatePipelineRequest(string? Name = null);
 public record PipelineExportBlockedResponse(string Error, IReadOnlyList<PipelineExportFinding> Findings);

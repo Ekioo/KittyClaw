@@ -1,0 +1,237 @@
+/* Mobile compositions for pages, editors, and overlays. Desktop remains in feature styles. */
+.mobile-section-navigation, .mobile-filter-toggle, .mobile-column-menu { display: none; }
+.status-page { max-width: 640px; margin: 3rem auto; padding: 1.5rem; overflow-wrap: anywhere; }
+.status-page p { margin-block: 1rem; line-height: 1.6; }
+@media (min-width: 768px) {
+    .board-layout > .page-header:has(.sub-kanban-breadcrumb) { flex-wrap: wrap; }
+}
+
+@media (max-width: 767px) {
+    /* A section picker replaces the long desktop stack without unmounting form drafts. */
+    .mobile-section-navigation {
+        display: block; position: sticky; top: 0; z-index: 10;
+        padding: .65rem 1rem; background: var(--surface); border-bottom: 1px solid var(--border);
+    }
+    .mobile-section-navigation label { display: grid; gap: .35rem; }
+    .mobile-section-navigation label > span { font-size: .7rem; color: var(--text-muted); }
+    .mobile-section-navigation select {
+        width: 100%; min-height: 44px; padding: .5rem .65rem;
+        border: 1px solid var(--border-strong); border-radius: 7px;
+        background: var(--surface2); color: var(--text); font: inherit; font-size: 16px;
+    }
+    .mobile-section-panel:not(.mobile-section-active) { display: none; }
+    .settings-container { margin-top: 0; }
+    .settings-container .settings-section { padding: 1.25rem 1rem; background: var(--surface); border: 0; border-radius: 0; }
+    .settings-section h2 { font-size: 1.2rem; margin-bottom: .75rem; }
+    .settings-section .settings-hint { line-height: 1.6; }
+    .settings-row { align-items: stretch; gap: .5rem; }
+    .settings-row > button, .settings-row > a { flex: 1 1 auto; justify-content: center; }
+    .settings-container .settings-input { min-height: 44px; min-width: 0; max-width: 100%; background: var(--surface2); color: var(--text); border-radius: 7px; }
+    .settings-section .settings-browse { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; box-sizing: border-box; }
+    .settings-section .settings-option { min-height: 44px; align-items: flex-start; padding-block: .5rem; }
+    .settings-section .settings-option input { margin-top: .2rem; }
+    .provider-section-heading { flex-wrap: wrap; gap: .5rem; }
+    .provider-section-heading > div { min-width: 0; }
+    .provider-card-header { flex-wrap: wrap; gap: .5rem; }
+    .provider-readiness-card { min-width: 0; }
+    .provider-readiness-card > a { display: inline-flex; align-items: center; min-height: 44px; }
+    .provider-readiness-card code { white-space: normal; overflow-wrap: anywhere; }
+    .git-initialize-card, .git-repository-status { flex-wrap: wrap; min-width: 0; }
+
+    /* Editable tables become labelled record cards, keeping the same event handlers. */
+    .settings-container .settings-list { display: block; width: 100%; overflow: visible; }
+    .settings-list thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    .settings-list tbody { display: grid; gap: .75rem; }
+    .settings-list tbody > tr { display: grid; grid-template-columns: minmax(0, 1fr); gap: .6rem; padding: .9rem; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; }
+    .settings-list tbody > tr > td { display: grid; gap: .3rem; min-width: 0; padding: 0; border: 0; overflow-wrap: anywhere; }
+    .settings-list tbody > tr > td:empty { display: none; }
+    .settings-list td[data-label]:not(.row-actions):not(:empty)::before { content: attr(data-label); font-size: .7rem; color: var(--text-muted); }
+    .settings-list td.row-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; }
+    .settings-list .row-actions button { min-width: 44px; min-height: 44px; }
+    .settings-list td input:not([type="color"]), .settings-list td select { width: 100%; min-width: 0; min-height: 44px; }
+    .settings-list .add-row { background: transparent; border-style: dashed; }
+    .settings-list .add-row button { width: 100%; }
+    .settings-list .add-row td::before { display: none; }
+    .settings-section .confirm-actions { flex-wrap: wrap; gap: .5rem; }
+    .settings-section .confirm-actions button { flex: 1; }
+
+    /* The board exposes context actions through touch buttons and a bottom sheet. */
+    .board-layout > .page-header > .back-link { min-height: 44px; }
+    .column-header .mobile-column-menu { display: inline-flex; align-items: center; justify-content: center; width: 44px; min-height: 44px; flex-shrink: 0; padding: 0; background: transparent; color: var(--text-muted); font-size: 1.4rem; }
+    .column-header .status-pill { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
+    .column-header .count { margin-left: auto; }
+    .column-context-menu { inset: auto .5rem max(.5rem, env(safe-area-inset-bottom)) !important; width: auto; min-width: 0; max-height: 72dvh; overflow-y: auto; border-radius: 12px; padding: .5rem; }
+    .column-context-menu .column-context-menu-item { min-height: 44px; white-space: normal; }
+    .add-ticket .add-ticket-btn, .ticket-card .ticket-open-btn { min-height: 44px; }
+    .ticket-card .agent-spinner, .ticket-card .agent-log-btn, .dashboard-tile-header .agent-spinner { min-width: 44px; min-height: 44px; }
+    .board-lane-toggle { min-height: 44px; white-space: normal; text-align: left; }
+    .board-lane-header { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: .5rem; }
+    .board-lane-title { min-width: 0; }
+    .board-lane-header > .pipeline-tabs { grid-column: 1 / -1; order: 3; width: 100%; max-width: 100%; margin: 0; padding-inline: 0; }
+    .board-lane-header .board-lane-actions { grid-column: 1 / -1; order: 4; display: grid; grid-template-columns: 1fr 1fr; }
+    .board-lane-actions .lane-action { flex: 1 1 auto; justify-content: center; }
+    .project-card-heading h3 { white-space: normal; overflow-wrap: anywhere; }
+    .project-card-actions button, .project-card-actions a { min-width: 44px; min-height: 44px; }
+    .tip-of-the-day .tip-next-btn { min-width: 44px; min-height: 44px; }
+    .legal-notice a { display: inline-flex; align-items: center; min-height: 44px; }
+
+    /* Costs start with the result; detailed filters expand on demand. */
+    .costs-header .costs-back-link { display: inline-flex; align-items: center; min-height: 44px; }
+    .cost-filter-card { padding: .65rem .75rem; border-radius: 8px; }
+    .cost-filter-card .mobile-filter-toggle { display: flex; align-items: center; justify-content: space-between; gap: .75rem; width: 100%; min-height: 44px; padding: .25rem 0; background: transparent; color: var(--text); text-align: left; }
+    .mobile-filter-toggle > span:first-child { display: grid; gap: .25rem; }
+    .mobile-filter-toggle small { color: var(--text-muted); font-size: .75rem; font-weight: 400; }
+    .cost-filter-card:not(.mobile-filters-open) > .cost-filter-content { display: none; }
+    .cost-filter-content { padding-top: 1rem; }
+    .cost-filter-grid { grid-template-columns: minmax(0, 1fr); }
+    .cost-date-presets .cost-date-preset { min-height: 44px; white-space: normal; }
+    .cost-project-menu { position: relative; margin-top: .5rem; max-height: 45dvh; overflow-y: auto; }
+    .cost-project-menu .cost-project-option { min-height: 44px; }
+    .cost-projects-section { min-width: 0; }
+
+    /* The mobile dashboard is a readable feed; saved desktop geometry stays intact. */
+    .dashboard-view { padding: 1rem; overflow: visible; }
+    .dashboard-empty { min-width: 0; width: 100%; padding: 1.5rem 0; }
+    .dashboard-empty-examples { width: 100%; min-width: 0; }
+    .dashboard-example { width: 100%; min-width: 0; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+    .dashboard-empty .tile-config-accept, .dashboard-example { min-height: 44px; }
+    .dashboard-grid { min-width: 0; }
+    .dashboard-tile .dashboard-tile-title { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+    .dashboard-tile-content table, .dashboard-tile-content pre { max-width: 100%; overflow-x: auto; }
+    .dashboard-tile-selector { display: flex; gap: .5rem; overflow-x: auto; }
+    .dashboard-tile-selector button { flex-shrink: 0; min-height: 44px; }
+
+    /* All editing surfaces fill the phone, with a stable header/footer and one body. */
+    .modal-backdrop, .processor-dialog-overlay, .pipeline-kit-overlay, .ticket-improvement-overlay, .tile-chat-overlay { padding: 0; }
+    .modal-backdrop .modal-dialog, .create-popup, .processor-dialog, .pipeline-kit-dialog, .ticket-improvement-dialog {
+        width: 100%; max-width: none; height: 100dvh; min-height: 0; max-height: 100dvh;
+        border: 0; border-radius: 0; box-sizing: border-box;
+        padding-bottom: max(.75rem, env(safe-area-inset-bottom));
+    }
+    .modal-backdrop .modal-dialog { padding: 1rem; overflow-y: auto; overscroll-behavior-y: contain; }
+    .modal-dialog > h2:first-child { margin-top: 0; font-size: 1.25rem; }
+    .modal-dialog .settings-row { flex-wrap: wrap; }
+    .modal-dialog .settings-row > input { flex: 1 1 100%; min-width: 0; }
+    .modal-backdrop .modal-dialog input:not([type="checkbox"]):not([type="radio"]):not([type="color"]), .modal-backdrop .modal-dialog select { min-height: 44px; }
+    .modal-dialog > .modal-actions { position: sticky; bottom: -1rem; z-index: 2; padding: .75rem 0 max(.75rem, env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border); }
+    .modal-dialog .modal-actions > * { flex: 1 1 auto; white-space: normal; }
+    .confirm-overlay { padding: 1rem; align-items: flex-end; }
+    .confirm-dialog { width: 100%; min-width: 0; max-width: none; max-height: calc(100dvh - 2rem); padding: 1.25rem; overflow-y: auto; overflow-wrap: anywhere; }
+    .confirm-dialog .confirm-actions { flex-wrap: wrap; }
+    .confirm-dialog button { flex: 1; min-height: 44px; white-space: normal; }
+    .onboarding-check { flex-wrap: wrap; gap: .5rem; }
+    .onboarding-check small { flex: 1 1 100%; }
+    .onboarding-check a { min-height: 44px; }
+    .create-popup { display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom); }
+    .create-popup-header, .create-popup-footer { flex-shrink: 0; padding: .75rem 1rem; flex-wrap: wrap; gap: .5rem; }
+    .create-popup-header h2 { flex: 1; min-width: 0; }
+    .create-popup-body { min-height: 0; flex: 1; overflow-y: auto; padding: 1rem; }
+    .create-popup .close-btn { width: 44px; min-height: 44px; }
+    .create-popup button, .create-popup input { min-height: 44px; }
+    .create-popup .priority-picker { display: grid; grid-template-columns: 1fr 1fr; }
+    .create-popup .new-label-form { width: 100%; flex-wrap: wrap; }
+    .folder-picker-dialog { display: flex; flex-direction: column; }
+    .folder-picker-header { flex-shrink: 0; gap: .5rem; }
+    .folder-picker-header > div { min-width: 0; }
+    .folder-picker-dialog .modal-close-btn { min-width: 44px; min-height: 44px; flex-shrink: 0; }
+    .folder-picker-path-row { flex-wrap: wrap; }
+    .folder-picker-path-row .folder-picker-path { flex: 1 1 100%; }
+    .folder-picker-browser { min-height: 0; flex: 1; grid-template-columns: minmax(0, 1fr); overflow-y: auto; }
+    .folder-picker-roots { flex-direction: row; overflow-x: auto; }
+    .folder-picker-roots button { flex-shrink: 0; }
+    .folder-picker-footer { flex-shrink: 0; flex-direction: column; align-items: stretch; gap: .5rem; }
+    .folder-picker-footer .modal-actions { flex-wrap: wrap; }
+    .folder-picker-name, .folder-picker-breadcrumbs { min-width: 0; overflow-wrap: anywhere; }
+    .folder-picker-breadcrumbs { flex-shrink: 0; }
+    .processor-dialog-header, .processor-dialog-footer { padding: .75rem 1rem; gap: .5rem; }
+    .processor-dialog-header > div { min-width: 0; }
+    .processor-dialog-header h2 { overflow-wrap: anywhere; font-size: 1.15rem; }
+    .processor-dialog-body { padding: .5rem 1rem 1rem; }
+    .processor-dialog-footer { flex-wrap: wrap; padding-bottom: max(.75rem, env(safe-area-inset-bottom)); }
+    .processor-dialog-footer button { flex: 1; white-space: normal; }
+    .processor-dialog .column-editor-grid, .processor-dialog .workflow-grid { grid-template-columns: minmax(0, 1fr); }
+    .processor-dialog .column-editor-tabs { padding-inline: .5rem; gap: .25rem; }
+    .processor-dialog .column-editor-tabs button { min-height: 44px; flex-shrink: 0; }
+    .processor-dialog .column-phase { padding-left: 2.25rem; }
+    .processor-dialog input:not([type="checkbox"]):not([type="radio"]), .processor-dialog select { min-height: 44px; }
+    .processor-dialog .workflow-check { min-height: 44px; }
+    .processor-dialog .route-row { flex-direction: column; align-items: stretch; }
+    .processor-dialog .route-row select { min-width: 0; width: 100%; }
+    .processor-dialog .skill-matrix { grid-template-columns: minmax(0, 1fr); }
+    .workflow-settings .skill-editor { min-width: 0; padding: .75rem; }
+    .workflow-settings .skill-editor summary { min-height: 44px; overflow-wrap: anywhere; }
+    .workflow-settings .workflow-pills { flex-wrap: wrap; }
+    .workflow-settings .workflow-migration-card button { white-space: normal; }
+    .migration-wizard { inset: 0; width: 100%; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; display: flex; flex-direction: column; }
+    .migration-wizard-header, .migration-wizard-footer { flex-shrink: 0; padding: .75rem 1rem; flex-wrap: wrap; gap: .5rem; }
+    .migration-wizard-header > div { min-width: 0; flex: 1; }
+    .migration-wizard-header h2 { font-size: 1.15rem; overflow-wrap: anywhere; }
+    .migration-wizard-body { flex: 1; min-height: 0; padding: 1rem; }
+    .migration-wizard-steps { flex-shrink: 0; padding: .5rem; }
+    .migration-wizard-footer > span { flex-basis: 100%; }
+    .migration-wizard-footer button { flex: 1; white-space: normal; }
+    .migration-pipeline-grid, .migration-benefits, .project-onboarding-questions { grid-template-columns: minmax(0, 1fr); }
+    .migration-pipeline-card, .migration-intro { min-width: 0; }
+    .migration-mini-flow { flex-wrap: wrap; overflow: visible; }
+    .migration-review-flow, .migration-column-flow { flex-direction: column; align-items: stretch; overflow: visible; }
+    .migration-review-flow span { min-width: 0; white-space: normal; }
+    .migration-column-card { min-width: 0; width: 100%; }
+    .pipeline-kit-dialog { padding: 1rem; }
+    .pipeline-kit-dialog > header { position: sticky; top: -1rem; z-index: 2; background: var(--surface); padding-block: .75rem; }
+    .pipeline-kit-dialog > header > div { min-width: 0; }
+    .pipeline-kit-dialog h2 { font-size: 1.15rem; overflow-wrap: anywhere; }
+    .pipeline-kit-tabs { overflow-x: auto; }
+    .pipeline-kit-tabs button { flex-shrink: 0; }
+    .pipeline-kit-body footer { bottom: -1rem; flex-wrap: wrap; padding-bottom: max(.75rem, env(safe-area-inset-bottom)); }
+    .pipeline-kit-body footer button { flex: 1; white-space: normal; }
+    .pipeline-kit-summary { grid-template-columns: 1fr 1fr; }
+    .pipeline-kit-grid { grid-template-columns: minmax(0, 1fr); }
+    .pipeline-kit-body, .pipeline-kit-body > * { min-width: 0; max-width: 100%; }
+    .pipeline-kit-dialog input[type="file"] { min-width: 0; width: 100%; max-width: 100%; }
+    .pipeline-kit-drop { padding: 1.5rem .75rem; overflow-wrap: anywhere; }
+    .pipeline-kit-dialog pre, .pipeline-kit-dialog code { overflow-wrap: anywhere; white-space: pre-wrap; }
+    .ticket-improvement-dialog { padding: 1rem; overflow-y: auto; }
+    .ticket-improvement-dialog h3 { margin-top: 0; }
+    .ticket-improvement-dialog textarea { min-height: 10rem; }
+    .ticket-improvement-dialog > button { width: 100%; margin-top: .5rem; white-space: normal; }
+    .fullscreen-editor { display: flex; flex-direction: column; max-height: 100dvh; padding-bottom: env(safe-area-inset-bottom); }
+    .fullscreen-editor textarea { min-height: 0; flex: 1; }
+    .fullscreen-editor-header, .fullscreen-editor-footer { flex-shrink: 0; flex-wrap: wrap; padding: .75rem 1rem; }
+    .fullscreen-editor button { min-height: 44px; }
+
+    /* Drawers retain a bounded toolbar and an accessible composer. */
+    .chat-drawer-header, .agent-drawer-header { flex-shrink: 0; }
+    .agent-drawer .agent-drawer-meta { grid-column: 1 / -1; order: 3; gap: .35rem; }
+    .agent-drawer .agent-drawer-actions { grid-column: 2; grid-row: 1; }
+    .agent-drawer .agent-drawer-title { grid-column: 1; grid-row: 1; }
+    .agent-drawer button, .chat-drawer button, .tile-chat-panel button { min-height: 44px; }
+    .chat-input-area, .agent-drawer-steer { flex-shrink: 0; padding-bottom: max(.5rem, env(safe-area-inset-bottom)); }
+    .chat-drawer .chat-model-select, .chat-drawer .chat-drawer-model-select { font-size: 16px; }
+    .chat-message-text, .chat-message-content, .agent-drawer-meta span { min-width: 0; overflow-wrap: anywhere; }
+    .agent-drawer .console-line { min-width: 0; }
+    .agent-drawer pre { max-width: 100%; overflow-x: auto; }
+    .tile-config-popup, .tile-code-popup, .tile-edit-popup { width: 100%; max-width: 100%; max-height: 100dvh; border-radius: 0; }
+    .tile-config-popup { height: 100dvh; border: 0; padding-bottom: env(safe-area-inset-bottom); }
+    .tile-config-header, .tile-config-footer { padding: .75rem 1rem; flex-shrink: 0; }
+    .tile-config-header .agent-close-btn { min-width: 44px; min-height: 44px; }
+    .tile-config-popup button { min-height: 44px; }
+    .tile-config-popup input:not([type="checkbox"]), .tile-config-popup select { min-height: 44px; }
+    .tile-config-body { min-height: 0; padding: 1rem; }
+    .tile-config-footer { flex-wrap: wrap; }
+    .tile-config-footer button { flex: 1; white-space: normal; }
+    .decision-brief-header, .decision-brief-actions, .jev-card-heading, .jev-work-actions { flex-wrap: wrap; }
+    .decision-brief-context, .decision-brief-repository { grid-template-columns: minmax(0, 1fr); }
+    .decision-brief button, .jev-route-assistance button, .jev-work-review button, .ticket-waiting-guidance button { min-height: 44px; white-space: normal; }
+
+    /* Text fields must not trigger iOS zoom, including feature-specific compact rules. */
+    body :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]), textarea, select) { font-size: 16px; }
+    .processor-dialog button, .processor-dialog select, .pipeline-kit-dialog button, .migration-wizard button, .ticket-improvement-dialog button { min-height: 44px; }
+    .processor-dialog .agent-close-btn, .migration-wizard .agent-close-btn, .pipeline-kit-dialog .dialog-close { min-width: 44px; min-height: 44px; }
+    .pipeline-kit-dialog .dialog-close { background: transparent; color: var(--text-muted); }
+    .update-banner { flex-wrap: wrap; gap: .5rem; padding: .75rem; }
+    .update-banner-text { min-width: 0; overflow-wrap: anywhere; }
+    .update-banner button { min-width: 44px; min-height: 44px; }
+    .status-page { margin: 0; padding: 1.5rem 1rem; }
+    .status-page h1 { font-size: 1.35rem; }
+    .status-page .back-link { display: inline-flex; align-items: center; min-height: 44px; }
+}

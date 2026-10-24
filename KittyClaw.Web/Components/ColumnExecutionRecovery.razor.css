@@ -1,0 +1,64 @@
+.column-execution-recovery {
+    min-width: 0;
+    max-width: 100%;
+    margin: .2rem 0;
+    cursor: default;
+}
+
+.automation-queue-entry {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: .35rem;
+    min-width: 0;
+    padding: .55rem .6rem;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--surface) 55%, transparent);
+    font-size: .72rem;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.automation-queue-entry + .automation-queue-entry { margin-top: .4rem; }
+.automation-question { border-color: var(--accent-info); }
+.automation-question button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-dim); }
+.automation-question textarea { box-sizing: border-box; width: 100%; resize: vertical; background: var(--surface2); color: var(--text); border: 1px solid var(--border-strong); border-radius: 7px; padding: .5rem; font: inherit; }
+.automation-question .question-submit { background: var(--accent); color: var(--bg); }
+.question-error { color: var(--s-blocked); }
+.automation-queue-state { color: var(--text); font-weight: 600; }
+.automation-queue-reason { color: var(--text-muted); }
+.automation-queue-reason:empty { display: none; }
+.automation-queue-entry time { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+.automation-queue-entry button {
+    box-sizing: border-box;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    margin: .1rem 0 0;
+    padding: .35rem .5rem;
+    border: 1px solid var(--border-strong);
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text);
+    font-size: inherit;
+    line-height: 1.4;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: left;
+}
+
+.automation-queue-entry button:hover:not(:disabled) {
+    background: var(--surface3);
+    border-color: var(--text-muted);
+}
+
+.automation-queue-entry button:focus-visible {
+    outline: 2px solid var(--accent-info);
+    outline-offset: 2px;
+}
+
+@media (max-width: 767px) {
+    .automation-queue-entry button { min-height: 44px; }
+}

@@ -6,10 +6,7 @@ using System.Text;
 namespace KittyClaw.Core.Automation;
 
 /// <summary>
-/// Reads/writes .agents/channel/dispatch-state.json. Format preserved for
-/// compatibility with the legacy dispatcher.mjs files (keys: _sessions,
-/// _lastProcessedCommit, _ticketSnapshot, _learnedTickets, _committedTickets,
-/// producer.lastSubStatuses, {agent}.lastDispatched).
+/// Stores provider sessions and chat model preferences independently of workflow execution.
 ///
 /// The concurrency gate allows several runs in the same workspace at once, so every
 /// read-modify-write of the file must go through <see cref="Update"/> — a bare
@@ -227,125 +224,10 @@ public sealed class SessionRegistry
     }
 
     /// <summary>
-    /// Session key identical to the legacy dispatcher.mjs: `{agent}:{ticketId}` when
+    /// Session key: `{agent}:{ticketId}` when
     /// bound to a ticket, or `{agent}:sweep` for global/stateless agents like groomer.
     /// </summary>
     private static string SessionKey(string agent, int? ticketId) =>
         $"{agent}:{(ticketId?.ToString() ?? "sweep")}";
 
-    public string? LastProcessedCommit(string workspacePath) =>
-        Load(workspacePath)["_lastProcessedCommit"]?.GetValue<string>();
-
-    public void SetLastProcessedCommit(string workspacePath, string sha)
-    {
-        Update(workspacePath, s => s["_lastProcessedCommit"] = sha);
-    }
-
-    /// <summary>Legacy shared snapshot (`_ticketSnapshot`) — one per workspace.</summary>
-    public Dictionary<int, string> TicketSnapshot(string workspacePath)
-    {
-        var s = Load(workspacePath);
-        return ParseSnapshot(s["_ticketSnapshot"] as JsonObject);
-    }
-
-    /// <summary>
-    /// Per-automation ticket snapshot (`_ticketSnapshots[automationId]`). Snapshots are
-    /// isolated per automation so one workflow committing its firing can never acknowledge
-    /// a transition that ANOTHER workflow on the same trigger was still due to retry
-    /// (backport analysis §2.4). An automation with no snapshot yet seeds from the legacy
-    /// shared `_ticketSnapshot`, so upgrading (or adding an automation) never replays
-    /// transitions that predate it.
-    /// </summary>
-    public Dictionary<int, string> TicketSnapshot(string workspacePath, string automationId)
-    {
-        var s = Load(workspacePath);
-        var perAutomation = (s["_ticketSnapshots"] as JsonObject)?[automationId] as JsonObject;
-        return ParseSnapshot(perAutomation ?? s["_ticketSnapshot"] as JsonObject);
-    }
-
-    private static Dictionary<int, string> ParseSnapshot(JsonObject? snap)
-    {
-        var dict = new Dictionary<int, string>();
-        if (snap is null) return dict;
-        foreach (var kv in snap)
-            if (int.TryParse(kv.Key, out var id) && kv.Value is not null)
-                dict[id] = kv.Value.GetValue<string>();
-        return dict;
-    }
-
-    public void SaveTicketSnapshot(string workspacePath, IReadOnlyDictionary<int, string> snap)
-    {
-        Update(workspacePath, s => s["_ticketSnapshot"] = ToJson(snap));
-    }
-
-    public void SaveTicketSnapshot(string workspacePath, string automationId, IReadOnlyDictionary<int, string> snap)
-    {
-        Update(workspacePath, s =>
-        {
-            var all = s["_ticketSnapshots"] as JsonObject ?? new JsonObject();
-            all[automationId] = ToJson(snap);
-            s["_ticketSnapshots"] = all;
-            // Write-through to the legacy shared snapshot: it stays a FRESH seed for
-            // automations that don't have their own snapshot yet (new automations, or a
-            // rollback to an older KittyClaw), instead of freezing at upgrade time and
-            // replaying stale transitions.
-            s["_ticketSnapshot"] = ToJson(snap);
-        });
-    }
-
-    /// <summary>
-    /// Atomically records a status transition for one automation. Returns false when that
-    /// automation has already consumed the ticket in the target status.
-    /// </summary>
-    public bool TryConsumeStatusTransition(string workspacePath, string automationId, int ticketId, string status)
-    {
-        var consumed = false;
-        Update(workspacePath, state =>
-        {
-            var all = state["_ticketSnapshots"] as JsonObject ?? new JsonObject();
-            var snapshot = all[automationId] as JsonObject;
-            if (snapshot is null)
-            {
-                snapshot = state["_ticketSnapshot"] is JsonObject legacy
-                    ? (JsonObject)legacy.DeepClone()
-                    : new JsonObject();
-            }
-
-            var key = ticketId.ToString();
-            if (string.Equals(snapshot[key]?.GetValue<string>(), status, StringComparison.Ordinal))
-                return;
-
-            snapshot[key] = status;
-            all[automationId] = snapshot;
-            state["_ticketSnapshots"] = all;
-            state["_ticketSnapshot"] = (JsonObject)snapshot.DeepClone();
-            consumed = true;
-        });
-        return consumed;
-    }
-
-    private static JsonObject ToJson(IReadOnlyDictionary<int, string> snap)
-    {
-        var obj = new JsonObject();
-        foreach (var kv in snap) obj[kv.Key.ToString()] = kv.Value;
-        return obj;
-    }
-
-    public DateTime? LastDispatched(string workspacePath, string agent)
-    {
-        var s = Load(workspacePath);
-        var agentNode = s[agent] as JsonObject;
-        var iso = agentNode?["lastDispatched"]?.GetValue<string>();
-        return iso is null ? null : DateTime.Parse(iso, null, System.Globalization.DateTimeStyles.RoundtripKind);
-    }
-
-    public void SetLastDispatched(string workspacePath, string agent, DateTime at)
-    {
-        Update(workspacePath, s =>
-        {
-            var agentNode = s[agent] as JsonObject ?? new JsonObject();
-            agentNode["lastDispatched"] = at.ToString("o");
-            s[agent] = agentNode;
-        });
-    }
 }

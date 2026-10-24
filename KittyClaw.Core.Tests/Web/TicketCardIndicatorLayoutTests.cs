@@ -9,7 +9,6 @@ public sealed class TicketCardIndicatorLayoutTests
 
     [Theory]
     [InlineData("KittyClaw.Web/Components/BoardTicketCard.razor")]
-    [InlineData("KittyClaw.Web/Components/Pages/UnifiedBoard.razor")]
     public void CardHeader_SeparatesStatusesFromFixedMetadata(string relativePath)
     {
         var source = File.ReadAllText(Path.Combine(RepoRoot(), relativePath.Replace('/', Path.DirectorySeparatorChar)));

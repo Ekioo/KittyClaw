@@ -2,5 +2,9 @@
   "ImproveTicket": "Melhorar com IA",
   "ImprovingTicket": "Analisando o ticket e preparando uma proposta…",
   "ImprovementReview": "Revise e edite a proposta antes de salvar.",
-  "ImprovementCriteriaHint": "Um critério por linha. Os critérios reformulados precisarão ser avaliados."
+  "ImprovementCriteriaHint": "Um critério por linha. Os critérios reformulados precisarão ser avaliados.",
+  "ImprovementSplitHint": "O escopo é amplo. Clique em um título para revisar os detalhes. A confirmação cria subtickets vinculados na mesma coluna.",
+  "ImprovementCreateTickets": "Validar e criar os tickets",
+  "SplitTicket": "Dividir em vários tickets",
+  "ImprovementNoSplitNeeded": "O escopo já está bem delimitado. Nenhum ticket adicional foi proposto."
 }

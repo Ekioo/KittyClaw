@@ -25,9 +25,11 @@ else
         <h1>@_project.Name — @L["SettingsTitle"]</h1>
     </div>
 
-    <div class="settings-container">
+    <MobileSectionNavigation Sections="@MobileSections" @bind-Active="_mobileSection" />
 
-        <section class="settings-section" data-testid="worktree-settings">
+<div class="settings-container">
+
+        <section class="settings-section mobile-section-panel @(_mobileSection == "worktrees" ? "mobile-section-active" : "")" data-testid="worktree-settings">
             <h2>@L["WorktreeSettings"]</h2>
             <p class="settings-hint">@L["WorktreeSettingsHint"]</p>
             @if (_gitStatus is not null)
@@ -107,7 +109,7 @@ else
             }
         </section>
 
-        <section class="settings-section">
+        <section class="settings-section mobile-section-panel @(_mobileSection == "workspace" ? "mobile-section-active" : "")">
             <h2>@L["WorkspacePath"]</h2>
             <p class="settings-hint">@L["WorkspaceHint"]</p>
             <div class="settings-row">
@@ -125,7 +127,7 @@ else
             }
         </section>
 
-        <section class="settings-section">
+        <section class="settings-section mobile-section-panel @(_mobileSection == "models" ? "mobile-section-active" : "")">
             <h2>@L["FallbackModel"]</h2>
             <p class="settings-hint">@L["FallbackModelHint"]</p>
             <div class="settings-row">
@@ -202,7 +204,7 @@ else
             }
         </section>
 
-        <section class="settings-section">
+        <section class="settings-section mobile-section-panel @(_mobileSection == "local" ? "mobile-section-active" : "")">
             <h2>@L["LocalModel"]</h2>
             <p class="settings-hint">@L["LocalModelHint"]</p>
             <div class="settings-row">
@@ -221,7 +223,7 @@ else
             }
         </section>
 
-        <section class="settings-section" data-testid="rtk-settings">
+        <section class="settings-section mobile-section-panel @(_mobileSection == "rtk" ? "mobile-section-active" : "")" data-testid="rtk-settings">
             <h2>@L["RtkTitle"]</h2>
             <p class="settings-hint">@L["RtkHint"]</p>
             <label class="settings-option">
@@ -244,7 +246,7 @@ else
             }
         </section>
 
-        <section class="settings-section" data-testid="agent-permissions-settings">
+        <section class="settings-section mobile-section-panel @(_mobileSection == "permissions" ? "mobile-section-active" : "")" data-testid="agent-permissions-settings">
             <h2>@L["AgentPermissionsTitle"]</h2>
             <p class="settings-hint">@L["AgentPermissionsSettingsHint"]</p>
             <label class="settings-label">@L["AgentPermissionsMode"]</label>
@@ -279,7 +281,7 @@ else
             }
         </section>
 
-        <section class="settings-section" data-testid="project-secrets">
+        <section class="settings-section mobile-section-panel @(_mobileSection == "secrets" ? "mobile-section-active" : "")" data-testid="project-secrets">
             <h2>@L["SecretsTitle"]</h2>
             <p class="settings-hint">@L["SecretsHint"]</p>
             <p class="settings-hint" data-testid="deepseek-secret-hint">@L["DeepSeekVaultHint"]</p>
@@ -306,9 +308,9 @@ else
                         @foreach (var secret in _secrets)
                         {
                             <tr data-testid="secret-row">
-                                <td><code>@secret.Name</code></td>
-                                <td>@secret.UpdatedAt.ToLocalTime().ToString("g")</td>
-                                <td class="row-actions">
+                                <td data-label="@L["Name"]"><code>@secret.Name</code></td>
+                                <td data-label="@L["SecretUpdated"]">@secret.UpdatedAt.ToLocalTime().ToString("g")</td>
+                                <td class="row-actions" data-label="@L["MobileTicketActions"]">
                                     <button class="icon-btn" title="@L["ReplaceSecret"]" @onclick="() => SelectSecret(secret.Name)">✎</button>
                                     @if (_deleteConfirmSecret == secret.Name)
                                     {
@@ -331,7 +333,7 @@ else
             }
         </section>
 
-        <section class="settings-section">
+        <section class="settings-section mobile-section-panel @(_mobileSection == "members" ? "mobile-section-active" : "")">
             <h2>@L["Members"]</h2>
             <p class="settings-hint">@L["MembersHint"]</p>
             <table class="settings-list">
@@ -340,7 +342,7 @@ else
                     @foreach (var m in _members)
                     {
                         <tr>
-                            <td>
+                            <td data-label="@L["Name"]">
                                 @if (_editingMemberId == m.Id)
                                 {
                                     <input @bind="_editingMemberName" @bind:event="oninput" />
@@ -350,8 +352,8 @@ else
                                     <span>@m.Name</span>
                                 }
                             </td>
-                            <td><code>@m.Slug</code></td>
-                            <td>
+                            <td data-label="@L["Slug"]"><code>@m.Slug</code></td>
+                            <td data-label="@L["Model"]">
                                 @if (_editingMemberId == m.Id)
                                 {
                                     <select class="settings-input" @bind="_editingMemberModel" style="max-width:220px">
@@ -418,7 +420,7 @@ else
                                     <code>@(m.DefaultModel ?? "-")</code>
                                 }
                             </td>
-                            <td class="row-actions">
+                            <td class="row-actions" data-label="@L["MobileTicketActions"]">
                                 @if (_editingMemberId == m.Id)
                                 {
                                     <button class="icon-btn save-btn" @onclick="() => SaveMember(m)">✓</button>
@@ -433,16 +435,16 @@ else
                         </tr>
                     }
                     <tr class="add-row">
-                        <td><input placeholder="@L["NewMemberSettingsPlaceholder"]" @bind="_newMemberName" @bind:event="oninput" @onkeydown="OnMemberKey" /></td>
-                        <td></td>
-                        <td></td>
-                        <td><button class="settings-primary" @onclick="CreateMember" disabled="@string.IsNullOrWhiteSpace(_newMemberName)">@L["Add"]</button></td>
+                        <td data-label="@L["Name"]"><input placeholder="@L["NewMemberSettingsPlaceholder"]" @bind="_newMemberName" @bind:event="oninput" @onkeydown="OnMemberKey" /></td>
+                        <td data-label="@L["Slug"]"></td>
+                        <td data-label="@L["Model"]"></td>
+                        <td data-label="@L["MobileTicketActions"]"><button class="settings-primary" @onclick="CreateMember" disabled="@string.IsNullOrWhiteSpace(_newMemberName)">@L["Add"]</button></td>
                     </tr>
                 </tbody>
             </table>
         </section>
 
-        <section class="settings-section">
+        <section class="settings-section mobile-section-panel @(_mobileSection == "labels" ? "mobile-section-active" : "")">
             <h2>@L["LabelsSection"]</h2>
             <p class="settings-hint">@L["LabelsHint"]</p>
             <table class="settings-list">
@@ -451,21 +453,21 @@ else
                     @foreach (var l in _labels)
                     {
                         <tr>
-                            <td>
+                            <td data-label="@L["Name"]">
                                 @if (_editingLabelId == l.Id)
                                 {
                                     <input @bind="_editingLabelName" @bind:event="oninput" />
                                 }
                                 else { <span>@l.Name</span> }
                             </td>
-                            <td>
+                            <td data-label="@L["Color"]">
                                 @if (_editingLabelId == l.Id)
                                 {
                                     <input type="color" class="color-input" @bind="_editingLabelColor" />
                                 }
                                 else { <span class="color-swatch" style="background:@l.Color"></span> <code>@l.Color</code> }
                             </td>
-                            <td class="row-actions">
+                            <td class="row-actions" data-label="@L["MobileTicketActions"]">
                                 @if (_editingLabelId == l.Id)
                                 {
                                     <button class="icon-btn save-btn" @onclick="() => SaveLabel(l)">✓</button>
@@ -480,15 +482,15 @@ else
                         </tr>
                     }
                     <tr class="add-row">
-                        <td><input placeholder="@L["NewLabelSettingsPlaceholder"]" @bind="_newLabelName" @bind:event="oninput" /></td>
-                        <td><input type="color" class="color-input" @bind="_newLabelColor" /></td>
-                        <td><button class="settings-primary" @onclick="CreateLabel" disabled="@string.IsNullOrWhiteSpace(_newLabelName)">@L["Add"]</button></td>
+                        <td data-label="@L["Name"]"><input placeholder="@L["NewLabelSettingsPlaceholder"]" @bind="_newLabelName" @bind:event="oninput" /></td>
+                        <td data-label="@L["Color"]"><input type="color" class="color-input" @bind="_newLabelColor" /></td>
+                        <td data-label="@L["MobileTicketActions"]"><button class="settings-primary" @onclick="CreateLabel" disabled="@string.IsNullOrWhiteSpace(_newLabelName)">@L["Add"]</button></td>
                     </tr>
                 </tbody>
             </table>
         </section>
 
-        <section class="settings-section danger-zone">
+        <section class="settings-section danger-zone mobile-section-panel @(_mobileSection == "danger" ? "mobile-section-active" : "")">
             <h2>@L["DangerZone"]</h2>
             @if (!_deleteConfirmProject)
             {
@@ -540,6 +542,21 @@ else
 }
 
 @code {
+    private string _mobileSection = "worktrees";
+    private IReadOnlyList<MobileSectionNavigation.Section> MobileSections =>
+    [
+        new("worktrees", L["WorktreeSettings"]),
+        new("workspace", L["WorkspacePath"]),
+        new("models", L["FallbackModel"]),
+        new("local", L["LocalModel"]),
+        new("rtk", L["RtkTitle"]),
+        new("permissions", L["AgentPermissionsTitle"]),
+        new("secrets", L["SecretsTitle"]),
+        new("members", L["Members"]),
+        new("labels", L["LabelsSection"]),
+        new("danger", L["DangerZone"]),
+    ];
+
     [Parameter] public string Slug { get; set; } = "";
 
     private Project? _project;

@@ -30,6 +30,10 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
+/* Native menus must use the same dark palette as their controls. */
+select { color-scheme: dark; }
+select option, select optgroup { background: var(--surface2); color: var(--text); }
+
 h1 { font-size: 1.4rem; font-weight: 600; letter-spacing: -0.02em; }
 h2 { font-size: 1.1rem; font-weight: 600; letter-spacing: -0.01em; }
 h3 { font-size: 0.95rem; font-weight: 600; margin: 1.25rem 0 0.6rem; color: var(--text); }

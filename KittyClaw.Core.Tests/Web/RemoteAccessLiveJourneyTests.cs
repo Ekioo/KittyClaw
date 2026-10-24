@@ -10,17 +10,13 @@ using static Microsoft.Playwright.Assertions;
 
 namespace KittyClaw.Core.Tests.Web;
 
-/// <summary>Explicitly opted-in acceptance test. Allocates and retires a real beta tunnel.</summary>
+/// <summary>Explicitly opted-in acceptance test. Allocates and retires a real tunnel.</summary>
 public sealed class RemoteAccessLiveJourneyTests(ITestOutputHelper output)
 {
     [LiveRemoteFact]
     public async Task Public_TLS_authentication_Blazor_pause_resume_and_retirement()
     {
         var repo = FindRepo();
-        var invitationFile = Environment.GetEnvironmentVariable("KITTYCLAW_REMOTE_LIVE_INVITATION")
-            ?? throw new InvalidOperationException("An operator-created private invitation file is required.");
-        using var invitationJson = JsonDocument.Parse(await File.ReadAllTextAsync(invitationFile));
-        var invitation = invitationJson.RootElement.GetProperty("invitation").GetString()!;
         var requestedSubdomain = "e2e-" + Guid.NewGuid().ToString("N")[..12];
         var dataDir = Path.Combine(repo, ".artifacts", "remote-live", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dataDir);
@@ -81,7 +77,6 @@ public sealed class RemoteAccessLiveJourneyTests(ITestOutputHelper output)
             await Expect(owner.GetByText("SHA-256:", new() { Exact = false })).ToBeVisibleAsync();
             await owner.GotoAsync(local + "/remote-setup");
             await owner.GetByLabel("Public address name (optional)").FillAsync(requestedSubdomain);
-            await owner.GetByLabel("Private beta invitation code").FillAsync(invitation);
             await owner.GetByRole(AriaRole.Checkbox).CheckAsync();
             await owner.GetByRole(AriaRole.Button, new() { Name = "Activate Internet access" }).ClickAsync();
             await Expect(owner.GetByText("Your address is reserved.", new() { Exact = false })).ToBeVisibleAsync(new() { Timeout = 100000 });
@@ -294,6 +289,6 @@ public sealed class LiveRemoteFactAttribute : FactAttribute
     public LiveRemoteFactAttribute()
     {
         if (Environment.GetEnvironmentVariable("KITTYCLAW_REMOTE_LIVE_E2E") != "1")
-            Skip = "Real Cloudflare allocation requires explicit KITTYCLAW_REMOTE_LIVE_E2E=1 and a private invitation file.";
+            Skip = "Real Cloudflare allocation requires explicit KITTYCLAW_REMOTE_LIVE_E2E=1.";
     }
 }

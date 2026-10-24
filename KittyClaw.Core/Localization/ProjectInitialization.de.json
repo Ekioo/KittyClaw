@@ -1,0 +1,8 @@
+{
+  "Enabled": "Ermöglicht",
+  "InitializeConfirmTitle": "Vorhandene Dateien überschreiben?",
+  "InitializeConfirmIntro": "Einige Dateien sind bereits im Zielordner .agents/ vorhanden. Wählen Sie, wie Sie fortfahren möchten:",
+  "InitializeOverwrite": "Überschreiben",
+  "InitializeSkip": "Vorhandenes überspringen",
+  "GitMissingWarning": "Git ist auf diesem Host nicht verfügbar. Der Arbeitsbereich wird initialisiert, es wird jedoch kein Git-Repository erstellt. Installieren Sie Git von https://git-scm.com/downloads und versuchen Sie es erneut, wenn Sie eine Versionsverfolgung wünschen."
+}

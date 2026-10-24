@@ -1,0 +1,8 @@
+{
+  "ColumnRequireAcceptanceCriteria": "进入时要求至少一条验收标准",
+  "ColumnRequireAcceptanceCriteriaHelp": "工单必须至少有一条验收标准才能进入此列，创建时也适用。现有工单不受影响。",
+  "ColumnAcceptanceCriteriaRequiredError": "此列要求至少一条验收标准。请先在工单中添加，再移入此列。",
+  "ColumnRequireValidatedAcceptanceCriteria": "进入时要求所有验收标准均已验证",
+  "ColumnRequireValidatedAcceptanceCriteriaHelp": "要求至少一条验收标准，且每条状态均为 PASS。FAIL、PARTIAL 和未评估标准将阻止进入。现有工单不受影响。",
+  "ColumnAcceptanceCriteriaNotValidatedError": "此列要求所有验收标准均通过验证（PASS）。请先添加至少一条标准并全部验证，再移入此列。"
+}

@@ -2,5 +2,8 @@
   "MobileColumnNavigation": "Colonne della bacheca",
   "MobilePreviousColumn": "Colonna precedente",
   "MobileNextColumn": "Colonna successiva",
-  "MobileColumnSwipeHint": "Scorri per cambiare colonna"
+  "MobileColumnSwipeHint": "Scorri per cambiare colonna",
+  "MobileTicketDetails": "Dettagli",
+  "MobileTicketActions": "Azioni del ticket",
+  "MobileSections": "Sezione"
 }

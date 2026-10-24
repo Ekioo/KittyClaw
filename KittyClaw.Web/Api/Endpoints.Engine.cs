@@ -5,44 +5,21 @@ namespace KittyClaw.Web.Api;
 
 public static partial class Endpoints
 {
-    private static void MapEngine(RouteGroupBuilder api)
-    {
-        // Anti-silent-outage observability (ticket #114): per project, how many scheduled tasks
-        // are actually registered in the engine, whether any are overdue, and when an automation
-        // last fired. lastTickAgeSeconds staying high means the tick loop itself is dead or hung.
+    private static void MapEngine(RouteGroupBuilder api) =>
         api.MapGet("/engine/health", HandleGetEngineHealth).WithTags("Engine");
-    }
 
-    // Shared application handlers used by REST endpoints and MCP tools.
-    internal static async Task<IResult> HandleGetEngineHealth(ProjectService projects, AutomationEngine engine)
+    internal static async Task<IResult> HandleGetEngineHealth(ProjectService projects, ColumnProcessingEngine engine)
     {
         var now = DateTime.UtcNow;
         var list = await projects.ListProjectsAsync();
-        var items = list.Select(p =>
-        {
-            var h = engine.GetProjectHealth(p.Slug);
-            return new
-            {
-                slug = p.Slug,
-                isPaused = p.IsPaused,
-                loaded = h is not null,
-                automations = h?.AutomationCount ?? 0,
-                enabled = h?.EnabledCount ?? 0,
-                scheduledRegistered = h?.ScheduledCount ?? 0,
-                nextRunAt = h?.NextRunAt,
-                overdue = h?.EffectiveOverdueCount(p.IsPaused) ?? 0,
-                lastFiredAt = h?.LastFiredAt,
-                lastFiredAutomationId = h?.LastFiredAutomationId,
-            };
-        }).ToList();
         return Results.Ok(new
         {
+            engine = "column-processing",
             startedAt = engine.StartedAt,
             lastTickAt = engine.LastTickAt,
-            lastTickAgeSeconds = engine.LastTickAt is DateTime t
-                ? Math.Round((now - t).TotalSeconds, 1)
-                : (double?)null,
-            projects = items,
+            lastTickAgeSeconds = engine.LastTickAt is DateTime tick
+                ? Math.Round((now - tick).TotalSeconds, 1) : (double?)null,
+            projects = list.Select(project => new { slug = project.Slug, isPaused = project.IsPaused }),
         });
     }
 }

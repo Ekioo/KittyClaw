@@ -37,7 +37,6 @@
   <ItemGroup>
     <Using Include="Xunit" />
     <Using Include="KittyClaw.Core.Automation" />
-    <Using Include="KittyClaw.Core.Automation.Triggers" />
     <Using Include="KittyClaw.Core.Models" />
   </ItemGroup>
 
