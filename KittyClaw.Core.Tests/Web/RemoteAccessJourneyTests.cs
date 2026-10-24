@@ -49,7 +49,6 @@ public sealed class RemoteAccessJourneyTests
             var bits = string.Concat(secret.Select(c => Convert.ToString(alphabet.IndexOf(c), 2).PadLeft(5, '0')));
             var key = Enumerable.Range(0, bits.Length / 8).Select(i => Convert.ToByte(bits.Substring(i * 8, 8), 2)).ToArray();
             await page.Locator("input[name=code]").FillAsync(NetworkAccessService.Totp(key, DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30));
-            await page.GetByRole(AriaRole.Button, new() { Name = "Validate code and enable network access" }).ClickAsync();
             await Expect(page.GetByText("SHA-256:", new() { Exact = false })).ToBeVisibleAsync();
             await page.GotoAsync(baseUrl + "/remote-setup");
             await page.GetByLabel("Public address name (optional)").FillAsync("my-office");

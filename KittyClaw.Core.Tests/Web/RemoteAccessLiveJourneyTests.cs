@@ -69,7 +69,6 @@ public sealed class RemoteAccessLiveJourneyTests(ITestOutputHelper output)
             var bits = string.Concat(setupKey.Select(c => Convert.ToString(alphabet.IndexOf(c), 2).PadLeft(5, '0')));
             var key = Enumerable.Range(0, bits.Length / 8).Select(i => Convert.ToByte(bits.Substring(i * 8, 8), 2)).ToArray();
             await owner.Locator("input[name=code]").FillAsync(await NextCodeAsync());
-            await owner.GetByRole(AriaRole.Button, new() { Name = "Validate code and enable network access" }).ClickAsync();
             await Expect(owner.GetByText("SHA-256:", new() { Exact = false })).ToBeVisibleAsync();
             await owner.GotoAsync(local + "/remote-setup");
             await owner.GetByLabel("Public address name (optional)").FillAsync(requestedSubdomain);
@@ -181,7 +180,6 @@ public sealed class RemoteAccessLiveJourneyTests(ITestOutputHelper output)
             {
                 await remote.GotoAsync(publicUrl + "/access");
                 await remote.Locator("input[name=code]").FillAsync(await NextCodeAsync());
-                await remote.GetByRole(AriaRole.Button, new() { Name = "Connect", Exact = true }).ClickAsync();
                 await Expect(remote.Locator("input[name=code]")).ToHaveCountAsync(0, new() { Timeout = 20000 });
             }
         }
