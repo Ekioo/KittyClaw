@@ -7,6 +7,17 @@
     color: var(--text); box-shadow: -8px 0 32px rgba(0,0,0,.45);
 }
 .conversation-header { padding: .8rem 1rem; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: minmax(0,1fr) auto; gap: .4rem .7rem; align-items: center; flex-shrink: 0; }
+.conversation-resize-handle { display: none; }
+@media (min-width: 768px) {
+    .agent-conversation.chat-drawer { width: clamp(360px, var(--conversation-width, 560px), 95vw); box-sizing: border-box; }
+    .conversation-resize-handle {
+        display: block; position: absolute; inset: 0 auto 0 0; width: 7px;
+        z-index: 2; cursor: ew-resize; touch-action: none;
+    }
+    .conversation-resize-handle:hover, .conversation-resize-handle:focus-visible,
+    .conversation-resize-handle[data-resizing] { background: var(--focus-ring); }
+    .conversation-resize-handle:focus-visible { outline: 0; }
+}
 .conversation-heading { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; min-width: 0; }
 .conversation-heading .agent-name { font-size: 1rem; font-weight: 600; overflow-wrap: anywhere; }
 .conversation-heading .agent-ticket { background: #4a9eff22; color: #4a9eff; padding: .1rem .5rem; border-radius: 4px; font-size: .8rem; }

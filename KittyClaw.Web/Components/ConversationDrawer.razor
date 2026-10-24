@@ -8,6 +8,8 @@
 <div class="chat-drawer-overlay conversation-overlay" @onclick="OnClose"></div>
 <section class="chat-drawer agent-conversation @CssClass @(_showTimes ? "conversation-show-times" : "")"
          aria-label="@DisplayTitle">
+    <div class="conversation-resize-handle" role="separator" aria-orientation="vertical"
+         aria-label="@DisplayTitle" tabindex="0"></div>
     <header class="conversation-header agent-drawer-header" @oncontextmenu="OpenMenu" @oncontextmenu:preventDefault>
         <div class="conversation-heading agent-drawer-title">
             @HeaderLeading

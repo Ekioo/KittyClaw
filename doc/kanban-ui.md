@@ -40,6 +40,12 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
   the conversation's context menu. Times sit inside message bubbles after the text,
   aligned right for outgoing messages and left for incoming messages. The composer
   keeps the native browser editing menu.
+  On desktop, dragging the left border resizes the drawer between 360px and 95%
+  of the viewport; the focused border also supports the left/right arrow keys.
+  The width is shared by conversation drawers and saved in browser local storage
+  when resizing ends, so reopening or reloading restores the preference.
+  Double-clicking the border restores the default width and clears that preference.
+  Phone conversations remain full-screen.
   Technical events are grouped chronologically behind activity disclosures; errors,
   user messages and agent replies remain visible. Raw payloads and diagnostic copying
   stay available. Each entry point retains its own session, streaming and submission
