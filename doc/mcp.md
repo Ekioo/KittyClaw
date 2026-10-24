@@ -54,6 +54,7 @@ The original seven tools keep their names and arguments. New management tools ta
 | Pipelines | `list_pipelines`, `create_pipeline`, `update_pipeline` |
 | ColumnProcessors | `get_column_processor`, `save_column_processor`, `delete_column_processor` |
 | ColumnExecutions | `list_column_executions`, `retry_column_execution`, `cancel_column_execution` |
+| TicketQuestions | `ask_ticket_question`, `list_ticket_questions`, `answer_ticket_question` — [persistent owner questions and resumption](ticket-questions.md) |
 | Runs | `list_runs`, `get_run`, `steer_run`, `stop_run`, `retry_run`, `get_run_evidence`, `list_concurrency_groups` |
 | Approvals | `list_approval_requests`, `list_approval_decisions`, `list_approval_receipts`, `decide_approval`, `get_runtime_capabilities` |
 | WorktreeMerges | `list_worktree_merges`, `get_worktree_merge`, `enqueue_worktree_merge`, `process_next_worktree_merge`, `resume_worktree_merge`, `retry_worktree_synchronization` |

@@ -5,7 +5,7 @@
 Each opted-in installation gets a stable address such as
 `https://my-office.kittyclaw.dev`, or the automatic
 `https://kc-<installation-id>.kittyclaw.dev` when no name is chosen. The desktop connector and local
-activation flow are implemented. The separate invitation-only provisioning Worker
+activation flow are implemented. The separate provisioning Worker
 lives in the KittyClaw-Front repository under `remote-access-worker/`.
 
 The Worker is deployed at https://remote-api.kittyclaw.dev with its dedicated D1
@@ -19,16 +19,14 @@ isolated installation. Full acceptance results are recorded below.
 Global settings links to `/remote-setup`, a server-rendered local-only page. Its
 mutations require antiforgery validation. Remote callers cannot activate, pause or
 read installation credentials through this page. The owner first associates the
-[network authenticator](./network-access.md), then enters a beta invitation and
-accepts Cloudflare transit. No Cloudflare account or API key is requested from the
+[network authenticator](./network-access.md), then accepts Cloudflare transit. No Cloudflare account or API key is requested from the
 end user.
 
 Owners may choose an available name during first activation. Names use 3–32 ASCII
 letters, digits or hyphens and are normalized to lowercase. Service names, existing
 DNS records and the automatic `kc-` namespace cannot be claimed. The Worker checks
-availability after validating the invitation; a D1 unique hostname constraint also
-handles concurrent claims. A name refusal does not consume the invitation. The
-owner can then choose another name using the same installation ID and credential.
+availability after validating the installation request; a D1 unique hostname constraint also
+handles concurrent claims. The owner can choose another name after a refusal using the same installation ID and credential.
 
 The protected identity persists the chosen name before registration. An ambiguous
 response keeps that name fixed for retries. Once assigned, an address cannot be
@@ -54,7 +52,7 @@ The setup page displays the public URL and its QR code, state, error explanation
 and a refresh link. Global settings also show the public address and a locally
 generated QR code after registration, with phone-camera instructions and the
 required authenticator step. The QR payload contains only the public HTTPS URL;
-no invitation, installation credential or session is embedded. Paused access keeps
+no installation credential or session is embedded. Paused access keeps
 the same QR code and displays the paused state. No external QR service is called.
 The setup page never renders the installation credential or tunnel token.
 
@@ -133,13 +131,12 @@ end-to-end encryption past Cloudflare; the consent text describes Cloudflare tra
 
 ## Provisioning service and release gates
 
-The front repository's Worker README owns the broker API, D1 schema, invitation
-administration, quotas and resource lifecycle. Global Cloudflare credentials remain
-in Worker secrets; each desktop receives only its own tunnel credential. Registration
-is invitation-only. Durable state and exact resource lookups handle partial failures.
+The front repository's Worker README owns the broker API, D1 schema, quotas and resource lifecycle. Global Cloudflare credentials remain
+in Worker secrets; each desktop receives only its own tunnel credential. Registration is open to every installation within the configured fleet quota. Durable state and exact resource lookups handle partial failures.
 Permanent retirement differs from desktop pause and retains a name tombstone.
 
-The invitation beta is deployed with D1, rate limits and validated live DNS/HTTPS.
+The service uses D1, rate limits and validated live DNS/HTTPS. Open enrollment without invitations was deployed on 2026-10-24 after explicit owner approval
+(Worker version `eeb7c298-e61f-4076-9a8d-4a1ba3a40924`). Authentication and existing quotas remain unchanged.
 Before general release, inspect fleet quotas, isolate rotation-only old-token
 rejection, and run Android hardware, reconnect and SSE journeys. Finish recovery for lost or cloned installation identities and
 establish fleet suspension, monitoring, backup and retention procedures.
@@ -165,13 +162,11 @@ desktop/mobile layouts. Enable it with `KITTYCLAW_REMOTE_DEBUG_E2E=1`; optionall
 - [WebSockets and edge reconnect behavior](https://developers.cloudflare.com/network/websockets/).
 
 The service's included capacities do not imply unlimited free hosting. Confirm the
-current Cloudflare account quotas and operating budget before increasing beta size.
+current Cloudflare account quotas and operating budget before increasing fleet size.
 
 ## Opt-in real Cloudflare acceptance
 
-`RemoteAccessLiveJourneyTests` is skipped unless `KITTYCLAW_REMOTE_LIVE_E2E=1` and
-`KITTYCLAW_REMOTE_LIVE_INVITATION` points to an operator-issued private invitation
-JSON file. It starts only its own child app on localhost:25832, with origin 25834,
+`RemoteAccessLiveJourneyTests` is skipped unless `KITTYCLAW_REMOTE_LIVE_E2E=1`. It starts only its own child app on localhost:25832, with origin 25834,
 LAN HTTPS 25833, a fresh ignored `.artifacts/remote-live/` data directory, mock CLI
 providers and no user projects. It restarts that isolated app after registration,
 then checks a unique chosen subdomain, default browser TLS validation, authenticator login, an interactive
@@ -197,3 +192,23 @@ The browser was desktop Edge with a mobile viewport; this does not claim physica
 Android acceptance. All test identities were retired and cloud resources checked
 separately. Evidence and protected test identities remain in ignored .artifacts/.
 No real user project or main-instance data was used.
+
+## Capacity and reservation alerts
+
+The Worker serves aggregate live capacity at `https://remote-api.kittyclaw.dev/capacity`
+(HTML for browsers, JSON for API clients). No installation identifiers, credentials
+or public addresses are exposed. Pending, active and revoking installations count
+against the quota; pausing access does not free a reservation.
+
+Every newly reserved URL with ten or fewer slots remaining creates a durable ntfy
+notification. With the current limit of 50, reservations 40 through 50 each notify
+`KittyClaw_Plafond_Tunnels` on ntfy.sh. Notifications contain used/maximum/remaining
+counts, with urgent priority for the final slot. Successful deliveries are deduplicated
+by installation ID; failures remain pending and can retry on later registration
+requests. No periodic capacity monitoring is configured. See the front repository's
+Worker README for delivery leases, failure recovery and D1 migration details.
+
+At capacity, the broker returns `503 capacity_exhausted`. Updated desktop clients
+show `RemoteCapacityExhausted`, explaining that new activations are temporarily
+unavailable and local access remains available. Existing registrations still resume
+and connect. The localized message requires the updated application binary.

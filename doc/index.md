@@ -49,6 +49,7 @@ and API/MCP documentation.
 - [Evidence decision briefs](./evidence-decision-briefs.md) — traceable run evidence, recovery guidance, and human accept/correct/stop decisions in owner-action columns.
 - [Ticket acceptance criteria](./acceptance-criteria.md) — independent assessments, evidence and read/write REST/MCP access.
 - [Ticket scheduling](./ticket-scheduling.md) — park tickets until a future time, then promote them into the workflow.
+- [Ticket questions](./ticket-questions.md) — persistent agent questions in the automation queue, owner answers and processor resumption through REST/MCP.
 - [Lossless ticket transfer](./ticket-transfer.md) — atomically move a complete ticket tree and its history between projects.
 - [Dashboard](./dashboard.md) — free-form tile view backed by `.dashboard/` Markdown files with drag-and-drop layout.
 - [Cost reporting](./cost-reporting.md) — global agent-cost history with date, project, and pipeline filtering.

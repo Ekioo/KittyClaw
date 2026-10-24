@@ -253,6 +253,9 @@ public sealed class ColumnProcessingEngine : BackgroundService
         var stage = ColumnExecutionStage.Preparation;
         while (stage != ColumnExecutionStage.Stopped)
         {
+            if ((await _executions.GetAsync(context.Slug, context.Execution.Id))?.Status is not
+                (ColumnExecutionStatus.Running or ColumnExecutionStatus.Completed))
+                return;
             StageChanged?.Invoke(stage);
             var proceed = stage switch
             {
@@ -285,6 +288,10 @@ public sealed class ColumnProcessingEngine : BackgroundService
         await _executions.SetRunIdAsync(context.Slug, context.Execution.Id, context.Execution.Id);
         var dispatch = await _dispatcher.DispatchAsync(context.Slug, context.Processor, context.Execution,
             context.Ticket, context.CancellationToken);
+        // A durable question suspends routing, including malformed/missing final agent output.
+        // An answer may already have queued a retry while the subprocess was exiting.
+        if ((await _executions.GetAsync(context.Slug, context.Execution.Id))?.Status != ColumnExecutionStatus.Running)
+            return false;
         if (dispatch.Result is null)
         {
             // An update/shutdown leaves the durable claim for startup recovery.
@@ -305,6 +312,8 @@ public sealed class ColumnProcessingEngine : BackgroundService
     {
         if (!context.Execution.AgentCompleted)
             await _executions.SaveAgentResultAsync(context.Slug, context.Execution, context.Result, context.Processor);
+        if ((await _executions.GetAsync(context.Slug, context.Execution.Id))?.Status != ColumnExecutionStatus.Running)
+            return false;
         await CapitalizeAsync(context.Slug, context.Processor, context.Execution, context.Result, context.CancellationToken);
         return true;
     }
@@ -375,7 +384,7 @@ public sealed class ColumnProcessingEngine : BackgroundService
         {
             var execution = await _executions.GetAsync(slug, executionId);
             if (execution?.AgentResult is not { } result
-                || execution.Status is ColumnExecutionStatus.Running or ColumnExecutionStatus.Retrying or ColumnExecutionStatus.WaitingForChildren
+                || execution.Status is ColumnExecutionStatus.Running or ColumnExecutionStatus.Retrying or ColumnExecutionStatus.WaitingForChildren or ColumnExecutionStatus.WaitingForAnswer
                 || execution.CapitalizationStatus is MemoryCapitalizationStatus.Succeeded or MemoryCapitalizationStatus.NoChange)
                 return false;
             var columnId = await _executions.FindProcessorColumnIdAsync(slug, execution.ProcessorId);

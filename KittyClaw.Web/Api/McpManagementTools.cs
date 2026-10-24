@@ -14,6 +14,25 @@ namespace KittyClaw.Web.Api;
 [McpServerToolType]
 public sealed class McpManagementTools(IServiceProvider services, ProjectService projects)
 {
+    [McpServerTool(Name = "ask_ticket_question", ReadOnly = false, Destructive = false, Idempotent = false)]
+    [Description("Ask the owner a persistent multiple-choice question in the ticket automation queue. Pauses the current column execution. Supply its executionId when available. After this tool succeeds, stop work and finish the run; KittyClaw resumes the processor after the owner's answer. Requires an enabled processor in the ticket's current column. Never bury confirmation requests in comments.")]
+    public Task<JsonElement> AskTicketQuestion(string project, int id, AskTicketQuestionRequest request) =>
+        ExecuteAsync(project, () => Endpoints.HandleAskTicketQuestion(project, id, request,
+            services.GetRequiredService<ColumnExecutionService>(), services.GetRequiredService<BoardUpdateNotifier>()));
+
+    [McpServerTool(Name = "list_ticket_questions", ReadOnly = true, Destructive = false, Idempotent = true)]
+    [Description("Read pending and answered ticket questions, including owner answers, in creation order.")]
+    public Task<JsonElement> ListTicketQuestions(string project, int id) =>
+        ExecuteAsync(project, () => Endpoints.HandleListTicketQuestions(project, id,
+            services.GetRequiredService<ColumnExecutionService>(), services.GetRequiredService<TicketService>()));
+
+    [McpServerTool(Name = "answer_ticket_question", ReadOnly = false, Destructive = false, Idempotent = false)]
+    [Description("Record the owner's explicit answer to a ticket question and queue the processor to resume (may launch an agent). Requires an actual human answer; never choose or invent an answer on the owner's behalf.")]
+    public Task<JsonElement> AnswerTicketQuestion(string project, int id, string questionId, AnswerTicketQuestionRequest request) =>
+        ExecuteAsync(project, () => Endpoints.HandleAnswerTicketQuestion(project, id, questionId, request,
+            services.GetRequiredService<ColumnExecutionService>(), services.GetRequiredService<ColumnProcessingEngine>(),
+            services.GetRequiredService<BoardUpdateNotifier>()));
+
     [McpServerTool(Name = "update_ticket", ReadOnly = false, Destructive = true, Idempotent = false)]
     [Description("Update ticket fields together, including status and assignee. Use expectedStatus to detect concurrent transitions.")]
     public Task<JsonElement> UpdateTicket(

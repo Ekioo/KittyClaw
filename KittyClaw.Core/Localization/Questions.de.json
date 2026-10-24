@@ -1,0 +1,8 @@
+{
+  "QuestionWaiting": "Ihre Antwort wird erwartet",
+  "QuestionSingle": "Eine Option auswählen",
+  "QuestionMultiple": "Eine oder mehrere Optionen auswählen",
+  "QuestionFreeText": "Ergänzung oder andere Antwort",
+  "QuestionSubmit": "Antworten und fortsetzen",
+  "QuestionAnswerFailed": "Die Antwort konnte nicht gespeichert werden. Aktualisieren Sie das Ticket und versuchen Sie es erneut."
+}

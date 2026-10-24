@@ -174,23 +174,22 @@
         var key = $"{Slug}/{TicketId}/{CurrentColumn?.Id}";
         if (key == _loadedKey) return;
         _loadedKey = key;
-        var processors = await ProcessorService.ListAsync(Slug);
+        var processors = await Task.Run(() => ProcessorService.ListAsync(Slug));
         var executions = await ExecutionService.ListAsync(Slug, TicketId);
         var targets = DecisionActionRouting.Resolve(Columns, processors, executions, CurrentColumn);
         _acceptColumn = targets.Accepted;
         _correctionColumn = targets.CorrectionRequested;
         _rejectColumn = targets.Stopped;
         _actionError = null;
-        LoadBrief();
+        _brief = await Task.Run(ReadBrief);
     }
 
-    private void LoadBrief()
+    private TicketDecisionBrief? ReadBrief()
     {
-        _brief = null;
         var evidence = EvidenceStore.LoadTicket(Slug, TicketId.ToString());
-        if (evidence is null) return;
+        if (evidence is null) return null;
         EvidenceStore.ApplyStaleness(evidence, EvidenceStore.DefaultStalenessThreshold);
-        _brief = DecisionBriefComposer.Compose(evidence);
+        return DecisionBriefComposer.Compose(evidence);
     }
 
     private Task CorrectAsync() =>

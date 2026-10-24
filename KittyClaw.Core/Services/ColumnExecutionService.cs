@@ -10,7 +10,7 @@ using System.Text.RegularExpressions;
 namespace KittyClaw.Core.Services;
 
 /// <summary>Durable ticket claims and lifecycle for column processors.</summary>
-public sealed class ColumnExecutionService(ProjectService projects, TicketService tickets, JevWorkReviewService? jevReviews = null,
+public sealed partial class ColumnExecutionService(ProjectService projects, TicketService tickets, JevWorkReviewService? jevReviews = null,
     JevQualificationService? qualification = null)
 {
     public event Action<string, int>? ExecutionChanged;
@@ -23,6 +23,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
 
     internal static async Task EnsureTableAsync(TodoDbContext db)
     {
+        await EnsureQuestionsTableAsync(db);
         await MigrationGate.RunOnceAsync(db, "column-executions-v1", static d =>
             d.Database.ExecuteSqlRawAsync("""
                 CREATE TABLE IF NOT EXISTS ColumnExecutions (
@@ -98,6 +99,11 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN JevExecutionProfileJson TEXT NULL"));
         await MigrationGate.RunOnceAsync(db, "column-executions-jev-fallback-v1", static d =>
             MigrationGate.AddColumnIfMissingAsync(d, "ALTER TABLE ColumnExecutions ADD COLUMN JevClassicFallback INTEGER NOT NULL DEFAULT 0"));
+        await MigrationGate.RunOnceAsync(db, "column-executions-owner-answer-v1", static d => d.Database.ExecuteSqlRawAsync("""
+            DROP INDEX IF EXISTS IX_ColumnExecutions_ActiveTicket;
+            CREATE UNIQUE INDEX IX_ColumnExecutions_ActiveTicket ON ColumnExecutions(TicketId)
+                WHERE Status IN (0, 1, 2, 4, 6);
+            """));
     }
 
     public async Task<bool> UsesClassicFallbackAsync(string slug, ColumnProcessor processor, Ticket ticket)
@@ -238,7 +244,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             .Where(e => e.Status == ColumnExecutionStatus.Running
                 || e.Status == ColumnExecutionStatus.Retrying
                 || e.Status == ColumnExecutionStatus.WaitingForChildren
-                || e.Status == ColumnExecutionStatus.Failed)
+                || e.Status == ColumnExecutionStatus.Failed || e.Status == ColumnExecutionStatus.WaitingForAnswer)
             .Select(e => e.TicketId);
         // A ticket with FireAt is parked durably until ScheduledPromotionService moves it to its
         // wake target. Re-claiming it in the waiting column would turn every persisted schedule
@@ -426,9 +432,12 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         await EnsureTableAsync(db);
         var claims = await db.ColumnExecutions.Where(e => e.TicketId == ticketId &&
             (e.Status == ColumnExecutionStatus.Running || e.Status == ColumnExecutionStatus.Retrying ||
-             e.Status == ColumnExecutionStatus.Failed || e.Status == ColumnExecutionStatus.WaitingForChildren)).ToListAsync();
+             e.Status == ColumnExecutionStatus.Failed || e.Status == ColumnExecutionStatus.WaitingForChildren ||
+             e.Status == ColumnExecutionStatus.WaitingForAnswer)).ToListAsync();
         foreach (var claim in claims)
         {
+            var pendingQuestions = await db.TicketQuestions.Where(q => q.ExecutionId == claim.Id && q.AnsweredAt == null && !q.Cancelled).ToListAsync();
+            foreach (var question in pendingQuestions) question.Cancelled = true;
             claim.ContextRejectionReason = "manual_transition";
             if (claim.Status == ColumnExecutionStatus.Running) continue;
             claim.Status = ColumnExecutionStatus.Cancelled;
@@ -566,6 +575,8 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             execution.AgentResult = row.AgentResult;
             return;
         }
+        if (row.Status != ColumnExecutionStatus.Running)
+            throw new InvalidOperationException("Only a running execution can record an agent result.");
         if (processor?.EvaluateAcceptanceCriteria == true)
         {
             if (row.Status != ColumnExecutionStatus.Running)
@@ -655,7 +666,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         await TicketService.EnsureActivityTableAsync(db);
         await EnsureTableAsync(db);
         var row = await db.ColumnExecutions.FindAsync(execution.Id);
-        if (row is null) return;
+        if (row is null || row.Status != ColumnExecutionStatus.Running) return;
         row.Error = error;
         row.CurrentActionId = null;
         row.EndedAt = DateTime.UtcNow;
@@ -1071,7 +1082,7 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
         await TicketService.EnsureActivityTableAsync(db);
         await EnsureTableAsync(db);
         var row = await db.ColumnExecutions.FindAsync(execution.Id);
-        if (row is null) return;
+        if (row is null || row.Status != ColumnExecutionStatus.Running) return;
         row.Error = error;
         if (row.Attempt < processor.MaxAttempts)
         {
@@ -1198,7 +1209,10 @@ public sealed class ColumnExecutionService(ProjectService projects, TicketServic
             return false;
         execution.Status = ColumnExecutionStatus.Cancelled;
         execution.EndedAt = DateTime.UtcNow;
+        var questions = await db.TicketQuestions.Where(q => q.ExecutionId == executionId && q.AnsweredAt == null && !q.Cancelled).ToListAsync();
+        foreach (var question in questions) question.Cancelled = true;
         await db.SaveChangesAsync();
+        ExecutionChanged?.Invoke(projectSlug, execution.TicketId);
         return true;
     }
 }

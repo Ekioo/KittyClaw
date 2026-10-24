@@ -8,8 +8,9 @@
                            Properties="@Properties" Context="@Context" DependencyEditor="@DependencyEditor"
                            Content="@Content" OnClose="@OnClose" OnImprove="@OnImprove" OnSplit="@OnSplit" OnEditTitle="@OnEditTitle" />
 }
-else if (_mobile is false)
+else
 {
+    @* Keep the ticket visible during prerendering and while the viewport observer connects. *@
     <TicketPanelDesktopView Loading="@Loading" Header="@DesktopHeader" Column="@Column" Properties="@Properties"
                             Context="@Context" DependencyEditor="@DependencyEditor" Content="@Content" />
 }

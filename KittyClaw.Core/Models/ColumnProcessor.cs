@@ -183,6 +183,7 @@ public enum ColumnExecutionStatus
     Completed,
     Failed,
     Cancelled,
+    WaitingForAnswer,
 }
 
 public enum MemoryCapitalizationStatus

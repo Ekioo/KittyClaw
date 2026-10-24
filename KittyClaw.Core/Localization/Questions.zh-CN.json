@@ -1,0 +1,8 @@
+{
+  "QuestionWaiting": "等待您的回答",
+  "QuestionSingle": "请选择一个选项",
+  "QuestionMultiple": "请选择一个或多个选项",
+  "QuestionFreeText": "补充或其他回答",
+  "QuestionSubmit": "回答并继续",
+  "QuestionAnswerFailed": "无法保存回答。请刷新任务后重试。"
+}

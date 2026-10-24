@@ -17,6 +17,7 @@
 @inject WorktreeMergeQueueService WorktreeMergeQueueService
 @inject KittyClaw.Web.Services.BoardUpdateNotifier BoardUpdateNotifier
 @inject IJSRuntime JS
+@inject PersistentComponentState InitialState
 @inject LocalizationService L
 @inject KittyClaw.Web.Services.EscapeKeyStack EscapeStack
 @implements IDisposable
@@ -328,7 +329,6 @@
 </div>;
 
     RenderFragment content = @<div class="ticket-panel-thread">
-                <ColumnExecutionRecovery Slug="@Slug" TicketId="@_ticket.Id" />
                 <div class="section-header">
                     <span class="section-label">@L["Description"]</span>
                     <button class="icon-btn pencil-btn" title="@L["EditDescription"]" @onclick="StartEditDescription">&#9998;</button>
@@ -344,6 +344,7 @@
                     }
                 </div>
 
+                <ColumnExecutionRecovery Slug="@Slug" TicketId="@_ticket.Id" OnAnswered="RefreshAsync" Drafts="_questionDrafts" />
                 <TicketAcceptanceCriteria Slug="@Slug" Ticket="@_ticket" OnChanged="@RefreshAsync" />
 
                 @if (CurrentColumn() is { } guidanceColumn &&
@@ -373,11 +374,8 @@
                     }
                 }
 
-                @if (!_detailsLoading)
-                {
-                    <JevWorkReviewPanel Slug="@Slug" TicketId="@TicketId" OnDecided="RefreshAsync" />
-                    <JevProposalPanel Slug="@Slug" TicketId="@TicketId" OnDecisionTaken="RefreshAsync" OnHistoryChanged="RefreshJevHistoryAsync" />
-                }
+                <JevWorkReviewPanel Slug="@Slug" TicketId="@TicketId" InitialTicket="@_ticket" OnDecided="RefreshAsync" />
+                <JevProposalPanel Slug="@Slug" TicketId="@TicketId" InitialTicket="@_ticket" OnDecisionTaken="RefreshAsync" OnHistoryChanged="RefreshJevHistoryAsync" />
                 <div class="thread-section-divider">
                     <div class="activity-header">
                         <span class="section-label">@L["Activity"]</span>
@@ -536,6 +534,7 @@
 }
 
 @code {
+    private readonly Dictionary<string, TicketQuestionAnswerDraft> _questionDrafts = [];
     private bool _showImprovement;
     private bool _splitTicket;
     private void OpenImprovement(bool split) { _splitTicket = split; _showImprovement = true; }
@@ -696,7 +695,21 @@
     protected override void OnInitialized()
     {
         BoardUpdateNotifier.OnProjectUpdated += OnProjectUpdatedExternal;
+        _initialStateSubscription = InitialState.RegisterOnPersisting(() =>
+        {
+            if (_ticket is not null)
+                InitialState.PersistAsJson($"ticket:{Slug}:{TicketId}", new InitialTicketData(_ticket, _columns,
+                    _summaries, _allLabels, _allMembers, _processorNames, _jevHistory, _worktreeState,
+                    _mergeRequest, _mergePosition, _worktreeLoadError, _crossProjectTickets));
+            return Task.CompletedTask;
+        });
     }
+
+    private PersistingComponentStateSubscription _initialStateSubscription;
+    public sealed record InitialTicketData(Ticket Ticket, List<BoardColumn> Columns, List<TicketSummary> Summaries,
+        List<Label> Labels, List<Member> Members, Dictionary<int, string> ProcessorNames, List<TimelineItem> JevHistory,
+        TicketWorktreeState? Worktree, WorktreeMergeRequest? MergeRequest, int? MergePosition, string? WorktreeError,
+        Dictionary<string, Dictionary<int, string>> CrossProjectTickets);
 
     protected override async Task OnParametersSetAsync()
     {
@@ -721,6 +734,7 @@
     public void Dispose()
     {
         _disposed = true;
+        _initialStateSubscription.Dispose();
         BoardUpdateNotifier.OnProjectUpdated -= OnProjectUpdatedExternal;
         _escClose?.Dispose();
         _escFullscreenEditor?.Dispose();
@@ -749,19 +763,35 @@
         _detailsLoading = true;
         try
         {
-            _ticket = await TicketService.GetTicketAsync(Slug, TicketId);
+            var restored = InitialState.TryTakeFromJson<InitialTicketData>($"ticket:{Slug}:{TicketId}", out var initial)
+                && initial is not null;
+            if (restored)
+            {
+                _ticket = initial!.Ticket;
+                _columns = initial.Columns;
+                _summaries = initial.Summaries; _allLabels = initial.Labels; _allMembers = initial.Members;
+                _processorNames = initial.ProcessorNames; _jevHistory = initial.JevHistory;
+                _worktreeState = initial.Worktree; _mergeRequest = initial.MergeRequest;
+                _mergePosition = initial.MergePosition; _worktreeLoadError = initial.WorktreeError;
+                foreach (var (foreignSlug, titles) in initial.CrossProjectTickets) _crossProjectTickets[foreignSlug] = titles;
+                BuildMarkdownPipeline();
+                return;
+            }
+            else
+                _ticket = await Task.Run(() => TicketService.GetTicketAsync(Slug, TicketId));
             if (_disposed || _ticket is null) return;
             // Load the column selector with the ticket; ancillary work must not delay its options.
-            _columns = await ColumnService.ListColumnsAsync(Slug, _ticket.PipelineId);
+            if (!restored)
+                _columns = await ColumnService.ListColumnsAsync(Slug, _ticket.PipelineId);
             if (_disposed) return;
             // Show the ticket and its criteria before loading history, processor files and Git state.
             _worktreeState = null; _mergeRequest = null; _mergePosition = null; _worktreeLoadError = null;
             StateHasChanged();
             await Task.Yield();
             if (_disposed) return;
-            var summaries = TicketService.ListTicketsAsync(Slug);
-            var labels = LabelService.ListLabelsAsync(Slug);
-            var members = MemberService.ListMembersAsync(Slug);
+            var summaries = Task.Run(() => TicketService.ListTicketsAsync(Slug));
+            var labels = Task.Run(() => LabelService.ListLabelsAsync(Slug));
+            var members = Task.Run(() => MemberService.ListMembersAsync(Slug));
             var slug = Slug;
             var processors = Task.Run(() => ProcessorService.ListAsync(slug));
             await Task.WhenAll(summaries, labels, members, processors);
@@ -976,6 +1006,11 @@
     private async Task RebuildPipelineAsync()
     {
         await FetchCrossProjectTicketsAsync();
+        BuildMarkdownPipeline();
+    }
+
+    private void BuildMarkdownPipeline()
+    {
         var index = _summaries.ToDictionary(t => t.Id, t => t.Title);
         var memberHandles = new HashSet<string>(_allMembers.Select(m => m.Slug), StringComparer.OrdinalIgnoreCase);
         _mdPipeline = KittyClaw.Web.Markdown.CommentMarkdownPipeline.Configure(new MarkdownPipelineBuilder())
@@ -986,7 +1021,7 @@
 
     // ── Timeline ──
 
-    private record TimelineItem(DateTime At, string Author, bool IsComment, string Text, int? Id,
+    public record TimelineItem(DateTime At, string Author, bool IsComment, string Text, int? Id,
         JevRoutingProposal? Proposal = null, JevProposalDecision? Decision = null, JevWorkDecision? WorkDecision = null);
     private List<TimelineItem> _jevHistory = [];
     private async Task RefreshJevHistoryAsync()

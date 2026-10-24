@@ -33,6 +33,12 @@ curl -s "$api/api/projects/{project-slug}/tickets/{id}"
 
 **Always check the HTTP status of write calls** (`POST`, `PATCH`, `PUT`, `DELETE`). `curl -s` swallows errors silently — a 4xx/5xx looks identical to success. Use `-w "\n%{http_code}"` (or `--fail-with-body`) and verify the code is 2xx before relying on the result. If a write fails, do not act as if it succeeded.
 
+## Owner questions
+
+When working on a ticket and you need an owner confirmation or decision, use the persistent ticket question API or MCP `ask_ticket_question` instead of burying the request in a comment or moving the ticket to a blocked column. Read the live API documentation for the exact schema. Supply a clear `question`, 2–12 distinct `options`, your `author` name, and the current `executionId` when provided. Set `multiSelect` when several options may be selected; `allowFreeText` permits an alternative answer or clarification.
+
+After the question is successfully saved, stop work and finish the run. The ticket's current column must have an enabled processor: the orchestrator pauses it and queues that processor again after the owner answers. Read saved answers using `list_ticket_questions` or the ticket questions endpoint when resuming. Never invent or submit an answer on the owner's behalf.
+
 ## Cross-platform paths
 
 Never use `/tmp` or other Linux-only filesystem paths — they do not exist on Windows. If you need a scratch file (patch, JSON body, …), write it in the current workspace (e.g. `body.json`, `full.patch`) and delete it once you are done.

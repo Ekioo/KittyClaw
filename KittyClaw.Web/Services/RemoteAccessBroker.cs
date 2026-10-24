@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace KittyClaw.Web.Services;
 
@@ -16,10 +15,9 @@ public sealed class RemoteAccessBroker(HttpClient http, Uri endpoint)
             throw new InvalidOperationException("RemoteAccess:BrokerUrl must be an HTTPS origin.");
         return uri.GetLeftPart(UriPartial.Authority);
     }
-    internal async Task RegisterAsync(RemoteAccessIdentity identity, string invitation, CancellationToken ct)
+    internal async Task RegisterAsync(RemoteAccessIdentity identity, CancellationToken ct)
     {
-        if (!Regex.IsMatch(invitation, "^[a-f0-9]{64}$")) throw new RemoteAccessException("RemoteInvitationInvalid");
-        await SendAsync(identity, "v1/instances", new { instanceId = identity.InstanceId, invitation, originPort = identity.Port, subdomain = identity.Subdomain }, false, ct);
+        await SendAsync(identity, "v1/instances", new { instanceId = identity.InstanceId, originPort = identity.Port, subdomain = identity.Subdomain }, false, ct);
     }
     internal async Task<string> ConnectAsync(RemoteAccessIdentity identity, CancellationToken ct)
     {
@@ -42,6 +40,15 @@ public sealed class RemoteAccessBroker(HttpClient http, Uri endpoint)
             using var response = await http.SendAsync(request, HttpCompletionOption.ResponseContentRead, timeout.Token);
             if (!response.IsSuccessStatusCode)
             {
+                if (!connect && response.StatusCode == HttpStatusCode.ServiceUnavailable)
+                {
+                    try
+                    {
+                        var failure = await response.Content.ReadFromJsonAsync<BrokerError>(cancellationToken: timeout.Token);
+                        if (failure?.Error == "capacity_exhausted") throw new RemoteAccessException("RemoteCapacityExhausted");
+                    }
+                    catch (JsonException) { throw new RemoteAccessException("RemoteBrokerUnavailable"); }
+                }
                 if (!connect && response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Conflict)
                 {
                     var failure = await response.Content.ReadFromJsonAsync<BrokerError>(cancellationToken: timeout.Token);
@@ -51,7 +58,7 @@ public sealed class RemoteAccessBroker(HttpClient http, Uri endpoint)
                 }
                 throw new RemoteAccessException(response.StatusCode switch
                 {
-                    HttpStatusCode.Forbidden when !connect => "RemoteInvitationInvalid",
+                    HttpStatusCode.Forbidden when !connect => "RemoteBrokerUnavailable",
                     HttpStatusCode.Unauthorized => "RemoteOwnershipInvalid",
                     HttpStatusCode.Gone => "RemoteRetired",
                     _ => "RemoteBrokerUnavailable"

@@ -21,6 +21,7 @@
 @inject ApprovalRegistryService ApprovalRegistry
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject PersistentComponentState InitialState
 @inject LocalizationService L
 @inject KittyClaw.Web.Services.EscapeKeyStack EscapeStack
 @rendermode InteractiveServer
@@ -753,6 +754,26 @@ else
     {
         BoardUpdateNotifier.OnProjectUpdated += OnProjectUpdatedExternal;
         AgentRuns.OnChange += OnAgentRunsChanged;
+        if (InitialState.TryTakeFromJson<InitialBoardData>($"board:{Slug}", out var initial) && initial is not null)
+        {
+            _project = initial.Project;
+            _tickets = initial.Tickets;
+            _columns = initial.Columns;
+            _columnsLoaded = true;
+            _pipelines = initial.Pipelines;
+            _selectedPipelineId = initial.SelectedPipelineId;
+            _allMembers = initial.Members;
+            _activeProcessorColumnIds = initial.ActiveProcessorColumnIds;
+            _pendingApprovalCount = initial.PendingApprovalCount;
+            foreach (var (id, policy) in initial.RoutingPolicies)
+                _routingPolicies[id] = new(policy.IsRestricted, policy.AllowedTargetColumnIds);
+            ResetLoadedColumns();
+            _subKanbanParentId = ParentId;
+            _subKanbanParent = _tickets.FirstOrDefault(t => t.Id == ParentId);
+            _openTicketId = TicketId;
+            StartApprovalRefreshTimer();
+            return;
+        }
         _project = await ProjectService.GetProjectAsync(Slug);
         if (_project is not null)
         {
@@ -762,11 +783,7 @@ else
             await RefreshTicketsAsync();
             _allMembers = await MemberService.ListMembersAsync(Slug);
             await RefreshPendingApprovalsAsync();
-            _approvalRefreshTimer = new Timer(_ => _ = InvokeAsync(async () =>
-            {
-                await RefreshPendingApprovalsAsync();
-                StateHasChanged();
-            }), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+            StartApprovalRefreshTimer();
 
             // Legacy ticket links did not carry the pipeline in the URL. Infer it from
             // the ticket so direct links still open in the pipeline that owns the card.
@@ -785,7 +802,29 @@ else
             _subKanbanParent = _tickets.FirstOrDefault(t => t.Id == ParentId.Value);
         }
         _openTicketId = TicketId;
+        _initialStateSubscription = InitialState.RegisterOnPersisting(() =>
+        {
+            if (_project is not null)
+                InitialState.PersistAsJson($"board:{Slug}", new InitialBoardData(_project, _tickets, _columns,
+                    _pipelines, _selectedPipelineId, _allMembers, _activeProcessorColumnIds, _pendingApprovalCount,
+                    _routingPolicies.ToDictionary(p => p.Key,
+                        p => new InitialRoutingPolicy(p.Value.IsRestricted, p.Value.AllowedTargetColumnIds.ToHashSet()))));
+            return Task.CompletedTask;
+        });
     }
+
+    private PersistingComponentStateSubscription _initialStateSubscription;
+    public sealed record InitialRoutingPolicy(bool IsRestricted, HashSet<int> AllowedTargetColumnIds);
+    public sealed record InitialBoardData(Project Project, List<TicketSummary> Tickets, List<BoardColumn> Columns,
+        List<Pipeline> Pipelines, int? SelectedPipelineId, List<Member> Members, HashSet<int> ActiveProcessorColumnIds,
+        int PendingApprovalCount, Dictionary<int, InitialRoutingPolicy> RoutingPolicies);
+
+    private void StartApprovalRefreshTimer() =>
+        _approvalRefreshTimer = new Timer(_ => _ = InvokeAsync(async () =>
+        {
+            await RefreshPendingApprovalsAsync();
+            StateHasChanged();
+        }), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
 
     private void OnProjectUpdatedExternal(string slug)
     {
@@ -810,6 +849,7 @@ else
 
     public void Dispose()
     {
+        _initialStateSubscription.Dispose();
         BoardUpdateNotifier.OnProjectUpdated -= OnProjectUpdatedExternal;
         AgentRuns.OnChange -= OnAgentRunsChanged;
         if (_undoHandler is not null)

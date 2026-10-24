@@ -14,6 +14,8 @@ public sealed partial class McpEndpointTests
     private static readonly string[] ManagementTools =
     [
         "add_ticket_dependency",
+        "answer_ticket_question",
+        "ask_ticket_question",
         "cancel_column_execution",
         "configure_local_model",
         "create_column",
@@ -51,6 +53,7 @@ public sealed partial class McpEndpointTests
         "list_pipelines",
         "list_project_skills",
         "list_runs",
+        "list_ticket_questions",
         "list_worktree_merges",
         "patch_ticket_labels",
         "process_next_worktree_merge",

@@ -1,0 +1,8 @@
+{
+  "QuestionWaiting": "Waiting for your answer",
+  "QuestionSingle": "Select one option",
+  "QuestionMultiple": "Select one or more options",
+  "QuestionFreeText": "Additional or alternative answer",
+  "QuestionSubmit": "Reply and resume",
+  "QuestionAnswerFailed": "The answer could not be saved. Refresh the ticket and try again."
+}
