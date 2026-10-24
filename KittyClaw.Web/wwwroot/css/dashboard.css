@@ -819,10 +819,10 @@
     cursor: pointer;
 }
 
-.dashboard-example:hover,
-.dashboard-example:focus-visible {
+.dashboard-example:hover {
     border-color: var(--accent);
     background: var(--surface2);
+    color: var(--text);
 }
 
 /* ── Tile chat panel ───────────────────────────────────────────────────────── */
