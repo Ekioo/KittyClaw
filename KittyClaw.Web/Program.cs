@@ -294,6 +294,9 @@ builder.Services.AddRazorComponents()
 
 var app = builder.Build();
 
+// Apply browser protections even to access-denied and setup responses.
+app.UseMiddleware<BrowserSecurityHeadersMiddleware>();
+
 // Gate all remote traffic, including uploads, APIs, MCP and Blazor connections.
 app.UseMiddleware<RemoteTunnelMiddleware>();
 app.UseMiddleware<RemoteAccessSetupMiddleware>();
@@ -374,21 +377,11 @@ if (app.Environment.IsDevelopment())
     }).ExcludeFromDescription();
 }
 
-app.MapGet("/api/docs", async (HttpContext ctx) =>
+app.MapGet("/api/docs", async (IHttpClientFactory clients, CancellationToken cancellationToken) =>
 {
-    var baseUrl = $"{ctx.Request.Scheme}://{ctx.Request.Host}";
-    // The self-call is local automation, not a second remote browser session.
-    if (networkAccess.Enabled && !NetworkAccessMiddleware.IsLocal(ctx))
-    {
-        var httpListener = app.Urls.FirstOrDefault(url => url.StartsWith("http://", StringComparison.OrdinalIgnoreCase));
-        if (httpListener is not null)
-        {
-            var listener = new Uri(httpListener.Replace("*", "localhost").Replace("+", "localhost"));
-            baseUrl = $"http://localhost:{listener.Port}";
-        }
-    }
-    using var client = new HttpClient();
-    var json = await client.GetStringAsync($"{baseUrl}/openapi/v1.json");
+    // Never derive a server-side destination from the caller's Host or scheme.
+    using var client = clients.CreateClient("KittyClawLocal");
+    var json = await client.GetStringAsync("/openapi/v1.json", cancellationToken);
     using var doc = JsonDocument.Parse(json);
     var markdown = OpenApiMarkdownGenerator.Generate(doc);
     return Results.Text(markdown, "text/markdown; charset=utf-8");

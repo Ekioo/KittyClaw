@@ -29,6 +29,11 @@ local automation.
 ## Request protection
 
 `NetworkAccessMiddleware` runs before application endpoints and uploaded files.
+Global response headers block framing, embedded objects and MIME sniffing, and
+limit referrer disclosure to the same origin. Endpoint-specific content security
+policies remain in force. The generated API documentation fetches its OpenAPI
+specification through the configured trusted local client, with redirects and
+proxies disabled; incoming Host and scheme values never select that destination.
 All non-loopback requests require enabled access, HTTPS and a valid session,
 including REST APIs, MCP and Blazor/SignalR handshakes. Only the login form is
 anonymous. APIs receive 401 rather than HTML redirects. Cross-origin browser requests are rejected before local trust is applied, including
