@@ -56,7 +56,7 @@ public sealed class JevPostRunJourneyTests(ITestOutputHelper output)
             var suggestion = columns.Single(c => c.Name == "Todo");
             var saved = await http.PutAsJsonAsync($"/api/projects/{slug}/columns/{source.Id}/processor",
                 new SaveColumnProcessorRequest("Worker", "Implement the ticket", Enabled: false,
-                    DefaultTargetColumnId: actualTarget.Id, Routes: [new("needs_revision", suggestion.Id)]));
+                    DefaultTargetColumnId: actualTarget.Id, Routes: [new("needs_revision", suggestion.Id)], JevPostRunObservation: true));
             Assert.True(saved.IsSuccessStatusCode, await saved.Content.ReadAsStringAsync());
             (await http.PutAsJsonAsync($"/api/projects/{slug}/secrets/TYPESAFE_API_KEY", new { value = "debug-only-key" })).EnsureSuccessStatusCode();
             using var pw = await Playwright.CreateAsync();
@@ -73,9 +73,8 @@ public sealed class JevPostRunJourneyTests(ITestOutputHelper output)
             await page.Locator(".column-context-menu-configure").ClickAsync();
             var dialog = page.GetByRole(AriaRole.Dialog);
             await dialog.Locator(".column-editor-tabs button").Nth(1).ClickAsync();
-            await dialog.GetByTestId("jev-settings").Locator("summary").First.ClickAsync();
-            await dialog.GetByLabel("JEV routing proposals after agent runs").CheckAsync();
-            await dialog.Locator("label.workflow-check").Filter(new() { HasText = "Enabled" }).Locator("input").CheckAsync();
+            // Legacy observation settings remain compatible when enabling the agent mode.
+            await dialog.GetByTestId("column-mode-Agent").CheckAsync();
             await dialog.Locator(".processor-dialog-footer .settings-primary").ClickAsync();
             await Expect(dialog).Not.ToBeVisibleAsync(new() { Timeout = 15000 });
             var processor = await http.GetFromJsonAsync<ColumnProcessor>($"/api/projects/{slug}/columns/{source.Id}/processor", json);
