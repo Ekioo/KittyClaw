@@ -1,0 +1,9 @@
+{
+  "ColumnMaxTickets": "工单数量上限（0 = 无限制）",
+  "ColumnCapacityMode": "达到上限时",
+  "ColumnCapacityWarning": "仅警告",
+  "ColumnCapacityBlocking": "阻止新工单进入",
+  "ColumnCapacityHelp": "仅适用于此列。现有工单仍可编辑或移出。默认不设上限。",
+  "ColumnCapacityReached": "已达到工单数量上限",
+  "ColumnCapacityError": "已达到列上限。请选择其他列或修改其设置。"
+}

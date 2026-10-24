@@ -38,6 +38,7 @@ public sealed class ProjectGitInitializationUiTests
     [InlineData("it")]
     [InlineData("ja")]
     [InlineData("pt-BR")]
+    [InlineData("zh-CN")]
     public void ProjectSettings_LocalizationsContainGitInitializationCopy(string language)
     {
         var path = Path.Combine(RepoRoot(), "KittyClaw.Core", "Localization", $"ProjectSettings.{language}.json");

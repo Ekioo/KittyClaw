@@ -1,5 +1,6 @@
-﻿<!DOCTYPE html>
-<html lang="en">
+@inject LocalizationService L
+<!DOCTYPE html>
+<html lang="@L.Lang">
 
 <head>
     <meta charset="utf-8" />
@@ -34,6 +35,9 @@
     <Routes />
     <ReconnectModal />
     <script>
+        window.setApplicationLanguage = function (language) {
+            document.documentElement.lang = language;
+        };
         window.__kittyClawBoardScrolls ??= {};
         window.saveColumnScrollPositions = function () {
             document.querySelectorAll('.column-body').forEach((element, index) => {

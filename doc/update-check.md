@@ -23,7 +23,9 @@ Source installations retain the dismissible release-link banner described below.
   after startup, and provides Open, Check for updates, and Quit actions in the notification area.
   Menu actions and update notifications use the selected application language and refresh
   immediately when it changes. New settings use the operating-system UI language when
-  supported (Portuguese maps to Brazilian Portuguese), otherwise English; saved choices take precedence.
+  supported (Portuguese maps to Brazilian Portuguese; `zh-CN`, `zh-SG` and `zh-Hans`
+  locales map to Simplified Chinese `zh-CN`), otherwise English. Traditional Chinese
+  locales fall back to English. Saved choices take precedence.
   Window controls are integrated into the existing page header without an extra title bar.
   `WindowsDesktopShell.js` applies one fixed-height header style from `windows-desktop.css`
   to every view, with the KittyClaw home link on the left and window controls on the right.

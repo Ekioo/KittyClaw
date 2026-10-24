@@ -205,7 +205,7 @@ public sealed class WorkflowMigrationPromptTests
         Assert.Contains("ContextText(\"MigrationWizardCompletedTitle\", \"ProjectOnboardingCompletedTitle\")", source);
         Assert.Contains("ContextText(\"MigrationWizardLongRunningHint\", \"ProjectOnboardingLongRunningHint\")", source);
 
-        foreach (var language in new[] { "en", "fr", "de", "es", "it", "pt-BR", "ja" })
+        foreach (var language in new[] { "en", "fr", "de", "es", "it", "pt-BR", "ja", "zh-CN" })
         {
             var path = Path.Combine(RepoRoot(), "KittyClaw.Core", "Localization", $"Workflows.{language}.json");
             using var document = JsonDocument.Parse(File.ReadAllText(path));

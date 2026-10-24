@@ -13,7 +13,7 @@ namespace KittyClaw.Core.Tests.Web;
 /// </summary>
 public class TipOfTheDayTests
 {
-    private static readonly string[] SupportedLanguages = ["en", "fr", "de", "es", "it", "pt-BR", "ja"];
+    private static readonly string[] SupportedLanguages = ["en", "fr", "de", "es", "it", "pt-BR", "ja", "zh-CN"];
     private static string RepoRoot()
     {
         var dir = Directory.GetCurrentDirectory();

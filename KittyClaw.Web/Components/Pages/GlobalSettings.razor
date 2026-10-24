@@ -1,6 +1,7 @@
 @page "/settings"
 @using KittyClaw.Core.Automation
 @using KittyClaw.Core.Services
+@inject IJSRuntime JS
 @inject AppSettingsService AppSettings
 @inject AgentCliReadinessService CliReadiness
 @inject RtkIntegrationService RtkIntegration
@@ -50,6 +51,7 @@
                 <option value="it">@L["LangIt"]</option>
                 <option value="pt-BR">@L["LangPtBr"]</option>
                 <option value="ja">@L["LangJa"]</option>
+                <option value="zh-CN">@L["LangZhCn"]</option>
             </select>
         </div>
     </section>
@@ -138,7 +140,11 @@
 
     protected override void OnInitialized() => L.OnLanguageChanged += OnLanguageChanged;
     private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
-    private void OnLangChanged(ChangeEventArgs e) => AppSettings.Language = (string?)e.Value ?? "fr";
+    private async Task OnLangChanged(ChangeEventArgs e)
+    {
+        AppSettings.Language = (string?)e.Value ?? "en";
+        await JS.InvokeVoidAsync("setApplicationLanguage", AppSettings.Language);
+    }
     public void Dispose() => L.OnLanguageChanged -= OnLanguageChanged;
 
     private CliReadiness _readiness = new(false, false, false, false, false, false);

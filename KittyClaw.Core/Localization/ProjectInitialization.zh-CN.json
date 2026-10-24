@@ -1,0 +1,8 @@
+{
+  "Enabled": "已启用",
+  "InitializeConfirmTitle": "覆盖现有文件？",
+  "InitializeConfirmIntro": "目标 .agents/ 文件夹中已存在部分文件。请选择处理方式：",
+  "InitializeOverwrite": "覆盖",
+  "InitializeSkip": "跳过现有文件",
+  "GitMissingWarning": "此主机上无法使用 Git。工作区将被初始化，但不会创建 Git 仓库。如需版本跟踪，请从 https://git-scm.com/downloads 安装 Git 后重试。"
+}

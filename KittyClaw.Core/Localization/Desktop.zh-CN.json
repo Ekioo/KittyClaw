@@ -1,0 +1,11 @@
+{
+  "TrayOpen": "打开 KittyClaw",
+  "TrayCheckUpdates": "检查更新",
+  "TrayQuit": "退出 KittyClaw",
+  "TrayCheckingUpdates": "正在检查更新…",
+  "TrayUpdateReady": "版本 {0} 已就绪。请打开 KittyClaw 确认安装并重启。",
+  "TrayUpdateDownloading": "已有更新正在后台下载。",
+  "TrayUpToDate": "KittyClaw 已是最新版本。",
+  "TrayUpdateFailed": "无法检查或下载更新。请稍后重试。",
+  "TrayUpdatesTitle": "KittyClaw 更新"
+}
