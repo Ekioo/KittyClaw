@@ -316,6 +316,26 @@ public sealed class NetworkAccessTests
         Assert.Equal(HttpStatusCode.Forbidden, (await fixture.Client.SendAsync(revoked)).StatusCode);
     }
 
+    [Fact]
+    public void Session_revocation_preserves_authenticator_and_invalidates_persisted_cookies()
+    {
+        using var dir = new TempDir();
+        var protection = new EphemeralDataProtectionProvider();
+        var access = new NetworkAccessService(dir.Path, protection, 5233);
+        var (enrollment, key) = Enrollment(access);
+        var now = DateTimeOffset.UtcNow;
+        Assert.True(access.Enable(enrollment, Code(key, now.AddSeconds(-30))));
+        var cookie = access.Authenticate(Code(key, now), now);
+        Assert.NotNull(cookie);
+        access.RevokeSessions();
+        Assert.True(access.Enabled);
+        Assert.False(access.ValidSession(cookie, now));
+        var restored = new NetworkAccessService(dir.Path, protection, 5233);
+        Assert.True(restored.Enabled);
+        Assert.False(restored.ValidSession(cookie, now));
+        Assert.NotNull(restored.Authenticate(Code(key, now.AddSeconds(30)), now.AddSeconds(30)));
+    }
+
     private static (string Token, byte[] Key) Enrollment(NetworkAccessService access)
     {
         var token = access.CreateEnrollment();

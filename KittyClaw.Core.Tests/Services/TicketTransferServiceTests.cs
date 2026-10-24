@@ -149,6 +149,8 @@ public sealed class TicketTransferServiceTests
             row.UpdatedAt = updatedAt;
             row.FireAt = createdAt.AddDays(3);
             row.ScheduleTarget = "Review";
+            row.ColumnVisit = 7;
+            (await db.Tickets.FindAsync(child.Id))!.ColumnVisit = 11;
             row.AgentTokens = 1234;
             row.AgentCostUsd = 4.56;
             await db.SaveChangesAsync();
@@ -169,6 +171,7 @@ public sealed class TicketTransferServiceTests
         Assert.Equal(updatedAt, moved.UpdatedAt);
         Assert.Equal(createdAt.AddDays(3), moved.FireAt);
         Assert.Equal("Review", moved.ScheduleTarget);
+        Assert.Equal(7L, moved.ColumnVisit);
         Assert.Equal(1234, moved.AgentTokens);
         Assert.Equal(4.56, moved.AgentCostUsd);
         Assert.Contains(moved.Comments, c => c.Content == "A preserved comment");
@@ -177,6 +180,7 @@ public sealed class TicketTransferServiceTests
         Assert.Single(moved.Labels, l => l.Name == "critical" && l.Color == "#f00");
         var movedChild = await tickets.GetTicketAsync(target, child.Id);
         Assert.Equal(root.Id, movedChild!.ParentId);
+        Assert.Equal(11L, movedChild.ColumnVisit);
     }
 
     [Fact]

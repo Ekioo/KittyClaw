@@ -389,6 +389,7 @@
   "JevApproveCriteria": "Aprobar y continuar",
   "JevAutomaticPolicy": "Enrutamiento automático activado · confianza mínima: {0}%. Por debajo del umbral se requiere validación manual.",
   "JevAutomaticRouting": "Aplicar enrutamiento automáticamente",
+  "JevAutomaticRoutingMode": "Dejar que JEV elija la ruta cuando termine el agente",
   "JevAutomaticRoutingHelp": "Las sugerencias por debajo del umbral esperan su aprobación.",
   "JevAvailable": "JEV disponible: hay una clave de TypeSafe configurada.",
   "JevChooseAnotherProfile": "Elegir otro perfil",

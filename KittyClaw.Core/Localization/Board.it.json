@@ -389,6 +389,7 @@
   "JevApproveCriteria": "Approva e continua",
   "JevAutomaticPolicy": "Instradamento automatico attivo · confidenza minima: {0}%. Sotto questa soglia è richiesta la convalida manuale.",
   "JevAutomaticRouting": "Applica automaticamente l'instradamento",
+  "JevAutomaticRoutingMode": "Lascia che JEV scelga la destinazione al termine dell’agente",
   "JevAutomaticRoutingHelp": "I suggerimenti sotto la soglia attendono la tua approvazione.",
   "JevAvailable": "JEV disponibile: è configurata una chiave TypeSafe.",
   "JevChooseAnotherProfile": "Scegli un altro profilo",

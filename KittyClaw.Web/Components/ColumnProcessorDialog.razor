@@ -559,8 +559,7 @@
     {
         try
         {
-            var http = HttpFactory.CreateClient();
-            http.BaseAddress = new Uri(Nav.BaseUri);
+            var http = HttpFactory.CreateClient("KittyClawLocal");
             var ollama = http.GetFromJsonAsync<List<string>>($"/api/projects/{Slug}/ollama-models");
             var grok = http.GetFromJsonAsync<List<string>>("/api/grok-models");
             var mistral = http.GetFromJsonAsync<List<string>>("/api/mistral-models");

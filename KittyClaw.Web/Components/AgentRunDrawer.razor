@@ -1,3 +1,4 @@
+@inject IHttpClientFactory HttpFactory
 @using KittyClaw.Core.Automation
 @using KittyClaw.Core.Models
 @using KittyClaw.Core.Services
@@ -298,7 +299,7 @@
     {
         if (_run is null || string.IsNullOrWhiteSpace(_steerText)) return;
         var payload = new { text = _steerText };
-        using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+        using var http = HttpFactory.CreateClient("KittyClawLocal");
         try
         {
             var response = await http.PostAsJsonAsync($"/api/projects/{_run.ProjectSlug}/runs/{_run.RunId}/steer", payload);
@@ -322,7 +323,7 @@
     private async Task Stop()
     {
         if (_run is null) return;
-        using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+        using var http = HttpFactory.CreateClient("KittyClawLocal");
         try
         {
             var response = await http.PostAsync($"/api/projects/{_run.ProjectSlug}/runs/{_run.RunId}/stop", null);
@@ -346,7 +347,7 @@
         _retrying = true;
         try
         {
-            using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+            using var http = HttpFactory.CreateClient("KittyClawLocal");
             var resp = await http.PostAsync($"/api/projects/{_run.ProjectSlug}/runs/{_run.RunId}/retry", null);
             if (resp.IsSuccessStatusCode)
             {

@@ -76,6 +76,17 @@ public sealed class NetworkAccessService
         SessionsRevoked?.Invoke();
     }
 
+    public void RevokeSessions()
+    {
+        lock (_gate)
+        {
+            var next = _state with { Generation = Guid.NewGuid().ToString("N") };
+            Save(next);
+            _state = next;
+        }
+        SessionsRevoked?.Invoke();
+    }
+
     public string? Authenticate(string code, DateTimeOffset now)
     {
         lock (_gate)

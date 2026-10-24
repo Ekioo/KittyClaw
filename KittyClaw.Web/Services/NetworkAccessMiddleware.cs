@@ -13,6 +13,7 @@ public sealed class NetworkAccessMiddleware(RequestDelegate next)
 
     internal static bool IsLocal(HttpContext context)
     {
+        if (context.Features.Get<RemoteTunnelRequest>() is not null) return false;
         var address = context.Connection.RemoteIpAddress;
         // In-process HTTP transports have no IP pair. Kestrel TCP connections always do.
         var localTransport = address is null ? context.Connection.LocalIpAddress is null
@@ -216,7 +217,7 @@ public sealed class NetworkAccessMiddleware(RequestDelegate next)
     }
 
     private static string E(string value) => WebUtility.HtmlEncode(value);
-    private static async Task Page(HttpContext context, string title, string content)
+    internal static async Task Page(HttpContext context, string title, string content)
     {
         context.Response.ContentType = "text/html; charset=utf-8";
         var nonce = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
