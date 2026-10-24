@@ -479,3 +479,5 @@
     white-space: normal;
     text-align: left;
 }
+/* Keep the page behind project creation still while the dialog scrolls. */
+html:has(.project-creation), body:has(.project-creation) { overflow: hidden; }

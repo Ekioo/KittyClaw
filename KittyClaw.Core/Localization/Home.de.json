@@ -1,4 +1,5 @@
 {
+  "CreationWorkspaceHint": "Wähle den lokalen Ordner deines Git-Repositorys oder gib seinen vollständigen Pfad ein.",
   "HomeTitle": "KittyClaw - Projekte",
   "Projects": "Projekte",
   "NewProjectPlaceholder": "Neuer Projektname...",
