@@ -1,0 +1,27 @@
+.global-navigation-header {
+    height: 64px;
+    box-sizing: border-box;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    gap: 1rem;
+}
+
+.global-navigation-header .home-logo-horizontal {
+    width: 180px;
+    height: auto;
+}
+
+.global-navigation-header nav {
+    min-width: 0;
+    overflow-x: auto;
+}
+
+.global-navigation-header nav ::deep a {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+    .global-navigation-header > a { display: none; }
+    .global-navigation-header nav { width: 100%; }
+}
