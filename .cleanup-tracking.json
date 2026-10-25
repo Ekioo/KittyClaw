@@ -57,6 +57,182 @@
         "Tracked-file reference search found no consumers.",
         "SHA-256 equals retained asset KittyClaw.Web/wwwroot/KittyClaw-Picto-Posture-07.webp."
       ]
+    },
+    "ProjectTemplate/Agents/groomer/SKILL.md": {
+      "reason": "Explicit owner-requested retirement of legacy roles from new-project initialization; existing workspaces are preserved.",
+      "sha256": "10e605ce70a171db763b1774938b87eb2fd25d116dc4efabf338c635badedf31",
+      "decision": "removed",
+      "last_reviewed_at": "2026-10-25T09:50:57.3964717Z",
+      "last_content_change_at": "2026-10-24T10:18:40.0000000Z",
+      "evidence": [
+        "Consumer trace: resources were copied only through AgentsTemplateService and ProjectCreation member seeding, both retired in this change.",
+        "Replacement: ColumnAgentDispatcher uses configured processor missions, project skills and processor memory; role-specific source files prescribe the former fixed pipeline."
+      ]
+    },
+    "ProjectTemplate/Agents/groomer/memory/MEMORY.md": {
+      "reason": "Explicit owner-requested retirement of legacy roles from new-project initialization; existing workspaces are preserved.",
+      "sha256": "be80b08f02dc259fbe6039e7fdcba2273c155a26840398a84cb3216901555b43",
+      "decision": "removed",
+      "last_reviewed_at": "2026-10-25T09:50:57.7563463Z",
+      "last_content_change_at": "2026-07-12T00:50:55.0000000Z",
+      "evidence": [
+        "Consumer trace: resources were copied only through AgentsTemplateService and ProjectCreation member seeding, both retired in this change.",
+        "Replacement: ColumnAgentDispatcher uses configured processor missions, project skills and processor memory; role-specific source files prescribe the former fixed pipeline."
+      ]
+    },
+    "ProjectTemplate/Agents/producer/SKILL.md": {
+      "reason": "Explicit owner-requested retirement of legacy roles from new-project initialization; existing workspaces are preserved.",
+      "sha256": "fdbad4773a951a4644b8993919baf26c572ef653b15f313b037b5f9e9069793f",
+      "decision": "removed",
+      "last_reviewed_at": "2026-10-25T09:50:57.9671650Z",
+      "last_content_change_at": "2026-10-24T10:18:40.0000000Z",
+      "evidence": [
+        "Consumer trace: resources were copied only through AgentsTemplateService and ProjectCreation member seeding, both retired in this change.",
+        "Replacement: ColumnAgentDispatcher uses configured processor missions, project skills and processor memory; role-specific source files prescribe the former fixed pipeline."
+      ]
+    },
+    "ProjectTemplate/Agents/producer/memory/MEMORY.md": {
+      "reason": "Explicit owner-requested retirement of legacy roles from new-project initialization; existing workspaces are preserved.",
+      "sha256": "22db598dc733358c3a2a9503418a0a600f1677124a07a3f96a36750bab7c81fb",
+      "decision": "removed",
+      "last_reviewed_at": "2026-10-25T09:50:58.2852486Z",
+      "last_content_change_at": "2026-07-12T00:50:55.0000000Z",
+      "evidence": [
+        "Consumer trace: resources were copied only through AgentsTemplateService and ProjectCreation member seeding, both retired in this change.",
+        "Replacement: ColumnAgentDispatcher uses configured processor missions, project skills and processor memory; role-specific source files prescribe the former fixed pipeline."
+      ]
+    },
+    "ProjectTemplate/Agents/programmer/SKILL.md": {
+      "reason": "Explicit owner-requested retirement of legacy roles from new-project initialization; existing workspaces are preserved.",
+      "sha256": "8620bf87738224e65a6ffed6117b29a674ff7171f5807a6d4ba9afb1c9e6ad1f",
+      "decision": "removed",
+      "last_reviewed_at": "2026-10-25T09:50:58.5585945Z",
+      "last_content_change_at": "2026-10-24T10:18:40.0000000Z",
+      "evidence": [
+        "Consumer trace: resources were copied only through AgentsTemplateService and ProjectCreation member seeding, both retired in this change.",
+        "Replacement: ColumnAgentDispatcher uses configured processor missions, project skills and processor memory; role-specific source files prescribe the former fixed pipeline."
+      ]
+    },
+    "ProjectTemplate/Agents/programmer/memory/MEMORY.md": {
+      "reason": "Explicit owner-requested retirement of legacy roles from new-project initialization; existing workspaces are preserved.",
+      "sha256": "43e970edf10bfed0e48ee12f53a89aa3948f8316d99f2c6e406fd2edf4462000",
+      "decision": "removed",
+      "last_reviewed_at": "2026-10-25T09:50:58.8598217Z",
+      "last_content_change_at": "2026-07-12T00:50:55.0000000Z",
+      "evidence": [
+        "Consumer trace: resources were copied only through AgentsTemplateService and ProjectCreation member seeding, both retired in this change.",
+        "Replacement: ColumnAgentDispatcher uses configured processor missions, project skills and processor memory; role-specific source files prescribe the former fixed pipeline."
+      ]
+    },
+    "ProjectTemplate/Agents/qa-tester/SKILL.md": {
+      "reason": "Explicit owner-requested retirement of legacy roles from new-project initialization; existing workspaces are preserved.",
+      "sha256": "6ad1c27f105699cb337791cbf6b49ae53829732a4c6423cd127ca7ebcd389b28",
+      "decision": "removed",
+      "last_reviewed_at": "2026-10-25T09:50:59.0958717Z",
+      "last_content_change_at": "2026-10-24T10:18:40.0000000Z",
+      "evidence": [
+        "Consumer trace: resources were copied only through AgentsTemplateService and ProjectCreation member seeding, both retired in this change.",
+        "Replacement: ColumnAgentDispatcher uses configured processor missions, project skills and processor memory; role-specific source files prescribe the former fixed pipeline."
+      ]
+    },
+    "ProjectTemplate/Agents/qa-tester/memory/MEMORY.md": {
+      "reason": "Explicit owner-requested retirement of legacy roles from new-project initialization; existing workspaces are preserved.",
+      "sha256": "684c38954d52b2f9a4e73fab4460cea1b3a1777ea9e042c95e2c291bab650be7",
+      "decision": "removed",
+      "last_reviewed_at": "2026-10-25T09:50:59.4170928Z",
+      "last_content_change_at": "2026-07-12T00:50:55.0000000Z",
+      "evidence": [
+        "Consumer trace: resources were copied only through AgentsTemplateService and ProjectCreation member seeding, both retired in this change.",
+        "Replacement: ColumnAgentDispatcher uses configured processor missions, project skills and processor memory; role-specific source files prescribe the former fixed pipeline."
+      ]
+    },
+    "ProjectTemplate/Agents/evaluator/SKILL.md": {
+      "reason": "Explicit owner-requested retirement of legacy roles from new-project initialization; existing workspaces are preserved.",
+      "sha256": "4cbec29106ff4140ec2d62783073786be8e6f5645b04e8f88e937c2c38340427",
+      "decision": "removed",
+      "last_reviewed_at": "2026-10-25T09:50:59.6927730Z",
+      "last_content_change_at": "2026-10-24T10:18:40.0000000Z",
+      "evidence": [
+        "Consumer trace: resources were copied only through AgentsTemplateService and ProjectCreation member seeding, both retired in this change.",
+        "Replacement: ColumnAgentDispatcher uses configured processor missions, project skills and processor memory; role-specific source files prescribe the former fixed pipeline."
+      ]
+    },
+    "ProjectTemplate/Agents/evaluator/memory/MEMORY.md": {
+      "reason": "Explicit owner-requested retirement of legacy roles from new-project initialization; existing workspaces are preserved.",
+      "sha256": "2803d7870ed50bf4a2b57d749746513875c8c7141e3314e9ae4bf645652fc0df",
+      "decision": "removed",
+      "last_reviewed_at": "2026-10-25T09:51:00.0563424Z",
+      "last_content_change_at": "2026-07-12T00:50:55.0000000Z",
+      "evidence": [
+        "Consumer trace: resources were copied only through AgentsTemplateService and ProjectCreation member seeding, both retired in this change.",
+        "Replacement: ColumnAgentDispatcher uses configured processor missions, project skills and processor memory; role-specific source files prescribe the former fixed pipeline."
+      ]
+    },
+    "ProjectTemplate/Agents/committer/SKILL.md": {
+      "reason": "Explicit owner-requested retirement of legacy roles from new-project initialization; existing workspaces are preserved.",
+      "sha256": "5d5166b3e3f372956e346e87adcaccd2a3e4e891c459c727b0844a3b0cc6b5f6",
+      "decision": "removed",
+      "last_reviewed_at": "2026-10-25T09:51:00.4075472Z",
+      "last_content_change_at": "2026-08-01T22:48:21.0000000Z",
+      "evidence": [
+        "Consumer trace: resources were copied only through AgentsTemplateService and ProjectCreation member seeding, both retired in this change.",
+        "Replacement: ColumnAgentDispatcher uses configured processor missions, project skills and processor memory; role-specific source files prescribe the former fixed pipeline."
+      ]
+    },
+    "ProjectTemplate/Agents/committer/memory/MEMORY.md": {
+      "reason": "Explicit owner-requested retirement of legacy roles from new-project initialization; existing workspaces are preserved.",
+      "sha256": "516459c315599ca0be10583c89d02c14c36f6e87307e5cbed1e01b4d95ade5bc",
+      "decision": "removed",
+      "last_reviewed_at": "2026-10-25T09:51:00.7907945Z",
+      "last_content_change_at": "2026-07-12T00:50:55.0000000Z",
+      "evidence": [
+        "Consumer trace: resources were copied only through AgentsTemplateService and ProjectCreation member seeding, both retired in this change.",
+        "Replacement: ColumnAgentDispatcher uses configured processor missions, project skills and processor memory; role-specific source files prescribe the former fixed pipeline."
+      ]
+    },
+    "ProjectTemplate/Agents/documentalist/SKILL.md": {
+      "reason": "Explicit owner-requested retirement of legacy roles from new-project initialization; existing workspaces are preserved.",
+      "sha256": "4658d9ab728e933aa0e4a0cd70bbe66bf3ef9192574b170be791bf2062fe2b30",
+      "decision": "removed",
+      "last_reviewed_at": "2026-10-25T09:51:01.0762304Z",
+      "last_content_change_at": "2026-10-25T09:48:18.0000000Z",
+      "evidence": [
+        "Consumer trace: resources were copied only through AgentsTemplateService and ProjectCreation member seeding, both retired in this change.",
+        "Replacement: ColumnAgentDispatcher uses configured processor missions, project skills and processor memory; role-specific source files prescribe the former fixed pipeline."
+      ]
+    },
+    "ProjectTemplate/Agents/documentalist/memory/MEMORY.md": {
+      "reason": "Explicit owner-requested retirement of legacy roles from new-project initialization; existing workspaces are preserved.",
+      "sha256": "9a6d7591667fe469e39c9ceedeb0ef9444431830a6eaf5653c5b3e41050c7ac2",
+      "decision": "removed",
+      "last_reviewed_at": "2026-10-25T09:51:01.4474913Z",
+      "last_content_change_at": "2026-07-12T00:50:55.0000000Z",
+      "evidence": [
+        "Consumer trace: resources were copied only through AgentsTemplateService and ProjectCreation member seeding, both retired in this change.",
+        "Replacement: ColumnAgentDispatcher uses configured processor missions, project skills and processor memory; role-specific source files prescribe the former fixed pipeline."
+      ]
+    },
+    "ProjectTemplate/Agents/code-janitor/SKILL.md": {
+      "reason": "Explicit owner-requested retirement of legacy roles from new-project initialization; existing workspaces are preserved.",
+      "sha256": "2ead83716cda7d554269695d2b72661bc882562878d4beb37a85c50a82e8bac4",
+      "decision": "removed",
+      "last_reviewed_at": "2026-10-25T09:51:01.7286820Z",
+      "last_content_change_at": "2026-10-24T10:18:40.0000000Z",
+      "evidence": [
+        "Consumer trace: resources were copied only through AgentsTemplateService and ProjectCreation member seeding, both retired in this change.",
+        "Replacement: ColumnAgentDispatcher uses configured processor missions, project skills and processor memory; role-specific source files prescribe the former fixed pipeline."
+      ]
+    },
+    "ProjectTemplate/Agents/code-janitor/memory/MEMORY.md": {
+      "reason": "Explicit owner-requested retirement of legacy roles from new-project initialization; existing workspaces are preserved.",
+      "sha256": "53d29b1df7682e6b3e3cc6d69d81d6fe4dea8b8e432e2bbb134885b8f0aceeec",
+      "decision": "removed",
+      "last_reviewed_at": "2026-10-25T09:51:02.1169316Z",
+      "last_content_change_at": "2026-07-12T00:50:55.0000000Z",
+      "evidence": [
+        "Consumer trace: resources were copied only through AgentsTemplateService and ProjectCreation member seeding, both retired in this change.",
+        "Replacement: ColumnAgentDispatcher uses configured processor missions, project skills and processor memory; role-specific source files prescribe the former fixed pipeline."
+      ]
     }
   }
 }

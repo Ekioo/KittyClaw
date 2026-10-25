@@ -2,9 +2,22 @@ using System.Text.Json;
 
 namespace KittyClaw.Core.Tests.Web;
 
+[Collection("MCP endpoint environment")]
 public sealed class ProjectCreationGitInitializationUiTests
 {
     private static string RepoRoot() => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+
+    [Fact]
+    public async Task ProjectCreation_RendersWithoutLegacyMemberInitialization()
+    {
+        using var factory = new Api.McpEndpointTests.ApiFactory();
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/");
+
+        response.EnsureSuccessStatusCode();
+        Assert.Contains("data-testid=\"create-project-open\"", await response.Content.ReadAsStringAsync());
+    }
 
     [Fact]
     public void ProjectCreation_OffersGitInitializationOnlyForEligibleWorkspace()
@@ -18,6 +31,8 @@ public sealed class ProjectCreationGitInitializationUiTests
         Assert.Contains("private bool _initializeGit = true", source);
         Assert.Contains("inspectionVersion == _workspaceInspectionVersion", source);
         Assert.Contains("InitializeAsync(_newWorkspacePath.Trim(), overwrite, initializeGit)", source);
+        Assert.DoesNotContain("MemberService", source);
+        Assert.DoesNotContain("EnsureAgentMembers", source);
     }
 
     [Theory]

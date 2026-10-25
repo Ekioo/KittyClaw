@@ -6,7 +6,6 @@
 @inject MinimalWorkflowService MinimalWorkflow
 @inject FirstRunProviderService FirstRunProvider
 @inject AgentsTemplateService AgentsTemplate
-@inject MemberService MemberService
 @inject LocalizationService L
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -295,7 +294,6 @@ else if (_createdProject is not null)
             await ProjectService.UpdateProjectAsync(project.Slug, _newWorkspacePath.Trim());
             var initializeGit = _gitWorkspace?.CanInitialize == true && _initializeGit;
             await AgentsTemplate.InitializeAsync(_newWorkspacePath.Trim(), overwrite, initializeGit);
-            await EnsureAgentMembersAsync(project.Slug);
 
             _newProjectName = "";
             _open = false;
@@ -348,15 +346,6 @@ else if (_createdProject is not null)
             _validatedIntake.JourneyId, plan.Primary!.Model,
             ct => FirstRunProvider.MarkStartedAsync(_validatedIntake.JourneyId, ct));
         _firstTicketConfirmed = true;
-    }
-
-    private async Task EnsureAgentMembersAsync(string projectSlug)
-    {
-        foreach (var slug in AgentsTemplate.AgentSlugs())
-        {
-            if (!await MemberService.MemberExistsAsync(projectSlug, slug))
-                await MemberService.CreateMemberAsync(projectSlug, slug);
-        }
     }
 
     public void Dispose()

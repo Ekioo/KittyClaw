@@ -1,10 +1,10 @@
 # Project template
 
 ## Purpose
-Source of truth for new-project initialization. When a project is created, these files are copied into the workspace so that agents have skills, memories, and independent budget settings.
+Source of truth for shared new-project guidance and budget settings. No fixed agent roles or agent members are seeded. Column processors use their configured missions, project skills, and persistent processor memories.
 
 ## Key components
-- `ProjectTemplate/Agents/` — per-agent folders (`SKILL.md`, a `memory/MEMORY.md` index skeleton), shared `preamble.md`, `memory-consolidation.md`, and `agent-budget.json`. Embedded with `LogicalName` `KittyClaw.Core.AgentsTemplate/…` and written to `<workspace>/.agents/` on Initialize. Memory topic files are not shipped — the consolidation pass creates them at runtime beside the index.
+- `ProjectTemplate/Agents/` — shared `preamble.md`, `memory-consolidation.md`, and `agent-budget.json`. Embedded with `LogicalName` `KittyClaw.Core.AgentsTemplate/…` and written to `<workspace>/.agents/` on Initialize.
 - `ProjectTemplate/AGENTS.md` — the single source of truth for workspace-wide agent guidance, read natively by Codex and Grok.
 - `ProjectTemplate/CLAUDE.md` — a one-line `@AGENTS.md` compatibility import for Claude Code; it contains no competing instructions.
 - These root-level files are embedded with `LogicalName` `KittyClaw.Core.AgentsTemplateRoot/…` and written to the workspace root.
@@ -13,6 +13,7 @@ Source of truth for new-project initialization. When a project is created, these
 ## Notes
 - Source folder is `Agents/` (no leading dot) so the repo's `.agents` gitignore does not hide the template files; only the destination at runtime is `.agents/`.
 - Template files must stay **generic** — no KittyClaw-specific stack references — since the same files ship to every initialized project.
+- Retiring the former role templates does not migrate or delete existing members, workflows, skills, or memories. Initialization only copies the current shared files; even with overwrite enabled it leaves former role directories and project-specific configuration intact.
 
 ## Entry points
 - Project creation flow (Home page → Create → Initialize).

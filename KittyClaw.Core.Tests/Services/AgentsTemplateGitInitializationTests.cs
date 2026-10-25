@@ -7,6 +7,54 @@ namespace KittyClaw.Core.Tests.Services;
 public sealed class AgentsTemplateGitInitializationTests
 {
     [Fact]
+    public async Task Initialize_NewWorkspace_WritesSharedGuidanceWithoutLegacyRoles()
+    {
+        using var temp = new TempDir();
+        var service = new AgentsTemplateService();
+
+        await service.InitializeAsync(temp.Path, overwriteConflicts: false, initializeGit: false);
+
+        Assert.Equal(new[] { "agent-budget.json", "memory-consolidation.md", "preamble.md" },
+            Directory.GetFiles(Path.Combine(temp.Path, ".agents")).Select(Path.GetFileName).OrderBy(n => n));
+        Assert.Empty(Directory.GetDirectories(Path.Combine(temp.Path, ".agents")));
+        Assert.True(File.Exists(Path.Combine(temp.Path, "AGENTS.md")));
+        Assert.True(File.Exists(Path.Combine(temp.Path, "CLAUDE.md")));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Initialize_ExistingWorkspace_PreservesRoleAndProcessorConfiguration(bool overwrite)
+    {
+        using var temp = new TempDir();
+        var existing = new Dictionary<string, string>
+        {
+            [".agents/groomer/SKILL.md"] = "Owner-customized legacy instructions",
+            [".agents/programmer/memory/MEMORY.md"] = "Existing lessons",
+            [".agents/skills/custom/SKILL.md"] = "Project skill",
+            [".agents/processors/column-42/memory/MEMORY.md"] = "Processor lessons",
+            [".agents/automations.json"] = "{\"legacy\":true}",
+        };
+        foreach (var (relative, content) in existing)
+        {
+            var path = Path.Combine(temp.Path, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllTextAsync(path, content);
+        }
+        var service = new AgentsTemplateService();
+        Assert.Empty(service.DetectConflicts(temp.Path));
+
+        var result = await service.InitializeAsync(temp.Path, overwrite, initializeGit: false);
+
+        foreach (var (relative, content) in existing)
+        {
+            Assert.Equal(content, await File.ReadAllTextAsync(Path.Combine(temp.Path, relative)));
+            Assert.DoesNotContain(relative, result.Written);
+        }
+        Assert.False(Directory.Exists(Path.Combine(temp.Path, ".agents", "producer")));
+    }
+
+    [Fact]
     public async Task Initialize_WritesPlainLanguageTicketGuidanceToPreamble()
     {
         using var temp = new TempDir();

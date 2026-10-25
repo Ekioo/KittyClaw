@@ -26,7 +26,7 @@ KittyClaw.QaRunner/        Isolated test-instance launcher (Playwright + scenari
 KittyClaw.ClaudeMock/      Mock agent CLI used by QaRunner for hermetic dispatch tests
 ProjectTemplate/           Source of truth for new-project initialization. Embedded into
                            KittyClaw.Core.dll and copied into each workspace on Initialize.
-  Agents/                    Skills, memory stubs, agent-budget.json, preamble.md (written to <workspace>/.agents/ on Initialize).
+  Agents/                    Shared guidance, memory-consolidation.md and agent-budget.json (written to <workspace>/.agents/ on Initialize).
   AGENTS.md                  Provider-neutral workspace guide (source of truth).
   CLAUDE.md                  Claude Code compatibility import of AGENTS.md.
 tools/                     Repo helpers (publish-stable.ps1, …).
@@ -52,7 +52,7 @@ tools/                     Repo helpers (publish-stable.ps1, …).
 ## Project template embedding
 
 Files under `ProjectTemplate/` are the source of truth for new-project initialization:
-- `ProjectTemplate/Agents/preamble.md`, `*/SKILL.md`, `*/memory/MEMORY.md`, `memory-consolidation.md`, `agent-budget.json` are embedded with `LogicalName` `KittyClaw.Core.AgentsTemplate/…` and written to `<workspace>/.agents/` on Initialize. The source folder is `Agents/` (no leading dot) so the repo's `.agents` gitignore doesn't hide template files; only the destination at runtime is `.agents/`. Agent memory uses a per-topic layout: `memory/MEMORY.md` is a scored index (always injected), with one topic file per subject created at runtime (read on demand); the consolidation pass curates it.
+- `ProjectTemplate/Agents/preamble.md`, `memory-consolidation.md`, and `agent-budget.json` are embedded with `LogicalName` `KittyClaw.Core.AgentsTemplate/…` and written to `<workspace>/.agents/` on Initialize. The source folder is `Agents/` (no leading dot) so the repo's `.agents` gitignore doesn't hide template files; only the destination at runtime is `.agents/`. No fixed roles, role memory stubs, or agent members are seeded. Existing project roles, skills, memories, members and workflows are preserved. Processors use configured project skills and `.agents/processors/column-<id>/memory/MEMORY.md`.
 - Everything else under `ProjectTemplate/` (notably `AGENTS.md` and its `CLAUDE.md` compatibility import) is embedded with `LogicalName` `KittyClaw.Core.AgentsTemplateRoot/…` and written to the workspace root.
 
 `AgentsTemplateService` enumerates the embedded resources by these prefixes and copies them out via `InitializeAsync(workspace, overwrite)` (called by the project-creation flow). Keep `ProjectTemplate/**` **generic** (no KittyClaw-specific stack references) since the same files ship to every initialized project.

@@ -4,7 +4,7 @@
 
 Projects can contain multiple independent pipelines. Each pipeline and column has a stable numeric identity, so display names can be changed without breaking tickets, processors, skills, or routing rules.
 
-This model is intended for business workflows where a ticket is claimed from a column, processed once, and routed to its next business state. It runs alongside the legacy trigger/action automation engine, which remains available for backward compatibility and cron/interval work.
+This model is intended for business workflows where a ticket is claimed from a column, processed once, and routed to its next business state. Independent scheduled tasks handle cron/interval work. No fixed agent-role pipeline is required or initialized.
 
 ## Domain model
 

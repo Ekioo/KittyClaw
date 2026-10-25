@@ -14,8 +14,10 @@ Consult it before interacting with the API. All ticket, comment, column, member,
 Automated agents for this project live under `.agents/`:
 
 - `.agents/preamble.md` — shared context injected into every agent run.
-- `.agents/{agent}/SKILL.md` — per-agent instructions (editable).
-- `.agents/{agent}/memory/` — per-agent persistent memory: `MEMORY.md` is a scored index (always injected), with one topic file per subject (read on demand). Grows over runs; curated by a consolidation pass.
+- `.agents/skills/{skill}/SKILL.md` — project skills selected by column processors.
+- `.agents/processors/column-{id}/memory/MEMORY.md` — persistent lessons for a column processor.
 - `.agents/agent-budget.json` — optional daily agent spending limit.
 
 Column processors and scheduled tasks select the model, instructions, and project skills for each stage. Follow the current execution context and use the board API above when needed.
+
+New workspaces do not receive fixed agent roles. Existing role instructions and memories remain available in projects that already have them.
