@@ -94,3 +94,18 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 ### Ticket improvement
 
 The shared ticket panel and right-click menus on the project board offer **Improve with AI**. `TicketImprovementService` requests a structured proposal through the existing provider runner. The editable preview keeps description and acceptance criteria separate and flags unknown information as questions. Saving replaces both atomically, rejects concurrent content changes, preserves assessments only for identical criteria, and records an activity entry. Closing the dialog cancels the analysis.
+
+### Chat model effort
+
+The chat composer displays an effort selector next to its model picker. `ModelEffort`
+lists supported values per known model; unknown models and providers without a
+supported effort transport display a disabled control. Supported models start with an explicit `medium` selection, which is always sent to
+the CLI instead of inheriting a hidden provider configuration. Changing models resets
+effort to this explicit initial value. Legacy conversations without an effort also
+resolve to `medium` on load and dispatch.
+
+`ChatStartRequest.Effort` is validated against the effective conversation model before
+any chat writes or dispatch. The selection is stored per conversation in
+`SessionRegistry` and returned by `/chat/model` when reopening the drawer. Changing
+effort applies to the next turn without clearing conversation history. Claude receives
+`--effort`; Codex receives a `model_reasoning_effort` config override, including on resume.

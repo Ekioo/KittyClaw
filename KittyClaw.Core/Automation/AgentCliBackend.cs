@@ -8,7 +8,8 @@ public sealed record AgentDispatchTarget(
     string? Model,
     CliProvider Provider,
     IReadOnlyDictionary<string, string> Environment,
-    string? ValidationError = null)
+    string? ValidationError = null,
+    string? Effort = null)
 {
     public static AgentDispatchTarget ClaudeDefault { get; } =
         new(null, CliProvider.Claude, new Dictionary<string, string>());
@@ -87,6 +88,8 @@ internal abstract class AgentCliBackend
         else { args.Add("-n"); args.Add(sessionName); args.Add("--session-id"); args.Add(sessionId); }
         if (context.Target.Model is not null) { args.Add("--model"); args.Add(context.Target.Model); }
 
+        if (context.Target.Effort is { } effort) { args.Add("--effort"); args.Add(effort); }
+
         // Fail-closed enforcement: route every PreToolUse event through the KittyClaw
         // approvals gate before the effect. Only Claude Code has this pre-effect hook;
         // SpawnAndWaitAsync rejects Enforce dispatches for the other providers.
@@ -151,6 +154,11 @@ internal abstract class AgentCliBackend
                 "--skip-git-repo-check", "--config", "notify=[]",
             };
             if (context.Target.Model is not null) { args.Add("--model"); args.Add(context.Target.Model); }
+            if (context.Target.Effort is { } effort)
+            {
+                args.Add("--config");
+                args.Add($"model_reasoning_effort=\"{effort}\"");
+            }
             if (context.ImagePaths is { Count: > 0 })
                 foreach (var image in context.ImagePaths) { args.Add("--image"); args.Add(image); }
             if (isResume) { args.Add("resume"); args.Add(sessionId); }

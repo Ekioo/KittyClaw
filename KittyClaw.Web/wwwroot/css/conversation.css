@@ -141,3 +141,9 @@
     .agent-conversation .conversation-input-area .conversation-submit-action, .agent-conversation .conversation-input-area .conversation-attach { width: 44px; height: 44px; min-height: 44px; flex-basis: 44px; }
     .agent-conversation .conversation-input-area .conversation-inject, .conversation-menu button { min-height: 44px; }
 }
+
+.chat-effort-picker { display: flex; align-items: center; gap: .3rem; color: var(--text-muted); font-size: .75rem; min-width: 0; }
+@media (max-width: 767px) {
+    .agent-conversation .conversation-composer-submit { flex-wrap: wrap; flex-shrink: 1; }
+    .chat-effort-picker { flex-wrap: wrap; }
+}

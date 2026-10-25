@@ -90,7 +90,7 @@ public record SaveRtkConfigRequest(bool Enabled);
 public record SteerRunRequest(string Text, IReadOnlyList<ChatImageDto>? Images = null);
 public record BrowseFolderRequest(string? InitialPath = null);
 public record ChatImageDto(string DataUrl, string Mime, string Name, long SizeBytes);
-public record ChatStartRequest(string Message, string Target = "owner-chat", bool ForceNew = false, int? TicketId = null, IReadOnlyList<ChatImageDto>? Images = null, string? Model = null, bool ResumeInterrupted = false);
+public record ChatStartRequest(string Message, string Target = "owner-chat", bool ForceNew = false, int? TicketId = null, IReadOnlyList<ChatImageDto>? Images = null, string? Model = null, bool ResumeInterrupted = false, string? Effort = null);
 public record ChatTargetDto(string Slug, string Name, string Kind);
 public record ChatTargetsResponse(string? LastTarget, List<ChatTargetDto> Targets);
 public record ChatMessageDto(string Role, string Text, string? ToolName, string? Detail, string CreatedAt,
