@@ -3,6 +3,7 @@
 @using KittyClaw.Core.Services
 @using KittyClaw.Core.Automation
 @inject ProjectService ProjectService
+@inject RunWorkingFilesService WorkingFiles
 @inject MemberService MemberService
 @inject LabelService LabelService
 @inject ColumnService ColumnService
@@ -129,6 +130,7 @@ else
             <div class="settings-row">
                 <input id="working-files-path" class="settings-input" aria-describedby="working-files-hint" placeholder="@L["WorkspacePlaceholder"]" @bind="_workingFilesPath" @bind:event="oninput" />
                 <button class="settings-browse" type="button" @onclick="() => _workingFilesPickerOpen = true">📁 @L["Browse"]</button>
+                <button class="settings-browse" type="button" @onclick="OpenWorkingFilesFolder" disabled="@_openingWorkingFiles" title="@L["OpenProjectWorkingFilesHint"]" data-testid="open-project-working-files">📂 @L["OpenRunWorkingFiles"]</button>
             </div>
             @if (_workspaceStatus is not null)
             {
@@ -625,6 +627,7 @@ else
     private string _workspacePath = "";
     private string _workingFilesPath = "";
     private bool _workingFilesPickerOpen;
+    private bool _openingWorkingFiles;
     private bool _savingWorkspace, _folderPickerOpen;
     private (string text, string css)? _workspaceStatus;
     private bool _worktreesEnabled, _savingWorktrees;
@@ -748,6 +751,18 @@ else
     }
 
     private void CloseFolderPicker() => _folderPickerOpen = false;
+
+    private async Task OpenWorkingFilesFolder()
+    {
+        _openingWorkingFiles = true;
+        _workspaceStatus = null;
+        try { await WorkingFiles.OpenProjectAsync(Slug, ProjectService); }
+        catch (Exception ex)
+        {
+            _workspaceStatus = ($"{L["OpenRunWorkingFilesError"]}: {ex.Message}", "settings-status-err");
+        }
+        finally { _openingWorkingFiles = false; }
+    }
 
     private async Task SaveWorkspace()
     {

@@ -1,4 +1,5 @@
 {
+  "OpenProjectWorkingFilesHint": "Abrir la carpeta guardada en el equipo de KittyClaw, o la carpeta predeterminada del proyecto si está vacía. Guarda los cambios primero.",
   "WorkingFilesPath": "Carpeta de archivos de trabajo",
   "WorkingFilesHint": "Carpeta base absoluta opcional para archivos temporales, borradores y pruebas. En blanco: carpeta de datos de KittyClaw (artifacts/proyecto). Cada ejecución tiene una subcarpeta creada automáticamente que se conserva al finalizar. Los agentes deben usarla. Guardar ambas carpetas con Guardar.",
   "SettingsTitle": "Ajustes",

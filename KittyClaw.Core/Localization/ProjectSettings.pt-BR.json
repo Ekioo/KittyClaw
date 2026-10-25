@@ -1,4 +1,5 @@
 {
+  "OpenProjectWorkingFilesHint": "Abrir a pasta salva no computador do KittyClaw, ou a pasta padrão do projeto se estiver vazia. Salve as alterações primeiro.",
   "WorkingFilesPath": "Pasta de arquivos de trabalho",
   "WorkingFilesHint": "Pasta base absoluta opcional para arquivos temporários, rascunhos e evidências. Em branco: pasta de dados do KittyClaw (artifacts/projeto). Cada execução tem uma subpasta criada automaticamente e mantida após a conclusão. Os agentes devem usá-la. Salve ambas as pastas com Salvar.",
   "SettingsTitle": "Configurações",

@@ -359,6 +359,14 @@ public partial class ProjectService
         return project;
     }
 
+    public string ResolveWorkingFilesRoot(Project project)
+    {
+        _ = GetProjectDbPath(project.Slug);
+        return Path.GetFullPath(string.IsNullOrWhiteSpace(project.WorkingFilesPath)
+            ? Path.Combine(_dataDir, "artifacts", project.Slug)
+            : project.WorkingFilesPath);
+    }
+
     /// <summary>Creates the persistent artifact directory for one run. Retries reuse its run id.</summary>
     public string PrepareRunWorkingFilesDirectory(Project project, string runId)
     {
@@ -367,9 +375,7 @@ public partial class ProjectService
         if (string.IsNullOrWhiteSpace(runId) ||
             runId.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '-' && c != '_'))
             throw new ArgumentException("Invalid run id for the working files folder.", nameof(runId));
-        var root = string.IsNullOrWhiteSpace(project.WorkingFilesPath)
-            ? Path.Combine(_dataDir, "artifacts", project.Slug)
-            : project.WorkingFilesPath;
+        var root = ResolveWorkingFilesRoot(project);
         var path = Path.GetFullPath(Path.Combine(root, runId));
         try
         {

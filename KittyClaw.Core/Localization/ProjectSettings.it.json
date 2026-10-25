@@ -1,4 +1,5 @@
 {
+  "OpenProjectWorkingFilesHint": "Apri la cartella salvata sul computer KittyClaw, o la cartella predefinita del progetto se vuota. Salva prima le modifiche.",
   "WorkingFilesPath": "Cartella dei file di lavoro",
   "WorkingFilesHint": "Cartella base assoluta facoltativa per file temporanei, bozze e prove. Vuoto: cartella dati KittyClaw (artifacts/progetto). Ogni esecuzione ha una sottocartella creata automaticamente e conservata al termine. Gli agenti devono usarla. Salvare entrambe le cartelle con Salva.",
   "SettingsTitle": "Impostazioni",

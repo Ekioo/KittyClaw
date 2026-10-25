@@ -1,4 +1,5 @@
 {
+  "OpenProjectWorkingFilesHint": "在KittyClaw计算机上打开已保存的工作文件夹；留空时打开项目默认文件夹。请先保存更改。",
   "WorkingFilesPath": "工作文件夹",
   "WorkingFilesHint": "可选的绝对路径基础文件夹，用于临时文件、草稿和证据。留空使用KittyClaw数据文件夹（artifacts/项目）。每次运行都有自动创建的子文件夹，完成后保留。代理必须使用此文件夹。点击保存以保存两个文件夹。",
   "SettingsTitle": "设置",

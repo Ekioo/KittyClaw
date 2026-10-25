@@ -1,14 +1,16 @@
 using System.Diagnostics;
 using KittyClaw.Core.Automation;
+using KittyClaw.Core.Services;
 
 namespace KittyClaw.Web.Services;
 
 /// <summary>Opens the recorded artifact directory on the KittyClaw host.</summary>
 public sealed class RunWorkingFilesService(AgentRunRegistry runs)
 {
-    internal static ProcessStartInfo BuildOpenStartInfo(AgentRun run)
+    internal static ProcessStartInfo BuildOpenStartInfo(AgentRun run) => BuildOpenStartInfo(run.WorkingFilesPath);
+
+    private static ProcessStartInfo BuildOpenStartInfo(string? path)
     {
-        var path = run.WorkingFilesPath;
         if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path) || !Directory.Exists(path))
             throw new InvalidOperationException("The working files folder is unavailable or has been removed.");
         var executable = OperatingSystem.IsWindows() ? "explorer.exe"
@@ -16,6 +18,15 @@ public sealed class RunWorkingFilesService(AgentRunRegistry runs)
         var info = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true };
         info.ArgumentList.Add(path);
         return info;
+    }
+
+    public async Task OpenProjectAsync(string projectSlug, ProjectService projects)
+    {
+        var project = await projects.GetProjectAsync(projectSlug)
+            ?? throw new InvalidOperationException("The project is unavailable.");
+        var path = projects.ResolveWorkingFilesRoot(project);
+        Directory.CreateDirectory(path);
+        using var process = Process.Start(BuildOpenStartInfo(path));
     }
 
     public void Open(string projectSlug, string runId)
