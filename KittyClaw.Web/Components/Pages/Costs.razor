@@ -5,11 +5,8 @@
 @attribute [StreamRendering]
 
 <PageTitle>@L["Costs"]</PageTitle>
-<main class="costs-page">
-    <header class="costs-header">
-        <a href="/" class="costs-back-link"><span aria-hidden="true">&larr;</span> @L["BackToProjects"]</a>
-        <h1>@L["Costs"]</h1>
-    </header>
+<UtilityPageHeader Title="@L["Costs"]" />
+<main class="costs-page utility-page-container">
 
     <section class="cost-filter-card @(_mobileFiltersOpen ? "mobile-filters-open" : "")" aria-label="@L["CostFilters"]">
         <button type="button" class="mobile-filter-toggle" aria-expanded="@(_mobileFiltersOpen ? "true" : "false")"

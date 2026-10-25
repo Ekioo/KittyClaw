@@ -21,6 +21,24 @@
 }
 .back-link:hover { color: var(--text); background: transparent; }
 
+/* Utility pages share one content measure and one header in browser and desktop. */
+:root { --utility-page-width: 1180px; --utility-page-gutter: 24px; }
+:root:has(.utility-page-container) { scrollbar-gutter: stable; }
+.utility-page-container:is(.settings-container, .costs-page) {
+    width: 100%;
+    max-width: var(--utility-page-width);
+    margin: 0 auto;
+    padding: 24px var(--utility-page-gutter) 48px;
+    min-width: 0;
+}
+.utility-page-header { min-height: 64px; }
+.utility-page-header:not(.desktop-window-header) { padding-inline: var(--utility-page-gutter); }
+.utility-page-header .back-link { min-height: 44px; }
+@media (max-width: 767px) {
+    :root { --utility-page-gutter: 16px; }
+    .utility-page-container:is(.settings-container, .costs-page) { padding-top: 16px; }
+}
+
 /* Filter bar */
 .filter-bar {
     flex: 1;

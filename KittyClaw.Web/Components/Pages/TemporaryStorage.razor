@@ -8,11 +8,8 @@
 @implements IDisposable
 
 <PageTitle>@L["TemporaryStorageTitle"]</PageTitle>
-<div class="temporary-storage-header">
-    <a class="back-link" href="/">&larr; @L["BackToProjects"]</a>
-    <h1>@L["TemporaryStorageTitle"]</h1>
-</div>
-<main class="settings-container temporary-storage-page">
+<UtilityPageHeader Title="@L["TemporaryStorageTitle"]" />
+<main class="settings-container utility-page-container temporary-storage-page">
     <section class="settings-section">
         <p role="note">@L["TemporaryStorageWarning"]</p>
         <p class="settings-hint">@L["TemporaryStorageScope"]</p>

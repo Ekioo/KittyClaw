@@ -1,0 +1,10 @@
+@inject LocalizationService L
+
+<header class="page-header utility-page-header">
+    <a class="back-link" href="/"><span aria-hidden="true">&larr;</span> @L["BackToProjects"]</a>
+    <h1>@Title</h1>
+</header>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+}

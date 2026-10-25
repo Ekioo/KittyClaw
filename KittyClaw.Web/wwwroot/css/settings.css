@@ -193,9 +193,6 @@
 .temporary-storage-folder code { overflow-wrap: anywhere; }
 .temporary-storage-page details { margin-bottom: 1rem; }
 
-.temporary-storage-header { max-width: 900px; margin: 1.5rem auto 0; padding: 0 2.2rem; display: flex; flex-direction: column; align-items: flex-start; gap: 0.75rem; }
-.temporary-storage-header h1 { margin: 0; font-size: 1.5rem; }
-.temporary-storage-header .back-link { margin: 0; padding-left: 0; }
 .temporary-storage-page .settings-section { min-width: 0; text-align: left; }
 .temporary-storage-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 1rem; }
 .temporary-storage-heading h2 { margin: 0; overflow-wrap: anywhere; }
@@ -211,6 +208,5 @@
 .temporary-storage-page summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 .temporary-storage-folder code { white-space: normal; }
 @media (max-width: 600px) {
-    .temporary-storage-header { padding: 0 1rem; }
     .temporary-storage-page .settings-row { align-items: flex-start; }
 }

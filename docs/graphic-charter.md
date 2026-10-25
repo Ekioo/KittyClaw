@@ -191,6 +191,34 @@ The global rule covers buttons, links, selects, and explicit tab stops. Text inp
 retain their established accent border plus soft shadow. Components may move the
 ring inward when clipping requires it, but should continue using `--focus-ring`.
 
+## Utility page headers and content width
+
+Global settings, costs, and temporary storage use `UtilityPageHeader` and the
+`utility-page-container` class. New instance-wide utility pages must reuse these
+primitives instead of defining their own header, back-link styling, or page width.
+
+- The shared header contains the same localized back-to-projects link followed by
+  one `h1`. Keep it outside the content container. Use the existing `page-header`
+  styling for its surface, divider, typography and spacing.
+- In the Windows desktop shell this same header becomes the fixed 64 px window
+  toolbar, with the shared logo and native window controls. Do not add a second
+  title bar or leave the page heading below the fallback toolbar.
+- Utility content is centered with a maximum outer width of 1180 px, including
+  24 px horizontal gutters. Below 768 px, gutters become 16 px. Content begins
+  24 px below the header on desktop and 16 px on mobile; bottom padding is 48 px.
+  The shared tokens are `--utility-page-width` and `--utility-page-gutter`.
+- Reserve a stable scrollbar gutter on utility pages so switching between short
+  and long pages does not shift their content edges.
+- Cards and filters fill this shared content measure. Feature-specific CSS may
+  arrange their interiors but must not override the page's width or gutters.
+- Browser and phone headers retain their responsive layout. Back links have a
+  minimum 44 px touch target; long titles may wrap on phones. Board and dashboard
+  canvases retain their dedicated layouts rather than adopting the utility width.
+
+Verify all three utility pages at the same viewport when changing these rules:
+their toolbar geometry and content edges must match in browser and desktop views,
+with no horizontal overflow on a phone.
+
 ## Animations
 
 - All transitions use `0.12–0.15s` linear or default ease — never overshoot 0.2s

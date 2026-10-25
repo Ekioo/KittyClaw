@@ -82,7 +82,7 @@
 
     const install = () => {
         document.documentElement.classList.add('windows-desktop');
-        const header = document.querySelector('.page-header, .costs-header');
+        const header = document.querySelector('.page-header');
         if (header) {
             fallback?.remove();
             decorate(header);
