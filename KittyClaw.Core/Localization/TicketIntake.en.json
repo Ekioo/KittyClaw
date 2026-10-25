@@ -1,0 +1,11 @@
+{
+  "IntakeAssisted": "AI assisted",
+  "IntakeManual": "Manual",
+  "IntakeWelcome": "Describe what you want to achieve. The agent will clarify your request one question at a time, then prepare your ticket.",
+  "IntakeMessage": "Your message",
+  "IntakeSend": "Send",
+  "IntakeThinking": "The agent is thinking…",
+  "IntakeCreateNow": "Create now",
+  "IntakeAutoCreate": "Create automatically when the request is clear",
+  "IntakeReview": "The ticket is ready. Review it in the Manual tab or create it now."
+}

@@ -109,3 +109,29 @@ any chat writes or dispatch. The selection is stored per conversation in
 `SessionRegistry` and returned by `/chat/model` when reopening the drawer. Changing
 effort applies to the next turn without clearing conversation history. Claude receives
 `--effort`; Codex receives a `model_reasoning_effort` config override, including on resume.
+
+## Conversational ticket creation
+
+`BoardCreateTicketDialog` opens in the same `ConversationDrawer`, `ConversationView`,
+`ConversationMessage` and `ConversationComposer` used by New instruction. It opens
+in AI assisted mode, alongside the preserved Manual
+form. `TicketIntakeService` runs one bounded provider invocation per message and passes
+conversation history as structured context. Inspired by
+[grill-me](https://www.skills.sh/mattpocock/skills/grill-me), it asks one focused
+question at a time about outcomes, scope, constraints and tradeoffs. Before asking technical questions, the agent inspects repository guidance and
+relevant source using file tools and read-only commands in the resolved project
+workspace. The prompt limits tools to inspection (this is an instruction, not an
+OS-enforced read-only sandbox). Unknown facts remain questions or explicit
+assumptions. Each response allows up to 20 provider turns and five minutes for
+inspection; only the final assistant message is parsed as the structured reply.
+The agent returns a validated JSON reply, optionally containing an actionable
+English title and description. The UI owns creation through `TicketService`,
+retaining the selected pipeline, parent, labels and priority.
+
+Automatic creation is enabled by default and can be disabled before sending for
+manual review. Create now requests a draft immediately from the available answers;
+unanswered decisions must be recorded rather than invented. Switching tabs keeps
+both drafts mounted. Closing cancels the current provider turn. Conversation history
+lasts for the open dialog; the existing session-storage recovery remains specific
+to the manual title and description. Provider failures leave the conversation
+available, and creation failures retain the generated draft for retry or editing.

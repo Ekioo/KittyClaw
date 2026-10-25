@@ -1,0 +1,11 @@
+{
+  "IntakeAssisted": "Assisté par IA",
+  "IntakeManual": "Manuel",
+  "IntakeWelcome": "Décrivez ce que vous souhaitez obtenir. L’agent précisera votre demande, une question à la fois, puis préparera votre ticket.",
+  "IntakeMessage": "Votre message",
+  "IntakeSend": "Envoyer",
+  "IntakeThinking": "L’agent réfléchit…",
+  "IntakeCreateNow": "Créer maintenant",
+  "IntakeAutoCreate": "Créer automatiquement lorsque la demande est claire",
+  "IntakeReview": "Le ticket est prêt. Relisez-le dans l’onglet Manuel ou créez-le maintenant."
+}

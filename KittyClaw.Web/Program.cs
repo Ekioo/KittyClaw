@@ -159,6 +159,7 @@ builder.Services.AddScoped<KittyClaw.Web.Services.BoardSortState>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.BoardUpdateNotifier>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.BoardFocusService>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.WorkflowMigrationPlanner>();
+builder.Services.AddSingleton<KittyClaw.Web.Services.TicketIntakeService>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.TicketImprovementService>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.ITicketImprovementAnalyzer>(
     sp => sp.GetRequiredService<KittyClaw.Web.Services.TicketImprovementService>());

@@ -396,3 +396,24 @@
     font-size: 0.875rem;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
 }
+
+/* Ticket creation uses the same conversation drawer as New instruction. */
+.ticket-intake-tabs {
+    display: flex;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    gap: .75rem;
+    padding: .75rem 1rem;
+}
+.ticket-intake-tabs button[aria-selected="true"] {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-dim);
+}
+.ticket-intake-panel { display: flex; flex: 1; min-height: 0; }
+.ticket-intake-panel[hidden], .ticket-intake-drawer .create-popup-body[hidden] { display: none; }
+.ticket-intake-drawer .create-popup-body { overflow-y: auto; min-height: 0; }
+.ticket-intake-auto { display: flex; align-items: center; gap: .5rem; }
+@media (max-width: 767px) {
+    .ticket-intake-tabs button { min-height: 44px; }
+}
