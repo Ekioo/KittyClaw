@@ -119,6 +119,9 @@ public class WorkingFilesPathTests
         var prompt = await AgentRunner.BuildPromptAsync(ctx, "Skill", resume, CancellationToken.None);
         Assert.Contains(System.Text.Json.JsonSerializer.Serialize(folder), prompt);
         Assert.Contains("screenshots, evidence", prompt);
+        Assert.Contains("may be cleaned up or deleted at any time", prompt);
+        Assert.Contains("Never leave unique or valuable data", prompt);
+        Assert.Contains("save all durable outputs and required evidence", prompt);
         Assert.Contains("even when executing in a worktree", prompt);
     }
 }

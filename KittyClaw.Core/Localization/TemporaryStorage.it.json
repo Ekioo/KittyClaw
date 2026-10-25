@@ -1,0 +1,14 @@
+{
+  "TemporaryStorageTitle": "Archiviazione temporanea",
+  "TemporaryStorageWarning": "Queste cartelle possono essere eliminate in qualsiasi momento. Non conservare dati insostituibili o risultati definitivi qui. Salva risultati importanti e prove necessarie in un archivio permanente.",
+  "TemporaryStorageScope": "Panoramica in sola lettura dei progetti registrati: cartelle configurate, predefinite e precedenti note dalle esecuzioni conservate. Dimensione dei file, non spazio allocato. Le cartelle condivise possono essere conteggiate più volte. I collegamenti vengono ignorati. Nessuna pulizia automatica.",
+  "TemporaryStorageRefresh": "Aggiorna dimensioni",
+  "TemporaryStorageMeasured": "Misurato il",
+  "TemporaryStorageScanning": "Misurazione delle cartelle…",
+  "TemporaryStorageEmpty": "Nessun progetto da misurare.",
+  "TemporaryStorageFiles": "file",
+  "TemporaryStoragePartial": "Misurazione parziale: alcune voci non sono leggibili o sono state ignorate.",
+  "TemporaryStorageFolders": "Cartelle",
+  "TemporaryStorageMissing": "Non creata o rimossa",
+  "TemporaryStorageFile": "file"
+}

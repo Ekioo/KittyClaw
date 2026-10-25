@@ -1,7 +1,7 @@
 {
   "OpenProjectWorkingFilesHint": "Open the saved working files folder on the KittyClaw computer, or the project’s default folder when empty. Save edits first.",
   "WorkingFilesPath": "Working files folder",
-  "WorkingFilesHint": "Optional absolute base folder for temporary files, drafts, and evidence. Leave blank to use KittyClaw’s data folder (artifacts/project). Each run has its own subfolder, created automatically and retained after completion. Agents must use this folder. Save both folders with Save.",
+  "WorkingFilesHint": "Optional absolute base folder for temporary files, drafts, and evidence. Leave blank to use KittyClaw’s data folder (artifacts/project). Each run has its own subfolder, created automatically and disposable at any time. Agents must use this folder. Save both folders with Save.",
   "SettingsTitle": "Settings",
   "Board": "Board",
   "WorkspacePath": "Workspace path",

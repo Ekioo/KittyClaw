@@ -1,0 +1,14 @@
+{
+  "TemporaryStorageTitle": "Stockage temporaire",
+  "TemporaryStorageWarning": "Ces dossiers peuvent être supprimés à tout moment. N’y conservez jamais de données irremplaçables ni de livrables définitifs. Enregistrez les résultats utiles et les preuves nécessaires dans un emplacement pérenne.",
+  "TemporaryStorageScope": "Vue en lecture seule des projets enregistrés : dossiers configurés, par défaut et anciens emplacements connus des exécutions conservées. Taille des fichiers, pas espace alloué sur disque. Un dossier partagé peut être compté pour plusieurs projets. Les liens sont ignorés. Aucun nettoyage automatique.",
+  "TemporaryStorageRefresh": "Actualiser les volumes",
+  "TemporaryStorageMeasured": "Mesuré le",
+  "TemporaryStorageScanning": "Mesure des dossiers…",
+  "TemporaryStorageEmpty": "Aucun projet à mesurer.",
+  "TemporaryStorageFiles": "fichiers",
+  "TemporaryStoragePartial": "Mesure partielle : certains éléments sont illisibles ou ont été ignorés.",
+  "TemporaryStorageFolders": "Dossiers",
+  "TemporaryStorageMissing": "Non créé ou supprimé",
+  "TemporaryStorageFile": "fichier"
+}

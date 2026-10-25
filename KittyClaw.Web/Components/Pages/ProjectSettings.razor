@@ -127,6 +127,7 @@ else
             </div>
             <label class="settings-label" for="working-files-path">@L["WorkingFilesPath"]</label>
             <p class="settings-hint" id="working-files-hint">@L["WorkingFilesHint"]</p>
+            <p class="settings-hint">@L["TemporaryStorageWarning"] <a href="/temporary-storage">@L["TemporaryStorageTitle"]</a></p>
             <div class="settings-row">
                 <input id="working-files-path" class="settings-input" aria-describedby="working-files-hint" placeholder="@L["WorkspacePlaceholder"]" @bind="_workingFilesPath" @bind:event="oninput" />
                 <button class="settings-browse" type="button" @onclick="() => _workingFilesPickerOpen = true">📁 @L["Browse"]</button>

@@ -185,6 +185,7 @@ builder.Services.AddSingleton<WorktreeFinalizationCoordinator>();
 builder.Services.AddHostedService<WorktreeMergeQueueProcessor>();
 builder.Services.AddSingleton<AgentRunner>();
 builder.Services.AddSingleton<RunWorkingFilesService>();
+builder.Services.AddSingleton<TemporaryStorageService>();
 builder.Services.AddSingleton<RtkIntegrationService>();
 builder.Services.AddSingleton<AgentMemoryHandler>(sp => new AgentMemoryHandler(
     sp.GetRequiredService<MemberService>(),

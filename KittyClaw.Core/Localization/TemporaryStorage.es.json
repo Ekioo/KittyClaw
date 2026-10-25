@@ -1,0 +1,14 @@
+{
+  "TemporaryStorageTitle": "Almacenamiento temporal",
+  "TemporaryStorageWarning": "Estas carpetas pueden eliminarse en cualquier momento. Nunca guardes datos irremplazables ni entregables finales aquí. Guarda resultados valiosos y pruebas necesarias en almacenamiento permanente.",
+  "TemporaryStorageScope": "Vista de solo lectura de proyectos registrados: carpetas configuradas, predeterminadas y anteriores conocidas por ejecuciones conservadas. Tamaño de archivos, no espacio asignado. Las carpetas compartidas pueden contarse varias veces. Se omiten enlaces. Sin limpieza automática.",
+  "TemporaryStorageRefresh": "Actualizar tamaños",
+  "TemporaryStorageMeasured": "Medido el",
+  "TemporaryStorageScanning": "Midiendo carpetas…",
+  "TemporaryStorageEmpty": "No hay proyectos para medir.",
+  "TemporaryStorageFiles": "archivos",
+  "TemporaryStoragePartial": "Medición parcial: algunas entradas no se pudieron leer o se omitieron.",
+  "TemporaryStorageFolders": "Carpetas",
+  "TemporaryStorageMissing": "No creada o eliminada",
+  "TemporaryStorageFile": "archivo"
+}

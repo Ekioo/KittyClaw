@@ -122,3 +122,19 @@ snapshots, and exposed by run detail/list responses. The execution drawer offers
 in the host computer's file manager, including after restart or project setting changes;
 missing directories show an error and are not recreated by this action. Older snapshots
 without this field do not display the button.
+
+## Temporary storage accounting
+
+`TemporaryStorageService` provides an on-demand, cancellable, read-only scan for
+`/temporary-storage`, linked from board navigation and project settings. Projects are
+sorted by logical file bytes. Configured roots, the default artifact root, and historical
+roots from retained run metadata are included, with nested roots deduplicated per project.
+Links/junctions are skipped, unreadable or changing entries produce a partial measurement,
+and missing roots are shown without creating them. Shared roots can count for multiple
+projects; old roots no longer recorded in retained history and deleted projects are outside
+this overview. The page offers refresh and opening the current project root, but no deletion.
+
+Run instructions explicitly classify these directories as disposable, removable at any time.
+Unique data, final deliverables and required evidence must be saved to permanent project
+storage before completion; temporary copies must be reproducible. This instruction is injected
+on every provider invocation, including existing and resumed sessions.
