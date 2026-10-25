@@ -59,6 +59,15 @@ The integration is disabled by default. An opted-in run always receives `RTK_TEL
 - `KittyClaw.Core/Automation/CostTracker.cs` — appends per-run `CostLogEntry` lines to `<workspace>/.agents/channel/cost-log.jsonl` (rotated monthly) and answers the daily-budget check (`IsBudgetExceeded`) from that file. A provider-reported monetary total is authoritative. When Codex or Grok only reports token classes, `ModelCostEstimator` applies its explicit, versioned public rate card; unknown models remain unpriced. Estimated entries carry `CostEstimated=true`.
 - `KittyClaw.Core/Automation/RunCostRecorder.cs` — hosted service subscribed to `AgentRunRegistry.OnRunEnded`. For every run that reported usage it writes the `CostLogEntry` via `CostTracker` and accumulates token/USD totals onto the ticket (`Tickets.AgentTokens` / `Tickets.AgentCostUsd` via `TicketService.AddAgentUsageAsync`) — the durable per-ticket figure shown on the board card and ticket panel, which survives the 24h run-log purge. `Tickets.AgentCostEstimated` remains true once any estimated amount contributes to that cumulative total. Run-level usage and its estimate marker also surface in the run drawer header and the `/runs` API DTOs.
 
+## Rendered content safety
+
+`SafeMarkdown` is shared by chat messages, ticket/comment Markdown and dashboard
+Markdown. HTML and active generic attributes are disabled. Rendered link and
+image URLs allow relative destinations and the `http`, `https`, `mailto` and
+`tel` schemes; other schemes are replaced with `#`. This also applies to
+reference links and autolinks. Disabling HTML alone does not prevent a
+`javascript:` Markdown link from executing when clicked.
+
 ## Entry points
 
 Each REST SSE subscriber has a queue of at most 256 pending events. If a client

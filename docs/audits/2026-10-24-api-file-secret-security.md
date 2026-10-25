@@ -70,3 +70,30 @@ drains, blocked stdin, hung commands, excessive output and successful stdin
 delivery. Native platform key stores were simulated; Windows ran the subprocess
 tests through PowerShell. SSE queue tests covered saturation, ordering and
 subscriber isolation; a real slow-network browser test was not performed.
+
+## 2026-10-25 nightly audit: executable Markdown URLs
+
+Confirmed a stored-XSS path in the shared Markdown pipeline. Raw HTML and generic
+attributes were already disabled, but `[audit link](javascript:...)` still emitted
+an executable `href`. An attacker-controlled ticket, comment, chat response or
+dashboard Markdown could therefore execute JavaScript in the application origin
+when the owner clicked the link. This requires a click; no automatic execution
+was claimed.
+
+Before changing production code, three Chromium tests rendered the actual chat,
+comment and dashboard HTML and clicked the injected link. All three failed
+because the JavaScript marker executed. The shared pipeline now rewrites unsafe
+URI schemes for links and images to `#`, including reference links and autolinks.
+Relative destinations and `http`, `https`, `mailto` and `tel` links remain
+supported. The check handles entity-encoded scheme characters and rejects
+control characters; `data`, `file`, `vbscript`, `javascript` and custom handlers
+are not permitted in rendered Markdown. No dependency version was changed.
+
+Final verification: 86 tests passed in two targeted runs (64 and 22), including
+54 new URL-policy/browser cases and existing generic-attribute, ticket-reference,
+Markdown-formatting and dashboard-renderer regressions. All three browser
+exploit cases that failed before the fix now pass. Tests rendered synthetic
+content in an isolated Chromium page; they did not use the live UI on :5230,
+real project data, real secrets or provider dispatches. The full test suite and
+a live Blazor navigation test were not run. Other sessions' local changes were
+preserved and excluded from the security commit.
