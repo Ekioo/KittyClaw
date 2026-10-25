@@ -1,6 +1,6 @@
 @if (At is DateTime at)
 {
-    <time class="conversation-time" datetime="@at.ToUniversalTime().ToString("O")">@at.ToLocalTime().ToString("HH:mm:ss")</time>
+    <LocalDateTime Value="at" Format="time" CssClass="conversation-time" />
 }
 
 @code {

@@ -42,7 +42,7 @@
                         <article>
                             <p><strong>@ProofSummary(evidence)</strong> <small class="settings-hint">@L[evidence.Fresh && evidence.Trust == KittyClaw.Core.Evidence.EvidenceTrust.Verified ? "JevProofVerified" : "JevProofUnverified"]</small></p>
                             @foreach (var criterion in _review.Criteria.Where(c => c.EvidenceId == evidence.Id)) { <small>@criterion.Criterion</small> }
-                            <details><summary>@L["JevTechnicalDetails"]</summary><pre>@evidence.Detail</pre><small>@evidence.Trust · @evidence.RunId · @evidence.CapturedAt.ToLocalTime().ToString("g")</small></details>
+                            <details><summary>@L["JevTechnicalDetails"]</summary><pre>@evidence.Detail</pre><small>@evidence.Trust · @evidence.RunId · <LocalDateTime Value="evidence.CapturedAt" /></small></details>
                         </article>
                     }
                 </details>
@@ -57,7 +57,7 @@
             }
             else if (_review.Error is null) { <p>@L["JevProfileAbstention"]</p> }
             @if (_history.FirstOrDefault(d => d.ReviewId == _review.Id) is { } decision)
-            { <p class="jev-decision-note" data-testid="jev-work-current-decision">✓ @L[decision.Accepted ? "JevWorkApproved" : "JevDecisionRejected"] · @decision.DecidedAt.ToLocalTime().ToString("g")</p> }
+            { <p class="jev-decision-note" data-testid="jev-work-current-decision">✓ @L[decision.Accepted ? "JevWorkApproved" : "JevDecisionRejected"] · <LocalDateTime Value="decision.DecidedAt" /></p> }
             else if (_review.Error is null)
             {
                 @if (_confirming)
@@ -76,7 +76,7 @@
                 }
             }
             <details class="jev-disclosure jev-technical"><summary>@L["JevTechnicalDetails"]</summary>
-                <p>@_review.Model · @_review.ObservedAt.ToLocalTime().ToString("g")</p>
+                <p>@_review.Model · <LocalDateTime Value="_review.ObservedAt" /></p>
                 @if (_review.Profile is { } technicalProfile) { <p>@technicalProfile.Model · @_review.Confidence?.ToString("P0")</p> }
                 @foreach (var criterion in _review.Criteria) { <p>@criterion.Criterion · @criterion.Confidence.ToString("P0") · @criterion.EvidenceId</p> }
                 <p>@_review.Error</p>

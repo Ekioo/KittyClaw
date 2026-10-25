@@ -154,7 +154,7 @@
                 <span class="section-label-sm">⏰ @L["ScheduledForLabel"]</span>
                 @if (_ticket.FireAt is DateTime fireAtUtc)
                 {
-                    <span class="schedule-value">@UtcToLocal(fireAtUtc).ToString("g")</span>
+                    <span class="schedule-value"><LocalDateTime Value="fireAtUtc" /></span>
                     <span class="schedule-arrow">&#8594; @(_ticket.ScheduleTarget ?? "Todo")</span>
                 }
                 else
@@ -173,7 +173,7 @@
 
             <div class="ticket-meta">
                 <span>@_ticket.CreatedBy</span>
-                <span>@_ticket.CreatedAt.ToString("d")</span>
+                <span><LocalDateTime Value="_ticket.CreatedAt" Format="date" /></span>
                 @if (_ticket.AgentTokens > 0)
                 {
                     <span class="token-badge" title="@CostTooltip(_ticket.AgentTokens, _ticket.AgentCostUsd, _ticket.AgentCostEstimated)">⛁ @KittyClaw.Web.Services.TokenDisplay.Compact(_ticket.AgentTokens)@(_ticket.AgentCostUsd > 0 ? $" · {(_ticket.AgentCostEstimated ? "≈ " : "")}{KittyClaw.Web.Services.TokenDisplay.Usd(_ticket.AgentCostUsd)}" : "")</span>
@@ -672,7 +672,7 @@
         if (column.Role == ColumnRole.Waiting)
         {
             if (_ticket?.FireAt is DateTime fireAt)
-                return L.Get("TicketWaitingScheduledGuidance", UtcToLocal(fireAt).ToString("g"),
+                return L.Get("TicketWaitingScheduledGuidance", BrowserLocalDateTime.Html(fireAt),
                     _ticket.ScheduleTarget ?? L["TicketWaitingNextConfiguredStep"]);
 
             var summary = _summaries.FirstOrDefault(ticket => ticket.Id == _ticket?.Id);
@@ -1227,15 +1227,12 @@
 
     // ── Schedule ──
 
-    private static DateTime UtcToLocal(DateTime utc) =>
-        DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime();
-
-    private void StartEditSchedule()
+    private async Task StartEditSchedule()
     {
         if (_ticket is null) return;
-        _editFireAtLocal = _ticket.FireAt is DateTime fireAt
-            ? UtcToLocal(fireAt)
-            : DateTime.Now.Date.AddDays(1).AddHours(9);
+        var input = await JS.InvokeAsync<string>("kittyLocalTime.scheduleInput",
+            _ticket.FireAt is DateTime fireAt ? BrowserLocalDateTime.UtcIso(fireAt) : null);
+        _editFireAtLocal = DateTime.Parse(input, System.Globalization.CultureInfo.InvariantCulture);
         var target = _ticket.ScheduleTarget;
         _editScheduleTarget = !string.IsNullOrWhiteSpace(target) && _columns.Any(c => c.Name == target)
             ? target!
@@ -1248,7 +1245,10 @@
     {
         if (_ticket is null) return;
         if (_editFireAtLocal is not DateTime local) return;
-        var fireAtUtc = DateTime.SpecifyKind(local, DateTimeKind.Local).ToUniversalTime();
+        var utc = await JS.InvokeAsync<string>("kittyLocalTime.inputToUtc",
+            local.ToString("yyyy-MM-ddTHH:mm:ss", System.Globalization.CultureInfo.InvariantCulture));
+        var fireAtUtc = DateTime.Parse(utc, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind);
         await TicketService.ScheduleTicketAsync(Slug, _ticket.Id, fireAtUtc, _editScheduleTarget);
         _editingSchedule = false;
         await RefreshAsync();

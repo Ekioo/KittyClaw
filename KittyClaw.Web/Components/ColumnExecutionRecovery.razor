@@ -50,7 +50,7 @@
                     <span class="automation-queue-reason">@entry.Error</span>
                     @if (entry.AvailableAt is DateTime available)
                     {
-                        <time>@available.ToLocalTime().ToString("g")</time>
+                        <LocalDateTime Value="available" />
                     }
                     @if (entry.Status == ColumnExecutionStatus.Failed)
                     {

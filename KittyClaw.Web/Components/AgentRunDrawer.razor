@@ -35,9 +35,9 @@
         {
             <details class="fresh-context-details">
                 <summary>Ticket context · technical details</summary>
-                <span>Trigger version: @(_columnExecution.TriggerTicketUpdatedAt?.ToString("O") ?? "unavailable")</span>
+                <span>Trigger version: <LocalDateTime Value="_columnExecution.TriggerTicketUpdatedAt" EmptyText="unavailable" /></span>
                 <span>Trigger signal: @_columnExecution.TriggerSignalType</span>
-                <span>Consumed version: @(_columnExecution.ConsumedTicketUpdatedAt?.ToString("O") ?? "not consumed")</span>
+                <span>Consumed version: <LocalDateTime Value="_columnExecution.ConsumedTicketUpdatedAt" EmptyText="not consumed" /></span>
                 <span>Owner feedback: @(_columnExecution.TriggerOwnerCommentId is int commentId ? $"#{commentId}" : "none")</span>
             </details>
             @if (!string.IsNullOrWhiteSpace(_columnExecution.ContextRejectionReason))

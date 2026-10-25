@@ -36,7 +36,7 @@
                 <details class="jev-disclosure jev-technical">
                     <summary>@L["JevTechnicalDetails"]</summary>
                     <p data-testid="jev-routing-policy">@(_automatic ? string.Format(L["JevAutomaticPolicy"], (_processor.JevConfidenceThreshold * 100).ToString("0.#")) : L["JevManualPolicy"])</p>
-                    <p>@_proposal.Model · @_proposal.ObservedAt.ToLocalTime().ToString("g") · @L["JevConfidence"]: @_proposal.Confidence?.ToString("P0")</p>
+                    <p>@_proposal.Model · <LocalDateTime Value="_proposal.ObservedAt" /> · @L["JevConfidence"]: @_proposal.Confidence?.ToString("P0")</p>
                     @if (_proposal.Error is not null) { <p>@_proposal.Error</p> }
                     @foreach (var option in _proposal.Probabilities.OrderByDescending(p => p.Value))
                     { <p>@_proposal.Destinations.GetValueOrDefault(option.Key, option.Key): @option.Value.ToString("P1")</p> }
