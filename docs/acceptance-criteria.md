@@ -15,6 +15,33 @@ a ready criterion returns it to Pending. Processor assessments record their verd
 
 ## AI ticket improvement
 
+`POST /api/projects/{slug}/tickets/{id}/improvement/analyze` and MCP
+`analyze_ticket_improvement` expose the same analysis as the ticket panel. Send
+`{"split":false}` as the REST body, or `project`, `id` and `request` in MCP.
+They launch a model run (consuming model usage), without modifying the ticket or
+creating subtickets. The response contains `ticketId`, `ticketUpdatedAt` for the
+analyzed revision, and `proposal` with `analysis`, `description`, `acceptanceCriteria`
+and `suggestedTickets`. The improvement analysis explains the professional approach,
+raw sources, methods/tools and independent verification before the rewrite.
+Use `split:true` to request the existing breakdown mode instead. Missing resources
+return HTTP 404; unusable analysis returns 422. Cancellation propagates to the model
+run.
+
+Apply the reviewed rewrite with `POST /api/projects/{slug}/tickets/{id}/improvement/apply`
+or MCP `apply_ticket_improvement`. Supply `author`, `expectedUpdatedAt` equal to the
+analysis response's `ticketUpdatedAt`, `description`, and `acceptanceCriteria` (text
+strings). In MCP these fields go in `request`, alongside `project` and `id`.
+The revision is mandatory; it is checked inside the same transaction as the description,
+criteria and activity writes. Any intervening ticket change, including a comment,
+rejects the request with HTTP 409 (MCP tool error) without modifying the ticket.
+Success returns HTTP 204; MCP returns a success object. Missing resources return 404;
+invalid or missing fields return 400. A successful application changes the revision,
+so replaying the same request is rejected. Unchanged criteria keep their IDs, statuses
+and evidence; new or rewritten criteria start Pending without evidence. The supplied
+author is recorded in activity and connected boards are notified after commit.
+Applying does not run a model or create subtickets; this operation applies the rewrite,
+not the separate breakdown proposal.
+
 The ticket panel's **Improve with AI** action proposes a clearer description and a minimal
 set of acceptance criteria for owner review. The prompt targets 1–3 essential criteria
 (fewer for simple tickets), allowing more only for distinct, explicitly requested outcomes.

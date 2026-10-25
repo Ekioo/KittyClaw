@@ -31,6 +31,8 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
     private static readonly HashSet<string> ExpectedRoutes = new(StringComparer.Ordinal)
     {
         // Columns
+        "POST /api/projects/{slug}/tickets/{id}/improvement/analyze",
+        "POST /api/projects/{slug}/tickets/{id}/improvement/apply",
         "GET /api/projects/{slug}/columns",
         "POST /api/projects/{slug}/columns",
         "PATCH /api/projects/{slug}/columns/{columnId}",

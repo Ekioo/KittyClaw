@@ -14,6 +14,20 @@ namespace KittyClaw.Web.Api;
 [McpServerToolType]
 public sealed class McpManagementTools(IServiceProvider services, ProjectService projects)
 {
+    [McpServerTool(Name = "apply_ticket_improvement", ReadOnly = false, Destructive = true, Idempotent = false)]
+    [Description("Atomically apply a reviewed ticket description and acceptance criteria. Supply author and expectedUpdatedAt equal to ticketUpdatedAt returned by analyze_ticket_improvement. A changed ticket is rejected (409) with no partial writes. Preserves unchanged criteria and their evidence. Does not run a model or create subtickets.")]
+    public Task<JsonElement> ApplyTicketImprovement(string project, int id, ApplyTicketImprovementRequest request) =>
+        ExecuteAsync(project, () => Endpoints.HandleApplyTicketImprovement(project, id, request, projects,
+            services.GetRequiredService<TicketService>(), services.GetRequiredService<BoardUpdateNotifier>()));
+
+    [McpServerTool(Name = "analyze_ticket_improvement", ReadOnly = false, Destructive = false, Idempotent = false)]
+    [Description("Launch AI analysis to propose a deeper version of an existing ticket, preserving its scope. Returns four-point analysis, description, acceptance criteria and the analyzed ticket revision. Does not modify tickets. Consumes model usage. Set request.split=true to propose a breakdown instead.")]
+    public Task<JsonElement> AnalyzeTicketImprovement(string project, int id,
+        AnalyzeTicketImprovementRequest request, CancellationToken cancellationToken) =>
+        ExecuteAsync(project, () => Endpoints.HandleAnalyzeTicketImprovement(project, id, request, projects,
+            services.GetRequiredService<TicketService>(), services.GetRequiredService<ITicketImprovementAnalyzer>(),
+            cancellationToken));
+
     [McpServerTool(Name = "focus_ticket", ReadOnly = false, Destructive = false, Idempotent = false)]
     [Description("Bring a ticket card into view and highlight it in connected kanban views of the same project, selecting its pipeline and parent board. Does not open the detail panel or change the ticket. Returns a URL usable when no project view is connected.")]
     public Task<JsonElement> FocusTicket(string project, int id) =>

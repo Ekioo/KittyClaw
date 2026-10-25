@@ -14,6 +14,10 @@
         @if (_proposal is not null)
         {
             @if (!Split) { <p>@L["ImprovementReview"]</p> }
+            @if (!Split && !string.IsNullOrWhiteSpace(_proposal.Analysis))
+            {
+                <p style="white-space: pre-line">@_proposal.Analysis</p>
+            }
             @if (Split && _proposal.SuggestedTickets is { Count: > 1 } drafts)
             {
                 <p>@L["ImprovementSplitHint"]</p>

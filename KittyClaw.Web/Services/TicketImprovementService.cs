@@ -6,9 +6,14 @@ using KittyClaw.Core.Services;
 namespace KittyClaw.Web.Services;
 
 public sealed record TicketImprovement(string Description, List<string> AcceptanceCriteria,
-    List<TicketImprovementDraft>? SuggestedTickets = null);
+    List<TicketImprovementDraft>? SuggestedTickets = null, string? Analysis = null);
 
-public sealed class TicketImprovementService(ProjectService projects, AgentRunner runner)
+public interface ITicketImprovementAnalyzer
+{
+    Task<TicketImprovement> AnalyzeAsync(string slug, Ticket ticket, CancellationToken ct, bool split = false);
+}
+
+public sealed class TicketImprovementService(ProjectService projects, AgentRunner runner) : ITicketImprovementAnalyzer
 {
     public async Task<TicketImprovement> AnalyzeAsync(string slug, Ticket ticket, CancellationToken ct, bool split = false)
     {
@@ -36,7 +41,7 @@ public sealed class TicketImprovementService(ProjectService projects, AgentRunne
                 Omit criteria that are unverifiable, subjective, or very difficult or costly to verify.
                 Do not invent thresholds, benchmarks, exhaustive edge-case coverage, generic quality
                 guarantees, documentation, tests or implementation chores as acceptance requirements.
-                Add a missing criterion only if it is essential to an explicitly requested outcome.
+                Add a missing criterion only if it is essential to achieving the owner's requested outcome.
                 Add details that follow from the supplied information. Never invent facts or business
                 decisions: list only unresolved information that blocks the requested outcome under
                 'Questions to clarify'. Do not expand scope or create work without clear net value.
@@ -55,7 +60,26 @@ public sealed class TicketImprovementService(ProjectService projects, AgentRunne
                 Do not include acceptance criteria in the description; use the separate array.
                 """ + (split
                     ? "\nThis action is Split into tickets. Assess scope and return suggestedTickets only if it is too broad."
-                    : "\nThis action is Improve ticket only. Always return suggestedTickets as an empty array; do not propose a breakdown."),
+                    : """
+
+                    This action is Improve ticket only. Always return suggestedTickets as an empty array;
+                    do not propose a breakdown.
+
+                    I want a deeper version of this task, not a bigger one. Before rewriting it:
+                    (1) say what a top professional in this field would do here that I'm not asking for;
+                    (2) name the rawest material they would start from instead of what has already been digested for me;
+                    (3) name the specific methods and tools they would use;
+                    (4) say what, other than you or me, would show the result is right.
+                    Then rewrite my prompt to ask for exactly that.
+
+                    Include an additional analysis string in the JSON with four concise numbered points
+                    answering these questions in the ticket's language. Put the rewritten task in description
+                    and its essential observable success conditions in acceptanceCriteria.
+                    Recommend sources, methods and tools appropriate to the supplied context; do not claim
+                    to have inspected data or used tools. Mark unknown source availability as unknown.
+                    Deepen the approach within the owner's outcome and constraints, without adding unrelated
+                    deliverables. Keep the analysis separate from the description and acceptance criteria.
+                    """),
             ExtraContext = JsonSerializer.Serialize(new { ticket.Title, ticket.Description, acceptanceCriteria = ticket.AcceptanceCriteria.Select(c => c.Text), project = project.Name }),
             Target = CodexCli.IsInstalled
                 ? new AgentDispatchTarget("gpt-5.6-sol", CliProvider.Codex, new Dictionary<string, string>())
@@ -76,7 +100,8 @@ public sealed class TicketImprovementService(ProjectService projects, AgentRunne
         var end = text.LastIndexOf('}');
         if (start < 0 || end <= start) throw new InvalidOperationException("The analysis did not return a valid proposal.");
         var proposal = JsonSerializer.Deserialize<TicketImprovement>(text[start..(end + 1)], new JsonSerializerOptions(JsonSerializerDefaults.Web));
-        if (proposal is null || string.IsNullOrWhiteSpace(proposal.Description) || proposal.Description.Length > 100000 ||
+        if (proposal is null || proposal.Analysis is { Length: > 10000 } ||
+            string.IsNullOrWhiteSpace(proposal.Description) || proposal.Description.Length > 100000 ||
             proposal.AcceptanceCriteria is null || proposal.AcceptanceCriteria.Count is < 1 or > 50 ||
             proposal.AcceptanceCriteria.Any(c => string.IsNullOrWhiteSpace(c) || c.Length > 10000))
             throw new InvalidOperationException("The analysis returned an incomplete or oversized proposal.");

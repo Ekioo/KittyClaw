@@ -25,8 +25,9 @@ public class TicketService
     public event Action<string, int>? TicketCreated;
 
     public Task ApplyImprovementAsync(string slug, int ticketId, string? originalDescription,
-        string originalCriteria, string description, List<string> criteria, DateTime? expectedUpdatedAt = null) =>
-        ApplyProposalAsync(slug, ticketId, originalDescription, originalCriteria, description, criteria, null, expectedUpdatedAt);
+        string originalCriteria, string description, List<string> criteria, DateTime? expectedUpdatedAt = null,
+        string author = "owner") =>
+        ApplyProposalAsync(slug, ticketId, originalDescription, originalCriteria, description, criteria, null, expectedUpdatedAt, author);
 
     public Task SplitTicketAsync(string slug, Ticket original, List<TicketImprovementDraft> drafts)
     {
@@ -37,7 +38,7 @@ public class TicketService
 
     private async Task ApplyProposalAsync(string slug, int ticketId, string? originalDescription,
         string originalCriteria, string description, List<string> criteria,
-        List<TicketImprovementDraft>? suggestedTickets = null, DateTime? expectedUpdatedAt = null)
+        List<TicketImprovementDraft>? suggestedTickets = null, DateTime? expectedUpdatedAt = null, string author = "owner")
     {
         var improve = suggestedTickets is not { Count: > 0 };
         if (improve && (string.IsNullOrWhiteSpace(description) || description.Length > 100000 || criteria.Count is < 1 or > 50))
@@ -63,14 +64,14 @@ public class TicketService
         var ticket = await db.Tickets.FindAsync(ticketId) ?? throw new InvalidOperationException("Ticket no longer exists.");
         if (ticket.Description != originalDescription || ticket.AcceptanceCriteriaJson != originalCriteria ||
             (expectedUpdatedAt.HasValue && ticket.UpdatedAt != expectedUpdatedAt.Value))
-            throw new InvalidOperationException("The ticket changed during analysis. Close this proposal and analyze it again.");
+            throw new TicketImprovementConflictException("The ticket changed during analysis. Close this proposal and analyze it again.");
         if (improve)
         {
             var previous = ticket.AcceptanceCriteria;
             ticket.Description = description.Trim();
             ticket.AcceptanceCriteria = criteria.Select(text => previous.FirstOrDefault(c => c.Text == text.Trim())
                 ?? new TicketAcceptanceCriterion(Guid.NewGuid().ToString("N"), text.Trim(), AcceptanceStatus.Pending)).ToList();
-            db.ActivityEntries.Add(new ActivityEntry { TicketId = ticketId, Author = "owner", Text = "Applied AI ticket improvement. New or rewritten criteria require evaluation." });
+            db.ActivityEntries.Add(new ActivityEntry { TicketId = ticketId, Author = author, Text = "Applied AI ticket improvement. New or rewritten criteria require evaluation." });
         }
         ticket.UpdatedAt = DateTime.UtcNow;
         var children = new List<Ticket>();
