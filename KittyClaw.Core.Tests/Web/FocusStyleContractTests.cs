@@ -26,7 +26,7 @@ public sealed class FocusStyleContractTests
     [Fact]
     public void GraphicCharter_DistinguishesHoverSelectionAndKeyboardFocus()
     {
-        var charter = File.ReadAllText(Path.Combine(RepoRoot(), "doc", "graphic-charter.md"));
+        var charter = File.ReadAllText(Path.Combine(RepoRoot(), "docs", "graphic-charter.md"));
 
         Assert.Contains("## Interaction states and focus", charter);
         Assert.Contains("Hover, selection, and keyboard focus", charter);

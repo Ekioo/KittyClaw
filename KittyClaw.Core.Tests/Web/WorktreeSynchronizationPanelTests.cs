@@ -22,8 +22,8 @@ public sealed class WorktreeSynchronizationPanelTests
     public void RecoveryDocumentation_IsLinkedAndCoversEveryTerminalFailure()
     {
         var root = RepoRoot();
-        var index = File.ReadAllText(Path.Combine(root, "doc", "index.md"));
-        var recovery = File.ReadAllText(Path.Combine(root, "doc", "local-checkout-sync-recovery.md"));
+        var index = File.ReadAllText(Path.Combine(root, "docs", "index.md"));
+        var recovery = File.ReadAllText(Path.Combine(root, "docs", "local-checkout-sync-recovery.md"));
 
         Assert.Contains("local-checkout-sync-recovery.md", index);
         Assert.Contains("Restore conflict", recovery);

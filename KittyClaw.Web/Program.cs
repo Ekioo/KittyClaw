@@ -246,7 +246,7 @@ builder.Services.AddSingleton<KittyClaw.Web.Services.IInstalledUpdateClient, Kit
 builder.Services.AddSingleton<KittyClaw.Web.Services.InstalledUpdateService>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.UpdateCheckService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<KittyClaw.Web.Services.UpdateCheckService>());
-// Anonymous daily usage heartbeat (see README "Telemetry" and doc/telemetry.md).
+// Anonymous daily usage heartbeat (see README "Telemetry" and docs/telemetry.md).
 // Never in Development: excludes dotnet watch sessions and QaRunner test instances.
 if (!builder.Environment.IsDevelopment())
 {

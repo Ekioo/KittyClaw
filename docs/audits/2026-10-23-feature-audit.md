@@ -128,7 +128,7 @@ A review column alone does not guarantee prevention of external provider effects
 The examined capability matrix advertises interception for Claude and Ollama through
 Claude. Codex, Grok, Mistral and DeepSeek remain observation-only and are refused in
 strict mode. Opaque tool/command effects remain an explicit exclusion even with Claude.
-See [runtime enforcement](../../doc/runtime-boundary-enforcement.md).
+See [runtime enforcement](../runtime-boundary-enforcement.md).
 
 ## Dashboard, costs and operations
 
@@ -205,14 +205,14 @@ The two priority defects were subsequently addressed without rewriting the histo
 - Transfers now preserve dependency edges within the transferred tree, including their
   direction and original creation timestamps, in the same transaction as the tickets.
   An edge crossing the tree boundary in either direction rejects the transfer before
-  content writes. See [current transfer behavior](../../doc/ticket-transfer.md).
+  content writes. See [current transfer behavior](../ticket-transfer.md).
 - `AgentBudgetService` checks every application agent launch against the project's
   daily budget, including chat, columns, dashboard, planning, memory work, retries,
   queued work, fallback and steering continuations. The `ceo` exemption was removed.
   Known usage awaiting asynchronous recording is included without double counting;
   invalid/unreadable configuration blocks admission. Already-running work is not
   terminated, and unreported/unknown charges cannot be reserved in advance.
-  See [budget admission](../../doc/agent-dispatch.md#daily-budget-admission).
+  See [budget admission](../agent-dispatch.md#daily-budget-admission).
 
 Verification: **82 targeted tests passed, none failed or skipped**, covering transfer
 fidelity/rejection/rollback, budgets and the production service registration, runner
@@ -242,8 +242,8 @@ The browser journey uses the real application on an ephemeral local port and syn
 data. It verifies the output write, isolated maintenance commit, integration tip,
 background synchronization after project resume, updated dashboard rendering and reuse
 for an unchanged write. No real agent provider or main application data is involved.
-See [dashboard verification](../../doc/dashboard.md#output-writes-with-worktrees-enabled)
-and [worktree naming](../../doc/durable-worktree-integrations.md).
+See [dashboard verification](../dashboard.md#output-writes-with-worktrees-enabled)
+and [worktree naming](../durable-worktree-integrations.md).
 
 Verification: **104 tests passed, none failed or skipped**, covering the HTTP regression,
 the real-browser journey, existing-worktree compatibility, durable routing, integration
@@ -282,7 +282,7 @@ fallback also pass. This establishes resource completeness; it is not a linguist
 review or a visual review of every translated screen.
 
 The [README](../../README.md#mcp-server) now describes the current MCP management
-surface and its 78 tools. The [detailed catalogue](../../doc/mcp.md) documents all
+surface and its 78 tools. The [detailed catalogue](../mcp.md) documents all
 nine board/acceptance tools and 69 management/observability tools, including criterion
 creation, updates, evidence retention and deletion. A catalogue comparison found all
 78 declared tools documented with no missing or extra names. The existing real MCP

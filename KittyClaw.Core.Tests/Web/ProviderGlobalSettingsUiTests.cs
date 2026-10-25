@@ -37,8 +37,8 @@ public sealed class ProviderGlobalSettingsUiTests
     [Fact]
     public void Provider_installation_documentation_covers_all_supported_clis()
     {
-        var guide = File.ReadAllText(RepoPath("doc", "agent-providers.md"));
-        var deepSeek = File.ReadAllText(RepoPath("doc", "deepseek.md"));
+        var guide = File.ReadAllText(RepoPath("docs", "agent-providers.md"));
+        var deepSeek = File.ReadAllText(RepoPath("docs", "deepseek.md"));
 
         foreach (var provider in new[] { "Claude Code", "OpenAI Codex", "Grok Build", "Mistral Vibe", "Ollama", "DeepSeek V4" })
             Assert.Contains(provider, guide);

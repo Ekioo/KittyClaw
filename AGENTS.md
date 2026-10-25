@@ -59,7 +59,7 @@ Files under `ProjectTemplate/` are the source of truth for new-project initializ
 
 ## Architecture docs
 
-Per-feature architecture documentation lives under [`doc/`](doc/index.md) — start at `doc/index.md` and follow the relative links. Each feature page covers purpose, key components, entry points, and external dependencies. Each concept is explained in exactly one file.
+Per-feature architecture documentation lives under [`docs/`](docs/index.md) — start at `docs/index.md` and follow the relative links. Each feature page covers purpose, key components, entry points, and external dependencies. Each concept is explained in exactly one file.
 
 ## API
 

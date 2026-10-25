@@ -408,7 +408,7 @@ Reliability work extends from startup to final delivery: memory consolidation is
 
 ### Added
 
-- Embedded MCP server (Streamable HTTP) at `/mcp` via the official `ModelContextProtocol.AspNetCore` SDK: seven v1 tools (`list_projects`, `list_tickets`, `get_ticket`, `create_ticket`, `comment_ticket`, `move_ticket`, `board_overview`) proxying the existing board services, so any MCP client (e.g. `claude mcp add --transport http kittyclaw http://localhost:5230/mcp`) can drive the board. The server is disabled by default; enable it with `KITTYCLAW_MCP_ENABLED=1`, then remove the variable or set it to `0` and restart KittyClaw to disable it. Registry metadata in `server.json`; docs in `doc/mcp.md`.
+- Embedded MCP server (Streamable HTTP) at `/mcp` via the official `ModelContextProtocol.AspNetCore` SDK: seven v1 tools (`list_projects`, `list_tickets`, `get_ticket`, `create_ticket`, `comment_ticket`, `move_ticket`, `board_overview`) proxying the existing board services, so any MCP client (e.g. `claude mcp add --transport http kittyclaw http://localhost:5230/mcp`) can drive the board. The server is disabled by default; enable it with `KITTYCLAW_MCP_ENABLED=1`, then remove the variable or set it to `0` and restart KittyClaw to disable it. Registry metadata in `server.json`; docs in `docs/mcp.md`.
 - Canonical per-ticket-family Git worktrees, separate control-workspace and code-repository settings, and a durable per-project merge queue with conflict diagnosis and safe resume actions.
 - A global Costs entry point backed by durable report snapshots, per-project cards, project-aware pipeline choices, model filtering, quick date ranges, daily trends, and measured-versus-estimated legends.
 - Clipboard image paste support for chat instructions, including PNG, JPEG, GIF, and WebP validation without a permanent prompt-area hint.
@@ -877,7 +877,7 @@ Customizable dashboards, AutomationEngine refactor, architecture docs.
 - Dedicated `consolidateAgentMemory` action with externalized instructions.
 - Compile-time completeness check for automation node types.
 - Current model displayed in LOG and chat window headers.
-- New `doc/` folder with per-feature architecture pages.
+- New `docs/` folder with per-feature architecture pages.
 - Sort projects by name with context-menu options.
 - New automations now persisted immediately, but disabled by default.
 - API actions in QaRunner scenarios.

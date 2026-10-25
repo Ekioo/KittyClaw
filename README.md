@@ -27,7 +27,7 @@ definition under `.agents/processors/column-<id>/memory/MEMORY.md`.
 - **.NET 10** / **Blazor Server** (interactive SSR)
 - **SQLite** via Entity Framework Core (one DB per project)
 - **OpenAPI** with auto-generated Markdown docs
-- Agent execution: at least one supported CLI — **[Claude Code CLI](https://docs.claude.com/en/docs/claude-code/overview)**, **[OpenAI Codex CLI](doc/codex-cli.md)**, **[Grok Build](doc/grok-build.md)**, or **[Mistral Vibe](doc/mistral-vibe.md)**. **[Ollama](https://ollama.com)** and **[DeepSeek V4](doc/deepseek.md)** are supported through Claude Code. See the consolidated **[agent-provider installation guide](doc/agent-providers.md)**.
+- Agent execution: at least one supported CLI — **[Claude Code CLI](https://docs.claude.com/en/docs/claude-code/overview)**, **[OpenAI Codex CLI](docs/codex-cli.md)**, **[Grok Build](docs/grok-build.md)**, or **[Mistral Vibe](docs/mistral-vibe.md)**. **[Ollama](https://ollama.com)** and **[DeepSeek V4](docs/deepseek.md)** are supported through Claude Code. See the consolidated **[agent-provider installation guide](docs/agent-providers.md)**.
 - Optional for repository initialization, worktree integrations, and agent commits: **[Git](https://git-scm.com/downloads)**
 
 ## Getting Started
@@ -39,7 +39,7 @@ when that release includes the Windows installer. Run it, acknowledge the instal
 confirmation, then launch **KittyClaw** from its desktop or Start-menu shortcut.
 The Windows x64 installer includes the .NET, ASP.NET Core, and Windows Desktop runtimes;
 no SDK or separate .NET installation is required. Agent CLIs still need to be installed and
-authenticated separately (see the [provider guide](doc/agent-providers.md)).
+authenticated separately (see the [provider guide](docs/agent-providers.md)).
 
 KittyClaw opens in your browser and stays in the notification area. Double-click its icon to
 open it again, or choose **Quit KittyClaw** from its menu to stop it. Installation is per user
@@ -47,7 +47,7 @@ under `%LOCALAPPDATA%/Ekioo.KittyClaw`; project data stays in `%APPDATA%/KittyCl
 
 The update banner offers **Download update**, followed by **Update and restart**. Downloads do
 not interrupt work; installation is blocked while agent work or tracked finalization is active.
-See [Windows packaging and updates](doc/update-check.md) for build and release details.
+See [Windows packaging and updates](docs/update-check.md) for build and release details.
 
 ### Run from source
 
@@ -115,7 +115,7 @@ Per-project agent state lives **in the workspace**: `<workspace>/.agents/{agent}
 
 ## Architecture
 
-Per-feature architecture documentation lives under [`doc/`](doc/index.md). Start with [pipeline and column processing](doc/column-workflows.md) for the multi-pipeline model, or `doc/index.md` for the complete architecture map.
+Per-feature architecture documentation lives under [`docs/`](docs/index.md). Start with [pipeline and column processing](docs/column-workflows.md) for the multi-pipeline model, or `docs/index.md` for the complete architecture map.
 
 ## API
 
@@ -132,7 +132,7 @@ KittyClaw can expose an embedded [MCP](https://modelcontextprotocol.io) endpoint
 claude mcp add --transport http kittyclaw http://localhost:5230/mcp
 ```
 
-The server exposes **73 tools**: nine board and acceptance-criteria tools plus 64 management and observability tools. Reconnect clients after upgrading to refresh their tool catalogue. The endpoint is disabled by default, can be toggled without restarting KittyClaw, and uses the same localhost trust boundary as the REST API. See the [complete tool catalogue and operation conventions](doc/mcp.md).
+The server exposes **73 tools**: nine board and acceptance-criteria tools plus 64 management and observability tools. Reconnect clients after upgrading to refresh their tool catalogue. The endpoint is disabled by default, can be toggled without restarting KittyClaw, and uses the same localhost trust boundary as the REST API. See the [complete tool catalogue and operation conventions](docs/mcp.md).
 
 ## For AI Agents
 
@@ -146,7 +146,7 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 6. **Labels & priority** — use `GET /api/projects/{slug}/labels` to discover available labels, and set priority to `Idea`, `NiceToHave`, `Required`, or `Critical`.
 7. **Check mentions** — call `GET /api/projects/{slug}/mentions/{your-handle}` to find tickets that mention you.
 8. **Sub-tickets** — set `parentId` when creating a ticket to make it a child. Use `PUT /api/projects/{slug}/tickets/{id}/parent` to reparent, or `DELETE` it to detach. List sub-tickets with `?parentId={id}`.
-9. **Cross-project transfers** — use `POST /api/projects/{slug}/tickets/{id}/transfer` only after checking that the target project has compatible columns, assignees, and labels. The operation preserves the ticket tree and its history or rejects the transfer without changing either project. See [Lossless ticket transfer](doc/ticket-transfer.md).
+9. **Cross-project transfers** — use `POST /api/projects/{slug}/tickets/{id}/transfer` only after checking that the target project has compatible columns, assignees, and labels. The operation preserves the ticket tree and its history or rejects the transfer without changing either project. See [Lossless ticket transfer](docs/ticket-transfer.md).
 
 ## Conventions
 
@@ -174,8 +174,8 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 - Column management directly from the board (insert, duplicate, reorder, configure, and mark read)
 - Label and member management
 - Image upload in descriptions and comments
-- Local model support ([Ollama](doc/local-models.md)): per-project base URL with model autodiscovery, per-member default model, and per-processor model configuration
-- Provider-aware dispatch through Claude Code, [OpenAI Codex](doc/codex-cli.md), [Grok Build](doc/grok-build.md), [Mistral Vibe](doc/mistral-vibe.md), or Ollama, with conversation handoff and unavailable-model fallback
+- Local model support ([Ollama](docs/local-models.md)): per-project base URL with model autodiscovery, per-member default model, and per-processor model configuration
+- Provider-aware dispatch through Claude Code, [OpenAI Codex](docs/codex-cli.md), [Grok Build](docs/grok-build.md), [Mistral Vibe](docs/mistral-vibe.md), or Ollama, with conversation handoff and unavailable-model fallback
 - Optional per-project RTK guidance for compact shell output, with bounded detection, telemetry forced off, and unchanged raw-command fallback
 
 ## Dashboard
@@ -273,7 +273,7 @@ Two things the AGPL does **not** touch (see [NOTICE.md](NOTICE.md)):
 
 → **Site + demo:** [kittyclaw.dev](https://kittyclaw.dev)
 
-→ **Community showcase:** [Projects using KittyClaw](doc/projects-using-kittyclaw.md)
+→ **Community showcase:** [Projects using KittyClaw](docs/projects-using-kittyclaw.md)
 
 Check out my other projects at **[ekioo.com](https://ekioo.com)**.
 

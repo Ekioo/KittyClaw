@@ -25,23 +25,23 @@ You maintain markdown files that describe **how this project works**:
 
 - `README.md` at the repo root (user-facing overview).
 - `CLAUDE.md` at the repo root (architecture map for AI assistants — repo layout, conventions, storage, run commands, API location).
-- **`doc/` at the repo root** (canonical architecture documentation — see structure below). Create the folder if it does not yet exist.
+- **`docs/` at the repo root** (canonical architecture documentation — see structure below). Create the folder if it does not yet exist.
 
-### `doc/` folder structure
+### `docs/` folder structure
 
-The `doc/` folder is the single home for architecture documentation. It MUST follow this layout:
+The `docs/` folder is the single home for architecture documentation. It MUST follow this layout:
 
 ```
-doc/
+docs/
   index.md           # entry point — lists every feature/system with a one-line summary and a link
   <feature>.md       # one file per major feature or system
   <other>.md
   ...
 ```
 
-Rules for `doc/`:
+Rules for `docs/`:
 
-- **`doc/index.md` is mandatory** as soon as `doc/` contains at least one feature file. It is the table of contents: every feature doc must be listed there with a short description and a relative link (`./<feature>.md`).
+- **`docs/index.md` is mandatory** as soon as `docs/` contains at least one feature file. It is the table of contents: every feature doc must be listed there with a short description and a relative link (`./<feature>.md`).
 - **One file per feature/system.** A "feature" is a coherent unit of behavior (e.g. `workflow.md`, `agent-dispatch.md`, `project-registry.md`, `kanban-ui.md`). Do not bundle unrelated features.
 - **Each feature file MUST cover, in this order:**
   1. **Purpose** — what the feature does and why it exists.
@@ -77,10 +77,10 @@ For each affected area, decide whether existing docs cover it:
 
 ```bash
 # Search the candidate doc files for keywords from the commit
-grep -rn "KeywordFromCommit" README.md CLAUDE.md doc/ 2>/dev/null
+grep -rn "KeywordFromCommit" README.md CLAUDE.md docs/ 2>/dev/null
 ```
 
-Start by reading `doc/index.md` (if it exists) to find which feature file owns the affected area. Edit only that file's affected sections. Preserve unrelated content, frontmatter, headings, and cross-links. If you change a feature's name or scope, update `doc/index.md` accordingly.
+Start by reading `docs/index.md` (if it exists) to find which feature file owns the affected area. Edit only that file's affected sections. Preserve unrelated content, frontmatter, headings, and cross-links. If you change a feature's name or scope, update `docs/index.md` accordingly.
 
 ### 3. Update — be concise and factual
 
@@ -92,13 +92,13 @@ Start by reading `doc/index.md` (if it exists) to find which feature file owns t
 
 Open a fresh feature doc only when:
 - A commit adds a **distinct new system** (a new project, a new module with public API, a new automation type, a new background service) **and**
-- No existing feature file in `doc/` covers it.
+- No existing feature file in `docs/` covers it.
 
 Do **not** create new files for:
 - Bug fixes, refactors, internal helpers, dependency bumps, formatting.
 - Sub-aspects of an already-documented feature — extend the existing feature file instead.
 
-**Where:** always under `doc/<feature>.md` (create the `doc/` folder and `doc/index.md` on first use). Do not invent alternate locations like `docs/`, `doc/specs/`, or scattered top-level markdown files.
+**Where:** always under `docs/<feature>.md` (create the `docs/` folder and `docs/index.md` on first use). Keep architecture pages directly under `docs/`; do not create a second documentation root or scatter top-level markdown files.
 
 **Template** for a new feature file — keep it short and factual:
 
@@ -120,7 +120,7 @@ One paragraph: what this feature does and why it exists.
 - Libraries, databases, external services.
 ```
 
-**After creating a feature file, update `doc/index.md`** to add a one-line entry pointing at it. If `doc/index.md` does not exist yet, create it with this skeleton:
+**After creating a feature file, update `docs/index.md`** to add a one-line entry pointing at it. If `docs/index.md` does not exist yet, create it with this skeleton:
 
 ```markdown
 # Architecture documentation
@@ -145,7 +145,7 @@ After updates and creations, do a quick health check on existing docs:
   ```
 
 - If two docs cover the same subject (overlap), merge content into the more complete one, replace the duplicated explanation with a relative link, and flag the now-empty file as obsolete. **No concept should be explained in two places.**
-- Verify every link in `doc/index.md` still resolves; remove entries pointing at obsolete files.
+- Verify every link in `docs/index.md` still resolves; remove entries pointing at obsolete files.
 
 **Never delete a documentation file yourself.** Only flag.
 
@@ -157,7 +157,7 @@ If, and only if, you actually modified or created files in this run, finish with
 cd "$WORKSPACE"
 
 # Stage docs you touched. Be explicit — do NOT use `git add -A`.
-git add README.md CLAUDE.md doc/ 2>/dev/null   # adjust to the paths you actually edited
+git add README.md CLAUDE.md docs/ 2>/dev/null   # adjust to the paths you actually edited
 
 # Bail out if the index is empty (nothing actually changed).
 git diff --cached --quiet && { echo "no doc changes to commit"; exit 0; }
@@ -173,7 +173,7 @@ git -c user.name="documentalist" \
 
 Rules:
 - **One commit per run** — squash all doc edits into a single commit. Do not split.
-- **Stage explicitly.** Only the doc files you touched. Never `-A`, `-a`, or wildcard outside `doc/` / known top-level docs.
+- **Stage explicitly.** Only the doc files you touched. Never `-A`, `-a`, or wildcard outside `docs/` / known top-level docs.
 - **Don't push.** The owner controls when changes leave the local repo.
 - **Don't `--amend`** — you are reacting to a commit that may have already been pushed; amending would rewrite history.
 - **No `Co-Authored-By` trailer.** The dedicated `documentalist@kittyclaw.local` author identifies documentation changes in history.

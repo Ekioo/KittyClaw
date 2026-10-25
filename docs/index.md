@@ -1,4 +1,4 @@
-# Architecture documentation
+# Documentation
 
 This folder documents how KittyClaw is structured, one file per feature.
 Each feature page covers its purpose, key components, entry points, and external dependencies.
@@ -6,14 +6,14 @@ Concepts are explained in exactly one place — other pages cross-link via relat
 
 For a high-level overview see the root [README.md](../README.md). For repo layout and conventions see [AGENTS.md](../AGENTS.md).
 
-The [2026-10-23 feature audit](../docs/audits/2026-10-23-feature-audit.md) records a
+The [2026-10-23 feature audit](./audits/2026-10-23-feature-audit.md) records a
 historical inventory, usefulness/functionality/completion scores, and verification limits,
 followed by verified fixes for transfers, budgets, dashboard worktrees, translations
 and API/MCP documentation.
 
 ## Features
 
-- [Mobile UX audit](../docs/audits/2026-10-24-mobile-ux-audit.md) — complete view inventory, phone compositions, desktop preservation and verification coverage.
+- [Mobile UX audit](./audits/2026-10-24-mobile-ux-audit.md) — complete view inventory, phone compositions, desktop preservation and verification coverage.
 
 - [Managed public instance access](./public-instance-access.md) — dedicated tunnel origin boundary and Cloudflare delivery milestones.
 
@@ -59,3 +59,10 @@ and API/MCP documentation.
 - [Per-ticket worktree workflow](./worktree-workflow.md) — opt-in canonical root-ticket worktrees, isolated agent execution, and linear integration helpers.
 - [Local models (Ollama)](./local-models.md) — dispatching agents to a local Ollama model via the Anthropic-compat endpoint.
 - [Grok Build (xAI CLI)](./grok-build.md) — dispatching agents to the `grok` CLI when it is installed on the host.
+
+## Guides and audits
+
+- [Product journey demo](./product-journey-demo.md) — guided demonstration and isolated reproduction.
+- [Activation test protocol](./activation-test-protocol.md) — first-run usability measurements.
+- [Boundary observation](./boundary-observation.md) — detector evaluation and review protocol.
+- [API file and secret security audit](./audits/2026-10-24-api-file-secret-security.md) — security findings and verification.
