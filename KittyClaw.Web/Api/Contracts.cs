@@ -84,7 +84,8 @@ public record UpdateProjectRequest(
     string? RepositoryPath = null,
     BoundaryEnforcementMode? BoundaryEnforcement = null,
     int? UpdateReviewColumnId = null,
-    bool UpdateReviewColumn = false);
+    bool UpdateReviewColumn = false,
+    string? WorkingFilesPath = null);
 public record SaveLocalModelConfigRequest(string? LocalModelBaseUrl = null, string? LocalModelName = null);
 public record SaveRtkConfigRequest(bool Enabled);
 public record SteerRunRequest(string Text, IReadOnlyList<ChatImageDto>? Images = null);

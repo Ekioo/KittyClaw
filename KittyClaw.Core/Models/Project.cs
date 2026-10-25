@@ -9,6 +9,7 @@ public class Project
     public required string Name { get; set; }
     public required string Slug { get; set; }
     public string? WorkspacePath { get; set; }
+    public string? WorkingFilesPath { get; set; }
     public string? RepositoryPath { get; set; }
     [NotMapped] public string? ResolvedRepositoryPath { get; set; }
     public bool IsPaused { get; set; } = false;

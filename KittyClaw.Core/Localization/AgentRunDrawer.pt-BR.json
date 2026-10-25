@@ -1,4 +1,7 @@
 {
+  "OpenRunWorkingFiles": "Abrir pasta de trabalho",
+  "OpenRunWorkingFilesHint": "Abrir a pasta desta execução no computador do KittyClaw",
+  "OpenRunWorkingFilesError": "Não foi possível abrir a pasta de trabalho",
   "StopAgent": "Parar agente",
   "Stop": "Parar",
   "Retry": "Tentar Novamente",

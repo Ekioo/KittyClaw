@@ -1,4 +1,7 @@
 {
+  "OpenRunWorkingFiles": "作業フォルダーを開く",
+  "OpenRunWorkingFilesHint": "KittyClawのコンピューターでこの実行の作業フォルダーを開く",
+  "OpenRunWorkingFilesError": "作業フォルダーを開けませんでした",
   "StopAgent": "エージェント停止",
   "Stop": "停止",
   "Retry": "再試行",

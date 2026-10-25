@@ -124,6 +124,12 @@ else
                     @(_savingWorkspace ? "…" : L["Save"])
                 </button>
             </div>
+            <label class="settings-label" for="working-files-path">@L["WorkingFilesPath"]</label>
+            <p class="settings-hint" id="working-files-hint">@L["WorkingFilesHint"]</p>
+            <div class="settings-row">
+                <input id="working-files-path" class="settings-input" aria-describedby="working-files-hint" placeholder="@L["WorkspacePlaceholder"]" @bind="_workingFilesPath" @bind:event="oninput" />
+                <button class="settings-browse" type="button" @onclick="() => _workingFilesPickerOpen = true">📁 @L["Browse"]</button>
+            </div>
             @if (_workspaceStatus is not null)
             {
                 <div class="settings-status @_workspaceStatus.Value.css">@_workspaceStatus.Value.text</div>
@@ -582,6 +588,13 @@ else
                         OnCancel="CloseFolderPicker" />
 }
 
+@if (_workingFilesPickerOpen)
+{
+    <FolderPickerDialog InitialPath="@_workingFilesPath"
+                        OnSelected="@(path => { _workingFilesPath = path; _workingFilesPickerOpen = false; })"
+                        OnCancel="@(() => _workingFilesPickerOpen = false)" />
+}
+
 @code {
     private string _mobileSection = "worktrees";
     private IReadOnlyList<MobileSectionNavigation.Section> MobileSections =>
@@ -610,6 +623,8 @@ else
     private (string text, string css)? _manualUpdateReviewStatus;
     private (string text, string css)? _updateReviewStatus;
     private string _workspacePath = "";
+    private string _workingFilesPath = "";
+    private bool _workingFilesPickerOpen;
     private bool _savingWorkspace, _folderPickerOpen;
     private (string text, string css)? _workspaceStatus;
     private bool _worktreesEnabled, _savingWorktrees;
@@ -677,6 +692,7 @@ else
                 .Where(ProjectUpdateReviewService.IsEligibleTarget));
         await ActivationMetrics.RecordSettingsOpenedAsync(Slug);
         _workspacePath = _project.WorkspacePath ?? "";
+        _workingFilesPath = _project.WorkingFilesPath ?? "";
         _worktreesEnabled = _project.WorktreesEnabled;
         _integrationBranch = _project.IntegrationBranch ?? "";
         _repositoryPath = _project.RepositoryPath ?? "";
@@ -739,7 +755,7 @@ else
         _workspaceStatus = null;
         try
         {
-            var body = new { workspacePath = string.IsNullOrWhiteSpace(_workspacePath) ? null : _workspacePath.Trim() };
+            var body = new { workspacePath = _workspacePath.Trim(), workingFilesPath = _workingFilesPath.Trim() };
             var resp = await NewHttp().PatchAsJsonAsync($"/api/projects/{Slug}", body);
             if (resp.IsSuccessStatusCode)
             {

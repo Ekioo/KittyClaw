@@ -94,3 +94,31 @@ events are never silently dropped while keeping the connection open.
 `AgentRunLifecycle` owns run retention and bounded cancellation on shutdown. Project pause and explicit stop use the same cleanup helper. It does not dispatch work; `ColumnProcessingEngine`, `ColumnScheduledTaskEngine`, and ad-hoc conversations own launches.
 
 `GET /api/engine/health` and `get_engine_health` report the column-processing service's start time, last loop heartbeat, and project pause states. Legacy automation counts, trigger scheduling, and queue entries are no longer exposed.
+
+## Project working files folder
+
+Project settings expose an optional absolute `WorkingFilesPath` alongside the workspace.
+The registry stores it with an inline migration. `PATCH /api/projects/{slug}` accepts
+`workingFilesPath`: omission preserves it, and an empty string clears it. The same path
+validation as the workspace applies; existing files and control characters are rejected.
+At the first provider invocation of each run, the runner resolves a base folder: the
+configured path, or `<dataDir>/artifacts/<project-slug>` when the setting is empty. The
+default data directory is `%APPDATA%/KittyClaw`; `KITTYCLAW_DATA_DIR` is respected for
+isolated instances. Every run uses a `<run-id>` subfolder beneath that base, including
+when the base is customized. The folder is created automatically; a creation failure
+fails the run before launching a provider, with the path and error in the run log.
+Retries, fallback providers and steering within the same run reuse the resolved folder.
+New runs, including resumed conversations, get their own run folder and updated instructions.
+The runner prepends instructions to use it for temporary files, scratch work, drafts,
+screenshots, evidence, reports, and intermediate artifacts. This also applies to worktree
+runs; deliverable source files stay in the execution workspace. Artifact directories are
+retained after completion and are not included in automatic run-history cleanup.
+This is an agent instruction, not a filesystem sandbox or a relocation of KittyClaw's
+internal databases, logs, attachments, or agent memory.
+
+The effective run directory is recorded as `AgentRun.WorkingFilesPath`, persisted in run
+snapshots, and exposed by run detail/list responses. The execution drawer offers an
+"Open working folder" button for runs with a recorded path. It opens that exact directory
+in the host computer's file manager, including after restart or project setting changes;
+missing directories show an error and are not recreated by this action. Older snapshots
+without this field do not display the button.

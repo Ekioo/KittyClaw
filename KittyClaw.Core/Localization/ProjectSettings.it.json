@@ -1,4 +1,6 @@
 {
+  "WorkingFilesPath": "Cartella dei file di lavoro",
+  "WorkingFilesHint": "Cartella base assoluta facoltativa per file temporanei, bozze e prove. Vuoto: cartella dati KittyClaw (artifacts/progetto). Ogni esecuzione ha una sottocartella creata automaticamente e conservata al termine. Gli agenti devono usarla. Salvare entrambe le cartelle con Salva.",
   "SettingsTitle": "Impostazioni",
   "Board": "Asse",
   "WorkspacePath": "Percorso dell'area di lavoro",

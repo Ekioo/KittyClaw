@@ -19,6 +19,28 @@ public sealed class ProjectWorktreeSettingsHttpTests : IClassFixture<ProjectWork
     }
 
     [Fact]
+    public async Task Patch_WorkingFilesFolderPersistsAndClearsWithoutChangingWorkspace()
+    {
+        var create = await _client.PostAsJsonAsync("/api/projects",
+            new CreateProjectRequest("api-working-files-" + Guid.NewGuid().ToString("N")));
+        create.EnsureSuccessStatusCode();
+        var slug = (await create.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("slug").GetString();
+        var workspace = Path.Combine(_factory.DataDir, "control-" + Guid.NewGuid().ToString("N"));
+        (await _client.PatchAsJsonAsync($"/api/projects/{slug}", new { workspacePath = workspace })).EnsureSuccessStatusCode();
+        var folder = Path.Combine(_factory.DataDir, "proofs");
+        (await _client.PatchAsJsonAsync($"/api/projects/{slug}", new { workingFilesPath = folder })).EnsureSuccessStatusCode();
+        var saved = await _client.GetFromJsonAsync<JsonElement>($"/api/projects/{slug}");
+        Assert.Equal(folder, saved.GetProperty("workingFilesPath").GetString());
+        Assert.Equal(workspace, saved.GetProperty("workspacePath").GetString());
+        var invalid = await _client.PatchAsJsonAsync($"/api/projects/{slug}", new { workingFilesPath = "relative" });
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        (await _client.PatchAsJsonAsync($"/api/projects/{slug}", new { workingFilesPath = "" })).EnsureSuccessStatusCode();
+        saved = await _client.GetFromJsonAsync<JsonElement>($"/api/projects/{slug}");
+        Assert.Equal(JsonValueKind.Null, saved.GetProperty("workingFilesPath").ValueKind);
+        Assert.Equal(workspace, saved.GetProperty("workspacePath").GetString());
+    }
+
+    [Fact]
     public async Task Post_NewProjectDefaultsToWorktreesEnabled()
     {
         var create = await _client.PostAsJsonAsync(

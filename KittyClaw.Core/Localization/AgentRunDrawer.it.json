@@ -1,4 +1,7 @@
 {
+  "OpenRunWorkingFiles": "Apri cartella di lavoro",
+  "OpenRunWorkingFilesHint": "Apri la cartella di questa esecuzione sul computer KittyClaw",
+  "OpenRunWorkingFilesError": "Impossibile aprire la cartella di lavoro",
   "StopAgent": "Arresta l'agente",
   "Stop": "Fermare",
   "Retry": "Riprova",

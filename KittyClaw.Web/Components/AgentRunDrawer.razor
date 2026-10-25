@@ -5,6 +5,7 @@
 @using KittyClaw.Web.Services
 @using Markdig
 @inject AgentRunsState RunsState
+@inject RunWorkingFilesService WorkingFiles
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject LocalizationService L
@@ -16,6 +17,10 @@
 {
     <ConversationDrawer Title="@_run.AgentName" Run="_run" CssClass="agent-drawer" IsBusy="@(_run.Status == AgentRunStatus.Running)" OnClose="Close">
         <HeaderActions>
+            @if (!string.IsNullOrWhiteSpace(_run.WorkingFilesPath))
+            {
+                <button class="header-action-btn" type="button" @onclick="OpenWorkingFiles" title="@L["OpenRunWorkingFilesHint"]" data-testid="open-run-working-files">📁 @L["OpenRunWorkingFiles"]</button>
+            }
             @if (_run.Status is AgentRunStatus.Failed or AgentRunStatus.Stopped)
             {
                 <button class="agent-retry-btn" @onclick="Retry" disabled="@_retrying" title="@L["RetryAgent"]">↻ @L["Retry"]</button>
@@ -181,6 +186,18 @@
             _needsScroll = true;
             StateHasChanged();
         });
+    }
+
+    private void OpenWorkingFiles()
+    {
+        if (_run is null) return;
+        _actionError = null;
+        try { WorkingFiles.Open(_run.ProjectSlug, _run.RunId); }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to open working files for run {RunId}", _run.RunId);
+            _actionError = $"{L["OpenRunWorkingFilesError"]}: {ex.Message}";
+        }
     }
 
     private async Task Close()

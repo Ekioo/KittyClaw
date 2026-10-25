@@ -1,4 +1,6 @@
 {
+  "WorkingFilesPath": "Pasta de arquivos de trabalho",
+  "WorkingFilesHint": "Pasta base absoluta opcional para arquivos temporários, rascunhos e evidências. Em branco: pasta de dados do KittyClaw (artifacts/projeto). Cada execução tem uma subpasta criada automaticamente e mantida após a conclusão. Os agentes devem usá-la. Salve ambas as pastas com Salvar.",
   "SettingsTitle": "Configurações",
   "Board": "Placa",
   "WorkspacePath": "Caminho do workspace",

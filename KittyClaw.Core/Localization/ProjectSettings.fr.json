@@ -1,4 +1,6 @@
 {
+  "WorkingFilesPath": "Dossier des fichiers de travail",
+  "WorkingFilesHint": "Dossier de base absolu facultatif pour les fichiers temporaires, brouillons et preuves. Vide : utilise le dossier de données KittyClaw (artifacts/projet). Chaque exécution possède un sous-dossier, créé automatiquement et conservé après sa fin. Les agents doivent l’utiliser. Enregistrer les deux dossiers avec Enregistrer.",
   "SettingsTitle": "Paramètres",
   "Board": "Board",
   "WorkspacePath": "Dossier de travail",

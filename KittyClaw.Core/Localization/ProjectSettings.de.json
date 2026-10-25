@@ -1,4 +1,6 @@
 {
+  "WorkingFilesPath": "Ordner für Arbeitsdateien",
+  "WorkingFilesHint": "Optionaler absoluter Basisordner für temporäre Dateien, Entwürfe und Nachweise. Leer: KittyClaw-Datenordner (artifacts/Projekt). Jeder Lauf erhält einen automatisch erstellten Unterordner, der danach erhalten bleibt. Agenten müssen ihn verwenden. Beide Ordner mit Speichern sichern.",
   "SettingsTitle": "Einstellungen",
   "Board": "Planke",
   "WorkspacePath": "Arbeitsbereichspfad",
