@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "inactivity_days": 30,
+  "review_interval_days": 30,
+  "files": {
+    "shot-917029eed5c7436fbca8102987e919ce.png": {
+      "sha256": "4fc806117779e31d7abcc94f46135012bef1dc702cc8633e1d0ced7e89f663da",
+      "last_content_change_at": "2026-09-05T17:48:38.0000000Z",
+      "last_reviewed_at": "2026-10-25T09:38:55.1089861Z",
+      "decision": "removed",
+      "reason": "Unreferenced execution screenshot at repository root; explicit user-requested removal.",
+      "evidence": [
+        "Tracked-file reference search found no consumers.",
+        "Git history identifies standalone screenshot artifacts; maintained README images are under docs/assets."
+      ]
+    },
+    "shot-b4d7e588c97049edb34e49c2f9170f9e.png": {
+      "sha256": "2215efb5a01df65307cc1f088bb3cd29a69fa97cb4a53a236cbb8d0f4d6199e7",
+      "last_content_change_at": "2026-09-05T17:48:38.0000000Z",
+      "last_reviewed_at": "2026-10-25T09:38:55.3003716Z",
+      "decision": "removed",
+      "reason": "Unreferenced execution screenshot at repository root; explicit user-requested removal.",
+      "evidence": [
+        "Tracked-file reference search found no consumers.",
+        "Git history identifies standalone screenshot artifacts; maintained README images are under docs/assets."
+      ]
+    },
+    "shot-ea5962af613e47d584c91c69405e85d3.png": {
+      "sha256": "0e4bb5c4e719db830c31ed9864dd4fe523a319e49cb9143f60ff962b25d699ea",
+      "last_content_change_at": "2026-09-05T17:48:38.0000000Z",
+      "last_reviewed_at": "2026-10-25T09:38:55.5397131Z",
+      "decision": "removed",
+      "reason": "Unreferenced execution screenshot at repository root; explicit user-requested removal.",
+      "evidence": [
+        "Tracked-file reference search found no consumers.",
+        "Git history identifies standalone screenshot artifacts; maintained README images are under docs/assets."
+      ]
+    },
+    "branding/KittyClaw-Picto.png": {
+      "sha256": "f29d88aefede2c5a9ba398f8dd234c043b123cb8837a09f1f2014cf7fbe7b6f0",
+      "last_content_change_at": "2026-10-22T21:46:43.0000000Z",
+      "last_reviewed_at": "2026-10-25T09:38:55.7140784Z",
+      "decision": "removed",
+      "reason": "Exact duplicate of retained Posture-07 asset; explicit user-requested removal.",
+      "evidence": [
+        "Tracked-file reference search found no consumers.",
+        "SHA-256 equals retained asset branding/KittyClaw-Picto-Posture-07.png."
+      ]
+    },
+    "KittyClaw.Web/wwwroot/KittyClaw-Picto.webp": {
+      "sha256": "6adbb5803afcfe953fa4cf856fe6b0b9b449686e1ff8ba196c8fdced0f5107eb",
+      "last_content_change_at": "2026-10-22T21:46:43.0000000Z",
+      "last_reviewed_at": "2026-10-25T09:38:55.9698697Z",
+      "decision": "removed",
+      "reason": "Exact duplicate of retained Posture-07 asset; explicit user-requested removal.",
+      "evidence": [
+        "Tracked-file reference search found no consumers.",
+        "SHA-256 equals retained asset KittyClaw.Web/wwwroot/KittyClaw-Picto-Posture-07.webp."
+      ]
+    }
+  }
+}
