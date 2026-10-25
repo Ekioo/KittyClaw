@@ -218,6 +218,27 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
         }
     }
 
+    public async Task CommitDashboardTileAsync(string projectSlug, DurableWriteRoute route, string message)
+    {
+        if (route.QueueRequestId is not null)
+        {
+            var validation = await CommitAndQueueAsync(projectSlug, route, message);
+            if (validation.Status != DurableWriteValidationStatus.Ready)
+                throw new InvalidOperationException(validation.Error ?? "Dashboard changes require review before integration.");
+            return;
+        }
+
+        // A shared checkout may contain unrelated staged or unstaged user work.
+        // Restrict both staging and the commit to this tile's declared paths.
+        var changed = StatusPaths(route.RootPath)
+            .Where(path => IsAllowed(path, route.AllowedPaths)).ToArray();
+        if (changed.Length == 0) return;
+        if (changed.Any(path => ProbableSecretScanner.ContainsProbableSecret(Path.Combine(route.RootPath, path))))
+            throw new InvalidOperationException("Dashboard changes contain a possible secret.");
+        RunGit(route.RootPath, ["add", "-A", "--", .. route.AllowedPaths]);
+        RunGit(route.RootPath, ["commit", "--only", "-m", message, "--", .. route.AllowedPaths]);
+    }
+
     public async Task PreserveExecutionAsync(string projectSlug, DurableWriteRoute route, string reason)
     {
         try

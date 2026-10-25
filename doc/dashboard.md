@@ -137,3 +137,5 @@ The configuration editor registers with the shared Escape stack on every entry
 (edit or AI proposal), moves focus inside after render, and contains Tab navigation.
 Escape closes the topmost editor and restores the original trigger's focus. Save,
 cancel, revise and component disposal release the Escape registration.
+
+Saving a tile from the configuration popup automatically commits its configuration, script and initial output together. Shared-checkout commits include only that tile folder and preserve unrelated staged changes. With worktrees enabled, the save uses the maintenance worktree and queues integration; the dashboard picks it up after synchronization. Commit errors leave the editor open and display the failure.

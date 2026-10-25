@@ -12,6 +12,7 @@
 @inject TicketService TicketService
 @inject IHttpClientFactory HttpFactory
 @inject DashboardService DashboardService
+@inject DurableWriteRouter DurableWrites
 @inject AgentRunner AgentRunner
 @inject DashboardTileGate TileGate
 @inject DashboardScriptRunner ScriptRunner
@@ -270,11 +271,11 @@ else
                         <div class="tile-config-field">
                             <label>@L["TileConfigScriptContent"]</label>
                             <textarea rows="6" @bind="_configScriptContent" placeholder="@L["TileConfigScriptContentHint"]"></textarea>
-                            @if (_configScriptError is not null)
-                            {
-                                <span class="tile-config-error">@_configScriptError</span>
-                            }
                         </div>
+                    }
+                    @if (_configScriptError is not null)
+                    {
+                        <span class="tile-config-error" role="alert">@_configScriptError</span>
                     }
                     @if (detectedOutput is not null)
                     {
@@ -1137,47 +1138,57 @@ else
             string.IsNullOrWhiteSpace(_configTitle) ? null : _configTitle.Trim(),
             refreshAt);
 
-        // Edit mode: update sidecar in place.
-        if (_configEditingSlug is not null)
-        {
-            await DashboardService.WriteSidecarAsync(_workspace, _configEditingSlug, sidecar);
-            _sidecars[_configEditingSlug] = sidecar;
-            HideTileConfigPopup();
-            _configEditingSlug = null;
-            return;
-        }
-
-        var tileSlug = _configSlug.Trim();
+        var tileSlug = (_configEditingSlug ?? _configSlug).Trim();
         if (string.IsNullOrWhiteSpace(tileSlug)) return;
-
-        // If script content provided, write it, test it, and abort on failure.
-        if (!string.IsNullOrWhiteSpace(_configScriptContent))
+        var route = await DurableWrites.ResolveAsync(Slug, null, [Path.Combine(".dashboard", tileSlug)]);
+        try
         {
-            var scriptExt = DashboardService.DefaultScriptExtension();
-            var tileDir = DashboardService.GetTileDirPath(_workspace, tileSlug);
-            System.IO.Directory.CreateDirectory(tileDir);
-            var scriptPath = System.IO.Path.Combine(tileDir, DashboardService.ScriptBaseName + scriptExt);
-            await System.IO.File.WriteAllTextAsync(scriptPath, _configScriptContent, System.Text.Encoding.UTF8);
-
-            var result = await ScriptRunner.RunAsync(scriptPath, _workspace, CancellationToken.None);
-            if (!result.IsSuccess)
+            // Edit mode: update sidecar in place.
+            if (_configEditingSlug is not null)
             {
-                _configScriptError = result.ConfigError
-                    ?? $"Script exited with code {result.ExitCode}: {result.Stderr}";
-                StateHasChanged();
+                await DashboardService.WriteSidecarAsync(route.RootPath, _configEditingSlug, sidecar);
+                await DurableWrites.CommitDashboardTileAsync(Slug, route, $"chore(dashboard): update {_configEditingSlug}");
+                _sidecars[_configEditingSlug] = sidecar;
+                HideTileConfigPopup();
+                _configEditingSlug = null;
                 return;
             }
-            _configScriptError = null;
-            // Write script stdout as initial output
-            await DashboardService.WriteOutputAsync(_workspace, tileSlug, result.Stdout, template);
+
+            // If script content provided, write it, test it, and abort on failure.
+            if (!string.IsNullOrWhiteSpace(_configScriptContent))
+            {
+                var scriptExt = DashboardService.DefaultScriptExtension();
+                var tileDir = DashboardService.GetTileDirPath(route.RootPath, tileSlug);
+                System.IO.Directory.CreateDirectory(tileDir);
+                var scriptPath = System.IO.Path.Combine(tileDir, DashboardService.ScriptBaseName + scriptExt);
+                await System.IO.File.WriteAllTextAsync(scriptPath, _configScriptContent, System.Text.Encoding.UTF8);
+
+                var result = await ScriptRunner.RunAsync(scriptPath, route.RootPath, CancellationToken.None);
+                if (!result.IsSuccess)
+                {
+                    _configScriptError = result.ConfigError
+                        ?? $"Script exited with code {result.ExitCode}: {result.Stderr}";
+                    throw new InvalidOperationException(_configScriptError);
+                }
+                _configScriptError = null;
+                // Write script stdout as initial output
+                await DashboardService.WriteOutputAsync(route.RootPath, tileSlug, result.Stdout, template);
+            }
+            else if (template != TileTemplate.Image)
+            {
+                await DashboardService.WriteOutputAsync(route.RootPath, tileSlug, "", template);
+            }
+
+            await DashboardService.WriteSidecarAsync(route.RootPath, tileSlug, sidecar);
+
+            await DurableWrites.CommitDashboardTileAsync(Slug, route, $"chore(dashboard): create {tileSlug}");
         }
-        else if (template != TileTemplate.Image)
+        catch (Exception ex)
         {
-            await DashboardService.WriteOutputAsync(_workspace, tileSlug, "", template);
+            await DurableWrites.PreserveExecutionAsync(Slug, route, ex.Message);
+            _configScriptError = ex.Message;
+            return;
         }
-
-        await DashboardService.WriteSidecarAsync(_workspace, tileSlug, sidecar);
-
         _availableSlugs = DashboardService.GetAvailableSlugs(_workspace);
         _tiles = await DashboardService.GetTilesAsync(Slug, _workspace);
         _sidecars[tileSlug] = sidecar;
