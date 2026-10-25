@@ -24,7 +24,7 @@
 /* Filter bar */
 .filter-bar {
     flex: 1;
-    max-width: 380px;
+    min-width: 0;
     margin-left: auto;
 }
 .filter-input-wrapper {
