@@ -33,6 +33,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         // Columns
         "POST /api/projects/{slug}/tickets/{id}/improvement/analyze",
         "POST /api/projects/{slug}/tickets/{id}/improvement/apply",
+        "POST /api/projects/{slug}/tickets/{id}/focus",
         "GET /api/projects/{slug}/columns",
         "POST /api/projects/{slug}/columns",
         "PATCH /api/projects/{slug}/columns/{columnId}",

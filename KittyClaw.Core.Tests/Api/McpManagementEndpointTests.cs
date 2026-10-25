@@ -35,6 +35,7 @@ public sealed partial class McpEndpointTests
         "delete_ticket",
         "delete_ticket_comment",
         "enqueue_worktree_merge",
+        "focus_ticket",
         "get_column_processor",
         "get_engine_health",
         "get_project",
