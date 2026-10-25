@@ -25,7 +25,15 @@ The global Costs page aggregates durable agent and JEV cost records across regis
 - The atomic `cost-report-snapshot.json` cache in the KittyClaw data directory, retained across process restarts.
 - Blazor Server for the interactive page and accessible daily bar visualization.
 
-## Provider rate verification (2026-10-22)
+## Provider rate verification (2026-10-25)
+
+The scheduled verification added missing estimates for the already selectable Grok 4.7
+and 4.6 models: $2 input, $6 output and $0.50 cached input per million tokens, doubled
+at 200,000 prompt tokens, from the [official xAI rate card](https://docs.x.ai/developers/pricing).
+These are standard global rates; Grok Build Fast and regional premiums are not inferred.
+The current OpenAI flagship, Claude, DeepSeek, Mistral Medium 3.5 and TypeSafe prices
+were checked against their official pages; no further price changes were established.
+Legacy entries retain the verification limits described below.
 
 `ModelCostEstimator` uses USD per million tokens, with provider-reported monetary totals
 taking precedence. This refresh updates GPT-5.6 Sol to 4 input / 20 output / 0.4 cached

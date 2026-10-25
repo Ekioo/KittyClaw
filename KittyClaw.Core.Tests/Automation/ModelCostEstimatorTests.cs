@@ -38,6 +38,19 @@ public sealed class ModelCostEstimatorTests
     }
 
     [Theory]
+    [InlineData("grok-4.7")]
+    [InlineData("grok-4.6")]
+    public void CurrentGrokModels_PriceCachedInputAndLongContext(string model)
+    {
+        Assert.True(ModelCostEstimator.TryEstimate(
+            model, 100_000, 10_000, 50_000, 0, out var shortCost));
+        Assert.Equal(0.285m, shortCost);
+        Assert.True(ModelCostEstimator.TryEstimate(
+            model, 150_000, 10_000, 50_000, 0, out var longCost));
+        Assert.Equal(0.77m, longCost);
+    }
+
+    [Theory]
     [InlineData("mistral:mistral-medium-3.5", 10.65)]
     [InlineData("mistral:devstral-small", 0.51)]
     public void MistralVibeAliases_UseOfficialRateCard(string model, double expected)

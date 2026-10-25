@@ -8,7 +8,7 @@ namespace KittyClaw.Core.Automation;
 /// </summary>
 public static class ModelCostEstimator
 {
-    public const string RateCardVersion = "2026-10-23";
+    public const string RateCardVersion = "2026-10-25";
 
     public static bool TryEstimate(
         string? model,
@@ -46,6 +46,8 @@ public static class ModelCostEstimator
             "gpt-5.6-luna" => new(1m, 6m, 0.1m, 1.25m),
             "gpt-5.5" => new(5m, 30m, 0.5m, 6.25m),
             "gpt-5.4" => new(2.5m, 15m, 0.25m, 3.125m),
+            // https://docs.x.ai/developers/pricing, verified 2026-10-25.
+            "grok-4.7" or "grok-4.6" => new(2m, 6m, 0.5m, 2m),
             "grok-4.5" or "grok-4.5-latest" => new(2m, 6m, 0.3m, 2m),
             "grok-build-0.1" => new(1m, 2m, 0.2m, 1m),
             "mistral-medium-3.5" or "mistral-vibe-cli-latest" => new(1.5m, 7.5m, 0.15m, 1.5m),
