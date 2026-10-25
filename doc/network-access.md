@@ -8,6 +8,11 @@ TOTP authenticator (SHA-1, six digits,
 30 seconds), then confirm a code. No password or external identity service is used;
 this is authenticator-only authentication, not two independent factors.
 
+Settings opens the standalone setup documents with full navigation. Local setup
+pages load the shared Windows desktop toolbar styles and allow same-origin images
+so the native shell keeps its logo and window controls. Remote login pages retain
+their self-contained asset policy.
+
 ## Listener and host validation
 
 After association, restart KittyClaw. The original listener remains available for
