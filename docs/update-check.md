@@ -29,6 +29,8 @@ Source installations retain the dismissible release-link banner described below.
   Window controls are integrated into the existing page header without an extra title bar.
   `WindowsDesktopShell.js` applies one fixed-height header style from `windows-desktop.css`
   to every view, with the KittyClaw home link on the left and window controls on the right.
+  The desktop stylesheet is also embedded and injected by the native host, so cached or
+  unavailable HTTP styles cannot leave the window logo at its intrinsic image size.
   A matching fallback keeps the shell visible during loading and on error/not-found pages.
   Browser views retain their regular layout; viewport-sized boards account for the fixed header.
   Shared conversation drawers and their overlays start below it and use the remaining viewport height,
