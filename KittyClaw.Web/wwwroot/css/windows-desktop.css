@@ -49,7 +49,7 @@
     line-height: 1.4;
 }
 .windows-desktop .desktop-window-header .project-directory-global-actions { margin-left: auto; }
-.windows-desktop .desktop-window-header .filter-bar { flex: 0 0 240px; max-width: 240px; }
+.windows-desktop .desktop-window-header .filter-bar { flex: 1 1 240px; min-width: 0; max-width: none; }
 .windows-desktop .desktop-window-header .filter-hint-popup {
     position: fixed;
     top: calc(var(--desktop-topbar-height) + 6px);
