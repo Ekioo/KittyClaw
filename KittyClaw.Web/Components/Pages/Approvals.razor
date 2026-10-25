@@ -81,7 +81,7 @@ else
                                 <span class="approval-state">@StateLabel(request.State)</span>
                                 <strong>@ActionLabel(request.ActionClass)</strong>
                             </div>
-                            <time>@request.ObservedAt.ToLocalTime().ToString("g")</time>
+                            <LocalDateTime Value="request.ObservedAt" />
                         </header>
                         <p class="approval-request-summary">@RequestSummary(request)</p>
                         <div class="approval-context">
@@ -149,7 +149,7 @@ else
                         <summary>
                             <span class="approval-state">@StateLabel(request.State)</span>
                             <strong>@ActionLabel(request.ActionClass)</strong>
-                            <span>#@request.TicketId · @request.ObservedAt.ToLocalTime().ToString("g")</span>
+                            <span>#@request.TicketId · <LocalDateTime Value="request.ObservedAt" /></span>
                         </summary>
                         <p class="approval-request-summary">@RequestSummary(request)</p>
                         <dl class="approval-grid">
@@ -166,11 +166,11 @@ else
                                 <strong>@L.Get("ApprovalAuditHistory", decisions.Count + receipts.Count)</strong>
                                 @foreach (var decision in decisions)
                                 {
-                                    <p><span>@DecisionLabel(decision.Kind)</span> @L.Get("ApprovalDecisionAudit", decision.Actor, decision.CreatedAt.ToLocalTime().ToString("g"), ScopeLabel(decision.Scope), decision.ExpiresAt.ToLocalTime().ToString("g"))</p>
+                                    <p><span>@DecisionLabel(decision.Kind)</span> @BrowserLocalDateTime.Format(L["ApprovalDecisionAudit"], decision.Actor, decision.CreatedAt, ScopeLabel(decision.Scope), decision.ExpiresAt)</p>
                                 }
                                 @foreach (var receipt in receipts)
                                 {
-                                    <p><span>@ReceiptLabel(receipt.Outcome)</span> @L.Get("ApprovalReceiptAudit", receipt.EnforcementPointId, receipt.EndedAt.ToLocalTime().ToString("g")) <code>@receipt.IntegrityHash[..12]</code></p>
+                                    <p><span>@ReceiptLabel(receipt.Outcome)</span> @BrowserLocalDateTime.Format(L["ApprovalReceiptAudit"], receipt.EnforcementPointId, receipt.EndedAt) <code>@receipt.IntegrityHash[..12]</code></p>
                                 }
                             </div>
                         }
@@ -280,9 +280,9 @@ else
         ? "—"
         : hash[..Math.Min(12, hash.Length)];
 
-    private string Duration(ApprovalRequestRecord request) => request.DurationRequestedSeconds is int seconds
-        ? TimeSpan.FromSeconds(seconds).ToString()
-        : L.Get("ApprovalUntil", request.ExpiresAt.ToLocalTime().ToString("g"));
+    private MarkupString Duration(ApprovalRequestRecord request) => request.DurationRequestedSeconds is int seconds
+        ? new MarkupString(TimeSpan.FromSeconds(seconds).ToString())
+        : BrowserLocalDateTime.Format(L["ApprovalUntil"], request.ExpiresAt);
 
     public void Dispose() => _refreshTimer?.Dispose();
 }

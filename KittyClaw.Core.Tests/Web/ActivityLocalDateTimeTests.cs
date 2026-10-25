@@ -15,6 +15,17 @@ public class ActivityLocalDateTimeTests
     }
 
     [Fact]
+    public void Localized_audit_text_encodes_untrusted_arguments_and_keeps_utc_instants()
+    {
+        var instant = new DateTime(2026, 10, 25, 1, 30, 0, DateTimeKind.Unspecified);
+        var markup = BrowserLocalDateTime.Format("{0} at {1}", "<script>alert(1)</script>", instant).Value;
+        Assert.Contains("&lt;script&gt;", markup);
+        Assert.DoesNotContain("<script>", markup);
+        Assert.Contains("2026-10-25T01:30:00.0000000Z", markup);
+        Assert.Contains("data-local-date-time", markup);
+    }
+
+    [Fact]
     public void Unspecified_database_value_is_treated_as_utc()
     {
         var value = new DateTime(2026, 8, 20, 19, 5, 43, DateTimeKind.Unspecified);

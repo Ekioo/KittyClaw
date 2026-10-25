@@ -23,7 +23,7 @@
     <section class="settings-section mobile-section-panel @(_mobileSection == "network" ? "mobile-section-active" : "")" data-testid="network-global-settings">
         <h2>@L["NetworkTitle"]</h2>
         <p class="settings-hint">@L["NetworkHint"]</p>
-        <a class="settings-browse" href="/network-setup">@L["NetworkConfigure"]</a>
+        <a class="settings-browse" href="/network-setup" data-enhance-nav="false">@L["NetworkConfigure"]</a>
         <p class="settings-hint">@L["NetworkLocalSetup"]</p>
         <form method="post" action="/access/logout">
             <AntiforgeryToken />
@@ -37,7 +37,7 @@
         {
             <RemoteAccessQr Url="@publicUrl" Enabled="@RemoteAccess.Snapshot.Enabled" />
         }
-        <a class="settings-browse" href="/remote-setup">@L["RemoteConfigure"]</a>
+        <a class="settings-browse" href="/remote-setup" data-enhance-nav="false">@L["RemoteConfigure"]</a>
         <p class="settings-hint">@L["NetworkLocalSetup"]</p>
     </section>
     <section class="settings-section mobile-section-panel @(_mobileSection == "language" ? "mobile-section-active" : "")" data-testid="language-global-settings">

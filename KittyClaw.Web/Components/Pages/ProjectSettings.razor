@@ -350,7 +350,7 @@ else
                         {
                             <tr data-testid="secret-row">
                                 <td data-label="@L["Name"]"><code>@secret.Name</code></td>
-                                <td data-label="@L["SecretUpdated"]">@secret.UpdatedAt.ToLocalTime().ToString("g")</td>
+                                <td data-label="@L["SecretUpdated"]"><LocalDateTime Value="secret.UpdatedAt" /></td>
                                 <td class="row-actions" data-label="@L["MobileTicketActions"]">
                                     <button class="icon-btn" title="@L["ReplaceSecret"]" @onclick="() => SelectSecret(secret.Name)">✎</button>
                                     @if (_deleteConfirmSecret == secret.Name)

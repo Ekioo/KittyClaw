@@ -16,7 +16,8 @@ Promotion raises the same ticket-status signal as a manual move, so existing sta
 - Renaming a target column updates pending schedules in that pipeline. If the target no longer exists, promotion remains pending and logs an actionable diagnostic.
 - Paused projects are skipped until they are resumed.
 - Moving a scheduled ticket to another column manually clears its fire time and target.
-- Cards in **Scheduled** show a `J`/`J-N` day badge and sort by fire time before manual order.
+- Cards in **Scheduled** show a `J`/`J-N` day badge and sort by fire time before manual order. Tooltips, calendar-day countdowns, and the schedule editor use the browser timezone, including daylight-saving transitions.
+- UI timestamps use `LocalDateTime` and `local-time.js` to format stored UTC instants in the browser timezone. Date-only reporting periods retain their calendar dates.
 
 ## API
 

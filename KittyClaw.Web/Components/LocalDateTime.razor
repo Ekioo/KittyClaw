@@ -1,0 +1,16 @@
+@inject LocalizationService L
+@if (Value is DateTime value)
+{
+    <time class="@CssClass" datetime="@BrowserLocalDateTime.UtcIso(value)" data-local-date-time data-local-date-time-format="@Format" data-local-date-time-locale="@L.Lang">@BrowserLocalDateTime.UtcFallback(value)</time>
+}
+else
+{
+    @EmptyText
+}
+
+@code {
+    [Parameter] public DateTime? Value { get; set; }
+    [Parameter] public string Format { get; set; } = "datetime";
+    [Parameter] public string? CssClass { get; set; }
+    [Parameter] public string? EmptyText { get; set; }
+}

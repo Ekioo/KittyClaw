@@ -84,8 +84,7 @@
     <div class="ticket-card-bottom">
         @if (Ticket.FireAt is not null)
         {
-            var days = (Ticket.FireAt.Value.Date - DateTime.UtcNow.Date).Days;
-            <span class="schedule-badge" title="@Ticket.FireAt.Value.ToString("yyyy-MM-dd HH:mm") UTC → @(Ticket.ScheduleTarget ?? "Todo")">@(days <= 0 ? "J" : $"J-{days}")</span>
+            <span class="schedule-badge" data-local-schedule="@BrowserLocalDateTime.UtcIso(Ticket.FireAt.Value)" data-local-schedule-target="@(Ticket.ScheduleTarget ?? "Todo")" data-local-date-time-locale="@L.Lang">&#9200;</span>
         }
         @if (Ticket.AgentTokens > 0)
         {

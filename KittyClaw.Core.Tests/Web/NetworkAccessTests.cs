@@ -91,10 +91,20 @@ public sealed class NetworkAccessTests
             Assert.True(factory.Services.GetRequiredService<NetworkAccessService>().Listening);
             var local = await client.GetAsync("http://localhost/network-setup");
             Assert.Equal(HttpStatusCode.OK, local.StatusCode);
-            Assert.Contains("SHA-256", await local.Content.ReadAsStringAsync());
+            var setupHtml = await local.Content.ReadAsStringAsync();
+            Assert.Contains("SHA-256", setupHtml);
+            Assert.Contains("class='page-header setup-header'", setupHtml);
+            Assert.Contains("href='/css/windows-desktop.css'", setupHtml);
+            var setupPolicy = Assert.Single(local.Headers.GetValues("Content-Security-Policy"), policy => policy.Contains("default-src"));
+            Assert.Contains("img-src data: 'self'", setupPolicy);
+            Assert.Contains("style-src 'unsafe-inline' 'self'", setupPolicy);
             var settings = await client.GetAsync("http://localhost/settings");
             Assert.Equal(HttpStatusCode.OK, settings.StatusCode);
-            Assert.Contains("network-global-settings", await settings.Content.ReadAsStringAsync());
+            var settingsHtml = await settings.Content.ReadAsStringAsync();
+            Assert.Contains("network-global-settings", settingsHtml);
+            // Middleware pages own their document, styles and scripts and require a full navigation.
+            Assert.Contains("href=\"/network-setup\" data-enhance-nav=\"false\"", settingsHtml);
+            Assert.Contains("href=\"/remote-setup\" data-enhance-nav=\"false\"", settingsHtml);
             Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"https://{Environment.MachineName}/access")).StatusCode);
             Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync($"https://{Environment.MachineName}/api/projects")).StatusCode);
             // Phones use an interface IP and the explicit HTTPS port, not the machine name.
