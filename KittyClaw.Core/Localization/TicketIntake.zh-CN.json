@@ -1,0 +1,11 @@
+{
+  "IntakeAssisted": "AI 辅助",
+  "IntakeManual": "手动",
+  "IntakeWelcome": "请描述您想实现的目标。智能体会逐一提问以明确您的需求，然后准备工单。",
+  "IntakeMessage": "您的消息",
+  "IntakeSend": "发送",
+  "IntakeThinking": "智能体正在思考…",
+  "IntakeCreateNow": "立即创建",
+  "IntakeAutoCreate": "需求明确后自动创建",
+  "IntakeReview": "工单已准备就绪。请在“手动”选项卡中检查，或立即创建。"
+}

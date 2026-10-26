@@ -4,6 +4,41 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.27] — 2026-10-26
+
+Conversational ticket creation, project release reviews, and clearer navigation.
+
+### Highlights
+
+Create tickets through the shared chat drawer, analyze and apply deeper AI improvements, and review project releases with focused kanban views. Persistent global navigation and consistent page layouts make project tools easier to reach.
+
+### Added
+
+- Conversational ticket creation and AI improvement analysis and application through the UI, REST API, and MCP.
+- Project release reviews, ticket focus options, and ticket URL copying with sub-kanban context.
+- Per-conversation model effort selection, resizable chat drawers, and acceptance criterion review states.
+- Per-run working folders, project folder shortcuts, and a temporary storage overview.
+
+### Changed
+
+- Keep global navigation available across pages and unify utility page headers and responsive widths.
+- Load ticket comments in batches and display activity timestamps in the browser's local timezone.
+- Preserve existing project roles and members without seeding legacy role templates.
+- Consolidate architecture documentation under docs and add Grok 4.6 and 4.7 cost estimates.
+
+### Fixed
+
+- Correct Windows desktop logo sizing, network setup navigation, model picker groups, and column display names.
+- Route dashboard tile saves through durable writes and correct API documentation contracts.
+- Complete ticket intake translations in all supported languages and update the timeline display regression check.
+
+### Security
+
+- Block executable URL schemes in rendered Markdown.
+- Prevent command injection when creating Windows dependency junctions.
+
+---
+
 ## [v0.26] — 2026-10-24
 
 Persistent agent questions, a redesigned Windows desktop, and Simplified Chinese support.

@@ -1,0 +1,11 @@
+{
+  "IntakeAssisted": "KI-gestützt",
+  "IntakeManual": "Manuell",
+  "IntakeWelcome": "Beschreibe dein Ziel. Der Agent klärt deine Anfrage mit jeweils einer Frage und bereitet dann dein Ticket vor.",
+  "IntakeMessage": "Deine Nachricht",
+  "IntakeSend": "Senden",
+  "IntakeThinking": "Der Agent denkt nach…",
+  "IntakeCreateNow": "Jetzt erstellen",
+  "IntakeAutoCreate": "Automatisch erstellen, sobald die Anfrage klar ist",
+  "IntakeReview": "Das Ticket ist bereit. Prüfe es im Tab Manuell oder erstelle es jetzt."
+}

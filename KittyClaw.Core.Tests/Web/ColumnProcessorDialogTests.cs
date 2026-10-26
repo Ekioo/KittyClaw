@@ -190,13 +190,14 @@ public sealed class ColumnProcessorDialogTests
     }
 
     [Fact]
-    public void Ticket_timeline_resolves_legacy_column_ids_to_processor_names()
+    public void Ticket_timeline_resolves_legacy_column_ids_to_current_column_names()
     {
         var source = File.ReadAllText(Path.Combine(
             RepoRoot(), "KittyClaw.Web", "Components", "TicketPanel.razor"));
 
         Assert.Contains("ActivityAuthor(a.Author)", source);
-        Assert.Contains("_processorNames.TryGetValue(columnId, out var processorName)", source);
+        Assert.Contains("ColumnDisplayName.IsColumn(author)", source);
+        Assert.Contains("ColumnDisplayName.Resolve(author, _columns, L[\"TicketCurrentColumn\"])", source);
     }
 
     [Fact]
