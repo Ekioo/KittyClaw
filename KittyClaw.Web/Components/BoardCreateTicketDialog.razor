@@ -1,3 +1,5 @@
+@using KittyClaw.Web.Services
+@inject TicketIntakeService Intake
 @inject TicketService TicketService
 @inject LabelService LabelService
 @inject EscapeKeyStack EscapeStack
@@ -6,13 +8,28 @@
 @inject ILogger<BoardCreateTicketDialog> Logger
 @implements IDisposable
 
-<div class="ticket-modal-overlay">
-    <div class="create-popup" @ref="_popup">
-        <div class="create-popup-header">
-            <h2>@L["NewTicket"]</h2>
-            <button class="close-btn" aria-label="@L["Close"]" @onclick="CloseAsync">&times;</button>
+<ConversationDrawer Title="@L["NewTicket"]" IsBusy="@_thinking" OnClose="CloseAsync" CssClass="ticket-intake-drawer">
+    <ChildContent>
+        <div class="ticket-intake-tabs" role="tablist" aria-label="@L["NewTicket"]">
+            <button class="tile-config-revise" disabled="@(_thinking || _creating)" role="tab" id="intake-assisted-tab" aria-controls="intake-assisted-panel" aria-selected="@_assisted" @onclick="() => _assisted = true">@L["IntakeAssisted"]</button>
+            <button class="tile-config-revise" disabled="@(_thinking || _creating)" role="tab" id="intake-manual-tab" aria-controls="intake-manual-panel" aria-selected="@(!_assisted)" @onclick="() => _assisted = false">@L["IntakeManual"]</button>
         </div>
-        <div class="create-popup-body">
+        <div id="intake-assisted-panel" class="ticket-intake-panel" role="tabpanel" aria-labelledby="intake-assisted-tab" hidden="@(!_assisted)">
+            <ConversationView @ref="_messagesView">
+                <ConversationMessage Markdown="false">@L["IntakeWelcome"]</ConversationMessage>
+                @foreach (var message in _messages)
+                {
+                    <ConversationMessage Role="@message.Role">
+                        @((MarkupString)KittyClaw.Web.Markdown.ChatMarkdownRenderer.Render(message.Text))
+                    </ConversationMessage>
+                }
+                @if (_thinking)
+                {
+                    <ConversationMessage Markdown="false" BubbleClass="chat-bubble-loading"><span role="status">@L["IntakeThinking"]</span></ConversationMessage>
+                }
+            </ConversationView>
+        </div>
+        <div id="intake-manual-panel" @ref="_popup" class="create-popup-body" role="tabpanel" aria-labelledby="intake-manual-tab" hidden="@_assisted">
             <label class="field-label">@L["Title"]</label>
             <input class="create-input" @bind="_title" @bind:event="oninput" placeholder="@L["TicketTitlePlaceholder"]" />
 
@@ -58,17 +75,33 @@
             </div>
 
         </div>
-        <div class="create-popup-footer">
-            @if (_creationError is not null)
-            {
-                <p role="alert">@_creationError</p>
-            }
-            <button class="cancel-btn" @onclick="CloseAsync">@L["Cancel"]</button>
-            <button @onclick="CreateAsync" disabled="@(_creating || string.IsNullOrWhiteSpace(_title))">@L["CreateTicket"]</button>
-        </div>
-    </div>
-</div>
-
+    </ChildContent>
+    <Composer>
+        @if (_assisted)
+        {
+            <ConversationComposer IsBusy="@_thinking" CanSend="@(!string.IsNullOrWhiteSpace(_input))" Disabled="@_creating"
+                                  OnSend="() => ConverseAsync(false)" OnStop="StopIntake">
+                <Editor>
+                    <textarea id="ticket-intake-input" @ref="_inputRef" aria-label="@L["IntakeMessage"]"
+                              placeholder="@L["ChatPlaceholder"]" @bind="_input" @bind:event="oninput"
+                              disabled="@(_thinking || _creating)" maxlength="20000"></textarea>
+                </Editor>
+            </ConversationComposer>
+        }
+    </Composer>
+    <Footer>
+        @if (_creationError is not null) { <p role="alert">@_creationError</p> }
+        @if (_assisted)
+        {
+            <label class="ticket-intake-auto"><input type="checkbox" @bind="_autoCreate" disabled="@_thinking" /> @L["IntakeAutoCreate"]</label>
+            <button class="tile-config-accept" @onclick="CreateNowAsync" disabled="@(_thinking || _creating || (_messages.Count == 0 && string.IsNullOrWhiteSpace(_input)))">@L["IntakeCreateNow"]</button>
+        }
+        else
+        {
+            <button class="tile-config-accept" @onclick="CreateAsync" disabled="@(_thinking || _creating || string.IsNullOrWhiteSpace(_title))">@L["CreateTicket"]</button>
+        }
+    </Footer>
+</ConversationDrawer>
 @code {
     [Parameter] public string Slug { get; set; } = "";
     [Parameter] public List<BoardColumn> Columns { get; set; } = [];
@@ -77,6 +110,16 @@
     [Parameter] public EventCallback<Ticket?> OnCreated { get; set; }
     [Parameter] public EventCallback OnClosed { get; set; }
 
+    private bool _assisted = true, _thinking, _autoCreate = true, _ready, _disposed, _created;
+    private string _input = "";
+    private readonly List<TicketIntakeMessage> _messages = [];
+    private readonly CancellationTokenSource _intakeCts = new();
+    private CancellationTokenSource? _turnCts;
+    private DotNetObjectReference<BoardCreateTicketDialog>? _self;
+    private ElementReference _inputRef;
+    private ConversationView? _messagesView;
+    private int _renderedMessageCount = -1;
+    private bool _wasThinking;
     private string _title = "";
     private string _description = "";
     private TicketPriority _priority = TicketPriority.NiceToHave;
@@ -99,6 +142,21 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (_assisted)
+        {
+            _self ??= DotNetObjectReference.Create(this);
+            try
+            {
+                await JS.InvokeVoidAsync("chatDrawerInstallEnterGuard", _inputRef, _self);
+                if (_renderedMessageCount != _messages.Count || _wasThinking != _thinking)
+                {
+                    await JS.InvokeVoidAsync("chatDrawerScrollToBottom", _messagesView?.Element);
+                    _renderedMessageCount = _messages.Count;
+                    _wasThinking = _thinking;
+                }
+            }
+            catch (JSException ex) { Logger.LogWarning(ex, "Ticket chat initialization failed"); }
+        }
         if (firstRender)
         {
             try
@@ -122,7 +180,64 @@
         }
     }
 
-    public void Dispose() => _escHandle?.Dispose();
+    public void Dispose()
+    {
+        _disposed = true;
+        _escHandle?.Dispose();
+        _self?.Dispose();
+        _intakeCts.Cancel();
+        _intakeCts.Dispose();
+    }
+
+    [JSInvokable]
+    public Task OnComposerEnter(string text)
+    {
+        if (_thinking || _creating || _disposed) return Task.CompletedTask;
+        _input = text;
+        return ConverseAsync(false);
+    }
+
+    private void StopIntake() => _turnCts?.Cancel();
+
+    private Task CreateNowAsync() => _ready && string.IsNullOrWhiteSpace(_input)
+        ? CreateAsync() : ConverseAsync(true);
+
+    private async Task ConverseAsync(bool createNow)
+    {
+        if (_disposed || _created || _thinking || _creating || (!createNow && string.IsNullOrWhiteSpace(_input))) return;
+        if (!string.IsNullOrWhiteSpace(_input))
+        {
+            _messages.Add(new("user", _input.Trim()));
+            _input = "";
+            _ready = false;
+        }
+        if (_messages.Count == 0) return;
+        _thinking = true;
+        _creationError = null;
+        try
+        {
+            using var turnCts = CancellationTokenSource.CreateLinkedTokenSource(_intakeCts.Token);
+            _turnCts = turnCts;
+            var reply = await Intake.ReplyAsync(Slug, _messages.ToArray(), createNow, turnCts.Token);
+            if (_disposed) return;
+            _messages.Add(new("assistant", reply.Message));
+            _ready = reply.Ready;
+            if (reply.Ready)
+            {
+                _title = reply.Title!;
+                _description = reply.Description!;
+                if (_autoCreate || createNow) await CreateAsync();
+                else _messages.Add(new("assistant", L["IntakeReview"]));
+            }
+        }
+        catch (OperationCanceledException) when (_disposed || _turnCts?.IsCancellationRequested == true) { }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Ticket intake failed for {Project}", Slug);
+            _creationError = ex.Message;
+        }
+        finally { _turnCts = null; _thinking = false; }
+    }
 
     private async Task CloseAsync() => await OnClosed.InvokeAsync();
 
@@ -145,7 +260,7 @@
 
     private async Task CreateAsync()
     {
-        if (_creating || string.IsNullOrWhiteSpace(_title) || Columns.Count == 0) return;
+        if (_disposed || _created || _creating || string.IsNullOrWhiteSpace(_title) || Columns.Count == 0) return;
         _creating = true;
         _creationError = null;
         Ticket ticket;
@@ -168,6 +283,7 @@
             return;
         }
         finally { _creating = false; }
+        _created = true;
         try { await JS.InvokeVoidAsync("ticketDraft.clear", DraftKey); }
         catch (Exception ex) { Logger.LogWarning(ex, "Ticket draft cleanup failed"); }
         await OnCreated.InvokeAsync(ticket);

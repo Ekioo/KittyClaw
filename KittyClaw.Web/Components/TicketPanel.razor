@@ -16,6 +16,7 @@
 @inject TicketWorktreeService TicketWorktreeService
 @inject WorktreeMergeQueueService WorktreeMergeQueueService
 @inject KittyClaw.Web.Services.BoardUpdateNotifier BoardUpdateNotifier
+@inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject PersistentComponentState InitialState
 @inject LocalizationService L
@@ -27,6 +28,13 @@
    so both the project board and the unified home can open a ticket without loading a
    different page underneath. Parents react through OnClose / OnChanged / OnDeleted /
    OnEnterSubKanban; undoable actions are offered to the optional PushUndo sink. *@
+
+<div class="board-copy-notification" role="status" aria-live="polite" aria-atomic="true">
+    @if (_ticketUrlCopied)
+    {
+        <span>✓ @L["TicketUrlCopied"]</span>
+    }
+</div>
 
 @if (_ticket is not null)
 {
@@ -64,6 +72,7 @@
                 }
             </div>
             <div class="header-actions">
+                <button type="button" class="icon-btn" title="@L["TicketMenuCopyUrl"]" aria-label="@L["TicketMenuCopyUrl"]" @onclick="CopyTicketUrlAsync">🔗</button>
                 <button class="tile-config-revise" @onclick="() => OpenImprovement(false)">✦ @L["ImproveTicket"]</button>
                 <button class="tile-config-revise" @onclick="() => OpenImprovement(true)">@L["SplitTicket"]</button>
                 <button class="close-btn" aria-label="@L["Close"]" @onclick="CloseAsync">&times;</button>
@@ -145,7 +154,7 @@
                 <span class="section-label-sm">⏰ @L["ScheduledForLabel"]</span>
                 @if (_ticket.FireAt is DateTime fireAtUtc)
                 {
-                    <span class="schedule-value">@UtcToLocal(fireAtUtc).ToString("g")</span>
+                    <span class="schedule-value"><LocalDateTime Value="fireAtUtc" /></span>
                     <span class="schedule-arrow">&#8594; @(_ticket.ScheduleTarget ?? "Todo")</span>
                 }
                 else
@@ -164,7 +173,7 @@
 
             <div class="ticket-meta">
                 <span>@_ticket.CreatedBy</span>
-                <span>@_ticket.CreatedAt.ToString("d")</span>
+                <span><LocalDateTime Value="_ticket.CreatedAt" Format="date" /></span>
                 @if (_ticket.AgentTokens > 0)
                 {
                     <span class="token-badge" title="@CostTooltip(_ticket.AgentTokens, _ticket.AgentCostUsd, _ticket.AgentCostEstimated)">⛁ @KittyClaw.Web.Services.TokenDisplay.Compact(_ticket.AgentTokens)@(_ticket.AgentCostUsd > 0 ? $" · {(_ticket.AgentCostEstimated ? "≈ " : "")}{KittyClaw.Web.Services.TokenDisplay.Usd(_ticket.AgentCostUsd)}" : "")</span>
@@ -424,6 +433,10 @@
                             </div>
                         }
                     }
+                    @if (_ticket?.HasMoreComments == true)
+                    {
+                        <button type="button" class="add-comment-btn-sm" disabled="@_loadingMoreComments" @onclick="LoadMoreCommentsAsync">@L["LoadMoreComments"]</button>
+                    }
                 </div>
 
                 <div class="panel-footer-actions">
@@ -473,7 +486,7 @@
                                    EditingTitle="@_editingTitle" DesktopHeader="@desktopHeader"
                                    Priority="@priority" TitleEditor="@titleEditor" Properties="@properties" Column="@column" Labels="@labels"
                                    Context="@context" DependencyEditor="@dependencyEditor" Content="@content"
-                                   OnClose="CloseAsync" OnImprove="() => OpenImprovement(false)" OnSplit="() => OpenImprovement(true)" OnEditTitle="StartEditTitle" />
+                                   OnClose="CloseAsync" OnImprove="() => OpenImprovement(false)" OnSplit="() => OpenImprovement(true)" OnEditTitle="StartEditTitle" OnCopyUrl="CopyTicketUrlAsync" />
     </div>
 }
 
@@ -548,6 +561,7 @@
 
     [Parameter, EditorRequired] public string Slug { get; set; } = "";
     [Parameter, EditorRequired] public int TicketId { get; set; }
+    [Parameter] public int? SubKanbanParentId { get; set; }
     /// <summary>Bumped by the parent to force a full reload (e.g. after an undo).</summary>
     [Parameter] public int RefreshToken { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
@@ -658,7 +672,7 @@
         if (column.Role == ColumnRole.Waiting)
         {
             if (_ticket?.FireAt is DateTime fireAt)
-                return L.Get("TicketWaitingScheduledGuidance", UtcToLocal(fireAt).ToString("g"),
+                return L.Get("TicketWaitingScheduledGuidance", BrowserLocalDateTime.Html(fireAt),
                     _ticket.ScheduleTarget ?? L["TicketWaitingNextConfiguredStep"]);
 
             var summary = _summaries.FirstOrDefault(ticket => ticket.Id == _ticket?.Id);
@@ -715,6 +729,7 @@
     {
         var key = $"{Slug}/{TicketId}/{RefreshToken}";
         if (key == _loadedKey) return;
+        if (_loadedKey?.StartsWith($"{Slug}/{TicketId}/", StringComparison.Ordinal) != true) _commentLimit = 30;
         _loadedKey = key;
         ResetEditingState();
         await LoadAsync();
@@ -733,6 +748,8 @@
 
     public void Dispose()
     {
+        _copyNotificationCts?.Cancel();
+        _copyNotificationCts?.Dispose();
         _disposed = true;
         _initialStateSubscription.Dispose();
         BoardUpdateNotifier.OnProjectUpdated -= OnProjectUpdatedExternal;
@@ -741,6 +758,27 @@
         _escPriorityPicker?.Dispose();
         _escLabelDropdown?.Dispose();
         _escChatDrawer?.Dispose();
+    }
+
+    private int _commentLimit = 30;
+    private bool _loadingMoreComments;
+
+    private async Task LoadMoreCommentsAsync()
+    {
+        if (_loadingMoreComments) return;
+        _loadingMoreComments = true;
+        var slug = Slug;
+        var ticketId = TicketId;
+        var limit = _commentLimit + 30;
+        try
+        {
+            var ticket = await TicketService.GetTicketAsync(slug, ticketId, limit);
+            if (_disposed || Slug != slug || TicketId != ticketId || ticket is null) return;
+            _commentLimit = limit;
+            _ticket = ticket;
+            await RebuildPipelineAsync();
+        }
+        finally { _loadingMoreComments = false; }
     }
 
     private void ResetEditingState()
@@ -778,7 +816,7 @@
                 return;
             }
             else
-                _ticket = await Task.Run(() => TicketService.GetTicketAsync(Slug, TicketId));
+                _ticket = await Task.Run(() => TicketService.GetTicketAsync(Slug, TicketId, _commentLimit));
             if (_disposed || _ticket is null) return;
             // Load the column selector with the ticket; ancillary work must not delay its options.
             if (!restored)
@@ -814,7 +852,7 @@
     /// <summary>Reload after a local mutation, then let the parent refresh its lists.</summary>
     private async Task RefreshAsync()
     {
-        _ticket = await TicketService.GetTicketAsync(Slug, TicketId);
+        _ticket = await TicketService.GetTicketAsync(Slug, TicketId, _commentLimit);
         await LoadJevHistoryAsync();
         _summaries = await TicketService.ListTicketsAsync(Slug);
         if (_ticket is not null)
@@ -950,7 +988,7 @@
         InvokeAsync(async () =>
         {
             if (_disposed) return;
-            _ticket = await TicketService.GetTicketAsync(Slug, TicketId);
+            _ticket = await TicketService.GetTicketAsync(Slug, TicketId, _commentLimit);
             if (_ticket is null)
             {
                 // Ticket deleted from elsewhere (API, agent) — close rather than show a husk.
@@ -964,6 +1002,44 @@
             await RebuildPipelineAsync();
             if (!_disposed) StateHasChanged();
         });
+    }
+
+    private bool _ticketUrlCopied;
+    private CancellationTokenSource? _copyNotificationCts;
+
+    private async Task CopyTicketUrlAsync()
+    {
+        var boardPath = $"board/{Uri.EscapeDataString(Slug)}";
+        if (SubKanbanParentId is int parentId)
+            boardPath += $"/sub/{parentId}";
+        var url = Navigation.ToAbsoluteUri($"{boardPath}/ticket/{TicketId}").AbsoluteUri;
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+        }
+        catch (JSException)
+        {
+            await JS.InvokeVoidAsync("prompt", L["TicketMenuCopyUrl"], url);
+            return;
+        }
+
+        _copyNotificationCts?.Cancel();
+        _copyNotificationCts?.Dispose();
+        using var notificationCts = new CancellationTokenSource();
+        _copyNotificationCts = notificationCts;
+        _ticketUrlCopied = true;
+        StateHasChanged();
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2), notificationCts.Token);
+            _ticketUrlCopied = false;
+        }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            if (_copyNotificationCts == notificationCts)
+                _copyNotificationCts = null;
+        }
     }
 
     private async Task CloseAsync() => await OnClose.InvokeAsync();
@@ -1063,11 +1139,8 @@
 
     private string ActivityAuthor(string author)
     {
-        const string prefix = "column-";
-        if (author.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-            && int.TryParse(author[prefix.Length..], out var columnId)
-            && _processorNames.TryGetValue(columnId, out var processorName))
-            return processorName;
+        if (ColumnDisplayName.IsColumn(author))
+            return ColumnDisplayName.Resolve(author, _columns, L["TicketCurrentColumn"]);
         return author;
     }
 
@@ -1154,15 +1227,12 @@
 
     // ── Schedule ──
 
-    private static DateTime UtcToLocal(DateTime utc) =>
-        DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime();
-
-    private void StartEditSchedule()
+    private async Task StartEditSchedule()
     {
         if (_ticket is null) return;
-        _editFireAtLocal = _ticket.FireAt is DateTime fireAt
-            ? UtcToLocal(fireAt)
-            : DateTime.Now.Date.AddDays(1).AddHours(9);
+        var input = await JS.InvokeAsync<string>("kittyLocalTime.scheduleInput",
+            _ticket.FireAt is DateTime fireAt ? BrowserLocalDateTime.UtcIso(fireAt) : null);
+        _editFireAtLocal = DateTime.Parse(input, System.Globalization.CultureInfo.InvariantCulture);
         var target = _ticket.ScheduleTarget;
         _editScheduleTarget = !string.IsNullOrWhiteSpace(target) && _columns.Any(c => c.Name == target)
             ? target!
@@ -1175,7 +1245,10 @@
     {
         if (_ticket is null) return;
         if (_editFireAtLocal is not DateTime local) return;
-        var fireAtUtc = DateTime.SpecifyKind(local, DateTimeKind.Local).ToUniversalTime();
+        var utc = await JS.InvokeAsync<string>("kittyLocalTime.inputToUtc",
+            local.ToString("yyyy-MM-ddTHH:mm:ss", System.Globalization.CultureInfo.InvariantCulture));
+        var fireAtUtc = DateTime.Parse(utc, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind);
         await TicketService.ScheduleTicketAsync(Slug, _ticket.Id, fireAtUtc, _editScheduleTarget);
         _editingSchedule = false;
         await RefreshAsync();

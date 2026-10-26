@@ -298,6 +298,19 @@
                     <option value="@_selectedModel">@_selectedModel</option>
                 }
             </select>
+                <label class="chat-effort-picker">
+                    @L["ChatEffort"]
+                    <select class="chat-drawer-model-select" @bind="_selectedEffort" disabled="@(_historyLoading || _loading || ModelEffort.Options(_selectedModel).Count == 0)">
+                        @if (ModelEffort.Options(_selectedModel).Count == 0)
+                        {
+                            <option value="">@L["ChatEffortUnsupported"]</option>
+                        }
+                        @foreach (var effort in ModelEffort.Options(_selectedModel))
+                        {
+                            <option value="@effort">@effort</option>
+                        }
+                    </select>
+                </label>
                 </ModelPicker>
             </ConversationComposer>
         }
@@ -342,6 +355,7 @@
     private bool _hitMaxTurns = false;
 
     private string _selectedModel = DefaultModel;
+    private string _selectedEffort = ModelEffort.Initial(DefaultModel);
     private string? _sessionModel; // model used by the current session (for detecting changes)
     private string? _streamingText;
     private List<string> _ollamaModels = new();
@@ -495,6 +509,7 @@
 
     private async Task PersistSelectedModelAsync()
     {
+        _selectedEffort = ModelEffort.Initial(_selectedModel);
         try
         {
             await JS.InvokeVoidAsync("localStorage.setItem", SelectedModelStorageKey, _selectedModel);
@@ -508,7 +523,10 @@
         {
             var storedModel = await JS.InvokeAsync<string?>("localStorage.getItem", SelectedModelStorageKey);
             if (IsAvailableModel(storedModel))
+            {
                 _selectedModel = storedModel!;
+                _selectedEffort = ModelEffort.Effective(_selectedModel, _selectedEffort);
+            }
         }
         catch (Exception ex) { Logger.LogDebug(ex, "Selected chat model could not be restored for project {ProjectSlug}; keeping the current model", ProjectSlug); }
     }
@@ -543,6 +561,7 @@
     private async Task EnterConversationAsync(ChatTarget target)
     {
         _activeTarget = target;
+        _selectedEffort = ModelEffort.Initial(_selectedModel);
         _lastRun = RunsState.AllForProject(ProjectSlug).Where(run => run.ChatTarget == target.Slug)
             .OrderByDescending(run => run.StartedAt).FirstOrDefault();
         _messages.Clear();
@@ -569,6 +588,7 @@
             {
                 _sessionModel = modelResponse.Model;
                 _selectedModel = modelResponse.Model;
+                _selectedEffort = ModelEffort.Effective(_selectedModel, modelResponse.Effort);
             }
             if (msgs is not null)
             {
@@ -684,6 +704,7 @@
         _messages.Clear();
         _loading = false;
         _sessionModel = null;
+        _selectedEffort = ModelEffort.Initial(_selectedModel);
         _lastRun = null;
         await RestoreRememberedModelAsync();
         // Ticket-scoped chats stay on the same target after a reset; only the picker mode falls back to selection.
@@ -826,7 +847,7 @@
         {
             var forceNew = _selectedModel != _sessionModel && _sessionModel is not null;
             var resp = await http.PostAsJsonAsync($"/api/projects/{ProjectSlug}/chat/start",
-                new { message = text, target = _activeTarget.Slug, ticketId = TicketId, images = imagesPayload, model = _selectedModel, forceNew });
+                new { message = text, target = _activeTarget.Slug, ticketId = TicketId, images = imagesPayload, model = _selectedModel, effort = _selectedEffort, forceNew });
             if (!resp.IsSuccessStatusCode)
             {
                 if (_inputText.Length == 0) _inputText = draft;
@@ -1117,7 +1138,7 @@
 
     private sealed record ChatStartResponse(string RunId);
     private sealed record ActiveResponse(string? RunId, bool Interrupted);
-    private sealed record ChatModelResponse(string? Model);
+    private sealed record ChatModelResponse(string? Model, string? Effort);
     private sealed record TargetsResponse(string? LastTarget, List<ServerChatTarget> Targets);
     private sealed record ServerChatTarget(string Slug, string Name, string Kind);
     private sealed record ServerChatImage(string DataUrl, string Mime, string Name, long SizeBytes);

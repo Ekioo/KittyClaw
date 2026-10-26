@@ -1,0 +1,14 @@
+{
+  "TemporaryStorageTitle": "临时存储",
+  "TemporaryStorageWarning": "这些文件夹随时可能被删除。切勿存放不可替代的数据或最终交付物。请将有价值的结果和必要证据保存到永久存储中。",
+  "TemporaryStorageScope": "已注册项目的只读概览：已配置、默认以及保留运行历史中已知的旧文件夹。显示文件大小，而非磁盘分配空间。共享文件夹可能重复计入多个项目。跳过链接。不自动清理。",
+  "TemporaryStorageRefresh": "刷新大小",
+  "TemporaryStorageMeasured": "测量时间",
+  "TemporaryStorageScanning": "正在测量文件夹…",
+  "TemporaryStorageEmpty": "没有可测量的项目。",
+  "TemporaryStorageFiles": "个文件",
+  "TemporaryStoragePartial": "部分测量：有些项目无法读取或已被跳过。",
+  "TemporaryStorageFolders": "文件夹",
+  "TemporaryStorageMissing": "尚未创建或已删除",
+  "TemporaryStorageFile": "个文件"
+}

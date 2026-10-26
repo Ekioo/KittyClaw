@@ -157,8 +157,12 @@ builder.Services.AddSingleton<AgentCliReadinessService>();
 builder.Services.AddScoped<KittyClaw.Web.Services.BoardFilterState>();
 builder.Services.AddScoped<KittyClaw.Web.Services.BoardSortState>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.BoardUpdateNotifier>();
+builder.Services.AddSingleton<KittyClaw.Web.Services.BoardFocusService>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.WorkflowMigrationPlanner>();
+builder.Services.AddSingleton<KittyClaw.Web.Services.TicketIntakeService>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.TicketImprovementService>();
+builder.Services.AddSingleton<KittyClaw.Web.Services.ITicketImprovementAnalyzer>(
+    sp => sp.GetRequiredService<KittyClaw.Web.Services.TicketImprovementService>());
 builder.Services.AddScoped<KittyClaw.Web.Services.EscapeKeyStack>();
 
 // Agent execution and column workflow services
@@ -183,6 +187,8 @@ builder.Services.AddSingleton<WorktreeMergeQueueService>();
 builder.Services.AddSingleton<WorktreeFinalizationCoordinator>();
 builder.Services.AddHostedService<WorktreeMergeQueueProcessor>();
 builder.Services.AddSingleton<AgentRunner>();
+builder.Services.AddSingleton<RunWorkingFilesService>();
+builder.Services.AddSingleton<TemporaryStorageService>();
 builder.Services.AddSingleton<RtkIntegrationService>();
 builder.Services.AddSingleton<AgentMemoryHandler>(sp => new AgentMemoryHandler(
     sp.GetRequiredService<MemberService>(),
@@ -229,6 +235,8 @@ builder.Services.AddSingleton<KittyClaw.Core.Services.DashboardRefreshService>()
 builder.Services.AddHostedService(sp => sp.GetRequiredService<KittyClaw.Core.Services.DashboardRefreshService>());
 // Auto-promote Scheduled tickets to their target column once FireAt fires (feature #99).
 builder.Services.AddHostedService<KittyClaw.Core.Services.ScheduledPromotionService>();
+builder.Services.AddSingleton<ProjectUpdateReviewService>();
+builder.Services.AddHostedService<ProjectUpdateReviewEngine>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.AgentRunsState>();
 builder.Services.AddHttpClient();
 builder.Services.AddHttpClient("KittyClawLocal", (sp, http) =>
@@ -242,7 +250,7 @@ builder.Services.AddSingleton<KittyClaw.Web.Services.IInstalledUpdateClient, Kit
 builder.Services.AddSingleton<KittyClaw.Web.Services.InstalledUpdateService>();
 builder.Services.AddSingleton<KittyClaw.Web.Services.UpdateCheckService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<KittyClaw.Web.Services.UpdateCheckService>());
-// Anonymous daily usage heartbeat (see README "Telemetry" and doc/telemetry.md).
+// Anonymous daily usage heartbeat (see README "Telemetry" and docs/telemetry.md).
 // Never in Development: excludes dotnet watch sessions and QaRunner test instances.
 if (!builder.Environment.IsDevelopment())
 {

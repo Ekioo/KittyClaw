@@ -21,7 +21,8 @@ public sealed class McpTools(
     TicketService tickets,
     ColumnService columns,
     MemberService members,
-    BoardUpdateNotifier notifier)
+    BoardUpdateNotifier notifier,
+    BoardFocusService boardFocus)
 {
     /// <summary>
     /// Mirrors the REST pipeline's JSON shape (camelCase + string enums) so agents that
@@ -36,7 +37,7 @@ public sealed class McpTools(
     };
 
     [McpServerTool(Name = "save_acceptance_criterion")]
-    [Description("Add or update one ticket acceptance criterion with status NotEvaluated, PASS, FAIL or PARTIAL and optional evidence. Read criteria through get_ticket. Evidence is plain text, JSON, or base64 image content with its media type. Updates replace this criterion only; supply its existing evidence to retain it.")]
+    [Description("Add or update one ticket acceptance criterion with status Pending, ReadyToEvaluate, PASS or NeedsRework and optional evidence. Read criteria through get_ticket. Evidence is plain text, JSON, or base64 image content with its media type. New or changed evidence automatically sets ReadyToEvaluate. Legacy FAIL/PARTIAL map to NeedsRework. Updates replace this criterion only; supply its existing evidence to retain it.")]
     public async Task<TicketAcceptanceCriterion> SaveAcceptanceCriterion(string project, int id, SaveAcceptanceCriterionRequest criterion, string? criterionId = null)
     {
         await RequireProjectAsync(project);
@@ -89,7 +90,7 @@ public sealed class McpTools(
     }
 
     [McpServerTool(Name = "create_ticket")]
-    [Description("Create a ticket on a project's board. Returns the created ticket, including its id.")]
+    [Description("Create a ticket on a project's board. Returns the created ticket, including its id. Set focus=true to reveal and highlight its card in connected kanban views of that project without opening the detail panel.")]
     public async Task<Ticket> CreateTicket(
         [Description("Project slug.")] string project,
         [Description("Ticket title.")] string title,
@@ -102,7 +103,8 @@ public sealed class McpTools(
         [Description("Optional pipeline id from list_pipelines.")] int? pipelineId = null,
         [Description("Optional target column id from list_columns.")] int? columnId = null,
         [Description("Whether this child blocks parent completion.")] bool blocksParent = true,
-        [Description("Optional project label ids.")] List<int>? labelIds = null)
+        [Description("Optional project label ids.")] List<int>? labelIds = null,
+        [Description("Focus the created card in connected kanban views of this project without opening its detail panel. Defaults to false.")] bool focus = false)
     {
         await RequireProjectAsync(project);
         try
@@ -113,6 +115,7 @@ public sealed class McpTools(
                 assignedTo: assignee, parentId: parentId, pipelineId: pipelineId,
                 columnId: columnId, blocksParent: blocksParent, labelIds: labelIds);
             notifier.NotifyProjectUpdated(project);
+            if (focus) boardFocus.Request(project, ticket);
             return ticket;
         }
         catch (InvalidOperationException ex)
@@ -145,12 +148,13 @@ public sealed class McpTools(
     }
 
     [McpServerTool(Name = "move_ticket")]
-    [Description("Move a ticket to another column/status (e.g. Todo, InProgress, Review, Done). Returns the updated ticket.")]
+    [Description("Move a ticket to another column/status (e.g. Todo, InProgress, Review, Done). Returns the updated ticket. Set focus=true to highlight its card in the destination kanban column without opening the detail panel.")]
     public async Task<Ticket> MoveTicket(
         [Description("Project slug.")] string project,
         [Description("Ticket id.")] int id,
         [Description("Target column/status name.")] string status,
-        [Description("Author recorded on the move. Defaults to 'owner'.")] string? author = null)
+        [Description("Author recorded on the move. Defaults to 'owner'.")] string? author = null,
+        [Description("Focus the moved card in connected kanban views of this project. Defaults to false.")] bool focus = false)
     {
         await RequireProjectAsync(project);
         try
@@ -160,6 +164,7 @@ public sealed class McpTools(
             if (ticket is null)
                 throw new McpException($"Ticket #{id} was not found in project '{project}'.");
             notifier.NotifyProjectUpdated(project);
+            if (focus) boardFocus.Request(project, ticket);
             return ticket;
         }
         catch (InvalidOperationException ex)

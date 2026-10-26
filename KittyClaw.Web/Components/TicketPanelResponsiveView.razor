@@ -6,7 +6,7 @@
     <TicketPanelMobileView TicketId="@TicketId" Title="@Title" Loading="@Loading" EditingTitle="@EditingTitle"
                            Priority="@Priority" TitleEditor="@TitleEditor" Column="@Column" Labels="@Labels"
                            Properties="@Properties" Context="@Context" DependencyEditor="@DependencyEditor"
-                           Content="@Content" OnClose="@OnClose" OnImprove="@OnImprove" OnSplit="@OnSplit" OnEditTitle="@OnEditTitle" />
+                           Content="@Content" OnClose="@OnClose" OnImprove="@OnImprove" OnSplit="@OnSplit" OnEditTitle="@OnEditTitle" OnCopyUrl="@OnCopyUrl" />
 }
 else
 {
@@ -29,6 +29,7 @@ else
     [Parameter] public RenderFragment? Context { get; set; }
     [Parameter] public RenderFragment? DependencyEditor { get; set; }
     [Parameter] public RenderFragment? Content { get; set; }
+    [Parameter] public EventCallback OnCopyUrl { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback OnImprove { get; set; }
     [Parameter] public EventCallback OnSplit { get; set; }

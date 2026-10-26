@@ -10,6 +10,39 @@ namespace KittyClaw.Core.Tests.Services;
 public sealed class TicketAcceptanceCriteriaTests
 {
     [Fact]
+    public async Task EvidenceChangesRequireEvaluationButUnchangedEvidencePreservesVerdict()
+    {
+        using var temp = new TempDir();
+        var projects = new ProjectService(temp.Path);
+        var slug = (await projects.CreateProjectAsync("transitions")).Slug;
+        var tickets = new TicketService(projects, new MemberService(projects));
+        var ticket = await tickets.CreateTicketAsync(slug, "Feature");
+        var criterion = (await tickets.SaveAcceptanceCriterionAsync(slug, ticket.Id, null, new("Works")))!;
+        Assert.Equal(AcceptanceStatus.Pending, criterion.Status);
+        var proof = new CriterionEvidence("Test output");
+        criterion = (await tickets.SaveAcceptanceCriterionAsync(slug, ticket.Id, criterion.Id, new("Works", AcceptanceStatus.PASS, proof)))!;
+        Assert.Equal(AcceptanceStatus.ReadyToEvaluate, criterion.Status);
+        criterion = (await tickets.SaveAcceptanceCriterionAsync(slug, ticket.Id, criterion.Id, new("Works", AcceptanceStatus.PASS, proof)))!;
+        Assert.Equal(AcceptanceStatus.PASS, criterion.Status);
+        criterion = (await tickets.SaveAcceptanceCriterionAsync(slug, ticket.Id, criterion.Id, new("Clarified", criterion.Status, proof)))!;
+        Assert.Equal(AcceptanceStatus.PASS, criterion.Status);
+        criterion = (await tickets.SaveAcceptanceCriterionAsync(slug, ticket.Id, criterion.Id, new("Clarified", criterion.Status, new("New output"))))!;
+        Assert.Equal(AcceptanceStatus.ReadyToEvaluate, criterion.Status);
+        criterion = (await tickets.SaveAcceptanceCriterionAsync(slug, ticket.Id, criterion.Id, new("Clarified", criterion.Status)))!;
+        Assert.Equal(AcceptanceStatus.Pending, criterion.Status);
+    }
+
+    [Theory]
+    [InlineData("FAIL")]
+    [InlineData("PARTIAL")]
+    public void LegacyNegativeStatusesMerge(string legacy)
+    {
+        var status = System.Text.Json.JsonSerializer.Deserialize<AcceptanceStatus>("\"" + legacy + "\"");
+        Assert.Equal(AcceptanceStatus.NeedsRework, status);
+        Assert.Equal("\"NeedsRework\"", System.Text.Json.JsonSerializer.Serialize(status));
+    }
+
+    [Fact]
     public async Task CriteriaPersistAndUpdateIndependentlyThroughMcp()
     {
         using var temp = new TempDir();
@@ -17,12 +50,12 @@ public sealed class TicketAcceptanceCriteriaTests
         var slug = (await projects.CreateProjectAsync("acceptance")).Slug;
         var members = new MemberService(projects);
         var tickets = new TicketService(projects, members);
-        var tools = new McpTools(projects, tickets, new ColumnService(projects), members, new BoardUpdateNotifier());
+        var tools = new McpTools(projects, tickets, new ColumnService(projects), members, new BoardUpdateNotifier(), new BoardFocusService());
         var ticket = await tickets.CreateTicketAsync(slug, "Feature");
         var first = await tools.SaveAcceptanceCriterion(slug, ticket.Id, new("Renders", Evidence: new("{\"count\":1}", "application/json")));
         var second = await tools.SaveAcceptanceCriterion(slug, ticket.Id, new("Saves"));
-        Assert.Equal(AcceptanceStatus.NotEvaluated, first.Status);
-        foreach (var status in new[] { AcceptanceStatus.PASS, AcceptanceStatus.FAIL, AcceptanceStatus.PARTIAL, AcceptanceStatus.NotEvaluated })
+        Assert.Equal(AcceptanceStatus.ReadyToEvaluate, first.Status);
+        foreach (var status in new[] { AcceptanceStatus.PASS, AcceptanceStatus.NeedsRework, AcceptanceStatus.NeedsRework, AcceptanceStatus.Pending })
         {
             await tools.SaveAcceptanceCriterion(slug, ticket.Id, new(first.Text, status, first.Evidence), first.Id);
             var read = await tools.GetTicket(slug, ticket.Id);
@@ -44,7 +77,7 @@ public sealed class TicketAcceptanceCriteriaTests
         var ticket = new Ticket { Id = 1, Title = "Feature" };
         var processor = new ColumnProcessor { ColumnId = 1, Name = "Router" };
         var before = JevQualificationService.Fingerprint(processor, ticket, []);
-        ticket.AcceptanceCriteria = [new("criterion", "Works", AcceptanceStatus.FAIL, new("A test failed"))];
+        ticket.AcceptanceCriteria = [new("criterion", "Works", AcceptanceStatus.NeedsRework, new("A test failed"))];
         var failed = JevQualificationService.Fingerprint(processor, ticket, []);
         Assert.NotEqual(before, failed);
         ticket.AcceptanceCriteria = [new("criterion", "Works", AcceptanceStatus.PASS, new("All tests passed"))];

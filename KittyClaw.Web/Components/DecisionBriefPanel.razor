@@ -20,7 +20,7 @@
                         <strong>@L[$"DecisionVerdict{_brief.Verdict}"]</strong>
                     </span>
                 </div>
-                <small class="decision-brief-captured">@_brief.CapturedAt.ToString("g")</small>
+                <small class="decision-brief-captured"><LocalDateTime Value="_brief.CapturedAt" /></small>
             </header>
 
             <dl class="decision-brief-context">

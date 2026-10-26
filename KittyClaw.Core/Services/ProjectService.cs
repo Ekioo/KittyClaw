@@ -65,6 +65,10 @@ public partial class ProjectService
             catch { /* column already exists */ }
             try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN RepositoryPath TEXT NULL"); }
             catch { /* column already exists */ }
+            try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN UpdateReviewColumnId INTEGER NULL"); }
+            catch { /* column already exists */ }
+            try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE Projects ADD COLUMN WorkingFilesPath TEXT NULL"); }
+            catch { /* column already exists */ }
             _dbInitialized = true;
         }
         finally
@@ -185,8 +189,20 @@ public partial class ProjectService
         bool? worktreesEnabled = null,
         string? integrationBranch = null,
         string? repositoryPath = null,
-        BoundaryEnforcementMode? boundaryEnforcement = null)
+        BoundaryEnforcementMode? boundaryEnforcement = null,
+        int? updateReviewColumnId = null,
+        bool updateReviewColumn = false,
+        string? workingFilesPath = null)
     {
+        if (!string.IsNullOrWhiteSpace(workingFilesPath))
+        {
+            ValidateWorkspacePath(workingFilesPath.Trim());
+            if (workingFilesPath.Any(char.IsControl))
+                throw new InvalidOperationException("The working files folder must not contain control characters.");
+            if (File.Exists(workingFilesPath.Trim()))
+                throw new InvalidOperationException("The working files path must be a folder, not a file.");
+        }
+        updateReviewColumn |= updateReviewColumnId.HasValue;
         if (!string.IsNullOrWhiteSpace(workspacePath))
             ValidateWorkspacePath(workspacePath.Trim());
         await EnsureRegistryInitializedAsync();
@@ -197,8 +213,11 @@ public partial class ProjectService
         // A worktree-only PATCH must not clear the workspace merely because WorkspacePath
         // was omitted from JSON. Preserve the historical clear behavior for ordinary patches.
         var updatesWorktreeSettings = worktreesEnabled.HasValue || integrationBranch is not null || repositoryPath is not null;
-        if (!updatesWorktreeSettings || workspacePath is not null)
+        if ((!updatesWorktreeSettings && !updateReviewColumn && workingFilesPath is null) || workspacePath is not null)
             project.WorkspacePath = string.IsNullOrWhiteSpace(workspacePath) ? null : workspacePath.Trim();
+
+        if (workingFilesPath is not null)
+            project.WorkingFilesPath = string.IsNullOrWhiteSpace(workingFilesPath) ? null : Path.GetFullPath(workingFilesPath.Trim());
 
         var normalizedBranch = integrationBranch?.Trim();
         var resultingBranch = integrationBranch is null ? project.IntegrationBranch : normalizedBranch;
@@ -225,6 +244,18 @@ public partial class ProjectService
         if (updateFallback)
         {
             project.FallbackModel = string.IsNullOrWhiteSpace(fallbackModel) ? null : fallbackModel.Trim();
+        }
+        if (updateReviewColumn)
+        {
+            if (updateReviewColumnId.HasValue)
+            {
+                await using var projectDb = GetProjectDb(slug);
+                await ColumnService.EnsureBoardColumnsTableAsync(projectDb);
+                var column = await projectDb.BoardColumns.FindAsync(updateReviewColumnId.Value);
+                if (column is null || !ProjectUpdateReviewService.IsEligibleTarget(column))
+                    throw new InvalidOperationException("Select an analysis or owner-action column without a validated-criteria entry requirement.");
+            }
+            project.UpdateReviewColumnId = updateReviewColumnId;
         }
         project.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
@@ -326,6 +357,35 @@ public partial class ProjectService
         project.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
         return project;
+    }
+
+    public string ResolveWorkingFilesRoot(Project project)
+    {
+        _ = GetProjectDbPath(project.Slug);
+        return Path.GetFullPath(string.IsNullOrWhiteSpace(project.WorkingFilesPath)
+            ? Path.Combine(_dataDir, "artifacts", project.Slug)
+            : project.WorkingFilesPath);
+    }
+
+    /// <summary>Creates the persistent artifact directory for one run. Retries reuse its run id.</summary>
+    public string PrepareRunWorkingFilesDirectory(Project project, string runId)
+    {
+        // Apply the registry slug guard before using the slug as a directory segment.
+        _ = GetProjectDbPath(project.Slug);
+        if (string.IsNullOrWhiteSpace(runId) ||
+            runId.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '-' && c != '_'))
+            throw new ArgumentException("Invalid run id for the working files folder.", nameof(runId));
+        var root = ResolveWorkingFilesRoot(project);
+        var path = Path.GetFullPath(Path.Combine(root, runId));
+        try
+        {
+            Directory.CreateDirectory(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            throw new InvalidOperationException($"Cannot create the run working files folder '{path}': {ex.Message}", ex);
+        }
+        return path;
     }
 
     public string ResolveWorkspacePath(Project project) =>

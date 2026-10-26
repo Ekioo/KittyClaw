@@ -25,8 +25,9 @@ public class TicketService
     public event Action<string, int>? TicketCreated;
 
     public Task ApplyImprovementAsync(string slug, int ticketId, string? originalDescription,
-        string originalCriteria, string description, List<string> criteria, DateTime? expectedUpdatedAt = null) =>
-        ApplyProposalAsync(slug, ticketId, originalDescription, originalCriteria, description, criteria, null, expectedUpdatedAt);
+        string originalCriteria, string description, List<string> criteria, DateTime? expectedUpdatedAt = null,
+        string author = "owner") =>
+        ApplyProposalAsync(slug, ticketId, originalDescription, originalCriteria, description, criteria, null, expectedUpdatedAt, author);
 
     public Task SplitTicketAsync(string slug, Ticket original, List<TicketImprovementDraft> drafts)
     {
@@ -37,12 +38,12 @@ public class TicketService
 
     private async Task ApplyProposalAsync(string slug, int ticketId, string? originalDescription,
         string originalCriteria, string description, List<string> criteria,
-        List<TicketImprovementDraft>? suggestedTickets = null, DateTime? expectedUpdatedAt = null)
+        List<TicketImprovementDraft>? suggestedTickets = null, DateTime? expectedUpdatedAt = null, string author = "owner")
     {
         var improve = suggestedTickets is not { Count: > 0 };
         if (improve && (string.IsNullOrWhiteSpace(description) || description.Length > 100000 || criteria.Count is < 1 or > 50))
             throw new InvalidOperationException("A description and 1–50 acceptance criteria are required.");
-        foreach (var text in criteria) ValidateAcceptanceCriterion(new(text, AcceptanceStatus.NotEvaluated));
+        foreach (var text in criteria) ValidateAcceptanceCriterion(new(text, AcceptanceStatus.Pending));
         if (suggestedTickets is { Count: > 0 })
         {
             if (suggestedTickets.Count is < 2 or > 10)
@@ -54,7 +55,7 @@ public class TicketService
                     draft.AcceptanceCriteria is null || draft.AcceptanceCriteria.Count is < 1 or > 3)
                     throw new InvalidOperationException("Each proposed ticket requires a title, description and 1–3 criteria.");
                 foreach (var text in draft.AcceptanceCriteria)
-                    ValidateAcceptanceCriterion(new(text, AcceptanceStatus.NotEvaluated));
+                    ValidateAcceptanceCriterion(new(text, AcceptanceStatus.Pending));
             }
         }
         await using var db = _projectService.GetProjectDb(slug);
@@ -63,14 +64,14 @@ public class TicketService
         var ticket = await db.Tickets.FindAsync(ticketId) ?? throw new InvalidOperationException("Ticket no longer exists.");
         if (ticket.Description != originalDescription || ticket.AcceptanceCriteriaJson != originalCriteria ||
             (expectedUpdatedAt.HasValue && ticket.UpdatedAt != expectedUpdatedAt.Value))
-            throw new InvalidOperationException("The ticket changed during analysis. Close this proposal and analyze it again.");
+            throw new TicketImprovementConflictException("The ticket changed during analysis. Close this proposal and analyze it again.");
         if (improve)
         {
             var previous = ticket.AcceptanceCriteria;
             ticket.Description = description.Trim();
             ticket.AcceptanceCriteria = criteria.Select(text => previous.FirstOrDefault(c => c.Text == text.Trim())
-                ?? new TicketAcceptanceCriterion(Guid.NewGuid().ToString("N"), text.Trim(), AcceptanceStatus.NotEvaluated)).ToList();
-            db.ActivityEntries.Add(new ActivityEntry { TicketId = ticketId, Author = "owner", Text = "Applied AI ticket improvement. New or rewritten criteria require evaluation." });
+                ?? new TicketAcceptanceCriterion(Guid.NewGuid().ToString("N"), text.Trim(), AcceptanceStatus.Pending)).ToList();
+            db.ActivityEntries.Add(new ActivityEntry { TicketId = ticketId, Author = author, Text = "Applied AI ticket improvement. New or rewritten criteria require evaluation." });
         }
         ticket.UpdatedAt = DateTime.UtcNow;
         var children = new List<Ticket>();
@@ -87,7 +88,7 @@ public class TicketService
                     PipelineId = ticket.PipelineId, ColumnId = column.Id, Status = column.Name,
                     Priority = ticket.Priority, ParentId = ticket.Id, SortOrder = ++sortOrder,
                     AcceptanceCriteria = draft.AcceptanceCriteria.Select(text => new TicketAcceptanceCriterion(
-                        Guid.NewGuid().ToString("N"), text.Trim(), AcceptanceStatus.NotEvaluated)).ToList()
+                        Guid.NewGuid().ToString("N"), text.Trim(), AcceptanceStatus.Pending)).ToList()
                 };
                 ColumnAssignmentPolicy.Apply(child, null, column);
                 db.Tickets.Add(child);
@@ -120,7 +121,12 @@ public class TicketService
         var criteria = ticket.AcceptanceCriteria;
         var index = criterionId is null ? -1 : criteria.FindIndex(c => c.Id == criterionId);
         if (criterionId is not null && index < 0) return null;
-        var criterion = new TicketAcceptanceCriterion(criterionId ?? Guid.NewGuid().ToString("N"), request.Text.Trim(), request.Status, request.Evidence);
+        var previousEvidence = index < 0 ? null : criteria[index].Evidence;
+        var status = request.Evidence is not null && request.Evidence != previousEvidence
+            ? AcceptanceStatus.ReadyToEvaluate
+            : request.Status == AcceptanceStatus.ReadyToEvaluate && request.Evidence is null
+                ? AcceptanceStatus.Pending : request.Status;
+        var criterion = new TicketAcceptanceCriterion(criterionId ?? Guid.NewGuid().ToString("N"), request.Text.Trim(), status, request.Evidence);
         if (index < 0) criteria.Add(criterion); else criteria[index] = criterion;
         ticket.AcceptanceCriteria = criteria;
         ticket.UpdatedAt = DateTime.UtcNow;
@@ -448,7 +454,7 @@ public class TicketService
             ticket.ColumnId.HasValue && ownerActionColumnIds.Contains(ticket.ColumnId.Value));
     }
 
-    public async Task<Ticket?> GetTicketAsync(string projectSlug, int ticketId)
+    public async Task<Ticket?> GetTicketAsync(string projectSlug, int ticketId, int? commentLimit = null)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureActivityTableAsync(db);
@@ -461,11 +467,14 @@ public class TicketService
         var ticket = await db.Tickets
             // Avoid multiplying comments × activities × labels for history-heavy tickets.
             .AsSplitQuery()
-            .Include(t => t.Comments.OrderBy(c => c.CreatedAt))
+            .Include(t => t.Comments.OrderByDescending(c => c.CreatedAt).ThenByDescending(c => c.Id).Take(commentLimit ?? int.MaxValue))
             .Include(t => t.Activities.OrderBy(a => a.CreatedAt))
             .Include(t => t.Labels)
             .FirstOrDefaultAsync(t => t.Id == ticketId);
         if (ticket is null) return null;
+        ticket.Comments = ticket.Comments.OrderBy(c => c.CreatedAt).ThenBy(c => c.Id).ToList();
+        ticket.HasMoreComments = commentLimit.HasValue &&
+            await db.Comments.CountAsync(c => c.TicketId == ticketId) > ticket.Comments.Count;
         ticket.SubTickets = await db.Tickets
             .Where(t => t.ParentId == ticketId)
             .OrderBy(t => t.SortOrder).ThenBy(t => t.CreatedAt)

@@ -32,6 +32,15 @@ window.boardReplaceUrl = function (url) {
 };
 
 // Reveal a linked column inside the horizontal board without moving the page header.
+window.focusBoardTicket = function (boardId, ticketId) {
+    const board = document.getElementById(boardId);
+    const card = board && board.querySelector(`[data-ticket-id="${Number(ticketId)}"]`);
+    if (!card) return;
+    card.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+    card.setAttribute('tabindex', '-1');
+    card.focus({ preventScroll: true });
+};
+
 window.focusBoardColumn = function (boardId, columnId) {
     const board = document.getElementById(boardId);
     const column = board && [...board.children].find(child =>

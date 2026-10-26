@@ -154,7 +154,13 @@ internal sealed class WindowsDesktopWindow : Forms.Form
             using var scriptStream = typeof(WindowsDesktopWindow).Assembly.GetManifestResourceStream(
                 "KittyClaw.Web.Services.WindowsDesktopShell.js")!;
             using var scriptReader = new StreamReader(scriptStream);
-            await _view.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(await scriptReader.ReadToEndAsync());
+            using var styleStream = typeof(WindowsDesktopWindow).Assembly.GetManifestResourceStream(
+                "KittyClaw.Web.wwwroot.css.windows-desktop.css")!;
+            using var styleReader = new StreamReader(styleStream);
+            // Keep native window geometry available independently of HTTP asset delivery or caching.
+            var shellStyles = System.Text.Json.JsonSerializer.Serialize(await styleReader.ReadToEndAsync());
+            var shellScript = (await scriptReader.ReadToEndAsync()).Replace("/* SHELL_STYLES */", shellStyles);
+            await _view.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(shellScript);
             _view.CoreWebView2.NavigationStarting += (_, args) =>
             {
                 if (IsLocal(args.Uri)) return;

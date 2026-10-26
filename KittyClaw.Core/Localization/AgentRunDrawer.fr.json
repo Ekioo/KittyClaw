@@ -1,4 +1,7 @@
 {
+  "OpenRunWorkingFiles": "Ouvrir le dossier de travail",
+  "OpenRunWorkingFilesHint": "Ouvrir le dossier de travail de cette exécution sur l’ordinateur KittyClaw",
+  "OpenRunWorkingFilesError": "Impossible d’ouvrir le dossier de travail",
   "StopAgent": "Arrêter l'agent",
   "Stop": "Stop",
   "Retry": "Relancer",

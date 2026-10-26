@@ -1,0 +1,109 @@
+@page "/temporary-storage"
+@inject TemporaryStorageService Storage
+@inject ProjectService Projects
+@inject RunWorkingFilesService WorkingFiles
+@inject LocalizationService L
+@rendermode InteractiveServer
+@attribute [StreamRendering]
+@implements IDisposable
+
+<PageTitle>@L["TemporaryStorageTitle"]</PageTitle>
+<UtilityPageHeader Title="@L["TemporaryStorageTitle"]" />
+<main class="settings-container utility-page-container temporary-storage-page">
+    <section class="settings-section">
+        <p role="note">@L["TemporaryStorageWarning"]</p>
+        <p class="settings-hint">@L["TemporaryStorageScope"]</p>
+        <div class="settings-row">
+            <button class="settings-primary" type="button" @onclick="Refresh" disabled="@_loading">@L["TemporaryStorageRefresh"]</button>
+            @if (_measuredAt is { } measured)
+            {
+                <span class="settings-hint">@L["TemporaryStorageMeasured"] <LocalDateTime Value="measured" /></span>
+            }
+        </div>
+    </section>
+    @if (_error is not null)
+    {
+        <div class="settings-status settings-status-err" role="alert">@_error</div>
+    }
+    @if (_loading)
+    {
+        <p role="status">@L["TemporaryStorageScanning"]</p>
+    }
+    @if (!_loading && _usage.Count == 0 && _error is null)
+    {
+        <p>@L["TemporaryStorageEmpty"]</p>
+    }
+    @foreach (var project in _usage)
+    {
+        <section class="settings-section" data-testid="project-storage-usage">
+            <div class="temporary-storage-heading">
+                <h2><a href="@($"/board/{project.Slug}/settings")">@project.Name</a></h2>
+                <strong>@FormatSize(project.Bytes)</strong>
+            </div>
+            <p class="settings-hint">@FileCountLabel(project.FileCount)</p>
+            @if (project.IsPartial)
+            {
+                <p role="status">@L["TemporaryStoragePartial"]</p>
+            }
+            <details>
+                <summary>@L["TemporaryStorageFolders"] (@project.Folders.Count)</summary>
+                @foreach (var folder in project.Folders)
+                {
+                    <div class="temporary-storage-folder">
+                        <code>@folder.Path</code>
+                        <span>@FormatSize(folder.Bytes) · @FileCountLabel(folder.FileCount)</span>
+                        @if (!folder.Exists && !folder.IsPartial) { <small>@L["TemporaryStorageMissing"]</small> }
+                        @if (folder.IsPartial) { <small>@L["TemporaryStoragePartial"]</small> }
+                    </div>
+                }
+            </details>
+            <button class="settings-browse" type="button" @onclick="() => OpenFolder(project.Slug)" disabled="@(_opening is not null)" title="@L["OpenProjectWorkingFilesHint"]">📂 @L["OpenRunWorkingFiles"]</button>
+        </section>
+    }
+</main>
+
+@code {
+    private readonly CancellationTokenSource _lifetime = new();
+    private IReadOnlyList<ProjectTemporaryStorage> _usage = [];
+    private bool _loading;
+    private string? _error, _opening;
+    private DateTime? _measuredAt;
+
+    protected override Task OnInitializedAsync() => Refresh();
+
+    private async Task Refresh()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _usage = await Storage.ScanAsync(_lifetime.Token);
+            _measuredAt = DateTime.UtcNow;
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        catch (Exception ex) { _error = $"{L["Error"]}: {ex.Message}"; }
+        finally { _loading = false; }
+    }
+
+    private async Task OpenFolder(string slug)
+    {
+        _opening = slug;
+        _error = null;
+        try { await WorkingFiles.OpenProjectAsync(slug, Projects); }
+        catch (Exception ex) { _error = $"{L["OpenRunWorkingFilesError"]}: {ex.Message}"; }
+        finally { _opening = null; }
+    }
+
+    private string FileCountLabel(long count) => $"{count} {L[count == 1 ? "TemporaryStorageFile" : "TemporaryStorageFiles"]}";
+
+    private static string FormatSize(long bytes)
+    {
+        string[] units = ["B", "KiB", "MiB", "GiB", "TiB"];
+        double value = bytes;
+        var unit = 0;
+        while (value >= 1024 && unit < units.Length - 1) { value /= 1024; unit++; }
+        return $"{value:0.##} {units[unit]}";
+    }
+
+    public void Dispose() { _lifetime.Cancel(); _lifetime.Dispose(); }
+}

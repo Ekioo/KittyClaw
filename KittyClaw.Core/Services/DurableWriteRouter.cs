@@ -218,6 +218,27 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
         }
     }
 
+    public async Task CommitDashboardTileAsync(string projectSlug, DurableWriteRoute route, string message)
+    {
+        if (route.QueueRequestId is not null)
+        {
+            var validation = await CommitAndQueueAsync(projectSlug, route, message);
+            if (validation.Status != DurableWriteValidationStatus.Ready)
+                throw new InvalidOperationException(validation.Error ?? "Dashboard changes require review before integration.");
+            return;
+        }
+
+        // A shared checkout may contain unrelated staged or unstaged user work.
+        // Restrict both staging and the commit to this tile's declared paths.
+        var changed = StatusPaths(route.RootPath)
+            .Where(path => IsAllowed(path, route.AllowedPaths)).ToArray();
+        if (changed.Length == 0) return;
+        if (changed.Any(path => ProbableSecretScanner.ContainsProbableSecret(Path.Combine(route.RootPath, path))))
+            throw new InvalidOperationException("Dashboard changes contain a possible secret.");
+        RunGit(route.RootPath, ["add", "-A", "--", .. route.AllowedPaths]);
+        RunGit(route.RootPath, ["commit", "--only", "-m", message, "--", .. route.AllowedPaths]);
+    }
+
     public async Task PreserveExecutionAsync(string projectSlug, DurableWriteRoute route, string reason)
     {
         try
@@ -386,27 +407,32 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
         }
         catch (IOException) when (OperatingSystem.IsWindows())
         {
-            var info = new ProcessStartInfo("cmd.exe")
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-            foreach (var argument in new[] { "/d", "/c", "mklink", "/J", target, source })
-                info.ArgumentList.Add(argument);
-            using var process = Process.Start(info)
-                ?? throw new IOException("The Windows junction helper could not be started.");
-            var output = process.StandardOutput.ReadToEnd();
-            var error = process.StandardError.ReadToEnd();
-            if (!process.WaitForExit(30_000))
-            {
-                process.Kill(true);
-                throw new IOException("The Windows junction helper timed out.");
-            }
-            if (process.ExitCode != 0)
-                throw new IOException($"The Windows junction helper failed: {(error.Length > 0 ? error : output).Trim()}");
+            CreateDirectoryJunction(target, source);
         }
+    }
+
+    internal static void CreateDirectoryJunction(string target, string source)
+    {
+        if (!OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException("Directory junctions require Windows.");
+        // ArgumentList does not escape cmd.exe metacharacters. Keep paths out of
+        // command text entirely, including percent expansion inside quoted paths.
+        const string command = """
+            $ErrorActionPreference = 'Stop'
+            $literalSource = [System.Management.Automation.WildcardPattern]::Escape($env:KITTYCLAW_JUNCTION_SOURCE)
+            New-Item -ItemType Junction -Path $env:KITTYCLAW_JUNCTION_TARGET -Value $literalSource | Out-Null
+            """;
+        var encoded = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(command));
+        var result = ProcessRunner.RunAsync("powershell.exe",
+            "-NoLogo -NoProfile -NonInteractive -EncodedCommand " + encoded,
+            timeout: TimeSpan.FromSeconds(30), env: new Dictionary<string, string>
+            {
+                ["KITTYCLAW_JUNCTION_TARGET"] = Path.GetFullPath(target),
+                ["KITTYCLAW_JUNCTION_SOURCE"] = Path.GetFullPath(source)
+            }).GetAwaiter().GetResult();
+        if (!result.Success)
+            throw new IOException(result.TimedOut ? "The Windows junction helper timed out."
+                : "The Windows junction helper failed to create the directory link.");
     }
 
     private static IEnumerable<string> FindLocalDependencyDirectories(string root, string? excludedRoot)

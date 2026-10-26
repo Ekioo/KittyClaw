@@ -1,0 +1,14 @@
+{
+  "TemporaryStorageTitle": "Armazenamento temporário",
+  "TemporaryStorageWarning": "Estas pastas podem ser excluídas a qualquer momento. Nunca guarde dados insubstituíveis ou entregas finais aqui. Salve resultados valiosos e evidências necessárias em armazenamento permanente.",
+  "TemporaryStorageScope": "Visão somente leitura dos projetos registrados: pastas configuradas, padrão e anteriores conhecidas pelas execuções mantidas. Tamanho dos arquivos, não espaço alocado. Pastas compartilhadas podem ser contadas várias vezes. Links são ignorados. Sem limpeza automática.",
+  "TemporaryStorageRefresh": "Atualizar tamanhos",
+  "TemporaryStorageMeasured": "Medido em",
+  "TemporaryStorageScanning": "Medindo pastas…",
+  "TemporaryStorageEmpty": "Nenhum projeto para medir.",
+  "TemporaryStorageFiles": "arquivos",
+  "TemporaryStoragePartial": "Medição parcial: algumas entradas não puderam ser lidas ou foram ignoradas.",
+  "TemporaryStorageFolders": "Pastas",
+  "TemporaryStorageMissing": "Não criada ou removida",
+  "TemporaryStorageFile": "arquivo"
+}

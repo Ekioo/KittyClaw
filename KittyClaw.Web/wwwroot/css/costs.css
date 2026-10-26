@@ -1,20 +1,4 @@
-.costs-page {
-    width: min(1180px, 100%);
-    margin: 0 auto;
-    padding: 1.75rem 1.25rem 3rem;
-}
-
-.costs-header {
-    display: flex;
-    align-items: center;
-    gap: 1.25rem;
-    margin-bottom: 1.25rem;
-}
-
-.costs-header h1 { font-size: 1.65rem; letter-spacing: -.025em; }
 .cost-accounting-help { color: var(--text-muted); line-height: 1.5; margin: .75rem 0; }
-.costs-back-link { display: inline-flex; align-items: center; gap: .45rem; color: var(--text-muted); text-decoration: none; transition: color .15s ease; }
-.costs-back-link:hover { color: var(--text); }
 
 .cost-filter-card,
 .cost-project-cost-card,
@@ -132,8 +116,6 @@
 }
 
 @media (max-width: 560px) {
-    .costs-page { padding: 1rem .75rem 2rem; }
-    .costs-header { align-items: flex-start; flex-direction: column; gap: .65rem; }
     .cost-filter-grid,
     .cost-project-card-grid,
     .cost-skeleton-projects { grid-template-columns: minmax(0, 1fr); }
@@ -152,7 +134,6 @@
 @media (prefers-reduced-motion: reduce) {
     .cost-skeleton::after { animation: none; }
     .cost-picker-chevron,
-    .costs-back-link,
     .cost-date-preset { transition: none; }
 }
 

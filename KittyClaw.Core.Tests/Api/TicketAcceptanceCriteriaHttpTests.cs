@@ -22,13 +22,13 @@ public sealed class TicketAcceptanceCriteriaHttpTests(TicketLabelsPatchTests.Api
         var added = await client.PostAsJsonAsync(url + "/acceptance-criteria", new { text = "It works" });
         added.EnsureSuccessStatusCode();
         var criterion = await added.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal("NotEvaluated", criterion.GetProperty("status").GetString());
+        Assert.Equal("Pending", criterion.GetProperty("status").GetString());
         var criterionUrl = url + "/acceptance-criteria/" + criterion.GetProperty("id").GetString();
         var update = await client.PutAsJsonAsync(criterionUrl, new { text = "It works", status = "PASS", evidence = new { content = "{\"passed\":true}", mediaType = "application/json" } });
         update.EnsureSuccessStatusCode();
         var read = await client.GetFromJsonAsync<JsonElement>(url);
         var saved = Assert.Single(read.GetProperty("acceptanceCriteria").EnumerateArray());
-        Assert.Equal("PASS", saved.GetProperty("status").GetString());
+        Assert.Equal("ReadyToEvaluate", saved.GetProperty("status").GetString());
         Assert.Equal("{\"passed\":true}", saved.GetProperty("evidence").GetProperty("content").GetString());
         var invalid = await client.PutAsJsonAsync(criterionUrl, new { text = "It works", status = "PASS", evidence = new { content = "oops", mediaType = "application/json" } });
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);

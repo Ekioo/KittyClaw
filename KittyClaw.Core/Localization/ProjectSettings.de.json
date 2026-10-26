@@ -1,4 +1,7 @@
 {
+  "OpenProjectWorkingFilesHint": "Gespeicherten Arbeitsordner auf dem KittyClaw-Computer öffnen, bei leerem Feld den Standardordner des Projekts. Änderungen zuerst speichern.",
+  "WorkingFilesPath": "Ordner für Arbeitsdateien",
+  "WorkingFilesHint": "Optionaler absoluter Basisordner für temporäre Dateien, Entwürfe und Nachweise. Leer: KittyClaw-Datenordner (artifacts/Projekt). Jeder Lauf erhält einen automatisch erstellten Unterordner, der jederzeit gelöscht werden kann. Agenten müssen ihn verwenden. Beide Ordner mit Speichern sichern.",
   "SettingsTitle": "Einstellungen",
   "Board": "Planke",
   "WorkspacePath": "Arbeitsbereichspfad",

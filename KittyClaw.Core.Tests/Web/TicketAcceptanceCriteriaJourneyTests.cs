@@ -41,13 +41,13 @@ public sealed class TicketAcceptanceCriteriaJourneyTests
         await area.Locator("textarea[aria-label='Evidence']").FillAsync("{\"passed\":true}");
         await area.GetByRole(AriaRole.Button, new() { Name = "Save", Exact = true }).ClickAsync();
         var status = area.GetByLabel("Status: Login works", new() { Exact = true });
-        await Expect(status).ToHaveValueAsync("NotEvaluated");
-        await status.SelectOptionAsync("PARTIAL");
-        await Expect(status).ToHaveValueAsync("PARTIAL");
+        await Expect(status).ToHaveValueAsync("ReadyToEvaluate");
+        await status.SelectOptionAsync("NeedsRework");
+        await Expect(status).ToHaveValueAsync("NeedsRework");
         await area.Locator("summary").ClickAsync();
         await Expect(area.Locator("pre")).ToHaveTextAsync("{\"passed\":true}");
         await page.ReloadAsync();
-        await Expect(area.GetByLabel("Status: Login works", new() { Exact = true })).ToHaveValueAsync("PARTIAL");
+        await Expect(area.GetByLabel("Status: Login works", new() { Exact = true })).ToHaveValueAsync("NeedsRework");
         await page.WaitForFunctionAsync("""
             () => {
                 const description = document.querySelector('.ticket-desc');

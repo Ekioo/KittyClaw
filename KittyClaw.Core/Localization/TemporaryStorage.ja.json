@@ -1,0 +1,14 @@
+{
+  "TemporaryStorageTitle": "一時ストレージ",
+  "TemporaryStorageWarning": "これらのフォルダーはいつでも削除される可能性があります。代替できないデータや最終成果物は保存しないでください。重要な結果や必要な証拠は永続ストレージに保存してください。",
+  "TemporaryStorageScope": "登録プロジェクトの読み取り専用一覧：設定済み、既定、および保持された実行履歴にある過去のフォルダー。ファイルサイズであり、ディスク割当量ではありません。共有フォルダーは複数回計上される場合があります。リンクは除外します。自動削除は行いません。",
+  "TemporaryStorageRefresh": "サイズを更新",
+  "TemporaryStorageMeasured": "測定日時",
+  "TemporaryStorageScanning": "フォルダーを測定中…",
+  "TemporaryStorageEmpty": "測定するプロジェクトがありません。",
+  "TemporaryStorageFiles": "ファイル",
+  "TemporaryStoragePartial": "一部のみ測定：読み取り不能または除外された項目があります。",
+  "TemporaryStorageFolders": "フォルダー",
+  "TemporaryStorageMissing": "未作成または削除済み",
+  "TemporaryStorageFile": "ファイル"
+}

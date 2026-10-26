@@ -1,0 +1,11 @@
+@inject LocalizationService L
+
+<header class="page-header global-navigation-header">
+    <a href="/" aria-label="KittyClaw"><img src="/KittyClaw-Logo-Horizontal.webp?v=posture07-rounded" alt="KittyClaw" class="home-logo-horizontal" /></a>
+    <nav class="project-directory-global-actions view-toggle" aria-label="@L["GlobalSettings"]">
+        <NavLink class="view-toggle-btn" ActiveClass="view-toggle-btn--active" href="/" Match="NavLinkMatch.All">@L["Projects"]</NavLink>
+        <NavLink class="view-toggle-btn" ActiveClass="view-toggle-btn--active" href="/costs">@L["Costs"]</NavLink>
+        <NavLink class="view-toggle-btn" ActiveClass="view-toggle-btn--active" href="/temporary-storage">@L["TemporaryStorageTitle"]</NavLink>
+        <NavLink class="view-toggle-btn" ActiveClass="view-toggle-btn--active" href="/settings">@L["GlobalSettings"]</NavLink>
+    </nav>
+</header>

@@ -1,4 +1,7 @@
 {
+  "OpenRunWorkingFiles": "Open working folder",
+  "OpenRunWorkingFilesHint": "Open this execution’s working files folder on the KittyClaw computer",
+  "OpenRunWorkingFilesError": "Could not open the working files folder",
   "StopAgent": "Stop agent",
   "Stop": "Stop",
   "Retry": "Retry",

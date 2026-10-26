@@ -14,7 +14,7 @@ public sealed class ColumnAgentDispatcherTests
         Assert.True(parsed, error);
         var assessment = Assert.Single(result!.AcceptanceCriteria!);
         Assert.Equal("criterion-1", assessment.Id);
-        Assert.Equal(AcceptanceStatus.PARTIAL, assessment.Status);
+        Assert.Equal(AcceptanceStatus.NeedsRework, assessment.Status);
         Assert.Equal("One check remains", assessment.Evidence!.Content);
     }
 

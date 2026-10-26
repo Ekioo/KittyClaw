@@ -63,7 +63,7 @@
         max-width: 100%;
     }
     button, a, input, select, textarea { touch-action: manipulation; }
-    .board-layout { height: 100dvh; width: 100%; min-width: 0; }
+    .board-layout { height: calc(100dvh - 64px); width: 100%; min-width: 0; }
     .board-layout > .page-header { max-height: 45dvh; overflow-y: auto; }
     .board {
         padding: 0;

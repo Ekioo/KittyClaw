@@ -13,6 +13,7 @@ public static partial class Endpoints
         MapProjectSecrets(api);
         MapWorktreeMerges(api);
         MapTickets(api);
+        MapTicketImprovement(api);
         MapProjectLabels(api);
         MapTicketLabels(api);
         MapTicketReorder(api);

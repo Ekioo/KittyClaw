@@ -11,6 +11,8 @@ public sealed class AgentRunContext
 {
     public required string ProjectSlug { get; init; }
     public required string WorkspacePath { get; init; }
+    /// <summary>Resolved run-specific artifact directory, preserved across provider retries.</summary>
+    internal string? WorkingFilesPath { get; set; }
     /// <summary>Process cwd. When null, the control workspace is used.</summary>
     internal string? ExecutionWorkspacePath { get; set; }
     /// <summary>Project-wide maintenance route owned by a no-ticket interactive chat chain.</summary>
@@ -93,6 +95,7 @@ public sealed class AgentRunContext
     {
         ProjectSlug = ProjectSlug,
         WorkspacePath = WorkspacePath,
+        WorkingFilesPath = WorkingFilesPath,
         ExecutionWorkspacePath = ExecutionWorkspacePath,
         DurableWriteRoute = DurableWriteRoute,
         ExecutionWorkspaceError = ExecutionWorkspaceError,
@@ -132,6 +135,7 @@ public sealed class AgentRunContext
     {
         ProjectSlug = ProjectSlug,
         WorkspacePath = WorkspacePath,
+        WorkingFilesPath = WorkingFilesPath,
         ExecutionWorkspacePath = ExecutionWorkspacePath,
         DurableWriteRoute = DurableWriteRoute,
         ExecutionWorkspaceError = ExecutionWorkspaceError,
@@ -255,6 +259,7 @@ public sealed class AgentRunner
 
     private AgentRun CreateAndRegisterRun(AgentRunContext ctx)
     {
+        if (_projects is not null) ctx.WorkingFilesPath = null;
         var run = new AgentRun
         {
             RunId = ctx.PresetRunId ?? Guid.NewGuid().ToString("N"),
@@ -1065,6 +1070,23 @@ public sealed class AgentRunner
             run.Push(new StreamEvent(DateTime.UtcNow, "external_tool", detail));
         }
 
+        // Resolve once per run so retries, fallback providers and steering share the same evidence.
+        if (ctx.WorkingFilesPath is null && _projects is not null)
+        {
+            var project = await _projects.GetProjectAsync(ctx.ProjectSlug)
+                ?? throw new InvalidOperationException($"Project '{ctx.ProjectSlug}' no longer exists.");
+            ctx.WorkingFilesPath = _projects.PrepareRunWorkingFilesDirectory(project, run.RunId);
+        }
+        if (!string.IsNullOrWhiteSpace(ctx.WorkingFilesPath))
+        {
+            Directory.CreateDirectory(ctx.WorkingFilesPath);
+            if (run.WorkingFilesPath != ctx.WorkingFilesPath)
+            {
+                run.WorkingFilesPath = ctx.WorkingFilesPath;
+                _runs.Persist(run);
+                run.Push(new StreamEvent(DateTime.UtcNow, "working_files", $"Working files folder: {run.WorkingFilesPath}"));
+            }
+        }
         var prompt = await BuildPromptAsync(ctx, skillContent, isResume, ct, _appSettings?.Language ?? "en");
         prompt = RtkIntegrationService.AppendInstructions(prompt, rtkStatus);
         var backend = AgentCliBackend.For(ctx.Target.Provider);
@@ -1425,6 +1447,13 @@ public sealed class AgentRunner
     }
 
     internal static async Task<string> BuildPromptAsync(AgentRunContext ctx, string skillContent, bool isResume, CancellationToken ct, string uiLanguage = "en")
+    {
+        var prompt = await BuildTaskPromptAsync(ctx, skillContent, isResume, ct, uiLanguage);
+        if (string.IsNullOrWhiteSpace(ctx.WorkingFilesPath)) return prompt;
+        return $"## Project working files folder (current setting)\nUse {JsonSerializer.Serialize(ctx.WorkingFilesPath)} for all temporary files, scratch work, drafts, screenshots, evidence, reports, and other intermediate artifacts. This directory is disposable temporary storage and may be cleaned up or deleted at any time, including during execution. Never leave unique or valuable data, final deliverables, source code, credentials, or anything that must survive deletion here. Before relying on a result or marking work complete, save all durable outputs and required evidence to an appropriate permanent project location or approved durable storage, and link that permanent copy. Temporary evidence must be reproducible. Create subfolders as needed and use absolute paths when linking evidence. Keep deliverable source files in the project workspace. This folder applies even when executing in a worktree and supersedes any earlier working files folder setting.\n\n{prompt}";
+    }
+
+    private static async Task<string> BuildTaskPromptAsync(AgentRunContext ctx, string skillContent, bool isResume, CancellationToken ct, string uiLanguage)
     {
         var imagesBlock = BuildAttachedImagesBlock(ctx);
 

@@ -1,0 +1,14 @@
+{
+  "TemporaryStorageTitle": "Temporary storage",
+  "TemporaryStorageWarning": "These folders may be deleted at any time. Never keep irreplaceable data or final deliverables here. Save valuable results and required evidence in permanent storage.",
+  "TemporaryStorageScope": "Read-only overview of registered projects: configured, default and historical folders known from retained runs. File sizes, not allocated disk space. Shared folders may count for multiple projects. Links are skipped. No automatic cleanup.",
+  "TemporaryStorageRefresh": "Refresh sizes",
+  "TemporaryStorageMeasured": "Measured at",
+  "TemporaryStorageScanning": "Measuring folders…",
+  "TemporaryStorageEmpty": "No projects to measure.",
+  "TemporaryStorageFiles": "files",
+  "TemporaryStoragePartial": "Partial measurement: some entries could not be read or were skipped.",
+  "TemporaryStorageFolders": "Folders",
+  "TemporaryStorageMissing": "Not created or no longer present",
+  "TemporaryStorageFile": "file"
+}

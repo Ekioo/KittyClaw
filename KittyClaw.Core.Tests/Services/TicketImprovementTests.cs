@@ -8,6 +8,24 @@ namespace KittyClaw.Core.Tests.Services;
 public class TicketImprovementTests
 {
     [Fact]
+    public void Parse_KeepsDepthAnalysisSeparateFromTheRewrittenTicket()
+    {
+        var expected = new KittyClaw.Web.Services.TicketImprovement(
+            "Reproduce the failure and address its cause", ["The reproduction passes after the fix"],
+            [], "1. Investigate the cause\n2. Raw logs\n3. Reproduction harness\n4. Regression result");
+
+        var actual = KittyClaw.Web.Services.TicketImprovementService.Parse(
+            System.Text.Json.JsonSerializer.Serialize(expected));
+
+        Assert.Equal(expected.Analysis, actual.Analysis);
+        Assert.Equal(expected.Description, actual.Description);
+        Assert.Equal(expected.AcceptanceCriteria, actual.AcceptanceCriteria);
+        Assert.Empty(actual.SuggestedTickets!);
+        Assert.Throws<InvalidOperationException>(() => KittyClaw.Web.Services.TicketImprovementService.Parse(
+            System.Text.Json.JsonSerializer.Serialize(expected with { Analysis = new string('x', 10001) })));
+    }
+
+    [Fact]
     public void Parse_ValidatesStructuredBreakdown()
     {
         var draft = new TicketImprovementDraft("Small task", "Concrete scope", ["Observable result"]);
@@ -44,9 +62,9 @@ public class TicketImprovementTests
             Assert.Equal(original.ColumnId, child.ColumnId);
             Assert.Equal(original.PipelineId, child.PipelineId);
             Assert.Single(child.AcceptanceCriteria);
-            Assert.Equal(AcceptanceStatus.NotEvaluated, child.AcceptanceCriteria[0].Status);
+            Assert.Equal(AcceptanceStatus.Pending, child.AcceptanceCriteria[0].Status);
         }
-        await Assert.ThrowsAsync<InvalidOperationException>(() => tickets.SplitTicketAsync(project.Slug, original, drafts));
+        await Assert.ThrowsAsync<TicketImprovementConflictException>(() => tickets.SplitTicketAsync(project.Slug, original, drafts));
         Assert.Equal(2, (await tickets.GetTicketAsync(project.Slug, original.Id))!.SubTickets.Count);
     }
 
@@ -113,11 +131,38 @@ public class TicketImprovementTests
         var after = (await tickets.GetTicketAsync(project.Slug, ticket.Id))!;
         Assert.Equal("Improved", after.Description);
         Assert.Equal(criterion, after.AcceptanceCriteria[0]);
-        Assert.Equal(AcceptanceStatus.NotEvaluated, after.AcceptanceCriteria[1].Status);
+        Assert.Equal(AcceptanceStatus.Pending, after.AcceptanceCriteria[1].Status);
         Assert.Null(after.AcceptanceCriteria[1].Evidence);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => tickets.ApplyImprovementAsync(project.Slug,
+        await Assert.ThrowsAsync<TicketImprovementConflictException>(() => tickets.ApplyImprovementAsync(project.Slug,
             ticket.Id, before.Description, before.AcceptanceCriteriaJson, "Stale", ["Wrong"]));
         Assert.Equal("Improved", (await tickets.GetTicketAsync(project.Slug, ticket.Id))!.Description);
+    }
+
+    [Fact]
+    public async Task Apply_DatabaseFailureRollsBackDescriptionCriteriaRevisionAndActivity()
+    {
+        using var tmp = new TempDir();
+        var projects = new ProjectService(tmp.Path);
+        var project = await projects.CreateProjectAsync("atomic-improvement");
+        var tickets = new TicketService(projects, new MemberService(projects));
+        var ticket = await tickets.CreateTicketAsync(project.Slug, "Original", "Original scope");
+        await tickets.SaveAcceptanceCriterionAsync(project.Slug, ticket.Id, null,
+            new("Existing", AcceptanceStatus.PASS, new("Proof")));
+        var before = (await tickets.GetTicketAsync(project.Slug, ticket.Id))!;
+        await using (var db = projects.GetProjectDb(project.Slug))
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TRIGGER reject_improvement_test BEFORE UPDATE ON Tickets
+                WHEN NEW.Description = 'Rejected' BEGIN SELECT RAISE(ABORT, 'rejected'); END;
+                """);
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => tickets.ApplyImprovementAsync(project.Slug,
+            ticket.Id, before.Description, before.AcceptanceCriteriaJson, "Rejected", ["New result"], before.UpdatedAt));
+
+        var after = (await tickets.GetTicketAsync(project.Slug, ticket.Id))!;
+        Assert.Equal(before.Description, after.Description);
+        Assert.Equal(before.AcceptanceCriteriaJson, after.AcceptanceCriteriaJson);
+        Assert.Equal(before.UpdatedAt, after.UpdatedAt);
+        Assert.Equal(before.Activities.Count, after.Activities.Count);
     }
 
     [Fact]

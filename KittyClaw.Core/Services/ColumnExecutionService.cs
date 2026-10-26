@@ -598,7 +598,7 @@ public sealed partial class ColumnExecutionService(ProjectService projects, Tick
                 {
                     var index = criteria.FindIndex(c => c.Id == evaluation.Id);
                     if (index < 0) throw new InvalidOperationException("Unknown acceptance criterion ID.");
-                    if (evaluation.Status != AcceptanceStatus.NotEvaluated && evaluation.Evidence is null)
+                    if (evaluation.Status != AcceptanceStatus.Pending && evaluation.Evidence is null)
                         throw new InvalidOperationException("Evaluated criteria require evidence.");
                     TicketService.ValidateAcceptanceCriterion(new(criteria[index].Text, evaluation.Status, evaluation.Evidence));
                     criteria[index] = criteria[index] with { Status = evaluation.Status, Evidence = evaluation.Evidence };

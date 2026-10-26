@@ -5,6 +5,7 @@
 @using KittyClaw.Web.Services
 @using Markdig
 @inject AgentRunsState RunsState
+@inject RunWorkingFilesService WorkingFiles
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject LocalizationService L
@@ -16,6 +17,10 @@
 {
     <ConversationDrawer Title="@_run.AgentName" Run="_run" CssClass="agent-drawer" IsBusy="@(_run.Status == AgentRunStatus.Running)" OnClose="Close">
         <HeaderActions>
+            @if (!string.IsNullOrWhiteSpace(_run.WorkingFilesPath))
+            {
+                <button class="header-action-btn" type="button" @onclick="OpenWorkingFiles" title="@L["OpenRunWorkingFilesHint"]" data-testid="open-run-working-files">📁 @L["OpenRunWorkingFiles"]</button>
+            }
             @if (_run.Status is AgentRunStatus.Failed or AgentRunStatus.Stopped)
             {
                 <button class="agent-retry-btn" @onclick="Retry" disabled="@_retrying" title="@L["RetryAgent"]">↻ @L["Retry"]</button>
@@ -35,9 +40,9 @@
         {
             <details class="fresh-context-details">
                 <summary>Ticket context · technical details</summary>
-                <span>Trigger version: @(_columnExecution.TriggerTicketUpdatedAt?.ToString("O") ?? "unavailable")</span>
+                <span>Trigger version: <LocalDateTime Value="_columnExecution.TriggerTicketUpdatedAt" EmptyText="unavailable" /></span>
                 <span>Trigger signal: @_columnExecution.TriggerSignalType</span>
-                <span>Consumed version: @(_columnExecution.ConsumedTicketUpdatedAt?.ToString("O") ?? "not consumed")</span>
+                <span>Consumed version: <LocalDateTime Value="_columnExecution.ConsumedTicketUpdatedAt" EmptyText="not consumed" /></span>
                 <span>Owner feedback: @(_columnExecution.TriggerOwnerCommentId is int commentId ? $"#{commentId}" : "none")</span>
             </details>
             @if (!string.IsNullOrWhiteSpace(_columnExecution.ContextRejectionReason))
@@ -181,6 +186,18 @@
             _needsScroll = true;
             StateHasChanged();
         });
+    }
+
+    private void OpenWorkingFiles()
+    {
+        if (_run is null) return;
+        _actionError = null;
+        try { WorkingFiles.Open(_run.ProjectSlug, _run.RunId); }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to open working files for run {RunId}", _run.RunId);
+            _actionError = $"{L["OpenRunWorkingFilesError"]}: {ex.Message}";
+        }
     }
 
     private async Task Close()

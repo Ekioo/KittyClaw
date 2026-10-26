@@ -2,6 +2,8 @@ namespace KittyClaw.Core.Models;
 
 public class Ticket
 {
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public bool HasMoreComments { get; set; }
     public int Id { get; set; }
     /// <summary>Stable workflow identity. Legacy projects are migrated to their default pipeline.</summary>
     public int PipelineId { get; set; }

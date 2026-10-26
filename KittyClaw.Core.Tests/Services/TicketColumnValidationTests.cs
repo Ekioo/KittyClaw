@@ -62,9 +62,9 @@ public sealed class TicketColumnValidationTests
     }
 
     [Theory]
-    [InlineData(AcceptanceStatus.NotEvaluated)]
-    [InlineData(AcceptanceStatus.FAIL)]
-    [InlineData(AcceptanceStatus.PARTIAL)]
+    [InlineData(AcceptanceStatus.Pending)]
+    [InlineData(AcceptanceStatus.NeedsRework)]
+    [InlineData(AcceptanceStatus.ReadyToEvaluate)]
     public async Task ValidatedCriteria_RequiresNonemptyChecklistAndEveryCriterionPassing(AcceptanceStatus pendingStatus)
     {
         using var tmp = new TempDir();

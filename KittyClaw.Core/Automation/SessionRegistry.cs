@@ -198,6 +198,18 @@ public sealed class SessionRegistry
         });
     }
 
+    public string? GetLastChatEffort(string workspacePath, string target) =>
+        (Load(workspacePath)["_chatEfforts"] as JsonObject)?[target]?.GetValue<string>();
+
+    public void SetLastChatEffort(string workspacePath, string target, string? effort) =>
+        Update(workspacePath, state =>
+        {
+            var efforts = state["_chatEfforts"] as JsonObject ?? new JsonObject();
+            if (effort is null) efforts.Remove(target);
+            else efforts[target] = effort;
+            state["_chatEfforts"] = efforts;
+        });
+
     public string? GetLastChatModel(string workspacePath, string target)
     {
         var state = Load(workspacePath);

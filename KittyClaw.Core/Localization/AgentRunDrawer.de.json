@@ -1,4 +1,7 @@
 {
+  "OpenRunWorkingFiles": "Arbeitsordner öffnen",
+  "OpenRunWorkingFilesHint": "Arbeitsordner dieses Laufs auf dem KittyClaw-Computer öffnen",
+  "OpenRunWorkingFilesError": "Der Arbeitsordner konnte nicht geöffnet werden",
   "StopAgent": "Stoppen Sie den Agenten",
   "Stop": "Stoppen",
   "Retry": "Wiederholen",

@@ -1,0 +1,14 @@
+{
+  "TemporaryStorageTitle": "Temporärer Speicher",
+  "TemporaryStorageWarning": "Diese Ordner können jederzeit gelöscht werden. Hier niemals unersetzliche Daten oder endgültige Ergebnisse speichern. Wertvolle Ergebnisse und erforderliche Nachweise dauerhaft sichern.",
+  "TemporaryStorageScope": "Nur lesende Übersicht registrierter Projekte: konfigurierte, Standard- und aus gespeicherten Läufen bekannte frühere Ordner. Dateigrößen, kein belegter Plattenplatz. Gemeinsame Ordner können mehrfach zählen. Links werden übersprungen. Keine automatische Bereinigung.",
+  "TemporaryStorageRefresh": "Größen aktualisieren",
+  "TemporaryStorageMeasured": "Gemessen am",
+  "TemporaryStorageScanning": "Ordner werden gemessen…",
+  "TemporaryStorageEmpty": "Keine Projekte vorhanden.",
+  "TemporaryStorageFiles": "Dateien",
+  "TemporaryStoragePartial": "Teilweise Messung: Einige Einträge waren unlesbar oder wurden übersprungen.",
+  "TemporaryStorageFolders": "Ordner",
+  "TemporaryStorageMissing": "Nicht erstellt oder entfernt",
+  "TemporaryStorageFile": "Datei"
+}

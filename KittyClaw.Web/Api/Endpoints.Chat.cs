@@ -65,7 +65,7 @@ public static partial class Endpoints
             var model = sessions.GetLastChatModel(workspacePath, target);
             if (model is null && await cs.AnyAsync(slug, target))
                 model = runs.LastCompletedForChatTarget(slug, target)?.Model;
-            return Results.Ok(new { model });
+            return Results.Ok(new { model, effort = ModelEffort.Effective(model ?? ClaudeModelCatalog.DefaultModel, sessions.GetLastChatEffort(workspacePath, target)) });
         }).WithTags("Chat");
 
         api.MapDelete("/projects/{slug}/chat/session", async (string slug, string target, ProjectService ps, ChatService cs, SessionRegistry sessions) =>
@@ -79,6 +79,7 @@ public static partial class Endpoints
             sessions.Clear(workspacePath, $"codex:chat:{target}", null);
             sessions.Clear(workspacePath, $"mistral:chat:{target}", null);
             sessions.ClearLastChatModel(workspacePath, target);
+            sessions.SetLastChatEffort(workspacePath, target, null);
             return Results.NoContent();
         }).WithTags("Chat");
 
@@ -138,8 +139,13 @@ public static partial class Endpoints
                 // Ollama model without a configured base URL: historical chat behavior —
                 // model stays null and the turn runs on the CLI default.
             }
+            var requestedEffort = req.Effort ?? (req.ForceNew ? null : sessions.GetLastChatEffort(workspacePath, target));
+            var effortModel = requestedModel ?? ClaudeModelCatalog.DefaultModel;
+            var effort = string.IsNullOrWhiteSpace(requestedEffort) ? ModelEffort.Initial(effortModel) : requestedEffort;
+            if (!string.IsNullOrEmpty(effort) && !ModelEffort.Options(effortModel).Contains(effort))
+                return Results.BadRequest(new { error = "invalid_effort", model = requestedModel });
             var dispatchTarget = new AgentDispatchTarget(
-                effectiveModel, provider, modelEnv ?? new Dictionary<string, string>(), modelValidationError);
+                effectiveModel, provider, modelEnv ?? new Dictionary<string, string>(), modelValidationError, string.IsNullOrEmpty(effort) ? null : effort);
 
             var runId = Guid.NewGuid().ToString("N");
 
@@ -194,6 +200,7 @@ public static partial class Endpoints
                 await cs.AppendAsync(slug, target, "user", req.Message, images: req.Images?
                     .Select(i => new ChatMessageImage(i.DataUrl, i.Mime, i.Name, i.SizeBytes))
                     .ToList());
+            sessions.SetLastChatEffort(workspacePath, target, effort);
             sessions.SetLastChatProvider(workspacePath, target, providerName);
             if (!string.IsNullOrWhiteSpace(requestedModel))
                 sessions.SetLastChatModel(workspacePath, target, requestedModel);

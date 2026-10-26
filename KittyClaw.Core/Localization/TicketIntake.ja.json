@@ -1,0 +1,11 @@
+{
+  "IntakeAssisted": "AIアシスト",
+  "IntakeManual": "手動",
+  "IntakeWelcome": "実現したいことを説明してください。エージェントが一度に一つずつ質問して依頼を明確にし、チケットを準備します。",
+  "IntakeMessage": "メッセージ",
+  "IntakeSend": "送信",
+  "IntakeThinking": "エージェントが考えています…",
+  "IntakeCreateNow": "今すぐ作成",
+  "IntakeAutoCreate": "依頼が明確になったら自動的に作成",
+  "IntakeReview": "チケットの準備ができました。「手動」タブで確認するか、今すぐ作成してください。"
+}

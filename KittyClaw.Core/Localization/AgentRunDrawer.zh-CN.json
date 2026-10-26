@@ -1,4 +1,7 @@
 {
+  "OpenRunWorkingFiles": "打开工作文件夹",
+  "OpenRunWorkingFilesHint": "在KittyClaw计算机上打开此次运行的工作文件夹",
+  "OpenRunWorkingFilesError": "无法打开工作文件夹",
   "StopAgent": "停止智能体",
   "Stop": "停止",
   "Retry": "重试",

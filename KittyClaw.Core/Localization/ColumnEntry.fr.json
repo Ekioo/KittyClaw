@@ -3,6 +3,6 @@
   "ColumnRequireAcceptanceCriteriaHelp": "Un ticket doit avoir au moins un critère d’acceptation pour entrer dans cette colonne, y compris à sa création. Les tickets déjà présents ne sont pas affectés.",
   "ColumnAcceptanceCriteriaRequiredError": "Cette colonne exige au moins un critère d’acceptation. Ajoutez-en un dans le ticket avant de le déplacer ici.",
   "ColumnRequireValidatedAcceptanceCriteria": "Exiger la validation de tous les critères d’acceptation à l’entrée",
-  "ColumnRequireValidatedAcceptanceCriteriaHelp": "Exige au moins un critère d’acceptation et le statut PASS pour chaque critère. Les critères FAIL, PARTIAL ou non évalués bloquent l’entrée. Les tickets déjà présents ne sont pas affectés.",
+  "ColumnRequireValidatedAcceptanceCriteriaHelp": "Exige au moins un critère d’acceptation et le statut PASS pour chaque critère. Les critères en attente, prêts à évaluer ou à reprendre bloquent l’entrée. Les tickets déjà présents ne sont pas affectés.",
   "ColumnAcceptanceCriteriaNotValidatedError": "Cette colonne exige que tous les critères d’acceptation soient validés (PASS). Ajoutez au moins un critère et validez-les tous avant de déplacer le ticket ici."
 }

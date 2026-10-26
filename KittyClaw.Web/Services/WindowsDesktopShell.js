@@ -82,7 +82,7 @@
 
     const install = () => {
         document.documentElement.classList.add('windows-desktop');
-        const header = document.querySelector('.page-header, .costs-header');
+        const header = document.querySelector('.page-header');
         if (header) {
             fallback?.remove();
             decorate(header);
@@ -102,6 +102,9 @@
         measureScroll();
     };
     document.addEventListener('DOMContentLoaded', () => {
+        const style = document.createElement('style');
+        style.textContent = /* SHELL_STYLES */;
+        document.head.append(style);
         install();
         // Enhanced navigation can reset attributes without changing any body children.
         // Reapply the shell even when the home link points to the current page.

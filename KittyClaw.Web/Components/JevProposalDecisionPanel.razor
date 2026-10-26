@@ -5,7 +5,7 @@
 <div class="jev-decision-controls" data-testid="jev-proposal-decision">
     @if (Decision is not null)
     {
-        <p data-testid="jev-decision-result"><strong>@L[Decision.Automatic ? "JevDecisionAutomatic" : Decision.Accepted ? "JevDecisionAccepted" : "JevDecisionRejected"]</strong> · @Decision.Actor · @Decision.DecidedAt.ToLocalTime().ToString("g")</p>
+        <p data-testid="jev-decision-result"><strong>@L[Decision.Automatic ? "JevDecisionAutomatic" : Decision.Accepted ? "JevDecisionAccepted" : "JevDecisionRejected"]</strong> · @Decision.Actor · <LocalDateTime Value="Decision.DecidedAt" /></p>
         @if (Decision.Automatic) { <p>@L["JevDecisionThreshold"]: @Decision.ConfidenceThreshold?.ToString("P0")</p> }
         @if (!string.IsNullOrWhiteSpace(Decision.Reason)) { <p>@Decision.Reason</p> }
         @if (!Decision.Accepted) { <p class="settings-hint">@L["JevRejectionEffect"]</p> }

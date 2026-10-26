@@ -7,6 +7,47 @@ namespace KittyClaw.Core.Tests.Services;
 public sealed class DurableWriteRouterTests
 {
     [Fact]
+    public async Task DashboardSave_WithWorktrees_CommitsAndQueuesWithoutChangingPrimary()
+    {
+        using var fixture = await Fixture.CreateAsync(withQueue: true);
+        var route = await fixture.Router.ResolveAsync(fixture.Slug, null, [".dashboard/example"]);
+        var directory = Path.Combine(route.RootPath, ".dashboard", "example");
+        Directory.CreateDirectory(directory);
+        await File.WriteAllTextAsync(Path.Combine(directory, "tile.yaml"), "template: markdown\n");
+        await fixture.Router.CommitDashboardTileAsync(fixture.Slug, route, "Create tile");
+        Assert.Empty(Git(route.RootPath, "status", "--porcelain"));
+        Assert.False(Directory.Exists(Path.Combine(fixture.Repository, ".dashboard", "example")));
+        Assert.Equal(WorktreeMergeStatus.Pending, Assert.Single(await fixture.Queue!.ListAsync(fixture.Slug)).Status);
+    }
+
+    [Fact]
+    public async Task DashboardSave_CommitsCreationAndEdit_WithoutIncludingOtherStagedFiles()
+    {
+        using var fixture = await Fixture.CreateAsync();
+        await fixture.Projects.UpdateProjectAsync(fixture.Slug, null, worktreesEnabled: false);
+        var route = await fixture.Router.ResolveAsync(fixture.Slug, null, [".dashboard/example"]);
+        var directory = Path.Combine(route.RootPath, ".dashboard", "example");
+        Directory.CreateDirectory(directory);
+        await File.WriteAllTextAsync(Path.Combine(route.RootPath, "unrelated.txt"), "user work");
+        Git(route.RootPath, "add", "unrelated.txt");
+        await File.WriteAllTextAsync(Path.Combine(directory, "tile.yaml"), "template: markdown\n");
+        await File.WriteAllTextAsync(Path.Combine(directory, "script.ps1"), "Write-Output hello");
+        await File.WriteAllTextAsync(Path.Combine(directory, "output.md"), "hello");
+
+        await fixture.Router.CommitDashboardTileAsync(fixture.Slug, route, "Create tile");
+        Assert.Contains("unrelated.txt", Git(route.RootPath, "diff", "--cached", "--name-only"));
+        Assert.DoesNotContain(".dashboard", Git(route.RootPath, "status", "--porcelain"));
+        Assert.DoesNotContain("unrelated.txt", Git(route.RootPath, "show", "--format=", "--name-only", "HEAD"));
+
+        await File.AppendAllTextAsync(Path.Combine(directory, "tile.yaml"), "title: Edited\n");
+        await fixture.Router.CommitDashboardTileAsync(fixture.Slug, route, "Edit tile");
+        Assert.Contains("title: Edited", Git(route.RootPath, "show", "HEAD:.dashboard/example/tile.yaml"));
+        var head = Git(route.RootPath, "rev-parse", "HEAD");
+        await fixture.Router.CommitDashboardTileAsync(fixture.Slug, route, "Unchanged tile");
+        Assert.Equal(head, Git(route.RootPath, "rev-parse", "HEAD"));
+    }
+
+    [Fact]
     public async Task TicketAndMaintenance_RouteToDistinctWorktrees_WithoutTouchingPrimary()
     {
         using var fixture = await Fixture.CreateAsync();

@@ -9,6 +9,7 @@ public class Project
     public required string Name { get; set; }
     public required string Slug { get; set; }
     public string? WorkspacePath { get; set; }
+    public string? WorkingFilesPath { get; set; }
     public string? RepositoryPath { get; set; }
     [NotMapped] public string? ResolvedRepositoryPath { get; set; }
     public bool IsPaused { get; set; } = false;
@@ -19,6 +20,7 @@ public class Project
     public BoundaryEnforcementMode BoundaryEnforcement { get; set; } = BoundaryEnforcementMode.Observe;
     public bool WorktreesEnabled { get; set; }
     public string? IntegrationBranch { get; set; }
+    public int? UpdateReviewColumnId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

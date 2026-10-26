@@ -38,18 +38,6 @@ public sealed class AgentsTemplateService
         return ms.ToArray();
     }
 
-    public IReadOnlyList<string> AgentSlugs()
-    {
-        var slugs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var rel in RelativePaths())
-        {
-            var parts = rel.Split('/');
-            if (parts.Length == 2 && parts[1].Equals("SKILL.md", StringComparison.OrdinalIgnoreCase))
-                slugs.Add(parts[0]);
-        }
-        return slugs.OrderBy(s => s, StringComparer.Ordinal).ToList();
-    }
-
     public List<string> DetectConflicts(string workspacePath)
     {
         var conflicts = new List<string>();

@@ -70,3 +70,69 @@ drains, blocked stdin, hung commands, excessive output and successful stdin
 delivery. Native platform key stores were simulated; Windows ran the subprocess
 tests through PowerShell. SSE queue tests covered saturation, ordering and
 subscriber isolation; a real slow-network browser test was not performed.
+
+## 2026-10-25 nightly audit: executable Markdown URLs
+
+Confirmed a stored-XSS path in the shared Markdown pipeline. Raw HTML and generic
+attributes were already disabled, but `[audit link](javascript:...)` still emitted
+an executable `href`. An attacker-controlled ticket, comment, chat response or
+dashboard Markdown could therefore execute JavaScript in the application origin
+when the owner clicked the link. This requires a click; no automatic execution
+was claimed.
+
+Before changing production code, three Chromium tests rendered the actual chat,
+comment and dashboard HTML and clicked the injected link. All three failed
+because the JavaScript marker executed. The shared pipeline now rewrites unsafe
+URI schemes for links and images to `#`, including reference links and autolinks.
+Relative destinations and `http`, `https`, `mailto` and `tel` links remain
+supported. The check handles entity-encoded scheme characters and rejects
+control characters; `data`, `file`, `vbscript`, `javascript` and custom handlers
+are not permitted in rendered Markdown. No dependency version was changed.
+
+Final verification: 86 tests passed in two targeted runs (64 and 22), including
+54 new URL-policy/browser cases and existing generic-attribute, ticket-reference,
+Markdown-formatting and dashboard-renderer regressions. All three browser
+exploit cases that failed before the fix now pass. Tests rendered synthetic
+content in an isolated Chromium page; they did not use the live UI on :5230,
+real project data, real secrets or provider dispatches. The full test suite and
+a live Blazor navigation test were not run. Other sessions' local changes were
+preserved and excluded from the security commit.
+
+
+## 2026-10-26 nightly audit: Windows junction command injection
+
+Confirmed command injection in the Windows fallback that exposes local
+`node_modules` dependencies in maintenance worktrees. When symbolic-link
+creation failed, `CreateDirectoryLink` invoked `cmd.exe /c mklink /J` with
+filesystem paths in `ArgumentList`. That API quotes ordinary process arguments,
+but does not escape the command interpreter's metacharacters. A crafted source
+path containing ampersands could execute another command as the app account.
+The issue requires Windows, the junction fallback and a crafted dependency path;
+it is not an anonymous remote HTTP exploit.
+
+A disposable fixture replayed the exact old invocation with a synthetic probe
+batch file on the child PATH. The probe executed, confirming the injection;
+no real project, secret or provider was used. The replacement executes fixed
+PowerShell code, passes paths exclusively through child environment variables,
+and escapes the source for PowerShell wildcard resolution. It uses the existing
+bounded process runner and refuses to overwrite an existing destination.
+
+Final verification: 37 targeted tests passed, including six native Windows
+junction cases plus `DurableWriteRouterTests`, `ProcessRunnerTests` and
+`ProcessRunnerLifecycleTests`. Coverage includes ampersands, percent variables,
+backticks, brackets, whitespace, quotes and existing destinations. The first run
+exposed a wildcard-resolution failure for bracketed source paths; that was
+corrected and the assertions were retained. The complete selected set passed
+on the final run. The full suite and live UI were not run.
+
+A NuGet vulnerability query of the resolved Web project graph, including
+transitive packages and using only nuget.org, completed without listing known
+vulnerable packages. No versions were changed; provider binaries and CDN assets
+were outside this dependency query. The scheduled audit's documentation entry
+was updated from `doc/index.md` to `docs/index.md` after the repository migration.
+
+Next scoped review: remaining synchronous Git helpers in `ProjectService`,
+`DurableWriteRouter` and `WorktreeMergeQueueService`, particularly sequential
+pipe draining and whether timeouts cover binary output transfer. These were
+identified for focused availability reproductions and were not refactored in
+this junction-specific correction.

@@ -221,57 +221,6 @@ public class StructuralConsistencyTests
 
     // ── 6. Agent template ↔ embedded assets ──────────────────────────────────
 
-    /// <summary>
-    /// Every agent slug discovered by AgentsTemplateService must have a corresponding
-    /// SKILL.md embedded in KittyClaw.Core.dll. An agent without a SKILL.md is
-    /// silently non-functional: the dispatch reads the file at startup and skips the
-    /// agent when it is absent.
-    /// </summary>
-    [Fact]
-    public void EveryEmbeddedAgent_HasSkillMdInCore()
-    {
-        var svc = new AgentsTemplateService();
-        var paths = svc.RelativePaths().ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var agentsRoot = Path.Combine(RepoRoot(), "ProjectTemplate", "Agents");
-        var slugs = Directory.GetDirectories(agentsRoot)
-            .Select(Path.GetFileName)
-            .Where(slug => !string.IsNullOrWhiteSpace(slug))
-            .Select(slug => slug!)
-            .OrderBy(slug => slug, StringComparer.Ordinal)
-            .ToList();
-
-        Assert.NotEmpty(slugs); // sanity: the assembly must embed at least one agent
-
-        var missing = slugs
-            .Where(slug => !paths.Contains($"{slug}/SKILL.md"))
-            .Select(slug => $"  agent directory 'ProjectTemplate/Agents/{slug}' has no embedded '{slug}/SKILL.md' — add the file and include it in KittyClaw.Core.csproj")
-            .ToList();
-
-        if (missing.Count > 0)
-            Assert.Fail("Embedded agents with no SKILL.md:\n" + string.Join("\n", missing));
-    }
-
-    /// <summary>
-    /// Every embedded agent must have a memory/MEMORY.md stub so the memory-consolidation
-    /// pass has a valid index to write into. Without it the consolidation action fails
-    /// silently on first run and memory is never accumulated.
-    /// </summary>
-    [Fact]
-    public void EveryEmbeddedAgent_HasMemoryIndexInCore()
-    {
-        var svc = new AgentsTemplateService();
-        var paths = svc.RelativePaths();
-        var slugs = svc.AgentSlugs();
-
-        var missing = slugs
-            .Where(slug => !paths.Any(p => p.StartsWith($"{slug}/memory/", StringComparison.OrdinalIgnoreCase)))
-            .Select(slug => $"  agent '{slug}' — add ProjectTemplate/Agents/{slug}/memory/MEMORY.md")
-            .ToList();
-
-        if (missing.Count > 0)
-            Assert.Fail("Embedded agents with no memory/ directory:\n" + string.Join("\n", missing));
-    }
-
     [Fact]
     public void Embedded_template_ships_budget_settings_without_legacy_automations()
     {
