@@ -26,6 +26,13 @@ Each completed integration also records a durable local-checkout synchronization
 
 Versioned project knowledge stays in Git. Local control data such as prompts, transcripts, sessions, traces, `.env` files, and vault secrets is rejected from durable routes. Probable secrets stop the operation before its first commit.
 
+On Windows, the junction fallback runs a fixed PowerShell command with source
+and target paths passed only in the child environment. Source paths are escaped
+for the provider's wildcard resolution. Paths are never interpolated into
+`cmd.exe` command text, where `ArgumentList` cannot prevent shell metacharacter
+or percent-variable expansion. The helper uses the bounded process runner with
+a 30-second timeout and preserves an existing destination on failure.
+
 ## Key components
 
 - `KittyClaw.Core/Services/DurableWriteRouter.cs` — selects ticket or maintenance worktrees, restricts writable paths, scans for probable secrets, commits maintenance changes, and checkpoints them in the queue.
