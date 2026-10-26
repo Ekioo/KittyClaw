@@ -4,6 +4,20 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.27.1] — 2026-10-26
+
+Remove the duplicate logo in the Windows desktop header.
+
+### Highlights
+
+The Windows desktop header now shows a single KittyClaw logo while preserving browser navigation branding.
+
+### Fixed
+
+- Hide the global navigation logo link when the Windows desktop shell supplies its own logo.
+
+---
+
 ## [v0.27] — 2026-10-26
 
 Conversational ticket creation, project release reviews, and clearer navigation.
