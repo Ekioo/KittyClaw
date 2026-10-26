@@ -38,7 +38,7 @@
 }
 .windows-desktop .desktop-window-header::-webkit-scrollbar { display: none; }
 .windows-desktop .desktop-window-header > * { flex-shrink: 0; }
-.windows-desktop .desktop-window-header > .home-logo-horizontal { display: none; }
+.windows-desktop .desktop-window-header > :is(.home-logo-horizontal, .global-navigation-brand) { display: none; }
 .windows-desktop .desktop-window-header h1 {
     margin: 0;
     max-width: 240px;
