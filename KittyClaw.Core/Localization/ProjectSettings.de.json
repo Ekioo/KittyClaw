@@ -87,5 +87,11 @@
   "GitInitialize": "Git-Repository initialisieren",
   "GitInitializeConfirm": "KittyClaw führt git init in diesem Arbeitsordner aus. Keine vorhandene Datei wird hinzugefügt oder geändert.",
   "GitInitializing": "Initialisierung…",
-  "GitInitialized": "Das lokale Git-Repository ist initialisiert. Keine vorhandene Datei wurde hinzugefügt oder geändert."
+  "GitInitialized": "Das lokale Git-Repository ist initialisiert. Keine vorhandene Datei wurde hinzugefügt oder geändert.",
+  "FolderPickerNewFolder": "Neuer Ordner",
+  "FolderPickerFolderName": "Ordnername",
+  "FolderPickerCreate": "Erstellen",
+  "FolderPickerInvalidName": "Geben Sie einen gültigen Ordnernamen ohne Pfadtrennzeichen ein.",
+  "FolderPickerAlreadyExists": "Eine Datei oder ein Ordner mit diesem Namen existiert bereits.",
+  "FolderPickerCreateError": "Ordner konnte nicht erstellt werden: {0}"
 }

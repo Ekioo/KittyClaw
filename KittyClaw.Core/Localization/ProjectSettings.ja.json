@@ -87,5 +87,11 @@
   "GitInitialize": "Git リポジトリを初期化",
   "GitInitializeConfirm": "KittyClaw はこのワークスペースで git init を実行します。既存ファイルは追加も変更もされません。",
   "GitInitializing": "初期化中…",
-  "GitInitialized": "ローカル Git リポジトリを初期化しました。既存ファイルは追加も変更もされていません。"
+  "GitInitialized": "ローカル Git リポジトリを初期化しました。既存ファイルは追加も変更もされていません。",
+  "FolderPickerNewFolder": "新しいフォルダー",
+  "FolderPickerFolderName": "フォルダー名",
+  "FolderPickerCreate": "作成",
+  "FolderPickerInvalidName": "パス区切り文字を含まない有効なフォルダー名を入力してください。",
+  "FolderPickerAlreadyExists": "同じ名前のファイルまたはフォルダーが既に存在します。",
+  "FolderPickerCreateError": "フォルダーを作成できません: {0}"
 }

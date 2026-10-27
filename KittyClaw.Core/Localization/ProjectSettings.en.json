@@ -87,5 +87,11 @@
   "GitInitialize": "Initialize a Git repository",
   "GitInitializeConfirm": "KittyClaw will run git init in this workspace. No existing file will be added or changed.",
   "GitInitializing": "Initializing…",
-  "GitInitialized": "The local Git repository is initialized. No existing file was added or changed."
+  "GitInitialized": "The local Git repository is initialized. No existing file was added or changed.",
+  "FolderPickerNewFolder": "New folder",
+  "FolderPickerFolderName": "Folder name",
+  "FolderPickerCreate": "Create",
+  "FolderPickerInvalidName": "Enter a valid folder name without path separators.",
+  "FolderPickerAlreadyExists": "A file or folder with this name already exists.",
+  "FolderPickerCreateError": "Unable to create the folder: {0}"
 }
