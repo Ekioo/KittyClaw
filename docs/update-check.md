@@ -29,6 +29,10 @@ Source installations retain the dismissible release-link banner described below.
   Window controls are integrated into the existing page header without an extra title bar.
   `WindowsDesktopShell.js` applies one fixed-height header style from `windows-desktop.css`
   to every view, with the KittyClaw home link on the left and window controls on the right.
+  Pages without an application header (including uploaded images) show a Back button
+  in the fallback toolbar. It uses WebView2 history to return to the previous view,
+  or the application home when no history exists. The embedded stylesheet supplies
+  toolbar colors even when the document does not load the application theme.
   The desktop stylesheet is also embedded and injected by the native host, so cached or
   unavailable HTTP styles cannot leave the window logo at its intrinsic image size.
   A matching fallback keeps the shell visible during loading and on error/not-found pages.

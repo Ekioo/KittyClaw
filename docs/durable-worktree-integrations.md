@@ -33,6 +33,15 @@ for the provider's wildcard resolution. Paths are never interpolated into
 or percent-variable expansion. The helper uses the bounded process runner with
 a 30-second timeout and preserves an existing destination on failure.
 
+Git invocations for project repository validation, maintenance writes and the
+integration queue use the shared `ProcessRunner` with literal `ArgumentList`
+entries and concurrent stdout/stderr drains. Repository validation keeps its
+10-second deadline; maintenance and integration calls keep 30 seconds. The
+deadline also covers pipe completion and raw binary conflict-file transfers,
+with a bounded cleanup drain after cancellation. Transfer failures cannot be
+reported as successful Git output. Git hooks and subprocess commands are not
+sandboxed by this availability protection.
+
 ## Key components
 
 - `KittyClaw.Core/Services/DurableWriteRouter.cs` — selects ticket or maintenance worktrees, restricts writable paths, scans for probable secrets, commits maintenance changes, and checkpoints them in the queue.

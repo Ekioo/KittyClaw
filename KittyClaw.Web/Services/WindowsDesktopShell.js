@@ -91,6 +91,15 @@
             fallback = document.createElement('header');
             fallback.className = 'desktop-window-fallback';
             decorate(fallback);
+            const back = document.createElement('button');
+            back.type = 'button';
+            back.className = 'desktop-window-return';
+            const language = document.documentElement.lang || navigator.language;
+            const label = language.startsWith('fr') ? 'Retour' : 'Back';
+            back.textContent = `← ${label}`;
+            back.title = `${label} (Alt+←)`;
+            back.addEventListener('click', () => send('back'));
+            fallback.append(back);
             document.body.prepend(fallback);
         }
         const current = header || fallback;

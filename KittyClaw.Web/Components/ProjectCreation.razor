@@ -253,11 +253,12 @@ else if (_createdProject is not null)
         try
         {
             var workspace = _newWorkspacePath.Trim();
-            var intake = await RepositoryIntake.SelectAndValidateAsync(_journeyId, workspace, _objective);
+            _workspaceWasEmpty = Directory.Exists(workspace) && !Directory.EnumerateFileSystemEntries(workspace).Any();
+            var intake = await RepositoryIntake.SelectAndValidateAsync(
+                _journeyId, workspace, _objective, initializeGit: _initializeGit);
             _journeyId = intake.JourneyId;
             _validatedIntake = intake;
-            _workspaceWasEmpty = !Directory.EnumerateFileSystemEntries(workspace).Any();
-            await OnWorkspaceChanged();
+            _gitWorkspace = await AgentsTemplateService.InspectGitWorkspaceAsync(workspace);
             if (_gitWorkspace?.Kind == AgentsTemplateService.GitWorkspaceKind.GitUnavailable)
             {
                 _creationStatus = (L["GitMissingWarning"], "settings-status-err");

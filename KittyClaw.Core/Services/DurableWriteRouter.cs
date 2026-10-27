@@ -482,10 +482,10 @@ public sealed partial class DurableWriteRouter(ProjectService projects, TicketWo
     {
         var info = new ProcessStartInfo("git") { WorkingDirectory = cwd, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
         foreach (var arg in args) info.ArgumentList.Add(arg);
-        using var process = Process.Start(info) ?? throw new InvalidOperationException("Git could not be started.");
-        var output = process.StandardOutput.ReadToEnd(); var error = process.StandardError.ReadToEnd();
-        if (!process.WaitForExit(30_000)) { process.Kill(true); throw new InvalidOperationException("Git command timed out."); }
-        var result = new GitResult(process.ExitCode, output, error);
+        var execution = ProcessRunner.RunAsync(info, TimeSpan.FromSeconds(30)).GetAwaiter().GetResult();
+        if (execution.TimedOut) throw new InvalidOperationException("Git command timed out.");
+        var error = execution.Stderr;
+        var result = new GitResult(execution.ExitCode ?? -1, execution.Stdout, error);
         if (throwOnError && result.ExitCode != 0) throw new InvalidOperationException(error.Trim());
         return result;
     }

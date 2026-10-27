@@ -87,5 +87,11 @@
   "GitInitialize": "Initialiser un dépôt Git",
   "GitInitializeConfirm": "KittyClaw va exécuter git init dans ce dossier de travail. Aucun fichier existant ne sera ajouté ni modifié.",
   "GitInitializing": "Initialisation…",
-  "GitInitialized": "Le dépôt Git local est initialisé. Aucun fichier existant n’a été ajouté ni modifié."
+  "GitInitialized": "Le dépôt Git local est initialisé. Aucun fichier existant n’a été ajouté ni modifié.",
+  "FolderPickerNewFolder": "Nouveau dossier",
+  "FolderPickerFolderName": "Nom du dossier",
+  "FolderPickerCreate": "Créer",
+  "FolderPickerInvalidName": "Saisissez un nom de dossier valide, sans séparateur de chemin.",
+  "FolderPickerAlreadyExists": "Un fichier ou dossier porte déjà ce nom.",
+  "FolderPickerCreateError": "Impossible de créer le dossier : {0}"
 }

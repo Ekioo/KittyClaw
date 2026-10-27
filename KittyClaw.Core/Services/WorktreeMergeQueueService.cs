@@ -1468,16 +1468,11 @@ public sealed partial class WorktreeMergeQueueService(
             CreateNoWindow = true
         };
         foreach (var argument in arguments) info.ArgumentList.Add(argument);
-        using var process = Process.Start(info) ?? throw new InvalidOperationException("Git could not be started.");
-        using (var output = File.Create(destination))
-            process.StandardOutput.BaseStream.CopyTo(output);
-        _ = process.StandardError.ReadToEnd();
-        if (!process.WaitForExit(30_000))
-        {
-            process.Kill(true);
-            throw new InvalidOperationException("Git command timed out.");
-        }
-        return process.ExitCode == 0;
+        using var output = File.Create(destination);
+        var execution = ProcessRunner.RunAsync(info, TimeSpan.FromSeconds(30), standardOutput: output)
+            .GetAwaiter().GetResult();
+        if (execution.TimedOut) throw new InvalidOperationException("Git command timed out.");
+        return execution.Success;
     }
 
     private static string[] ConflictMarkerFiles(string worktreePath, string integrationTip)
@@ -1649,11 +1644,10 @@ public sealed partial class WorktreeMergeQueueService(
     {
         var info = new ProcessStartInfo("git") { WorkingDirectory = path, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
         foreach (var arg in args) info.ArgumentList.Add(arg);
-        using var process = Process.Start(info) ?? throw new InvalidOperationException("Git could not be started.");
-        var output = process.StandardOutput.ReadToEnd();
-        var error = process.StandardError.ReadToEnd();
-        if (!process.WaitForExit(30_000)) { process.Kill(true); throw new InvalidOperationException("Git command timed out."); }
-        var result = new GitResult(process.ExitCode, output, error);
+        var execution = ProcessRunner.RunAsync(info, TimeSpan.FromSeconds(30)).GetAwaiter().GetResult();
+        if (execution.TimedOut) throw new InvalidOperationException("Git command timed out.");
+        var error = execution.Stderr;
+        var result = new GitResult(execution.ExitCode ?? -1, execution.Stdout, error);
         if (throwOnError && result.ExitCode != 0) throw new InvalidOperationException($"git {string.Join(' ', args)} failed: {error.Trim()}");
         return result;
     }

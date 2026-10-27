@@ -87,5 +87,11 @@
   "GitInitialize": "初始化 Git 仓库",
   "GitInitializeConfirm": "KittyClaw 将在此工作区运行 git init。不会添加或修改任何现有文件。",
   "GitInitializing": "正在初始化…",
-  "GitInitialized": "本地 Git 仓库已初始化。未添加或修改任何现有文件。"
+  "GitInitialized": "本地 Git 仓库已初始化。未添加或修改任何现有文件。",
+  "FolderPickerNewFolder": "新建文件夹",
+  "FolderPickerFolderName": "文件夹名称",
+  "FolderPickerCreate": "创建",
+  "FolderPickerInvalidName": "请输入不含路径分隔符的有效文件夹名称。",
+  "FolderPickerAlreadyExists": "已存在同名文件或文件夹。",
+  "FolderPickerCreateError": "无法创建文件夹：{0}"
 }

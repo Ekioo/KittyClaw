@@ -11,7 +11,7 @@ You can continue when an optional provider is missing, and the board remains usa
 ## Create your first project
 
 1. On the home page, select **Create a project**.
-2. Enter a project name and choose its workspace. **Browse** opens KittyClaw's integrated folder browser, not an operating-system dialog. It works on Windows, macOS, and Linux and provides home/root shortcuts, mounted drives, breadcrumbs, parent navigation, and direct path entry. You can still type an absolute path manually; use **Create folder** if it does not exist yet.
+2. Enter a project name and choose its workspace. **Browse** opens KittyClaw's integrated folder browser, not an operating-system dialog. It works on Windows, macOS, and Linux and provides home/root shortcuts, mounted drives, breadcrumbs, parent navigation, and direct path entry. **New folder** creates a named child of the displayed folder and opens it for selection; invalid names and existing entries are reported inline. You can still type an absolute path manually; use **Create folder** if it does not exist yet.
 3. Select **Initialize**. KittyClaw then:
    - creates the project registry entry and its board database;
    - copies the built-in skills, memory files, and `agent-budget.json` into `<workspace>/.agents/`, plus `CLAUDE.md` into the workspace root;

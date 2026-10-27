@@ -87,5 +87,11 @@
   "GitInitialize": "Inizializza un repository Git",
   "GitInitializeConfirm": "KittyClaw eseguirà git init in questa cartella di lavoro. Nessun file esistente verrà aggiunto o modificato.",
   "GitInitializing": "Inizializzazione…",
-  "GitInitialized": "Il repository Git locale è inizializzato. Nessun file esistente è stato aggiunto o modificato."
+  "GitInitialized": "Il repository Git locale è inizializzato. Nessun file esistente è stato aggiunto o modificato.",
+  "FolderPickerNewFolder": "Nuova cartella",
+  "FolderPickerFolderName": "Nome della cartella",
+  "FolderPickerCreate": "Crea",
+  "FolderPickerInvalidName": "Inserisci un nome valido senza separatori di percorso.",
+  "FolderPickerAlreadyExists": "Esiste già un file o una cartella con questo nome.",
+  "FolderPickerCreateError": "Impossibile creare la cartella: {0}"
 }

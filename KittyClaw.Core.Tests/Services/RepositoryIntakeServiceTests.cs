@@ -25,6 +25,38 @@ public sealed class RepositoryIntakeServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task EmptyFolder_WithInitializationConsent_CreatesOnlyGitMetadataAndValidates()
+    {
+        var folder = Path.Combine(_root, "empty");
+        Directory.CreateDirectory(folder);
+        var service = new RepositoryIntakeService(Path.Combine(_root, "data"));
+
+        var state = await service.SelectAndValidateAsync(null, folder, "Start a project", initializeGit: true);
+
+        Assert.True(state.IsValidated);
+        Assert.Equal(state, await service.LoadAsync(state.JourneyId));
+        Assert.Equal([".git"], Directory.EnumerateFileSystemEntries(folder).Select(Path.GetFileName));
+        var status = await ProcessRunner.RunAsync("git", "status --porcelain", folder, TimeSpan.FromSeconds(10));
+        Assert.True(status.Success, status.Stderr);
+        Assert.Empty(status.Stdout);
+        Assert.Equal(["repository_selected", "repository_validated"], (await ReadEventsAsync()).Select(e => e.Name));
+    }
+
+    [Fact]
+    public async Task EmptyFolder_WithoutInitializationConsent_DoesNotCreateMetadata()
+    {
+        var folder = Path.Combine(_root, "empty");
+        Directory.CreateDirectory(folder);
+        var service = new RepositoryIntakeService(Path.Combine(_root, "data"));
+
+        var error = await Assert.ThrowsAsync<RepositoryIntakeException>(() =>
+            service.SelectAndValidateAsync(null, folder, "Start a project", initializeGit: false));
+
+        Assert.Equal("RepositoryNotGit", error.ErrorCode);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(folder));
+    }
+
+    [Fact]
     public async Task InvalidPathAndNonGitFolder_AreActionableAndKeepObjectiveForRetry()
     {
         var service = new RepositoryIntakeService(Path.Combine(_root, "data"));

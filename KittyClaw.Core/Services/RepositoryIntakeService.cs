@@ -14,7 +14,8 @@ public sealed class RepositoryIntakeService
     }
 
     public async Task<RepositoryIntakeState> SelectAndValidateAsync(
-        string? journeyId, string path, string objective, CancellationToken ct = default)
+        string? journeyId, string path, string objective, CancellationToken ct = default,
+        bool initializeGit = false)
     {
         journeyId = string.IsNullOrWhiteSpace(journeyId) ? Guid.NewGuid().ToString("N") : journeyId;
         var selectedAt = DateTimeOffset.UtcNow;
@@ -26,11 +27,6 @@ public sealed class RepositoryIntakeService
             ProjectService.ValidateWorkspacePath(normalizedPath);
             if (!Directory.Exists(normalizedPath))
                 throw new RepositoryIntakeException(journeyId, "RepositoryPathMissing", "The selected folder does not exist.");
-
-            var git = await ProcessRunner.RunAsync(
-                "git", "rev-parse --is-inside-work-tree", normalizedPath, TimeSpan.FromSeconds(10), ct: ct);
-            if (!git.Success || !git.Stdout.Trim().Equals("true", StringComparison.OrdinalIgnoreCase))
-                throw new RepositoryIntakeException(journeyId, "RepositoryNotGit", "The selected folder is not a usable Git repository.");
 
             var probePath = Path.Combine(normalizedPath, $".kittyclaw-write-probe-{Guid.NewGuid():N}");
             try
@@ -45,6 +41,23 @@ public sealed class RepositoryIntakeService
             {
                 if (File.Exists(probePath)) File.Delete(probePath);
             }
+
+            if (initializeGit)
+            {
+                var inspection = await AgentsTemplateService.InspectGitWorkspaceAsync(normalizedPath);
+                if (inspection.CanInitialize)
+                {
+                    var init = await ProcessRunner.RunAsync(
+                        "git", "init", normalizedPath, TimeSpan.FromSeconds(10), ct: ct);
+                    if (!init.Success)
+                        throw new RepositoryIntakeException(journeyId, "RepositoryNotGit", "Git initialization failed.");
+                }
+            }
+
+            var git = await ProcessRunner.RunAsync(
+                "git", "rev-parse --is-inside-work-tree", normalizedPath, TimeSpan.FromSeconds(10), ct: ct);
+            if (!git.Success || !git.Stdout.Trim().Equals("true", StringComparison.OrdinalIgnoreCase))
+                throw new RepositoryIntakeException(journeyId, "RepositoryNotGit", "The selected folder is not a usable Git repository.");
 
             var state = new RepositoryIntakeState(
                 journeyId, normalizedPath, objective.Trim(), selectedAt, DateTimeOffset.UtcNow, true, null);

@@ -4,6 +4,30 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.27.2] — 2026-10-27
+
+More reliable project setup, provider installation, and Windows navigation.
+
+### Highlights
+
+Create projects in empty folders, create workspace folders directly in the picker, and return to the board after viewing uploaded images in the Windows app.
+
+### Added
+
+- Folder creation in the workspace picker.
+- Automated availability checks for provider installation links.
+
+### Fixed
+
+- Allow project creation in empty folders and cover project creation browser journeys.
+- Correct provider installation links and Windows back navigation for uploaded images.
+
+### Security
+
+- Bound Git subprocess execution and pipe completion, and preserve binary output during durable file transfers.
+
+---
+
 ## [v0.27.1] — 2026-10-26
 
 Remove the duplicate logo in the Windows desktop header.

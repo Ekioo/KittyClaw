@@ -316,17 +316,8 @@ public partial class ProjectService
             };
             foreach (var argument in arguments)
                 startInfo.ArgumentList.Add(argument);
-            using var process = Process.Start(startInfo);
-            if (process is null)
-                return (false, "");
-            var output = process.StandardOutput.ReadToEnd();
-            process.WaitForExit(10_000);
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-                return (false, output);
-            }
-            return (process.ExitCode == 0, output);
+            var result = ProcessRunner.RunAsync(startInfo, TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
+            return (result.Success, result.Stdout);
         }
         catch
         {

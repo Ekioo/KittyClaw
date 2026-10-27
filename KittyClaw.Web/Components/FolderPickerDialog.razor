@@ -56,8 +56,23 @@
                     <button type="button" class="folder-picker-up" @onclick="GoToParent" disabled="@(_loading || _parentPath is null)">
                         <span aria-hidden="true">↑</span> @L["FolderPickerParent"]
                     </button>
+                    <button type="button" class="header-action-btn" @onclick="BeginCreateFolder" disabled="@(_loading || string.IsNullOrWhiteSpace(_currentPath))">@L["FolderPickerNewFolder"]</button>
                     <span class="folder-picker-count">@L.Get("FolderPickerFolderCount", _directories.Count)</span>
                 </div>
+
+                @if (_showCreateFolder)
+                {
+                    <form class="folder-picker-create" @onsubmit="CreateFolder" @onsubmit:preventDefault>
+                        <label for="folder-picker-name">@L["FolderPickerFolderName"]</label>
+                        <input id="folder-picker-name" class="settings-input" @ref="_nameInput" @bind="_newFolderName" @bind:event="oninput" disabled="@_loading" />
+                        <button class="header-action-btn" type="submit" disabled="@(_loading || string.IsNullOrWhiteSpace(_newFolderName))">@L["FolderPickerCreate"]</button>
+                        <button class="header-action-btn" type="button" @onclick="() => _showCreateFolder = false" disabled="@_loading">@L["Cancel"]</button>
+                        @if (_createError is not null)
+                        {
+                            <span class="folder-picker-error" role="alert">@_createError</span>
+                        }
+                    </form>
+                }
 
                 @if (_loading)
                 {
@@ -118,6 +133,11 @@
     private string? _parentPath;
     private string? _error;
     private bool _loading;
+    private bool _showCreateFolder;
+    private bool _focusName;
+    private string _newFolderName = "";
+    private string? _createError;
+    private ElementReference _nameInput;
     private int _navigationVersion;
     private IDisposable? _escapeRegistration;
 
@@ -128,7 +148,7 @@
         await NavigateTo(initial);
     }
 
-    protected override Task OnAfterRenderAsync(bool firstRender)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
@@ -137,7 +157,11 @@
                 () => InvokeAsync(Cancel));
         }
 
-        return Task.CompletedTask;
+        if (_focusName)
+        {
+            _focusName = false;
+            await _nameInput.FocusAsync();
+        }
     }
 
     private void LoadRoots()
@@ -187,6 +211,7 @@
         var version = ++_navigationVersion;
         _loading = true;
         _error = null;
+        _showCreateFolder = false;
 
         try
         {
@@ -244,6 +269,43 @@
         }
 
         _breadcrumbs.Reverse();
+    }
+
+    private void BeginCreateFolder()
+    {
+        _newFolderName = "";
+        _createError = null;
+        _showCreateFolder = true;
+        _focusName = true;
+    }
+
+    private async Task CreateFolder()
+    {
+        if (_loading) return;
+        var name = _newFolderName.Trim();
+        if (string.IsNullOrWhiteSpace(name) || name is "." or ".."
+            || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+            || name.Contains('/') || name.Contains('\\'))
+        {
+            _createError = L["FolderPickerInvalidName"];
+            return;
+        }
+
+        try
+        {
+            var path = Path.Combine(_currentPath, name);
+            if (Directory.Exists(path) || File.Exists(path))
+            {
+                _createError = L["FolderPickerAlreadyExists"];
+                return;
+            }
+            Directory.CreateDirectory(path);
+            await NavigateTo(path);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or ArgumentException or NotSupportedException)
+        {
+            _createError = L.Get("FolderPickerCreateError", ex.Message);
+        }
     }
 
     private Task OpenTypedPath() => NavigateTo(_pathInput);

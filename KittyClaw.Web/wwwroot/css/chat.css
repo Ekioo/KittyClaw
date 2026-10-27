@@ -898,3 +898,62 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     text-decoration: none;
 }
 
+
+.folder-picker-toolbar { flex-wrap: wrap; gap: 0.5rem; }
+.folder-picker-toolbar .folder-picker-count { order: 1; margin-left: auto; }
+.folder-picker-toolbar > .header-action-btn {
+    order: 2;
+    min-height: 32px;
+    padding: 0.3rem 0.55rem;
+    border-color: transparent;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+.folder-picker-toolbar > .header-action-btn::before { content: "+"; margin-right: 0.35rem; }
+.folder-picker-toolbar > .header-action-btn:hover:not(:disabled) {
+    background: var(--surface3);
+    border-color: var(--border);
+    color: var(--text);
+}
+.folder-picker-create {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0.45rem 0.45rem 0;
+    padding: 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface2);
+}
+.folder-picker-create label {
+    grid-column: 1 / -1;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+.folder-picker-create input {
+    width: 100%;
+    min-width: 0;
+    height: 34px;
+    padding: 0.4rem 0.55rem;
+    font-size: 0.85rem;
+}
+.folder-picker-create .header-action-btn { min-height: 34px; padding: 0.4rem 0.6rem; font-size: 0.8rem; }
+.folder-picker-create button[type="submit"] { background: var(--accent); border-color: var(--accent); color: #000; }
+.folder-picker-create [role="alert"] { grid-column: 1 / -1; font-size: 0.8rem; }
+.folder-picker-dialog button:focus-visible,
+.folder-picker-dialog input:focus-visible { outline-color: var(--focus-ring); }
+@media (max-width: 420px) {
+    .folder-picker-count { display: none; }
+    .folder-picker-toolbar > .header-action-btn { margin-left: auto; }
+    .folder-picker-create input { grid-column: 1 / -1; }
+    .folder-picker-create { grid-template-columns: 1fr auto; }
+}
+
+.folder-picker-create input:focus { box-shadow: none; border-color: var(--border-strong); }
+@media (max-width: 680px) {
+    .folder-picker-path-row { flex-wrap: nowrap; flex-direction: row; }
+    .folder-picker-path-row .folder-picker-path { width: 0; }
+    .folder-picker-path-row > button { flex-shrink: 0; }
+}

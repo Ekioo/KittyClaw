@@ -136,3 +136,46 @@ Next scoped review: remaining synchronous Git helpers in `ProjectService`,
 pipe draining and whether timeouts cover binary output transfer. These were
 identified for focused availability reproductions and were not refactored in
 this junction-specific correction.
+
+
+## 2026-10-27 nightly audit: Git pipe deadlocks and transfer deadlines
+
+Completed the previous follow-up on synchronous Git helpers. Project repository
+validation, maintenance writes and worktree integration drained stdout before
+stderr and checked exit timeouts only after those reads. A child filling stderr
+could block while the parent waited for stdout EOF, preventing the timeout from
+ever being reached and holding workflow locks indefinitely. The conflict-file
+export path likewise copied raw stdout synchronously before checking its timer.
+This is an availability defect in local Git execution, not an anonymous remote
+command-execution vulnerability.
+
+A synthetic native child first signaled readiness, then filled stderr while
+leaving stdout open. Replaying the former drain order demonstrated that stdout
+remained blocked before the exit-timeout check. Only that disposable child was
+started and stopped; no live project, secret or provider was involved.
+
+The three Git consumers now use `ProcessRunner` through a `ProcessStartInfo`
+overload, preserving literal `ArgumentList` entries. Both streams drain
+concurrently. The existing 10-second validation and 30-second integration timers
+remain active through pipe completion and binary transfers; cancellation kills
+the process tree on a best-effort basis and uses a bounded final cleanup drain.
+Raw output is copied as bytes, and failed or incomplete transfers cannot be
+reported as success. The string-based runner delegates to the same path, so its
+final pipe drain also no longer silently reports success after a transfer error.
+
+Final verification: 130 tests passed in two final runs: 13 process-security and
+lifecycle tests, plus 117 project-validation, durable-routing, integration-queue
+and Windows-junction regressions. Native tests cover stderr saturation, literal
+arguments, all 256 byte values in a 64 KiB transfer, hung processes, a blocked
+transfer after parent exit, write failures, exit codes and cancellation. An
+initially timing-sensitive fixture was replaced with a minimal child while
+retaining its start and timeout assertions, then the complete process set was
+rerun successfully. The integration tests include append-only memory conflict
+recovery through the raw-output export path.
+
+The full suite, live UI and non-Windows execution were not tested. No dependency
+versions were changed. Git hooks are not sandboxed by this change, and text
+output remains captured in memory. Next scoped review: synchronous availability
+probes, especially their final EOF waits, and suitable output-volume limits for
+non-agent command capture. The :5230 instance was not used for verification;
+all execution used synthetic processes or fixture-owned temporary repositories.

@@ -87,5 +87,11 @@
   "GitInitialize": "Inicializar um repositório Git",
   "GitInitializeConfirm": "O KittyClaw executará git init nesta pasta de trabalho. Nenhum arquivo existente será adicionado ou modificado.",
   "GitInitializing": "Inicializando…",
-  "GitInitialized": "O repositório Git local está inicializado. Nenhum arquivo existente foi adicionado ou modificado."
+  "GitInitialized": "O repositório Git local está inicializado. Nenhum arquivo existente foi adicionado ou modificado.",
+  "FolderPickerNewFolder": "Nova pasta",
+  "FolderPickerFolderName": "Nome da pasta",
+  "FolderPickerCreate": "Criar",
+  "FolderPickerInvalidName": "Digite um nome válido sem separadores de caminho.",
+  "FolderPickerAlreadyExists": "Já existe um arquivo ou pasta com esse nome.",
+  "FolderPickerCreateError": "Não foi possível criar a pasta: {0}"
 }
