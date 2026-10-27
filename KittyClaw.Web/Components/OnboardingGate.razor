@@ -25,7 +25,7 @@
                 @if (!_readiness.Claude)
                 {
                     <small>@L["OnboardingClaudeGuidance"]</small>
-                    <a class="header-action-btn" href="https://docs.claude.com/en/docs/claude-code/overview" target="_blank" rel="noopener">@L["OnboardingInstall"]</a>
+                    <a class="header-action-btn" href="https://code.claude.com/docs/en/setup" target="_blank" rel="noopener">@L["OnboardingInstall"]</a>
                 }
             </div>
             <div class="onboarding-check @ProviderClass(_readiness.Codex)">
@@ -41,7 +41,7 @@
                 @if (!_readiness.Grok)
                 {
                     <small>@L["OnboardingGrokGuidance"]</small>
-                    <a class="header-action-btn" href="https://docs.x.ai/docs/grok-code-fast-1" target="_blank" rel="noopener">@L["OnboardingInstall"]</a>
+                    <a class="header-action-btn" href="https://docs.x.ai/build/overview" target="_blank" rel="noopener">@L["OnboardingInstall"]</a>
                 }
             </div>
             <div class="onboarding-check @ProviderClass(_readiness.Mistral)">
