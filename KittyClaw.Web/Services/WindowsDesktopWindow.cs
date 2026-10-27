@@ -146,6 +146,10 @@ internal sealed class WindowsDesktopWindow : Forms.Form
                 catch (ArgumentException) { return; }
                 switch (command)
                 {
+                    case "window:back":
+                        if (_view.CoreWebView2.CanGoBack) _view.CoreWebView2.GoBack();
+                        else _view.CoreWebView2.Navigate(_origin.AbsoluteUri);
+                        break;
                     case "window:minimize": WindowState = Forms.FormWindowState.Minimized; break;
                     case "window:maximize": ToggleMaximize(); break;
                     case "window:close": Hide(); break;
