@@ -83,25 +83,43 @@ public static class ProcessRunner
         if (env is not null)
             foreach (var (k, v) in env) psi.Environment[k] = v;
 
-        using var proc = Process.Start(psi)
-            ?? throw new InvalidOperationException($"Failed to start '{fileName}' process");
-        using var job = ProcessJobObject.TryCreateAndAssign(proc);
+        return await RunAsync(psi, timeout, ct).ConfigureAwait(false);
+    }
 
-        // Killing the process (below) closes its pipe ends, so these reads always complete.
-        var stdoutTask = proc.StandardOutput.ReadToEndAsync(CancellationToken.None);
-        var stderrTask = proc.StandardError.ReadToEndAsync(CancellationToken.None);
-
+    /// <summary>
+    /// Runs an argument-list invocation, optionally copying raw stdout bytes to a caller-owned
+    /// stream. The deadline covers process exit and pipe completion; transfer errors fail closed.
+    /// </summary>
+    public static async Task<ProcessResult> RunAsync(
+        ProcessStartInfo startInfo, TimeSpan? timeout = null,
+        CancellationToken ct = default, Stream? standardOutput = null)
+    {
+        ct.ThrowIfCancellationRequested();
+        startInfo.RedirectStandardOutput = true;
+        startInfo.RedirectStandardError = true;
+        startInfo.UseShellExecute = false;
+        startInfo.CreateNoWindow = true;
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
         linked.CancelAfter(timeout ?? TimeSpan.FromMinutes(2));
+        using var proc = Process.Start(startInfo)
+            ?? throw new InvalidOperationException($"Failed to start '{startInfo.FileName}' process");
+        using var job = ProcessJobObject.TryCreateAndAssign(proc);
+
+        var stdoutTask = CaptureOutputAsync();
+        var stderrTask = proc.StandardError.ReadToEndAsync(linked.Token);
         try
         {
             await proc.WaitForExitAsync(linked.Token).ConfigureAwait(false);
+            // A descendant can retain inherited pipes after the parent exits. Close the job
+            // first, and keep the original deadline active while awaiting the final drain.
+            var exitCode = proc.ExitCode;
+            job?.Dispose();
+            await Task.WhenAll(stdoutTask, stderrTask).WaitAsync(linked.Token).ConfigureAwait(false);
+            return new ProcessResult(exitCode, stdoutTask.Result, stderrTask.Result, TimedOut: false);
         }
         catch (OperationCanceledException)
         {
-            job?.Dispose();
-            try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); }
-            catch { /* may have exited between the check and the kill */ }
+            Stop();
             await DrainPumpsBoundedAsync(stdoutTask, stderrTask).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
             return new ProcessResult(null,
@@ -109,19 +127,28 @@ public static class ProcessRunner
                 stderrTask.IsCompletedSuccessfully ? stderrTask.Result : string.Empty,
                 TimedOut: true);
         }
+        catch
+        {
+            Stop();
+            await DrainPumpsBoundedAsync(stdoutTask, stderrTask).ConfigureAwait(false);
+            throw;
+        }
 
-        // The parent can exit while a detached descendant still owns inherited stdout/stderr
-        // handles. Waiting for EOF before closing the job would then keep the run in Running
-        // forever, and the configured timeout no longer applies because WaitForExitAsync already
-        // completed successfully. Close the kill-on-close job first so descendants release their
-        // handles, then bound the final pipe drain for platforms where no job could be assigned.
-        var exitCode = proc.ExitCode;
-        job?.Dispose();
-        await DrainPumpsBoundedAsync(stdoutTask, stderrTask).ConfigureAwait(false);
-        return new ProcessResult(exitCode,
-            stdoutTask.IsCompletedSuccessfully ? stdoutTask.Result : string.Empty,
-            stderrTask.IsCompletedSuccessfully ? stderrTask.Result : string.Empty,
-            TimedOut: false);
+        async Task<string> CaptureOutputAsync()
+        {
+            if (standardOutput is null)
+                return await proc.StandardOutput.ReadToEndAsync(linked.Token).ConfigureAwait(false);
+            await proc.StandardOutput.BaseStream.CopyToAsync(standardOutput, linked.Token).ConfigureAwait(false);
+            return string.Empty;
+        }
+
+        void Stop()
+        {
+            linked.Cancel();
+            job?.Dispose();
+            try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); }
+            catch { /* may have exited between the check and the kill */ }
+        }
     }
 
     private static async Task DrainPumpsBoundedAsync(params Task<string>[] pumps)
