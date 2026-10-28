@@ -124,6 +124,7 @@
     private string _description = "";
     private TicketPriority _priority = TicketPriority.NiceToHave;
     private List<int> _labelIds = [];
+    private List<string> _acceptanceCriteria = [];
     private List<Label> _allLabels = [];
     private bool _showNewLabelForm;
     private string _newLabelName = "";
@@ -226,6 +227,8 @@
             {
                 _title = reply.Title!;
                 _description = reply.Description!;
+                _labelIds = reply.LabelIds ?? [];
+                _acceptanceCriteria = reply.AcceptanceCriteria ?? [];
                 if (_autoCreate || createNow) await CreateAsync();
                 else _messages.Add(new("assistant", L["IntakeReview"]));
             }
@@ -274,7 +277,8 @@
             priority: _priority,
             parentId: SubKanbanParentId,
             pipelineId: SelectedPipelineId,
-            columnId: Columns[0].Id);
+            columnId: Columns[0].Id,
+            acceptanceCriteria: _acceptanceCriteria);
         }
         catch (Exception ex)
         {
