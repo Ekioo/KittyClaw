@@ -22,6 +22,13 @@ KittyClaw runs the executable's version command with a short timeout. It does no
 display account credentials. Provider authentication remains owned by the provider CLI, while
 project-specific secrets such as `DEEPSEEK_API_KEY` remain write-only in the project vault.
 
+Codex and Vibe executable discovery uses synchronous five-second probes. These discard
+both output streams as bytes rather than accumulating lines. Their timeout remains active
+through process exit and pipe closure; on Windows the runner closes its process job before
+the final drain so descendants cannot keep discovery blocked. Timeout cleanup uses a bounded
+final drain of at most five seconds. The synchronous wrapper does not capture the caller's
+synchronization context.
+
 Restart KittyClaw, or use **Check again** in Global settings, after changing `PATH` or a
 `KITTYCLAW_*_BIN` override.
 

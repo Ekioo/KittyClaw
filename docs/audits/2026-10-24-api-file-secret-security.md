@@ -179,3 +179,55 @@ output remains captured in memory. Next scoped review: synchronous availability
 probes, especially their final EOF waits, and suitable output-volume limits for
 non-agent command capture. The :5230 instance was not used for verification;
 all execution used synthetic processes or fixture-owned temporary repositories.
+
+
+## 2026-10-28 nightly audit: synchronous CLI probe EOF waits
+
+Confirmed the synchronous-probe follow-up from the previous batch. Codex and
+Vibe executable discovery runs `ProcessRunner.ProbeSync` from cached Lazy
+initializers. Its timed process-exit wait was followed by a parameterless
+`WaitForExit`, which also waits for event-based stream readers to reach EOF.
+When the parent exited successfully but a descendant inherited its pipes, the
+probe blocked before disposing the Windows job that would terminate that
+same descendant. This could hold a discovery initializer indefinitely despite
+its nominal five-second timeout. The defect requires a local executable or
+wrapper with this behavior; no anonymous remote exploit was established.
+
+Before changing production code, a synthetic PowerShell parent spawned a
+sleeping child with inherited streams and exited. The regression called the
+actual probe with a three-second timeout; it still had not returned after
+eight seconds and failed. Fixture cleanup killed only its own child. The
+corrected version of the same test passes, including proof that the child
+was spawned. Fixture cleanup checks both PID and process start time to avoid
+targeting a recycled PID.
+
+The synchronous wrapper now uses the existing bounded runner. Its concurrent
+raw-byte transfers discard both streams into Stream.Null, avoiding line
+accumulation even for newline-free output. The runner closes its Windows job
+before awaiting final pipe completion, keeps the original timer active, and
+uses the existing bounded five-second cleanup drain after timeout. Every
+internal await avoids the caller's synchronization context; a regression uses
+a context that rejects posted callbacks to check the synchronous wrapper.
+The new optional raw stderr destination shares stdout's deadline and failure
+handling; errors or incomplete transfers cannot produce success.
+
+Final verification: 57 tests passed in two runs: 21 across
+`CliProbeSecurityTests`, `GitProcessSecurityTests`, `ProcessRunnerTests` and
+`ProcessRunnerLifecycleTests`, then 36 across `CliAvailabilityProbeTests`,
+`AgentCliReadinessServiceTests` and `CliVersionProbeTests`. Eight cases were
+added, covering inherited pipes, hung probes, exit failures, 8 MiB of
+newline-free output on each stream, synchronization contexts, discarded
+streams, blocked stderr transfer and stderr write failure. Existing literal
+arguments, raw binary output, cancellation and descendant cleanup regressions
+also passed. Builds used `bin/SecurityProbeAudit/` and a temporary NuGet
+configuration containing only nuget.org. No provider work was dispatched and
+no real project, secret or instance on :5230 was used for attack testing.
+
+The full suite, live UI and non-Windows execution were not tested. No
+dependency versions were changed. Text-capturing commands outside these
+synchronous discovery probes still need output-volume assessment. Next scoped
+review: reproduce cancellation/inherited-pipe behavior in RTK's separate probe
+and final-drain behavior in `TicketWorktreeService`, then select appropriate
+limits for commands that genuinely need captured text. These separate process
+lifecycles were located during source review and were not changed in this
+probe-specific correction.
