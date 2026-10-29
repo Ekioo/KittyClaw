@@ -89,44 +89,39 @@ public sealed partial class RtkIntegrationService
         return result;
     }
 
-    private static async Task<RtkProbeResult> ProbeBinaryAsync(string binary, CancellationToken ct)
+    private static Task<RtkProbeResult> ProbeBinaryAsync(string binary, CancellationToken ct)
+    {
+        var startInfo = new ProcessStartInfo(binary)
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        startInfo.ArgumentList.Add("--version");
+        return ProbeBinaryAsync(startInfo, ct);
+    }
+
+    internal static async Task<RtkProbeResult> ProbeBinaryAsync(ProcessStartInfo startInfo, CancellationToken ct)
     {
         try
         {
-            var startInfo = new ProcessStartInfo(binary)
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-            startInfo.ArgumentList.Add("--version");
-            using var process = Process.Start(startInfo);
-            if (process is null) return new RtkProbeResult(false, null, "RTK could not be started.");
-
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(TimeSpan.FromSeconds(2));
-            try
-            {
-                await process.WaitForExitAsync(timeout.Token);
-            }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-            {
-                try { process.Kill(entireProcessTree: true); } catch { }
+            var result = await ProcessRunner.RunAsync(startInfo, TimeSpan.FromSeconds(2), ct,
+                standardError: Stream.Null, maxOutputCharacters: 64 * 1024).ConfigureAwait(false);
+            if (result.TimedOut)
                 return new RtkProbeResult(false, null, "RTK version probe timed out.");
-            }
+            if (!result.Success)
+                return new RtkProbeResult(false, null, $"RTK version probe exited with code {result.ExitCode}.");
 
-            var output = (await process.StandardOutput.ReadToEndAsync(ct)).Trim();
-            var error = (await process.StandardError.ReadToEndAsync(ct)).Trim();
-            if (process.ExitCode != 0)
-                return new RtkProbeResult(false, null, string.IsNullOrWhiteSpace(error)
-                    ? $"RTK version probe exited with code {process.ExitCode}."
-                    : "RTK version probe failed.");
-
+            var output = result.Stdout.Trim();
             var match = VersionRegex().Match(output);
             return match.Success
                 ? new RtkProbeResult(true, match.Groups[1].Value, null)
                 : new RtkProbeResult(false, null, "The detected rtk executable returned an unrecognized version.");
+        }
+        catch (ProcessRunner.OutputLimitExceededException)
+        {
+            return new RtkProbeResult(false, null, "RTK version probe returned excessive output.");
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or FileNotFoundException)
         {

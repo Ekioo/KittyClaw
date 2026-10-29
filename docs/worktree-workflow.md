@@ -17,6 +17,12 @@ These pieces are in the repo and available to every project:
 - `tools/worktree-ensure.ps1` — idempotent. Creates a worktree from local `main` if absent, or returns the path of the existing one. Convention: branch `ticket/<N>`, folder `<repo>.worktrees/ticket-<N>`. Usage: `powershell.exe -NoProfile -File tools/worktree-ensure.ps1 <N>`; the absolute path is printed on the last stdout line.
 - `tools/worktree-merge.ps1` — rebases the local unpublished ticket branch onto `dev`, fast-forwards `dev` to it, then removes the worktree and deletes the branch. This keeps ticket integration linear without merge commits.
 
+Native Git calls in `TicketWorktreeService` use literal `ArgumentList` entries and the shared
+process runner. Their 30-second deadline covers concurrent output reads and final pipe closure,
+with a bounded final cleanup drain after timeout. On Windows the runner closes its process job
+before waiting for EOF, so a background hook child cannot keep worktree preparation blocked.
+This controls process lifetime; Git hooks still execute as the application account.
+
 ### `worktree-merge.ps1` exit codes
 
 | Code | Meaning |

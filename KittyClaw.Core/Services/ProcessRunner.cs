@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using KittyClaw.Core.Automation;
 
 namespace KittyClaw.Core.Services;
@@ -17,6 +18,9 @@ public static class ProcessRunner
     {
         public bool Success => !TimedOut && ExitCode == 0;
     }
+
+    public sealed class OutputLimitExceededException()
+        : IOException("The process returned excessive output.") { }
 
     /// <summary>
     /// Synchronous availability probe for Lazy initializers. Both streams are discarded as
@@ -67,13 +71,16 @@ public static class ProcessRunner
     /// <summary>
     /// Runs an argument-list invocation, optionally copying raw output bytes to caller-owned
     /// streams (Stream.Null discards output). The deadline covers process exit and both pipe
-    /// transfers; transfer errors fail closed. Internal awaits do not capture the caller's context.
+    /// transfers; transfer errors fail closed. An optional character limit applies independently
+    /// to each captured text stream, not raw destinations. Internal awaits do not capture context.
     /// </summary>
     public static async Task<ProcessResult> RunAsync(
         ProcessStartInfo startInfo, TimeSpan? timeout = null,
-        CancellationToken ct = default, Stream? standardOutput = null, Stream? standardError = null)
+        CancellationToken ct = default, Stream? standardOutput = null, Stream? standardError = null,
+        int? maxOutputCharacters = null)
     {
         ct.ThrowIfCancellationRequested();
+        if (maxOutputCharacters < 0) throw new ArgumentOutOfRangeException(nameof(maxOutputCharacters));
         startInfo.RedirectStandardOutput = true;
         startInfo.RedirectStandardError = true;
         startInfo.UseShellExecute = false;
@@ -115,16 +122,40 @@ public static class ProcessRunner
 
         async Task<string> CaptureOutputAsync(StreamReader reader, Stream? destination)
         {
-            if (destination is null)
+            if (destination is not null)
+            {
+                await reader.BaseStream.CopyToAsync(destination, linked.Token).ConfigureAwait(false);
+                return string.Empty;
+            }
+            if (maxOutputCharacters is not int limit)
                 return await reader.ReadToEndAsync(linked.Token).ConfigureAwait(false);
-            await reader.BaseStream.CopyToAsync(destination, linked.Token).ConfigureAwait(false);
-            return string.Empty;
+
+            var output = new StringBuilder(Math.Min(4096, limit));
+            var buffer = new char[4096];
+            while (true)
+            {
+                var read = await reader.ReadAsync(buffer.AsMemory(), linked.Token).ConfigureAwait(false);
+                if (read == 0) return output.ToString();
+                if (read > limit - output.Length)
+                {
+                    // Stop the producer immediately; it may otherwise block on the full pipe
+                    // while the main task waits for exit. Preserve the limit error for the caller.
+                    Kill();
+                    throw new OutputLimitExceededException();
+                }
+                output.Append(buffer, 0, read);
+            }
         }
 
         void Stop()
         {
             linked.Cancel();
             job?.Dispose();
+            Kill();
+        }
+
+        void Kill()
+        {
             try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); }
             catch { /* may have exited between the check and the kill */ }
         }

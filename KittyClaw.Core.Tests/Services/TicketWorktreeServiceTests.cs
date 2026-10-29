@@ -76,6 +76,32 @@ public sealed class TicketWorktreeServiceTests
     }
 
     [Fact]
+    public async Task Resolution_does_not_wait_forever_for_a_background_hook_child()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var fixture = await Fixture.CreateAsync();
+        using var process = new SyntheticProcessFixture();
+        var script = process.SpawnInheritedChild;
+        var hook = Path.Combine(fixture.Repository, ".git", "hooks", "post-checkout");
+        await File.WriteAllTextAsync(hook, "#!/bin/sh\npowershell.exe -NoProfile -NonInteractive -EncodedCommand " +
+            SyntheticProcessFixture.Encode(script) + "\n");
+        var ticket = await fixture.Tickets.CreateTicketAsync(fixture.ProjectSlug, "Background hook");
+        var resolution = Task.Run(() => fixture.Worktrees.ResolveAsync(fixture.ProjectSlug, ticket.Id, CancellationToken.None));
+        try
+        {
+            var worktree = await resolution.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(process.WasStarted, "The hook did not spawn its synthetic child.");
+            Assert.NotNull(worktree);
+            Assert.True(Directory.Exists(worktree.Path));
+        }
+        finally
+        {
+            process.Stop();
+            await resolution.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+    }
+
+    [Fact]
     public async Task NestedConfiguredRepository_CreatesWorktreeBesideNestedRepositoryOnly()
     {
         using var fixture = await Fixture.CreateAsync(nested: true);

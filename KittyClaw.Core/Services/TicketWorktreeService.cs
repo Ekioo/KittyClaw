@@ -183,23 +183,12 @@ public sealed class TicketWorktreeService(ProjectService projects, TicketService
             };
             startInfo.Environment["LC_ALL"] = "C";
             foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
-            using var process = Process.Start(startInfo)
-                ?? throw new InvalidOperationException("Git process could not be started.");
-            // Drain both redirected streams concurrently. Reading them sequentially can
-            // deadlock before WaitForExit when a Git hook fills the stderr pipe.
-            var stdoutTask = process.StandardOutput.ReadToEndAsync();
-            var stderrTask = process.StandardError.ReadToEndAsync();
-            if (!process.WaitForExit(30_000))
-            {
-                process.Kill(entireProcessTree: true);
-                process.WaitForExit();
+            var execution = ProcessRunner.RunAsync(startInfo, TimeSpan.FromSeconds(30)).GetAwaiter().GetResult();
+            if (execution.TimedOut)
                 throw new InvalidOperationException($"Git command timed out: git {string.Join(' ', arguments)}");
-            }
-            var stdout = stdoutTask.GetAwaiter().GetResult();
-            var stderr = stderrTask.GetAwaiter().GetResult();
-            var result = new GitResult(process.ExitCode, stdout, stderr);
+            var result = new GitResult(execution.ExitCode ?? -1, execution.Stdout, execution.Stderr);
             if (throwOnError && result.ExitCode != 0)
-                throw new InvalidOperationException($"Git command failed ({result.ExitCode}): git {string.Join(' ', arguments)}\n{stderr.Trim()}");
+                throw new InvalidOperationException($"Git command failed ({result.ExitCode}): git {string.Join(' ', arguments)}\n{result.Error.Trim()}");
             return result;
         }
         catch (Exception ex) when (ex is not InvalidOperationException)

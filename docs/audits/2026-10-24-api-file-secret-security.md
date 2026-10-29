@@ -231,3 +231,67 @@ and final-drain behavior in `TicketWorktreeService`, then select appropriate
 limits for commands that genuinely need captured text. These separate process
 lifecycles were located during source review and were not changed in this
 probe-specific correction.
+
+
+## 2026-10-29 nightly audit: RTK probing and ticket worktree Git processes
+
+Completed the two process-lifecycle reproductions identified in the preceding
+batch. Four baseline regressions failed against the original execution paths:
+
+- RTK waited for process exit before draining either output pipe. A synthetic
+  command writing 48,000 stderr characters blocked on the pipe and was reported
+  unavailable after two seconds despite returning a valid version when drained.
+- RTK's caller-cancellation path disposed its Process wrapper without killing
+  the command. A fixture waited for a native child to publish its identity,
+  cancelled the probe, and confirmed that the child remained alive after the
+  cancellation had propagated.
+- After the RTK parent exited, its final reads used only the caller token rather
+  than the two-second deadline. An inherited-pipe child kept the actual probe
+  blocked beyond the eight-second regression watchdog.
+- Ticket worktree Git calls drained concurrently but awaited the final reads
+  without a timer or Windows job boundary. A post-checkout hook in a disposable
+  repository spawned an inherited-pipe child; worktree preparation remained
+  blocked at the ten-second regression watchdog after the Git parent exited.
+  Code inspection established that those final waits had no deadline.
+
+These are local availability and process-cleanup defects, not evidence of an
+anonymous remote command-execution path. All four original regressions pass
+after the fixes. Tests start and stop only fixture-owned synthetic processes;
+cleanup verifies both PID and process start time.
+
+RTK now uses the shared ProcessRunner with its existing two-second timeout
+active through concurrent pipe reads and process exit. Cancellation propagates
+after cleanup; Windows jobs also terminate descendants holding inherited
+pipes. RTK discards stderr as bytes without storing diagnostics and captures
+at most 65,536 stdout characters. Excess stdout is rejected with a fixed
+unavailable reason. The runner's new optional limit bounds each captured text
+stream independently and stops an overproducing process before awaiting its
+exit; raw destinations retain their existing streaming behavior. Exact-limit
+output succeeds, and one extra character fails without returning partial text.
+The limit is opt-in and is applied to RTK in this batch.
+
+TicketWorktreeService now uses the same runner with its existing literal
+ArgumentList entries, LC_ALL setting, exit handling and 30-second deadline.
+The deadline covers final pipe reads, and the Windows job closes before EOF
+waits. Timeout/cancellation cleanup retains the shared five-second bounded
+final drain. Git hooks still execute as the application account.
+
+Final verification: 67 distinct tests passed in two runs: 36 process/security
+cases, then 31 RTK integration, isolated HTTP, ticket-worktree and project-setting
+regressions (the already-tested background-hook case was excluded from the
+second run). Fifteen cases were added. Coverage includes all four baseline
+failures, stdout/stderr limits, immediate producer termination on overflow,
+large discarded stderr, cancellation before spawn, fixed failure diagnostics,
+version fallback, native binary transfer, literal arguments and descendant
+cleanup. Worktree dispatch regressions use the mock CLI and temporary project
+data; the HTTP test uses WebApplicationFactory's in-memory client and its own
+data directory. Builds used bin/SecurityRtkAudit/ and a temporary NuGet
+configuration containing only nuget.org. The main :5230 instance and real
+project secrets were not used for verification; no paid provider was called.
+
+The full suite, live UI and non-Windows execution were not tested. No dependency
+versions were changed. Seven pre-existing modified files belonging to other
+work were preserved byte-for-byte and excluded from this security batch.
+Other text-capturing Git, version and evidence commands still need individual
+output-volume assessment. Next scope: measure their legitimate output needs
+and bound or stream the largest captures, then return to HTTP file/path review.
