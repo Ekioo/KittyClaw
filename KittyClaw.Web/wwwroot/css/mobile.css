@@ -63,9 +63,12 @@
         max-width: 100%;
     }
     button, a, input, select, textarea { touch-action: manipulation; }
-    .board-layout { height: calc(100dvh - 64px); width: 100%; min-width: 0; }
-    .board-layout > .page-header { max-height: 45dvh; overflow-y: auto; }
+    /* Let the page scroll so wrapped headers cannot squeeze tickets into a small viewport. */
+    .board-layout { height: auto; width: 100%; min-width: 0; overflow: visible; }
+    .board-layout > .page-header { max-height: none; overflow: visible; }
     .board {
+        flex: none;
+        align-items: stretch;
         padding: 0;
         scroll-snap-type: x mandatory;
         overscroll-behavior-x: contain;
@@ -75,6 +78,7 @@
     .board::-webkit-scrollbar { display: none; }
     .board > .column {
         flex: 0 0 100%;
+        height: auto;
         min-width: 0; max-width: none;
         box-sizing: border-box;
         scroll-snap-align: start;
@@ -84,6 +88,7 @@
         box-shadow: none;
     }
     .board > .column-insert-slot { display: none; }
+    .board > .column > .column-body { flex: none; overflow: visible; }
     .board > .add-column-lane { flex: 0 0 100%; box-sizing: border-box; scroll-snap-align: start; scroll-snap-stop: always; }
     .board-lane-columns { padding-inline: 0; }
     .column-body { min-height: 0; overscroll-behavior-y: contain; }
