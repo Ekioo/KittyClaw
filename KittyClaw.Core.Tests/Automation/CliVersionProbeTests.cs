@@ -1,5 +1,6 @@
 using KittyClaw.Core.Automation;
 using KittyClaw.Core.Services;
+using KittyClaw.Core.Tests.Helpers;
 
 namespace KittyClaw.Core.Tests.Automation;
 
@@ -68,6 +69,51 @@ public class CliVersionProbeTests
             (_, _, _) => Task.FromResult(Process(0, "unknown")));
 
         Assert.Equal("unsupported version output", result.Failure);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Excessive_version_output_fails_without_retaining_a_partial_version(bool stderr)
+    {
+        var text = "version 1.2." + new string('3', 128 * 1024);
+        var result = await CliVersionProbe.ProbeAsync(CliProvider.Claude, "synthetic-cli", null,
+            (_, _, _) => Task.FromResult(Process(0, stderr ? "" : text, stderr ? text : "")));
+        Assert.Equal("failed", result.Status);
+        Assert.Null(result.Version);
+        Assert.Equal("version command returned excessive output", result.Failure);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Native_version_output_is_limited_before_capture_completes(bool stderr)
+    {
+        var info = SyntheticProcessFixture.Command(
+            "[Console]::" + (stderr ? "Error" : "Out") + ".Write('version 1.2.' + ('3' * 131072)); Start-Sleep -Seconds 30",
+            "printf 'version 1.2.'" + (stderr ? " >&2" : "") + "; head -c 131072 /dev/zero" + (stderr ? " >&2" : "") + "; sleep 30");
+        var result = await CliVersionProbe.ProbeAsync(CliProvider.Claude, "synthetic-cli", null,
+            (_, _, _) => CliVersionProbe.ExecuteVersionCommandAsync(info))
+            .WaitAsync(TimeSpan.FromSeconds(8));
+        Assert.Equal("failed", result.Status);
+        Assert.Null(result.Version);
+        Assert.Equal("version command returned excessive output", result.Failure);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Native_version_output_at_the_limit_remains_supported_on_either_stream(bool stderr)
+    {
+        const string suffix = " version 1.2.3";
+        var prefixLength = CliVersionProbe.MaxOutputCharacters - suffix.Length;
+        var info = SyntheticProcessFixture.Command(
+            "[Console]::" + (stderr ? "Error" : "Out") + $".Write(('x' * {prefixLength}) + '{suffix}')",
+            $"(head -c {prefixLength} /dev/zero; printf '{suffix}')" + (stderr ? " >&2" : ""));
+        var result = await CliVersionProbe.ProbeAsync(CliProvider.Grok, "synthetic-cli", null,
+            (_, _, _) => CliVersionProbe.ExecuteVersionCommandAsync(info));
+        Assert.Equal("detected", result.Status);
+        Assert.Equal("1.2.3", result.Version);
     }
 
     [Fact]

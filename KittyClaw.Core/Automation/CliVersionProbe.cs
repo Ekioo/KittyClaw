@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using KittyClaw.Core.Services;
 
@@ -15,6 +16,10 @@ public sealed record CliVersionMetadata(
 internal static partial class CliVersionProbe
 {
     internal static readonly TimeSpan Timeout = TimeSpan.FromSeconds(3);
+    internal const int MaxOutputCharacters = 64 * 1024;
+
+    internal static Task<ProcessRunner.ProcessResult> ExecuteVersionCommandAsync(ProcessStartInfo startInfo) =>
+        ProcessRunner.RunAsync(startInfo, Timeout, maxOutputCharacters: MaxOutputCharacters);
 
     internal static string BinaryFor(CliProvider provider) => provider switch
     {
@@ -46,12 +51,15 @@ internal static partial class CliVersionProbe
         try
         {
             var result = execute is null
-                ? await ProcessRunner.RunAsync(binary, "--version", timeout: Timeout)
+                ? await ExecuteVersionCommandAsync(new ProcessStartInfo(binary, "--version"))
                 : await execute(binary, "--version", Timeout);
             if (result.TimedOut)
                 return Failed("timeout");
             if (result.ExitCode != 0)
                 return Failed($"version command exited with code {result.ExitCode}");
+            // Apply the same policy to injected executors before concatenation and regex parsing.
+            if (result.Stdout.Length > MaxOutputCharacters || result.Stderr.Length > MaxOutputCharacters)
+                return Failed("version command returned excessive output");
 
             var output = string.Join('\n', result.Stdout, result.Stderr).Trim();
             var match = VersionPattern().Match(output);
@@ -63,6 +71,10 @@ internal static partial class CliVersionProbe
                 && !string.Equals(version, expectedVersion.Trim(), StringComparison.OrdinalIgnoreCase);
             return new CliVersionMetadata(providerName, safeBinary, version, expectedVersion,
                 mismatch ? "mismatch" : "detected", null, mismatch);
+        }
+        catch (ProcessRunner.OutputLimitExceededException)
+        {
+            return Failed("version command returned excessive output");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

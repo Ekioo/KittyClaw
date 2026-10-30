@@ -834,7 +834,7 @@ public sealed class AgentRunner
         CompleteFromProviderResult();
     }
 
-    private static async Task<string> CaptureRepositoryStateAsync(
+    internal static async Task<string> CaptureRepositoryStateAsync(
         string repositoryPath, CancellationToken cancellationToken)
     {
         // Session/debug channel state is local control-plane data. Versioned memories are routed
@@ -863,8 +863,15 @@ public sealed class AgentRunner
         foreach (var relativePath in untracked.Stdout.Split('\0', StringSplitOptions.RemoveEmptyEntries))
         {
             var file = Path.GetFullPath(Path.Combine(repositoryPath, relativePath));
-            fingerprint.Append('\0').Append(relativePath).Append(':')
-                .Append(Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(file, cancellationToken))));
+            await using var content = new FileStream(file, new FileStreamOptions
+            {
+                Mode = FileMode.Open,
+                Access = FileAccess.Read,
+                Share = FileShare.Read,
+                Options = FileOptions.Asynchronous | FileOptions.SequentialScan,
+            });
+            var hash = await SHA256.HashDataAsync(content, cancellationToken);
+            fingerprint.Append('\0').Append(relativePath).Append(':').Append(Convert.ToHexString(hash));
         }
         return fingerprint.ToString();
     }

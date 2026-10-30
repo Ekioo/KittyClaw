@@ -23,6 +23,11 @@ with a bounded final cleanup drain after timeout. On Windows the runner closes i
 before waiting for EOF, so a background hook child cannot keep worktree preparation blocked.
 This controls process lifetime; Git hooks still execute as the application account.
 
+Primary-checkout fingerprinting hashes untracked file contents through asynchronous streams,
+so managed memory does not grow by the size of an individual untracked file. It keeps the same
+SHA-256 strings and changed-path attribution. Git status, tracked binary diffs and path listings
+are still captured as text; this does not bound the entire fingerprint's memory footprint.
+
 ### `worktree-merge.ps1` exit codes
 
 | Code | Meaning |

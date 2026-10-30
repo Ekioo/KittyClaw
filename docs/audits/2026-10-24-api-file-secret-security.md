@@ -295,3 +295,56 @@ work were preserved byte-for-byte and excluded from this security batch.
 Other text-capturing Git, version and evidence commands still need individual
 output-volume assessment. Next scope: measure their legitimate output needs
 and bound or stream the largest captures, then return to HTTP file/path review.
+
+
+## 2026-10-30 nightly audit: fingerprint and version-output memory
+
+Continued the output-volume follow-up with two confirmed local resource risks:
+
+- Primary-checkout fingerprinting read each untracked file into a single byte
+  array before computing SHA-256. A disposable 64 MiB untracked file caused
+  67,353,800 managed bytes of allocation during a warmed capture. Repeated or
+  concurrent captures could therefore multiply large temporary allocations.
+  The regression failed its 32 MiB allocation budget before the correction.
+- CLI version metadata probes used unrestricted text capture and accepted very
+  large parsed version strings. Two injected-executor baseline cases supplied
+  a synthetic numeric version over 128 KiB on stdout or stderr. Both were
+  incorrectly marked detected, retaining the large version as run metadata.
+  Source inspection also confirmed that the real subprocess path used
+  ReadToEndAsync without an output-volume limit.
+
+Fingerprinting now hashes untracked files through asynchronous FileStream
+reads. The same 64 MiB fixture allocated 244,944 managed bytes after the change.
+These are measured managed-allocation totals in the Windows test process, not
+whole-system memory or Git-child RSS. Existing SHA-256 strings, fingerprint
+format and changed-path attribution are preserved. Tests check exact hashes,
+same-length edits, deterministic capture and cancellation without partial data.
+
+CLI version probes now use the existing bounded ProcessRunner capture with a
+65,536-character limit on each stream. Overflow terminates the producer and
+records a fixed failure reason without returning a partial version; dispatch
+retains its existing non-blocking warning behavior. Injected executor results
+also receive a length check before concatenation and regex parsing. Native
+synthetic process tests cover both stdout and stderr, including exact-limit
+success and overflow while the producer would otherwise continue sleeping.
+The three-second execution deadline is unchanged.
+
+Final verification: 74 distinct tests passed in two runs: 47 across
+RepositoryStateCaptureSecurityTests, CliVersionProbeTests,
+PrimaryCheckoutChangeAttributionTests and BoundedProcessOutputTests; then 27
+across TicketWorktreeServiceTests and AgentRunnerMockIntegrationTests. Nine
+regression cases were added. All three baseline failures now pass. Integration
+coverage includes primary-change attribution, coordinated synchronization,
+canonical worktrees, run completion, approvals and mock-provider failures.
+Builds used bin/SecurityCaptureAudit/ with a temporary NuGet configuration
+containing only nuget.org. All data and processes used for attack/resource
+reproductions belonged to disposable fixtures; no paid provider, live :5230
+verification, real project or real secret was used.
+
+The full suite, live UI and non-Windows execution were not tested. No dependency
+versions were changed. Ten pre-existing modified/untracked files were preserved
+byte-for-byte and excluded from this batch. Git status, tracked binary diffs,
+path listings and evidence captures still need their own output-volume policy;
+the entire repository fingerprint is not claimed to have bounded memory.
+Next scope: stream or bound the tracked-diff/path-list captures while preserving
+path attribution, then resume HTTP uploaded-file and path-boundary review.

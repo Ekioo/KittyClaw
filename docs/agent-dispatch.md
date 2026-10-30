@@ -49,6 +49,11 @@ queued work, fallback and steering replay with the mock CLI.
 
 KittyClaw records the effective external CLI provider, binary identity, and detected version on every run and exposes it through the runs API. Detection uses `<binary> --version` with a three-second timeout; failure is recorded as a warning and never blocks dispatch. Binary overrides are `KITTYCLAW_CLAUDE_BIN`, `KITTYCLAW_CODEX_BIN`, `KITTYCLAW_GROK_BIN`, and `KITTYCLAW_MISTRAL_BIN`. Set these before starting KittyClaw to pin each provider to a specific executable. Optional `KITTYCLAW_CLAUDE_EXPECTED_VERSION`, `KITTYCLAW_CODEX_EXPECTED_VERSION`, `KITTYCLAW_GROK_EXPECTED_VERSION`, and `KITTYCLAW_MISTRAL_EXPECTED_VERSION` values add a visible non-blocking warning when the detected version differs.
 
+Version metadata probes capture at most 65,536 characters per output stream. Exceeding either
+limit stops the producer and records a fixed failure reason without retaining a partial version.
+The existing three-second execution deadline and non-blocking dispatch warning remain in place.
+This policy also applies before parsing results supplied by an injected probe executor.
+
 ## Optional RTK output optimization
 
 Projects can explicitly opt in to [Rust Token Killer (RTK)](https://github.com/rtk-ai/rtk) from project settings. `RtkIntegrationService` probes the locally installed binary with `rtk --version` using a two-second timeout. When the probe succeeds, `AgentRunner` adds a short instruction block that prefers RTK only for supported, high-volume shell reads and requires an unchanged raw-command retry whenever exact output or missing detail matters. The provider executable, arguments, stdout protocol, and permission model are never wrapped or rewritten by KittyClaw.
