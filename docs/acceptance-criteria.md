@@ -13,6 +13,16 @@ ReadyToEvaluate, even for a previously validated criterion. Unchanged evidence p
 the requested status; text-only edits do not trigger readiness. Removing evidence from
 a ready criterion returns it to Pending. Processor assessments record their verdict directly.
 
+## AI ticket creation
+
+The board's assisted ticket dialog uses `TicketIntakeService` to generate a title,
+description, structured `acceptanceCriteria` and existing project `labelIds`.
+The assistant follows the language established by repository guidance and project
+artifacts, falling back to the application's language instruction. Project labels
+are supplied with their IDs; unknown IDs are discarded. Criteria are kept outside
+the description and persisted as Pending without evidence in the same creation
+transaction as the ticket and labels, before column entry checks and notifications.
+
 ## AI ticket improvement
 
 `POST /api/projects/{slug}/tickets/{id}/improvement/analyze` and MCP

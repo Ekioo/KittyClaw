@@ -124,6 +124,7 @@
     private string _description = "";
     private TicketPriority _priority = TicketPriority.NiceToHave;
     private List<int> _labelIds = [];
+    private List<string> _acceptanceCriteria = [];
     private List<Label> _allLabels = [];
     private bool _showNewLabelForm;
     private string _newLabelName = "";
@@ -134,6 +135,24 @@
     private string? _creationError;
     private string DraftKey => $"kittyclaw.ticket-draft:{Slug}:{SelectedPipelineId}:{SubKanbanParentId}";
     private IDisposable? _escHandle;
+    private bool _draftLoaded;
+    private string ConversationDraftKey => DraftKey + ":conversation";
+
+    public sealed record IntakeDraft(bool Assisted, bool AutoCreate, bool Ready, string Input,
+        List<TicketIntakeMessage> Messages, string Title, string Description,
+        TicketPriority Priority, List<int> LabelIds, List<string> AcceptanceCriteria);
+
+    private async Task SaveDraftAsync()
+    {
+        if (!_draftLoaded || _created || _disposed) return;
+        try
+        {
+            await JS.InvokeVoidAsync("ticketDraft.saveConversation", ConversationDraftKey,
+                new IntakeDraft(_assisted, _autoCreate, _ready, _input, _messages.ToList(),
+                    _title, _description, _priority, _labelIds, _acceptanceCriteria));
+        }
+        catch (Exception ex) { Logger.LogWarning(ex, "Ticket conversation draft save failed"); }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -168,16 +187,33 @@
                     _description = draft[1];
                     StateHasChanged();
                 }
+                var conversation = await JS.InvokeAsync<IntakeDraft?>("ticketDraft.loadConversation", ConversationDraftKey);
+                if (conversation is not null)
+                {
+                    _assisted = conversation.Assisted;
+                    _autoCreate = conversation.AutoCreate;
+                    _ready = conversation.Ready;
+                    _input = conversation.Input;
+                    _messages.AddRange(conversation.Messages);
+                    _title = conversation.Title;
+                    _description = conversation.Description;
+                    _priority = conversation.Priority;
+                    _labelIds = conversation.LabelIds;
+                    _acceptanceCriteria = conversation.AcceptanceCriteria;
+                    StateHasChanged();
+                }
             }
             catch (Exception ex) { Logger.LogWarning(ex, "Ticket draft initialization failed"); }
+            _draftLoaded = true;
             _escHandle = EscapeStack.PushWithFocus(JS,
-                () => InvokeAsync(async () => { await OnClosed.InvokeAsync(); }));
+                () => InvokeAsync(CloseAsync));
             try { await JS.InvokeVoidAsync("attachImagePaste", _descTextarea, "/api/images"); }
             catch (Exception ex)
             {
                 Logger.LogWarning(ex, "Image paste initialization failed");
             }
         }
+        await SaveDraftAsync();
     }
 
     public void Dispose()
@@ -214,6 +250,7 @@
         if (_messages.Count == 0) return;
         _thinking = true;
         _creationError = null;
+        await SaveDraftAsync();
         try
         {
             using var turnCts = CancellationTokenSource.CreateLinkedTokenSource(_intakeCts.Token);
@@ -226,6 +263,8 @@
             {
                 _title = reply.Title!;
                 _description = reply.Description!;
+                _labelIds = reply.LabelIds ?? [];
+                _acceptanceCriteria = reply.AcceptanceCriteria ?? [];
                 if (_autoCreate || createNow) await CreateAsync();
                 else _messages.Add(new("assistant", L["IntakeReview"]));
             }
@@ -236,10 +275,14 @@
             Logger.LogWarning(ex, "Ticket intake failed for {Project}", Slug);
             _creationError = ex.Message;
         }
-        finally { _turnCts = null; _thinking = false; }
+        finally { _turnCts = null; _thinking = false; await SaveDraftAsync(); }
     }
 
-    private async Task CloseAsync() => await OnClosed.InvokeAsync();
+    private async Task CloseAsync()
+    {
+        await SaveDraftAsync();
+        await OnClosed.InvokeAsync();
+    }
 
     private void ToggleLabel(int id)
     {
@@ -274,7 +317,8 @@
             priority: _priority,
             parentId: SubKanbanParentId,
             pipelineId: SelectedPipelineId,
-            columnId: Columns[0].Id);
+            columnId: Columns[0].Id,
+            acceptanceCriteria: _acceptanceCriteria);
         }
         catch (Exception ex)
         {
@@ -284,7 +328,11 @@
         }
         finally { _creating = false; }
         _created = true;
-        try { await JS.InvokeVoidAsync("ticketDraft.clear", DraftKey); }
+        try
+        {
+            await JS.InvokeVoidAsync("ticketDraft.clear", ConversationDraftKey);
+            await JS.InvokeVoidAsync("ticketDraft.clear", DraftKey);
+        }
         catch (Exception ex) { Logger.LogWarning(ex, "Ticket draft cleanup failed"); }
         await OnCreated.InvokeAsync(ticket);
     }

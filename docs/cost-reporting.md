@@ -134,3 +134,12 @@ Older work reviews did not retain token usage and cannot be retrospectively pric
 `JevCostRecorderTests` covers filters, rates, unpriced responses, invalid judgments, deduplication,
 legacy imports, and restart durability. The isolated `JevWorkReviewJourneyTests` also checks that
 four simulated API responses appear on `/costs`, including the model filter and precise amount.
+
+## GPT-6.1 Terra verification (2026-10-28)
+
+Added `codex:gpt-6.1-terra` to the Codex selector and versioned rate card.
+The [official model page](https://developers.openai.com/api/docs/models/gpt-6.1-terra)
+lists standard USD prices per million tokens of $1 input, $5 output, $0.05 cached
+input and $1.25 cache writes (30 minutes). Existing request-context handling applies
+the published long-context multipliers above 272,000 input tokens. The CLI owns
+account availability; this update does not change existing model selections.

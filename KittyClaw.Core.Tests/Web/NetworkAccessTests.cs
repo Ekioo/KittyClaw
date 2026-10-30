@@ -19,6 +19,36 @@ namespace KittyClaw.Core.Tests.Web;
 public sealed class NetworkAccessTests
 {
     [Fact]
+    public async Task Local_setup_saves_rules_with_csrf_and_rejects_invalid_updates()
+    {
+        using var fixture = new Fixture(true);
+        using var get = new HttpRequestMessage(HttpMethod.Get, "http://localhost/network-setup");
+        get.Headers.Add("Test-Loopback", "true");
+        var response = await fixture.Client.SendAsync(get);
+        var html = await response.Content.ReadAsStringAsync();
+        Assert.Contains("id='allowed-networks'", html);
+        var csrf = WebUtility.HtmlDecode(Regex.Match(html, "name='__RequestVerificationToken' value='([^']+)'").Groups[1].Value);
+        var cookies = string.Join("; ", response.Headers.GetValues("Set-Cookie").Select(v => v.Split(';')[0]));
+        foreach (var entry in new[] { "192.168.1.0/24", "invalid" })
+        {
+            using var post = new HttpRequestMessage(HttpMethod.Post, "http://localhost/network-setup");
+            post.Headers.Add("Test-Loopback", "true");
+            post.Headers.Add("Origin", "http://localhost");
+            post.Headers.Add("Cookie", cookies);
+            post.Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["action"] = "network-rules", ["restrict"] = "on", ["networks"] = entry,
+                ["__RequestVerificationToken"] = csrf
+            });
+            var saved = await fixture.Client.SendAsync(post);
+            Assert.Equal(entry == "invalid" ? HttpStatusCode.BadRequest : HttpStatusCode.OK, saved.StatusCode);
+            Assert.True(fixture.Access.RestrictNetwork);
+            Assert.Equal("192.168.1.0/24", Assert.Single(fixture.Access.AllowedNetworks));
+            Assert.True(fixture.Access.Enabled);
+        }
+    }
+
+    [Fact]
     public async Task Six_digit_entry_submits_once_when_complete_and_supports_paste()
     {
         using var fixture = new Fixture(true);

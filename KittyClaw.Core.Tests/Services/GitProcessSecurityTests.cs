@@ -61,6 +61,43 @@ public sealed class GitProcessSecurityTests
         Assert.Equal(Enumerable.Range(0, 65536).Select(i => (byte)(i % 256)).ToArray(), destination.ToArray());
     }
 
+    [Fact]
+    public async Task Both_raw_streams_can_be_discarded_without_retaining_output()
+    {
+        var info = Command("[Console]::Error.Write('e' * 131072); [Console]::Out.Write('o' * 131072)",
+            "head -c 131072 /dev/zero >&2; head -c 131072 /dev/zero");
+        var result = await ProcessRunner.RunAsync(info, TimeSpan.FromSeconds(10),
+            standardOutput: Stream.Null, standardError: Stream.Null);
+        Assert.True(result.Success);
+        Assert.Empty(result.Stdout);
+        Assert.Empty(result.Stderr);
+    }
+
+    [Fact]
+    public async Task Deadline_still_applies_to_a_blocked_stderr_transfer()
+    {
+        var windows = OperatingSystem.IsWindows();
+        var info = new ProcessStartInfo(windows ? "cmd.exe" : "/bin/sh");
+        foreach (var arg in windows ? new[] { "/d", "/c", "echo payload 1>&2" } : new[] { "-c", "printf payload >&2" })
+            info.ArgumentList.Add(arg);
+        using var destination = new BlockedOutput();
+        var execution = ProcessRunner.RunAsync(info, TimeSpan.FromSeconds(2),
+            standardOutput: Stream.Null, standardError: destination);
+        await destination.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var result = await execution.WaitAsync(TimeSpan.FromSeconds(9));
+        Assert.True(result.TimedOut);
+        Assert.False(result.Success);
+    }
+
+    [Fact]
+    public async Task Failed_stderr_write_cannot_be_reported_as_success()
+    {
+        var info = Command("[Console]::Error.Write('payload')", "printf payload >&2");
+        using var destination = new FailedOutput();
+        await Assert.ThrowsAsync<IOException>(() => ProcessRunner.RunAsync(info,
+            TimeSpan.FromSeconds(5), standardError: destination));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

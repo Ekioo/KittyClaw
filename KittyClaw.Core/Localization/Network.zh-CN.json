@@ -1,4 +1,11 @@
 {
+  "NetworkRulesTitle": "允许的设备和网络",
+  "NetworkRulesHint": "按 IP 地址限制直接网络访问。仍需进行身份验证。这些规则不适用于 localhost 或通过 Cloudflare 的访问。更改立即生效，包括现有连接。启用筛选时，空列表将阻止所有直接远程访问。",
+  "NetworkRulesRestrict": "仅允许列出的地址和网络",
+  "NetworkRulesEntries": "每行一个 IP 地址或 CIDR 网络（例如 192.168.1.42、192.168.1.0/24 或 fd00::/64）",
+  "NetworkRulesSave": "保存访问规则",
+  "NetworkRulesSaved": "访问规则已保存。",
+  "NetworkRulesInvalid": "请输入有效的 IP 地址或 CIDR 网络，最多 256 条。未保存任何更改。",
   "NetworkTitle": "局域网访问",
   "NetworkHint": "使用身份验证器应用中的验证码，在手机或其他设备上打开 KittyClaw。无需密码。",
   "NetworkConfigure": "配置网络访问",

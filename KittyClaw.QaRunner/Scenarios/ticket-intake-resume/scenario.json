@@ -1,0 +1,201 @@
+{
+  "environment": {
+    "KITTYCLAW_MOCK_SCENARIOS_DIR": "{scenarioDirectory}"
+  },
+  "instance": {
+    "providers": [
+      "codex"
+    ],
+    "mockScenario": "intake"
+  },
+  "setup": [
+    {
+      "type": "createProject",
+      "name": "qa-intake-resume"
+    }
+  ],
+  "actions": [
+    {
+      "type": "navigate",
+      "url": "/board/qa-intake-resume"
+    },
+    {
+      "type": "wait",
+      "ms": 2500
+    },
+    {
+      "type": "click",
+      "selector": ".add-ticket-btn"
+    },
+    {
+      "type": "wait",
+      "ms": 500
+    },
+    {
+      "type": "click",
+      "selector": ".ticket-intake-auto input"
+    },
+    {
+      "type": "fill",
+      "selector": "#ticket-intake-input",
+      "value": "Keep my conversation when I close this drawer."
+    },
+    {
+      "type": "click",
+      "selector": ".ticket-intake-drawer .conversation-send"
+    },
+    {
+      "type": "wait",
+      "ms": 3000
+    },
+    {
+      "type": "assertVisible",
+      "selector": ".ticket-intake-drawer :text(\"Prepared draft for the requested change.\")"
+    },
+    {
+      "type": "fill",
+      "selector": "#ticket-intake-input",
+      "value": "An unsent follow-up"
+    },
+    {
+      "type": "click",
+      "selector": ".ticket-intake-drawer .agent-close-btn"
+    },
+    {
+      "type": "click",
+      "selector": ".add-ticket-btn"
+    },
+    {
+      "type": "wait",
+      "ms": 500
+    },
+    {
+      "type": "assertVisible",
+      "selector": ".ticket-intake-drawer :text(\"Keep my conversation when I close this drawer.\")"
+    },
+    {
+      "type": "assertVisible",
+      "selector": ".ticket-intake-drawer :text(\"Prepared draft for the requested change.\")"
+    },
+    {
+      "type": "assertValue",
+      "selector": "#ticket-intake-input",
+      "expected": "An unsent follow-up"
+    },
+    {
+      "type": "assertCount",
+      "selector": ".ticket-intake-auto input:checked",
+      "expected": "0"
+    },
+    {
+      "type": "press",
+      "selector": "#ticket-intake-input",
+      "property": "Escape"
+    },
+    {
+      "type": "click",
+      "selector": ".add-ticket-btn"
+    },
+    {
+      "type": "wait",
+      "ms": 500
+    },
+    {
+      "type": "assertValue",
+      "selector": "#ticket-intake-input",
+      "expected": "An unsent follow-up"
+    },
+    {
+      "type": "navigate",
+      "url": "/board/qa-intake-resume"
+    },
+    {
+      "type": "wait",
+      "ms": 2500
+    },
+    {
+      "type": "click",
+      "selector": ".add-ticket-btn"
+    },
+    {
+      "type": "wait",
+      "ms": 500
+    },
+    {
+      "type": "assertVisible",
+      "selector": ".ticket-intake-drawer :text(\"Prepared draft for the requested change.\")"
+    },
+    {
+      "type": "assertValue",
+      "selector": "#ticket-intake-input",
+      "expected": "An unsent follow-up"
+    },
+    {
+      "type": "click",
+      "selector": "#intake-manual-tab"
+    },
+    {
+      "type": "assertValue",
+      "selector": ".create-input",
+      "expected": "Resume ticket intake"
+    },
+    {
+      "type": "assertValue",
+      "selector": ".create-textarea",
+      "expected": "Preserve the conversation until ticket creation succeeds."
+    },
+    {
+      "type": "click",
+      "selector": ".ticket-intake-drawer .tile-config-accept"
+    },
+    {
+      "type": "wait",
+      "ms": 500
+    },
+    {
+      "type": "assertCount",
+      "selector": ".ticket-intake-drawer",
+      "expected": "0"
+    },
+    {
+      "type": "click",
+      "selector": ".add-ticket-btn"
+    },
+    {
+      "type": "wait",
+      "ms": 500
+    },
+    {
+      "type": "assertValue",
+      "selector": "#ticket-intake-input",
+      "expected": ""
+    },
+    {
+      "type": "assertCount",
+      "selector": ".ticket-intake-drawer :text(\"Prepared draft for the requested change.\")",
+      "expected": "0"
+    },
+    {
+      "type": "assertCount",
+      "selector": ".ticket-intake-auto input:checked",
+      "expected": "1"
+    },
+    {
+      "type": "click",
+      "selector": "#intake-manual-tab"
+    },
+    {
+      "type": "assertValue",
+      "selector": ".create-input",
+      "expected": ""
+    },
+    {
+      "type": "assertValue",
+      "selector": ".create-textarea",
+      "expected": ""
+    }
+  ],
+  "verdict": {
+    "passOn": "all-asserts-pass"
+  }
+}

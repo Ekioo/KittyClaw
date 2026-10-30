@@ -54,7 +54,7 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
   and cancellation without changing its configuration or script-validation flow.
 - Ticket creation and detail panels no longer offer manual member assignment. Existing assignment data is no longer used by the ticket interface.
 - Ticket cards display the first Markdown image from their description as a full-width cover above the card content, preserving its aspect ratio. Inline and reference-style images are supported; code samples and unsafe URL schemes are excluded.
-- Phone layouts use `css/mobile.css`, loaded after component styles and scoped to widths up to 767px. Headers wrap actions into touch-sized rows with a full-width search field. Project and nested Kanbans show one full-width column at a time with mandatory horizontal snapping and a stop at each column; tickets scroll vertically within their column. Ticket details stack in a full-screen panel, and chat/run drawers fill the screen. Dynamic viewport heights and safe-area padding accommodate mobile browser chrome. Desktop layouts and saved dashboard coordinates remain unchanged.
+- Phone layouts use `css/mobile.css`, loaded after component styles and scoped to widths up to 767px. Headers wrap actions into touch-sized rows with a full-width search field. Project and nested Kanbans show one full-width column at a time with mandatory horizontal snapping and a stop at each column; the whole page scrolls vertically, including headers and tickets, so wrapped controls cannot squeeze the ticket list into a small nested scroll area. Desktop tickets retain independent column scrolling. Ticket details stack in a full-screen panel, and chat/run drawers fill the screen. Dynamic viewport heights and safe-area padding accommodate mobile browser chrome. Desktop layouts and saved dashboard coordinates remain unchanged.
 - The current column in the shared ticket panel is a native selector for the ticket's pipeline, usable by touch and keyboard. Changes use the existing routing validation, preserve undo support, refresh the project board, and display rejected moves inline.
 - Ticket details have dedicated `TicketPanelMobileView` and `TicketPanelDesktopView` components. `TicketPanelResponsiveView` selects a single view through a `matchMedia` listener in `js/ticket-panel-viewport.js` and switches when crossing 767px. Both views receive shared content and command fragments from `TicketPanel`, keeping edits and service calls in one place. Mobile uses a full-width title, a sticky toolbar with secondary actions, compact status and label summaries, and a native Details disclosure for property and dependency editing. The whole mobile sheet scrolls as one surface; desktop keeps its directly accessible property bar and independently scrolling content. Mobile styles live in `css/ticket-panel-mobile.css`.
 - Remaining phone compositions live in `css/mobile-views.css`. `MobileSectionNavigation` switches visible settings/workflow sections below 768px while keeping their forms mounted; desktop shows every section. Editable settings tables become labelled cards, cost filters expand on demand, and phone column headers expose the shared context menu as a bottom sheet. See the [mobile audit](./audits/2026-10-24-mobile-ux-audit.md) for the complete view inventory and verification boundaries.
@@ -131,7 +131,10 @@ retaining the selected pipeline, parent, labels and priority.
 Automatic creation is enabled by default and can be disabled before sending for
 manual review. Create now requests a draft immediately from the available answers;
 unanswered decisions must be recorded rather than invented. Switching tabs keeps
-both drafts mounted. Closing cancels the current provider turn. Conversation history
-lasts for the open dialog; the existing session-storage recovery remains specific
-to the manual title and description. Provider failures leave the conversation
+both drafts mounted. Closing cancels the current provider turn. Browser session storage
+preserves conversation history, the unsent message, assisted/manual mode, creation
+preference and all prepared ticket fields per project, pipeline and parent ticket.
+Reopening New Ticket restores this draft, including after a page reload in the same
+tab. Only successful ticket creation clears it; failed creation retains it.
+Provider failures leave the conversation
 available, and creation failures retain the generated draft for retry or editing.

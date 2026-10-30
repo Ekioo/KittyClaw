@@ -8,7 +8,7 @@ namespace KittyClaw.Core.Automation;
 /// </summary>
 public static class ModelCostEstimator
 {
-    public const string RateCardVersion = "2026-10-25";
+    public const string RateCardVersion = "2026-10-28";
 
     public static bool TryEstimate(
         string? model,
@@ -39,6 +39,7 @@ public static class ModelCostEstimator
             // https://developers.openai.com/api/docs/pricing (standard, 30-minute writes).
             "gpt-6-astra" => new(10m, 50m, 1m, 12.5m),
             "gpt-6.1-sol" => new(2m, 10m, 0.1m, 2.5m),
+            "gpt-6.1-terra" => new(1m, 5m, 0.05m, 1.25m),
             "gpt-6-sol" => new(2m, 10m, 0.2m, 2.5m),
             "gpt-6-luna" => new(0.1m, 0.5m, 0.01m, 0.125m),
             "gpt-5.6-sol" => new(4m, 20m, 0.4m, 5m),

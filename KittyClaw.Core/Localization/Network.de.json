@@ -1,4 +1,11 @@
 {
+  "NetworkRulesTitle": "Erlaubte Geräte und Netzwerke",
+  "NetworkRulesHint": "Direkten Netzwerkzugriff nach IP-Adresse einschränken. Die Authentifizierung bleibt erforderlich. Diese Regeln gelten nicht für localhost oder den Cloudflare-Zugriff. Änderungen gelten sofort, auch für bestehende Verbindungen. Eine leere Liste blockiert bei aktivierter Filterung jeden direkten Fernzugriff.",
+  "NetworkRulesRestrict": "Nur die aufgeführten Adressen und Netzwerke zulassen",
+  "NetworkRulesEntries": "Eine IP-Adresse oder ein CIDR-Netzwerk pro Zeile (zum Beispiel 192.168.1.42, 192.168.1.0/24 oder fd00::/64)",
+  "NetworkRulesSave": "Zugriffsregeln speichern",
+  "NetworkRulesSaved": "Zugriffsregeln gespeichert.",
+  "NetworkRulesInvalid": "Geben Sie gültige IP-Adressen oder CIDR-Netzwerke ein, höchstens 256 Einträge. Es wurden keine Änderungen gespeichert.",
   "NetworkTitle": "Zugriff im lokalen Netzwerk",
   "NetworkHint": "Öffne KittyClaw auf deinem Smartphone oder einem anderen Gerät mit einem Code aus deiner Authenticator-App. Ein Passwort ist nicht erforderlich.",
   "NetworkConfigure": "Netzwerkzugriff einrichten",

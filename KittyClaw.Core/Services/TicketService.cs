@@ -700,10 +700,11 @@ public class TicketService
         string status = "Backlog", List<int>? labelIds = null,
         TicketPriority priority = TicketPriority.NiceToHave, string? assignedTo = null,
         int? parentId = null, int? pipelineId = null, int? columnId = null,
-        bool blocksParent = true)
+        bool blocksParent = true, List<string>? acceptanceCriteria = null)
     {
         if (string.IsNullOrWhiteSpace(createdBy))
             throw new InvalidOperationException("Le champ 'createdBy' est requis.");
+        foreach (var text in acceptanceCriteria ?? []) ValidateAcceptanceCriterion(new(text));
         var creationGate = _creationGates.GetOrAdd(projectSlug, _ => new SemaphoreSlim(1, 1));
         await creationGate.WaitAsync();
         try
@@ -741,6 +742,8 @@ public class TicketService
             AssignedTo = assignedTo,
             ParentId = parentId,
             BlocksParent = blocksParent,
+            AcceptanceCriteria = (acceptanceCriteria ?? []).Select(text => new TicketAcceptanceCriterion(
+                Guid.NewGuid().ToString("N"), text.Trim())).ToList(),
         };
         ColumnAssignmentPolicy.Apply(ticket, null, column);
         if (labelIds is { Count: > 0 })

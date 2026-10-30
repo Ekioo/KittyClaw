@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using KittyClaw.Core.Automation;
 
 namespace KittyClaw.Core.Services;
@@ -18,39 +19,20 @@ public static class ProcessRunner
         public bool Success => !TimedOut && ExitCode == 0;
     }
 
+    public sealed class OutputLimitExceededException()
+        : IOException("The process returned excessive output.") { }
+
     /// <summary>
-    /// Synchronous availability probe for use from <c>Lazy&lt;T&gt;</c> initializers that
-    /// cannot be async. Uses event-based pipe draining and <see cref="Process.WaitForExit(int)"/>
-    /// — no async machinery — so this is genuine blocking I/O, not sync-over-async.
-    /// Returns <c>true</c> when the process exits with code 0 within <paramref name="timeout"/>.
+    /// Synchronous availability probe for Lazy initializers. Both streams are discarded as
+    /// bytes without accumulating lines. The shared runner bounds process exit and EOF waits
+    /// and never captures the caller's synchronization context, so blocking here is safe.
     /// </summary>
     public static bool ProbeSync(string fileName, string arguments, TimeSpan timeout)
     {
         try
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = fileName,
-                Arguments = arguments,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-            using var proc = Process.Start(psi);
-            if (proc is null) return false;
-            using var job = ProcessJobObject.TryCreateAndAssign(proc);
-            // Drain pipes via internal thread pool to prevent buffer-fill deadlock.
-            proc.BeginOutputReadLine();
-            proc.BeginErrorReadLine();
-            bool exited = proc.WaitForExit((int)timeout.TotalMilliseconds);
-            if (!exited)
-            {
-                try { proc.Kill(entireProcessTree: true); } catch { }
-                return false;
-            }
-            proc.WaitForExit(); // flush async stream handlers before reading ExitCode
-            return proc.ExitCode == 0;
+            return RunAsync(new ProcessStartInfo(fileName, arguments), timeout,
+                standardOutput: Stream.Null, standardError: Stream.Null).GetAwaiter().GetResult().Success;
         }
         catch { return false; }
     }
@@ -87,14 +69,18 @@ public static class ProcessRunner
     }
 
     /// <summary>
-    /// Runs an argument-list invocation, optionally copying raw stdout bytes to a caller-owned
-    /// stream. The deadline covers process exit and pipe completion; transfer errors fail closed.
+    /// Runs an argument-list invocation, optionally copying raw output bytes to caller-owned
+    /// streams (Stream.Null discards output). The deadline covers process exit and both pipe
+    /// transfers; transfer errors fail closed. An optional character limit applies independently
+    /// to each captured text stream, not raw destinations. Internal awaits do not capture context.
     /// </summary>
     public static async Task<ProcessResult> RunAsync(
         ProcessStartInfo startInfo, TimeSpan? timeout = null,
-        CancellationToken ct = default, Stream? standardOutput = null)
+        CancellationToken ct = default, Stream? standardOutput = null, Stream? standardError = null,
+        int? maxOutputCharacters = null)
     {
         ct.ThrowIfCancellationRequested();
+        if (maxOutputCharacters < 0) throw new ArgumentOutOfRangeException(nameof(maxOutputCharacters));
         startInfo.RedirectStandardOutput = true;
         startInfo.RedirectStandardError = true;
         startInfo.UseShellExecute = false;
@@ -105,8 +91,8 @@ public static class ProcessRunner
             ?? throw new InvalidOperationException($"Failed to start '{startInfo.FileName}' process");
         using var job = ProcessJobObject.TryCreateAndAssign(proc);
 
-        var stdoutTask = CaptureOutputAsync();
-        var stderrTask = proc.StandardError.ReadToEndAsync(linked.Token);
+        var stdoutTask = CaptureOutputAsync(proc.StandardOutput, standardOutput);
+        var stderrTask = CaptureOutputAsync(proc.StandardError, standardError);
         try
         {
             await proc.WaitForExitAsync(linked.Token).ConfigureAwait(false);
@@ -134,18 +120,42 @@ public static class ProcessRunner
             throw;
         }
 
-        async Task<string> CaptureOutputAsync()
+        async Task<string> CaptureOutputAsync(StreamReader reader, Stream? destination)
         {
-            if (standardOutput is null)
-                return await proc.StandardOutput.ReadToEndAsync(linked.Token).ConfigureAwait(false);
-            await proc.StandardOutput.BaseStream.CopyToAsync(standardOutput, linked.Token).ConfigureAwait(false);
-            return string.Empty;
+            if (destination is not null)
+            {
+                await reader.BaseStream.CopyToAsync(destination, linked.Token).ConfigureAwait(false);
+                return string.Empty;
+            }
+            if (maxOutputCharacters is not int limit)
+                return await reader.ReadToEndAsync(linked.Token).ConfigureAwait(false);
+
+            var output = new StringBuilder(Math.Min(4096, limit));
+            var buffer = new char[4096];
+            while (true)
+            {
+                var read = await reader.ReadAsync(buffer.AsMemory(), linked.Token).ConfigureAwait(false);
+                if (read == 0) return output.ToString();
+                if (read > limit - output.Length)
+                {
+                    // Stop the producer immediately; it may otherwise block on the full pipe
+                    // while the main task waits for exit. Preserve the limit error for the caller.
+                    Kill();
+                    throw new OutputLimitExceededException();
+                }
+                output.Append(buffer, 0, read);
+            }
         }
 
         void Stop()
         {
             linked.Cancel();
             job?.Dispose();
+            Kill();
+        }
+
+        void Kill()
+        {
             try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); }
             catch { /* may have exited between the check and the kill */ }
         }

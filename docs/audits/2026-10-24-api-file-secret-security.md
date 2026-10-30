@@ -179,3 +179,172 @@ output remains captured in memory. Next scoped review: synchronous availability
 probes, especially their final EOF waits, and suitable output-volume limits for
 non-agent command capture. The :5230 instance was not used for verification;
 all execution used synthetic processes or fixture-owned temporary repositories.
+
+
+## 2026-10-28 nightly audit: synchronous CLI probe EOF waits
+
+Confirmed the synchronous-probe follow-up from the previous batch. Codex and
+Vibe executable discovery runs `ProcessRunner.ProbeSync` from cached Lazy
+initializers. Its timed process-exit wait was followed by a parameterless
+`WaitForExit`, which also waits for event-based stream readers to reach EOF.
+When the parent exited successfully but a descendant inherited its pipes, the
+probe blocked before disposing the Windows job that would terminate that
+same descendant. This could hold a discovery initializer indefinitely despite
+its nominal five-second timeout. The defect requires a local executable or
+wrapper with this behavior; no anonymous remote exploit was established.
+
+Before changing production code, a synthetic PowerShell parent spawned a
+sleeping child with inherited streams and exited. The regression called the
+actual probe with a three-second timeout; it still had not returned after
+eight seconds and failed. Fixture cleanup killed only its own child. The
+corrected version of the same test passes, including proof that the child
+was spawned. Fixture cleanup checks both PID and process start time to avoid
+targeting a recycled PID.
+
+The synchronous wrapper now uses the existing bounded runner. Its concurrent
+raw-byte transfers discard both streams into Stream.Null, avoiding line
+accumulation even for newline-free output. The runner closes its Windows job
+before awaiting final pipe completion, keeps the original timer active, and
+uses the existing bounded five-second cleanup drain after timeout. Every
+internal await avoids the caller's synchronization context; a regression uses
+a context that rejects posted callbacks to check the synchronous wrapper.
+The new optional raw stderr destination shares stdout's deadline and failure
+handling; errors or incomplete transfers cannot produce success.
+
+Final verification: 57 tests passed in two runs: 21 across
+`CliProbeSecurityTests`, `GitProcessSecurityTests`, `ProcessRunnerTests` and
+`ProcessRunnerLifecycleTests`, then 36 across `CliAvailabilityProbeTests`,
+`AgentCliReadinessServiceTests` and `CliVersionProbeTests`. Eight cases were
+added, covering inherited pipes, hung probes, exit failures, 8 MiB of
+newline-free output on each stream, synchronization contexts, discarded
+streams, blocked stderr transfer and stderr write failure. Existing literal
+arguments, raw binary output, cancellation and descendant cleanup regressions
+also passed. Builds used `bin/SecurityProbeAudit/` and a temporary NuGet
+configuration containing only nuget.org. No provider work was dispatched and
+no real project, secret or instance on :5230 was used for attack testing.
+
+The full suite, live UI and non-Windows execution were not tested. No
+dependency versions were changed. Text-capturing commands outside these
+synchronous discovery probes still need output-volume assessment. Next scoped
+review: reproduce cancellation/inherited-pipe behavior in RTK's separate probe
+and final-drain behavior in `TicketWorktreeService`, then select appropriate
+limits for commands that genuinely need captured text. These separate process
+lifecycles were located during source review and were not changed in this
+probe-specific correction.
+
+
+## 2026-10-29 nightly audit: RTK probing and ticket worktree Git processes
+
+Completed the two process-lifecycle reproductions identified in the preceding
+batch. Four baseline regressions failed against the original execution paths:
+
+- RTK waited for process exit before draining either output pipe. A synthetic
+  command writing 48,000 stderr characters blocked on the pipe and was reported
+  unavailable after two seconds despite returning a valid version when drained.
+- RTK's caller-cancellation path disposed its Process wrapper without killing
+  the command. A fixture waited for a native child to publish its identity,
+  cancelled the probe, and confirmed that the child remained alive after the
+  cancellation had propagated.
+- After the RTK parent exited, its final reads used only the caller token rather
+  than the two-second deadline. An inherited-pipe child kept the actual probe
+  blocked beyond the eight-second regression watchdog.
+- Ticket worktree Git calls drained concurrently but awaited the final reads
+  without a timer or Windows job boundary. A post-checkout hook in a disposable
+  repository spawned an inherited-pipe child; worktree preparation remained
+  blocked at the ten-second regression watchdog after the Git parent exited.
+  Code inspection established that those final waits had no deadline.
+
+These are local availability and process-cleanup defects, not evidence of an
+anonymous remote command-execution path. All four original regressions pass
+after the fixes. Tests start and stop only fixture-owned synthetic processes;
+cleanup verifies both PID and process start time.
+
+RTK now uses the shared ProcessRunner with its existing two-second timeout
+active through concurrent pipe reads and process exit. Cancellation propagates
+after cleanup; Windows jobs also terminate descendants holding inherited
+pipes. RTK discards stderr as bytes without storing diagnostics and captures
+at most 65,536 stdout characters. Excess stdout is rejected with a fixed
+unavailable reason. The runner's new optional limit bounds each captured text
+stream independently and stops an overproducing process before awaiting its
+exit; raw destinations retain their existing streaming behavior. Exact-limit
+output succeeds, and one extra character fails without returning partial text.
+The limit is opt-in and is applied to RTK in this batch.
+
+TicketWorktreeService now uses the same runner with its existing literal
+ArgumentList entries, LC_ALL setting, exit handling and 30-second deadline.
+The deadline covers final pipe reads, and the Windows job closes before EOF
+waits. Timeout/cancellation cleanup retains the shared five-second bounded
+final drain. Git hooks still execute as the application account.
+
+Final verification: 67 distinct tests passed in two runs: 36 process/security
+cases, then 31 RTK integration, isolated HTTP, ticket-worktree and project-setting
+regressions (the already-tested background-hook case was excluded from the
+second run). Fifteen cases were added. Coverage includes all four baseline
+failures, stdout/stderr limits, immediate producer termination on overflow,
+large discarded stderr, cancellation before spawn, fixed failure diagnostics,
+version fallback, native binary transfer, literal arguments and descendant
+cleanup. Worktree dispatch regressions use the mock CLI and temporary project
+data; the HTTP test uses WebApplicationFactory's in-memory client and its own
+data directory. Builds used bin/SecurityRtkAudit/ and a temporary NuGet
+configuration containing only nuget.org. The main :5230 instance and real
+project secrets were not used for verification; no paid provider was called.
+
+The full suite, live UI and non-Windows execution were not tested. No dependency
+versions were changed. Seven pre-existing modified files belonging to other
+work were preserved byte-for-byte and excluded from this security batch.
+Other text-capturing Git, version and evidence commands still need individual
+output-volume assessment. Next scope: measure their legitimate output needs
+and bound or stream the largest captures, then return to HTTP file/path review.
+
+
+## 2026-10-30 nightly audit: fingerprint and version-output memory
+
+Continued the output-volume follow-up with two confirmed local resource risks:
+
+- Primary-checkout fingerprinting read each untracked file into a single byte
+  array before computing SHA-256. A disposable 64 MiB untracked file caused
+  67,353,800 managed bytes of allocation during a warmed capture. Repeated or
+  concurrent captures could therefore multiply large temporary allocations.
+  The regression failed its 32 MiB allocation budget before the correction.
+- CLI version metadata probes used unrestricted text capture and accepted very
+  large parsed version strings. Two injected-executor baseline cases supplied
+  a synthetic numeric version over 128 KiB on stdout or stderr. Both were
+  incorrectly marked detected, retaining the large version as run metadata.
+  Source inspection also confirmed that the real subprocess path used
+  ReadToEndAsync without an output-volume limit.
+
+Fingerprinting now hashes untracked files through asynchronous FileStream
+reads. The same 64 MiB fixture allocated 244,944 managed bytes after the change.
+These are measured managed-allocation totals in the Windows test process, not
+whole-system memory or Git-child RSS. Existing SHA-256 strings, fingerprint
+format and changed-path attribution are preserved. Tests check exact hashes,
+same-length edits, deterministic capture and cancellation without partial data.
+
+CLI version probes now use the existing bounded ProcessRunner capture with a
+65,536-character limit on each stream. Overflow terminates the producer and
+records a fixed failure reason without returning a partial version; dispatch
+retains its existing non-blocking warning behavior. Injected executor results
+also receive a length check before concatenation and regex parsing. Native
+synthetic process tests cover both stdout and stderr, including exact-limit
+success and overflow while the producer would otherwise continue sleeping.
+The three-second execution deadline is unchanged.
+
+Final verification: 74 distinct tests passed in two runs: 47 across
+RepositoryStateCaptureSecurityTests, CliVersionProbeTests,
+PrimaryCheckoutChangeAttributionTests and BoundedProcessOutputTests; then 27
+across TicketWorktreeServiceTests and AgentRunnerMockIntegrationTests. Nine
+regression cases were added. All three baseline failures now pass. Integration
+coverage includes primary-change attribution, coordinated synchronization,
+canonical worktrees, run completion, approvals and mock-provider failures.
+Builds used bin/SecurityCaptureAudit/ with a temporary NuGet configuration
+containing only nuget.org. All data and processes used for attack/resource
+reproductions belonged to disposable fixtures; no paid provider, live :5230
+verification, real project or real secret was used.
+
+The full suite, live UI and non-Windows execution were not tested. No dependency
+versions were changed. Ten pre-existing modified/untracked files were preserved
+byte-for-byte and excluded from this batch. Git status, tracked binary diffs,
+path listings and evidence captures still need their own output-volume policy;
+the entire repository fingerprint is not claimed to have bounded memory.
+Next scope: stream or bound the tracked-diff/path-list captures while preserving
+path attribution, then resume HTTP uploaded-file and path-boundary review.
