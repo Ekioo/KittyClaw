@@ -131,7 +131,10 @@ retaining the selected pipeline, parent, labels and priority.
 Automatic creation is enabled by default and can be disabled before sending for
 manual review. Create now requests a draft immediately from the available answers;
 unanswered decisions must be recorded rather than invented. Switching tabs keeps
-both drafts mounted. Closing cancels the current provider turn. Conversation history
-lasts for the open dialog; the existing session-storage recovery remains specific
-to the manual title and description. Provider failures leave the conversation
+both drafts mounted. Closing cancels the current provider turn. Browser session storage
+preserves conversation history, the unsent message, assisted/manual mode, creation
+preference and all prepared ticket fields per project, pipeline and parent ticket.
+Reopening New Ticket restores this draft, including after a page reload in the same
+tab. Only successful ticket creation clears it; failed creation retains it.
+Provider failures leave the conversation
 available, and creation failures retain the generated draft for retry or editing.

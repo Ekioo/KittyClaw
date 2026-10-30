@@ -1,5 +1,12 @@
 // Save directly from DOM input events, including while the Blazor connection is down.
 window.ticketDraft = {
+    loadConversation(key) {
+        try { return JSON.parse(sessionStorage.getItem(key)); }
+        catch { return null; }
+    },
+    saveConversation(key, draft) {
+        sessionStorage.setItem(key, JSON.stringify(draft));
+    },
     attach(popup, key) {
         const title = popup.querySelector('.create-input');
         const description = popup.querySelector('.create-textarea');
