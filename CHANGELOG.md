@@ -4,6 +4,36 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.28] — 2026-10-30
+
+Configurable network access filtering, GPT-6.1 Terra, and more reliable ticket creation.
+
+### Highlights
+
+Control direct remote access with an optional IP and CIDR allowlist, and select GPT-6.1 Terra with token cost estimates. Ticket creation preserves the intake conversation until the ticket is created and better respects the requested language and acceptance criteria.
+
+### Added
+
+- Optional persistent IPv4/IPv6 and CIDR allowlist for direct network access, with immediate enforcement on active connections.
+- GPT-6.1 Terra in the Codex model selector and cost estimates.
+
+### Changed
+
+- Update the pinned .NET SDK to 10.0.403.
+
+### Fixed
+
+- Preserve ticket intake conversations until ticket creation completes.
+- Correct assisted ticket language, project labels, and acceptance criteria.
+- Restore mobile kanban page scrolling.
+
+### Security
+
+- Bound CLI version and RTK probes and ticket worktree Git subprocesses, and cap or discard captured output.
+- Stream repository file hashes to avoid loading entire files into memory.
+
+---
+
 ## [v0.27.2] — 2026-10-27
 
 More reliable project setup, provider installation, and Windows navigation.

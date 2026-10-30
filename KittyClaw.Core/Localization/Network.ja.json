@@ -1,4 +1,11 @@
 {
+  "NetworkRulesTitle": "許可するデバイスとネットワーク",
+  "NetworkRulesHint": "IP アドレスで直接のネットワークアクセスを制限します。認証は引き続き必要です。このルールは localhost や Cloudflare 経由のアクセスには適用されません。変更は既存の接続を含めて直ちに適用されます。フィルタリングが有効な場合、空のリストはすべての直接リモートアクセスをブロックします。",
+  "NetworkRulesRestrict": "一覧にあるアドレスとネットワークのみを許可する",
+  "NetworkRulesEntries": "1 行につき 1 つの IP アドレスまたは CIDR ネットワーク（例：192.168.1.42、192.168.1.0/24、fd00::/64）",
+  "NetworkRulesSave": "アクセスルールを保存",
+  "NetworkRulesSaved": "アクセスルールを保存しました。",
+  "NetworkRulesInvalid": "有効な IP アドレスまたは CIDR ネットワークを最大 256 件入力してください。変更は保存されていません。",
   "NetworkTitle": "ローカルネットワークからのアクセス",
   "NetworkHint": "認証アプリのコードを使い、スマートフォンや別の端末でKittyClawを開けます。パスワードは不要です。",
   "NetworkConfigure": "ネットワークアクセスを設定",

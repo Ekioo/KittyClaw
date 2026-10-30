@@ -1,4 +1,11 @@
 {
+  "NetworkRulesTitle": "Dispositivos y redes permitidos",
+  "NetworkRulesHint": "Restringe el acceso directo a la red por dirección IP. La autenticación sigue siendo obligatoria. Estas reglas no se aplican a localhost ni al acceso mediante Cloudflare. Los cambios se aplican de inmediato, incluso a las conexiones existentes. Una lista vacía bloquea todo acceso remoto directo cuando el filtrado está activado.",
+  "NetworkRulesRestrict": "Permitir solo las direcciones y redes indicadas",
+  "NetworkRulesEntries": "Una dirección IP o red CIDR por línea (por ejemplo, 192.168.1.42, 192.168.1.0/24 o fd00::/64)",
+  "NetworkRulesSave": "Guardar reglas de acceso",
+  "NetworkRulesSaved": "Reglas de acceso guardadas.",
+  "NetworkRulesInvalid": "Introduce direcciones IP o redes CIDR válidas, hasta 256 entradas. No se guardó ningún cambio.",
   "NetworkTitle": "Acceso a la red local",
   "NetworkHint": "Abre KittyClaw en tu teléfono u otro dispositivo con un código de tu aplicación de autenticación. No se necesita contraseña.",
   "NetworkConfigure": "Configurar el acceso de red",
