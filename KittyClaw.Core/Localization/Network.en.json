@@ -1,4 +1,11 @@
 {
+  "NetworkRulesTitle": "Allowed devices and networks",
+  "NetworkRulesHint": "Restrict direct network access by IP address. Authentication is still required. These rules do not apply to localhost or Cloudflare access. Changes apply immediately, including existing connections. An empty list blocks all direct remote access when filtering is enabled.",
+  "NetworkRulesRestrict": "Only allow the listed addresses and networks",
+  "NetworkRulesEntries": "One IP address or CIDR network per line (for example 192.168.1.42, 192.168.1.0/24 or fd00::/64)",
+  "NetworkRulesSave": "Save access rules",
+  "NetworkRulesSaved": "Access rules saved.",
+  "NetworkRulesInvalid": "Enter valid IP addresses or CIDR networks, up to 256 entries. No changes were saved.",
   "NetworkTitle": "Local network access",
   "NetworkHint": "Open KittyClaw on your phone or another device using a code from your authenticator app. No password is required.",
   "NetworkConfigure": "Configure network access",

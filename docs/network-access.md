@@ -33,6 +33,21 @@ local automation.
 
 ## Request protection
 
+The local-only `/network-setup` page also offers an optional direct-network IP
+allowlist. Enable filtering and enter individual IPv4/IPv6 addresses or CIDR
+networks, one per line (maximum 256). Filtering is disabled by default for existing
+installations. An enabled empty list denies every direct remote client. Invalid
+entries reject the entire update. Rules are protected in the existing network state
+and survive authenticator enrollment, reset and server restart.
+
+Rules use the actual socket peer, normalizing IPv4-mapped IPv6 addresses; forwarded
+headers cannot grant access. They apply before login to direct remote requests for
+UI, APIs, uploads, MCP and Blazor. HTTPS and authenticator sessions remain required.
+Changes apply immediately and abort active authenticated connections whose peer is
+no longer allowed. Localhost remains available for recovery. The managed Cloudflare
+tunnel is excluded from this allowlist and retains its own session authentication.
+Use stable device addresses or DHCP reservations when allowing individual devices.
+
 `NetworkAccessMiddleware` runs before application endpoints and uploaded files.
 Global response headers block framing, embedded objects and MIME sniffing, and
 limit referrer disclosure to the same origin. Endpoint-specific content security

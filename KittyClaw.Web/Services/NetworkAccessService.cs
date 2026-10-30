@@ -20,6 +20,45 @@ public sealed class NetworkAccessService
     private readonly Dictionary<string, LoginAttempt> _loginAttempts = new(StringComparer.Ordinal);
     public event Action? SessionsRevoked;
     public event Action<string>? SessionRevoked;
+    public event Action? NetworkRulesChanged;
+    public bool RestrictNetwork { get { lock (_gate) return _state.RestrictNetwork; } }
+    public IReadOnlyList<string> AllowedNetworks { get { lock (_gate) return _state.AllowedNetworks.ToArray(); } }
+
+    public void SetNetworkRules(bool restrict, string entries)
+    {
+        var networks = entries.Split(['\r', '\n', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        if (networks.Length > 256 || networks.Any(entry => !TryNetwork(entry, out _)))
+            throw new ArgumentException("Invalid IP address or CIDR network.", nameof(entries));
+        lock (_gate)
+        {
+            var next = _state with { RestrictNetwork = restrict, AllowedNetworks = networks };
+            Save(next);
+            _state = next;
+        }
+        NetworkRulesChanged?.Invoke();
+    }
+
+    public bool AllowsNetwork(IPAddress? address)
+    {
+        lock (_gate)
+        {
+            if (!_state.RestrictNetwork) return true;
+            if (address is null) return false;
+            if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
+            return _state.AllowedNetworks.Any(entry => TryNetwork(entry, out var network) && network.Contains(address));
+        }
+    }
+
+    private static bool TryNetwork(string entry, out System.Net.IPNetwork network)
+    {
+        if (!entry.Contains('/') && IPAddress.TryParse(entry, out var address))
+        {
+            if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
+            entry = $"{address}/{(address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork ? 32 : 128)}";
+        }
+        return System.Net.IPNetwork.TryParse(entry, out network);
+    }
     public bool Enabled { get { lock (_gate) return _state.Secret is not null; } }
     public bool Listening { get; set; }
     public int Port { get; }
@@ -59,7 +98,7 @@ public sealed class NetworkAccessService
             var enrollment = ReadEnrollment(token);
             var step = MatchStep(enrollment.Secret, code, DateTimeOffset.UtcNow);
             if (step is null) return false;
-            var next = new State { Secret = enrollment.Secret, LastStep = step.Value };
+            var next = _state with { Secret = enrollment.Secret, LastStep = step.Value };
             Save(next);
             _state = next;
             return true;
@@ -70,7 +109,7 @@ public sealed class NetworkAccessService
     {
         lock (_gate)
         {
-            var next = new State();
+            var next = new State { RestrictNetwork = _state.RestrictNetwork, AllowedNetworks = _state.AllowedNetworks };
             Save(next);
             _state = next;
         }
@@ -231,6 +270,8 @@ public sealed class NetworkAccessService
 
     private sealed record State
     {
+        public bool RestrictNetwork { get; init; }
+        public string[] AllowedNetworks { get; init; } = [];
         public string? Secret { get; init; }
         public long LastStep { get; init; } = -1;
         public string Generation { get; init; } = Guid.NewGuid().ToString("N");
