@@ -1,0 +1,11 @@
+{
+  "SpeechStart": "Dictate",
+  "SpeechStop": "Stop dictation",
+  "SpeechUnavailable": "This browser does not support speech recognition.",
+  "SpeechError": "Dictation interrupted. Check microphone permission and connection, then try again.",
+  "SpeechInsecure": "Dictation requires HTTPS or localhost.",
+  "SpeechDenied": "Microphone access is blocked. Allow it in your browser settings.",
+  "SpeechNoMicrophone": "No microphone is available. Check that it is connected and allowed by the system.",
+  "SpeechServiceDenied": "The browser speech recognition service is not allowed.",
+  "SpeechLanguageUnsupported": "The speech service does not support the selected language."
+}

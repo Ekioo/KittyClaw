@@ -1,0 +1,11 @@
+{
+  "SpeechStart": "Dictar",
+  "SpeechStop": "Detener dictado",
+  "SpeechUnavailable": "Este navegador no admite el dictado.",
+  "SpeechError": "Dictado interrumpido. Comprueba el permiso del micrófono y la conexión.",
+  "SpeechInsecure": "El dictado requiere HTTPS o localhost.",
+  "SpeechDenied": "Acceso al micrófono bloqueado. Permítelo en los ajustes del navegador.",
+  "SpeechNoMicrophone": "No hay micrófono disponible. Comprueba la conexión y los permisos del sistema.",
+  "SpeechServiceDenied": "El servicio de dictado del navegador no está permitido.",
+  "SpeechLanguageUnsupported": "El servicio de dictado no admite el idioma seleccionado."
+}

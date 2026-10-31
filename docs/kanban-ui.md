@@ -85,6 +85,34 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 - When a deployment invalidates an already-open Blazor circuit, `ReconnectModal.razor.js` observes the fatal circuit banner, verifies `/api/engine/health`, and reloads the stale page once. A one-minute session guard prevents reload loops for genuine component exceptions; those retain a localized, dark-theme recovery banner with an explicit reload action.
 
 ## Entry points
+
+### Speech input
+
+`SpeechInput.razor` and `wwwroot/js/speech-input.js` provide browser speech recognition
+in the shared conversation composer (chat, dashboard chat, ticket intake and run
+steering) and the ticket fullscreen editor. The microphone icon sits beside Send.
+Dictation uses the UI language and writes interim and final text directly into the
+normal editable draft. Input events synchronize the Blazor draft so Send becomes
+available as soon as text is present. Manual edits rebase subsequent recognition
+at the caret and preserve corrections. Sending, saving or pressing Enter stops
+capture before the explicit action; recognition never sends or saves a message.
+Browser-final recognition segments receive a period when no trailing punctuation is
+provided; the next sentence is capitalized. Stopping or sending finalizes the last
+interim segment. This uses recognition boundaries as a pause heuristic, rather than
+semantic punctuation inference. French spoken commands (virgule, point final,
+point d'interrogation, point d'exclamation, point-virgule, deux-points) provide explicit
+punctuation, with French spacing. Manual edits remain authoritative.
+Only one microphone session runs at a time; closing the editor, disabling it or
+hiding the page cancels capture. Unsupported browsers, insecure origins, denied
+microphone permission, missing capture devices, blocked speech services and unsupported
+languages disable the microphone with a reason tooltip available on hover or keyboard
+focus. The permission query never prompts; when supported, permission changes restore
+the button after access is granted. Availability is reapplied after Blazor renders.
+Transient network errors preserve the editable draft and allow a retry.
+The browser's Web Speech service may process audio remotely; availability depends
+on the browser and its speech service. HTTPS (or localhost) and microphone permission
+are required. No provider API key or audio storage is added to KittyClaw.
+
 - `http://localhost:5230/` (default port served by `dotnet watch`).
 
 ## External dependencies

@@ -499,6 +499,7 @@
                 <button class="icon-btn cancel-icon-btn" @onclick="CancelFullscreen">&#10005;</button>
             </div>
             <textarea @ref="_editorTextarea" @bind="_fullscreenText" @bind:event="oninput"></textarea>
+            <SpeechInput />
             <div class="fullscreen-editor-footer">
                 <button @onclick="SaveFullscreen">@L["Save"]</button>
                 <button class="cancel-btn" @onclick="CancelFullscreen">@L["Cancel"]</button>

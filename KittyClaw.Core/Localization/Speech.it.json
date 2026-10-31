@@ -1,0 +1,11 @@
+{
+  "SpeechStart": "Detta",
+  "SpeechStop": "Interrompi dettatura",
+  "SpeechUnavailable": "Questo browser non supporta la dettatura.",
+  "SpeechError": "Dettatura interrotta. Controlla il permesso del microfono e la connessione.",
+  "SpeechInsecure": "La dettatura richiede HTTPS o localhost.",
+  "SpeechDenied": "Accesso al microfono bloccato. Consentilo nelle impostazioni del browser.",
+  "SpeechNoMicrophone": "Nessun microfono disponibile. Controlla il collegamento e i permessi di sistema.",
+  "SpeechServiceDenied": "Il servizio di dettatura del browser non è consentito.",
+  "SpeechLanguageUnsupported": "Il servizio di dettatura non supporta la lingua selezionata."
+}
