@@ -177,8 +177,8 @@ settings and a scrollable project list. Collapsing retains accessible icon links
 phones. On phones the expanded menu overlays content while a 68px rail stays
 reserved. Project and dashboard headers no longer repeat a back-to-projects link.
 `ProjectAvatar` creates local symmetric abstract cat marks from SHA-256 of each
-project slug. Its versioned seed keeps colors and geometry stable across sessions
-without storing images or contacting an external image service.
+project slug. Its versioned seed keeps geometry and palette selection stable across sessions
+without storing images or contacting an external image service. Global settings expose three previewed icon themes: A (dark backgrounds), B (colorful backgrounds, the default), and C (light backgrounds). Each uses eight coordinated background/cat/dot palettes. `AppSettingsService.ProjectAvatarTheme` persists the selection in `settings.json` and notifies mounted avatars so theme changes apply immediately; changing the theme preserves each project pattern.
 The expanded desktop sidebar also shares the conversation drawer's resize behavior:
 drag its right edge, use Left/Right on the focused separator, or double-click to
 reset. Width is bounded to 200–480px and 45% of the viewport, persisted locally,
