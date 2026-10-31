@@ -3,7 +3,7 @@ export function readCollapsed() {
         const saved = localStorage.getItem('kittyclaw.sidebar.collapsed');
         if (saved !== null) return saved === 'true';
     } catch { /* Storage can be disabled by browser preferences. */ }
-    return window.matchMedia('(max-width: 767px)').matches;
+    return false;
 }
 export function saveCollapsed(collapsed) {
     try { localStorage.setItem('kittyclaw.sidebar.collapsed', String(collapsed)); }
@@ -29,7 +29,11 @@ export function initializeResize(sidebar) {
     };
     try {
         const saved = parseFloat(localStorage.getItem(storageKey));
-        if (Number.isFinite(saved) && saved >= 200) setWidth(saved);
+        if (Number.isFinite(saved) && saved >= 200) {
+            const width = Math.min(480, saved);
+            document.documentElement.style.setProperty('--project-sidebar-width', `${width}px`);
+            handle.setAttribute('aria-valuenow', String(width));
+        }
     } catch { /* Retain the default width. */ }
     handle.addEventListener('pointerdown', event => {
         if (!desktop.matches || sidebar.classList.contains('is-collapsed') || event.button !== 0) return;
@@ -82,4 +86,90 @@ export function initializeResize(sidebar) {
 export function disposeResize(sidebar) {
     resizers.get(sidebar)?.();
     resizers.delete(sidebar);
+}
+
+const mobileMenus = new WeakMap();
+export function initializeMobileNavigation(sidebar, trigger, closeButton, backdrop) {
+    disposeMobileNavigation(sidebar);
+    const controller = new AbortController();
+    const mobile = window.matchMedia('(max-width: 767px)');
+    const content = sidebar.closest('.app-shell').querySelector('.app-content');
+    let open = false;
+    let previousOverflow = '';
+    let previousInert = false;
+    const focusable = () => Array.from(sidebar.querySelectorAll('a[href], button, [tabindex="0"]'))
+        .filter(element => !element.disabled && element.getClientRects().length && getComputedStyle(element).visibility !== 'hidden');
+    const close = (restoreFocus = true) => {
+        if (!open) return;
+        open = false;
+        delete sidebar.dataset.mobileOpen;
+        delete backdrop.dataset.mobileOpen;
+        trigger.setAttribute('aria-expanded', 'false');
+        sidebar.removeAttribute('role');
+        sidebar.removeAttribute('aria-modal');
+        content.inert = previousInert;
+        document.body.style.overflow = previousOverflow;
+        if (restoreFocus && trigger.isConnected && mobile.matches) trigger.focus({ preventScroll: true });
+        sidebar.inert = mobile.matches;
+        if (mobile.matches) sidebar.setAttribute('aria-hidden', 'true');
+        else sidebar.removeAttribute('aria-hidden');
+    };
+    const syncViewport = () => {
+        close(false);
+        sidebar.inert = mobile.matches;
+        if (mobile.matches) sidebar.setAttribute('aria-hidden', 'true');
+        else sidebar.removeAttribute('aria-hidden');
+    };
+    trigger.addEventListener('click', () => {
+        if (!mobile.matches || open) return;
+        open = true;
+        previousOverflow = document.body.style.overflow;
+        previousInert = content.inert;
+        sidebar.inert = false;
+        sidebar.removeAttribute('aria-hidden');
+        sidebar.dataset.mobileOpen = '';
+        backdrop.dataset.mobileOpen = '';
+        sidebar.setAttribute('role', 'dialog');
+        sidebar.setAttribute('aria-modal', 'true');
+        trigger.setAttribute('aria-expanded', 'true');
+        content.inert = true;
+        document.body.style.overflow = 'hidden';
+        closeButton.focus({ preventScroll: true });
+    }, { signal: controller.signal });
+    closeButton.addEventListener('click', () => close(), { signal: controller.signal });
+    backdrop.addEventListener('click', () => close(), { signal: controller.signal });
+    sidebar.addEventListener('click', event => {
+        if (event.target.closest('a[href]')) close(false);
+    }, { signal: controller.signal });
+    window.addEventListener('keydown', event => {
+        if (!open) return;
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            close();
+        } else if (event.key === 'Tab') {
+            const elements = focusable();
+            const first = elements[0];
+            const last = elements[elements.length - 1];
+            if (event.shiftKey && (document.activeElement === first || !sidebar.contains(document.activeElement))) {
+                event.preventDefault(); last?.focus();
+            } else if (!event.shiftKey && (document.activeElement === last || !sidebar.contains(document.activeElement))) {
+                event.preventDefault(); first?.focus();
+            }
+        }
+    }, { capture: true, signal: controller.signal });
+    window.addEventListener('popstate', () => close(false), { signal: controller.signal });
+    document.addEventListener('enhancedload', () => close(false), { signal: controller.signal });
+    mobile.addEventListener('change', syncViewport, { signal: controller.signal });
+    syncViewport();
+    mobileMenus.set(sidebar, () => {
+        close(false);
+        controller.abort();
+        sidebar.inert = false;
+        sidebar.removeAttribute('aria-hidden');
+    });
+}
+export function disposeMobileNavigation(sidebar) {
+    mobileMenus.get(sidebar)?.();
+    mobileMenus.delete(sidebar);
 }

@@ -173,9 +173,7 @@ available, and creation failures retain the generated draft for retry or editing
 `MainLayout` reserves space for `GlobalNavigation`, a fixed left sidebar shared by
 all routes. It exposes the project directory, costs, temporary storage, global
 settings and a scrollable project list. Collapsing retains accessible icon links;
-`js/sidebar.js` remembers this browser preference and defaults to compact mode on
-phones. On phones the expanded menu overlays content while a 68px rail stays
-reserved. Project and dashboard headers no longer repeat a back-to-projects link.
+`js/sidebar.js` remembers desktop collapse and resize preferences. On phones, no rail is reserved: a persistent 44px menu button opens a modal drawer with the full project names. Navigation, backdrop clicks and Escape close the drawer. Focus stays inside while open and the underlying content is inert with scrolling locked; explicit dismissal restores focus to the trigger. Breakpoint changes close the mobile drawer without persisting a desktop preference. Project and dashboard headers no longer repeat a back-to-projects link.
 `ProjectAvatar` creates local symmetric abstract cat marks from SHA-256 of each
 project slug. Its versioned seed keeps geometry and palette selection stable across sessions
 without storing images or contacting an external image service. Global settings expose three previewed icon themes: A (dark backgrounds), B (colorful backgrounds, the default), and C (light backgrounds). Each uses eight coordinated background/cat/dot palettes. `AppSettingsService.ProjectAvatarTheme` persists the selection in `settings.json` and notifies mounted avatars so theme changes apply immediately; changing the theme preserves each project pattern.

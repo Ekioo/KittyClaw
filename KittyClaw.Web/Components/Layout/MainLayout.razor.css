@@ -52,4 +52,8 @@
 .app-shell:has(.is-collapsed) { --sidebar-width: 68px; }
 .app-content { margin-left: var(--sidebar-width); min-width: 0; }
 .app-content ::deep .board-layout { height: 100dvh; }
-@media (max-width: 767px) { .app-shell { --sidebar-width: 68px; } }
+@media (max-width: 767px) {
+    .app-shell, .app-shell:has(.is-collapsed) { --sidebar-width: 0px; }
+    .app-content ::deep .page-header:not(.desktop-window-header) { padding-left: max(68px, calc(env(safe-area-inset-left) + 56px)); }
+    .app-content:has(.status-page) { padding-top: 64px; }
+}

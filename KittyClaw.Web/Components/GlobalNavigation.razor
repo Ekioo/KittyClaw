@@ -6,8 +6,15 @@
 @inject IJSRuntime JS
 @inject BoardUpdateNotifier Updates
 
-<aside @ref="_sidebar" class="app-sidebar @(_collapsed ? "is-collapsed" : "")" aria-label="@L["Projects"]">
+<button @ref="_mobileTrigger" class="mobile-sidebar-trigger" type="button" aria-label="@L["OpenProjectNavigation"]" title="@L["OpenProjectNavigation"]" aria-expanded="false" aria-controls="project-sidebar">
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+</button>
+<button @ref="_mobileBackdrop" class="sidebar-backdrop" type="button" tabindex="-1" aria-label="@L["Close"]"></button>
+<aside id="project-sidebar" @ref="_sidebar" class="app-sidebar @(_collapsed ? "is-collapsed" : "")" aria-label="@L["Projects"]">
     <a class="sidebar-brand" href="/" title="KittyClaw"><img src="/KittyClaw-Logo-Horizontal.webp?v=posture07-rounded" alt="KittyClaw" /></a>
+    <button @ref="_mobileClose" class="mobile-sidebar-close" type="button" aria-label="@L["CloseProjectNavigation"]" title="@L["CloseProjectNavigation"]">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+    </button>
     <button class="sidebar-toggle" type="button" @onclick="Toggle" aria-expanded="@(!_collapsed)" aria-controls="sidebar-navigation" aria-label="@ToggleLabel" title="@ToggleLabel">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/><path d="@(_collapsed ? "M12 8l3 4-3 4" : "M15 8l-3 4 3 4")"/></svg>
     </button>
@@ -36,6 +43,9 @@
     private List<Project> _projects = [];
     private bool _collapsed;
     private ElementReference _sidebar;
+    private ElementReference _mobileTrigger;
+    private ElementReference _mobileBackdrop;
+    private ElementReference _mobileClose;
     private string ResizeLabel => L.Lang == "fr" ? "Redimensionner la barre latérale" : "Resize sidebar";
     private IJSObjectReference? _module;
     private bool _disposed;
@@ -55,6 +65,7 @@
             _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/sidebar.js");
             _collapsed = await _module.InvokeAsync<bool>("readCollapsed");
             await _module.InvokeVoidAsync("initializeResize", _sidebar);
+            await _module.InvokeVoidAsync("initializeMobileNavigation", _sidebar, _mobileTrigger, _mobileClose, _mobileBackdrop);
             StateHasChanged();
         }
         catch (JSException) { }
@@ -83,7 +94,12 @@
         L.OnLanguageChanged -= OnLanguageChanged;
         if (_module is not null)
         {
-            try { await _module.InvokeVoidAsync("disposeResize", _sidebar); await _module.DisposeAsync(); }
+            try
+            {
+                await _module.InvokeVoidAsync("disposeMobileNavigation", _sidebar);
+                await _module.InvokeVoidAsync("disposeResize", _sidebar);
+                await _module.DisposeAsync();
+            }
             catch (JSDisconnectedException) { }
         }
     }
