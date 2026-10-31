@@ -68,11 +68,27 @@
 }
 
 .column-header {
+    box-sizing: border-box;
+    min-height: var(--column-header-height, 0px);
     padding: 0.7rem 0.85rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.column-header > .status-pill {
+    min-width: 0;
+    line-height: 1rem;
+}
+
+.column-header > .status-pill > span:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.column-header > .count {
     flex-shrink: 0;
 }
 

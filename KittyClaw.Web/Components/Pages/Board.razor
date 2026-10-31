@@ -143,7 +143,7 @@ else
                               aria-label="@L[_activeProcessorColumnIds.Contains(col.Id) ? "ColumnProcessorActive" : "ColumnProcessorInactive"]">
                             @(_activeProcessorColumnIds.Contains(col.Id) ? "⚙" : "○")
                         </span>
-                        <span>@col.Name</span>
+                        <span title="@col.Name">@col.Name</span>
                     </span>
                     @{ var _sortHere = SortState.Get(Slug, col.Name); }
                     @if (_sortHere.Mode != KittyClaw.Web.Services.ColumnSortMode.Manual)
