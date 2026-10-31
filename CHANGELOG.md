@@ -4,6 +4,34 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.29] — 2026-10-31
+
+Persistent project navigation, editable speech dictation, and clearer mobile workflows.
+
+### Highlights
+
+Move between projects with a persistent, resizable sidebar and a compact mobile navigation drawer. Dictate editable text in ticket comments and chats, customize project icon themes, and manage pipelines directly from project workflows.
+
+### Added
+
+- Editable speech dictation in ticket comments and chat composers.
+- Persistent, resizable project sidebar and mobile navigation drawer.
+- Configurable project icon themes.
+- Pipeline and ticket deletion from project workflows.
+
+### Changed
+
+- Unify page headers and compact the project header on mobile.
+- Refine sidebar controls and project navigation.
+
+### Fixed
+
+- Preserve the selected pipeline and view when returning from project settings.
+- Paginate ticket timelines across all activity types.
+- Correct dynamic kanban column header alignment.
+
+---
+
 ## [v0.28] — 2026-10-30
 
 Configurable network access filtering, GPT-6.1 Terra, and more reliable ticket creation.
