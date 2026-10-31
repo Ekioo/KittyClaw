@@ -397,7 +397,7 @@
                             </button>
                         </div>
                     </div>
-                    @foreach (var item in GetTimeline())
+                    @foreach (var item in GetTimeline().Take(_activityLimit))
                     {
                         @if (item.Proposal is not null)
                         {
@@ -433,7 +433,7 @@
                             </div>
                         }
                     }
-                    @if (_ticket?.HasMoreComments == true)
+                    @if (GetTimeline().Skip(_activityLimit).Any())
                     {
                         <button type="button" class="add-comment-btn-sm" disabled="@_loadingMoreComments" @onclick="LoadMoreCommentsAsync">@L["LoadMoreComments"]</button>
                     }
@@ -729,7 +729,7 @@
     {
         var key = $"{Slug}/{TicketId}/{RefreshToken}";
         if (key == _loadedKey) return;
-        if (_loadedKey?.StartsWith($"{Slug}/{TicketId}/", StringComparison.Ordinal) != true) _commentLimit = 30;
+        if (_loadedKey?.StartsWith($"{Slug}/{TicketId}/", StringComparison.Ordinal) != true) _activityLimit = ActivityPageSize;
         _loadedKey = key;
         ResetEditingState();
         await LoadAsync();
@@ -760,7 +760,8 @@
         _escChatDrawer?.Dispose();
     }
 
-    private int _commentLimit = 30;
+    private const int ActivityPageSize = 30;
+    private int _activityLimit = ActivityPageSize;
     private bool _loadingMoreComments;
 
     private async Task LoadMoreCommentsAsync()
@@ -769,12 +770,12 @@
         _loadingMoreComments = true;
         var slug = Slug;
         var ticketId = TicketId;
-        var limit = _commentLimit + 30;
+        var limit = _activityLimit + ActivityPageSize;
         try
         {
-            var ticket = await TicketService.GetTicketAsync(slug, ticketId, limit);
+            var ticket = await TicketService.GetTicketAsync(slug, ticketId, limit + 1, limit + 1);
             if (_disposed || Slug != slug || TicketId != ticketId || ticket is null) return;
-            _commentLimit = limit;
+            _activityLimit = limit;
             _ticket = ticket;
             await RebuildPipelineAsync();
         }
@@ -816,7 +817,7 @@
                 return;
             }
             else
-                _ticket = await Task.Run(() => TicketService.GetTicketAsync(Slug, TicketId, _commentLimit));
+                _ticket = await Task.Run(() => TicketService.GetTicketAsync(Slug, TicketId, _activityLimit + 1, _activityLimit + 1));
             if (_disposed || _ticket is null) return;
             // Load the column selector with the ticket; ancillary work must not delay its options.
             if (!restored)
@@ -852,7 +853,7 @@
     /// <summary>Reload after a local mutation, then let the parent refresh its lists.</summary>
     private async Task RefreshAsync()
     {
-        _ticket = await TicketService.GetTicketAsync(Slug, TicketId, _commentLimit);
+        _ticket = await TicketService.GetTicketAsync(Slug, TicketId, _activityLimit + 1, _activityLimit + 1);
         await LoadJevHistoryAsync();
         _summaries = await TicketService.ListTicketsAsync(Slug);
         if (_ticket is not null)
@@ -988,7 +989,7 @@
         InvokeAsync(async () =>
         {
             if (_disposed) return;
-            _ticket = await TicketService.GetTicketAsync(Slug, TicketId, _commentLimit);
+            _ticket = await TicketService.GetTicketAsync(Slug, TicketId, _activityLimit + 1, _activityLimit + 1);
             if (_ticket is null)
             {
                 // Ticket deleted from elsewhere (API, agent) — close rather than show a husk.

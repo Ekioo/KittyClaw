@@ -40,11 +40,12 @@ public sealed class TicketLoadingTests(ITestOutputHelper output)
         Assert.Equal(Enumerable.Range(0, 200).Select(i => $"Activity {i}"),
             loaded.Activities.Where(a => a.Text.StartsWith("Activity ")).Select(a => a.Text));
         Assert.Equal(labelIds.Order(), loaded.Labels.Select(l => l.Id).Order());
-        var recent = await tickets.GetTicketAsync(project.Slug, ticket.Id, 30);
+        var recent = await tickets.GetTicketAsync(project.Slug, ticket.Id, 30, 30);
         Assert.NotNull(recent);
         Assert.True(recent.HasMoreComments);
+        Assert.Equal(loaded.Activities.TakeLast(30).Select(a => a.Id), recent.Activities.Select(a => a.Id));
         Assert.Equal(Enumerable.Range(170, 30).Select(i => $"Comment {i}"), recent.Comments.Select(c => c.Content));
-        var expanded = await tickets.GetTicketAsync(project.Slug, ticket.Id, 60);
+        var expanded = await tickets.GetTicketAsync(project.Slug, ticket.Id, 60, 60);
         Assert.NotNull(expanded);
         Assert.Equal(Enumerable.Range(140, 60).Select(i => $"Comment {i}"), expanded.Comments.Select(c => c.Content));
         var complete = await tickets.GetTicketAsync(project.Slug, ticket.Id, 210);
