@@ -25,7 +25,7 @@
 else
 {
     <div class="page-header">
-        <a class="back-link" href="/board/@Slug">&larr; @L["Board"]</a>
+        <ProjectBackButton Href="@ProjectNavigationUrls.Return(Slug, PipelineId, ReturnView)" />
         <h1>@_project.Name — @L["SettingsTitle"]</h1>
     </div>
 
@@ -321,7 +321,7 @@ else
                         @onclick="SaveBoundaryEnforcement" disabled="@_savingBoundaryEnforcement">
                     @(_savingBoundaryEnforcement ? "…" : L["Save"])
                 </button>
-                <a class="settings-browse" href="/board/@Slug/approvals">@L["AgentPermissionsOpen"]</a>
+                <a class="settings-browse" href="@ProjectNavigationUrls.Page(Slug, PipelineId, "approvals", ReturnView)">@L["AgentPermissionsOpen"]</a>
             </div>
             @if (_boundaryEnforcementStatus is not null)
             {
@@ -616,6 +616,10 @@ else
     ];
 
     [Parameter] public string Slug { get; set; } = "";
+    [SupplyParameterFromQuery(Name = "pipeline")]
+    public int? PipelineId { get; set; }
+    [SupplyParameterFromQuery(Name = "view")]
+    public string? ReturnView { get; set; }
 
     private Project? _project;
     private int? _updateReviewColumnId;

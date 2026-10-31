@@ -16,7 +16,7 @@
 else
 {
     <div class="page-header">
-        <a class="back-link" href="/board/@Slug">&larr; @L["WorkflowBoard"]</a>
+        <ProjectBackButton Href="@ProjectNavigationUrls.Return(Slug, PipelineId, ReturnView)" />
         <h1>@_project.Name — @L["WorkflowTitle"]</h1>
     </div>
 
@@ -116,6 +116,10 @@ else
     ];
 
     [Parameter] public string Slug { get; set; } = "";
+    [SupplyParameterFromQuery(Name = "pipeline")]
+    public int? PipelineId { get; set; }
+    [SupplyParameterFromQuery(Name = "view")]
+    public string? ReturnView { get; set; }
 
     private Project? _project;
     private List<Pipeline> _pipelines = [];
@@ -167,7 +171,8 @@ else
         _pipelines = await PipelineService.ListAsync(Slug);
         _skills = await SkillService.ListAsync(Slug);
         await LoadSkillDraftsAsync();
-        await SelectPipelineAsync(_pipelines.FirstOrDefault(p => p.IsDefault)?.Id ?? _pipelines.First().Id);
+        await SelectPipelineAsync(_pipelines.FirstOrDefault(p => p.Id == PipelineId)?.Id
+            ?? _pipelines.FirstOrDefault(p => p.IsDefault)?.Id ?? _pipelines.First().Id);
     }
 
     private async Task SelectPipelineAsync(int id)

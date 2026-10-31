@@ -313,3 +313,6 @@
 
 .utility-page-actions { margin-left: auto; min-width: 0; }
 .utility-page-header .utility-page-actions .header-action-btn { min-height: 44px; }
+
+.project-back-button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 44px; width: 44px; height: 44px; border: 1px solid var(--border); border-radius: 50%; background: transparent; color: var(--text-muted); text-decoration: none; }
+.project-back-button:hover { background: var(--surface2); color: var(--text); }
