@@ -12,6 +12,7 @@
         display: block; position: sticky; top: 0; z-index: 10;
         padding: .65rem 1rem; background: var(--surface); border-bottom: 1px solid var(--border);
     }
+    .app-content .mobile-section-navigation { padding-left: max(68px, calc(env(safe-area-inset-left) + 56px)); }
     .mobile-section-navigation label { display: grid; gap: .35rem; }
     .mobile-section-navigation label > span { font-size: .7rem; color: var(--text-muted); }
     .mobile-section-navigation select {
@@ -233,4 +234,15 @@
     .status-page { margin: 0; padding: 1.5rem 1rem; }
     .status-page h1 { font-size: 1.35rem; }
     .status-page .back-link { display: inline-flex; align-items: center; min-height: 44px; }
+}
+
+@media (max-width: 767px) {
+    .project-directory > .utility-page-header { height: var(--app-header-height); min-height: var(--app-header-height); flex-wrap: nowrap; gap: .5rem; padding-block: 9px; }
+    .project-directory > .utility-page-header h1 { flex: 1 1 auto; white-space: nowrap; }
+    .project-directory > .utility-page-header .utility-page-actions { flex: 0 0 auto; }
+}
+@media (max-width: 480px) {
+    .project-directory .utility-page-actions [data-testid="create-project-open"] { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; }
+    .project-directory .utility-page-actions .create-project-label { display: none; }
+    .project-directory .utility-page-actions .create-project-icon { font-size: 1.5rem; line-height: 1; }
 }

@@ -1,0 +1,11 @@
+{
+  "SpeechStart": "Diktieren",
+  "SpeechStop": "Diktat stoppen",
+  "SpeechUnavailable": "Dieser Browser unterstützt keine Spracheingabe.",
+  "SpeechError": "Diktat unterbrochen. Mikrofonberechtigung und Verbindung prüfen.",
+  "SpeechInsecure": "Spracheingabe erfordert HTTPS oder localhost.",
+  "SpeechDenied": "Mikrofonzugriff blockiert. In den Browsereinstellungen erlauben.",
+  "SpeechNoMicrophone": "Kein Mikrofon verfügbar. Verbindung und Systemberechtigungen prüfen.",
+  "SpeechServiceDenied": "Der Spracherkennungsdienst des Browsers ist nicht erlaubt.",
+  "SpeechLanguageUnsupported": "Der Spracherkennungsdienst unterstützt die gewählte Sprache nicht."
+}

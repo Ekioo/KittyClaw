@@ -19,11 +19,10 @@
 
 <div class="unified-page project-directory">
 
+    <UtilityPageHeader Title="@L["Projects"]">
+        <ProjectCreation OnCreated="OnProjectCreated" />
+    </UtilityPageHeader>
     <main class="project-directory-content">
-        <div class="project-directory-heading">
-            <h1>@L["Projects"]</h1>
-            <ProjectCreation OnCreated="OnProjectCreated" />
-        </div>
         @if (_projects is null)
         {
             <p class="empty-hint" role="status">@L["UnifiedBoardLoading"]</p>

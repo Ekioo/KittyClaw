@@ -9,6 +9,7 @@ This model is intended for business workflows where a ticket is claimed from a c
 ## Domain model
 
 - A project owns one or more `Pipeline` records. Renaming a pipeline changes only `Name`; its `Id` and stable `Slug` remain unchanged.
+- The Workflows page can permanently delete a pipeline, its columns and its tickets after confirmation. At least one pipeline must remain; deleting the default promotes the first remaining pipeline. Children in other pipelines are detached and preserved. Running column agents must be stopped first. Processor and schedule definitions remove references to deleted columns.
 - A pipeline owns ordered `BoardColumn` records. Column names are unique only within their pipeline.
 - Tickets reference both `PipelineId` and `ColumnId`. The legacy `Status` string remains synchronized with the column name.
 - A column has a semantic `ColumnRole`: `Normal`, `Waiting`, `OwnerAction`, `Success`, or `Failure`. Logic relies on the role, not on translated or user-editable names. `Waiting` is reserved for non-human pauses; `OwnerAction` marks a decision or missing input and assigns the ticket to the owner.

@@ -16,7 +16,7 @@
 else
 {
     <div class="page-header">
-        <a class="back-link" href="/board/@Slug">&larr; @L["WorkflowBoard"]</a>
+        <ProjectBackButton Href="@ProjectNavigationUrls.Return(Slug, PipelineId, ReturnView)" />
         <h1>@_project.Name — @L["WorkflowTitle"]</h1>
     </div>
 
@@ -49,6 +49,7 @@ else
                     <input class="settings-input" @bind="_pipelineName" @bind:event="oninput" />
                     <button class="settings-primary" data-testid="reconfigure-pipeline" @onclick="() => _showReconfigurationWizard = true">@L["WorkflowReconfigure"]</button>
                     <button class="settings-primary" @onclick="RenamePipelineAsync">@L["WorkflowRename"]</button>
+                    <button class="delete-btn" data-testid="delete-pipeline" disabled="@(_pipelines.Count <= 1 || _deletingPipeline)" @onclick="() => _deletePipelineId = _selectedPipelineId">@L["WorkflowDeletePipeline"]</button>
                     <span class="settings-hint">@L["WorkflowStableKey"] <code>@_selectedPipeline.Slug</code></span>
                 </div>
             }
@@ -81,6 +82,19 @@ else
     </div>
 }
 
+@if (_deletePipelineId is int deleteId)
+{
+    <div class="confirm-overlay">
+        <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-pipeline-title">
+            <h2 id="delete-pipeline-title">@L["WorkflowDeletePipeline"] — @_pipelines.FirstOrDefault(p => p.Id == deleteId)?.Name</h2>
+            <p class="confirm-warning">@L["WorkflowDeletePipelineWarning"]</p>
+            <div class="confirm-actions">
+                <button class="cancel-btn" disabled="@_deletingPipeline" @onclick="() => _deletePipelineId = null">@L["Cancel"]</button>
+                <button class="delete-btn" data-testid="confirm-delete-pipeline" disabled="@_deletingPipeline" @onclick="DeletePipelineAsync">@L["Delete"]</button>
+            </div>
+        </div>
+    </div>
+}
 
 @if (_showReconfigurationWizard)
 {
@@ -102,6 +116,10 @@ else
     ];
 
     [Parameter] public string Slug { get; set; } = "";
+    [SupplyParameterFromQuery(Name = "pipeline")]
+    public int? PipelineId { get; set; }
+    [SupplyParameterFromQuery(Name = "view")]
+    public string? ReturnView { get; set; }
 
     private Project? _project;
     private List<Pipeline> _pipelines = [];
@@ -115,6 +133,24 @@ else
     private string _newPipelineName = "";
     private string? _message;
     private bool _isError;
+    private int? _deletePipelineId;
+    private bool _deletingPipeline;
+
+    private async Task DeletePipelineAsync()
+    {
+        if (_deletingPipeline || _deletePipelineId is not int id) return;
+        _deletingPipeline = true;
+        try
+        {
+            await RunAsync(async () =>
+            {
+                await PipelineService.DeleteAsync(Slug, id);
+                _pipelines = await PipelineService.ListAsync(Slug);
+                await SelectPipelineAsync(_pipelines.First(p => p.IsDefault).Id);
+            }, L["WorkflowPipelineDeleted"]);
+        }
+        finally { _deletePipelineId = null; _deletingPipeline = false; }
+    }
     private bool _showReconfigurationWizard;
     private async Task CloseReconfigurationAsync()
     {
@@ -135,7 +171,8 @@ else
         _pipelines = await PipelineService.ListAsync(Slug);
         _skills = await SkillService.ListAsync(Slug);
         await LoadSkillDraftsAsync();
-        await SelectPipelineAsync(_pipelines.FirstOrDefault(p => p.IsDefault)?.Id ?? _pipelines.First().Id);
+        await SelectPipelineAsync(_pipelines.FirstOrDefault(p => p.Id == PipelineId)?.Id
+            ?? _pipelines.FirstOrDefault(p => p.IsDefault)?.Id ?? _pipelines.First().Id);
     }
 
     private async Task SelectPipelineAsync(int id)

@@ -19,6 +19,7 @@
             </div>
             <div class="conversation-composer-submit">
                 @ModelPicker
+                <SpeechInput Disabled="@Disabled" Compact="true" />
                 @if (IsBusy && OnStop.HasDelegate)
                 {
                     <button type="button" class="conversation-submit-action chat-stop-btn" @onclick="OnStop"

@@ -1,0 +1,11 @@
+{
+  "SpeechStart": "语音输入",
+  "SpeechStop": "停止语音输入",
+  "SpeechUnavailable": "此浏览器不支持语音输入。",
+  "SpeechError": "语音输入中断。请检查麦克风权限和网络连接。",
+  "SpeechInsecure": "语音输入需要 HTTPS 或 localhost。",
+  "SpeechDenied": "麦克风访问已被阻止。请在浏览器设置中允许。",
+  "SpeechNoMicrophone": "没有可用的麦克风。请检查连接和系统权限。",
+  "SpeechServiceDenied": "浏览器的语音识别服务未获允许。",
+  "SpeechLanguageUnsupported": "语音识别服务不支持所选语言。"
+}

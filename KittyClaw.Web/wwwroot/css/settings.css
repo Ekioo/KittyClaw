@@ -1,4 +1,4 @@
-﻿/* ─── Settings page ────────────────────────────────────────────────── */
+/* ─── Settings page ────────────────────────────────────────────────── */
 .settings-container {
     max-width: 900px;
     margin: 1rem auto;
@@ -210,3 +210,13 @@
 @media (max-width: 600px) {
     .temporary-storage-page .settings-row { align-items: flex-start; }
 }
+
+.avatar-theme-picker { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; border: 0; padding: 0; min-width: 0; }
+.avatar-theme-legend { color: var(--text-muted); margin-bottom: .75rem; }
+.avatar-theme-option { display: flex; flex-direction: column; gap: 1rem; padding: 1rem; min-width: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); cursor: pointer; }
+.avatar-theme-option:hover { background: var(--surface2); border-color: var(--border-strong); }
+.avatar-theme-option:has(input:checked) { border-color: var(--accent); background: var(--accent-dim); }
+.avatar-theme-heading { display: flex; align-items: center; gap: .6rem; }
+.avatar-theme-heading input[type="radio"] { accent-color: var(--accent); flex: 0 0 18px; width: 18px; min-width: 18px; max-width: 18px; height: 18px; margin: 0; padding: 0; }
+.avatar-theme-preview { display: flex; flex-wrap: wrap; gap: .5rem; }
+@media (max-width: 900px) { .avatar-theme-picker { grid-template-columns: 1fr; } }

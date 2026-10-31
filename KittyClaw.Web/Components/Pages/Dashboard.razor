@@ -34,15 +34,14 @@
 else
 {
     <div class="page-header">
-        <a href="/" class="back-link">&larr; @L["BackToProjects"]</a>
         <h1>@_project.Name</h1>
         <div class="view-toggle">
-            <a class="view-toggle-btn" href="/board/@Slug">@L["KanbanView"]</a>
+            <a class="view-toggle-btn" href="@ProjectNavigationUrls.Page(Slug, PipelineId)">@L["KanbanView"]</a>
             <span class="view-toggle-btn view-toggle-btn--active">@L["Dashboard"]</span>
         </div>
         <div class="header-right">
             <button class="header-action-btn" @onclick="OpenTileChat">@L["AddTile"]</button>
-            <a class="header-action-btn" href="/board/@Slug/settings">&#9881;&#65039; @L["ProjectSettings"]</a>
+            <a class="header-action-btn" href="@ProjectNavigationUrls.Page(Slug, PipelineId, "settings", "dashboard")">&#9881;&#65039; @L["ProjectSettings"]</a>
         </div>
     </div>
 
@@ -58,7 +57,7 @@ else
                 {
                     <p class="dashboard-guidance-error" data-testid="dashboard-guidance-error">@L["GuidanceRecoverableHint"]</p>
                 }
-                <a class="dashboard-guidance-action" href="/board/@Slug" @onclick="RecordPrimaryAction"
+                <a class="dashboard-guidance-action" href="@ProjectNavigationUrls.Page(Slug, PipelineId)" @onclick="RecordPrimaryAction"
                    data-testid="dashboard-primary-action">@GuidanceAction</a>
             </section>
         }
@@ -392,6 +391,8 @@ else
 
 @code {
     [Parameter] public string Slug { get; set; } = "";
+    [SupplyParameterFromQuery(Name = "pipeline")]
+    public int? PipelineId { get; set; }
 
     private Project? _project;
     private string _workspace = "";

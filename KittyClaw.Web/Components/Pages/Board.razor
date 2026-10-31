@@ -37,7 +37,6 @@ else
 {
     <div class="board-layout">
     <div class="page-header">
-        <a href="/" class="back-link">&larr; @L["BackToProjects"]</a>
         <h1>@_project.Name</h1>
         @if (_subKanbanParentId is not null && _subKanbanParent is not null)
         {
@@ -49,7 +48,7 @@ else
         }
         <div class="view-toggle">
             <span class="view-toggle-btn view-toggle-btn--active">@L["KanbanView"]</span>
-            <a class="view-toggle-btn" href="/board/@Slug/dashboard">@L["Dashboard"]</a>
+            <a class="view-toggle-btn" href="@ProjectNavigationUrls.Page(Slug, _selectedPipelineId, "dashboard")">@L["Dashboard"]</a>
         </div>
         <BoardFilterBar OnChanged="ResetLoadedColumns" />
         <button type="button" class="header-action-btn mobile-actions-toggle"
@@ -69,7 +68,7 @@ else
             </button>
             <button class="header-action-btn new-instruction-btn" @onclick="OpenChatDrawer" title="@L["NewInstruction"]">&#128172; @L["NewInstruction"]</button>
             <a class="header-action-btn agent-permissions-link @(_pendingApprovalCount > 0 ? "agent-permissions-link--pending" : "")"
-               href="/board/@Slug/approvals" title="@L["AgentPermissionsTitle"]">
+               href="@ProjectNavigationUrls.Page(Slug, _selectedPipelineId, "approvals")" title="@L["AgentPermissionsTitle"]">
                 &#128737; @L["AgentPermissionsNav"]
                 @if (_pendingApprovalCount > 0)
                 {
@@ -77,8 +76,8 @@ else
                           aria-label="@L.Get("AgentPermissionsPendingCount", _pendingApprovalCount)">@_pendingApprovalCount</span>
                 }
             </a>
-            <a class="header-action-btn" href="/board/@Slug/workflows" title="@L["WorkflowTitle"]">&#8644; @L["WorkflowTitle"]</a>
-            <a class="header-action-btn" href="/board/@Slug/settings" title="@L["ProjectSettingsTooltip"]">&#9881;&#65039; @L["ProjectSettings"]</a>
+            <a class="header-action-btn" href="@ProjectNavigationUrls.Page(Slug, _selectedPipelineId, "workflows")" title="@L["WorkflowTitle"]">&#8644; @L["WorkflowTitle"]</a>
+            <a class="header-action-btn" href="@ProjectNavigationUrls.Page(Slug, _selectedPipelineId, "settings")" title="@L["ProjectSettingsTooltip"]">&#9881;&#65039; @L["ProjectSettings"]</a>
         </div>
     </div>
 
@@ -143,7 +142,7 @@ else
                               aria-label="@L[_activeProcessorColumnIds.Contains(col.Id) ? "ColumnProcessorActive" : "ColumnProcessorInactive"]">
                             @(_activeProcessorColumnIds.Contains(col.Id) ? "⚙" : "○")
                         </span>
-                        <span>@col.Name</span>
+                        <span title="@col.Name">@col.Name</span>
                     </span>
                     @{ var _sortHere = SortState.Get(Slug, col.Name); }
                     @if (_sortHere.Mode != KittyClaw.Web.Services.ColumnSortMode.Manual)

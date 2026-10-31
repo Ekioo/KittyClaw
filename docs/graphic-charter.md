@@ -193,12 +193,18 @@ ring inward when clipping requires it, but should continue using `--focus-ring`.
 
 ## Utility page headers and content width
 
+All desktop page headers share --app-header-height (64px), including projects,
+Kanban, dashboards and utility pages. Keep vertical padding independent of the
+controls so adding an action never increases toolbar height. Phone headers retain
+their wrapping layout for accessible controls.
+
+
 Global settings, costs, and temporary storage use `UtilityPageHeader` and the
 `utility-page-container` class. New instance-wide utility pages must reuse these
 primitives instead of defining their own header, back-link styling, or page width.
 
-- The shared header contains the same localized back-to-projects link followed by
-  one `h1`. Keep it outside the content container. Use the existing `page-header`
+- The shared header contains
+  one `h1`. Persistent left navigation provides access to projects, costs, storage and settings; do not add redundant back-to-projects links. Keep the header outside the content container. Use the existing `page-header`
   styling for its surface, divider, typography and spacing.
 - In the Windows desktop shell this same header becomes the fixed 64 px window
   toolbar, with the shared logo and native window controls. Do not add a second
@@ -211,7 +217,7 @@ primitives instead of defining their own header, back-link styling, or page widt
   and long pages does not shift their content edges.
 - Cards and filters fill this shared content measure. Feature-specific CSS may
   arrange their interiors but must not override the page's width or gutters.
-- Browser and phone headers retain their responsive layout. Back links have a
+- Browser and phone headers retain their responsive layout. Sidebar links have a
   minimum 44 px touch target; long titles may wrap on phones. Board and dashboard
   canvases retain their dedicated layouts rather than adopting the utility width.
 

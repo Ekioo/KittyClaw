@@ -1,4 +1,8 @@
 {
+  "WorkflowDeletePipeline": "Delete pipeline",
+  "WorkflowDeletePipelineWarning": "This permanently deletes the pipeline, its columns and all its tickets. Tickets in other pipelines are preserved. This cannot be undone.",
+  "WorkflowPipelineDeleted": "Pipeline and tickets deleted.",
+
   "WorkflowProject": "Project",
   "WorkflowTitle": "Workflows",
   "WorkflowBoard": "Board",

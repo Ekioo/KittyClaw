@@ -1,4 +1,5 @@
 ﻿:root {
+    --app-header-height: 64px;
     --bg: #05050a;
     --surface: #191928;
     --surface2: #232338;

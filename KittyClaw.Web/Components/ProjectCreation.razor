@@ -15,7 +15,7 @@
 
 @* Project creation, extracted from Home.razor so every host page shares one flow that
    cannot diverge. A single button opens the modal; the name lives inside the modal. *@
-<button class="header-action-btn settings-primary" data-testid="create-project-open" disabled="@(!_interactive)" @onclick="OpenCreation">+ @L["CreateProjectButton"]</button>
+<button class="header-action-btn settings-primary" data-testid="create-project-open" aria-label="@L["CreateProjectButton"]" title="@L["CreateProjectButton"]" disabled="@(!_interactive)" @onclick="OpenCreation"><span class="create-project-icon" aria-hidden="true">+</span><span class="create-project-label"> @L["CreateProjectButton"]</span></button>
 
 @if (_open)
 {

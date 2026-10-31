@@ -53,6 +53,29 @@
         </div>
     </section>
 
+    <section class="settings-section mobile-section-panel @(_mobileSection == "appearance" ? "mobile-section-active" : "")" data-testid="appearance-global-settings">
+        <h2>@L["AvatarAppearance"]</h2>
+        <p class="settings-hint">@L["AvatarThemeHint"]</p>
+        <fieldset class="avatar-theme-picker">
+            <legend class="avatar-theme-legend">@L["AvatarTheme"]</legend>
+            @foreach (var theme in new[] { "A", "B", "C" })
+            {
+                <label class="avatar-theme-option">
+                    <span class="avatar-theme-heading">
+                        <input type="radio" name="project-avatar-theme" value="@theme" checked="@(AppSettings.ProjectAvatarTheme == theme)"
+                               @onchange="() => AppSettings.ProjectAvatarTheme = theme" />
+                        <strong>@L["AvatarTheme" + theme]</strong>
+                    </span>
+                    <span class="avatar-theme-preview" aria-hidden="true">
+                        @foreach (var seed in AvatarPreviewSeeds)
+                        {
+                            <ProjectAvatar Seed="@seed" Theme="@theme" />
+                        }
+                    </span>
+                </label>
+            }
+        </fieldset>
+    </section>
     <section class="settings-section mobile-section-panel @(_mobileSection == "providers" ? "mobile-section-active" : "")" data-testid="agent-provider-settings">
         <div class="provider-section-heading">
             <div>
@@ -131,18 +154,28 @@
         new("network", L["NetworkTitle"]),
         new("remote", L["RemoteTitle"]),
         new("language", L["Language"]),
+        new("appearance", L["AvatarAppearance"]),
         new("providers", L["AgentProvidersTitle"]),
         new("mcp", L["McpServerTitle"]),
     ];
 
-    protected override void OnInitialized() => L.OnLanguageChanged += OnLanguageChanged;
+    private static readonly string[] AvatarPreviewSeeds = [ "studio", "atlas", "garden", "orbit", "canvas", "lumen" ];
+    protected override void OnInitialized()
+    {
+        L.OnLanguageChanged += OnLanguageChanged;
+        AppSettings.OnProjectAvatarThemeChanged += OnLanguageChanged;
+    }
     private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
     private async Task OnLangChanged(ChangeEventArgs e)
     {
         AppSettings.Language = (string?)e.Value ?? "en";
         await JS.InvokeVoidAsync("setApplicationLanguage", AppSettings.Language);
     }
-    public void Dispose() => L.OnLanguageChanged -= OnLanguageChanged;
+    public void Dispose()
+    {
+        L.OnLanguageChanged -= OnLanguageChanged;
+        AppSettings.OnProjectAvatarThemeChanged -= OnLanguageChanged;
+    }
 
     private CliReadiness _readiness = new(false, false, false, false, false, false);
     private JevSettingsPanel? _jevPanel;

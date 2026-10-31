@@ -170,4 +170,37 @@ public sealed class PipelineServiceTests : IDisposable
     }
 
     public void Dispose() => _temp.Dispose();
+
+    [Fact]
+    public async Task Deleting_pipeline_removes_its_tickets_and_columns_but_preserves_other_pipelines()
+    {
+        var project = await _projects.CreateProjectAsync("Delete workflow");
+        var original = Assert.Single(await _pipelines.ListAsync(project.Slug));
+        var other = await _pipelines.CreateAsync(project.Slug, "Keep");
+        var column = await _columns.CreateColumnAsync(project.Slug, "Ready", pipelineId: other.Id);
+        var tickets = new TicketService(_projects, new MemberService(_projects));
+        var deleted = await tickets.CreateTicketAsync(project.Slug, "Delete", pipelineId: original.Id);
+        await tickets.AddCommentAsync(project.Slug, deleted.Id, "History");
+        var kept = await tickets.CreateTicketAsync(project.Slug, "Keep", parentId: deleted.Id,
+            pipelineId: other.Id, columnId: column.Id, status: column.Name);
+
+        Assert.True(await _pipelines.DeleteAsync(project.Slug, original.Id));
+
+        Assert.Null(await tickets.GetTicketAsync(project.Slug, deleted.Id));
+        Assert.Null((await tickets.GetTicketAsync(project.Slug, kept.Id))!.ParentId);
+        Assert.Empty(await _columns.ListColumnsAsync(project.Slug, original.Id));
+        var remaining = Assert.Single(await _pipelines.ListAsync(project.Slug));
+        Assert.Equal(other.Id, remaining.Id);
+        Assert.True(remaining.IsDefault);
+    }
+
+    [Fact]
+    public async Task Last_pipeline_cannot_be_deleted()
+    {
+        var project = await _projects.CreateProjectAsync("Keep last workflow");
+        var pipeline = Assert.Single(await _pipelines.ListAsync(project.Slug));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _pipelines.DeleteAsync(project.Slug, pipeline.Id));
+        Assert.Single(await _pipelines.ListAsync(project.Slug));
+        Assert.False(await _pipelines.DeleteAsync(project.Slug, int.MaxValue));
+    }
 }

@@ -1,0 +1,11 @@
+{
+  "SpeechStart": "Dicter",
+  "SpeechStop": "Arrêter la dictée",
+  "SpeechUnavailable": "Ce navigateur ne prend pas en charge la dictée.",
+  "SpeechError": "Dictée interrompue. Vérifiez les permissions du microphone et la connexion, puis réessayez.",
+  "SpeechInsecure": "La dictée nécessite HTTPS ou localhost.",
+  "SpeechDenied": "Accès au microphone bloqué. Autorisez-le dans les paramètres du navigateur.",
+  "SpeechNoMicrophone": "Aucun microphone disponible. Vérifiez son branchement et les autorisations du système.",
+  "SpeechServiceDenied": "Le service de dictée du navigateur est interdit.",
+  "SpeechLanguageUnsupported": "Le service de dictée ne prend pas en charge la langue sélectionnée."
+}

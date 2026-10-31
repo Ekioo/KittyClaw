@@ -13,7 +13,16 @@ public sealed partial class PipelineService
 
     private readonly ProjectService _projects;
 
-    public PipelineService(ProjectService projects) => _projects = projects;
+    private readonly ColumnProcessorService? _processors;
+    private readonly ColumnScheduledTaskService? _scheduledTasks;
+
+    public PipelineService(ProjectService projects, ColumnProcessorService? processors = null,
+        ColumnScheduledTaskService? scheduledTasks = null)
+    {
+        _projects = projects;
+        _processors = processors;
+        _scheduledTasks = scheduledTasks;
+    }
 
     internal static async Task<Pipeline> EnsureWorkflowSchemaAsync(TodoDbContext db)
     {
@@ -133,6 +142,62 @@ public sealed partial class PipelineService
         }
         await db.SaveChangesAsync();
         return pipeline;
+    }
+
+    public async Task<bool> DeleteAsync(string projectSlug, int pipelineId)
+    {
+        await using var db = _projects.GetProjectDb(projectSlug);
+        await ColumnService.EnsureBoardColumnsTableAsync(db);
+        await MigrationGate.AddColumnIfMissingAsync(db, "ALTER TABLE Tickets ADD COLUMN ParentId INTEGER NULL");
+        await ColumnProcessorService.EnsureTableAsync(db);
+        await ColumnExecutionService.EnsureTableAsync(db);
+        await TicketService.EnsureActivityTableAsync(db);
+        await TicketService.EnsureTicketDependenciesTableAsync(db);
+        await ColumnScheduledTaskService.EnsureTablesAsync(db);
+        var pipeline = await db.Pipelines.FindAsync(pipelineId);
+        if (pipeline is null) return false;
+        var replacement = await db.Pipelines.OrderBy(p => p.SortOrder).ThenBy(p => p.Id)
+            .FirstOrDefaultAsync(p => p.Id != pipelineId)
+            ?? throw new InvalidOperationException("A project must retain at least one pipeline.");
+        var columnIds = await db.BoardColumns.Where(c => c.PipelineId == pipelineId).Select(c => c.Id).ToListAsync();
+        var ticketIds = db.Tickets.Where(t => t.PipelineId == pipelineId).Select(t => t.Id);
+        if (await db.ColumnExecutions.AnyAsync(e => ticketIds.Contains(e.TicketId) && e.Status == ColumnExecutionStatus.Running))
+            throw new InvalidOperationException("Stop running agents in this pipeline before deleting it.");
+        var taskIds = await db.ColumnScheduledTasks.Where(t => columnIds.Contains(t.ColumnId)).Select(t => t.Id).ToListAsync();
+        if (await db.ColumnScheduledTaskRuns.AnyAsync(r => taskIds.Contains(r.TaskId) && r.Status == ColumnScheduledTaskRunStatus.Running))
+            throw new InvalidOperationException("Stop running scheduled tasks in this pipeline before deleting it.");
+        foreach (var columnId in columnIds)
+        {
+            if (_processors is not null) await _processors.PrepareColumnDeletionAsync(projectSlug, columnId);
+            if (_scheduledTasks is not null) await _scheduledTasks.PrepareColumnDeletionAsync(projectSlug, columnId);
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        // Children in other pipelines survive and become independent tickets.
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE Tickets SET ParentId = NULL WHERE ParentId IN (SELECT Id FROM Tickets WHERE PipelineId = {pipelineId})");
+        await db.ColumnExecutions.Where(e => ticketIds.Contains(e.TicketId)).ExecuteDeleteAsync();
+        await db.TicketQuestions.Where(q => ticketIds.Contains(q.TicketId)).ExecuteDeleteAsync();
+        await db.Comments.Where(c => ticketIds.Contains(c.TicketId)).ExecuteDeleteAsync();
+        await db.ActivityEntries.Where(a => ticketIds.Contains(a.TicketId)).ExecuteDeleteAsync();
+        await db.TicketDependencies.Where(d => ticketIds.Contains(d.BlockedTicketId) || ticketIds.Contains(d.BlocksTicketId)).ExecuteDeleteAsync();
+        await db.Database.ExecuteSqlRawAsync("CREATE TABLE IF NOT EXISTS TicketLabels (TicketsId INTEGER NOT NULL, LabelsId INTEGER NOT NULL, PRIMARY KEY (TicketsId, LabelsId))");
+        await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM TicketLabels WHERE TicketsId IN (SELECT Id FROM Tickets WHERE PipelineId = {pipelineId})");
+        await db.Tickets.Where(t => t.PipelineId == pipelineId).ExecuteDeleteAsync();
+        await db.ColumnScheduledTaskRuns.Where(r => taskIds.Contains(r.TaskId)).ExecuteDeleteAsync();
+        await db.ColumnScheduledTasks.Where(t => columnIds.Contains(t.ColumnId)).ExecuteDeleteAsync();
+        foreach (var processor in await db.ColumnProcessors.ToListAsync())
+        {
+            if (columnIds.Contains(processor.ColumnId)) { db.ColumnProcessors.Remove(processor); continue; }
+            if (processor.DefaultTargetColumnId is int target && columnIds.Contains(target)) processor.DefaultTargetColumnId = null;
+            if (processor.TechnicalFailureColumnId is int failure && columnIds.Contains(failure)) processor.TechnicalFailureColumnId = null;
+            processor.Routes = processor.Routes.Where(r => !columnIds.Contains(r.TargetColumnId)).ToList();
+        }
+        await db.BoardColumns.Where(c => c.PipelineId == pipelineId).ExecuteDeleteAsync();
+        if (pipeline.IsDefault) replacement.IsDefault = true;
+        db.Pipelines.Remove(pipeline);
+        await db.SaveChangesAsync();
+        await transaction.CommitAsync();
+        return true;
     }
 
     [GeneratedRegex("[^a-z0-9]+")]

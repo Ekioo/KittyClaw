@@ -1,4 +1,8 @@
 {
+  "WorkflowDeletePipeline": "删除流水线",
+  "WorkflowDeletePipelineWarning": "这将永久删除此流水线、其列及所有工单。其他流水线的工单将保留。此操作无法撤消。",
+  "WorkflowPipelineDeleted": "流水线及工单已删除。",
+
   "WorkflowProject": "项目",
   "WorkflowTitle": "工作流",
   "WorkflowBoard": "看板",

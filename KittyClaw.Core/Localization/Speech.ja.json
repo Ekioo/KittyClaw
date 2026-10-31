@@ -1,0 +1,11 @@
+{
+  "SpeechStart": "音声入力",
+  "SpeechStop": "音声入力を停止",
+  "SpeechUnavailable": "このブラウザーは音声入力に対応していません。",
+  "SpeechError": "音声入力が中断されました。マイクの権限と接続を確認してください。",
+  "SpeechInsecure": "音声入力には HTTPS または localhost が必要です。",
+  "SpeechDenied": "マイクへのアクセスがブロックされています。ブラウザーの設定で許可してください。",
+  "SpeechNoMicrophone": "マイクを利用できません。接続とシステムの権限を確認してください。",
+  "SpeechServiceDenied": "ブラウザーの音声認識サービスが許可されていません。",
+  "SpeechLanguageUnsupported": "音声認識サービスは選択された言語に対応していません。"
+}

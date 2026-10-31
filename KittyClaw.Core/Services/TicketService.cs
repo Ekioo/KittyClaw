@@ -454,7 +454,7 @@ public class TicketService
             ticket.ColumnId.HasValue && ownerActionColumnIds.Contains(ticket.ColumnId.Value));
     }
 
-    public async Task<Ticket?> GetTicketAsync(string projectSlug, int ticketId, int? commentLimit = null)
+    public async Task<Ticket?> GetTicketAsync(string projectSlug, int ticketId, int? commentLimit = null, int? activityLimit = null)
     {
         await using var db = _projectService.GetProjectDb(projectSlug);
         await EnsureActivityTableAsync(db);
@@ -468,10 +468,13 @@ public class TicketService
             // Avoid multiplying comments × activities × labels for history-heavy tickets.
             .AsSplitQuery()
             .Include(t => t.Comments.OrderByDescending(c => c.CreatedAt).ThenByDescending(c => c.Id).Take(commentLimit ?? int.MaxValue))
-            .Include(t => t.Activities.OrderBy(a => a.CreatedAt))
+            .Include(t => t.Activities
+                .Where(a => !activityLimit.HasValue || (!a.Text.StartsWith("JEV proposal ") && !a.Text.StartsWith("Automatic routing. JEV proposal ") && !a.Text.StartsWith("JEV acceptance ") && !a.Text.StartsWith("JEV profile ")))
+                .OrderByDescending(a => a.CreatedAt).ThenByDescending(a => a.Id).Take(activityLimit ?? int.MaxValue))
             .Include(t => t.Labels)
             .FirstOrDefaultAsync(t => t.Id == ticketId);
         if (ticket is null) return null;
+        ticket.Activities = ticket.Activities.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id).ToList();
         ticket.Comments = ticket.Comments.OrderBy(c => c.CreatedAt).ThenBy(c => c.Id).ToList();
         ticket.HasMoreComments = commentLimit.HasValue &&
             await db.Comments.CountAsync(c => c.TicketId == ticketId) > ticket.Comments.Count;

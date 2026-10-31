@@ -1,6 +1,8 @@
 /* Board */
 .page-header .mobile-actions-toggle { display: none; }
 .board-layout {
+    --board-gutter: 1rem;
+    --column-insert-width: .6rem;
     height: calc(100dvh - 64px);
     min-height: 0;
     display: flex;
@@ -15,7 +17,7 @@
 .board {
     display: flex;
     gap: 0;
-    padding: 1rem;
+    padding: var(--board-gutter);
     overflow-x: auto;
     height: auto;
     min-height: 0;
@@ -68,11 +70,27 @@
 }
 
 .column-header {
+    box-sizing: border-box;
+    min-height: var(--column-header-height, 0px);
     padding: 0.7rem 0.85rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.column-header > .status-pill {
+    min-width: 0;
+    line-height: 1rem;
+}
+
+.column-header > .status-pill > span:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.column-header > .count {
     flex-shrink: 0;
 }
 
@@ -102,7 +120,7 @@
 .column-insert-slot {
     position: relative;
     z-index: 4;
-    flex: 0 0 .6rem;
+    flex: 0 0 var(--column-insert-width);
     min-width: 0;
     align-self: stretch;
     margin: 0;
@@ -416,4 +434,12 @@
 .ticket-intake-auto { display: flex; align-items: center; gap: .5rem; }
 @media (max-width: 767px) {
     .ticket-intake-tabs button { min-height: 44px; }
+}
+
+@media (min-width: 768px) {
+    /* Match the first column, including the insertion slot before it. */
+    .board-layout > .pipeline-tabs {
+        margin: var(--board-gutter) calc(var(--board-gutter) + var(--column-insert-width)) 0;
+        max-width: calc(100% - var(--board-gutter) - var(--board-gutter) - var(--column-insert-width) - var(--column-insert-width));
+    }
 }

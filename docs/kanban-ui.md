@@ -28,7 +28,7 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 - Components consume the [storage](./storage.md) services directly via DI rather than self-calling the [REST API](./rest-api.md).
 
 ## Features
-- Ticket details load the latest 30 comments from SQLite initially. The load-more button at the end of the activity list expands the comment window by 30; refreshes preserve the expanded window. Other service callers retain complete comment history by default.
+- Ticket details display the latest 30 timeline entries across comments, activities and JEV history. The load-more button expands the combined timeline by 30; refreshes preserve the expanded window. SQLite comment and activity queries are bounded to the visible window plus one entry. Other service callers retain complete history by default.
 - Instruction chat, ticket run logs, and tile-creation chat share `ConversationDrawer`,
   `ConversationView`, `ConversationMessage`, `ConversationComposer`,
   `ConversationActivity`, and `ConversationTimestamp`. The view owns the common
@@ -63,6 +63,7 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 - Onboarding popup on first launch with Git, Claude Code, OpenAI Codex, Grok Build, Mistral Vibe, and Ollama detection.
 - Project creation popup with an integrated Windows/macOS/Linux folder browser, template initialization, and guided workflow design.
 - Multi-pipeline Kanban with drag-and-drop; processor routing lightly highlights allowed destinations and subdues forbidden columns while dragging.
+- Project header links to approvals, workflows and settings carry the selected pipeline query parameter. Their circular back-arrow links and settings/approvals cross-links retain that origin, including dashboard origins through the allowlisted `view=dashboard` query value; workflow editing opens on the requested pipeline, falling back to the default if it has been removed.
 - The project board applies only the latest overlapping ticket refresh, keeping externally moved tickets in their current column without disturbing the selected pipeline, filters, sorting, sub-kanban, or open ticket panel.
 - The home routes `/`, `/board`, and `/projects` share one project directory. It shows project names, ordered columns with root-ticket counts and project status badges, with direct Kanban, dashboard and settings links. Desktop uses compact project rows; mobile stacks the project information above three touch-sized links. Search combines project names/slugs, pipeline names and column names; sorting retains the browser preference and places paused projects last. The directory renders its shell before loading column summaries sequentially and never loads ticket lists or ticket content. Column counts include zero-ticket columns, use stable column IDs, and match the root tickets visible on the project Kanban; child tickets belong to their nested boards. Multiple pipelines are displayed separately. Each column summary is a normal link carrying `pipeline` and `column` IDs in the board URL. After rendering, the board highlights and focuses the requested column and scrolls only its horizontal container; mobile column navigation follows the selected column. Invalid or removed column IDs leave the ordinary board available. The former multi-project swimlanes and display-mode toggle are removed.
 - Ticket detail panel with comments and activity timeline. The initial ticket render includes its column selector and acceptance criteria; ancillary history, processor files and Git inspection load afterward without hiding the criteria. The responsive panel renders its desktop view before the viewport observer connects, including during prerendering, so a slow JavaScript module cannot leave an empty dark overlay. The observer switches to the mobile view when needed.
@@ -85,6 +86,34 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 - When a deployment invalidates an already-open Blazor circuit, `ReconnectModal.razor.js` observes the fatal circuit banner, verifies `/api/engine/health`, and reloads the stale page once. A one-minute session guard prevents reload loops for genuine component exceptions; those retain a localized, dark-theme recovery banner with an explicit reload action.
 
 ## Entry points
+
+### Speech input
+
+`SpeechInput.razor` and `wwwroot/js/speech-input.js` provide browser speech recognition
+in the shared conversation composer (chat, dashboard chat, ticket intake and run
+steering) and the ticket fullscreen editor. The microphone icon sits beside Send.
+Dictation uses the UI language and writes interim and final text directly into the
+normal editable draft. Input events synchronize the Blazor draft so Send becomes
+available as soon as text is present. Manual edits rebase subsequent recognition
+at the caret and preserve corrections. Sending, saving or pressing Enter stops
+capture before the explicit action; recognition never sends or saves a message.
+Browser-final recognition segments receive a period when no trailing punctuation is
+provided; the next sentence is capitalized. Stopping or sending finalizes the last
+interim segment. This uses recognition boundaries as a pause heuristic, rather than
+semantic punctuation inference. French spoken commands (virgule, point final,
+point d'interrogation, point d'exclamation, point-virgule, deux-points) provide explicit
+punctuation, with French spacing. Manual edits remain authoritative.
+Only one microphone session runs at a time; closing the editor, disabling it or
+hiding the page cancels capture. Unsupported browsers, insecure origins, denied
+microphone permission, missing capture devices, blocked speech services and unsupported
+languages disable the microphone with a reason tooltip available on hover or keyboard
+focus. The permission query never prompts; when supported, permission changes restore
+the button after access is granted. Availability is reapplied after Blazor renders.
+Transient network errors preserve the editable draft and allow a retry.
+The browser's Web Speech service may process audio remotely; availability depends
+on the browser and its speech service. HTTPS (or localhost) and microphone permission
+are required. No provider API key or audio storage is added to KittyClaw.
+
 - `http://localhost:5230/` (default port served by `dotnet watch`).
 
 ## External dependencies
@@ -138,3 +167,17 @@ Reopening New Ticket restores this draft, including after a page reload in the s
 tab. Only successful ticket creation clears it; failed creation retains it.
 Provider failures leave the conversation
 available, and creation failures retain the generated draft for retry or editing.
+
+## Persistent application navigation
+
+`MainLayout` reserves space for `GlobalNavigation`, a fixed left sidebar shared by
+all routes. It exposes the project directory, costs, temporary storage, global
+settings and a scrollable project list. Collapsing retains accessible icon links;
+`js/sidebar.js` remembers desktop collapse and resize preferences. On phones, no rail is reserved: a persistent 44px menu button opens a modal drawer with the full project names. Navigation, backdrop clicks and Escape close the drawer. Focus stays inside while open and the underlying content is inert with scrolling locked; explicit dismissal restores focus to the trigger. Breakpoint changes close the mobile drawer without persisting a desktop preference. Project and dashboard headers no longer repeat a back-to-projects link.
+`ProjectAvatar` creates local symmetric abstract cat marks from SHA-256 of each
+project slug. Its versioned seed keeps geometry and palette selection stable across sessions
+without storing images or contacting an external image service. Global settings expose three previewed icon themes: A (dark backgrounds), B (colorful backgrounds, the default), and C (light backgrounds). Each uses eight coordinated background/cat/dot palettes. `AppSettingsService.ProjectAvatarTheme` persists the selection in `settings.json` and notifies mounted avatars so theme changes apply immediately; changing the theme preserves each project pattern.
+The expanded desktop sidebar also shares the conversation drawer's resize behavior:
+drag its right edge, use Left/Right on the focused separator, or double-click to
+reset. Width is bounded to 200–480px and 45% of the viewport, persisted locally,
+and applied to both the sidebar and content gutter without server round trips.

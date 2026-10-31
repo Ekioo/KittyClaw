@@ -1,6 +1,9 @@
-﻿/* Page header */
+/* Page header */
 .page-header {
-    padding: 1rem 1.5rem;
+    height: var(--app-header-height);
+    min-height: var(--app-header-height);
+    flex-shrink: 0;
+    padding: 9px 1.5rem;
     display: flex;
     align-items: center;
     gap: 1rem;
@@ -31,7 +34,7 @@
     padding: 24px var(--utility-page-gutter) 48px;
     min-width: 0;
 }
-.utility-page-header { min-height: 64px; }
+.utility-page-header { min-height: var(--app-header-height); }
 .utility-page-header:not(.desktop-window-header) { padding-inline: var(--utility-page-gutter); }
 .utility-page-header .back-link { min-height: 44px; }
 @media (max-width: 767px) {
@@ -307,3 +310,9 @@
 @media (hover: none), (pointer: coarse) {
     .project-card-wrap .project-pause-btn { opacity: 1; }
 }
+
+.utility-page-actions { margin-left: auto; min-width: 0; }
+.utility-page-header .utility-page-actions .header-action-btn { min-height: 44px; }
+
+.project-back-button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 44px; width: 44px; height: 44px; border: 1px solid var(--border); border-radius: 50%; background: transparent; color: var(--text-muted); text-decoration: none; }
+.project-back-button:hover { background: var(--surface2); color: var(--text); }

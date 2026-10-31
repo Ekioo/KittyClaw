@@ -1,5 +1,49 @@
 const _savedScrolls = {};
 
+// Share the tallest natural header height, recalculating in both directions.
+(() => {
+    let frame;
+    const observed = new Set();
+    const schedule = () => {
+        if (frame) return;
+        frame = requestAnimationFrame(() => {
+            frame = null;
+            const headers = [...document.querySelectorAll('.column-header')];
+            for (const element of observed) {
+                if (!element.isConnected) {
+                    resize.unobserve(element);
+                    observed.delete(element);
+                }
+            }
+            const groups = new Map();
+            for (const header of headers) {
+                const board = header.closest('.board, .board-lane-columns');
+                if (!board) continue;
+                if (!groups.has(board)) groups.set(board, []);
+                groups.get(board).push(header);
+                for (const child of header.children) {
+                    if (!observed.has(child)) {
+                        observed.add(child);
+                        resize.observe(child);
+                    }
+                }
+            }
+            for (const [board, group] of groups) {
+                board.style.removeProperty('--column-header-height');
+                const height = Math.max(...group.map(header => header.getBoundingClientRect().height));
+                board.style.setProperty('--column-header-height', `${height}px`);
+            }
+        });
+    };
+    const resize = new ResizeObserver(schedule);
+    new MutationObserver(schedule).observe(document.documentElement, {
+        subtree: true, childList: true, characterData: true
+    });
+    window.addEventListener('resize', schedule);
+    document.fonts.ready.then(schedule);
+    schedule();
+})();
+
 // Measure rendered menus, including destinations loaded after opening them.
 window.fitBoardContextMenus = function () {
     const margin = 8;

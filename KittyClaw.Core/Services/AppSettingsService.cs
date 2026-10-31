@@ -45,6 +45,21 @@ public class AppSettingsService
 
     public event Action? OnLanguageChanged;
 
+    public string ProjectAvatarTheme
+    {
+        get => Models.ProjectAvatarColors.NormalizeTheme(_data.ProjectAvatarTheme);
+        set
+        {
+            var theme = Models.ProjectAvatarColors.NormalizeTheme(value);
+            if (ProjectAvatarTheme == theme) return;
+            _data.ProjectAvatarTheme = theme;
+            Save();
+            OnProjectAvatarThemeChanged?.Invoke();
+        }
+    }
+
+    public event Action? OnProjectAvatarThemeChanged;
+
     public bool McpEnabled
     {
         get => _data.McpEnabled;
@@ -136,6 +151,7 @@ public class AppSettingsService
     private class AppSettingsData
     {
         public string Language { get; set; } = "";
+        public string ProjectAvatarTheme { get; set; } = "B";
         public bool McpEnabled { get; set; }
         public bool OnboardingSeen { get; set; } = false;
         public string? UpdateDismissedVersion { get; set; }
