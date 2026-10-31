@@ -1,4 +1,8 @@
 {
+  "WorkflowDeletePipeline": "Supprimer le pipeline",
+  "WorkflowDeletePipelineWarning": "Cette action supprime définitivement le pipeline, ses colonnes et tous ses tickets. Les tickets des autres pipelines sont conservés. Cette action est irréversible.",
+  "WorkflowPipelineDeleted": "Pipeline et tickets supprimés.",
+
   "WorkflowProject": "Projet",
   "WorkflowTitle": "Flux de travail",
   "WorkflowBoard": "Tableau",

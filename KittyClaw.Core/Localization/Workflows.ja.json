@@ -1,4 +1,8 @@
 {
+  "WorkflowDeletePipeline": "パイプラインを削除",
+  "WorkflowDeletePipelineWarning": "パイプライン、列、およびすべてのチケットを完全に削除します。他のパイプラインのチケットは保持されます。この操作は取り消せません。",
+  "WorkflowPipelineDeleted": "パイプラインとチケットを削除しました。",
+
   "WorkflowProject": "プロジェクト",
   "WorkflowTitle": "フロー",
   "WorkflowBoard": "ボード",
