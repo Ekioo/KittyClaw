@@ -1,0 +1,24 @@
+@using System.Security.Cryptography
+@using System.Text
+<svg class="project-avatar" viewBox="0 0 40 40" width="32" height="32" aria-hidden="true">
+    <rect width="40" height="40" rx="10" fill="@Background" />
+    <path d="M8 26 L9 10 L17 15 Q20 13 23 15 L31 10 L32 26 Q20 38 8 26Z" fill="@Foreground" />
+    @for (var y = 0; y < 3; y++)
+    {
+        @for (var x = 0; x < 2; x++)
+        {
+            @if ((_hash[2 + y * 2 + x] & 1) == 1)
+            {
+                <rect x="@(12 + x * 5)" y="@(18 + y * 4)" width="4" height="3" rx="1" fill="@Background" />
+                <rect x="@(24 - x * 5)" y="@(18 + y * 4)" width="4" height="3" rx="1" fill="@Background" />
+            }
+        }
+    }
+</svg>
+@code {
+    [Parameter, EditorRequired] public string Seed { get; set; } = "";
+    private byte[] _hash = new byte[32];
+    private string Background => $"hsl({_hash[0] * 360 / 256} 30% 18%)";
+    private string Foreground => $"hsl({_hash[0] * 360 / 256} {55 + _hash[1] % 25}% 68%)";
+    protected override void OnParametersSet() => _hash = SHA256.HashData(Encoding.UTF8.GetBytes("KittyClaw/avatar/v1/" + Seed));
+}

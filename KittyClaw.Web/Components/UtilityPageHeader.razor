@@ -1,10 +1,14 @@
 @inject LocalizationService L
 
 <header class="page-header utility-page-header">
-    <a class="back-link" href="/"><span aria-hidden="true">&larr;</span> @L["BackToProjects"]</a>
     <h1>@Title</h1>
+    @if (ChildContent is not null)
+    {
+        <div class="utility-page-actions">@ChildContent</div>
+    }
 </header>
 
 @code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter, EditorRequired] public string Title { get; set; } = "";
 }

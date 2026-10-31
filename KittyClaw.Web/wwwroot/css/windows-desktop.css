@@ -175,3 +175,7 @@
 .windows-desktop .desktop-window-scroll:disabled { color: var(--text-dim); opacity: 1; cursor: default; }
 .windows-desktop .desktop-window-scroll:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -3px; }
 .windows-desktop .desktop-window-scroll svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+
+/* The native toolbar remains above the persistent project sidebar. */
+.windows-desktop .app-sidebar { top: var(--desktop-topbar-height); }
+.windows-desktop .app-content .board-layout { height: calc(100dvh - var(--desktop-topbar-height)); }

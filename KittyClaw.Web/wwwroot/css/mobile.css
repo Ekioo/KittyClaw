@@ -23,6 +23,7 @@
     .mobile-column-hint { display: block; font-size: .7rem; color: var(--text-muted); }
     body { min-height: 100dvh; }
     .page-header {
+        height: auto;
         flex-wrap: wrap;
         gap: .5rem;
         padding: .65rem max(.75rem, env(safe-area-inset-right)) .65rem max(.75rem, env(safe-area-inset-left));

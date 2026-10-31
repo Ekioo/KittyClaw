@@ -166,3 +166,19 @@ Reopening New Ticket restores this draft, including after a page reload in the s
 tab. Only successful ticket creation clears it; failed creation retains it.
 Provider failures leave the conversation
 available, and creation failures retain the generated draft for retry or editing.
+
+## Persistent application navigation
+
+`MainLayout` reserves space for `GlobalNavigation`, a fixed left sidebar shared by
+all routes. It exposes the project directory, costs, temporary storage, global
+settings and a scrollable project list. Collapsing retains accessible icon links;
+`js/sidebar.js` remembers this browser preference and defaults to compact mode on
+phones. On phones the expanded menu overlays content while a 68px rail stays
+reserved. Project and dashboard headers no longer repeat a back-to-projects link.
+`ProjectAvatar` creates local symmetric abstract cat marks from SHA-256 of each
+project slug. Its versioned seed keeps colors and geometry stable across sessions
+without storing images or contacting an external image service.
+The expanded desktop sidebar also shares the conversation drawer's resize behavior:
+drag its right edge, use Left/Right on the focused separator, or double-click to
+reset. Width is bounded to 200–480px and 45% of the viewport, persisted locally,
+and applied to both the sidebar and content gutter without server round trips.

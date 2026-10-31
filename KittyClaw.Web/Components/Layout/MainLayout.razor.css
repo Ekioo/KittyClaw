@@ -47,3 +47,9 @@
     background: var(--surface3);
     color: var(--text);
 }
+
+.app-shell { --sidebar-width: min(var(--project-sidebar-width, 232px), 480px, 45vw); }
+.app-shell:has(.is-collapsed) { --sidebar-width: 68px; }
+.app-content { margin-left: var(--sidebar-width); min-width: 0; }
+.app-content ::deep .board-layout { height: 100dvh; }
+@media (max-width: 767px) { .app-shell { --sidebar-width: 68px; } }
