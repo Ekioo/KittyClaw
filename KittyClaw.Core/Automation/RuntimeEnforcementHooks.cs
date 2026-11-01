@@ -14,13 +14,13 @@ internal static class RuntimeEnforcementHooks
 
     /// <summary>Creates a temp directory with the hook bundle and returns its path. The caller owns
     /// deletion (AgentRunner removes it with the invocation's other temporary artifacts).</summary>
-    internal static string WriteClaudeHookBundle()
+    internal static string WriteClaudeHookBundle(bool? useWindowsShell = null)
     {
         var directory = Path.Combine(Path.GetTempPath(), $"kittyclaw-enforce-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
 
         string command;
-        if (OperatingSystem.IsWindows())
+        if (useWindowsShell ?? OperatingSystem.IsWindows())
         {
             var script = Path.Combine(directory, "boundary-gate.ps1");
             File.WriteAllText(script, PowerShellScript, Encoding.UTF8);
@@ -30,8 +30,9 @@ internal static class RuntimeEnforcementHooks
         {
             var script = Path.Combine(directory, "boundary-gate.sh");
             File.WriteAllText(script, ShellScript, new UTF8Encoding(false));
-            File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
-                | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+                    | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
             command = $"/bin/sh \"{script}\"";
         }
 
@@ -41,11 +42,11 @@ internal static class RuntimeEnforcementHooks
             {
                 PreToolUse = new[]
                 {
-                    new { matcher = "*", hooks = new[] { new { type = "command", command, timeout = 600 } } },
+                    new { matcher = "*", hooks = new[] { new { type = "command", command = command + " PreToolUse", timeout = 600 } } },
                 },
                 PostToolUse = new[]
                 {
-                    new { matcher = "*", hooks = new[] { new { type = "command", command, timeout = 60 } } },
+                    new { matcher = "*", hooks = new[] { new { type = "command", command = command + " PostToolUse", timeout = 60 } } },
                 },
             },
         };
@@ -61,6 +62,7 @@ internal static class RuntimeEnforcementHooks
     // Claude Code treats some non-zero exits as non-blocking, so an explicit deny is the only
     // reliable fail-closed signal.
     private const string PowerShellScript = """
+        param([string]$HookEvent = 'PreToolUse')
         $ErrorActionPreference = 'Stop'
         function Write-Verdict([string]$Decision, [string]$Reason) {
           $verdict = @{
@@ -73,7 +75,8 @@ internal static class RuntimeEnforcementHooks
           [Console]::Out.WriteLine($verdict)
         }
         $payload = [Console]::In.ReadToEnd()
-        $isPost = $payload -match '"hook_event_name"\s*:\s*"PostToolUse"'
+        # Phase is bound by the registered command, never by attacker-controlled tool arguments.
+        $isPost = $HookEvent -ceq 'PostToolUse'
         try {
           $api = $env:KITTYCLAW_API_URL
           $slug = $env:KITTYCLAW_PROJECT_SLUG
@@ -115,7 +118,8 @@ internal static class RuntimeEnforcementHooks
         emit() {
           printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"%s","permissionDecisionReason":"%s"}}\n' "$1" "$2"
         }
-        case "$payload" in *'"hook_event_name"'*'PostToolUse'*) is_post=1 ;; *) is_post=0 ;; esac
+        # Phase is bound by the registered command, never by attacker-controlled tool arguments.
+        case "${1:-PreToolUse}" in PostToolUse) is_post=1 ;; *) is_post=0 ;; esac
         if [ -z "$KITTYCLAW_API_URL" ] || [ -z "$KITTYCLAW_PROJECT_SLUG" ] || [ -z "$KITTYCLAW_RUN_ID" ]; then
           [ "$is_post" = "0" ] && emit deny "Fail-closed: enforcement environment variables are missing."
           exit 0
