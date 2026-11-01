@@ -4,7 +4,7 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
-## [v0.29] — 2026-10-31
+## [v0.29] — 2026-11-01
 
 Persistent project navigation, editable speech dictation, and clearer mobile workflows.
 

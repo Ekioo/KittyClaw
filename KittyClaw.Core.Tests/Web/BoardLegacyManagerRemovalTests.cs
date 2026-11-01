@@ -45,7 +45,7 @@ public class BoardLegacyManagerRemovalTests
     public void Board_ContainsOnlyOne_WorkflowsLink()
     {
         var src = LoadBoardRazor();
-        Assert.Single(Regex.Matches(src, "href=\"/board/@Slug/workflows\"").Cast<Match>());
+        Assert.Single(Regex.Matches(src, Regex.Escape("href=\"@ProjectNavigationUrls.Page(Slug, _selectedPipelineId, \"workflows\")\"")).Cast<Match>());
         Assert.DoesNotContain("pipeline-tab--manage", src);
     }
 
