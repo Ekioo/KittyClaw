@@ -29,10 +29,14 @@ public class UnifiedBoardTests
     }
 
     [Fact]
-    public void ProjectBoard_ReturnsToTheDirectoryRegardlessOfOldViewPreferences()
+    public void ProjectNavigation_ReturnsToTheDirectoryRegardlessOfOldViewPreferences()
     {
         var source = Page("Board.razor");
-        Assert.Contains("href=\"/\" class=\"back-link\"", source);
+        var components = Path.Combine(AppCssHelper.FindRepoRoot(), "KittyClaw.Web", "Components");
+        var navigation = File.ReadAllText(Path.Combine(components, "GlobalNavigation.razor"));
+        var layout = File.ReadAllText(Path.Combine(components, "Layout", "MainLayout.razor"));
+        Assert.Contains("<GlobalNavigation", layout);
+        Assert.Contains("<NavLink href=\"/\" Match=\"NavLinkMatch.All\"", navigation);
         Assert.DoesNotContain("unified-board-view", source);
     }
 
