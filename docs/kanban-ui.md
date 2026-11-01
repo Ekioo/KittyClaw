@@ -28,6 +28,7 @@ Blazor Server frontend for managing the board: visualize columns and tickets, ed
 - Components consume the [storage](./storage.md) services directly via DI rather than self-calling the [REST API](./rest-api.md).
 
 ## Features
+- The project board subscribes directly to `TicketService.TicketStatusChanged` and `TicketCreated`, so internal workflow and scheduled moves refresh the visible cards without relying on REST/MCP notifications or a page reload. Subscriptions are removed when the board is disposed.
 - Ticket details display the latest 30 timeline entries across comments, activities and JEV history. The load-more button expands the combined timeline by 30; refreshes preserve the expanded window. SQLite comment and activity queries are bounded to the visible window plus one entry. Other service callers retain complete history by default.
 - Instruction chat, ticket run logs, and tile-creation chat share `ConversationDrawer`,
   `ConversationView`, `ConversationMessage`, `ConversationComposer`,
