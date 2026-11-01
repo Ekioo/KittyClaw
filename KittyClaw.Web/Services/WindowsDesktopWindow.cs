@@ -131,7 +131,11 @@ internal sealed class WindowsDesktopWindow : Forms.Form
         Shown -= InitializeView;
         try
         {
-            var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: _profile);
+            // WebView2's Ceto speech service can reject valid dictation sessions with HTTP 403.
+            // Keep the previous service until MicrosoftEdge/WebView2Feedback#5724 is resolved.
+            var options = new CoreWebView2EnvironmentOptions(
+                "--disable-features=msSpeechRecognitionServiceUseCetoService");
+            var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: _profile, options: options);
             if (IsDisposed) return;
             await _view.EnsureCoreWebView2Async(environment);
             if (IsDisposed) return;

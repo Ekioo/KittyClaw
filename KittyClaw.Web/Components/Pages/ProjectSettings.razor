@@ -687,6 +687,7 @@ else
     private Label? _deleteConfirmLabel;
 
     private bool _deleteConfirmProject;
+    private bool _disposed;
 
     protected override async Task OnInitializedAsync()
     {
@@ -707,12 +708,21 @@ else
         _localModelBaseUrl = _project.LocalModelBaseUrl ?? "";
         _rtkEnabled = _project.RtkEnabled;
         _boundaryEnforcement = _project.BoundaryEnforcement;
+        _fallbackModel = _project.FallbackModel ?? "";
         await ReloadAllAsync();
-        await RefreshGitStatus();
-        await RefreshRtkStatus();
-        await ReloadSecrets();
-        // Load model catalogs first, then apply the saved fallback so the <select> has a
-        // matching <option> on first paint (avoids showing "Disabled" while value is set).
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _project is null) return;
+        // Provider probes must not delay navigation or run again during prerendering.
+        // The select already includes the saved model even before its catalog arrives.
+        await Task.WhenAll(RefreshGitStatus(), RefreshRtkStatus(), ReloadSecrets(), LoadModelCatalogsAsync());
+        if (!_disposed) await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadModelCatalogsAsync()
+    {
         if (!string.IsNullOrWhiteSpace(_localModelBaseUrl)) await DiscoverLocalModels();
         try { _grokModels = (await KittyClaw.Core.Automation.GrokCli.ListModelsAsync()).ToList(); }
         catch { _grokModels = new(); }
@@ -722,14 +732,17 @@ else
         catch { _mistralModels = new(); }
         try { _deepSeekModels = (await KittyClaw.Core.Automation.DeepSeekModelCatalog.ListModelsAsync()).ToList(); }
         catch { _deepSeekModels = new(); }
-        _fallbackModel = _project.FallbackModel ?? "";
     }
 
     private void OnFallbackModelChanged(ChangeEventArgs e) =>
         _fallbackModel = e.Value?.ToString() ?? "";
 
     private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
-    public void Dispose() => L.OnLanguageChanged -= OnLanguageChanged;
+    public void Dispose()
+    {
+        _disposed = true;
+        L.OnLanguageChanged -= OnLanguageChanged;
+    }
 
     private async Task ReloadAllAsync()
     {

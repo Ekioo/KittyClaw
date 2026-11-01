@@ -4,6 +4,27 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.29.1] — 2026-11-01
+
+Consistent desktop headers, restored dictation, and faster project settings.
+
+### Highlights
+
+Keep the web layout in the Windows app with window controls integrated into the existing header. Headers stay visible while scrolling, and project settings open before provider discovery completes.
+
+### Changed
+
+- Load project settings diagnostics and provider catalogs after the first interactive render.
+
+### Fixed
+
+- Remove duplicate desktop branding and preserve page header layout without an extra title bar.
+- Keep desktop headers pinned while scrolling and remove the empty scrollbar gutter on utility pages.
+- Work around the WebView2 speech service regression that interrupts dictation with a network error.
+- Preserve the saved fallback model while provider catalogs load.
+
+---
+
 ## [v0.29] — 2026-11-01
 
 Persistent project navigation, editable speech dictation, and clearer mobile workflows.

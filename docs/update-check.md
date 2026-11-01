@@ -26,22 +26,20 @@ Source installations retain the dismissible release-link banner described below.
   supported (Portuguese maps to Brazilian Portuguese; `zh-CN`, `zh-SG` and `zh-Hans`
   locales map to Simplified Chinese `zh-CN`), otherwise English. Traditional Chinese
   locales fall back to English. Saved choices take precedence.
-  Window controls are integrated into the existing page header without an extra title bar.
-  `WindowsDesktopShell.js` applies one fixed-height header style from `windows-desktop.css`
-  to every view, with the KittyClaw home link on the left and window controls on the right.
-  Pages without an application header (including uploaded images) show a Back button
-  in the fallback toolbar. It uses WebView2 history to return to the previous view,
-  or the application home when no history exists. The embedded stylesheet supplies
-  toolbar colors even when the document does not load the application theme.
-  The desktop stylesheet is also embedded and injected by the native host, so cached or
-  unavailable HTTP styles cannot leave the window logo at its intrinsic image size.
-  A matching fallback keeps the shell visible during loading and on error/not-found pages.
-  Browser views retain their regular layout; viewport-sized boards account for the fixed header.
-  Shared conversation drawers and their overlays start below it and use the remaining viewport height,
-  keeping the conversation header and composer visible even in compact windows.
-  Long toolbars scroll between the fixed logo and window controls, using arrow buttons or
-  the mouse wheel. Search help opens below the header so the scrolling strip cannot clip it.
-  Free header space supports native dragging; interactive controls remain clickable.
+  Window controls occupy the reserved right edge of the shared web page header,
+  without an extra title bar or logo. The header keeps its web typography and layout,
+  and stays pinned at the top while long settings and utility pages scroll beneath it,
+  and the project sidebar stays at the top of the window. `WindowsDesktopShell.js`
+  overlays controls without moving Blazor-owned page elements. The page header supports
+  native dragging while interactive controls remain clickable. Documents without a page
+  header (including uploaded images) receive a compact fallback toolbar with a Back
+  button, which uses WebView2 history or returns home when no history exists.
+  The embedded `windows-desktop.css` supplies toolbar colors independently of HTTP assets.
+  Desktop pages do not reserve an empty root scrollbar gutter, keeping window controls
+  flush with the right edge on short utility views.
+  WebView2 uses the previous speech recognition service via
+  `--disable-features=msSpeechRecognitionServiceUseCetoService` to work around the
+  dictation HTTP 403/network regression tracked in MicrosoftEdge/WebView2Feedback#5724.
   Closing hides the window while agents continue running. Relaunching the shortcut signals
   the existing instance to restore its window. External HTTP(S) and mail links open externally.
   WebView2 profile data is isolated per data directory under `%LOCALAPPDATA%/Ekioo.KittyClaw/WebView2`.
