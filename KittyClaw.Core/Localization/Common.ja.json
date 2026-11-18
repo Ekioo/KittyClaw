@@ -50,6 +50,7 @@
   "AgentProvidersChecking": "確認中…",
   "ProviderDetected": "CLI検出済み",
   "ProviderNotDetected": "インストールが必要",
+  "ModelProviderNotInstalled": "未インストール",
   "ProviderInstallationGuide": "インストールガイド",
   "ProviderClaudeConfiguration": "Claude CodeをインストールしてAnthropicにログインします。DeepSeekとOllamaの実行にも使用されます。",
   "ProviderCodexConfiguration": "Codex CLIをインストールし、OpenAIアカウントまたはAPIキーで認証します。",

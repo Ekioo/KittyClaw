@@ -1,4 +1,4 @@
-@page "/board/{Slug}/dashboard"
+﻿@page "/board/{Slug}/dashboard"
 @using System.Text
 @using System.Text.Json
 @using System.Text.RegularExpressions
@@ -206,16 +206,7 @@ else
                     <Editor><textarea @ref="_tileChatInputRef" placeholder="@L["TileChatPlaceholder"]" value="@_chatInput" @oninput="OnChatInput" disabled="@_chatLoading" aria-label="@L["TileChatPlaceholder"]" rows="3"></textarea></Editor>
                     <ModelPicker>
                         <select @bind="_chatModel" aria-label="@L["ConversationModel"]" disabled="@_chatLoading">
-                            <optgroup label="Claude">@foreach (var model in AvailableModels) { <option value="@model">@model</option> }</optgroup>
-                            @foreach (var (label, catalog) in new[] { ("OpenAI Codex", _codexModels), ("Grok", _grokModels), ("Mistral Vibe", _mistralModels), ("DeepSeek", _deepSeekModels), ("GitHub Copilot", _copilotModels), ("Local (Ollama)", _ollamaModels) })
-                            {
-                                @if (catalog.Count > 0)
-                                {
-                                    <optgroup label="@label">
-                                        @foreach (var model in catalog) { <option value="@model">@model</option> }
-                                    </optgroup>
-                                }
-                            }
+                            <ModelOptionGroups Groups="Groups" Selected="@_chatModel" />
                         </select>
                     </ModelPicker>
                 </ConversationComposer>
@@ -313,66 +304,7 @@ else
                         <label>@L["TileConfigModel"]</label>
                         <select @bind="_configModel">
                             <option value="">@L["TileConfigModelHint"]</option>
-                            <optgroup label="Claude">
-                                @foreach (var m in AvailableModels)
-                                {
-                                    <option value="@m">@m</option>
-                                }
-                            </optgroup>
-                            @if (_grokModels.Count > 0)
-                            {
-                                <optgroup label="Grok">
-                                    @foreach (var m in _grokModels)
-                                    {
-                                        <option value="@m">@m</option>
-                                    }
-                                </optgroup>
-                            }
-                            @if (_codexModels.Count > 0)
-                            {
-                                <optgroup label="OpenAI Codex">
-                                    @foreach (var m in _codexModels)
-                                    {
-                                        <option value="@m">@m</option>
-                                    }
-                                </optgroup>
-                            }
-                            @if (_mistralModels.Count > 0)
-                            {
-                                <optgroup label="Mistral Vibe">
-                                    @foreach (var m in _mistralModels)
-                                    {
-                                        <option value="@m">@m</option>
-                                    }
-                                </optgroup>
-                            }
-                            @if (_deepSeekModels.Count > 0)
-                            {
-                                <optgroup label="DeepSeek">
-                                    @foreach (var m in _deepSeekModels)
-                                    {
-                                        <option value="@m">@m</option>
-                                    }
-                                </optgroup>
-                            }
-                            @if (_copilotModels.Count > 0)
-                            {
-                                <optgroup label="GitHub Copilot">
-                                    @foreach (var m in _copilotModels)
-                                    {
-                                        <option value="@m">@m</option>
-                                    }
-                                </optgroup>
-                            }
-                            @if (_ollamaModels.Count > 0)
-                            {
-                                <optgroup label="Local (Ollama)">
-                                    @foreach (var m in _ollamaModels)
-                                    {
-                                        <option value="@m">@m</option>
-                                    }
-                                </optgroup>
-                            }
+                            <ModelOptionGroups Groups="Groups" Selected="@_configModel" />
                         </select>
                     </div>
                 </div>
@@ -411,8 +343,7 @@ else
     private List<string> _codexModels = new();
     private List<string> _deepSeekModels = new();
     private List<string> _copilotModels = new();
-    private static readonly IReadOnlyList<string> AvailableModels = ClaudeModelCatalog.Models;
-    private List<string> AllModels => AvailableModels.Concat(_grokModels).Concat(_codexModels).Concat(_mistralModels).Concat(_deepSeekModels).Concat(_copilotModels).Concat(_ollamaModels).ToList();
+    private IReadOnlyList<ModelGroup> Groups => ModelGroups.Build(_grokModels, _codexModels, _mistralModels, _deepSeekModels, _copilotModels, _ollamaModels);
 
     private List<DashboardTileLayout> _tiles = [];
     private List<string> _availableSlugs = [];

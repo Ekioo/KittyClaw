@@ -47,6 +47,7 @@
   "AgentProvidersChecking": "Checking…",
   "ProviderDetected": "CLI detected",
   "ProviderNotDetected": "Install required",
+  "ModelProviderNotInstalled": "not installed",
   "ProviderInstallationGuide": "Installation guide",
   "ProviderClaudeConfiguration": "Install Claude Code, then sign in to your Anthropic account. It also transports DeepSeek and Ollama runs.",
   "ProviderCodexConfiguration": "Install Codex CLI, then authenticate it with your OpenAI account or an API key.",

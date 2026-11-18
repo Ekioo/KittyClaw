@@ -1,4 +1,4 @@
-@page "/board/{Slug}/settings"
+﻿@page "/board/{Slug}/settings"
 @using KittyClaw.Core.Models
 @using KittyClaw.Core.Services
 @using KittyClaw.Core.Automation
@@ -188,70 +188,7 @@ else
                         @onchange="OnFallbackModelChanged"
                         @key="@($"fallback-select-{_grokModels.Count}-{_mistralModels.Count}-{_deepSeekModels.Count}-{_copilotModels.Count}-{_discoveredModels.Count}-{_fallbackModel}")">
                     <option value="">@L["FallbackDisabled"]</option>
-                    <optgroup label="Claude">
-                        @foreach (var model in ClaudeModels)
-                        {
-                            <option value="@model">@model</option>
-                        }
-                    </optgroup>
-                    @if (_grokModels.Count > 0)
-                    {
-                        <optgroup label="Grok">
-                            @foreach (var model in _grokModels)
-                            {
-                                <option value="@model">@model</option>
-                            }
-                        </optgroup>
-                    }
-                    @if (_codexModels.Count > 0)
-                    {
-                        <optgroup label="OpenAI Codex">
-                            @foreach (var model in _codexModels)
-                            {
-                                <option value="@model">@model</option>
-                            }
-                        </optgroup>
-                    }
-                    @if (_mistralModels.Count > 0)
-                    {
-                        <optgroup label="Mistral Vibe">
-                            @foreach (var model in _mistralModels)
-                            {
-                                <option value="@model">@model</option>
-                            }
-                        </optgroup>
-                    }
-                    @if (_deepSeekModels.Count > 0)
-                    {
-                        <optgroup label="DeepSeek">
-                            @foreach (var model in _deepSeekModels)
-                            {
-                                <option value="@model">@model</option>
-                            }
-                        </optgroup>
-                    }
-                    @if (_copilotModels.Count > 0)
-                    {
-                        <optgroup label="GitHub Copilot">
-                            @foreach (var model in _copilotModels)
-                            {
-                                <option value="@model">@model</option>
-                            }
-                        </optgroup>
-                    }
-                    @if (_discoveredModels.Count > 0)
-                    {
-                        <optgroup label="Local (Ollama)">
-                            @foreach (var model in _discoveredModels)
-                            {
-                                <option value="@model">@model</option>
-                            }
-                        </optgroup>
-                    }
-                    @if (!string.IsNullOrEmpty(_fallbackModel) && !AllModels.Contains(_fallbackModel))
-                    {
-                        <option value="@_fallbackModel">@_fallbackModel</option>
-                    }
+                    <ModelOptionGroups Groups="Groups" Selected="@_fallbackModel" />
                 </select>
                 <button class="settings-primary" @onclick="SaveFallbackModel" disabled="@_savingFallback">
                     @(_savingFallback ? "…" : L["Save"])
@@ -417,70 +354,7 @@ else
                                 {
                                     <select class="settings-input" @bind="_editingMemberModel" style="max-width:220px">
                                         <option value="">@L["DefaultModelPlaceholder"]</option>
-                                        <optgroup label="Claude">
-                                            @foreach (var model in ClaudeModels)
-                                            {
-                                                <option value="@model">@model</option>
-                                            }
-                                        </optgroup>
-                                        @if (_grokModels.Count > 0)
-                                        {
-                                            <optgroup label="Grok">
-                                                @foreach (var model in _grokModels)
-                                                {
-                                                    <option value="@model">@model</option>
-                                                }
-                                            </optgroup>
-                                        }
-                                        @if (_codexModels.Count > 0)
-                                        {
-                                            <optgroup label="OpenAI Codex">
-                                                @foreach (var model in _codexModels)
-                                                {
-                                                    <option value="@model">@model</option>
-                                                }
-                                            </optgroup>
-                                        }
-                                        @if (_mistralModels.Count > 0)
-                                        {
-                                            <optgroup label="Mistral Vibe">
-                                                @foreach (var model in _mistralModels)
-                                                {
-                                                    <option value="@model">@model</option>
-                                                }
-                                            </optgroup>
-                                        }
-                                        @if (_deepSeekModels.Count > 0)
-                                        {
-                                            <optgroup label="DeepSeek">
-                                                @foreach (var model in _deepSeekModels)
-                                                {
-                                                    <option value="@model">@model</option>
-                                                }
-                                            </optgroup>
-                                        }
-                                        @if (_copilotModels.Count > 0)
-                                        {
-                                            <optgroup label="GitHub Copilot">
-                                                @foreach (var model in _copilotModels)
-                                                {
-                                                    <option value="@model">@model</option>
-                                                }
-                                            </optgroup>
-                                        }
-                                        @if (_discoveredModels.Count > 0)
-                                        {
-                                            <optgroup label="Local (Ollama)">
-                                                @foreach (var model in _discoveredModels)
-                                                {
-                                                    <option value="@model">@model</option>
-                                                }
-                                            </optgroup>
-                                        }
-                                        @if (!string.IsNullOrEmpty(_editingMemberModel) && !AllModels.Contains(_editingMemberModel))
-                                        {
-                                            <option value="@_editingMemberModel">@_editingMemberModel</option>
-                                        }
+                                        <ModelOptionGroups Groups="Groups" Selected="@_editingMemberModel" />
                                     </select>
                                 }
                                 else
@@ -686,8 +560,7 @@ else
     private string? _deleteConfirmSecret;
     private bool _savingSecret;
     private (string text, string css)? _secretStatus;
-    private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
-    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_mistralModels).Concat(_deepSeekModels).Concat(_copilotModels).Concat(_discoveredModels).ToList();
+    private IReadOnlyList<ModelGroup> Groups => ModelGroups.Build(_grokModels, _codexModels, _mistralModels, _deepSeekModels, _copilotModels, _discoveredModels);
 
     private List<Member> _members = new();
     private int? _editingMemberId;

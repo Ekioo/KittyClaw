@@ -51,6 +51,7 @@
   "AgentProvidersChecking": "检查中…",
   "ProviderDetected": "已检测到 CLI",
   "ProviderNotDetected": "需要安装",
+  "ModelProviderNotInstalled": "未安装",
   "ProviderInstallationGuide": "安装指南",
   "ProviderClaudeConfiguration": "安装 Claude Code，然后登录您的 Anthropic 账户。它也用于传输 DeepSeek 和 Ollama 运行。",
   "ProviderCodexConfiguration": "安装 Codex CLI，然后通过 OpenAI 账户或 API 密钥进行身份验证。",
