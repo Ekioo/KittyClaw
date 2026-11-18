@@ -140,6 +140,8 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "GET /api/mistral-models",
         // DeepSeek
         "GET /api/deepseek-models",
+        // Copilot
+        "GET /api/copilot-models",
         // Approval registry
         "GET /api/projects/{slug}/approvals/requests",
         "POST /api/projects/{slug}/approvals/requests",
@@ -285,6 +287,7 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         ["GET /api/codex-models"] = "Codex",
         ["GET /api/mistral-models"] = "Mistral",
         ["GET /api/deepseek-models"] = "DeepSeek",
+        ["GET /api/copilot-models"] = "GitHub Copilot",
         ["POST /api/projects/{slug}/workflow-migrations/analyze"] = "Workflow migrations",
         ["POST /api/projects/{slug}/workflow-migrations/apply"] = "Workflow migrations",
         ["POST /api/projects/{slug}/workflow-migrations/refine"] = "Workflow migrations",
