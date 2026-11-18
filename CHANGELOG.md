@@ -4,6 +4,34 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.30] — 2026-11-18
+
+GitHub Copilot CLI support, clearer model selection, and updated provider models.
+
+### Highlights
+
+Use GitHub Copilot CLI as an agent provider and choose models from a shared picker with colored vendor logos. New chats default to the recommended model of an installed provider, while undetected providers stay out of model pickers.
+
+### Added
+
+- GitHub Copilot CLI provider detection, agent dispatch, and model support.
+- Claude Fable 5.2 and updated provider model catalogs with estimated token costs.
+
+### Changed
+
+- Share a model picker with colored vendor logos across chats, dashboards, processors, and project settings.
+- Default new chats to the recommended model of an installed provider and hide undetected providers in model pickers.
+
+### Fixed
+
+- Refresh the board after internal ticket column changes.
+
+### Security
+
+- Prevent tool input from bypassing approval hooks before effects are executed.
+
+---
+
 ## [v0.29.1] — 2026-11-01
 
 Consistent desktop headers, restored dictation, and faster project settings.
