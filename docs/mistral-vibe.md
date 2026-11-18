@@ -13,9 +13,12 @@ confused with an Ollama model.
 - `KittyClaw.Core/Automation/AgentCliBackend.cs` — builds Vibe commands, selects trusted-workspace and automatic-approval options, and passes the selected model through `VIBE_ACTIVE_MODEL`.
 - `KittyClaw.Web/Api/Endpoints.Mistral.cs` — exposes the available Mistral model catalogue to the UI.
 
-The selectors expose Vibe's hosted aliases:
+The selectors expose current Vibe catalog aliases:
 
+- `mistral:mistral-large-3`
+- `mistral:mistral-medium-latest`
 - `mistral:mistral-medium-3.5`
+- `mistral:zai-glm-5-3`
 - `mistral:devstral-small`
 
 KittyClaw removes the qualifier and passes the alias through `VIBE_ACTIVE_MODEL`. Vibe emits

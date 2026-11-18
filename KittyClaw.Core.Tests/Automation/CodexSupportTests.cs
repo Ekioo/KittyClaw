@@ -61,6 +61,8 @@ public sealed class CodexSupportTests
     {
         Assert.Equal(
         [
+            "codex:gpt-6.2-astra",
+            "codex:gpt-6.2-sol",
             "codex:gpt-6-astra",
             "codex:gpt-6.1-sol",
             "codex:gpt-6.1-terra",

@@ -29,11 +29,12 @@ public class Opus48ModelSupportTests
     // all bind to ClaudeModelCatalog.Models, so the catalog is the single thing to assert on.
 
     [Fact]
-    public void Catalog_Omits_SupersededOpusModels()
+    public void Catalog_Offers_CurrentOfficialClaudeModelIds()
     {
-        Assert.DoesNotContain("claude-opus-4-8", ClaudeModelCatalog.Models);
+        Assert.Contains("claude-opus-4-8", ClaudeModelCatalog.Models);
+        Assert.Contains("claude-sonnet-4-6", ClaudeModelCatalog.Models);
+        Assert.Contains("claude-haiku-4-5", ClaudeModelCatalog.Models);
         Assert.DoesNotContain("claude-opus-4-7", ClaudeModelCatalog.Models);
-        Assert.DoesNotContain("claude-opus-5", ClaudeModelCatalog.Models);
     }
 
     [Fact]

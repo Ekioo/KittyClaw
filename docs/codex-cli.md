@@ -8,9 +8,9 @@ the host. Codex models use a `codex:` qualifier in stored configuration, for exa
 Ollama models and is removed before the model name is passed to Codex.
 
 The built-in selector deliberately follows the compact set supported by current Codex
-installations: GPT-5.6 Sol, Terra and Luna, followed by GPT-5.5 and GPT-5.4. Codex does
-not expose a stable non-interactive model-list command, so this catalog is versioned in
-KittyClaw; a custom `codex:*` identifier can still be persisted through the API.
+installations, with GPT-6.2 Astra and Sol first, followed by GPT-6, GPT-6.1, and GPT-5.6
+families. Codex does not expose a stable non-interactive model-list command, so this catalog
+is versioned in KittyClaw; a custom `codex:*` identifier can still be persisted through the API.
 
 ## Key components
 

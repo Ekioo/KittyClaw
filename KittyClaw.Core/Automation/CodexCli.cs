@@ -23,6 +23,8 @@ public static class CodexCli
     /// </summary>
     public static readonly IReadOnlyList<string> Models =
     [
+        "codex:gpt-6.2-astra",
+        "codex:gpt-6.2-sol",
         "codex:gpt-6-astra",
         "codex:gpt-6.1-sol",
         "codex:gpt-6.1-terra",

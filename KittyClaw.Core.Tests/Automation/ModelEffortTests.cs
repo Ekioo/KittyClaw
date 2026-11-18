@@ -14,7 +14,10 @@ public sealed class ModelEffortTests
 
     [Theory]
     [InlineData("claude-sonnet-5-5")]
+    [InlineData("claude-opus-4-8")]
+    [InlineData("claude-sonnet-4-6")]
     [InlineData("codex:gpt-6.1-sol")]
+    [InlineData("codex:gpt-6.2-sol")]
     public void MissingEffort_ResolvesToAnExplicitSupportedValue(string model)
     {
         Assert.Equal("medium", ModelEffort.Effective(model, null));
@@ -27,8 +30,10 @@ public sealed class ModelEffortTests
     public void Capabilities_AreModelSpecific()
     {
         Assert.Contains("max", ModelEffort.Options("claude-sonnet-5-5"));
+        Assert.Contains("max", ModelEffort.Options("claude-opus-4-8"));
         Assert.DoesNotContain("xhigh", ModelEffort.Options("claude-opus-4-6"));
         Assert.Contains("ultra", ModelEffort.Options("codex:gpt-6.1-sol"));
+        Assert.Contains("ultra", ModelEffort.Options("codex:gpt-6.2-sol"));
         Assert.DoesNotContain("ultra", ModelEffort.Options("codex:gpt-6-luna"));
     }
 

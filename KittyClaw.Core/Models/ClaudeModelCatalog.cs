@@ -17,7 +17,10 @@ public static class ClaudeModelCatalog
     {
         "claude-fable-5-1",
         "claude-opus-5-5",
+        "claude-opus-4-8",
         DefaultModel,
+        "claude-sonnet-4-6",
         "claude-haiku-5-5",
+        "claude-haiku-4-5",
     };
 }

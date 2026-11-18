@@ -15,6 +15,9 @@ public static class ModelEffort
     {
         if (model is null) return [];
         var name = model.StartsWith("claude:") ? model[7..] : model;
+        if (name == "claude-haiku-4-5") return [];
+        if (name is "claude-opus-4-8" or "claude-sonnet-4-6")
+            return ["low", "medium", "high", "max"];
         if (ClaudeModelCatalog.Models.Contains(name))
             return ["low", "medium", "high", "xhigh", "max"];
         if (CodexCli.Models.Contains(model))

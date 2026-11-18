@@ -11,8 +11,8 @@ an Anthropic API key or an Anthropic account for DeepSeek runs.
 2. Create an API key on the [DeepSeek platform](https://platform.deepseek.com/).
 3. Open the KittyClaw project, then **Project settings → Secure vault**.
 4. Save the secret with the exact name `DEEPSEEK_API_KEY`.
-5. Select `DeepSeek V4 Pro` or `DeepSeek V4 Flash` in a member, processor, automation, or chat
-   model selector.
+5. Select `deepseek:deepseek-v4-pro[1m]`, `deepseek:deepseek-v4-pro`, or
+   `deepseek:deepseek-v4-flash` in a member, processor, automation, or chat model selector.
 
 The secret is write-only in the UI. KittyClaw decrypts it only when starting an agent process for
 that project, maps it to the authentication variable expected by Claude Code, and does not expose
