@@ -15,6 +15,7 @@ public static class ClaudeModelCatalog
     /// <summary>Selectable Claude models, ordered most-capable first.</summary>
     public static readonly IReadOnlyList<string> Models = new[]
     {
+        "claude-fable-5-2",
         "claude-fable-5-1",
         "claude-opus-5-5",
         DefaultModel,

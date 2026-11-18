@@ -143,3 +143,7 @@ lists standard USD prices per million tokens of $1 input, $5 output, $0.05 cache
 input and $1.25 cache writes (30 minutes). Existing request-context handling applies
 the published long-context multipliers above 272,000 input tokens. The CLI owns
 account availability; this update does not change existing model selections.
+
+## Fable 5.2 verification (2026-11-10)
+
+Added Claude Fable 5.2 alongside Fable 5.1. Standard USD rates per million tokens are 8 input, 40 output, 0.20 cache reads and 10 five-minute cache writes. One-hour writes (16) and Fast mode are outside the estimator's default assumptions. Source: https://platform.claude.com/docs/en/about-claude/pricing
