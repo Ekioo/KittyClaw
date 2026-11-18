@@ -53,6 +53,7 @@
   "ProviderInstallationGuide": "インストールガイド",
   "ProviderClaudeConfiguration": "Claude CodeをインストールしてAnthropicにログインします。DeepSeekとOllamaの実行にも使用されます。",
   "ProviderCodexConfiguration": "Codex CLIをインストールし、OpenAIアカウントまたはAPIキーで認証します。",
+  "ProviderCopilotConfiguration": "GitHub Copilot CLIをインストールし、有効なCopilotサブスクリプションを持つGitHubアカウントでサインインしてください。",
   "ProviderGrokConfiguration": "Grokモデルを選択する前にGrok Buildをインストールして認証します。",
   "ProviderMistralConfiguration": "Mistralモデルを選択する前にMistral Vibeをインストールして認証情報を設定します。",
   "ProviderOllamaConfiguration": "Ollamaをインストールして起動します。アドレスとローカルモデルはプロジェクトごとに設定します。",

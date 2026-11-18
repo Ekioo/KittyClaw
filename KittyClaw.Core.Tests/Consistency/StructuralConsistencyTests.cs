@@ -162,6 +162,7 @@ public class StructuralConsistencyTests
     [InlineData(CliProvider.Grok,    "grok-4.5")]
     [InlineData(CliProvider.Codex,   "codex:gpt-5.6-sol")]
     [InlineData(CliProvider.Mistral, "mistral:mistral-medium-3.5")]
+    [InlineData(CliProvider.Copilot, "copilot:default")]
     [InlineData(CliProvider.DeepSeek, "deepseek:deepseek-v4-pro[1m]")]
     public void NonDefaultCliProvider_IsReachableByModelPrefix(CliProvider expected, string probeModel)
     {

@@ -284,6 +284,15 @@
                         }
                     </optgroup>
                 }
+                @if (_copilotModels.Count > 0)
+                {
+                    <optgroup label="GitHub Copilot">
+                        @foreach (var m in _copilotModels)
+                        {
+                            <option value="@m">@m</option>
+                        }
+                    </optgroup>
+                }
                 @if (_ollamaModels.Count > 0)
                 {
                     <optgroup label="Local (Ollama)">
@@ -363,9 +372,10 @@
     private List<string> _codexModels = new();
     private List<string> _mistralModels = new();
     private List<string> _deepSeekModels = new();
+    private List<string> _copilotModels = new();
     private const string DefaultModel = ClaudeModelCatalog.DefaultModel;
     private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
-    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_mistralModels).Concat(_deepSeekModels).Concat(_ollamaModels).ToList();
+    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_mistralModels).Concat(_deepSeekModels).Concat(_copilotModels).Concat(_ollamaModels).ToList();
     private string SelectedModelStorageKey => $"kc-chat-model-{ProjectSlug}";
 
     // Image paste (#115). Accepted clipboard images await Send() in this buffer; rejections
@@ -540,12 +550,14 @@
         var codexTask = TryFetchModelsAsync(http, "/api/codex-models", "codex");
         var mistralTask = TryFetchModelsAsync(http, "/api/mistral-models", "mistral");
         var deepSeekTask = TryFetchModelsAsync(http, "/api/deepseek-models", "deepseek");
-        await Task.WhenAll(ollamaTask, grokTask, codexTask, mistralTask, deepSeekTask);
+        var copilotTask = TryFetchModelsAsync(http, "/api/copilot-models", "copilot");
+        await Task.WhenAll(ollamaTask, grokTask, codexTask, mistralTask, deepSeekTask, copilotTask);
         _ollamaModels = await ollamaTask;
         _grokModels = await grokTask;
         _codexModels = await codexTask;
         _mistralModels = await mistralTask;
         _deepSeekModels = await deepSeekTask;
+        _copilotModels = await copilotTask;
     }
 
     private async Task<List<string>> TryFetchModelsAsync(HttpClient http, string uri, string provider)

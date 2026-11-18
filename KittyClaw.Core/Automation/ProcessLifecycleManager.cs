@@ -3,7 +3,7 @@ using System.Text;
 
 namespace KittyClaw.Core.Automation;
 
-/// <summary>Resolves the claude binary and constructs ProcessStartInfo for a claude subprocess.</summary>
+/// <summary>Resolves provider CLI binaries and constructs their ProcessStartInfo.</summary>
 internal static class ProcessLifecycleManager
 {
     // Resolved once per process. Search order:
@@ -81,6 +81,7 @@ internal static class ProcessLifecycleManager
                 CliProvider.Grok => GrokCli.Binary ?? "grok",
                 CliProvider.Codex => CodexCli.Binary ?? "codex",
                 CliProvider.Mistral => MistralCli.Binary ?? "vibe",
+                CliProvider.Copilot => CopilotCli.Binary ?? "copilot",
                 CliProvider.DeepSeek => ClaudeBinary,
                 _ => ClaudeBinary,
             }),

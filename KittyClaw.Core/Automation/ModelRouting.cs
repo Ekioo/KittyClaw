@@ -11,6 +11,8 @@ public enum CliProvider
     Codex,
     /// <summary>Mistral Vibe CLI (`vibe`) — used for explicitly qualified mistral:* models.</summary>
     Mistral,
+    /// <summary>GitHub Copilot CLI (`copilot`) — uses the user's signed-in Copilot subscription.</summary>
+    Copilot,
     /// <summary>DeepSeek's Anthropic-compatible API, executed through the Claude Code CLI.</summary>
     DeepSeek,
 }
@@ -41,10 +43,9 @@ public static class ModelRouting
 
     /// <summary>
     /// Routing rules:
-    /// - null, claude-*, or claude:* → claude CLI, no extra env.
-    /// - grok-* → grok CLI when installed; otherwise an error (run fails without launching).
-    /// - anything else → Ollama local model through the claude CLI: requires the project's
-    ///   LocalModelBaseUrl and injects the ANTHROPIC_* env overrides.
+    /// - null, claude-*, or claude:* → Claude CLI.
+    /// - deepseek:*, copilot:*, codex:*, mistral:*, and grok-* → their provider CLI when installed.
+    /// - any other model → Ollama through Claude CLI, requiring the project's LocalModelBaseUrl.
     /// </summary>
     public static Resolution Resolve(string? model, string? localModelBaseUrl)
     {
@@ -68,6 +69,16 @@ public static class ModelRouting
                 ["CLAUDE_CODE_EFFORT_LEVEL"] = "max",
                 ["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] = "786432",
             }, null, cliModel);
+        }
+
+        if (CopilotCli.IsCopilotModel(model))
+        {
+            if (!CopilotCli.IsInstalled)
+                return new Resolution(CliProvider.Claude, null,
+                    $"GitHub Copilot model '{model}': the Copilot CLI (copilot) was not found on this machine. " +
+                    "Install it from https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli " +
+                    "or point KITTYCLAW_COPILOT_BIN at the binary.");
+            return new Resolution(CliProvider.Copilot, null, null, CopilotCli.ToCliModel(model));
         }
 
         if (CodexCli.IsCodexModel(model))

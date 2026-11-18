@@ -369,6 +369,12 @@
                                         @foreach (var model in _deepSeekModels) { <option value="@model">@model</option> }
                                     </optgroup>
                                 }
+                                @if (_copilotModels.Count > 0)
+                                {
+                                    <optgroup label="GitHub Copilot">
+                                        @foreach (var model in _copilotModels) { <option value="@model">@model</option> }
+                                    </optgroup>
+                                }
                                 @if (_ollamaModels.Count > 0)
                                 {
                                     <optgroup label="Local (Ollama)">
@@ -484,7 +490,8 @@
     private List<string> _mistralModels = [];
     private List<string> _codexModels = [];
     private List<string> _deepSeekModels = [];
-    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_mistralModels).Concat(_deepSeekModels).Concat(_ollamaModels).ToList();
+    private List<string> _copilotModels = [];
+    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_mistralModels).Concat(_deepSeekModels).Concat(_copilotModels).Concat(_ollamaModels).ToList();
     private int _maxTurns = 100;
     private int _maxAttempts = 3;
     private int _retryBackoff = 60;
@@ -565,12 +572,14 @@
             var mistral = http.GetFromJsonAsync<List<string>>("/api/mistral-models");
             var codex = http.GetFromJsonAsync<List<string>>("/api/codex-models");
             var deepSeek = http.GetFromJsonAsync<List<string>>("/api/deepseek-models");
-            await Task.WhenAll(ollama, grok, codex, mistral, deepSeek);
+            var copilot = http.GetFromJsonAsync<List<string>>("/api/copilot-models");
+            await Task.WhenAll(ollama, grok, codex, mistral, deepSeek, copilot);
             _ollamaModels = await ollama ?? [];
             _grokModels = await grok ?? [];
             _mistralModels = await mistral ?? [];
             _codexModels = await codex ?? [];
             _deepSeekModels = await deepSeek ?? [];
+            _copilotModels = await copilot ?? [];
         }
         catch
         {

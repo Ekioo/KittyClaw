@@ -4,21 +4,22 @@ namespace KittyClaw.Core.Tests.Automation;
 
 public sealed class AgentCliReadinessServiceTests
 {
-    public static TheoryData<bool, bool, bool, bool> IndependentProviders => new()
+    public static TheoryData<bool, bool, bool, bool, bool> IndependentProviders => new()
     {
-        { true, false, false, false },
-        { false, true, false, false },
-        { false, false, true, false },
-        { false, false, false, true },
-        { true, true, true, true },
+        { true, false, false, false, false },
+        { false, true, false, false, false },
+        { false, false, true, false, false },
+        { false, false, false, true, false },
+        { false, false, false, false, true },
+        { true, true, true, true, true },
     };
 
     [Theory]
     [MemberData(nameof(IndependentProviders))]
     public async Task Probe_accepts_each_provider_independently_and_multiple_providers(
-        bool claude, bool codex, bool grok, bool mistral)
+        bool claude, bool codex, bool grok, bool mistral, bool copilot)
     {
-        var service = Create(claude, codex, grok, mistral, git: true);
+        var service = Create(claude, codex, grok, mistral, copilot, git: true);
 
         var result = await service.ProbeAsync();
 
@@ -26,6 +27,7 @@ public sealed class AgentCliReadinessServiceTests
         Assert.Equal(codex, result.Codex);
         Assert.Equal(grok, result.Grok);
         Assert.Equal(mistral, result.Mistral);
+        Assert.Equal(copilot, result.Copilot);
         Assert.True(result.HasAgentProvider);
         Assert.True(result.Ready);
     }
@@ -33,7 +35,7 @@ public sealed class AgentCliReadinessServiceTests
     [Fact]
     public async Task Probe_reports_not_ready_when_no_provider_is_installed()
     {
-        var result = await Create(false, false, false, false, git: true).ProbeAsync();
+        var result = await Create(false, false, false, false, false, git: true).ProbeAsync();
 
         Assert.False(result.HasAgentProvider);
         Assert.False(result.Ready);
@@ -47,6 +49,7 @@ public sealed class AgentCliReadinessServiceTests
             () => "codex",
             () => "grok",
             () => "vibe",
+            () => "copilot",
             async (binary, _, _) =>
             {
                 if (binary == "codex") throw new TimeoutException();
@@ -62,16 +65,19 @@ public sealed class AgentCliReadinessServiceTests
         Assert.False(result.Codex);
         Assert.False(result.Grok);
         Assert.False(result.Mistral);
+        Assert.False(result.Copilot);
         Assert.False(result.Ollama);
         Assert.False(result.Ready);
     }
 
-    private static AgentCliReadinessService Create(bool claude, bool codex, bool grok, bool mistral, bool git) =>
+    private static AgentCliReadinessService Create(
+        bool claude, bool codex, bool grok, bool mistral, bool copilot, bool git) =>
         new(
             () => "claude",
             () => "codex",
             () => "grok",
             () => "vibe",
+            () => "copilot",
             (binary, _, _) => Task.FromResult(binary switch
             {
                 "git" => git,
@@ -79,6 +85,7 @@ public sealed class AgentCliReadinessServiceTests
                 "codex" => codex,
                 "grok" => grok,
                 "vibe" => mistral,
+                "copilot" => copilot,
                 "ollama" => false,
                 _ => false,
             }));

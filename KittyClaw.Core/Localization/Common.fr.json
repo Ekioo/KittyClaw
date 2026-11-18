@@ -50,6 +50,7 @@
   "ProviderInstallationGuide": "Guide d’installation",
   "ProviderClaudeConfiguration": "Installez Claude Code, puis connectez-le à votre compte Anthropic. Il sert aussi de transport à DeepSeek et Ollama.",
   "ProviderCodexConfiguration": "Installez Codex CLI, puis authentifiez-le avec votre compte OpenAI ou une clé d’API.",
+  "ProviderCopilotConfiguration": "Installez GitHub Copilot CLI et connectez-vous avec le compte GitHub associé à votre abonnement Copilot actif.",
   "ProviderGrokConfiguration": "Installez Grok Build et terminez son authentification avant de sélectionner un modèle Grok.",
   "ProviderMistralConfiguration": "Installez Mistral Vibe et configurez ses identifiants avant de sélectionner un modèle Mistral.",
   "ProviderOllamaConfiguration": "Installez et démarrez Ollama. L’adresse et les modèles locaux se configurent ensuite par projet.",

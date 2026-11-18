@@ -1,9 +1,10 @@
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 
 namespace KittyClaw.Core.Automation;
 
-/// <summary>Pumps stdout, stderr, and steering stdin between a claude subprocess and an AgentRun.</summary>
+/// <summary>Pumps stdout, stderr, and steering stdin between a provider CLI and an AgentRun.</summary>
 internal static class AgentStreamPump
 {
     internal static Task PumpStdoutAsync(Process proc, AgentRun run, CancellationToken ct) =>
@@ -17,6 +18,9 @@ internal static class AgentStreamPump
         Func<string, string>? redact = null)
     {
         var reader = proc.StandardOutput;
+        var plainText = backend.PlainTextOutput ? new StringBuilder() : null;
+        var plainTextHasLine = false;
+        var outputCompleted = false;
         try
         {
             while (!ct.IsCancellationRequested)
@@ -29,11 +33,25 @@ internal static class AgentStreamPump
                     run.Push(new StreamEvent(DateTime.UtcNow, "error", $"stdout read error: {ex.Message}"));
                     break;
                 }
-                if (line is null) break;
-                if (string.IsNullOrWhiteSpace(line)) continue;
+                if (line is null)
+                {
+                    outputCompleted = true;
+                    break;
+                }
+                if (string.IsNullOrWhiteSpace(line) && plainText is null) continue;
                 line = redact?.Invoke(line) ?? line;
                 try { await run.WaitForApprovalResolutionAsync(ct); }
                 catch (OperationCanceledException) { break; }
+                if (plainText is not null)
+                {
+                    var separator = plainTextHasLine ? "\n" : "";
+                    var delta = separator + line;
+                    plainText.Append(delta);
+                    plainTextHasLine = true;
+                    if (delta.Length > 0)
+                        run.Push(new StreamEvent(DateTime.UtcNow, "content_block_delta", delta));
+                    continue;
+                }
                 try
                 {
                     using var doc = JsonDocument.Parse(line);
@@ -124,6 +142,13 @@ internal static class AgentStreamPump
                 {
                     run.Push(new StreamEvent(DateTime.UtcNow, "raw", line));
                 }
+            }
+            // Keep a final full response for column processors and resume-retry detection.
+            if (outputCompleted && !ct.IsCancellationRequested && plainText is { Length: > 0 })
+            {
+                var text = plainText.ToString();
+                if (!string.IsNullOrWhiteSpace(text))
+                    run.Push(new StreamEvent(DateTime.UtcNow, "assistant", $"[assistant] {text}"));
             }
         }
         catch (Exception ex)
