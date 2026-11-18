@@ -205,9 +205,7 @@ else
                 <ConversationComposer IsBusy="@_chatLoading" CanSend="@(!string.IsNullOrWhiteSpace(_chatInput))" OnSend="SendChatMessage" OnStop="StopTileChat">
                     <Editor><textarea @ref="_tileChatInputRef" placeholder="@L["TileChatPlaceholder"]" value="@_chatInput" @oninput="OnChatInput" disabled="@_chatLoading" aria-label="@L["TileChatPlaceholder"]" rows="3"></textarea></Editor>
                     <ModelPicker>
-                        <select @bind="_chatModel" aria-label="@L["ConversationModel"]" disabled="@_chatLoading">
-                            <ModelOptionGroups Groups="Groups" Selected="@_chatModel" />
-                        </select>
+                        <ModelSelect Groups="Groups" @bind-Value="_chatModel" AriaLabel="@L["ConversationModel"]" Disabled="@_chatLoading" OpenUp="true" />
                     </ModelPicker>
                 </ConversationComposer>
             </Composer>
@@ -302,10 +300,7 @@ else
                     </div>
                     <div class="tile-config-field">
                         <label>@L["TileConfigModel"]</label>
-                        <select @bind="_configModel">
-                            <option value="">@L["TileConfigModelHint"]</option>
-                            <ModelOptionGroups Groups="Groups" Selected="@_configModel" />
-                        </select>
+                        <ModelSelect Groups="Groups" @bind-Value="_configModel" EmptyLabel="@L["TileConfigModelHint"]" />
                     </div>
                 </div>
                 <div class="tile-config-actions">

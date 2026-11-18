@@ -241,12 +241,9 @@
 
                 </Tray>
                 <ModelPicker>
-            <select class="chat-drawer-model-select" @bind="_selectedModel" @bind:after="PersistSelectedModelAsync" disabled="@_historyLoading">
-                <ModelOptionGroups Groups="Groups" Selected="@_selectedModel" />
-            </select>
+            <ModelSelect Groups="Groups" @bind-Value="_selectedModel" @bind-Value:after="PersistSelectedModelAsync" Disabled="@_historyLoading" OpenUp="true" />
                 <label class="chat-effort-picker">
-                    @L["ChatEffort"]
-                    <select class="chat-drawer-model-select" @bind="_selectedEffort" disabled="@(_historyLoading || _loading || ModelEffort.Options(_selectedModel).Count == 0)">
+                    <select class="chat-drawer-model-select" aria-label="@L["ChatEffort"]" @bind="_selectedEffort" disabled="@(_historyLoading || _loading || ModelEffort.Options(_selectedModel).Count == 0)">
                         @if (ModelEffort.Options(_selectedModel).Count == 0)
                         {
                             <option value="">@L["ChatEffortUnsupported"]</option>

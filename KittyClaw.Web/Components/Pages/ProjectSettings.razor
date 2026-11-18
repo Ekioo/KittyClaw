@@ -181,15 +181,7 @@ else
             <h2>@L["FallbackModel"]</h2>
             <p class="settings-hint">@L["FallbackModelHint"]</p>
             <div class="settings-row">
-                @* value+onchange (not @bind): Blazor @bind on a <select> with optgroups can fail to
-                   show the selected value after reload when the option list is built asynchronously. *@
-                <select class="settings-input" style="max-width:340px"
-                        value="@_fallbackModel"
-                        @onchange="OnFallbackModelChanged"
-                        @key="@($"fallback-select-{_grokModels.Count}-{_mistralModels.Count}-{_deepSeekModels.Count}-{_copilotModels.Count}-{_discoveredModels.Count}-{_fallbackModel}")">
-                    <option value="">@L["FallbackDisabled"]</option>
-                    <ModelOptionGroups Groups="Groups" Selected="@_fallbackModel" />
-                </select>
+                <ModelSelect Groups="Groups" Value="@_fallbackModel" ValueChanged="@(v => _fallbackModel = v ?? "")" EmptyLabel="@L["FallbackDisabled"]" Style="max-width:340px" />
                 <button class="settings-primary" @onclick="SaveFallbackModel" disabled="@_savingFallback">
                     @(_savingFallback ? "…" : L["Save"])
                 </button>
@@ -352,10 +344,7 @@ else
                             <td data-label="@L["Model"]">
                                 @if (_editingMemberId == m.Id)
                                 {
-                                    <select class="settings-input" @bind="_editingMemberModel" style="max-width:220px">
-                                        <option value="">@L["DefaultModelPlaceholder"]</option>
-                                        <ModelOptionGroups Groups="Groups" Selected="@_editingMemberModel" />
-                                    </select>
+                                    <ModelSelect Groups="Groups" Value="@_editingMemberModel" ValueChanged="@(v => _editingMemberModel = v ?? "")" EmptyLabel="@L["DefaultModelPlaceholder"]" Style="max-width:220px" />
                                 }
                                 else
                                 {
@@ -627,9 +616,6 @@ else
         try { _copilotModels = (await KittyClaw.Core.Automation.CopilotCli.ListModelsAsync()).ToList(); }
         catch { _copilotModels = new(); }
     }
-
-    private void OnFallbackModelChanged(ChangeEventArgs e) =>
-        _fallbackModel = e.Value?.ToString() ?? "";
 
     private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
     public void Dispose()

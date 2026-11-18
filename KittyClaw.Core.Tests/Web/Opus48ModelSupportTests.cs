@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using KittyClaw.Core.Models;
 using Xunit;
 
@@ -76,8 +76,7 @@ public class Opus48ModelSupportTests
     public void ProjectSettings_FallbackSelect_IsCatalogDriven()
     {
         var src = ProjectSettings();
-        // value+onchange (not @bind) so the selected Grok/Ollama option survives reload.
-        Assert.Contains("OnFallbackModelChanged", src);
+        Assert.Contains("<ModelSelect", src);
         Assert.Contains("_fallbackModel", src);
         Assert.DoesNotContain("FallbackOpus48", src);
     }

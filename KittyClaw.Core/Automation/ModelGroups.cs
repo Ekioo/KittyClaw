@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using KittyClaw.Core.Models;
 using KittyClaw.Core.Services;
 
@@ -34,6 +34,21 @@ public sealed record ModelGroup(
 
 public static class ModelGroups
 {
+    /// <summary>Logo file name (under img/models) identifying the model vendor.</summary>
+    public static string Icon(string? model)
+    {
+        var m = (model ?? "").ToLowerInvariant();
+        if (m.Contains("claude")) return "claude";
+        if (m.Contains("gpt") || m.Contains("codex") || m.StartsWith("o1") || m.StartsWith("o3") || m.StartsWith("o4")) return "openai";
+        if (m.Contains("gemini")) return "gemini";
+        if (m.Contains("grok")) return "grok";
+        if (m.Contains("deepseek")) return "deepseek";
+        if (m.Contains("mistral") || m.Contains("devstral")) return "mistral";
+        if (m.Contains("mai-") || m.Contains("mai ")) return "microsoft";
+        if (m.Contains("kimi")) return "kimi";
+        if (m.StartsWith("copilot")) return "copilot";
+        return "default";
+    }
     public static bool IsListed(IEnumerable<ModelGroup> groups, string? selected) =>
         !string.IsNullOrWhiteSpace(selected)
         && groups.Any(g => g.IsShown(selected) && g.VisibleModels(selected).Contains(selected));
@@ -46,18 +61,22 @@ public static class ModelGroups
         IReadOnlyList<string> copilot,
         IReadOnlyList<string> ollama)
     {
-        var claudeInstalled = ClaudeCli.IsInstalled;
+        // Debug aid: KITTYCLAW_FAKE_ALL_PROVIDERS=1 lists every provider (with sample models) so all logos can be reviewed.
+        var fake = Environment.GetEnvironmentVariable("KITTYCLAW_FAKE_ALL_PROVIDERS") == "1";
+        static IReadOnlyList<string> Or(bool fake, IReadOnlyList<string> real, params string[] sample) =>
+            fake && real.Count == 0 ? sample : real;
+        var claudeInstalled = fake || ClaudeCli.IsInstalled;
         return
         [
             new("Claude", ClaudeModelCatalog.Models, claudeInstalled,
                 m => m.StartsWith("claude-", StringComparison.OrdinalIgnoreCase)
                      || m.StartsWith("claude:", StringComparison.OrdinalIgnoreCase)),
-            new("Grok", grok, GrokCli.IsInstalled, GrokCli.IsGrokModel),
-            new("OpenAI Codex", codex, CodexCli.IsInstalled, CodexCli.IsCodexModel),
-            new("Mistral Vibe", mistral, MistralCli.IsInstalled, MistralCli.IsMistralModel),
-            new("DeepSeek", deepSeek, claudeInstalled, DeepSeekModelCatalog.IsDeepSeekModel),
-            new("GitHub Copilot", copilot, CopilotCli.IsInstalled, CopilotCli.IsCopilotModel),
-            new("Local (Ollama)", ollama),
+            new("Grok", Or(fake, grok, "grok-4.5"), fake || GrokCli.IsInstalled, GrokCli.IsGrokModel),
+            new("OpenAI Codex", Or(fake, codex, "gpt-5.3-codex"), fake || CodexCli.IsInstalled, CodexCli.IsCodexModel),
+            new("Mistral Vibe", Or(fake, mistral, "devstral-2"), fake || MistralCli.IsInstalled, MistralCli.IsMistralModel),
+            new("DeepSeek", Or(fake, deepSeek, "deepseek-v4"), claudeInstalled, DeepSeekModelCatalog.IsDeepSeekModel),
+            new("GitHub Copilot", copilot, fake || CopilotCli.IsInstalled, CopilotCli.IsCopilotModel),
+            new("Local (Ollama)", Or(fake, ollama, "llama3"), true),
         ];
     }
 }

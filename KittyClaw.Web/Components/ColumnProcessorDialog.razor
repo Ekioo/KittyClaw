@@ -315,9 +315,7 @@
                                 <div class="worktree-summary jev-profile-editor" @key="profile" data-testid="jev-profile-editor">
                                     <label>@L["Name"]<input class="settings-input" @bind="profile.Name" /></label>
                                     <label>@L["Description"]<input class="settings-input" @bind="profile.Description" /></label>
-                                    <label>@L["ProcessorModel"]<select class="settings-input" @bind="profile.Model">
-                                        <ModelOptionGroups Groups="Groups" Selected="@profile.Model" />
-                                    </select></label>
+                                    <label>@L["ProcessorModel"]<ModelSelect Groups="Groups" Value="@profile.Model" ValueChanged="@(v => profile.Model = v ?? "")" /></label>
                                     @foreach (var skill in _skills.Where(s => _availableSkills.Contains(s.Slug) || _recommendedSkills.Contains(s.Slug) || _requiredSkills.Contains(s.Slug)))
                                     {
                                         <label class="workflow-check"><input type="checkbox" checked="@(profile.Skills.Contains(skill.Slug) || _requiredSkills.Contains(skill.Slug))" disabled="@_requiredSkills.Contains(skill.Slug)" @onchange="e => ToggleProfileSkill(profile, skill.Slug, e.Value is true)" /> @skill.Name</label>
@@ -336,10 +334,7 @@
         <ColumnEditorPhase Number="4" Title="@L["ColumnPhaseExecute"]" Hint="@L["ColumnPhaseExecuteHint"]">
             @if (!fallback) { @AgentIdentityFields() }
                         <label><FieldHelp Label="@L["ProcessorModel"]" Help="@L["ProcessorModelHelp"]" />
-                            <select @key="@($"{_model}#{AllModels.Count}")" value="@(_model ?? "")" @onchange="OnModelChanged">
-                                <option value="">@L["ProcessorModelAutomatic"]</option>
-                                <ModelOptionGroups Groups="Groups" Selected="@_model" ShowFallback="false" />                                 @if (!string.IsNullOrWhiteSpace(_model) && !ModelGroups.IsListed(Groups, _model))                                 {                                     <option value="@_model">@_model @L["ProcessorModelCustom"]</option>                                 }
-                            </select>
+                            <ModelSelect Groups="Groups" Value="@_model" ValueChanged="@(v => _model = v)" EmptyLabel="@L["ProcessorModelAutomatic"]" CustomSuffix="@L["ProcessorModelCustom"]" />
                         </label>
 
 
@@ -446,7 +441,6 @@
     private List<string> _deepSeekModels = [];
     private List<string> _copilotModels = [];
     private IReadOnlyList<ModelGroup> Groups => ModelGroups.Build(_grokModels, _codexModels, _mistralModels, _deepSeekModels, _copilotModels, _ollamaModels);
-    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_mistralModels).Concat(_deepSeekModels).Concat(_copilotModels).Concat(_ollamaModels).ToList();
     private int _maxTurns = 100;
     private int _maxAttempts = 3;
     private int _retryBackoff = 60;
@@ -541,9 +535,6 @@
             // Model discovery is optional; the built-in catalog and any saved custom value remain usable.
         }
     }
-
-    private void OnModelChanged(ChangeEventArgs e) =>
-        _model = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value!.ToString();
 
     private void ApplyProcessor(ColumnProcessor? processor, string? sourceName)
     {

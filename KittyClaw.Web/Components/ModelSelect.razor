@@ -1,0 +1,81 @@
+﻿@using KittyClaw.Core.Automation
+@using KittyClaw.Core.Services
+@inject LocalizationService L
+
+<div class="model-select @Class" style="@Style">
+    <button type="button" class="model-select-trigger" disabled="@Disabled" aria-haspopup="listbox" aria-expanded="@_open"
+            aria-label="@AriaLabel" @onclick="Toggle">
+        @if (string.IsNullOrWhiteSpace(Value))
+        {
+            <span class="model-select-label">@(EmptyLabel ?? "")</span>
+        }
+        else
+        {
+            <span class="model-icon" style="@IconStyle(Value)"></span>
+            <span class="model-select-label">@Value</span>
+        }
+    </button>
+    @if (_open)
+    {
+        <div class="model-select-backdrop" @onclick="Close"></div>
+        <div class="model-select-menu @(OpenUp ? "up" : "")" role="listbox">
+            @if (EmptyLabel is not null)
+            {
+                <div class="model-select-option @(string.IsNullOrWhiteSpace(Value) ? "selected" : "")" role="option" @onclick="@(() => Pick(""))">
+                    <span class="model-select-label">@EmptyLabel</span>
+                </div>
+            }
+            @foreach (var group in Groups)
+            {
+                if (!group.IsShown(Value)) continue;
+                var label = group.Installed ? group.Label : $"{group.Label} ({L["ModelProviderNotInstalled"]})";
+                <div class="model-select-group">@label</div>
+                @foreach (var m in group.VisibleModels(Value))
+                {
+                    <div class="model-select-option @(m == Value ? "selected" : "")" role="option" @onclick="@(() => Pick(m))">
+                        <span class="model-icon" style="@IconStyle(m)"></span>
+                        <span class="model-select-label">@m</span>
+                    </div>
+                }
+            }
+            @if (!string.IsNullOrWhiteSpace(Value) && !ModelGroups.IsListed(Groups, Value))
+            {
+                <div class="model-select-option selected" role="option" @onclick="Close">
+                    <span class="model-icon" style="@IconStyle(Value)"></span>
+                    <span class="model-select-label">@Value @CustomSuffix</span>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private bool _open;
+
+    [Parameter, EditorRequired] public IReadOnlyList<ModelGroup> Groups { get; set; } = [];
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    /// <summary>When set, adds a leading "no model" entry with this label.</summary>
+    [Parameter] public string? EmptyLabel { get; set; }
+    [Parameter] public string? CustomSuffix { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public bool OpenUp { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? Style { get; set; }
+    [Parameter] public string? AriaLabel { get; set; }
+
+    private string IconStyle(string? model) =>
+        $"background:url('{Assets[$"img/models/{ModelGroups.Icon(model)}.svg"]}') center/contain no-repeat";
+
+    private void Toggle() => _open = !_open;
+    private void Close() => _open = false;
+
+    private async Task Pick(string model)
+    {
+        _open = false;
+        var value = model.Length == 0 ? null : model;
+        if (value == Value) return;
+        Value = value;
+        await ValueChanged.InvokeAsync(value);
+    }
+}

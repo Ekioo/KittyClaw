@@ -1,4 +1,4 @@
-namespace KittyClaw.Core.Tests.Web;
+﻿namespace KittyClaw.Core.Tests.Web;
 
 public class ChatDrawerModelPersistenceTests
 {
@@ -10,7 +10,7 @@ public class ChatDrawerModelPersistenceTests
     {
         var source = ChatDrawer();
 
-        Assert.Contains("@bind:after=\"PersistSelectedModelAsync\"", source);
+        Assert.Contains("@bind-Value:after=\"PersistSelectedModelAsync\"", source);
         Assert.Contains("$\"kc-chat-model-{ProjectSlug}\"", source);
         Assert.Contains("localStorage.setItem", source);
         Assert.Contains("localStorage.getItem", source);
@@ -39,11 +39,7 @@ public class ChatDrawerModelPersistenceTests
         var source = ChatDrawer();
 
         Assert.Contains("!string.IsNullOrWhiteSpace(model)", source);
-        Assert.Contains("ClaudeModels.Contains(model)", source);
-        Assert.Contains("_ollamaModels.Contains(model)", source);
-        Assert.Contains("_grokModels.Contains(model)", source);
-        Assert.Contains("_codexModels.Contains(model)", source);
-        Assert.Contains("_mistralModels.Contains(model)", source);
+        Assert.Contains("Groups.Any(g => g.Installed && g.Models.Contains(model))", source);
     }
 
     [Fact]
