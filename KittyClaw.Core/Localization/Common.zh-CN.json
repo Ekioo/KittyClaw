@@ -54,6 +54,7 @@
   "ProviderInstallationGuide": "安装指南",
   "ProviderClaudeConfiguration": "安装 Claude Code，然后登录您的 Anthropic 账户。它也用于传输 DeepSeek 和 Ollama 运行。",
   "ProviderCodexConfiguration": "安装 Codex CLI，然后通过 OpenAI 账户或 API 密钥进行身份验证。",
+  "ProviderCopilotConfiguration": "安装 GitHub Copilot CLI，然后使用拥有有效 Copilot 订阅的 GitHub 账户登录。",
   "ProviderGrokConfiguration": "安装 Grok Build，并在选择 Grok 模型前完成身份验证。",
   "ProviderMistralConfiguration": "安装 Mistral Vibe，并在选择 Mistral 模型前配置凭据。",
   "ProviderOllamaConfiguration": "安装并启动 Ollama。按项目配置其地址和本地模型。",

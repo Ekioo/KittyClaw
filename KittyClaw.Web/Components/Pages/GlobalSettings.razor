@@ -177,7 +177,7 @@
         AppSettings.OnProjectAvatarThemeChanged -= OnLanguageChanged;
     }
 
-    private CliReadiness _readiness = new(false, false, false, false, false, false);
+    private CliReadiness _readiness = new(false, false, false, false, false, false, false);
     private JevSettingsPanel? _jevPanel;
     private RtkIntegrationStatus? _rtkStatus;
     private bool _checkingProviders;
@@ -189,6 +189,9 @@
             "https://code.claude.com/docs/en/setup", L["ProviderClaudeConfiguration"], false),
         new("OpenAI Codex", "codex", _readiness.Codex,
             "https://developers.openai.com/codex/cli/", L["ProviderCodexConfiguration"], false),
+        new("GitHub Copilot", "copilot", _readiness.Copilot,
+            "https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli",
+            L["ProviderCopilotConfiguration"], false),
         new("Grok Build", "grok", _readiness.Grok,
             "https://docs.x.ai/build/overview", L["ProviderGrokConfiguration"], false),
         new("Mistral Vibe", "vibe", _readiness.Mistral,

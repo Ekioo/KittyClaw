@@ -21,10 +21,12 @@ public class OnboardingProviderChecksTests
         Assert.Contains("@inject AgentCliReadinessService CliReadiness", source);
         Assert.Contains("_readiness.Claude", source);
         Assert.Contains("_readiness.Codex", source);
+        Assert.Contains("_readiness.Copilot", source);
         Assert.Contains("_readiness.Grok", source);
         Assert.Contains("_readiness.Mistral", source);
         Assert.Contains("_readiness.Ollama", source);
         Assert.Contains("OpenAI Codex", source);
+        Assert.Contains("GitHub Copilot", source);
         Assert.Contains("Grok Build", source);
         Assert.Contains("Mistral Vibe", source);
         Assert.Contains("Ollama", source);

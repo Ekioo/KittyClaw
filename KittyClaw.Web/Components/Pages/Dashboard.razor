@@ -207,7 +207,7 @@ else
                     <ModelPicker>
                         <select @bind="_chatModel" aria-label="@L["ConversationModel"]" disabled="@_chatLoading">
                             <optgroup label="Claude">@foreach (var model in AvailableModels) { <option value="@model">@model</option> }</optgroup>
-                            @foreach (var (label, catalog) in new[] { ("OpenAI Codex", _codexModels), ("Grok", _grokModels), ("Mistral Vibe", _mistralModels), ("DeepSeek", _deepSeekModels), ("Local (Ollama)", _ollamaModels) })
+                            @foreach (var (label, catalog) in new[] { ("OpenAI Codex", _codexModels), ("Grok", _grokModels), ("Mistral Vibe", _mistralModels), ("DeepSeek", _deepSeekModels), ("GitHub Copilot", _copilotModels), ("Local (Ollama)", _ollamaModels) })
                             {
                                 @if (catalog.Count > 0)
                                 {
@@ -355,6 +355,15 @@ else
                                     }
                                 </optgroup>
                             }
+                            @if (_copilotModels.Count > 0)
+                            {
+                                <optgroup label="GitHub Copilot">
+                                    @foreach (var m in _copilotModels)
+                                    {
+                                        <option value="@m">@m</option>
+                                    }
+                                </optgroup>
+                            }
                             @if (_ollamaModels.Count > 0)
                             {
                                 <optgroup label="Local (Ollama)">
@@ -401,8 +410,9 @@ else
     private List<string> _mistralModels = new();
     private List<string> _codexModels = new();
     private List<string> _deepSeekModels = new();
+    private List<string> _copilotModels = new();
     private static readonly IReadOnlyList<string> AvailableModels = ClaudeModelCatalog.Models;
-    private List<string> AllModels => AvailableModels.Concat(_grokModels).Concat(_codexModels).Concat(_mistralModels).Concat(_deepSeekModels).Concat(_ollamaModels).ToList();
+    private List<string> AllModels => AvailableModels.Concat(_grokModels).Concat(_codexModels).Concat(_mistralModels).Concat(_deepSeekModels).Concat(_copilotModels).Concat(_ollamaModels).ToList();
 
     private List<DashboardTileLayout> _tiles = [];
     private List<string> _availableSlugs = [];
@@ -526,6 +536,8 @@ else
             _deepSeekModels = await http.GetFromJsonAsync<List<string>>("/api/deepseek-models") ?? new();
         }
         catch { _deepSeekModels = new(); }
+        try { _copilotModels = await http.GetFromJsonAsync<List<string>>("/api/copilot-models") ?? new(); }
+        catch { _copilotModels = new(); }
     }
 
     private static string TileId(string tileSlug) =>

@@ -19,6 +19,7 @@ public static class RunEvidenceCapture
         CliProvider.Codex => "codex",
         CliProvider.Grok => "grok",
         CliProvider.Mistral => "mistral",
+        CliProvider.Copilot => "copilot",
         CliProvider.DeepSeek => "deepseek",
         _ => "unknown",
     };
@@ -36,7 +37,7 @@ public static class RunEvidenceCapture
     /// </summary>
     /// <param name="run">The completed (or stopped / failed) agent run.</param>
     /// <param name="workspacePath">Absolute path to the agent workspace (git working tree root).</param>
-    /// <param name="provider">Lowercase CLI provider name: "claude", "codex", "grok", "mistral", or "unknown".</param>
+    /// <param name="provider">Lowercase CLI provider name such as "claude", "copilot", or "unknown".</param>
     /// <param name="ct">Cancellation token forwarded to git subprocess invocations.</param>
     public static async Task<TicketEvidence> CaptureAsync(
         AgentRun run,

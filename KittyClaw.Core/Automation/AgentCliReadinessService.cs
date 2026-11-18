@@ -10,6 +10,7 @@ public sealed class AgentCliReadinessService
     private readonly Func<string?> _resolveCodex;
     private readonly Func<string?> _resolveGrok;
     private readonly Func<string?> _resolveMistral;
+    private readonly Func<string?> _resolveCopilot;
     private readonly Func<string, string, TimeSpan, Task<bool>> _probe;
     private readonly TimeSpan _probeTimeout;
 
@@ -19,6 +20,7 @@ public sealed class AgentCliReadinessService
             () => CodexCli.Binary,
             () => GrokCli.Binary,
             () => MistralCli.Binary,
+            () => CopilotCli.Binary,
             ProbeProcessAsync,
             ProbeTimeout)
     {
@@ -29,6 +31,7 @@ public sealed class AgentCliReadinessService
         Func<string?> resolveCodex,
         Func<string?> resolveGrok,
         Func<string?> resolveMistral,
+        Func<string?> resolveCopilot,
         Func<string, string, TimeSpan, Task<bool>> probe,
         TimeSpan? probeTimeout = null)
     {
@@ -36,6 +39,7 @@ public sealed class AgentCliReadinessService
         _resolveCodex = resolveCodex;
         _resolveGrok = resolveGrok;
         _resolveMistral = resolveMistral;
+        _resolveCopilot = resolveCopilot;
         _probe = probe;
         _probeTimeout = probeTimeout ?? ProbeTimeout;
     }
@@ -47,8 +51,9 @@ public sealed class AgentCliReadinessService
         var codex = ProbeSafelyAsync(_resolveCodex, "--version");
         var grok = ProbeSafelyAsync(_resolveGrok, "--version");
         var mistral = ProbeSafelyAsync(_resolveMistral, "--version");
+        var copilot = ProbeSafelyAsync(_resolveCopilot, "--version");
         var ollama = ProbeSafelyAsync(() => "ollama", "--version");
-        await Task.WhenAll(git, claude, codex, grok, mistral, ollama);
+        await Task.WhenAll(git, claude, codex, grok, mistral, copilot, ollama);
         // Isolated QA instances restrict provider readiness to the mock-backed ones so
         // first-run provider selection stays deterministic on developer machines.
         var allowList = Environment.GetEnvironmentVariable("KITTYCLAW_PROVIDER_ALLOWLIST")?
@@ -60,7 +65,8 @@ public sealed class AgentCliReadinessService
             Allowed("codex", codex.Result),
             Allowed("grok", grok.Result),
             Allowed("mistral", mistral.Result),
-            Allowed("ollama", ollama.Result));
+            Allowed("ollama", ollama.Result),
+            Allowed("copilot", copilot.Result));
     }
 
     private async Task<bool> ProbeSafelyAsync(Func<string?> resolve, string arguments)
@@ -91,8 +97,8 @@ public sealed class AgentCliReadinessService
     }
 }
 
-public sealed record CliReadiness(bool Git, bool Claude, bool Codex, bool Grok, bool Mistral, bool Ollama)
+public sealed record CliReadiness(bool Git, bool Claude, bool Codex, bool Grok, bool Mistral, bool Ollama, bool Copilot)
 {
-    public bool HasAgentProvider => Claude || Codex || Grok || Mistral;
+    public bool HasAgentProvider => Claude || Codex || Grok || Mistral || Copilot;
     public bool Ready => Git && HasAgentProvider;
 }

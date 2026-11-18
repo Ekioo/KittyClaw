@@ -6,6 +6,14 @@ namespace KittyClaw.Core.Tests.Automation;
 [Collection("MockClaude")]
 public sealed class MistralSupportTests
 {
+    [Fact]
+    public void ModelCatalog_ContainsCurrentVibeModels()
+    {
+        Assert.Contains("mistral:mistral-large-3", MistralCli.Models);
+        Assert.Contains("mistral:mistral-medium-latest", MistralCli.Models);
+        Assert.Contains("mistral:zai-glm-5-3", MistralCli.Models);
+    }
+
     private sealed class FakeMistralInstall : IDisposable
     {
         private readonly string? _previous;
