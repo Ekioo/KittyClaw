@@ -28,10 +28,11 @@ public sealed class FirstRunProviderService
         if (state.Claude) providers.Add(new("claude", null));
         if (state.Codex) providers.Add(new("codex", "codex:gpt-5.6-sol"));
         if (state.Grok) providers.Add(new("grok", "grok-4.5"));
+        if (state.Copilot) providers.Add(new("copilot", "copilot:default"));
         if (providers.Count == 0)
             return new(journeyId, null, null,
-                "Install Claude Code, OpenAI Codex, or Grok Build, then retry this same step. " +
-                "You can configure custom binaries with KITTYCLAW_CLAUDE_BIN, KITTYCLAW_CODEX_BIN, or KITTYCLAW_GROK_BIN.");
+                "Install Claude Code, OpenAI Codex, Grok Build, or GitHub Copilot CLI, then retry this same step. " +
+                "You can configure custom binaries with KITTYCLAW_CLAUDE_BIN, KITTYCLAW_CODEX_BIN, KITTYCLAW_GROK_BIN, or KITTYCLAW_COPILOT_BIN.");
 
         var primary = providers[0];
         var fallback = providers.Skip(1).FirstOrDefault();

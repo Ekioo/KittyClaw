@@ -11,6 +11,7 @@ models.
 | --- | --- | --- |
 | Claude Code | `claude` | Follow the [Claude Code setup guide](https://code.claude.com/docs/en/setup), then sign in with the CLI. Override discovery with `KITTYCLAW_CLAUDE_BIN` when necessary. |
 | OpenAI Codex | `codex` | Follow [KittyClaw's Codex CLI guide](./codex-cli.md). Override discovery with `KITTYCLAW_CODEX_BIN`. |
+| GitHub Copilot | `copilot` | Install the [Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli), then run `copilot` and `/login` as the same OS user that runs KittyClaw. Override discovery with `KITTYCLAW_COPILOT_BIN`. |
 | Grok Build | `grok` | Follow [KittyClaw's Grok Build guide](./grok-build.md). Override discovery with `KITTYCLAW_GROK_BIN`. |
 | Mistral Vibe | `vibe` | Follow [KittyClaw's Mistral Vibe guide](./mistral-vibe.md). Override discovery with `KITTYCLAW_MISTRAL_BIN`. |
 | Ollama | `ollama` | Install and start [Ollama](https://ollama.com/download), then follow the [local-model guide](./local-models.md). Ollama runs currently use Claude Code as their agent transport. |
@@ -21,6 +22,18 @@ models.
 KittyClaw runs the executable's version command with a short timeout. It does not read, copy, or
 display account credentials. Provider authentication remains owned by the provider CLI, while
 project-specific secrets such as `DEEPSEEK_API_KEY` remain write-only in the project vault.
+Copilot CLI authentication uses the signed-in GitHub account and its active Copilot
+subscription; KittyClaw does not store or display its credentials.
+
+Copilot model choices use the `copilot:<model-id>` form. `copilot:default` delegates to the
+model configured in Copilot CLI; the other choices follow GitHub's
+[published model list](https://docs.github.com/en/copilot/reference/ai-models/supported-models).
+Actual availability still depends on the user's Copilot plan and organization policies.
+KittyClaw runs Copilot non-interactively with `--allow-all-tools` and `--no-ask-user`;
+this bypasses per-tool approvals. KittyClaw does not pass `--allow-all-paths` or
+`--allow-all-urls`.
+Copilot boundary handling is observation-only; use Claude Code when a project requires
+enforced boundary hooks. Silent CLI output omits usage statistics and structured tool events.
 
 Codex and Vibe executable discovery uses synchronous five-second probes. These discard
 both output streams as bytes rather than accumulating lines. Their timeout remains active

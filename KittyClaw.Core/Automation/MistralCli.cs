@@ -17,10 +17,13 @@ public static class MistralCli
     public static string ToCliModel(string model) =>
         IsMistralModel(model) ? model[ModelPrefix.Length..] : model;
 
-    /// <summary>Stable aliases shipped by Vibe. The CLI resolves them to its current hosted models.</summary>
+    /// <summary>Current model aliases exposed by Vibe's hosted catalog.</summary>
     public static readonly IReadOnlyList<string> Models =
     [
+        "mistral:mistral-large-3",
+        "mistral:mistral-medium-latest",
         "mistral:mistral-medium-3.5",
+        "mistral:zai-glm-5-3",
         "mistral:devstral-small",
     ];
 

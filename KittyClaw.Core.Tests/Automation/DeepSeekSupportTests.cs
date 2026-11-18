@@ -10,7 +10,9 @@ public sealed class DeepSeekSupportTests
     {
         Assert.Equal(
         [
+            "deepseek:deepseek-v4-pro[1m]",
             "deepseek:deepseek-v4-pro",
+            "deepseek:deepseek-v4-flash",
             "deepseek:deepseek-flash",
         ], DeepSeekModelCatalog.Models);
     }

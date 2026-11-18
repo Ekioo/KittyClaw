@@ -14,6 +14,7 @@ public sealed class ProviderGlobalSettingsUiTests
         Assert.Contains("data-testid=\"agent-provider-settings\"", source);
         Assert.Contains("Claude Code", source);
         Assert.Contains("OpenAI Codex", source);
+        Assert.Contains("GitHub Copilot", source);
         Assert.Contains("Grok Build", source);
         Assert.Contains("Mistral Vibe", source);
         Assert.Contains("Ollama", source);
@@ -40,7 +41,7 @@ public sealed class ProviderGlobalSettingsUiTests
         var guide = File.ReadAllText(RepoPath("docs", "agent-providers.md"));
         var deepSeek = File.ReadAllText(RepoPath("docs", "deepseek.md"));
 
-        foreach (var provider in new[] { "Claude Code", "OpenAI Codex", "Grok Build", "Mistral Vibe", "Ollama", "DeepSeek V4" })
+        foreach (var provider in new[] { "Claude Code", "OpenAI Codex", "GitHub Copilot", "Grok Build", "Mistral Vibe", "Ollama", "DeepSeek V4" })
             Assert.Contains(provider, guide);
 
         Assert.Contains("DEEPSEEK_API_KEY", deepSeek);

@@ -36,6 +36,14 @@
                     <a class="header-action-btn" href="https://developers.openai.com/codex/cli/" target="_blank" rel="noopener">@L["OnboardingInstall"]</a>
                 }
             </div>
+            <div class="onboarding-check @ProviderClass(_readiness.Copilot)">
+                <span>@(_readiness.Copilot ? "✓" : "○") GitHub Copilot</span>
+                @if (!_readiness.Copilot)
+                {
+                    <small>@L["OnboardingCopilotGuidance"]</small>
+                    <a class="header-action-btn" href="https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli" target="_blank" rel="noopener">@L["OnboardingInstall"]</a>
+                }
+            </div>
             <div class="onboarding-check @ProviderClass(_readiness.Grok)">
                 <span>@(_readiness.Grok ? "✓" : "○") Grok Build</span>
                 @if (!_readiness.Grok)
@@ -88,7 +96,7 @@
 
 @code {
     private bool _showOnboarding;
-    private CliReadiness _readiness = new(false, false, false, false, false, false);
+    private CliReadiness _readiness = new(false, false, false, false, false, false, false);
     private bool _checking;
     private bool _checkStarted;
     private IDisposable? _escOnboarding;

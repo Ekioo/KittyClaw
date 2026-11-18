@@ -1,4 +1,4 @@
-@using System.Net.Http.Json
+﻿@using System.Net.Http.Json
 @using Microsoft.AspNetCore.Components
 @using KittyClaw.Core.Automation
 @using KittyClaw.Core.Models
@@ -315,10 +315,7 @@
                                 <div class="worktree-summary jev-profile-editor" @key="profile" data-testid="jev-profile-editor">
                                     <label>@L["Name"]<input class="settings-input" @bind="profile.Name" /></label>
                                     <label>@L["Description"]<input class="settings-input" @bind="profile.Description" /></label>
-                                    <label>@L["ProcessorModel"]<select class="settings-input" @bind="profile.Model">
-                                        @foreach (var model in AllModels) { <option value="@model">@model</option> }
-                                        @if (!AllModels.Contains(profile.Model)) { <option value="@profile.Model">@profile.Model</option> }
-                                    </select></label>
+                                    <label>@L["ProcessorModel"]<ModelSelect Groups="Groups" Value="@profile.Model" ValueChanged="@(v => profile.Model = v ?? "")" /></label>
                                     @foreach (var skill in _skills.Where(s => _availableSkills.Contains(s.Slug) || _recommendedSkills.Contains(s.Slug) || _requiredSkills.Contains(s.Slug)))
                                     {
                                         <label class="workflow-check"><input type="checkbox" checked="@(profile.Skills.Contains(skill.Slug) || _requiredSkills.Contains(skill.Slug))" disabled="@_requiredSkills.Contains(skill.Slug)" @onchange="e => ToggleProfileSkill(profile, skill.Slug, e.Value is true)" /> @skill.Name</label>
@@ -337,49 +334,7 @@
         <ColumnEditorPhase Number="4" Title="@L["ColumnPhaseExecute"]" Hint="@L["ColumnPhaseExecuteHint"]">
             @if (!fallback) { @AgentIdentityFields() }
                         <label><FieldHelp Label="@L["ProcessorModel"]" Help="@L["ProcessorModelHelp"]" />
-                            <select @key="@($"{_model}#{AllModels.Count}")" value="@(_model ?? "")" @onchange="OnModelChanged">
-                                <option value="">@L["ProcessorModelAutomatic"]</option>
-                                <optgroup label="Claude">
-                                    @foreach (var model in ClaudeModels)
-                                    {
-                                        <option value="@model">@model</option>
-                                    }
-                                </optgroup>
-                                @if (_grokModels.Count > 0)
-                                {
-                                    <optgroup label="Grok">
-                                        @foreach (var model in _grokModels) { <option value="@model">@model</option> }
-                                    </optgroup>
-                                }
-                                @if (_codexModels.Count > 0)
-                                {
-                                    <optgroup label="OpenAI Codex">
-                                        @foreach (var model in _codexModels) { <option value="@model">@model</option> }
-                                    </optgroup>
-                                }
-                                @if (_mistralModels.Count > 0)
-                                {
-                                    <optgroup label="Mistral Vibe">
-                                        @foreach (var model in _mistralModels) { <option value="@model">@model</option> }
-                                    </optgroup>
-                                }
-                                @if (_deepSeekModels.Count > 0)
-                                {
-                                    <optgroup label="DeepSeek">
-                                        @foreach (var model in _deepSeekModels) { <option value="@model">@model</option> }
-                                    </optgroup>
-                                }
-                                @if (_ollamaModels.Count > 0)
-                                {
-                                    <optgroup label="Local (Ollama)">
-                                        @foreach (var model in _ollamaModels) { <option value="@model">@model</option> }
-                                    </optgroup>
-                                }
-                                @if (!string.IsNullOrWhiteSpace(_model) && !AllModels.Contains(_model))
-                                {
-                                    <option value="@_model">@_model @L["ProcessorModelCustom"]</option>
-                                }
-                            </select>
+                            <ModelSelect Groups="Groups" Value="@_model" ValueChanged="@(v => _model = v)" EmptyLabel="@L["ProcessorModelAutomatic"]" CustomSuffix="@L["ProcessorModelCustom"]" />
                         </label>
 
 
@@ -484,7 +439,8 @@
     private List<string> _mistralModels = [];
     private List<string> _codexModels = [];
     private List<string> _deepSeekModels = [];
-    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_mistralModels).Concat(_deepSeekModels).Concat(_ollamaModels).ToList();
+    private List<string> _copilotModels = [];
+    private IReadOnlyList<ModelGroup> Groups => ModelGroups.Build(_grokModels, _codexModels, _mistralModels, _deepSeekModels, _copilotModels, _ollamaModels);
     private int _maxTurns = 100;
     private int _maxAttempts = 3;
     private int _retryBackoff = 60;
@@ -565,21 +521,20 @@
             var mistral = http.GetFromJsonAsync<List<string>>("/api/mistral-models");
             var codex = http.GetFromJsonAsync<List<string>>("/api/codex-models");
             var deepSeek = http.GetFromJsonAsync<List<string>>("/api/deepseek-models");
-            await Task.WhenAll(ollama, grok, codex, mistral, deepSeek);
+            var copilot = http.GetFromJsonAsync<List<string>>("/api/copilot-models");
+            await Task.WhenAll(ollama, grok, codex, mistral, deepSeek, copilot);
             _ollamaModels = await ollama ?? [];
             _grokModels = await grok ?? [];
             _mistralModels = await mistral ?? [];
             _codexModels = await codex ?? [];
             _deepSeekModels = await deepSeek ?? [];
+            _copilotModels = await copilot ?? [];
         }
         catch
         {
             // Model discovery is optional; the built-in catalog and any saved custom value remain usable.
         }
     }
-
-    private void OnModelChanged(ChangeEventArgs e) =>
-        _model = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value!.ToString();
 
     private void ApplyProcessor(ColumnProcessor? processor, string? sourceName)
     {

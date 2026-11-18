@@ -8,7 +8,7 @@ namespace KittyClaw.Core.Automation;
 /// </summary>
 public static class ModelCostEstimator
 {
-    public const string RateCardVersion = "2026-10-28";
+    public const string RateCardVersion = "2026-11-10";
 
     public static bool TryEstimate(
         string? model,
@@ -58,6 +58,7 @@ public static class ModelCostEstimator
             "deepseek-v4-pro" or "deepseek-v4-pro[1m]" => new(1.32m, 3.96m, 0.044m, 1.32m),
             "deepseek-flash" or "deepseek-v4-flash" => new(0.3m, 1.2m, 0.006m, 0.3m),
             // https://platform.claude.com/docs/en/about-claude/pricing (5-minute writes).
+            "claude-fable-5-2" => new(8m, 40m, 0.2m, 10m),
             "claude-fable-5-1" => new(10m, 50m, 0.25m, 12.5m),
             "claude-opus-5-5" => new(4m, 20m, 0.2m, 5m),
             "claude-sonnet-5-5" => new(2m, 10m, 0.1m, 2.5m),

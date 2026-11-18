@@ -84,6 +84,7 @@ public sealed class ModelCostEstimatorTests
     }
 
     [Theory]
+    [InlineData("claude-fable-5-2", 58.2)]
     [InlineData("claude-fable-5-1", 72.75)]
     [InlineData("claude:claude-opus-5-5", 29.2)]
     [InlineData("claude-sonnet-5-5", 14.6)]

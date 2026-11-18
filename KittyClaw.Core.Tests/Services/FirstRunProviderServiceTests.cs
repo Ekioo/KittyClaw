@@ -8,13 +8,14 @@ public sealed class FirstRunProviderServiceTests : IDisposable
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "kittyclaw-first-run-" + Guid.NewGuid().ToString("N"));
 
     [Theory]
-    [InlineData(true, false, false, "claude", null)]
-    [InlineData(false, true, false, "codex", "codex:gpt-5.6-sol")]
-    [InlineData(false, false, true, "grok", "grok-4.5")]
+    [InlineData(true, false, false, false, "claude", null)]
+    [InlineData(false, true, false, false, "codex", "codex:gpt-5.6-sol")]
+    [InlineData(false, false, true, false, "grok", "grok-4.5")]
+    [InlineData(false, false, false, true, "copilot", "copilot:default")]
     public async Task SelectAsync_UsesEachAvailableProviderIndependently(
-        bool claude, bool codex, bool grok, string expectedName, string? expectedModel)
+        bool claude, bool codex, bool grok, bool copilot, string expectedName, string? expectedModel)
     {
-        var plan = await Create(claude, codex, grok).SelectAsync("journey-1");
+        var plan = await Create(claude, codex, grok, copilot).SelectAsync("journey-1");
 
         Assert.True(plan.Ready);
         Assert.Equal(expectedName, plan.Primary!.Name);
@@ -25,7 +26,7 @@ public sealed class FirstRunProviderServiceTests : IDisposable
     [Fact]
     public async Task SelectAsync_UsesDeterministicFallbackOrder()
     {
-        var plan = await Create(true, true, true).SelectAsync("journey-2");
+        var plan = await Create(true, true, true, false).SelectAsync("journey-2");
 
         Assert.Equal("claude", plan.Primary!.Name);
         Assert.Equal("codex", plan.Fallback!.Name);
@@ -34,11 +35,12 @@ public sealed class FirstRunProviderServiceTests : IDisposable
     [Fact]
     public async Task SelectAsync_NoProviderKeepsJourneyForRetry()
     {
-        var unavailable = await Create(false, false, false).SelectAsync("journey-retry");
-        var available = await Create(false, true, false).SelectAsync(unavailable.JourneyId);
+        var unavailable = await Create(false, false, false, false).SelectAsync("journey-retry");
+        var available = await Create(false, true, false, false).SelectAsync(unavailable.JourneyId);
 
         Assert.False(unavailable.Ready);
         Assert.Contains("KITTYCLAW_CODEX_BIN", unavailable.Guidance);
+        Assert.Contains("KITTYCLAW_COPILOT_BIN", unavailable.Guidance);
         Assert.True(available.Ready);
         Assert.Equal("journey-retry", available.JourneyId);
     }
@@ -46,7 +48,7 @@ public sealed class FirstRunProviderServiceTests : IDisposable
     [Fact]
     public async Task FailureAndFallback_AreCorrelatedInActivationEvents()
     {
-        var service = Create(true, true, false);
+        var service = Create(true, true, false, false);
         var plan = await service.SelectAsync("journey-events");
         await service.MarkStartedAsync(plan.JourneyId);
         await service.RecordFailureAsync(plan, "quota");
@@ -60,7 +62,7 @@ public sealed class FirstRunProviderServiceTests : IDisposable
         Assert.Equal(5, events.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries).Length);
     }
 
-    private FirstRunProviderService Create(bool claude, bool codex, bool grok)
+    private FirstRunProviderService Create(bool claude, bool codex, bool grok, bool copilot)
     {
         Directory.CreateDirectory(_dir);
         var readiness = new AgentCliReadinessService(
@@ -68,7 +70,9 @@ public sealed class FirstRunProviderServiceTests : IDisposable
             () => codex ? "codex" : null,
             () => grok ? "grok" : null,
             () => null,
-            (binary, _, _) => Task.FromResult(binary == "git" || binary is "claude" or "codex" or "grok"));
+            () => copilot ? "copilot" : null,
+            (binary, _, _) => Task.FromResult(binary == "git"
+                || binary is "claude" or "codex" or "grok" or "copilot"));
         return new FirstRunProviderService(_dir, readiness);
     }
 

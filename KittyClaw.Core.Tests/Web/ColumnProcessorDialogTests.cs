@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 namespace KittyClaw.Core.Tests.Web;
 
@@ -145,7 +145,7 @@ public sealed class ColumnProcessorDialogTests
         Assert.Contains("ProcessorMissionHelp", source);
         Assert.Contains("ProcessorPromptHelp", source);
         Assert.Contains("ProcessorModelHelp", source);
-        Assert.Contains("OnModelChanged", source);
+        Assert.Contains("<ModelSelect", source);
         Assert.Contains("_model = processor?.Model", source);
         Assert.Contains("request.Name, request.Mission, request.Model", source);
         Assert.DoesNotContain("request.Name, request.Mission, null", source);

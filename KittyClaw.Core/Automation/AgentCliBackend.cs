@@ -32,6 +32,7 @@ internal abstract class AgentCliBackend
     internal abstract CliProvider Provider { get; }
     internal abstract string SessionPrefix { get; }
     internal virtual bool CallerChoosesNewSessionId => true;
+    internal virtual bool PlainTextOutput => false;
 
     internal abstract Task<AgentCliInvocation> BuildInvocationAsync(
         AgentRunContext context, string prompt, string sessionId, bool isResume,
@@ -45,6 +46,7 @@ internal abstract class AgentCliBackend
         CliProvider.Grok => GrokBackend.Instance,
         CliProvider.Codex => CodexBackend.Instance,
         CliProvider.Mistral => MistralBackend.Instance,
+        CliProvider.Copilot => CopilotBackend.Instance,
         CliProvider.DeepSeek => DeepSeekBackend.Instance,
         _ => ClaudeBackend.Instance,
     };
@@ -185,6 +187,7 @@ internal abstract class AgentCliBackend
             AgentRunContext context, string prompt, string sessionId, bool isResume,
             CancellationToken cancellationToken)
         {
+            // Copilot selects or resumes the session by exact UUID; --resume conflicts with --session-id.
             var args = new List<string>
             {
                 "--prompt", "--max-turns", context.MaxTurns.ToString(),
@@ -197,5 +200,44 @@ internal abstract class AgentCliBackend
 
         internal override bool TryMapEvent(JsonElement root, string line, AgentRun run) =>
             MistralStreamAdapter.TryMap(root, line, run);
+    }
+
+    private sealed class CopilotBackend : AgentCliBackend
+    {
+        internal static readonly CopilotBackend Instance = new();
+        internal override CliProvider Provider => CliProvider.Copilot;
+        internal override string SessionPrefix => "copilot:";
+        internal override bool PlainTextOutput => true;
+
+        internal override Task<AgentCliInvocation> BuildInvocationAsync(
+            AgentRunContext context, string prompt, string sessionId, bool isResume,
+            CancellationToken cancellationToken)
+        {
+            var args = new List<string>
+            {
+                "--silent", "--no-ask-user", "--no-auto-update", "--allow-all-tools",
+                "--session-id", sessionId,
+            };
+            var model = CopilotCli.ToCliModel(context.Target.Model);
+            if (!string.IsNullOrWhiteSpace(model))
+            {
+                args.Add("--model");
+                args.Add(model);
+            }
+            if (context.ImagePaths is { Count: > 0 })
+                foreach (var image in context.ImagePaths)
+                    args.Add($"--attachment={image}");
+
+            var secretNames = context.Env.Keys
+                .Concat(context.Target.Environment.Keys)
+                .Where(name => !string.IsNullOrWhiteSpace(name) && !name.Contains(','))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (secretNames.Length > 0)
+                args.Add($"--secret-env-vars={string.Join(",", secretNames)}");
+
+            return Task.FromResult(new AgentCliInvocation(
+                CopilotCli.Binary ?? "copilot", args, WritePromptToStdin: true));
+        }
     }
 }

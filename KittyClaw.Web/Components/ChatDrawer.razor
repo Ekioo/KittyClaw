@@ -1,4 +1,4 @@
-@inject IHttpClientFactory HttpFactory
+﻿@inject IHttpClientFactory HttpFactory
 @using KittyClaw.Core.Automation
 @using KittyClaw.Web.Services
 @using Markdig
@@ -241,66 +241,9 @@
 
                 </Tray>
                 <ModelPicker>
-            <select class="chat-drawer-model-select" @bind="_selectedModel" @bind:after="PersistSelectedModelAsync" disabled="@_historyLoading">
-                <optgroup label="Claude">
-                    @foreach (var m in ClaudeModels)
-                    {
-                        <option value="@m">@m</option>
-                    }
-                </optgroup>
-                @if (_grokModels.Count > 0)
-                {
-                    <optgroup label="Grok">
-                        @foreach (var m in _grokModels)
-                        {
-                            <option value="@m">@m</option>
-                        }
-                    </optgroup>
-                }
-                @if (_codexModels.Count > 0)
-                {
-                    <optgroup label="OpenAI Codex">
-                        @foreach (var m in _codexModels)
-                        {
-                            <option value="@m">@m</option>
-                        }
-                    </optgroup>
-                }
-                @if (_mistralModels.Count > 0)
-                {
-                    <optgroup label="Mistral Vibe">
-                        @foreach (var m in _mistralModels)
-                        {
-                            <option value="@m">@m</option>
-                        }
-                    </optgroup>
-                }
-                @if (_deepSeekModels.Count > 0)
-                {
-                    <optgroup label="DeepSeek">
-                        @foreach (var m in _deepSeekModels)
-                        {
-                            <option value="@m">@m</option>
-                        }
-                    </optgroup>
-                }
-                @if (_ollamaModels.Count > 0)
-                {
-                    <optgroup label="Local (Ollama)">
-                        @foreach (var m in _ollamaModels)
-                        {
-                            <option value="@m">@m</option>
-                        }
-                    </optgroup>
-                }
-                @if (!string.IsNullOrWhiteSpace(_selectedModel) && !AllModels.Contains(_selectedModel))
-                {
-                    <option value="@_selectedModel">@_selectedModel</option>
-                }
-            </select>
+            <ModelSelect Groups="Groups" @bind-Value="_selectedModel" @bind-Value:after="PersistSelectedModelAsync" Disabled="@_historyLoading" OpenUp="true" />
                 <label class="chat-effort-picker">
-                    @L["ChatEffort"]
-                    <select class="chat-drawer-model-select" @bind="_selectedEffort" disabled="@(_historyLoading || _loading || ModelEffort.Options(_selectedModel).Count == 0)">
+                    <select class="chat-drawer-model-select" aria-label="@L["ChatEffort"]" @bind="_selectedEffort" disabled="@(_historyLoading || _loading || ModelEffort.Options(_selectedModel).Count == 0)">
                         @if (ModelEffort.Options(_selectedModel).Count == 0)
                         {
                             <option value="">@L["ChatEffortUnsupported"]</option>
@@ -363,9 +306,9 @@
     private List<string> _codexModels = new();
     private List<string> _mistralModels = new();
     private List<string> _deepSeekModels = new();
+    private List<string> _copilotModels = new();
     private const string DefaultModel = ClaudeModelCatalog.DefaultModel;
-    private static readonly IReadOnlyList<string> ClaudeModels = ClaudeModelCatalog.Models;
-    private List<string> AllModels => ClaudeModels.Concat(_grokModels).Concat(_codexModels).Concat(_mistralModels).Concat(_deepSeekModels).Concat(_ollamaModels).ToList();
+    private IReadOnlyList<ModelGroup> Groups => ModelGroups.Build(_grokModels, _codexModels, _mistralModels, _deepSeekModels, _copilotModels, _ollamaModels);
     private string SelectedModelStorageKey => $"kc-chat-model-{ProjectSlug}";
 
     // Image paste (#115). Accepted clipboard images await Send() in this buffer; rejections
@@ -504,8 +447,7 @@
 
     private bool IsAvailableModel(string? model) =>
         !string.IsNullOrWhiteSpace(model) &&
-        (ClaudeModels.Contains(model) || _ollamaModels.Contains(model) ||
-         _grokModels.Contains(model) || _codexModels.Contains(model) || _mistralModels.Contains(model));
+        Groups.Any(g => g.Installed && g.Models.Contains(model));
 
     private async Task PersistSelectedModelAsync()
     {
@@ -540,12 +482,20 @@
         var codexTask = TryFetchModelsAsync(http, "/api/codex-models", "codex");
         var mistralTask = TryFetchModelsAsync(http, "/api/mistral-models", "mistral");
         var deepSeekTask = TryFetchModelsAsync(http, "/api/deepseek-models", "deepseek");
-        await Task.WhenAll(ollamaTask, grokTask, codexTask, mistralTask, deepSeekTask);
+        var copilotTask = TryFetchModelsAsync(http, "/api/copilot-models", "copilot");
+        await Task.WhenAll(ollamaTask, grokTask, codexTask, mistralTask, deepSeekTask, copilotTask);
         _ollamaModels = await ollamaTask;
         _grokModels = await grokTask;
         _codexModels = await codexTask;
         _mistralModels = await mistralTask;
         _deepSeekModels = await deepSeekTask;
+        _copilotModels = await copilotTask;
+        if (_sessionModel is null)
+        {
+            _selectedModel = ModelGroups.ResolveDefault(Groups, _selectedModel);
+            _selectedEffort = ModelEffort.Effective(_selectedModel, _selectedEffort);
+            await RestoreRememberedModelAsync();
+        }
     }
 
     private async Task<List<string>> TryFetchModelsAsync(HttpClient http, string uri, string provider)

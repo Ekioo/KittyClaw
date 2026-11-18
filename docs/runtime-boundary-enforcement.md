@@ -17,6 +17,12 @@ Runtime boundary enforcement stops protected provider actions before their exter
 - `POST /api/projects/{slug}/approvals/gate?runId={runId}` receives provider hook events before and after effects.
 - Every run reloads the project's enforcement mode before dispatch. `Enforce` installs the native hook adapter when every protected boundary is enforceable, or fails before provider spawn when the runtime is observation-only.
 
+The registered hook commands bind their phase with a literal `PreToolUse` or `PostToolUse`
+argument. The scripts do not infer that phase from the incoming JSON text: a tool argument,
+comment or nested metadata field must never switch a pre-effect decision into the silent
+post-effect path. Pre-effect failures and denials produce an explicit deny verdict;
+post-effect hooks only forward the outcome.
+
 Local-checkout synchronization is an orchestrator-owned Git operation, not a provider action. Its mutation window is registered so boundary drift reporting identifies it as coordinated KittyClaw activity instead of attributing it to the running agent. Synchronization failures remain visible independently from the already durable integration; see [Local checkout synchronization recovery](./local-checkout-sync-recovery.md).
 
 ## Capability matrix

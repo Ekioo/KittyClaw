@@ -348,3 +348,64 @@ path listings and evidence captures still need their own output-volume policy;
 the entire repository fingerprint is not claimed to have bounded memory.
 Next scope: stream or bound the tracked-diff/path-list captures while preserving
 path attribution, then resume HTTP uploaded-file and path-boundary review.
+
+
+## 2026-11-01 nightly audit: approval hook phase confusion
+
+Confirmed a security boundary bypass in the Claude Code pre-effect hook adapter.
+An untrusted agent controls tool arguments; those arguments must not control
+whether KittyClaw performs a pre-effect approval check or only records an outcome.
+The generated scripts instead inferred their phase by searching the entire raw
+payload for PostToolUse. The actual root event could remain PreToolUse:
+
+- The shell implementation could be switched by a valid Bash command such as
+  `git push origin main # PostToolUse` when the event field preceded the input.
+- PowerShell could be switched by a nested `hook_event_name: PostToolUse` field
+  in structured tool arguments, such as metadata accepted by an MCP command
+  tool. The nested field was mistaken for the provider's root event field.
+
+The mistaken post-effect branch ignored a denied gate response (or a missing/
+unavailable gate) and exited successfully without a permission verdict. Claude
+Code's [official hook protocol](https://code.claude.com/docs/en/hooks) specifies
+that exit 0 without output leaves the normal permission flow in control.
+KittyClaw's Claude-compatible backend starts the provider with
+`--dangerously-skip-permissions`, so that fallback does not enforce the missing
+KittyClaw approval. This is an approval bypass by untrusted tool input, not an
+anonymous HTTP exploit. It applies to the enforced Claude transport, including
+Ollama through that transport.
+
+Before the fix, a standalone replay of the actual shell script returned an
+explicit deny for the control payload and empty stdout with exit 0 after adding
+the harmless-looking comment. Twelve direct-hook regression cases then ran the
+actual generated PowerShell and shell commands against disposable loopback gates.
+Seven failed because a pre-effect hook returned empty stdout instead of an
+explicit deny. The gate-denial fixtures also establish that the response was
+ignored; the fake gate never authorized an effect. No actual push, publication,
+secret access or other protected external effect was attempted.
+
+Each registered command now carries its fixed PreToolUse or PostToolUse phase
+as an argument. Both scripts use that trusted registration value, never tool
+input text. A pre-effect invocation therefore returns its explicit verdict even
+when arguments contain nested phase fields or comments. Genuine post-effect
+hooks keep their silent outcome-reporting behavior. The default platform is
+unchanged; tests can generate either script implementation on Windows.
+
+Final verification: 88 distinct tests passed in two runs: 78 across
+RuntimeHookPhaseSecurityTests, RuntimeBoundaryGateServiceTests and
+RuntimeBoundaryEnforcementServiceTests, then 10 RuntimeEnforcementIntegrationTests.
+All 12 new direct-hook cases pass, including all seven original failures, both
+JSON property orders, missing environment and genuine post-effect calls. Existing
+integration tests cover denied decisions, no decision, allow-once consumption,
+Ollama transport and unsupported-provider refusal, using only the mock CLI and
+isolated loopback Kestrel gates. Builds used bin/SecurityHookPhaseAudit/ and a
+temporary NuGet configuration containing only nuget.org.
+
+Both generated script implementations were executed on Windows (PowerShell and
+Git Bash). Native Linux/macOS, the full test suite, live UI and a real paid
+provider were not tested. The mock CLI is deliberately stricter than Claude
+Code about empty pre-hook output, so the new direct-hook tests assert the actual
+script verdict rather than relying on that mock to reproduce the native
+permission fallback. That fallback assessment uses the official protocol and
+the backend's explicit permission flag. The main :5230 instance, real projects
+and real secrets were not used. No dependency versions were changed.
+Previously generated invocation bundles are not rewritten by this patch.

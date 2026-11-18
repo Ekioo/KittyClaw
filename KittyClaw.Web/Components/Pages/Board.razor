@@ -770,6 +770,8 @@ else
     protected override async Task OnInitializedAsync()
     {
         BoardUpdateNotifier.OnProjectUpdated += OnProjectUpdatedExternal;
+        TicketService.TicketStatusChanged += OnTicketStatusChanged;
+        TicketService.TicketCreated += OnTicketCreated;
         AgentRuns.OnChange += OnAgentRunsChanged;
         if (InitialState.TryTakeFromJson<InitialBoardData>($"board:{Slug}", out var initial) && initial is not null)
         {
@@ -843,6 +845,11 @@ else
             StateHasChanged();
         }), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
 
+    private void OnTicketStatusChanged(string slug, int ticketId, string fromStatus, string toStatus) =>
+        OnProjectUpdatedExternal(slug);
+
+    private void OnTicketCreated(string slug, int ticketId) => OnProjectUpdatedExternal(slug);
+
     private void OnProjectUpdatedExternal(string slug)
     {
         if (slug != Slug) return;
@@ -870,6 +877,8 @@ else
         _copyNotificationCts?.Dispose();
         _initialStateSubscription.Dispose();
         BoardUpdateNotifier.OnProjectUpdated -= OnProjectUpdatedExternal;
+        TicketService.TicketStatusChanged -= OnTicketStatusChanged;
+        TicketService.TicketCreated -= OnTicketCreated;
         AgentRuns.OnChange -= OnAgentRunsChanged;
         if (_undoHandler is not null)
             _ = JS.InvokeVoidAsync("unregisterUndoShortcut", _undoHandler);
