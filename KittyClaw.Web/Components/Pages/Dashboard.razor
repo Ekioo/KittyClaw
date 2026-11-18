@@ -464,6 +464,7 @@ else
         catch { _deepSeekModels = new(); }
         try { _copilotModels = await http.GetFromJsonAsync<List<string>>("/api/copilot-models") ?? new(); }
         catch { _copilotModels = new(); }
+        _chatModel = ModelGroups.ResolveDefault(Groups, _chatModel);
     }
 
     private static string TileId(string tileSlug) =>

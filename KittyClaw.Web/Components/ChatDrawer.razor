@@ -490,6 +490,12 @@
         _mistralModels = await mistralTask;
         _deepSeekModels = await deepSeekTask;
         _copilotModels = await copilotTask;
+        if (_sessionModel is null)
+        {
+            _selectedModel = ModelGroups.ResolveDefault(Groups, _selectedModel);
+            _selectedEffort = ModelEffort.Effective(_selectedModel, _selectedEffort);
+            await RestoreRememberedModelAsync();
+        }
     }
 
     private async Task<List<string>> TryFetchModelsAsync(HttpClient http, string uri, string provider)

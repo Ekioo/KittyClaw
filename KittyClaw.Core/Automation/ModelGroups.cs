@@ -49,6 +49,18 @@ public static class ModelGroups
         if (m.StartsWith("copilot")) return "copilot";
         return "default";
     }
+    /// <summary>Recommended model of the first installed provider, or null when none is available.</summary>
+    public static string? Recommended(IEnumerable<ModelGroup> groups)
+    {
+        var group = groups.FirstOrDefault(g => g.Installed && g.Models.Count > 0);
+        if (group is null) return null;
+        return group.Models.Contains(ClaudeModelCatalog.DefaultModel) ? ClaudeModelCatalog.DefaultModel : group.Models[0];
+    }
+
+    /// <summary>Keeps <paramref name="current"/> when it is offered by an installed provider; otherwise falls back to the recommended model.</summary>
+    public static string ResolveDefault(IReadOnlyList<ModelGroup> groups, string current) =>
+        groups.Any(g => g.Installed && g.Models.Contains(current)) ? current : Recommended(groups) ?? current;
+
     public static bool IsListed(IEnumerable<ModelGroup> groups, string? selected) =>
         !string.IsNullOrWhiteSpace(selected)
         && groups.Any(g => g.IsShown(selected) && g.VisibleModels(selected).Contains(selected));
