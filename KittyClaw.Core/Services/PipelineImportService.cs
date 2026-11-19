@@ -109,6 +109,12 @@ public sealed partial class PipelineImportService(
         preview.RequiredApprovals = ComputeRequiredApprovals(kit);
 
         var workspace = projects.ResolveWorkspacePath(project);
+        var skillsRoot = Path.Combine(workspace, ".agents", "skills");
+        if (kit.ReferencedSkills.Count != 0 && ProjectSkillService.HasLinkedRoot(skillsRoot))
+        {
+            preview.Blockages.Add(LinkedSkillsRootIssue());
+            return preview;
+        }
         preview.Agents = kit.Agents.Select(agent => new PipelineImportRequirement(
             agent, File.Exists(Path.Combine(workspace, ".agents", agent, "SKILL.md")))).ToList();
 
@@ -125,7 +131,7 @@ public sealed partial class PipelineImportService(
             if (kit.SkillFolders.TryGetValue(slug, out var folder))
             {
                 var fingerprint = FingerprintKitSkill(folder);
-                var resolution = ResolveSkillCollision(workspace, slug, fingerprint);
+                var resolution = ResolveSkillCollision(skillsRoot, slug, fingerprint);
                 var name = ReadKitSkillName(folder) ?? slug;
                 preview.Skills.Add(new PipelineImportSkill(
                     slug, name, Embedded: true, fingerprint, folder.Count, resolution, Available: true));
@@ -138,7 +144,7 @@ public sealed partial class PipelineImportService(
             {
                 // Declared-only prerequisite: it must already exist because a processor cannot
                 // reference an unknown project skill.
-                var available = File.Exists(Path.Combine(workspace, ".agents", "skills", slug, "SKILL.md"));
+                var available = ProjectSkillService.IsAvailableSkill(Path.Combine(skillsRoot, slug));
                 preview.Skills.Add(new PipelineImportSkill(
                     slug, slug, Embedded: false, Fingerprint: null, FileCount: 0, Resolution: null, available));
                 if (!available)
@@ -187,6 +193,8 @@ public sealed partial class PipelineImportService(
 
         var workspace = projects.ResolveWorkspacePath(project);
         var skillsRoot = Path.Combine(workspace, ".agents", "skills");
+        if (kit.ReferencedSkills.Count != 0 && ProjectSkillService.HasLinkedRoot(skillsRoot))
+            throw new PipelineImportRejectedException([LinkedSkillsRootIssue()]);
 
         // --- Collision resolution: rename or cancel, never overwrite. ---
         var conflicts = new List<PipelineImportIssue>();
@@ -205,7 +213,7 @@ public sealed partial class PipelineImportService(
         foreach (var (slug, folder) in kit.SkillFolders)
         {
             var fingerprint = FingerprintKitSkill(folder);
-            var resolution = ResolveSkillCollision(workspace, slug, fingerprint);
+            var resolution = ResolveSkillCollision(skillsRoot, slug, fingerprint);
             if (resolution == PipelineImportSkillResolution.ReuseIdentical)
             {
                 slugMap[slug] = slug;
@@ -228,7 +236,8 @@ public sealed partial class PipelineImportService(
                     $"Le renommage '{finalSlug}' n’est pas un identifiant de skill valide."));
                 continue;
             }
-            if (Directory.Exists(Path.Combine(skillsRoot, finalSlug)) || slugMap.ContainsValue(finalSlug))
+            var destination = Path.Combine(skillsRoot, finalSlug);
+            if (ProjectSkillService.IsReparsePoint(destination) || Directory.Exists(destination) || slugMap.ContainsValue(finalSlug))
             {
                 conflicts.Add(new PipelineImportIssue(
                     "skill-rename-collision", $"{PipelineKitFormat.SkillsFolderName}/{slug}",
@@ -284,7 +293,7 @@ public sealed partial class PipelineImportService(
                 disabledReasons.Add($"agent:{agent}");
         var unavailableDeclaredSkills = kit.ReferencedSkills
             .Where(skill => !kit.SkillFolders.ContainsKey(skill)
-                && !File.Exists(Path.Combine(skillsRoot, skill, "SKILL.md")))
+                && !ProjectSkillService.IsAvailableSkill(Path.Combine(skillsRoot, skill)))
             .ToHashSet(StringComparer.Ordinal);
         foreach (var skill in unavailableDeclaredSkills)
             disabledReasons.Add($"skill:{skill}");
@@ -467,10 +476,15 @@ public sealed partial class PipelineImportService(
         return [.. approvals];
     }
 
+    private static PipelineImportIssue LinkedSkillsRootIssue() => new(
+        "linked-skill-root", PipelineKitFormat.SkillsFolderName,
+        "Project skill directories cannot be symbolic links or reparse points.");
+
     private static PipelineImportSkillResolution ResolveSkillCollision(
-        string workspace, string slug, string kitFingerprint)
+        string skillsRoot, string slug, string kitFingerprint)
     {
-        var folder = Path.Combine(workspace, ".agents", "skills", slug);
+        var folder = Path.Combine(skillsRoot, slug);
+        if (ProjectSkillService.IsReparsePoint(folder)) return PipelineImportSkillResolution.RenameRequired;
         if (!Directory.Exists(folder)) return PipelineImportSkillResolution.Create;
         return string.Equals(FingerprintDiskSkill(folder), kitFingerprint, StringComparison.Ordinal)
             ? PipelineImportSkillResolution.ReuseIdentical
@@ -944,11 +958,23 @@ public sealed partial class PipelineImportService(
     private static string FingerprintKitSkill(List<(string Relative, byte[] Content)> files) =>
         Fingerprint(files.Select(file => (file.Relative, file.Content)));
 
-    private static string FingerprintDiskSkill(string folder)
+    private static string? FingerprintDiskSkill(string folder)
     {
         var root = Path.GetFullPath(folder);
-        return Fingerprint(Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
-            .Select(path => (Path.GetRelativePath(root, path).Replace('\\', '/'), File.ReadAllBytes(path))));
+        var pending = new Stack<string>();
+        var files = new List<string>();
+        pending.Push(root);
+        while (pending.TryPop(out var directory))
+        {
+            foreach (var path in Directory.EnumerateFileSystemEntries(directory))
+            {
+                if (ProjectSkillService.IsReparsePoint(path)) return null;
+                if (Directory.Exists(path)) pending.Push(path);
+                else files.Add(path);
+            }
+        }
+        return Fingerprint(files.Select(path =>
+            (Path.GetRelativePath(root, path).Replace('\\', '/'), File.ReadAllBytes(path))));
     }
 
     /// <summary>Content fingerprint over relative paths and per-file hashes; text newlines are

@@ -22,7 +22,8 @@ public static partial class Endpoints
         {
             var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
             if (workspace is null) return Results.NotFound();
-            if (!IsInsideTileDir(workspace, tileSlug, ds)) return Results.BadRequest();
+            if (!ds.IsTileDirectoryAllowed(workspace, tileSlug))
+                return Results.BadRequest(new { error = DashboardTilePathException.InvalidTilePathMessage });
             var removed = await ds.RemoveTileAsync(slug, tileSlug);
             if (!removed) return Results.NotFound();
             ds.DeleteTileFolder(workspace, tileSlug);
@@ -33,7 +34,8 @@ public static partial class Endpoints
         {
             var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
             if (workspace is null) return Results.NotFound();
-            if (!IsInsideTileDir(workspace, tileSlug, ds)) return Results.BadRequest();
+            if (!ds.IsTileDirectoryAllowed(workspace, tileSlug))
+                return Results.BadRequest(new { error = DashboardTilePathException.InvalidTilePathMessage });
             var tile = await ds.MoveTileAsync(slug, workspace, tileSlug, req.X, req.Y);
             return tile is null ? Results.NotFound() : Results.Ok(tile);
         }).WithTags("Dashboard");
@@ -42,7 +44,8 @@ public static partial class Endpoints
         {
             var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
             if (workspace is null) return Results.NotFound();
-            if (!IsInsideTileDir(workspace, tileSlug, ds)) return Results.BadRequest();
+            if (!ds.IsTileDirectoryAllowed(workspace, tileSlug))
+                return Results.BadRequest(new { error = DashboardTilePathException.InvalidTilePathMessage });
             var tile = await ds.ResizeTileAsync(slug, workspace, tileSlug, req.Width, req.Height);
             return tile is null ? Results.NotFound() : Results.Ok(tile);
         }).WithTags("Dashboard");
@@ -52,7 +55,8 @@ public static partial class Endpoints
         {
             var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
             if (workspace is null) return Results.NotFound();
-            if (!IsInsideTileDir(workspace, tileSlug, ds)) return Results.BadRequest();
+            if (!ds.IsTileDirectoryAllowed(workspace, tileSlug))
+                return Results.BadRequest(new { error = DashboardTilePathException.InvalidTilePathMessage });
             var content = await ds.ReadOutputAsync(workspace, tileSlug);
             return content is null ? Results.NotFound() : Results.Text(content);
         }).WithTags("Dashboard");
@@ -62,7 +66,8 @@ public static partial class Endpoints
         {
             var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
             if (workspace is null) return Results.NotFound();
-            if (!IsInsideTileDir(workspace, tileSlug, ds)) return Results.BadRequest();
+            if (!ds.IsTileDirectoryAllowed(workspace, tileSlug))
+                return Results.BadRequest(new { error = DashboardTilePathException.InvalidTilePathMessage });
             var path = ds.FindOutputPath(workspace, tileSlug);
             if (path is null || !File.Exists(path)) return Results.NotFound();
             var ext = Path.GetExtension(path).ToLowerInvariant();
@@ -85,7 +90,8 @@ public static partial class Endpoints
         {
             var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
             if (workspace is null) return Results.NotFound();
-            if (!IsInsideTileDir(workspace, tileSlug, ds)) return Results.BadRequest();
+            if (!ds.IsTileDirectoryAllowed(workspace, tileSlug))
+                return Results.BadRequest(new { error = DashboardTilePathException.InvalidTilePathMessage });
             var route = await durableWrites.ResolveAsync(slug, null,
                 [Path.Combine(".dashboard", tileSlug)], req.HttpContext.RequestAborted);
             try
@@ -106,6 +112,11 @@ public static partial class Endpoints
                         secretPaths = validation.SecretPaths
                     });
             }
+            catch (DashboardTilePathException ex)
+            {
+                await durableWrites.CloseOrPreserveExecutionAsync(slug, route, ex.Message);
+                return Results.BadRequest(new { error = ex.Message });
+            }
             catch (Exception ex)
             {
                 await durableWrites.PreserveExecutionAsync(slug, route, ex.Message);
@@ -118,7 +129,8 @@ public static partial class Endpoints
         {
             var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
             if (workspace is null) return Results.NotFound();
-            if (!IsInsideTileDir(workspace, tileSlug, ds)) return Results.BadRequest();
+            if (!ds.IsTileDirectoryAllowed(workspace, tileSlug))
+                return Results.BadRequest(new { error = DashboardTilePathException.InvalidTilePathMessage });
             var sidecar = await ds.ReadSidecarAsync(workspace, tileSlug);
             return sidecar is null ? Results.NotFound() : Results.Ok(sidecar);
         }).WithTags("Dashboard");
@@ -128,11 +140,19 @@ public static partial class Endpoints
         {
             var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
             if (workspace is null) return Results.NotFound();
-            if (!IsInsideTileDir(workspace, tileSlug, ds)) return Results.BadRequest();
+            if (!ds.IsTileDirectoryAllowed(workspace, tileSlug))
+                return Results.BadRequest(new { error = DashboardTilePathException.InvalidTilePathMessage });
             if (string.IsNullOrWhiteSpace(sidecar.Template) || !TileTemplate.IsKnown(sidecar.Template))
                 return Results.BadRequest(new { error = $"Unknown template '{sidecar.Template}'." });
-            await ds.WriteSidecarAsync(workspace, tileSlug, sidecar);
-            return Results.NoContent();
+            try
+            {
+                await ds.WriteSidecarAsync(workspace, tileSlug, sidecar);
+                return Results.NoContent();
+            }
+            catch (DashboardTilePathException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
         }).WithTags("Dashboard");
 
         // Returns the script filename (script.*) if present; 404 if none.
@@ -140,7 +160,8 @@ public static partial class Endpoints
         {
             var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
             if (workspace is null) return Results.NotFound();
-            if (!IsInsideTileDir(workspace, tileSlug, ds)) return Results.BadRequest();
+            if (!ds.IsTileDirectoryAllowed(workspace, tileSlug))
+                return Results.BadRequest(new { error = DashboardTilePathException.InvalidTilePathMessage });
             var (scriptPath, error) = ds.FindScript(workspace, tileSlug);
             if (error is not null) return Results.BadRequest(new { error });
             if (scriptPath is null) return Results.NotFound();
@@ -153,7 +174,8 @@ public static partial class Endpoints
         {
             var workspace = await ResolveDashboardWorkspaceAsync(slug, ps);
             if (workspace is null) return Results.NotFound();
-            if (!IsInsideTileDir(workspace, tileSlug, ds)) return Results.BadRequest();
+            if (!ds.IsTileDirectoryAllowed(workspace, tileSlug))
+                return Results.BadRequest(new { error = DashboardTilePathException.InvalidTilePathMessage });
             // Actual refresh is fire-and-forget; caller polls via the gate snapshot or SSE.
             _ = Task.Run(() => refreshSvc.ManualRefreshAsync(slug, workspace, tileSlug, CancellationToken.None));
             return Results.Accepted();
@@ -164,14 +186,5 @@ public static partial class Endpoints
     {
         var project = await ps.GetProjectAsync(slug);
         return project is null ? null : ps.ResolveWorkspacePath(project);
-    }
-
-    private static bool IsInsideTileDir(string workspace, string tileSlug, DashboardService ds)
-    {
-        var dashDir = Path.GetFullPath(ds.GetDashboardDir(workspace));
-        var tileDir = Path.GetFullPath(ds.GetTileDirPath(workspace, tileSlug));
-        return tileDir.StartsWith(dashDir + Path.DirectorySeparatorChar, StringComparison.Ordinal)
-            && !tileSlug.Contains(Path.DirectorySeparatorChar)
-            && !tileSlug.Contains(Path.AltDirectorySeparatorChar);
     }
 }

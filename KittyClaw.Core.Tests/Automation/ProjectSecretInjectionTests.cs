@@ -8,6 +8,54 @@ namespace KittyClaw.Core.Tests.Automation;
 public sealed class ProjectSecretInjectionTests
 {
     [Fact]
+    public async Task Escaped_json_secret_is_removed_before_events_are_published_and_saved()
+    {
+        using var temp = new TempDir();
+        var projects = new ProjectService(temp.Path);
+        var project = await projects.CreateProjectAsync("JSON log fixture");
+        var workspace = projects.ResolveWorkspacePath(project);
+        const string secret = "fixture-\u00e9-value";
+        const string encoded = """fixture-\u00e9-value""";
+        var vault = new ProjectSecretVault(temp.Path, new TestSecretProtector());
+        await vault.SetAsync(project.Slug, "PROJECT_TOKEN", secret);
+        var scenarios = Directory.CreateDirectory(Path.Combine(temp.Path, "scenarios")).FullName;
+        await File.WriteAllLinesAsync(Path.Combine(scenarios, "escaped-secret.ndjson"),
+        [
+            """{"type":"system","subtype":"init","session_id":"{{session_id}}"}""",
+            $$$"""{"type":"assistant","message":{"content":[{"type":"text","text":"Observed {{{encoded}}}"}]}}""",
+            $$$"""{"type":"result","subtype":"success","is_error":false,"result":"Observed {{{encoded}}}","usage":{"input_tokens":3}}""",
+        ]);
+        TestSkillBuilder.Create(workspace, "secret-agent", scenario: "escaped-secret");
+        var logs = new RunLogStore(temp.Path);
+        var registry = new AgentRunRegistry(logs);
+        var runner = new AgentRunner(new SessionRegistry(), registry, new RunConcurrencyGate(1),
+            NullLogger<AgentRunner>.Instance, projectSecrets: vault);
+        var published = new System.Collections.Concurrent.ConcurrentQueue<StreamEvent>();
+
+        var run = await runner.RunAsync(new AgentRunContext
+        {
+            ProjectSlug = project.Slug,
+            WorkspacePath = workspace,
+            AgentName = "secret-agent",
+            SkillFile = "secret-agent/SKILL.md",
+            MaxTurns = 1,
+            OnEventHook = published.Enqueue,
+            Env = new Dictionary<string, string> { ["KITTYCLAW_MOCK_SCENARIOS_DIR"] = scenarios },
+        }, CancellationToken.None);
+
+        Assert.Equal(AgentRunStatus.Completed, run.Status);
+        Assert.Equal(3, run.InputTokens);
+        foreach (var events in new IEnumerable<StreamEvent>[] { published, Assert.Single(logs.LoadAll()).SnapshotBuffer() })
+        {
+            Assert.Contains(events, item => item.Kind == "assistant" && item.Text.Contains("Observed [REDACTED]"));
+            Assert.Contains(events, item => item.Kind == "result" && item.Detail?.Contains("Observed [REDACTED]") == true);
+            Assert.DoesNotContain(events, item =>
+                item.Text.Contains(secret) || item.Text.Contains(encoded) ||
+                item.Detail?.Contains(secret) == true || item.Detail?.Contains(encoded) == true);
+        }
+    }
+
+    [Fact]
     public async Task Agent_receives_only_its_project_secrets_and_stream_is_redacted()
     {
         using var temp = new TempDir();

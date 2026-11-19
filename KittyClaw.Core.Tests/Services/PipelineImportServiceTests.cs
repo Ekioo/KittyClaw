@@ -123,6 +123,58 @@ public sealed class PipelineImportServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Kit_with_skills_is_refused_when_the_skill_root_is_linked()
+    {
+        var project = await _projects.CreateProjectAsync("Linked kit root");
+        var agents = Directory.CreateDirectory(Path.Combine(_projects.ResolveWorkspacePath(project), ".agents")).FullName;
+        var link = Path.Combine(agents, "skills");
+        using var outside = new TempDir();
+        if (OperatingSystem.IsWindows())
+            DurableWriteRouter.CreateDirectoryJunction(link, outside.Path);
+        else
+            Directory.CreateSymbolicLink(link, outside.Path);
+        try
+        {
+            var kit = BuildKit();
+            var preview = await _import.AnalyzeAsync(project.Slug, kit);
+            Assert.False(preview!.Installable);
+            Assert.Contains(preview.Blockages, issue => issue.Category == "linked-skill-root");
+
+            var rejected = await Assert.ThrowsAsync<PipelineImportRejectedException>(
+                () => _import.InstallAsync(project.Slug, kit, new()));
+            Assert.Contains(rejected.Issues, issue => issue.Category == "linked-skill-root");
+            Assert.Empty(Directory.EnumerateFileSystemEntries(outside.Path));
+            Assert.Single(await _pipelines.ListAsync(project.Slug));
+        }
+        finally { Directory.Delete(link); }
+    }
+
+    [Fact]
+    public async Task Linked_subdirectory_prevents_identical_skill_reuse()
+    {
+        var project = await _projects.CreateProjectAsync("Linked skill reuse fixture");
+        var skill = Directory.CreateDirectory(
+            Path.Combine(_projects.ResolveWorkspacePath(project), ".agents", "skills", "demo")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(skill, "SKILL.md"),
+            "---\nname: demo\ndescription: \"demo\"\n---\n\nDemo skill.\n");
+        var link = Path.Combine(skill, "attachments");
+        using var outside = new TempDir();
+        if (OperatingSystem.IsWindows())
+            DurableWriteRouter.CreateDirectoryJunction(link, outside.Path);
+        else
+            Directory.CreateSymbolicLink(link, outside.Path);
+        try
+        {
+            var preview = await _import.AnalyzeAsync(project.Slug, BuildKit());
+            Assert.Equal(PipelineImportSkillResolution.RenameRequired, Assert.Single(preview!.Skills).Resolution);
+            await Assert.ThrowsAsync<PipelineImportConflictException>(
+                () => _import.InstallAsync(project.Slug, BuildKit(), new()));
+            Assert.Single(await _pipelines.ListAsync(project.Slug));
+        }
+        finally { Directory.Delete(link); }
+    }
+
+    [Fact]
     public async Task Identical_skill_is_reused_without_rewriting_it()
     {
         var project = await _projects.CreateProjectAsync("Reuse " + Guid.NewGuid().ToString("N"));

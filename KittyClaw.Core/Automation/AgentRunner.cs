@@ -1113,7 +1113,8 @@ public sealed class AgentRunner
             run.Push(new StreamEvent(DateTime.UtcNow, "error", credentialError!));
             return new SpawnResult(-1, 0, false, FallbackReason.None);
         }
-        string Redact(string text) => SecretRedactor.Redact(text, projectSecrets.Values);
+        Func<string, string>? redact = projectSecrets.Count == 0 ? null
+            : line => SecretRedactor.RedactProviderLine(line, projectSecrets.Values);
 
         AppendDebugLog(ctx, $"LAUNCHING {ctx.AgentName} {(isResume ? "(resume)" : "(new)")} ticket=#{ctx.TicketId} session={sessionId}");
         if (backend.Provider == CliProvider.Codex)
@@ -1206,9 +1207,9 @@ public sealed class AgentRunner
                 ? new CancellationTokenSource(maxDuration)
                 : new CancellationTokenSource();
             using var linkedWithTimeout = CancellationTokenSource.CreateLinkedTokenSource(linked.Token, timeoutCts.Token);
-            var stdoutTask = AgentStreamPump.PumpStdoutAsync(proc, run, backend, linkedWithTimeout.Token, Redact);
+            var stdoutTask = AgentStreamPump.PumpStdoutAsync(proc, run, backend, linkedWithTimeout.Token, redact);
             var stderrTask = AgentStreamPump.PumpStderrAsync(
-                proc, run, backend, linkedWithTimeout.Token, Redact);
+                proc, run, backend, linkedWithTimeout.Token, redact);
             var steerTask = AgentStreamPump.PumpSteeringAsync(proc, run, linkedWithTimeout.Token);
 
             using var killReg = linkedWithTimeout.Token.Register(() =>

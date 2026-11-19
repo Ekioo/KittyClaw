@@ -23,6 +23,8 @@ internal static class HttpActionClient
         var handler = new SocketsHttpHandler
         {
             AllowAutoRedirect = false,
+            // A proxy would make ConnectCallback validate the proxy instead of the destination.
+            UseProxy = !guard,
             ConnectTimeout = TimeSpan.FromSeconds(15),
             PooledConnectionLifetime = TimeSpan.FromMinutes(5),
         };

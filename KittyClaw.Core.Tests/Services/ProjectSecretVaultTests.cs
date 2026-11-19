@@ -119,6 +119,15 @@ public sealed class ProjectSecretVaultTests
         Assert.Empty(await vault.ListAsync("alpha"));
     }
 
+    [Fact]
+    public void Provider_redaction_preserves_unrelated_JSON_tokens_and_formatting()
+    {
+        const string line = """{ "fixture-\u00e9" : ["unchanged\\path", "fixture-\u00e9"], "finished":true }""";
+        const string expected = """{ "[REDACTED]" : ["unchanged\\path", "[REDACTED]"], "finished":true }""";
+
+        Assert.Equal(expected, SecretRedactor.RedactProviderLine(line, ["fixture-\u00e9"]));
+    }
+
     [Theory]
     [InlineData("a\"b", "a\\\"b")]
     [InlineData("a/b", "a\\/b")]

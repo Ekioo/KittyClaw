@@ -30,6 +30,11 @@ Each tile owns a dedicated subfolder under `.dashboard/`:
 
 The **tile slug** (`<tileSlug>`) is the folder name and the stable identifier used in all API calls.
 
+A tile name must be a single directory entry. Dashboard discovery omits linked
+tile directories and linked dashboard roots. Reads skip linked output and
+sidecar files, and refresh refuses linked scripts. File writes require
+ordinary dashboard directories and reject linked destinations.
+
 ### Sidecar fields (`tile.yaml`)
 
 The sidecar YAML inside each tile folder contains six fields:
@@ -56,6 +61,11 @@ The last refresh timestamp is persisted per tile in a `dashboard_tile_refresh_st
 A tile folder without a sidecar is treated as a static tile; rendering falls back to the output file extension (`.md` → markdown, `.json` → table/kpi-grid auto-detected, anything else → raw text).
 
 **Startup migration**: `DashboardRefreshService` runs `DashboardService.MigrateAsync` after the HTTP host is accepting requests, converting legacy flat-file tiles (`<slug>.<ext>` + `<slug>.<ext>.yaml`) into the folder layout. `StartupWorkGate` keeps this migration and catch-up work behind the explicit host-start boundary.
+
+Legacy `script` references must be relative paths to supported script files
+inside `.dashboard/`. Migration skips a tile before moving any files when its
+script reference escapes that directory or traverses a symbolic link or junction.
+Linked dashboard roots, sidecars and outputs are also excluded from migration.
 
 ## Key components
 The open dashboard reloads tile output and sidecars when the refresh queue changes, including when a background refresh completes. It also rereads them every 30 seconds to pick up direct file writes and delayed worktree integrations. Image URLs include the output file's modification timestamp so updated images bypass the browser cache.

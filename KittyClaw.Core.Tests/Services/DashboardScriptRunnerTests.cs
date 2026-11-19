@@ -1,4 +1,5 @@
 ﻿using KittyClaw.Core.Services;
+using KittyClaw.Core.Tests.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace KittyClaw.Core.Tests.Services;
@@ -304,6 +305,139 @@ public sealed class DashboardServicePathTests
         {
             if (Directory.Exists(tmp)) Directory.Delete(tmp, true);
         }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MigrateAsync_RefusesScriptOutsideDashboard(bool absolute)
+    {
+        using var temp = new TempDir();
+        var workspace = Path.Combine(temp.Path, "workspace");
+        var dashboard = Directory.CreateDirectory(Path.Combine(workspace, ".dashboard")).FullName;
+        var outside = Path.Combine(temp.Path, "fixture.sh");
+        var script = absolute ? outside : Path.GetRelativePath(dashboard, outside);
+        var sidecar = Path.Combine(dashboard, "tile.json.yaml");
+        var output = Path.Combine(dashboard, "tile.json");
+        await File.WriteAllTextAsync(outside, "# synthetic fixture");
+        await File.WriteAllTextAsync(output, "{}");
+        await File.WriteAllTextAsync(sidecar, $"template: markdown\nscript: '{script}'");
+
+        await CreateService().MigrateAsync("test-project", workspace);
+
+        Assert.Equal("# synthetic fixture", await File.ReadAllTextAsync(outside));
+        Assert.True(File.Exists(sidecar));
+        Assert.True(File.Exists(output));
+        Assert.False(Directory.Exists(Path.Combine(dashboard, "tile")));
+    }
+
+    [Fact]
+    public async Task MigrateAsync_PreservesNestedInDashboardScriptSupport()
+    {
+        using var temp = new TempDir();
+        var dashboard = Directory.CreateDirectory(Path.Combine(temp.Path, ".dashboard")).FullName;
+        var scripts = Directory.CreateDirectory(Path.Combine(dashboard, "scripts")).FullName;
+        var script = Path.Combine(scripts, "fixture.sh");
+        await File.WriteAllTextAsync(script, "# synthetic fixture");
+        await File.WriteAllTextAsync(Path.Combine(dashboard, "tile.json.yaml"),
+            "template: markdown\nscript: scripts/fixture.sh");
+
+        await CreateService().MigrateAsync("test-project", temp.Path);
+
+        Assert.Equal("# synthetic fixture",
+            await File.ReadAllTextAsync(Path.Combine(dashboard, "tile", "script.sh")));
+        Assert.False(File.Exists(script));
+    }
+
+    [Fact]
+    public async Task MigrateAsync_RefusesScriptUnderLinkedDirectory()
+    {
+        using var temp = new TempDir();
+        var workspace = Path.Combine(temp.Path, "workspace");
+        var dashboard = Directory.CreateDirectory(Path.Combine(workspace, ".dashboard")).FullName;
+        var outside = Directory.CreateDirectory(Path.Combine(temp.Path, "outside")).FullName;
+        var link = Path.Combine(dashboard, "scripts");
+        if (OperatingSystem.IsWindows())
+            DurableWriteRouter.CreateDirectoryJunction(link, outside);
+        else
+            Directory.CreateSymbolicLink(link, outside);
+
+        try
+        {
+            var script = Path.Combine(outside, "fixture.sh");
+            var sidecar = Path.Combine(dashboard, "tile.json.yaml");
+            await File.WriteAllTextAsync(script, "# synthetic fixture");
+            await File.WriteAllTextAsync(sidecar, "template: markdown\nscript: scripts/fixture.sh");
+
+            await CreateService().MigrateAsync("test-project", workspace);
+
+            Assert.Equal("# synthetic fixture", await File.ReadAllTextAsync(script));
+            Assert.True(File.Exists(sidecar));
+            Assert.False(Directory.Exists(Path.Combine(dashboard, "tile")));
+        }
+        finally { Directory.Delete(link); }
+    }
+
+    [Fact]
+    public async Task Tile_file_operations_reject_linked_files()
+    {
+        using var workspace = new TempDir();
+        using var outside = new TempDir();
+        var dashboard = CreateService();
+        const string tile = "fixture";
+        var directory = Directory.CreateDirectory(dashboard.GetTileDirPath(workspace.Path, tile)).FullName;
+        var sidecar = new TileSidecar(TileTemplate.Markdown, 0);
+        var script = DashboardService.ScriptBaseName + DashboardService.DefaultScriptExtension();
+        foreach (var filename in new[] { DashboardService.SidecarFileName, "output.md", script })
+        {
+            var target = Path.Combine(outside.Path, filename);
+            await File.WriteAllTextAsync(target, FixtureContent(filename));
+            var link = Path.Combine(directory, filename);
+            if (OperatingSystem.IsWindows())
+            {
+                // Git for Windows can run on hosts without symlink privileges. Exercise
+                // file links on those hosts only when the filesystem permits their creation.
+                try { File.CreateSymbolicLink(link, target); }
+                catch (IOException ex) when ((ex.HResult & 0xffff) == 1314)
+                {
+                    return;
+                }
+            }
+            else
+                File.CreateSymbolicLink(link, target);
+        }
+
+        Assert.Null(await dashboard.ReadSidecarAsync(workspace.Path, tile));
+        Assert.Null(await dashboard.ReadOutputAsync(workspace.Path, tile));
+        var (scriptPath, configError) = dashboard.FindScript(workspace.Path, tile);
+        Assert.Null(scriptPath);
+        Assert.NotNull(configError);
+
+        await Assert.ThrowsAsync<DashboardTilePathException>(
+            () => dashboard.WriteSidecarAsync(workspace.Path, tile, sidecar));
+        await Assert.ThrowsAsync<DashboardTilePathException>(
+            () => dashboard.WriteOutputAsync(workspace.Path, tile, "updated fixture", TileTemplate.Markdown));
+        await Assert.ThrowsAsync<DashboardTilePathException>(
+            () => dashboard.WriteScriptAsync(workspace.Path, tile, "updated fixture"));
+        foreach (var target in Directory.GetFiles(outside.Path))
+            Assert.Equal(FixtureContent(Path.GetFileName(target)), await File.ReadAllTextAsync(target));
+
+        static string FixtureContent(string filename) => filename == DashboardService.SidecarFileName
+            ? "template: markdown\nrefresh: 0\ntitle: Synthetic fixture"
+            : "synthetic fixture";
+    }
+
+    [Theory]
+    [InlineData(".")]
+    [InlineData("..")]
+    [InlineData("one/two")]
+    public void Tile_directory_operations_require_one_name(string tileSlug)
+    {
+        using var fixture = new TempDir();
+        var dashboard = CreateService();
+
+        Assert.False(dashboard.IsTileDirectoryAllowed(fixture.Path, tileSlug));
+        Assert.Throws<DashboardTilePathException>(() => dashboard.DeleteTileFolder(fixture.Path, tileSlug));
     }
 
     private static DashboardService CreateService()

@@ -13,12 +13,12 @@ public sealed partial class ProjectSkillService(ProjectService projects)
     public async Task<List<ProjectSkill>> ListAsync(string projectSlug)
     {
         var root = await ResolveRootAsync(projectSlug);
-        if (!Directory.Exists(root)) return [];
+        if (HasLinkedRoot(root) || !Directory.Exists(root)) return [];
         var result = new List<ProjectSkill>();
         foreach (var directory in Directory.EnumerateDirectories(root))
         {
             var instructions = Path.Combine(directory, "SKILL.md");
-            if (!File.Exists(instructions)) continue;
+            if (!IsAvailableSkill(directory)) continue;
             var slug = Path.GetFileName(directory);
             var metadata = await ReadMetadataAsync(directory) ?? new SkillMetadata(slug);
             var document = await NormalizeAsync(directory, slug, metadata);
@@ -29,7 +29,7 @@ public sealed partial class ProjectSkillService(ProjectService projects)
 
     public async Task<string?> ReadInstructionsAsync(string projectSlug, string skillSlug)
     {
-        var path = await ResolveSkillPathAsync(projectSlug, skillSlug, mustExist: true);
+        var path = await ResolveSkillPathAsync(projectSlug, skillSlug);
         if (path is null) return null;
         var metadata = await ReadMetadataAsync(path) ?? new SkillMetadata(skillSlug);
         return (await NormalizeAsync(path, skillSlug, metadata)).Body;
@@ -40,12 +40,18 @@ public sealed partial class ProjectSkillService(ProjectService projects)
     {
         if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("Le nom du skill est requis.");
         var root = await ResolveRootAsync(projectSlug);
+        if (HasLinkedRoot(root))
+            throw new InvalidOperationException("Project skill directories cannot be symbolic links or reparse points.");
         Directory.CreateDirectory(root);
         var baseSlug = SlugPattern().Replace(name.Trim().ToLowerInvariant(), "-").Trim('-');
         if (baseSlug.Length == 0) baseSlug = "skill";
         var slug = baseSlug;
-        for (var suffix = 2; Directory.Exists(Path.Combine(root, slug)); suffix++) slug = $"{baseSlug}-{suffix}";
         var directory = Path.Combine(root, slug);
+        for (var suffix = 2; IsReparsePoint(directory) || Directory.Exists(directory); suffix++)
+        {
+            slug = $"{baseSlug}-{suffix}";
+            directory = Path.Combine(root, slug);
+        }
         Directory.CreateDirectory(directory);
         var effectiveDescription = NormalizeDescription(description, name, instructions);
         var metadata = new SkillMetadata(name.Trim(), effectiveDescription);
@@ -58,7 +64,7 @@ public sealed partial class ProjectSkillService(ProjectService projects)
         string projectSlug, string skillSlug, string? name, string? instructions,
         string? description = null)
     {
-        var directory = await ResolveSkillPathAsync(projectSlug, skillSlug, mustExist: true);
+        var directory = await ResolveSkillPathAsync(projectSlug, skillSlug);
         if (directory is null) return null;
         var metadata = await ReadMetadataAsync(directory) ?? new SkillMetadata(skillSlug);
         var current = await NormalizeAsync(directory, skillSlug, metadata);
@@ -80,7 +86,7 @@ public sealed partial class ProjectSkillService(ProjectService projects)
 
     public async Task<bool> DeleteAsync(string projectSlug, string skillSlug)
     {
-        var directory = await ResolveSkillPathAsync(projectSlug, skillSlug, mustExist: true);
+        var directory = await ResolveSkillPathAsync(projectSlug, skillSlug);
         if (directory is null) return false;
         Directory.Delete(directory, recursive: true);
         return true;
@@ -93,11 +99,31 @@ public sealed partial class ProjectSkillService(ProjectService projects)
         return Path.Combine(projects.ResolveWorkspacePath(project), ".agents", "skills");
     }
 
-    private async Task<string?> ResolveSkillPathAsync(string projectSlug, string slug, bool mustExist)
+    private async Task<string?> ResolveSkillPathAsync(string projectSlug, string slug)
     {
         if (!ValidSlugPattern().IsMatch(slug)) throw new InvalidOperationException("Identifiant de skill invalide.");
-        var path = Path.Combine(await ResolveRootAsync(projectSlug), slug);
-        return !mustExist || Directory.Exists(path) ? path : null;
+        var root = await ResolveRootAsync(projectSlug);
+        if (HasLinkedRoot(root)) return null;
+        var path = Path.Combine(root, slug);
+        return !HasLinkedSkillFiles(path) && Directory.Exists(path) ? path : null;
+    }
+
+    internal static bool HasLinkedRoot(string root) =>
+        IsReparsePoint(Path.GetDirectoryName(root)!) || IsReparsePoint(root);
+
+    private static bool HasLinkedSkillFiles(string directory) =>
+        IsReparsePoint(directory)
+        || IsReparsePoint(Path.Combine(directory, "SKILL.md"))
+        || IsReparsePoint(Path.Combine(directory, "skill.json"));
+
+    internal static bool IsAvailableSkill(string directory) =>
+        !HasLinkedSkillFiles(directory) && File.Exists(Path.Combine(directory, "SKILL.md"));
+
+    internal static bool IsReparsePoint(string path)
+    {
+        try { return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0; }
+        catch (FileNotFoundException) { return false; }
+        catch (DirectoryNotFoundException) { return false; }
     }
 
     private static async Task<SkillMetadata?> ReadMetadataAsync(string directory)
