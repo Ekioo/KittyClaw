@@ -102,11 +102,12 @@ public sealed partial class RtkIntegrationService
         return ProbeBinaryAsync(startInfo, ct);
     }
 
-    internal static async Task<RtkProbeResult> ProbeBinaryAsync(ProcessStartInfo startInfo, CancellationToken ct)
+    internal static async Task<RtkProbeResult> ProbeBinaryAsync(ProcessStartInfo startInfo, CancellationToken ct,
+        TimeSpan? timeout = null)
     {
         try
         {
-            var result = await ProcessRunner.RunAsync(startInfo, TimeSpan.FromSeconds(2), ct,
+            var result = await ProcessRunner.RunAsync(startInfo, timeout ?? TimeSpan.FromSeconds(2), ct,
                 standardError: Stream.Null, maxOutputCharacters: 64 * 1024).ConfigureAwait(false);
             if (result.TimedOut)
                 return new RtkProbeResult(false, null, "RTK version probe timed out.");

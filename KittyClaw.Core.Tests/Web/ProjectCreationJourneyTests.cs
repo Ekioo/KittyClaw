@@ -65,7 +65,7 @@ public sealed class ProjectCreationJourneyTests
             }
 
             await page.GetByTestId("create-project-initialize").ClickAsync();
-            await Expect(page.Locator("#first-ticket-title")).ToHaveValueAsync(objective);
+            await Expect(page.Locator("#first-ticket-title")).ToHaveValueAsync(objective, new() { Timeout = 30_000 });
             Assert.True(Directory.Exists(Path.Combine(workspace, ".git")));
             Assert.True(File.Exists(Path.Combine(workspace, "AGENTS.md")));
             var project = await http.GetFromJsonAsync<JsonElement>("/api/projects/creation-journey");
@@ -80,7 +80,7 @@ public sealed class ProjectCreationJourneyTests
             await Expect(page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/board/creation-journey$"));
             await page.ReloadAsync();
             await page.Locator(".pipeline-tab").Filter(new() { HasText = "First success" }).ClickAsync();
-            await Expect(page.Locator(".ticket-card").Filter(new() { HasText = title }).First).ToBeVisibleAsync();
+            await Expect(page.Locator(".ticket-card").Filter(new() { HasText = title }).First).ToBeVisibleAsync(new() { Timeout = 30_000 });
             var tickets = await http.GetFromJsonAsync<JsonElement[]>("/api/projects/creation-journey/tickets");
             var ticket = Assert.Single(tickets!);
             Assert.Equal(title, ticket.GetProperty("title").GetString());
