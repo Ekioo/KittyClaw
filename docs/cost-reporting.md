@@ -147,3 +147,7 @@ account availability; this update does not change existing model selections.
 ## Fable 5.2 verification (2026-11-10)
 
 Added Claude Fable 5.2 alongside Fable 5.1. Standard USD rates per million tokens are 8 input, 40 output, 0.20 cache reads and 10 five-minute cache writes. One-hour writes (16) and Fast mode are outside the estimator's default assumptions. Source: https://platform.claude.com/docs/en/about-claude/pricing
+
+## GPT-6.2 verification (2026-11-19)
+
+Added Codex GPT-6.2 Astra and Sol without changing existing selections. Standard USD per million tokens (input / output / cache read / 30-minute write): Astra 8 / 40 / 0.40 / 10; Sol 2 / 10 / 0.10 / 2.50. Source: https://developers.openai.com/api/docs/pricing

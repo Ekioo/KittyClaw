@@ -6,6 +6,8 @@ public sealed class ModelCostEstimatorTests
 {
     [Theory]
     [InlineData("codex:gpt-6.1-terra", 1, 5, 0.05, 1.25)]
+    [InlineData("codex:gpt-6.2-astra", 8, 40, 0.4, 10)]
+    [InlineData("codex:gpt-6.2-sol", 2, 10, 0.1, 2.5)]
     [InlineData("gpt-5.6-sol", 4, 20, 0.4, 5)]
     [InlineData("codex:gpt-5.6-terra", 2.5, 15, 0.25, 3.125)]
     [InlineData("gpt-5.6-luna", 1, 6, 0.1, 1.25)]

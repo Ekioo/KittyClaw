@@ -1079,6 +1079,11 @@ else
 
         var tileSlug = (_configEditingSlug ?? _configSlug).Trim();
         if (string.IsNullOrWhiteSpace(tileSlug)) return;
+        if (!DashboardService.IsTileDirectoryAllowed(_workspace, tileSlug))
+        {
+            _configScriptError = DashboardTilePathException.InvalidTilePathMessage;
+            return;
+        }
         var route = await DurableWrites.ResolveAsync(Slug, null, [Path.Combine(".dashboard", tileSlug)]);
         try
         {
@@ -1096,11 +1101,7 @@ else
             // If script content provided, write it, test it, and abort on failure.
             if (!string.IsNullOrWhiteSpace(_configScriptContent))
             {
-                var scriptExt = DashboardService.DefaultScriptExtension();
-                var tileDir = DashboardService.GetTileDirPath(route.RootPath, tileSlug);
-                System.IO.Directory.CreateDirectory(tileDir);
-                var scriptPath = System.IO.Path.Combine(tileDir, DashboardService.ScriptBaseName + scriptExt);
-                await System.IO.File.WriteAllTextAsync(scriptPath, _configScriptContent, System.Text.Encoding.UTF8);
+                var scriptPath = await DashboardService.WriteScriptAsync(route.RootPath, tileSlug, _configScriptContent);
 
                 var result = await ScriptRunner.RunAsync(scriptPath, route.RootPath, CancellationToken.None);
                 if (!result.IsSuccess)
@@ -1289,7 +1290,7 @@ else
     {
         var msg = string.Format(L["RemoveTileConfirm"], tileSlug);
         var confirmed = await JS.InvokeAsync<bool>("confirm", msg);
-        if (!confirmed) return;
+        if (!confirmed || !DashboardService.IsTileDirectoryAllowed(_workspace, tileSlug)) return;
 
         await DashboardService.RemoveTileAsync(Slug, tileSlug);
         DashboardService.DeleteTileFolder(_workspace, tileSlug);

@@ -11,7 +11,10 @@ of the string; trailing line breaks are rejected. Values containing NUL are
 rejected before storage because subprocess environments cannot preserve them.
 Run redaction covers literal values and both default .NET and relaxed JSON
 escaping, including escaped forward slashes. Encoded variants are processed
-before shorter literal values.
+before shorter literal values. For provider JSON objects and arrays, KittyClaw
+also checks decoded string tokens before publishing or persisting events.
+Equivalent JSON escapes, including lowercase Unicode escapes, receive the same
+redaction as literal text.
 
 ## Key components
 

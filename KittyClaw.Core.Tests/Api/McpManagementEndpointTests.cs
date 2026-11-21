@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using KittyClaw.Core.Models;
 using KittyClaw.Core.Services;
+using KittyClaw.Core.Tests.Helpers;
 using KittyClaw.Web.Api;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
@@ -168,6 +169,35 @@ public sealed partial class McpEndpointTests
         Assert.Single(list.EnumerateArray());
         await CallAsync("delete_ticket", new() { ["project"] = project, ["id"] = id });
         Assert.Equal(System.Net.HttpStatusCode.NotFound, (await _http.GetAsync($"/api/projects/{project}/tickets/{id}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Linked_project_skill_is_unavailable_through_rest_and_mcp()
+    {
+        var project = await NewProjectAsync();
+        var projects = _factory.Services.GetRequiredService<ProjectService>();
+        var workspace = projects.ResolveWorkspacePath((await projects.GetProjectAsync(project))!);
+        var root = Directory.CreateDirectory(Path.Combine(workspace, ".agents", "skills")).FullName;
+        var link = Path.Combine(root, "fixture");
+        using var outside = new TempDir();
+        await File.WriteAllTextAsync(Path.Combine(outside.Path, "SKILL.md"), "Synthetic instructions.");
+        if (OperatingSystem.IsWindows())
+            DurableWriteRouter.CreateDirectoryJunction(link, outside.Path);
+        else
+            Directory.CreateSymbolicLink(link, outside.Path);
+        try
+        {
+            using var response = await _http.GetAsync($"/api/projects/{project}/project-skills/fixture");
+            Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
+            var listed = await CallAsync("list_project_skills", new() { ["project"] = project });
+            Assert.Empty(listed.EnumerateArray());
+            var result = await _mcp!.CallToolAsync("get_project_skill",
+                new Dictionary<string, object?> { ["project"] = project, ["skillSlug"] = "fixture" });
+            Assert.True(result.IsError);
+            Assert.DoesNotContain(result.Content.OfType<TextContentBlock>(),
+                block => block.Text.Contains("Synthetic instructions."));
+        }
+        finally { Directory.Delete(link); }
     }
 
     [Fact]

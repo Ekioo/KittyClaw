@@ -11,6 +11,11 @@ namespace KittyClaw.Core.Services;
 // Slug is the tile folder name inside .dashboard/ -- the single identity of the tile.
 public record DashboardTileLayout(string Slug, int X = 0, int Y = 0, int Width = 300, int Height = 200);
 
+public sealed class DashboardTilePathException() : IOException(InvalidTilePathMessage)
+{
+    public const string InvalidTilePathMessage = "Dashboard files must stay in an ordinary tile directory.";
+}
+
 public class DashboardService
 {
     private readonly ProjectService _projectService;
@@ -115,7 +120,8 @@ public class DashboardService
     private async Task<DashboardTileLayout?> UpsertTileAsync(
         string projectSlug, string workspace, string tileSlug, Func<DashboardTileLayout, DashboardTileLayout> apply)
     {
-        if (!Directory.Exists(GetTileDirPath(workspace, tileSlug))) return null;
+        if (!IsTileDirectoryAllowed(workspace, tileSlug) ||
+            !Directory.Exists(GetTileDirPath(workspace, tileSlug))) return null;
 
         var tiles = await GetStoredTilesAsync(projectSlug);
         var idx = tiles.FindIndex(t => t.Slug == tileSlug);
@@ -202,22 +208,36 @@ public class DashboardService
     public string GetOutputPath(string workspace, string tileSlug, string template) =>
         Path.Combine(GetTileDirPath(workspace, tileSlug), OutputBaseName + TileTemplate.DefaultExtension(template));
 
+    public bool IsTileDirectoryAllowed(string workspace, string tileSlug) =>
+        IsValidTileSlug(tileSlug) && !IsReparsePoint(GetDashboardDir(workspace))
+        && !IsReparsePoint(GetTileDirPath(workspace, tileSlug));
+
+    private static bool IsValidTileSlug(string slug) =>
+        !string.IsNullOrWhiteSpace(slug) && slug is not ("." or "..")
+        && slug.IndexOfAny(Path.GetInvalidFileNameChars()) < 0
+        && (!OperatingSystem.IsWindows() || (!slug.EndsWith('.') && !slug.EndsWith(' ')));
+
     public string? FindOutputPath(string workspace, string tileSlug)
     {
+        if (!IsTileDirectoryAllowed(workspace, tileSlug)) return null;
         var dir = GetTileDirPath(workspace, tileSlug);
         if (!Directory.Exists(dir)) return null;
-        return Directory.GetFiles(dir, OutputBaseName + ".*", SearchOption.TopDirectoryOnly)
-            .FirstOrDefault();
+        return Directory.EnumerateFiles(dir, OutputBaseName + ".*")
+            .FirstOrDefault(path => !IsReparsePoint(path));
     }
 
     public (string? Path, string? ConfigError) FindScript(string workspace, string tileSlug)
     {
+        if (!IsTileDirectoryAllowed(workspace, tileSlug)) return (null, null);
         var dir = GetTileDirPath(workspace, tileSlug);
         if (!Directory.Exists(dir)) return (null, null);
 
         var scripts = Directory.GetFiles(dir, ScriptBaseName + ".*", SearchOption.TopDirectoryOnly)
             .Where(f => ScriptExtensions.Contains(Path.GetExtension(f)))
             .ToList();
+
+        if (scripts.Any(IsReparsePoint))
+            return (null, "Dashboard scripts must be regular files.");
 
         return scripts.Count switch
         {
@@ -230,11 +250,11 @@ public class DashboardService
     public List<string> GetAvailableSlugs(string workspace)
     {
         var dir = GetDashboardDir(workspace);
-        if (!Directory.Exists(dir)) return [];
-        return Directory.GetDirectories(dir, "*", SearchOption.TopDirectoryOnly)
-            .Select(Path.GetFileName)
-            .Where(n => n is not null)
-            .Cast<string>()
+        if (!Directory.Exists(dir) || IsReparsePoint(dir)) return [];
+        return new DirectoryInfo(dir).EnumerateDirectories()
+            .Where(directory => (directory.Attributes & FileAttributes.ReparsePoint) == 0)
+            .Select(directory => directory.Name)
+            .Where(IsValidTileSlug)
             .OrderBy(n => n)
             .ToList();
     }
@@ -250,22 +270,18 @@ public class DashboardService
 
     public async Task WriteOutputAsync(string workspace, string tileSlug, string content, string template)
     {
-        var dir = GetTileDirPath(workspace, tileSlug);
-        Directory.CreateDirectory(dir);
-        foreach (var old in Directory.GetFiles(dir, OutputBaseName + ".*", SearchOption.TopDirectoryOnly))
+        var path = PrepareTileFileForWrite(workspace, tileSlug, OutputBaseName + TileTemplate.DefaultExtension(template));
+        var previousOutputs = Directory.GetFiles(Path.GetDirectoryName(path)!, OutputBaseName + ".*");
+        if (previousOutputs.Any(IsReparsePoint)) throw new DashboardTilePathException();
+        foreach (var old in previousOutputs)
             File.Delete(old);
-        var path = GetOutputPath(workspace, tileSlug, template);
         await File.WriteAllTextAsync(path, content, Encoding.UTF8);
     }
 
     public void DeleteTileFolder(string workspace, string tileSlug)
     {
-        // Defense in depth against traversal slugs: this deletes recursively, so never
-        // trust the caller to have validated tileSlug.
-        var dashDir = Path.GetFullPath(GetDashboardDir(workspace));
-        var dir = Path.GetFullPath(GetTileDirPath(workspace, tileSlug));
-        if (!dir.StartsWith(dashDir + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-            throw new ArgumentException($"Tile slug '{tileSlug}' resolves outside the dashboard directory.", nameof(tileSlug));
+        if (!IsTileDirectoryAllowed(workspace, tileSlug)) throw new DashboardTilePathException();
+        var dir = GetTileDirPath(workspace, tileSlug);
         if (Directory.Exists(dir))
             Directory.Delete(dir, recursive: true);
     }
@@ -274,26 +290,43 @@ public class DashboardService
 
     public async Task<TileSidecar?> ReadSidecarAsync(string workspace, string tileSlug)
     {
+        if (!IsTileDirectoryAllowed(workspace, tileSlug)) return null;
         var path = GetSidecarPath(workspace, tileSlug);
-        if (!File.Exists(path)) return null;
+        if (!File.Exists(path) || IsReparsePoint(path)) return null;
         var yaml = await File.ReadAllTextAsync(path, Encoding.UTF8);
         return TileSidecarSerializer.TryParse(yaml);
     }
 
     public async Task WriteSidecarAsync(string workspace, string tileSlug, TileSidecar sidecar)
     {
-        var dir = GetTileDirPath(workspace, tileSlug);
-        Directory.CreateDirectory(dir);
+        var path = PrepareTileFileForWrite(workspace, tileSlug, SidecarFileName);
         var yaml = TileSidecarSerializer.Serialize(sidecar);
-        await File.WriteAllTextAsync(GetSidecarPath(workspace, tileSlug), yaml, Encoding.UTF8);
+        await File.WriteAllTextAsync(path, yaml, Encoding.UTF8);
+    }
+
+    public async Task<string> WriteScriptAsync(string workspace, string tileSlug, string content)
+    {
+        var path = PrepareTileFileForWrite(workspace, tileSlug, ScriptBaseName + DefaultScriptExtension());
+        await File.WriteAllTextAsync(path, content, Encoding.UTF8);
+        return path;
+    }
+
+    private string PrepareTileFileForWrite(string workspace, string tileSlug, string filename)
+    {
+        if (!IsTileDirectoryAllowed(workspace, tileSlug)) throw new DashboardTilePathException();
+        var directory = GetTileDirPath(workspace, tileSlug);
+        var path = Path.Combine(directory, filename);
+        if (IsReparsePoint(path)) throw new DashboardTilePathException();
+        Directory.CreateDirectory(directory);
+        return path;
     }
 
     // -- Startup migration (flat to folder-per-tile) --------------------------------
 
     public virtual async Task MigrateAsync(string projectSlug, string workspace, Action<string>? log = null)
     {
-        var dashDir = GetDashboardDir(workspace);
-        if (!Directory.Exists(dashDir)) return;
+        var dashDir = Path.GetFullPath(GetDashboardDir(workspace));
+        if (!Directory.Exists(dashDir) || IsReparsePoint(dashDir)) return;
 
         var flatSidecars = Directory.GetFiles(dashDir, "*.yaml", SearchOption.TopDirectoryOnly)
             .Where(p =>
@@ -311,7 +344,7 @@ public class DashboardService
                 var sidecarFile = Path.GetFileName(sidecarPath);
                 var resultFile  = sidecarFile[..^".yaml".Length];
                 var tileSlug    = Path.GetFileNameWithoutExtension(resultFile);
-                if (string.IsNullOrWhiteSpace(tileSlug)) continue;
+                if (!IsTileDirectoryAllowed(workspace, tileSlug)) continue;
 
                 var tileDir = GetTileDirPath(workspace, tileSlug);
                 if (Directory.Exists(tileDir))
@@ -320,28 +353,28 @@ public class DashboardService
                     continue;
                 }
 
-                Directory.CreateDirectory(tileDir);
+                if (IsReparsePoint(sidecarPath))
+                    throw new InvalidDataException("Legacy tile metadata must be a regular dashboard file.");
 
-                var oldYaml       = await File.ReadAllTextAsync(sidecarPath, Encoding.UTF8);
-                var oldSidecar    = TileSidecarSerializer.TryParse(oldYaml);
-                var legacyScript  = ExtractLegacyScriptField(oldYaml);
+                var oldYaml = await File.ReadAllTextAsync(sidecarPath, Encoding.UTF8);
+                var oldSidecar = TileSidecarSerializer.TryParse(oldYaml);
+                var legacyScript = ExtractLegacyScriptField(oldYaml);
 
-                string? scriptSrc = null;
-                if (legacyScript is not null)
-                {
-                    var c = Path.Combine(dashDir, legacyScript);
-                    if (File.Exists(c)) scriptSrc = c;
-                }
+                var scriptSrc = legacyScript is null ? null : ResolveLegacyScript(dashDir, legacyScript);
                 if (scriptSrc is null)
                 {
                     foreach (var ext in ScriptExtensions)
                     {
-                        var c = Path.Combine(dashDir, tileSlug + ext);
-                        if (File.Exists(c)) { scriptSrc = c; break; }
+                        scriptSrc = ResolveLegacyScript(dashDir, tileSlug + ext);
+                        if (scriptSrc is not null) break;
                     }
                 }
 
                 var resultSrc = Path.Combine(dashDir, resultFile);
+                if (IsReparsePoint(resultSrc))
+                    throw new InvalidDataException("Legacy tile output must be a regular dashboard file.");
+
+                Directory.CreateDirectory(tileDir);
                 if (File.Exists(resultSrc))
                 {
                     var outputExt = Path.GetExtension(resultFile);
@@ -421,6 +454,38 @@ public class DashboardService
     }
 
     private record LegacyTileLayout(string FileName = "", int X = 0, int Y = 0, int Width = 300, int Height = 200);
+
+    private static string? ResolveLegacyScript(string dashboard, string script)
+    {
+        const string error = "Legacy tile script must be a supported file inside the dashboard directory.";
+        if (Path.IsPathRooted(script))
+            throw new InvalidDataException(error);
+
+        var relative = Path.GetRelativePath(dashboard, Path.GetFullPath(script, dashboard));
+        if (Path.IsPathRooted(relative) || relative is "." or ".." ||
+            relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
+            !ScriptExtensions.Contains(Path.GetExtension(relative)))
+            throw new InvalidDataException(error);
+
+        var path = dashboard;
+        foreach (var segment in relative.Split(Path.DirectorySeparatorChar))
+        {
+            if (segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                throw new InvalidDataException(error);
+            path = Path.Combine(path, segment);
+            if (IsReparsePoint(path))
+                throw new InvalidDataException(error);
+        }
+
+        return File.Exists(path) ? path : null;
+    }
+
+    private static bool IsReparsePoint(string path)
+    {
+        try { return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0; }
+        catch (FileNotFoundException) { return false; }
+        catch (DirectoryNotFoundException) { return false; }
+    }
 
     private static string? ExtractLegacyScriptField(string yaml)
     {

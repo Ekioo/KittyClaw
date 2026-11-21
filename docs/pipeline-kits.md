@@ -21,6 +21,11 @@ Pipeline kits provide a portable `.kittyclaw-pipeline` ZIP format for exporting 
 
 Unknown format versions, path traversal, links, executable binaries, nested archives, duplicate paths, hash mismatches, and documented archive-limit violations are rejected before installation. Name and skill collisions are resolved by explicit rename or identical-content reuse; existing content is never overwritten. Embedded scripts, `executePowerShell`, and `httpRequest` each require owner approval, and imported processors remain disabled while an input, vault binding, prerequisite, or approval is missing. Kit content is never executed during analysis or installation. URL-based import is not supported.
 
+A kit that references project skills requires ordinary project skill roots.
+Existing skill directories that contain symbolic links or reparse points are
+ineligible for identical-content reuse. Choose a new slug for an embedded skill
+when its original slug is occupied by such a directory.
+
 ## Temporal configuration and portable options
 
 Review a pipeline kit in the same [temporal option order](column-workflows.md#temporal-column-editor)

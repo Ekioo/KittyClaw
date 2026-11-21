@@ -46,6 +46,64 @@ public sealed class ProjectSkillAndProcessorTests : IDisposable
         Assert.Equal("# Run tests", await _skills.ReadInstructionsAsync(project.Slug, skill.Slug));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Linked_skill_root_is_unavailable_and_cannot_be_modified(bool linkAgents)
+    {
+        var project = await _projects.CreateProjectAsync("Linked skill root");
+        var agents = Path.Combine(_projects.ResolveWorkspacePath(project), ".agents");
+        var link = linkAgents ? agents : Path.Combine(agents, "skills");
+        using var outside = new TempDir();
+        var target = Path.Combine(outside.Path, linkAgents ? Path.Combine("skills", "fixture") : "fixture");
+        Directory.CreateDirectory(target);
+        var sentinel = Path.Combine(target, "SKILL.md");
+        await File.WriteAllTextAsync(sentinel, "Synthetic skill content.");
+        Directory.CreateDirectory(Path.GetDirectoryName(link)!);
+        if (OperatingSystem.IsWindows())
+            DurableWriteRouter.CreateDirectoryJunction(link, outside.Path);
+        else
+            Directory.CreateSymbolicLink(link, outside.Path);
+        try
+        {
+            Assert.Empty(await _skills.ListAsync(project.Slug));
+            Assert.Null(await _skills.ReadInstructionsAsync(project.Slug, "fixture"));
+            Assert.Null(await _skills.UpdateAsync(project.Slug, "fixture", null, "Replacement"));
+            Assert.False(await _skills.DeleteAsync(project.Slug, "fixture"));
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => _skills.CreateAsync(project.Slug, "New", "Synthetic new skill."));
+            Assert.Equal("Synthetic skill content.", await File.ReadAllTextAsync(sentinel));
+            Assert.Single(Directory.GetDirectories(Path.GetDirectoryName(target)!));
+        }
+        finally { Directory.Delete(link); }
+    }
+
+    [Theory]
+    [InlineData("SKILL.md")]
+    [InlineData("skill.json")]
+    public async Task Skill_with_a_linked_file_is_unavailable(string filename)
+    {
+        var project = await _projects.CreateProjectAsync("Linked skill file");
+        var skill = await _skills.CreateAsync(project.Slug, "Fixture", "Ordinary instructions.");
+        var link = Path.Combine(Path.GetDirectoryName(skill.InstructionsPath)!, filename);
+        using var outside = new TempDir();
+        var sentinel = Path.Combine(outside.Path, filename);
+        var original = await File.ReadAllTextAsync(link);
+        await File.WriteAllTextAsync(sentinel, original);
+        File.Delete(link);
+        try { File.CreateSymbolicLink(link, sentinel); }
+        catch (IOException ex) when (OperatingSystem.IsWindows() && (ex.HResult & 0xffff) == 1314)
+        {
+            return; // Windows junction tests still exercise directory links.
+        }
+
+        Assert.Empty(await _skills.ListAsync(project.Slug));
+        Assert.Null(await _skills.ReadInstructionsAsync(project.Slug, skill.Slug));
+        Assert.Null(await _skills.UpdateAsync(project.Slug, skill.Slug, null, "Replacement"));
+        Assert.False(await _skills.DeleteAsync(project.Slug, skill.Slug));
+        Assert.Equal(original, await File.ReadAllTextAsync(sentinel));
+    }
+
     [Fact]
     public async Task Project_skill_is_written_with_codex_frontmatter()
     {

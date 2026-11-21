@@ -11,6 +11,9 @@ Source installations retain the dismissible release-link banner described below.
   `KittyClawWindowsInstaller=true`, `win-x64`, and `--self-contained true`, then calls
   the pinned `vpk pack` tool. It produces the installer, full package, portable ZIP,
   and `releases.win.json`. It does not publish externally.
+- Build with the minimum SDK specified in `global.json`. The installer embeds its
+  runtime, so installed copies receive runtime security fixes through a new KittyClaw
+  package. Source installations use the machine's installed .NET runtime.
 - Only installer builds target `net10.0-windows`, use WinForms and WebView2 for the desktop window and notification
   icon, and hide the console. Normal source builds still target `net10.0`.
 - `branding/KittyClaw.ico` contains transparent 16–256 px versions of the Posture 07 KittyClaw
@@ -150,7 +153,8 @@ project pause still govern execution.
   access. `Test-WindowsDeltaUpdate.ps1` verifies reconstruction with no target full package
   on the test server. Windows CI builds two versions and runs both tests.
 - `.github/workflows/windows-installer.yml` packages CI artifacts without publishing.
-- `tools/Test-WindowsInstaller.ps1` verifies the self-contained host and static assets
+- `tools/Test-WindowsInstaller.ps1` checks the embedded ASP.NET Core security minimum
+  before it verifies the self-contained host and static assets
   on an isolated port, then reads the actual feed and validates the downloaded package
   through `TestVelopackLocator`. It does not install over the developer's instance.
 - `InstalledUpdateServiceTests` cover busy agents, finalization, dispatch/update races,

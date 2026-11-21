@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text;
 using KittyClaw.Core.Models;
@@ -229,21 +230,45 @@ public sealed class ColumnActionExecutor(
             ?? throw new InvalidOperationException($"Le projet '{projectSlug}' n’existe pas.");
         var workspace = projects.ResolveWorkspacePath(project);
         string Resolve(string value) => Render(value, projectSlug, ticket, agentResult);
-        string scriptArgument;
+        var inputs = new (string Placeholder, string Name, string Value)[]
+        {
+            ("{ticketTitle}", "KITTYCLAW_TICKET_TITLE", ticket.Title),
+            ("{ticketStatus}", "KITTYCLAW_TICKET_STATUS", ticket.Status),
+            ("{assignee}", "KITTYCLAW_TICKET_ASSIGNEE", ticket.AssignedTo ?? ""),
+            ("{outcome}", "KITTYCLAW_ACTION_OUTCOME", agentResult?.Outcome ?? ""),
+            ("{summary}", "KITTYCLAW_ACTION_SUMMARY", agentResult?.Summary ?? ""),
+        };
+        var startInfo = new ProcessStartInfo(ShellResolver.ResolvePowerShell()) { WorkingDirectory = workspace };
+        startInfo.ArgumentList.Add("-NonInteractive");
+        startInfo.ArgumentList.Add("-NoProfile");
         if (!string.IsNullOrWhiteSpace(spec.ScriptFile))
         {
             var rendered = Resolve(spec.ScriptFile);
             var path = Path.IsPathRooted(rendered) ? rendered : Path.Combine(workspace, rendered);
-            scriptArgument = $"-File \"{path}\"";
+            startInfo.ArgumentList.Add("-File");
+            startInfo.ArgumentList.Add(path);
         }
         else
         {
+            // Encoding transports source; it does not make interpolated ticket/model text safe.
+            foreach (var input in inputs)
+                if (spec.Script.Contains(input.Placeholder, StringComparison.Ordinal))
+                    return ColumnActionResult.Failure(
+                        $"Do not interpolate {input.Placeholder} into PowerShell source. Read the environment variable $env:{input.Name} instead.");
             var bytes = Encoding.Unicode.GetBytes(Resolve(spec.Script));
-            scriptArgument = $"-EncodedCommand {Convert.ToBase64String(bytes)}";
+            startInfo.ArgumentList.Add("-EncodedCommand");
+            startInfo.ArgumentList.Add(Convert.ToBase64String(bytes));
         }
-        var arguments = spec.Arguments.Count == 0
-            ? ""
-            : " " + string.Join(" ", spec.Arguments.Select(argument => $"\"{Resolve(argument)}\""));
+        foreach (var argument in spec.Arguments)
+        {
+            var rendered = Resolve(argument);
+            // Match PowerShell's ASCII and Unicode parameter markers after native argv quoting.
+            if (rendered is ['-' or '\u2013' or '\u2014' or '\u2015', _, ..]
+                && inputs.Any(input => argument.Contains(input.Placeholder, StringComparison.Ordinal)))
+                return ColumnActionResult.Failure(
+                    "A dynamic PowerShell argument cannot begin with a parameter marker. Read its environment variable from the script instead.");
+            startInfo.ArgumentList.Add(rendered);
+        }
         var env = new Dictionary<string, string>(spec.Env, StringComparer.OrdinalIgnoreCase)
         {
             ["KITTYCLAW_ACTION_EXECUTION_ID"] = $"{execution.Id}:{action.Id}",
@@ -256,13 +281,10 @@ public sealed class ColumnActionExecutor(
                 await projectSecrets.ReadForInjectionAsync(projectSlug, cancellationToken),
                 StringComparer.OrdinalIgnoreCase);
         foreach (var (name, value) in secrets) env[name] = value;
-        var result = await ProcessRunner.RunAsync(
-            ShellResolver.ResolvePowerShell(),
-            $"-NonInteractive -NoProfile {scriptArgument}{arguments}",
-            workspace,
-            TimeSpan.FromSeconds(Math.Max(1, spec.TimeoutSeconds)),
-            env,
-            cancellationToken);
+        foreach (var input in inputs) env[input.Name] = input.Value;
+        foreach (var (name, value) in env) startInfo.Environment[name] = value;
+        var result = await ProcessRunner.RunAsync(startInfo,
+            TimeSpan.FromSeconds(Math.Max(1, spec.TimeoutSeconds)), cancellationToken);
         if (result.TimedOut)
             return ColumnActionResult.Failure($"Le script PowerShell a dépassé le délai de {spec.TimeoutSeconds} secondes.");
         if (result.ExitCode != 0)

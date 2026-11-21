@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -229,8 +230,51 @@ public static class SecretRedactor
     public static string Redact(string? text, IEnumerable<string> values)
     {
         if (string.IsNullOrEmpty(text)) return text ?? string.Empty;
-        var result = text;
-        var variants = values.Where(value => !string.IsNullOrEmpty(value))
+        return ReplaceVariants(text, GetVariants(values));
+    }
+
+    internal static string RedactProviderLine(string line, IEnumerable<string> values)
+    {
+        var variants = GetVariants(values);
+        if (variants.Length != 0 && line.Contains('\\') && line.AsSpan().TrimStart() is ['{' or '[', ..])
+            line = RedactEscapedJsonStrings(line, variants);
+        return ReplaceVariants(line, variants);
+    }
+
+    private static string RedactEscapedJsonStrings(string line, string[] variants)
+    {
+        var bytes = Encoding.UTF8.GetBytes(line);
+        var reader = new Utf8JsonReader(bytes);
+        using var rewritten = new MemoryStream();
+        var copied = 0;
+        try
+        {
+            while (reader.Read())
+            {
+                if (reader.TokenType is not (JsonTokenType.String or JsonTokenType.PropertyName) || !reader.ValueIsEscaped)
+                    continue;
+
+                var decoded = reader.GetString()!;
+                var redacted = ReplaceVariants(decoded, variants);
+                if (redacted == decoded) continue;
+
+                // Replace just the quoted token. Keep punctuation and whitespace as emitted by the provider.
+                var start = (int)reader.TokenStartIndex;
+                rewritten.Write(bytes.AsSpan(copied, start - copied));
+                rewritten.Write(JsonSerializer.SerializeToUtf8Bytes(redacted));
+                copied = start + reader.ValueSpan.Length + 2;
+            }
+        }
+        catch (JsonException) { return line; }
+        catch (InvalidOperationException) { return line; } // An invalid Unicode sequence can fail during decoding.
+
+        if (copied == 0) return line;
+        rewritten.Write(bytes.AsSpan(copied));
+        return Encoding.UTF8.GetString(rewritten.GetBuffer(), 0, (int)rewritten.Length);
+    }
+
+    private static string[] GetVariants(IEnumerable<string> values) =>
+        values.Where(value => !string.IsNullOrEmpty(value))
             .SelectMany(value => new[]
             {
                 value,
@@ -238,12 +282,13 @@ public static class SecretRedactor
                 JsonSerializer.Serialize(value, RelaxedJson)[1..^1],
                 JsonSerializer.Serialize(value, RelaxedJson)[1..^1].Replace("/", "\\/", StringComparison.Ordinal)
             })
-            .Distinct(StringComparer.Ordinal).OrderByDescending(value => value.Length);
+            .Distinct(StringComparer.Ordinal).OrderByDescending(value => value.Length).ToArray();
+
+    private static string ReplaceVariants(string text, string[] variants)
+    {
         // Replace escaped representations before shorter raw substrings can split them.
         foreach (var value in variants)
-        {
-            result = result.Replace(value, Replacement, StringComparison.Ordinal);
-        }
-        return result;
+            text = text.Replace(value, Replacement, StringComparison.Ordinal);
+        return text;
     }
 }

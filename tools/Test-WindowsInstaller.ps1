@@ -26,6 +26,10 @@ $runtime = Get-Content -LiteralPath (Join-Path $payload 'KittyClaw.Web.runtimeco
 foreach ($framework in 'Microsoft.NETCore.App', 'Microsoft.AspNetCore.App', 'Microsoft.WindowsDesktop.App') {
     if ($framework -notin $runtime.runtimeOptions.includedFrameworks.name) { throw "Runtime is not embedded: $framework" }
 }
+$aspNetCore = $runtime.runtimeOptions.includedFrameworks | Where-Object name -eq 'Microsoft.AspNetCore.App'
+if ([version]$aspNetCore.version -lt [version]'10.0.15') {
+    throw "Embedded ASP.NET Core $($aspNetCore.version) is below the 10.0.15 security minimum for CVE-2026-114149."
+}
 $startInfo = [Diagnostics.ProcessStartInfo]::new((Join-Path $payload 'KittyClaw.Web.exe'))
 $startInfo.UseShellExecute = $false
 $startInfo.CreateNoWindow = $true

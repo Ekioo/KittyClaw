@@ -19,10 +19,11 @@ public sealed class CliProbeSecurityTests
             $"$info.Arguments = '-NoProfile -NonInteractive -EncodedCommand {childCommand}'; " +
             "$child = [System.Diagnostics.Process]::Start($info); " +
             $"[System.IO.File]::WriteAllText('{pidFile.Replace("'", "''")}', [string]$child.Id + ':' + [string]$child.StartTime.ToUniversalTime().Ticks)";
-        var probe = Task.Run(() => Probe(parent, "", TimeSpan.FromSeconds(3)));
+        // The parent launches another interpreter before exiting; allow cold startup.
+        var probe = Task.Run(() => Probe(parent, "", TimeSpan.FromSeconds(6)));
         try
         {
-            Assert.True(await probe.WaitAsync(TimeSpan.FromSeconds(8)));
+            Assert.True(await probe.WaitAsync(TimeSpan.FromSeconds(10)));
             Assert.True(File.Exists(pidFile), "The synthetic parent never spawned its child.");
         }
         finally
@@ -44,7 +45,7 @@ public sealed class CliProbeSecurityTests
                     catch (InvalidOperationException) { }
                 }
             }
-            await probe.WaitAsync(TimeSpan.FromSeconds(8));
+            await probe.WaitAsync(TimeSpan.FromSeconds(10));
         }
     }
 

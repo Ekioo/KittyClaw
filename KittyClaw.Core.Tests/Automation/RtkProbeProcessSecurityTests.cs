@@ -40,7 +40,8 @@ public sealed class RtkProbeProcessSecurityTests
         if (!OperatingSystem.IsWindows()) return;
         using var fixture = new SyntheticProcessFixture();
         var info = SyntheticProcessFixture.Command(fixture.SpawnInheritedChild + "[Console]::Out.Write('rtk 1.2.3')", "");
-        var probe = RtkIntegrationService.ProbeBinaryAsync(info, CancellationToken.None);
+        // Allow the synthetic PowerShell parent to start; pipe completion must still be bounded.
+        var probe = RtkIntegrationService.ProbeBinaryAsync(info, CancellationToken.None, TimeSpan.FromSeconds(6));
         try
         {
             var result = await probe.WaitAsync(TimeSpan.FromSeconds(8));
@@ -63,7 +64,8 @@ public sealed class RtkProbeProcessSecurityTests
         var info = SyntheticProcessFixture.Command(
             "[Console]::Out.Write('rtk 1.2.3'); [Console]::" + (stderr ? "Error" : "Out") + ".Write('synthetic-private-diagnostic' * 6000)",
             "printf 'rtk 1.2.3'; head -c 131072 /dev/zero" + (stderr ? " >&2" : ""));
-        var result = await RtkIntegrationService.ProbeBinaryAsync(info, CancellationToken.None)
+        // This case tests output limits rather than interpreter startup speed.
+        var result = await RtkIntegrationService.ProbeBinaryAsync(info, CancellationToken.None, TimeSpan.FromSeconds(6))
             .WaitAsync(TimeSpan.FromSeconds(8));
         Assert.Equal(stderr, result.Available);
         if (stderr)

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Text;
 using KittyClaw.Core.Services;
 using KittyClaw.Core.Tests.Helpers;
@@ -102,6 +103,51 @@ public sealed class ApiFileSecurityTests
             using var accepted = await client.PostAsync("/api/images", validForm);
             accepted.EnsureSuccessStatusCode();
             Assert.EndsWith(".png", Assert.Single(Directory.GetFiles(Path.Combine(dir.Path, "uploads"))));
+        }
+        finally { Environment.SetEnvironmentVariable("KITTYCLAW_DATA_DIR", before); }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Dashboard_API_rejects_linked_tile_directories(bool linkDashboardRoot)
+    {
+        using var data = new TempDir();
+        using var outside = new TempDir();
+        var before = Environment.GetEnvironmentVariable("KITTYCLAW_DATA_DIR");
+        Environment.SetEnvironmentVariable("KITTYCLAW_DATA_DIR", data.Path);
+        try
+        {
+            await using var factory = new Factory();
+            using var client = factory.CreateClient(new() { BaseAddress = new Uri("http://localhost") });
+            var projects = factory.Services.GetRequiredService<ProjectService>();
+            var project = await projects.CreateProjectAsync("Dashboard file fixture");
+            var dashboard = Path.Combine(projects.ResolveWorkspacePath(project), ".dashboard");
+            var link = linkDashboardRoot ? dashboard : Path.Combine(dashboard, "fixture");
+            var target = linkDashboardRoot
+                ? Directory.CreateDirectory(Path.Combine(outside.Path, "fixture")).FullName
+                : outside.Path;
+            var output = Path.Combine(target, "output.md");
+            const string marker = "synthetic fixture";
+            await File.WriteAllTextAsync(output, marker);
+            Directory.CreateDirectory(Path.GetDirectoryName(link)!);
+            if (OperatingSystem.IsWindows())
+                DurableWriteRouter.CreateDirectoryJunction(link, outside.Path);
+            else
+                Directory.CreateSymbolicLink(link, outside.Path);
+
+            try
+            {
+                var tilesUrl = $"/api/projects/{project.Slug}/dashboard/tiles";
+                Assert.Empty((await client.GetFromJsonAsync<List<DashboardTileLayout>>(tilesUrl))!);
+                using var read = await client.GetAsync($"{tilesUrl}/fixture/output/raw");
+                Assert.Equal(HttpStatusCode.BadRequest, read.StatusCode);
+                using var body = new StringContent("updated fixture");
+                using var write = await client.PutAsync($"{tilesUrl}/fixture/output", body);
+                Assert.Equal(HttpStatusCode.BadRequest, write.StatusCode);
+                Assert.Equal(marker, await File.ReadAllTextAsync(output));
+            }
+            finally { Directory.Delete(link); }
         }
         finally { Environment.SetEnvironmentVariable("KITTYCLAW_DATA_DIR", before); }
     }

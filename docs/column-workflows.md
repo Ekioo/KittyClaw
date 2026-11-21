@@ -18,6 +18,53 @@ This model is intended for business workflows where a ticket is claimed from a c
 
 There is deliberately no required `InProgress` business column. A durable `ColumnExecution` records `Running`, `Retrying`, `WaitingForChildren`, and terminal execution states while the ticket remains in its current business column.
 
+## HTTP action destinations
+
+By default, HTTP actions reject loopback, link-local, wildcard, broadcast and multicast
+addresses. Ordinary private LAN targets remain available. DNS results are checked against
+the addresses actually used by the socket connection, and redirects are disabled.
+
+Protected requests connect directly and ignore the process/platform default proxy.
+Otherwise the connection callback would validate the proxy address while the proxy could
+forward to a prohibited destination. Setting `allowLocalTargets=true` explicitly enables
+local targets and retains the existing default-proxy routing. Redirects remain disabled
+in that mode too.
+
+## PowerShell action inputs
+
+PowerShell actions use literal native argument-list entries for the script path and
+`Arguments`; ticket titles and model summaries cannot add arguments through quotes.
+Static configured options such as `-Publish` remain supported. A dynamic argument
+containing a ticket/model placeholder is rejected before launch if its rendered value
+would be parsed as a parameter: `-`, U+2013, U+2014 or U+2015 followed by another
+character. `-File` interprets these values as parameters even when they remain one
+native argument. Pass such data through the environment instead. A single dash and
+values with leading whitespace remain literal arguments.
+
+Inline `Script` is trusted executable source. It no longer substitutes `{ticketTitle}`,
+`{ticketStatus}`, `{assignee}`, `{outcome}` or `{summary}`; referencing one of these
+placeholders fails the action before launch with migration guidance. Encoding a script
+with `-EncodedCommand` does not prevent code injection during text substitution.
+`{ticketId}` and the registered project `{slug}` remain available.
+
+Use the following environment values in inline scripts or script files. They are set
+from the current context and are reserved: they override same-named action or vault
+environment entries:
+
+| Data | Environment variable |
+| --- | --- |
+| Ticket title | `KITTYCLAW_TICKET_TITLE` |
+| Ticket column/status name | `KITTYCLAW_TICKET_STATUS` |
+| Ticket assignee, or empty | `KITTYCLAW_TICKET_ASSIGNEE` |
+| Agent outcome, or empty | `KITTYCLAW_ACTION_OUTCOME` |
+| Agent summary, or empty | `KITTYCLAW_ACTION_SUMMARY` |
+
+For example, replace `Write-Output "{ticketTitle}"` with
+`Write-Output $env:KITTYCLAW_TICKET_TITLE`. PowerShell reads the variable value as data;
+quotes and `$()` in that value are not evaluated again. Script authors remain responsible
+for treating these values as data when calling other tools; `Invoke-Expression` or a
+second command interpreter would explicitly turn them back into code.
+
 ## Manual ticket transitions
 
 Manual moves reuse the source column processor's routing graph. As soon as that processor declares
@@ -277,6 +324,10 @@ Reusable project capabilities live under:
 ```
 
 KittyClaw writes the Codex-compatible YAML frontmatter (`name` and `description`) and keeps the editable instructions as the Markdown body. Reading an older plain-Markdown project skill upgrades it atomically before the next agent process starts.
+
+Project skill management and processor skill loading use ordinary project files.
+They skip linked skill roots, skill directories, instruction files and metadata.
+Creating a skill requires ordinary directories beneath the configured workspace.
 
 The processor is a generic agent identity tied to a column. Its persistent memory lives under:
 
