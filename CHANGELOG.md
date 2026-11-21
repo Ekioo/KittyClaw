@@ -4,6 +4,29 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.30.1] — 2026-11-21
+
+Audited security hardening and GPT-6.2 token cost estimates.
+
+### Highlights
+
+Harden workflow actions, dashboard files, project skills, and secret redaction. Update the build SDK to include runtime security fixes and add estimated token costs for GPT-6.2 models.
+
+### Changed
+
+- Add estimated token costs for GPT-6.2 models.
+- Require .NET SDK 10.0.404 and verify the installer's embedded ASP.NET Core security minimum.
+
+### Security
+
+- Pass PowerShell action inputs as literal arguments and reserved environment values instead of interpolating untrusted text into scripts.
+- Validate HTTP action destinations against the actual connection and bypass default proxies for protected requests.
+- Reject linked dashboard and project skill paths, and prevent pipeline skill reuse through symbolic links or reparse points.
+- Keep dashboard migration and script paths within the dashboard directory.
+- Redact decoded provider JSON string values, including equivalent Unicode escape sequences, before publishing or storing events.
+
+---
+
 ## [v0.30] — 2026-11-18
 
 GitHub Copilot CLI support, clearer model selection, and updated provider models.
