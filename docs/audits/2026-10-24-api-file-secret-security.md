@@ -724,3 +724,49 @@ isolated audit SDK directory. Running source installations need an updated
 runtime, and existing self-contained installations need a rebuilt package.
 No release was pushed, published or deployed, and the main instance was not
 used for validation.
+
+## 2026-11-23 nightly audit: automatic context and processor memory paths
+
+An untrusted checkout could redirect automatic context reads through links under
+`.agents`. The host read preambles, legacy agent skills, memory indexes and flat
+memory files before passing their contents to a provider. Consolidation also read
+linked topic files and its instruction file. These reads happened outside the
+provider's tool hooks, so `Enforce` did not protect the initial prompt. This could
+disclose an external file readable by the application account without a tool
+request or a boundary approval.
+
+Processor memory migration could import external text through the same layout.
+Native lesson capitalization could also rewrite an external `MEMORY.md` through
+a linked memory directory. The input was the workspace-controlled link; the host
+performed the read or write with its own filesystem permissions.
+
+`AgentContextFiles` now requires paths beneath the configured workspace's `.agents`
+directory and rejects existing reparse points at every descendant component.
+Automatic prompt reads, chat background skills and consolidation instructions use
+this check. Runner preparation failures stay visible on the registered run; chat
+returns `invalid_agent_context`. Processor memory migration and capitalization
+validate their canonical and legacy paths before reading or writing. Ordinary
+optional context and memory migration remain supported.
+
+A disposable Windows fixture against `4b0641e` first demonstrated that a linked
+agent directory placed an external synthetic marker in an `Enforce` prompt.
+Six regression cases were then executed against the three original runner and
+processor-memory classes: all six failed as expected because the original code
+followed the links instead of rejecting them. Capitalization returned `Succeeded`
+through the external memory directory. The corrected source was restored after
+that baseline run.
+
+133 targeted tests passed with the isolated SDK 10.0.404, including 16 new cases.
+The TRX counters recorded 133 executed, 133 passed, zero failures and zero
+unexecuted tests. Coverage included file links and directory junctions, HTTP chat
+rejection, preservation of synthetic external targets, ordinary prompt assembly,
+legacy memory migration, capitalization, simulated dispatch and resume, secret
+injection and native pre-effect hook enforcement. HTTP checks used disposable
+in-process or random-loopback fixture servers. No real provider, main instance,
+user project or real secret was used.
+
+The configured workspace remains the trusted root. These are checks of existing
+paths, not protection against concurrent filesystem replacement or a sandbox for
+provider-owned tool reads. Other workspace configuration and runtime-state paths,
+the full test suite, browser interaction and native Linux/macOS validation were
+outside this batch. No dependency version was changed.

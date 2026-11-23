@@ -564,7 +564,8 @@ public sealed class ColumnProcessorService(
     {
         var project = await projects.GetProjectAsync(projectSlug)
             ?? throw new InvalidOperationException($"Le projet '{projectSlug}' n'existe pas.");
-        var root = Path.Combine(projects.ResolveWorkspacePath(project), ".agents", "processors");
+        var workspace = projects.ResolveWorkspacePath(project);
+        var root = AgentContextFiles.RequirePath(workspace, Path.Combine(workspace, ".agents", "processors"));
         Directory.CreateDirectory(root);
         return root;
     }
@@ -575,7 +576,8 @@ public sealed class ColumnProcessorService(
             ?? throw new InvalidOperationException($"Le projet '{projectSlug}' n'existe pas.");
         var workspace = projects.ResolveWorkspacePath(project);
         var relativeMemoryDir = Path.Combine(".agents", "processors", ColumnReference(processor.ColumnId), "memory");
-        var primaryIndex = Path.Combine(workspace, relativeMemoryDir, "MEMORY.md");
+        var primaryIndex = AgentContextFiles.RequirePath(workspace, Path.Combine(workspace, relativeMemoryDir, "MEMORY.md"));
+        AgentContextFiles.RequirePath(workspace, Path.Combine(workspace, ".agents", $"column-{processor.ColumnId}", "memory.md"));
         DurableWriteRoute? route = null;
         var root = workspace;
         if (durableWrites is not null && project.WorktreesEnabled &&
@@ -587,7 +589,7 @@ public sealed class ColumnProcessorService(
         }
 
         var memoryDir = Path.Combine(root, relativeMemoryDir);
-        var index = Path.Combine(memoryDir, "MEMORY.md");
+        var index = AgentContextFiles.RequirePath(root, Path.Combine(memoryDir, "MEMORY.md"));
         var previousMemory = File.Exists(index) ? await File.ReadAllTextAsync(index) : null;
         try
         {
@@ -622,7 +624,8 @@ public sealed class ColumnProcessorService(
     private static async Task<bool> MemoryRequiresWriteAsync(string workspace, int columnId, string canonicalPath)
     {
         if (!File.Exists(canonicalPath)) return true;
-        var legacyPath = Path.Combine(workspace, ".agents", $"column-{columnId}", "memory.md");
+        var legacyPath = AgentContextFiles.RequirePath(workspace,
+            Path.Combine(workspace, ".agents", $"column-{columnId}", "memory.md"));
         if (!File.Exists(legacyPath)) return false;
         var canonical = await File.ReadAllTextAsync(canonicalPath);
         return (await File.ReadAllLinesAsync(legacyPath))
@@ -633,7 +636,8 @@ public sealed class ColumnProcessorService(
 
     private static async Task MigrateLegacyMemoryAsync(string workspace, int columnId, string canonicalPath)
     {
-        var legacyPath = Path.Combine(workspace, ".agents", $"column-{columnId}", "memory.md");
+        var legacyPath = AgentContextFiles.RequirePath(workspace,
+            Path.Combine(workspace, ".agents", $"column-{columnId}", "memory.md"));
         if (!File.Exists(legacyPath)) return;
         var canonical = await File.ReadAllTextAsync(canonicalPath);
         var lessons = (await File.ReadAllLinesAsync(legacyPath))

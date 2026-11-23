@@ -152,6 +152,39 @@ public sealed class ApiFileSecurityTests
         finally { Environment.SetEnvironmentVariable("KITTYCLAW_DATA_DIR", before); }
     }
 
+    [Fact]
+    public async Task Chat_start_rejects_linked_agent_instructions_without_dispatch()
+    {
+        using var data = new TempDir();
+        using var outside = new TempDir();
+        var before = Environment.GetEnvironmentVariable("KITTYCLAW_DATA_DIR");
+        Environment.SetEnvironmentVariable("KITTYCLAW_DATA_DIR", data.Path);
+        try
+        {
+            await using var factory = new Factory();
+            using var client = factory.CreateClient(new() { BaseAddress = new Uri("http://localhost") });
+            var projects = factory.Services.GetRequiredService<ProjectService>();
+            var project = await projects.CreateProjectAsync("Chat context fixture");
+            var link = Path.Combine(projects.ResolveWorkspacePath(project), ".agents", "programmer");
+            Directory.CreateDirectory(Path.GetDirectoryName(link)!);
+            var sentinel = Path.Combine(outside.Path, "SKILL.md");
+            await File.WriteAllTextAsync(sentinel, "Synthetic external instructions.");
+            if (OperatingSystem.IsWindows()) DurableWriteRouter.CreateDirectoryJunction(link, outside.Path);
+            else Directory.CreateSymbolicLink(link, outside.Path);
+            try
+            {
+                using var response = await client.PostAsJsonAsync($"/api/projects/{project.Slug}/chat/start",
+                    new ChatStartRequest("Ordinary fixture message.", Target: "programmer", Model: "claude:claude-opus-5"));
+                Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+                Assert.Contains("invalid_agent_context", await response.Content.ReadAsStringAsync());
+                Assert.Empty(factory.Services.GetRequiredService<AgentRunRegistry>().ActiveForProject(project.Slug));
+                Assert.Equal("Synthetic external instructions.", await File.ReadAllTextAsync(sentinel));
+            }
+            finally { Directory.Delete(link); }
+        }
+        finally { Environment.SetEnvironmentVariable("KITTYCLAW_DATA_DIR", before); }
+    }
+
     private sealed class Factory : WebApplicationFactory<CreateProjectRequest>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)

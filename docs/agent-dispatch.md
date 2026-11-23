@@ -72,6 +72,22 @@ cancellation cleanup use the runner's bounded final drain of at most five second
 - `KittyClaw.Core/Automation/CostTracker.cs` — appends per-run `CostLogEntry` lines to `<workspace>/.agents/channel/cost-log.jsonl` (rotated monthly) and answers the daily-budget check (`IsBudgetExceeded`) from that file. A provider-reported monetary total is authoritative. When Codex or Grok only reports token classes, `ModelCostEstimator` applies its explicit, versioned public rate card; unknown models remain unpriced. Estimated entries carry `CostEstimated=true`.
 - `KittyClaw.Core/Automation/RunCostRecorder.cs` — hosted service subscribed to `AgentRunRegistry.OnRunEnded`. For every run that reported usage it writes the `CostLogEntry` via `CostTracker` and accumulates token/USD totals onto the ticket (`Tickets.AgentTokens` / `Tickets.AgentCostUsd` via `TicketService.AddAgentUsageAsync`) — the durable per-ticket figure shown on the board card and ticket panel, which survives the 24h run-log purge. `Tickets.AgentCostEstimated` remains true once any estimated amount contributes to that cumulative total. Run-level usage and its estimate marker also surface in the run drawer header and the `/runs` API DTOs.
 
+## Automatic context files
+
+`AgentContextFiles` checks automatic prompt files beneath the configured workspace's
+`.agents` directory. Preambles, agent skills, memory indexes, legacy memory and
+consolidation topics must use ordinary files and directories. A linked file or
+parent directory is rejected before its contents enter the prompt, including in
+`Enforce` mode: provider tool hooks cannot protect a file already read by the host.
+Chat rejects linked background skills with `invalid_agent_context`; a runner
+preparation failure remains visible on its registered run.
+
+The same checks cover memory-consolidation instructions and the canonical and
+legacy memory paths used by processor migration and lesson capitalization. Missing
+optional context keeps its existing behavior. The configured workspace is the
+trusted root. Checks cover existing links; they do not provide filesystem isolation
+against concurrent path replacement or constrain provider-owned tool reads.
+
 ## Rendered content safety
 
 `SafeMarkdown` is shared by chat messages, ticket/comment Markdown and dashboard

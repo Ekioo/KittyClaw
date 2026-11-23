@@ -296,6 +296,8 @@ public sealed class AgentRunner
         {
             if (_projects is not null && await _projects.GetProjectAsync(ctx.ProjectSlug) is { } project)
                 ctx.BoundaryEnforcement = project.BoundaryEnforcement;
+            AgentContextFiles.RequirePath(ctx.WorkspacePath,
+                Path.Combine(ctx.WorkspacePath, ".agents", ctx.AgentName));
         }
         catch (Exception ex)
         {
@@ -487,7 +489,17 @@ public sealed class AgentRunner
                 _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
                 return run;
             }
-            skillContent = await File.ReadAllTextAsync(skillAbs);
+            try
+            {
+                skillContent = await AgentContextFiles.ReadOptionalTextAsync(ctx.WorkspacePath, skillAbs)
+                    ?? throw new FileNotFoundException("Skill file no longer exists.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                run.Push(new StreamEvent(DateTime.UtcNow, "error", ex.Message));
+                _runs.Complete(run.RunId, AgentRunStatus.Failed, -1);
+                return run;
+            }
         }
 
         // Session key matches the legacy dispatcher.mjs format ({agent}:{ticketId|sweep}).
@@ -1590,9 +1602,9 @@ public sealed class AgentRunner
         var sb = new StringBuilder();
 
         var preambleFile = Path.Combine(ctx.WorkspacePath, ".agents", "preamble.md");
-        if (File.Exists(preambleFile))
+        var preamble = await AgentContextFiles.ReadOptionalTextAsync(ctx.WorkspacePath, preambleFile, ct);
+        if (preamble is not null)
         {
-            var preamble = await File.ReadAllTextAsync(preambleFile, ct);
             sb.AppendLine(preamble.Replace("{agent}", ctx.AgentName));
             sb.AppendLine();
         }
@@ -1630,9 +1642,10 @@ public sealed class AgentRunner
         var indexFile = Path.Combine(memDir, "MEMORY.md");
         var isConsolidate = ctx.SessionScope == "consolidate";
 
-        if (File.Exists(indexFile))
+        var index = await AgentContextFiles.ReadOptionalTextAsync(ctx.WorkspacePath, indexFile, ct);
+        if (index is not null)
         {
-            sb.AppendLine(await File.ReadAllTextAsync(indexFile, ct));
+            sb.AppendLine(index);
             sb.AppendLine();
 
             if (isConsolidate)
@@ -1642,7 +1655,7 @@ public sealed class AgentRunner
                     .OrderBy(f => f, StringComparer.Ordinal))
                 {
                     sb.AppendLine($"--- memory topic: {Path.GetFileName(topic)} ---");
-                    sb.AppendLine(await File.ReadAllTextAsync(topic, ct));
+                    sb.AppendLine(await AgentContextFiles.ReadOptionalTextAsync(ctx.WorkspacePath, topic, ct));
                     sb.AppendLine();
                 }
             }
@@ -1655,9 +1668,10 @@ public sealed class AgentRunner
         // window. Once the consolidation pass has moved everything and deleted the flat file, only
         // the index is injected (pure lazy) and the agent reads topic files on demand.
         var legacyFile = Path.Combine(agentDir, "memory.md");
-        if (File.Exists(legacyFile))
+        var legacy = await AgentContextFiles.ReadOptionalTextAsync(ctx.WorkspacePath, legacyFile, ct);
+        if (legacy is not null)
         {
-            sb.AppendLine(await File.ReadAllTextAsync(legacyFile, ct));
+            sb.AppendLine(legacy);
             sb.AppendLine();
         }
     }
