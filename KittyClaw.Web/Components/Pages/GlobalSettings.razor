@@ -7,6 +7,7 @@
 @inject RtkIntegrationService RtkIntegration
 @inject LocalizationService L
 @inject RemoteAccessStore RemoteAccess
+@inject KittyClaw.Web.Services.AccountAssociationService Accounts
 @rendermode InteractiveServer
 @implements IDisposable
 
@@ -20,8 +21,23 @@
     <section class="settings-section mobile-section-panel @(_mobileSection == "account" ? "mobile-section-active" : "")" data-testid="account-global-settings">
         <h2>@L["AccountTitle"]</h2>
         <p class="settings-hint">@L["AccountHint"]</p>
+        @if (Accounts.Snapshot.Account is { } account)
+        {
+            <div class="account-summary settings-status settings-status-ok">
+                <span>@L["AccountAssociated"] <strong>@account.Name</strong></span>
+                @if (!string.IsNullOrWhiteSpace(account.Email))
+                {
+                    <span>@account.Email</span>
+                }
+            </div>
+            <p><a class="settings-browse" href="https://my.kittyclaw.dev">@L["AccountPortal"] ↗</a></p>
+        }
+        else
+        {
+            <p class="settings-hint">@L[Accounts.Snapshot.AuthorizationUrl is null ? "AccountNotAssociated" : "AccountPending"]</p>
+        }
         <a class="settings-browse" href="/account-setup" data-enhance-nav="false">@L["AccountConfigure"]</a>
-        <p class="settings-hint">@L["NetworkLocalSetup"]</p>
+        <p class="settings-hint">@L["AccountNetworkUnchanged"]</p>
     </section>
     <section class="settings-section mobile-section-panel @(_mobileSection == "network" ? "mobile-section-active" : "")" data-testid="network-global-settings">
         <h2>@L["NetworkTitle"]</h2>
@@ -154,7 +170,7 @@
 </div>
 
 @code {
-    private string _mobileSection = "network";
+    private string _mobileSection = "account";
     private IReadOnlyList<MobileSectionNavigation.Section> MobileSections =>
     [
         new("account", L["AccountTitle"]),

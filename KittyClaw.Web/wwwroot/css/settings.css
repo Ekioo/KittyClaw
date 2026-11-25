@@ -75,6 +75,7 @@
 .settings-status-ok { background: #3ecf8e22; color: #3ecf8e; }
 .settings-status-warn { background: #f5b94222; color: #f5b942; }
 .settings-status-err { background: #f06b6b22; color: #f06b6b; }
+.account-summary { display: grid; gap: 4px; margin-bottom: 16px; overflow-wrap: anywhere; }
 .git-repository-status { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; margin-bottom: 1rem; }
 .git-repository-status code { color: #c8d0e0; overflow-wrap: anywhere; }
 .git-initialize-card {

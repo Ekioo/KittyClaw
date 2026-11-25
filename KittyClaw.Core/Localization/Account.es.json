@@ -1,0 +1,19 @@
+{
+  "AccountTitle": "Cuenta de KittyClaw",
+  "AccountHint": "Asocia esta instalación a tu cuenta de GitHub o Google para encontrarla en my.kittyclaw.dev.",
+  "AccountConfigure": "Gestionar la asociación de la cuenta",
+  "AccountAssociate": "Asociar mi cuenta",
+  "AccountAssociated": "Asociada a",
+  "AccountPortal": "Mis instancias",
+  "AccountDisconnect": "Desconectar esta cuenta",
+  "AccountConfirmTitle": "Confirmar esta cuenta",
+  "AccountConfirmHint": "Comprueba que esta es tu cuenta antes de asociar esta máquina.",
+  "AccountConfirm": "Asociar esta máquina",
+  "AccountCancel": "Cancelar asociación",
+  "AccountContinue": "Continuar con GitHub o Google",
+  "AccountReturnHint": "El inicio de sesión continúa en esta ventana. Volverás aquí para confirmar la cuenta. La solicitud caduca en 10 minutos.",
+  "AccountRefresh": "Comprobar asociación",
+  "AccountRevoked": "La asociación ha sido revocada. Puedes volver a asociar esta instalación.",
+  "AccountError": "El servicio de cuentas no pudo completar esta solicitud. Comprueba tu conexión e inténtalo de nuevo.",
+  "AccountNetworkUnchanged": "La asociación de la cuenta no activa el acceso a la red. Los proyectos y archivos permanecen en esta máquina."
+}

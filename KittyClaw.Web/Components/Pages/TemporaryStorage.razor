@@ -9,7 +9,7 @@
 
 <PageTitle>@L["TemporaryStorageTitle"]</PageTitle>
 <UtilityPageHeader Title="@L["TemporaryStorageTitle"]" />
-<main class="settings-container utility-page-container temporary-storage-page">
+<div class="settings-container utility-page-container temporary-storage-page">
     <section class="settings-section">
         <p role="note">@L["TemporaryStorageWarning"]</p>
         <p class="settings-hint">@L["TemporaryStorageScope"]</p>
@@ -60,7 +60,7 @@
             <button class="settings-browse" type="button" @onclick="() => OpenFolder(project.Slug)" disabled="@(_opening is not null)" title="@L["OpenProjectWorkingFilesHint"]">📂 @L["OpenRunWorkingFiles"]</button>
         </section>
     }
-</main>
+</div>
 
 @code {
     private readonly CancellationTokenSource _lifetime = new();

@@ -48,24 +48,25 @@ public sealed class AccountSetupMiddleware(RequestDelegate next)
 
         var snapshot = accounts.Snapshot;
         var token = antiforgery.GetAndStoreTokens(context);
-        string Form(string action, string label, string fields = "") =>
-            $"<form method='post' action='/account-setup'><input type='hidden' name='{E(token.FormFieldName)}' value='{E(token.RequestToken!)}'><input type='hidden' name='action' value='{action}'>{fields}<button>{E(label)}</button></form>";
+        string Form(string action, string label, string fields = "", string buttonClass = "") =>
+            $"<form method='post' action='/account-setup'><input type='hidden' name='{E(token.FormFieldName)}' value='{E(token.RequestToken!)}'><input type='hidden' name='action' value='{action}'>{fields}<button class='{buttonClass}'>{E(label)}</button></form>";
         var content = $"<p>{E(l["AccountHint"])}</p>";
         if (error) content += $"<p role='alert'>{E(l["AccountError"])}</p>";
         if (snapshot.Account is { } account)
         {
             content += $"<p role='status'>{E(l["AccountAssociated"])} <strong>{E(account.Name)}</strong></p><p>{E(account.Email ?? "")}</p>" +
                 $"<p><a href='{AccountAssociationService.PortalOrigin}'>{E(l["AccountPortal"])}</a></p>" +
-                Form("disconnect", l["AccountDisconnect"]);
+                $"<details class='setup-advanced'><summary>{E(l["AccountDisconnect"])}</summary><p>{E(l["AccountDisconnectHint"])}</p>" +
+                Form("disconnect", l["AccountDisconnect"], buttonClass: "danger") + "</details>";
         }
         else if (snapshot.ProposedAccount is { } proposed)
         {
             content += $"<h2>{E(l["AccountConfirmTitle"])}</h2><p><strong>{E(proposed.Name)}</strong><br>{E(proposed.Email ?? "")}</p><p>{E(l["AccountConfirmHint"])}</p>" +
-                Form("confirm", l["AccountConfirm"], $"<input type='hidden' name='accountId' value='{E(proposed.Id)}'>") + Form("disconnect", l["AccountCancel"]);
+                Form("confirm", l["AccountConfirm"], $"<input type='hidden' name='accountId' value='{E(proposed.Id)}'>") + Form("disconnect", l["AccountCancel"], buttonClass: "secondary");
         }
         else if (snapshot.AuthorizationUrl is not null && snapshot.ExpiresAt > DateTimeOffset.UtcNow.ToUnixTimeSeconds())
         {
-            content += Form("continue", l["AccountContinue"]) + $"<p>{E(l["AccountReturnHint"])}</p>" + Form("disconnect", l["AccountCancel"]);
+            content += Form("continue", l["AccountContinue"]) + $"<p>{E(l["AccountReturnHint"])}</p>" + Form("disconnect", l["AccountCancel"], buttonClass: "secondary");
         }
         else
         {

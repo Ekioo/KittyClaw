@@ -1,12 +1,14 @@
 @inherits LayoutComponentBase
 @using KittyClaw.Core.Services
 @inject LocalizationService L
+@inject NavigationManager Navigation
 
 <EscapeKeyHost />
 <BoardFocusHost />
+<a class="app-skip-link" href="@(Navigation.Uri.Split('#')[0] + "#main-content")" data-enhance-nav="false">@L["SkipToContent"]</a>
 <div class="app-shell">
     <GlobalNavigation />
-    <main class="app-content">@Body</main>
+    <main id="main-content" class="app-content" tabindex="-1">@Body</main>
 </div>
 
 <UpdateBanner />

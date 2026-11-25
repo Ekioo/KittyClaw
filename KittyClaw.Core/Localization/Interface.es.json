@@ -1,0 +1,11 @@
+{
+  "SkipToContent": "Ir al contenido",
+  "PageNotFound": "Página no encontrada",
+  "PageNotFoundHint": "Esta página ya no existe o su dirección ha cambiado.",
+  "BackToProjects": "Volver a los proyectos",
+  "PageError": "No se pudo abrir esta página",
+  "PageErrorHint": "Inténtalo de nuevo en un momento. Si el problema persiste, incluye el identificador de solicitud que aparece abajo al comunicarlo.",
+  "AccountNotAssociated": "Esta instalación aún no está asociada a una cuenta.",
+  "AccountPending": "Asociación iniciada. Continúa el inicio de sesión para vincular esta instalación.",
+  "AccountDisconnectHint": "Elimina esta máquina de tu cuenta. Se conservan tus proyectos locales y las cuentas vinculadas de GitHub o Google."
+}

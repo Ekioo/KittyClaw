@@ -1,0 +1,11 @@
+{
+  "SkipToContent": "本文へ移動",
+  "PageNotFound": "ページが見つかりません",
+  "PageNotFoundHint": "このページは削除されたか、アドレスが変更されました。",
+  "BackToProjects": "プロジェクトに戻る",
+  "PageError": "ページを開けませんでした",
+  "PageErrorHint": "しばらくしてからもう一度お試しください。問題が続く場合は、下のリクエストIDを添えて報告してください。",
+  "AccountNotAssociated": "このインストールはまだアカウントに関連付けられていません。",
+  "AccountPending": "関連付けを開始しました。ログインを続けて、このインストールの関連付けを完了してください。",
+  "AccountDisconnectHint": "このマシンをアカウントから削除します。ローカルのプロジェクトと、連携済みのGitHubまたはGoogleアカウントは保持されます。"
+}

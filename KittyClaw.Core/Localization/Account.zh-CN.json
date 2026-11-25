@@ -1,0 +1,19 @@
+{
+  "AccountTitle": "KittyClaw 账户",
+  "AccountHint": "将此安装关联到您的 GitHub 或 Google 账户，即可在 my.kittyclaw.dev 上找到它。",
+  "AccountConfigure": "管理账户关联",
+  "AccountAssociate": "关联我的账户",
+  "AccountAssociated": "已关联到",
+  "AccountPortal": "我的实例",
+  "AccountDisconnect": "解除此账户关联",
+  "AccountConfirmTitle": "确认此账户",
+  "AccountConfirmHint": "在关联此计算机之前，请确认这是您的账户。",
+  "AccountConfirm": "关联此计算机",
+  "AccountCancel": "取消关联",
+  "AccountContinue": "使用 GitHub 或 Google 继续",
+  "AccountReturnHint": "登录将在此窗口中继续。随后将返回此处确认账户。请求将在 10 分钟后过期。",
+  "AccountRefresh": "检查关联",
+  "AccountRevoked": "关联已被撤销。您可以重新关联此安装。",
+  "AccountError": "账户服务无法完成此请求。请检查连接并重试。",
+  "AccountNetworkUnchanged": "账户关联不会启用网络访问。项目和文件仍保留在此计算机上。"
+}

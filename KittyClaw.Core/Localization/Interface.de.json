@@ -1,0 +1,11 @@
+{
+  "SkipToContent": "Zum Inhalt",
+  "PageNotFound": "Seite nicht gefunden",
+  "PageNotFoundHint": "Diese Seite existiert nicht mehr oder ihre Adresse hat sich geändert.",
+  "BackToProjects": "Zurück zu den Projekten",
+  "PageError": "Diese Seite konnte nicht geöffnet werden",
+  "PageErrorHint": "Versuche es gleich noch einmal. Falls das Problem weiterhin besteht, gib beim Melden die unten stehende Anfrage-ID an.",
+  "AccountNotAssociated": "Diese Installation ist noch keinem Konto zugeordnet.",
+  "AccountPending": "Zuordnung gestartet. Setze die Anmeldung fort, um diese Installation zuzuordnen.",
+  "AccountDisconnectHint": "Entfernt diesen Rechner aus deinem Konto. Lokale Projekte und verknüpfte GitHub- oder Google-Konten bleiben erhalten."
+}
