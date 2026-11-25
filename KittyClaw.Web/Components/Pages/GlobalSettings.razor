@@ -17,6 +17,12 @@
 <MobileSectionNavigation Sections="@MobileSections" @bind-Active="_mobileSection" />
 
 <div class="settings-container utility-page-container global-settings">
+    <section class="settings-section mobile-section-panel @(_mobileSection == "account" ? "mobile-section-active" : "")" data-testid="account-global-settings">
+        <h2>@L["AccountTitle"]</h2>
+        <p class="settings-hint">@L["AccountHint"]</p>
+        <a class="settings-browse" href="/account-setup" data-enhance-nav="false">@L["AccountConfigure"]</a>
+        <p class="settings-hint">@L["NetworkLocalSetup"]</p>
+    </section>
     <section class="settings-section mobile-section-panel @(_mobileSection == "network" ? "mobile-section-active" : "")" data-testid="network-global-settings">
         <h2>@L["NetworkTitle"]</h2>
         <p class="settings-hint">@L["NetworkHint"]</p>
@@ -151,6 +157,7 @@
     private string _mobileSection = "network";
     private IReadOnlyList<MobileSectionNavigation.Section> MobileSections =>
     [
+        new("account", L["AccountTitle"]),
         new("network", L["NetworkTitle"]),
         new("remote", L["RemoteTitle"]),
         new("language", L["Language"]),

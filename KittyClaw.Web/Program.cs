@@ -89,6 +89,10 @@ if (networkAccess.Enabled)
 // A tunnel origin has its own loopback port and never inherits local trust.
 var remoteAccessStore = new RemoteAccessStore(dataDir, networkProtection);
 builder.Services.AddSingleton(remoteAccessStore);
+builder.Services.AddSingleton(new AccountAssociationService(dataDir, networkProtection,
+    new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
+    { MaxResponseContentBufferSize = 32 * 1024, Timeout = TimeSpan.FromSeconds(20) }));
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AccountAssociationService>());
 var remoteTunnel = remoteAccessStore.OriginOptions(RemoteTunnelOptions.Read(builder.Configuration));
 builder.Services.AddSingleton(remoteTunnel);
 if (remoteTunnel.Enabled)
@@ -307,6 +311,7 @@ app.UseMiddleware<BrowserSecurityHeadersMiddleware>();
 
 // Gate all remote traffic, including uploads, APIs, MCP and Blazor connections.
 app.UseMiddleware<RemoteTunnelMiddleware>();
+app.UseMiddleware<AccountSetupMiddleware>();
 app.UseMiddleware<RemoteAccessSetupMiddleware>();
 app.UseMiddleware<NetworkAccessMiddleware>();
 

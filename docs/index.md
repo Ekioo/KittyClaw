@@ -13,6 +13,8 @@ and API/MCP documentation.
 
 ## Features
 
+- [Account association](./account-association.md) — GitHub/Google identity, local ownership confirmation and the central installation registry.
+
 - [Mobile UX audit](./audits/2026-10-24-mobile-ux-audit.md) — complete view inventory, phone compositions, desktop preservation and verification coverage.
 
 - [Managed public instance access](./public-instance-access.md) — dedicated tunnel origin boundary and Cloudflare delivery milestones.

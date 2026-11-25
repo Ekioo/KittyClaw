@@ -5,7 +5,7 @@ namespace KittyClaw.Web.Services;
 internal static class RemoteAccessName
 {
     private static readonly HashSet<string> Reserved = new(
-        "www remote-api api admin app mail smtp imap pop pop3 ftp sftp ssh vpn status docs blog support help cdn assets static auth login account accounts billing checkout ns ns1 ns2 autodiscover autoconfig mta-sts webmail dev staging test".Split(' '), StringComparer.Ordinal);
+        "www my remote-api api admin app mail smtp imap pop pop3 ftp sftp ssh vpn status docs blog support help cdn assets static auth login account accounts billing checkout ns ns1 ns2 autodiscover autoconfig mta-sts webmail dev staging test".Split(' '), StringComparer.Ordinal);
 
     internal static string? Normalize(string? value)
     {

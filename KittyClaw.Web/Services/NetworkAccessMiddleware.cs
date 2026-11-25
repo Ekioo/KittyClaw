@@ -274,7 +274,7 @@ public sealed class NetworkAccessMiddleware(RequestDelegate next)
     }
 
     private static string E(string value) => WebUtility.HtmlEncode(value);
-    internal static async Task Page(HttpContext context, string title, string content)
+    internal static async Task Page(HttpContext context, string title, string content, string? formNavigationOrigin = null)
     {
         context.Response.ContentType = "text/html; charset=utf-8";
         var nonce = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
@@ -283,7 +283,8 @@ public sealed class NetworkAccessMiddleware(RequestDelegate next)
         var localAssets = local ? " 'self'" : "";
         var shellStyles = local ? "<link rel='stylesheet' href='/css/windows-desktop.css'>" : "";
         var header = local ? $"<header class='page-header setup-header'><a href='/settings'>← {E(context.RequestServices.GetRequiredService<LocalizationService>()["GlobalSettings"])}</a></header>" : "";
-        context.Response.Headers["Content-Security-Policy"] = $"default-src 'none'; script-src 'nonce-{nonce}'; img-src data:{localAssets}; style-src 'unsafe-inline'{localAssets}; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+        var formOrigins = formNavigationOrigin is null ? "" : $" {formNavigationOrigin}";
+        context.Response.Headers["Content-Security-Policy"] = $"default-src 'none'; script-src 'nonce-{nonce}'; img-src data:{localAssets}; style-src 'unsafe-inline'{localAssets}; form-action 'self'{formOrigins}; frame-ancestors 'none'; base-uri 'none'";
         context.Response.Headers["X-Content-Type-Options"] = "nosniff";
         // Browsers can send Origin: null on form POSTs under no-referrer, which
         // conflicts with our same-origin validation before the code is checked.
