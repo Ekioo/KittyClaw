@@ -770,3 +770,44 @@ paths, not protection against concurrent filesystem replacement or a sandbox for
 provider-owned tool reads. Other workspace configuration and runtime-state paths,
 the full test suite, browser interaction and native Linux/macOS validation were
 outside this batch. No dependency version was changed.
+
+## 2026-11-25 nightly audit: template initialization writes through workspace links
+
+`AgentsTemplateService.InitializeAsync` followed checkout-controlled links while
+copying shared and root guidance. A linked `.agents` directory could create the
+three shared template files outside the selected workspace even without overwrite.
+With overwrite selected, a linked `AGENTS.md` could instead truncate an external
+file and replace it with template content. The owner selected workspace-relative
+conflicts; the checkout-controlled link chose the unrelated target. This was an
+integrity violation by host file I/O, without provider involvement.
+
+Two fixtures against `ccc48e3` reproduced both effects using synthetic external
+files: ordinary initialization wrote all three shared files through a junction,
+and overwrite replaced the external file behind the root guidance link.
+
+`ValidateWriteDestinations` now checks the complete write plan before any asset is
+copied or Git initialized. It rejects linked files and linked parent directories
+for destinations that would be written. Project creation invokes the same
+preflight before adding its registry entry, through its existing error handling.
+Existing files selected for skipping remain untouched, including owner-managed
+links. On Windows, `File.Exists` also recognizes a dangling file link; the existing
+skip behavior is preserved, while a planned overwrite of that link is rejected.
+
+49 targeted tests passed with the isolated SDK 10.0.404: 49 executed, 49 passed,
+zero failures and zero unexecuted tests in the final TRX. The run included 21 new
+regression cases for directory links, all five asset destinations, absent and
+existing external targets, preservation before refusal, and skip behavior. Existing
+tests covered initialization, retained roles/configuration, Git eligibility,
+repository intake and server rendering of project creation. Tests used disposable
+workspaces and an in-process HTTP fixture. No real provider, user project, real
+secret or main instance was used.
+
+A diagnostic copy through a junction explicitly selected as the workspace root
+raised `DirectoryNotFoundException` both with and without the new preflight. This
+pre-existing functional behavior was not changed; the root-link regression checks
+only that preflight trusts the selected root. Copying through such a root needs a
+separate functional reproduction before changing its behavior.
+
+The checks cover existing descendants and do not protect against concurrent path
+replacement. The full suite, interactive browser journeys and native Linux/macOS
+validation were outside this batch. No dependency or template content was changed.

@@ -291,6 +291,7 @@ else if (_createdProject is not null)
             // Validate BEFORE creating: a rejected workspace must not leave a half-created
             // project behind (§2.6 — relative / ".." / drive root / system dirs).
             ProjectService.ValidateWorkspacePath(_newWorkspacePath.Trim());
+            AgentsTemplate.ValidateWriteDestinations(_newWorkspacePath.Trim(), overwrite);
             var project = await ProjectService.CreateProjectAsync(_newProjectName.Trim());
             await ProjectService.UpdateProjectAsync(project.Slug, _newWorkspacePath.Trim());
             var initializeGit = _gitWorkspace?.CanInitialize == true && _initializeGit;

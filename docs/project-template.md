@@ -15,6 +15,19 @@ Source of truth for shared new-project guidance and budget settings. No fixed ag
 - Template files must stay **generic** — no KittyClaw-specific stack references — since the same files ship to every initialized project.
 - Retiring the former role templates does not migrate or delete existing members, workflows, skills, or memories. Initialization only copies the current shared files; even with overwrite enabled it leaves former role directories and project-specific configuration intact.
 
+## Destination checks
+
+`ValidateWriteDestinations` checks every template file that would be written before
+initialization copies any asset or initializes Git. Linked files, dangling links and
+linked parent directories are refused. Project creation runs the same preflight
+before adding the project to the registry, and displays a refusal through its
+existing error handling.
+
+Existing files selected for skipping are never opened for writing and remain
+unchanged, including owner-managed links. The selected workspace remains the
+trusted root. These checks cover existing descendant links; they do not protect
+against concurrent path replacement.
+
 ## Entry points
 - Project creation flow (Home page → Create → Initialize).
 - After template initialization, the new-project wizard analyzes the workspace and replaces the placeholder board organization with the workflow explicitly approved by the owner. Empty workspaces receive a short requirements questionnaire first.
