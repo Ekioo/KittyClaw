@@ -93,7 +93,7 @@ builder.Services.AddSingleton(new AccountAssociationService(dataDir, networkProt
     new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
     { MaxResponseContentBufferSize = 32 * 1024, Timeout = TimeSpan.FromSeconds(20) }, remoteAccessStore));
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AccountAssociationService>());
-builder.Services.AddSingleton(sp => new AccountPortalAccessService(sp.GetRequiredService<AccountAssociationService>(), remoteAccessStore, networkProtection));
+builder.Services.AddSingleton(sp => new AccountPortalAccessService(sp.GetRequiredService<AccountAssociationService>(), remoteAccessStore, networkProtection, networkAccess));
 var remoteTunnel = remoteAccessStore.OriginOptions(RemoteTunnelOptions.Read(builder.Configuration));
 builder.Services.AddSingleton(remoteTunnel);
 if (remoteTunnel.Enabled)
@@ -314,6 +314,7 @@ app.UseMiddleware<BrowserSecurityHeadersMiddleware>();
 app.UseMiddleware<RemoteTunnelMiddleware>();
 app.UseMiddleware<AccountSetupMiddleware>();
 app.UseMiddleware<RemoteAccessSetupMiddleware>();
+app.UseMiddleware<AccountNetworkSetupMiddleware>();
 app.UseMiddleware<AccountPortalAccessMiddleware>();
 app.UseMiddleware<NetworkAccessMiddleware>();
 

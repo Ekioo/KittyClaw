@@ -11,5 +11,10 @@
   "AccountSecurity": "Account security and two-factor authentication",
   "AccountAccessFailed": "Account sign-in could not be completed. Check that this installation is associated with your account and that account two-factor authentication is enabled.",
   "AccountAccessRetry": "Try signing in again",
-  "AccountRemoteAuthentication": "Enable two-factor authentication once on my.kittyclaw.dev to protect all your associated instances. Alternatively, configure a local authenticator for this installation."
+  "AccountRemoteAuthentication": "Associate this installation with your account and enable two-factor authentication on my.kittyclaw.dev. This is the only authenticator you need.",
+  "AccountNetworkHint": "Your KittyClaw account and its two-factor authentication protect both local network access and the Internet tunnel. There is no separate authenticator to set up on this machine.",
+  "AccountNetworkReady": "Account two-factor authentication is enabled. Network connections use this same account.",
+  "AccountNetworkRequired": "Associate this installation with your account and enable two-factor authentication on my.kittyclaw.dev. This is the only authenticator you need.",
+  "AccountNetworkEnable": "Enable local network access",
+  "AccountNetworkEnableHint": "Allow devices on your network to connect to this installation. They will sign in through your KittyClaw account. Restart KittyClaw once after activation to start the HTTPS listener."
 }

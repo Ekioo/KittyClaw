@@ -46,7 +46,7 @@ public sealed class RemoteAccessSetupMiddleware(RequestDelegate next)
             content += $"<figure style='margin:24px 0'><a href='{E(url)}' target='_blank' rel='noopener noreferrer'><img width='256' height='256' style='display:block;max-width:100%;height:auto;background:white;border-radius:8px' src='{RemoteAccessQrCode.DataUrl(url)}' alt='{E(l["RemoteUrlQr"])}' data-testid='remote-url-qr'></a><figcaption><h2 style='font-size:1.1rem'>{E(l["RemoteQrTitle"])}</h2><p>{E(l["RemoteQrInstructions"])}</p><p>{E(l["RemoteQrAuthentication"])}</p></figcaption></figure>";
         }
         if (!connector.CanAuthenticate)
-            content += $"<p>{E(l["AccountRemoteAuthentication"])}</p><p><a href='{AccountAssociationService.PortalOrigin}/security'>{E(l["AccountSecurity"])}</a></p><p><a href='/network-setup'>{E(l["NetworkConfigure"])}</a></p>";
+            content += $"<p>{E(l["AccountNetworkRequired"])}</p><p><a href='{AccountAssociationService.PortalOrigin}/security'>{E(l["AccountSecurity"])}</a></p><p><a href='/account-setup'>{E(l["AccountConfigure"])}</a></p>";
         if (snapshot.Enabled || connector.CanAuthenticate)
         {
             var csrf = antiforgery.GetAndStoreTokens(context).RequestToken!;

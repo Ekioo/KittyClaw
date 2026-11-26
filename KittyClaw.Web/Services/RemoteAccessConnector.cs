@@ -15,7 +15,7 @@ public sealed class RemoteAccessConnector(RemoteAccessStore store, RemoteAccessB
     private RemoteConnectorStatus _status = new("Disabled");
     public RemoteConnectorStatus Status => Volatile.Read(ref _status);
     public bool NeedsRestart => store.Snapshot.Registered && (!origin.Enabled || origin.Hostname != new Uri(store.Snapshot.Url!).Host);
-    public bool CanAuthenticate => access.Enabled || accounts?.Snapshot is { Account: not null, MfaEnabled: true };
+    public bool CanAuthenticate => accounts?.Snapshot is { Account: not null, MfaEnabled: true };
     private void SetStatus(string state, string? error = null)
     {
         store.SetConnected(state == "Online");
@@ -32,7 +32,7 @@ public sealed class RemoteAccessConnector(RemoteAccessStore store, RemoteAccessB
             {
                 try { await accounts.RefreshAsync(ct); }
                 catch (Exception ex) when (ex is AccountAssociationException or HttpRequestException or TaskCanceledException)
-                { if (!access.Enabled) throw new RemoteAccessException("AccountError"); }
+                { throw new RemoteAccessException("AccountError"); }
             }
             if (!CanAuthenticate) throw new RemoteAccessException("RemoteAuthenticationRequired");
             var identity = store.Prepare(broker.Origin, origin.Port, subdomain);

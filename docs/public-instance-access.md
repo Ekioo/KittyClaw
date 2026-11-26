@@ -18,9 +18,10 @@ isolated installation. Full acceptance results are recorded below.
 
 Global settings links to `/remote-setup`, a server-rendered local-only page. Its
 mutations require antiforgery validation. Remote callers cannot activate, pause or
-read installation credentials through this page. The owner first enables either
+read installation credentials through this page. The owner first enables
 [account two-factor authentication](./account-association.md) on `my.kittyclaw.dev`
-or the [local network authenticator](./network-access.md), then accepts Cloudflare transit. No Cloudflare account or API key is requested from the
+and associates the installation, then accepts Cloudflare transit. This same factor
+also protects [local network access](./network-access.md). No Cloudflare account or API key is requested from the
 end user.
 
 Owners may choose an available name during first activation. Names use 3–32 ASCII
@@ -47,10 +48,9 @@ no restart while that origin is present. Stopping first closes the HTTP origin g
 then cancels the connector and revokes browser sessions. Session revocation preserves
 the authenticator but also signs out existing LAN sessions. Restarting a paused
 installation keeps the dedicated origin bound and closed so resume is immediate.
-Without either authentication method, the connector is cancelled and cannot start
-or resume. Disabling the local authenticator does not disable direct-LAN security
-checks or silently open the tunnel; a centrally authenticated account is required
-for the alternative mode.
+Without an associated account with enabled 2FA, the connector is cancelled and
+cannot start or resume. Disabling LAN access does not disable the account factor;
+the separately opted-in tunnel can remain available through account authentication.
 
 The setup page displays the public URL and its QR code, state, error explanation,
 and a refresh link. Global settings also show the public address and a locally
@@ -117,8 +117,8 @@ localhost transport cannot grant local privileges. It represents an explicitly
 configured HTTPS edge; forwarding headers do not establish trust. The Cloudflare
 ingress must preserve that Host and target this port, never the trusted agent port.
 
-Every allowed request still passes local-authenticator or centrally verified account
-session protection. The account flow and its ownership/PKCE/revocation boundary are
+Every allowed request passes centrally verified account session protection.
+The account flow and its ownership/PKCE/revocation boundary are
 documented in [account association](./account-association.md). API, MCP and
 OpenAPI paths remain denied except these browser requirements:
 

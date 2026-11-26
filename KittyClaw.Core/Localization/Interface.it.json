@@ -11,5 +11,10 @@
   "AccountSecurity": "Sicurezza dell’account e autenticazione a due fattori",
   "AccountAccessFailed": "Impossibile completare l’accesso. Verifica che l’installazione sia associata al tuo account e che l’autenticazione a due fattori sia attiva.",
   "AccountAccessRetry": "Riprova l’accesso",
-  "AccountRemoteAuthentication": "Attiva l’autenticazione a due fattori una sola volta su my.kittyclaw.dev per proteggere tutte le istanze associate. In alternativa, configura un autenticatore locale per questa installazione."
+  "AccountRemoteAuthentication": "Associa questa installazione al tuo account e attiva l’autenticazione a due fattori su my.kittyclaw.dev. È l’unico autenticatore necessario.",
+  "AccountNetworkHint": "Il tuo account KittyClaw e la sua autenticazione a due fattori proteggono l’accesso alla rete locale e il tunnel Internet. Non serve configurare un altro autenticatore su questo computer.",
+  "AccountNetworkReady": "L’autenticazione a due fattori dell’account è attiva. Le connessioni di rete usano lo stesso account.",
+  "AccountNetworkRequired": "Associa questa installazione al tuo account e attiva l’autenticazione a due fattori su my.kittyclaw.dev. È l’unico autenticatore necessario.",
+  "AccountNetworkEnable": "Attiva l’accesso alla rete locale",
+  "AccountNetworkEnableHint": "Consenti ai dispositivi della rete di connettersi a questa istanza con il tuo account KittyClaw. Riavvia KittyClaw una volta dopo l’attivazione per avviare il servizio HTTPS."
 }

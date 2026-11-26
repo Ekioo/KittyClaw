@@ -11,5 +11,10 @@
   "AccountSecurity": "Sécurité du compte et authentification à deux facteurs",
   "AccountAccessFailed": "La connexion au compte n’a pas abouti. Vérifiez que cette installation est associée à votre compte et que le 2FA du compte est activé.",
   "AccountAccessRetry": "Réessayer la connexion",
-  "AccountRemoteAuthentication": "Activez le 2FA une seule fois sur my.kittyclaw.dev pour protéger toutes vos instances associées. Vous pouvez aussi configurer un authentificateur local pour cette installation."
+  "AccountRemoteAuthentication": "Associe cette installation à ton compte et active le 2FA sur my.kittyclaw.dev. C’est le seul authentificateur nécessaire.",
+  "AccountNetworkHint": "Ton compte KittyClaw et son authentification à deux facteurs protègent l’accès au réseau local et le tunnel Internet. Aucun autre authentificateur à associer sur cette machine.",
+  "AccountNetworkReady": "Le 2FA du compte est activé. Les connexions réseau utilisent ce même compte.",
+  "AccountNetworkRequired": "Associe cette installation à ton compte et active le 2FA sur my.kittyclaw.dev. C’est le seul authentificateur nécessaire.",
+  "AccountNetworkEnable": "Activer l’accès au réseau local",
+  "AccountNetworkEnableHint": "Autorise les appareils de ton réseau à se connecter à cette instance. Ils se connecteront avec ton compte KittyClaw. Redémarre KittyClaw une fois après l’activation pour démarrer l’écoute HTTPS."
 }

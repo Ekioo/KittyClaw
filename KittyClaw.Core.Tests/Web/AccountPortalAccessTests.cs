@@ -47,10 +47,10 @@ public sealed class AccountPortalAccessTests
     public async Task Existing_remote_stream_is_aborted_when_the_account_session_or_factor_is_revoked(bool localRefresh)
     {
         await using var f = await Fixture.Create();
-        var challenge = f.Portal.Begin(DateTimeOffset.UtcNow);
+        var challenge = await f.Portal.BeginAsync("tunnel", "https://office.kittyclaw.dev", DateTimeOffset.UtcNow, default);
         var query = QueryHelpers.ParseQuery(new Uri(challenge.Url).Query);
         f.Handler.Challenge = query["challenge"].ToString();
-        var cookie = await f.Portal.CompleteAsync(challenge.Cookie, query["state"].ToString(), FakeAccounts.Code, DateTimeOffset.UtcNow, default);
+        var cookie = await f.Portal.CompleteAsync(challenge.Cookie, query["state"].ToString(), FakeAccounts.Code, "tunnel", "https://office.kittyclaw.dev", DateTimeOffset.UtcNow, default);
         await using var app = await f.StartServer(remote: true);
         using var client = app.GetTestClient(); client.BaseAddress = new Uri("https://office.kittyclaw.dev");
         client.DefaultRequestHeaders.Add("Cookie", "__Host-KittyClawPortalSession=" + cookie);
@@ -152,6 +152,102 @@ public sealed class AccountPortalAccessTests
         Assert.False(response.Headers.Contains("Set-Cookie"));
     }
 
+    [Fact]
+    public async Task Network_setup_uses_account_MFA_without_another_QR_and_requires_CSRF_for_opt_in()
+    {
+        await using var f = await Fixture.Create();
+        await using var app = await f.StartServer(remote: false);
+        using var client = app.GetTestClient(); client.BaseAddress = new Uri("http://localhost");
+        var page = await client.GetAsync("/network-setup");
+        var html = await page.Content.ReadAsStringAsync();
+        Assert.Contains("my.kittyclaw.dev/security", html);
+        Assert.Contains("name='action' value='enable'", html);
+        Assert.DoesNotContain("otpauth:", html); Assert.DoesNotContain("name='code'", html); Assert.DoesNotContain("name='enrollment'", html);
+        Assert.False(f.Network.Enabled);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsync("/network-setup", new FormUrlEncodedContent(new Dictionary<string,string> { ["action"] = "enable" }))).StatusCode);
+        var token = System.Text.RegularExpressions.Regex.Match(html, "name='__RequestVerificationToken' value='([^']+)'").Groups[1].Value;
+        client.DefaultRequestHeaders.Add("Cookie", page.Headers.GetValues("Set-Cookie").Single().Split(';')[0]);
+        var enabled = await client.PostAsync("/network-setup", new FormUrlEncodedContent(new Dictionary<string,string> { ["action"] = "enable", ["__RequestVerificationToken"] = token }));
+        Assert.Equal(HttpStatusCode.Redirect, enabled.StatusCode);
+        Assert.True(f.Network.AccountAccessEnabled);
+        f.Handler.MfaEnabled = false;
+        var locked = await (await client.GetAsync("/network-setup")).Content.ReadAsStringAsync();
+        Assert.DoesNotContain("otpauth:", locked); Assert.DoesNotContain("name='action' value='enable'", locked);
+    }
+
+    [Fact]
+    public async Task LAN_sign_in_requires_the_same_account_MFA_and_cannot_reuse_a_tunnel_or_foreign_host_cookie()
+    {
+        await using var f = await Fixture.Create();
+        f.Network.EnableAccountAccess(); f.Network.Listening = true;
+        var origin = $"https://{Environment.MachineName.ToLowerInvariant()}:5233";
+        await using var app = await f.StartServer(remote: false, network: true);
+        using var client = app.GetTestClient(); client.BaseAddress = new Uri(origin);
+        var start = await client.GetAsync("/account-access");
+        Assert.Equal(HttpStatusCode.Redirect, start.StatusCode);
+        Assert.Contains("/authorize?request=", start.Headers.Location!.ToString());
+        var challengeCookie = start.Headers.GetValues("Set-Cookie").Single();
+        Assert.Contains("secure", challengeCookie); Assert.Contains("httponly", challengeCookie);
+        client.DefaultRequestHeaders.Add("Cookie", challengeCookie.Split(';')[0]);
+        var callback = await client.GetAsync($"/account-access/callback?state={f.Handler.State}&code={FakeAccounts.Code}");
+        Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
+        var sessionCookie = callback.Headers.GetValues("Set-Cookie").Single(value => value.StartsWith("__Host-KittyClawPortalSession="));
+        client.DefaultRequestHeaders.Remove("Cookie"); client.DefaultRequestHeaders.Add("Cookie", sessionCookie.Split(';')[0]);
+        Assert.Equal("protected", await client.GetStringAsync("/"));
+        Assert.Equal("protected", await client.GetStringAsync("/api/projects"));
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/network-setup")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/account-setup")).StatusCode);
+        Assert.False(await f.Portal.ValidAsync(sessionCookie.Split(';')[0].Split('=',2)[1], "tunnel", "https://office.kittyclaw.dev", default));
+        Assert.False(await f.Portal.ValidAsync(sessionCookie.Split(';')[0].Split('=',2)[1], "network", "https://192.168.1.21:5233", default));
+        using var cross = new HttpRequestMessage(HttpMethod.Get, "/"); cross.Headers.Add("Origin", "https://evil.test");
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(cross)).StatusCode);
+        f.Network.SetNetworkRules(true, "192.168.1.80");
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/")).StatusCode);
+        f.Network.SetNetworkRules(false, "");
+        f.Network.Disable(); f.Network.EnableAccountAccess();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/")).StatusCode);
+    }
+
+    [Theory]
+    [InlineData("factor")]
+    [InlineData("disable")]
+    [InlineData("rules")]
+    public async Task Existing_LAN_stream_is_aborted_when_account_or_network_access_is_revoked(string reason)
+    {
+        await using var f = await Fixture.Create(); f.Network.EnableAccountAccess(); f.Network.Listening = true;
+        var origin = $"https://{Environment.MachineName.ToLowerInvariant()}:5233";
+        var challenge = await f.Portal.BeginAsync("network", origin, DateTimeOffset.UtcNow, default);
+        var cookie = await f.Portal.CompleteAsync(challenge.Cookie, f.Handler.State!, FakeAccounts.Code, "network", origin, DateTimeOffset.UtcNow, default);
+        await using var app = await f.StartServer(remote: false, network: true);
+        using var client = app.GetTestClient(); client.BaseAddress = new Uri(origin);
+        client.DefaultRequestHeaders.Add("Cookie", "__Host-KittyClawPortalSession=" + cookie);
+        var request = client.GetStringAsync("/long");
+        await f.StreamStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        if (reason == "factor") { f.Handler.MfaEnabled = false; await f.Accounts.RefreshAsync(default); }
+        else if (reason == "disable") f.Network.Disable();
+        else f.Network.SetNetworkRules(true, "192.168.1.80");
+        await Assert.ThrowsAnyAsync<Exception>(async () => await request).WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task Legacy_local_authenticator_cannot_bypass_the_account_gate()
+    {
+        await using var f = await Fixture.Create();
+        var enrollment = f.Network.CreateEnrollment();
+        const string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+        var bits = string.Concat(f.Network.EnrollmentSecret(enrollment).Select(c => Convert.ToString(alphabet.IndexOf(c), 2).PadLeft(5, '0')));
+        var key = Enumerable.Range(0, bits.Length / 8).Select(i => Convert.ToByte(bits.Substring(i * 8, 8), 2)).ToArray();
+        Assert.True(f.Network.Enable(enrollment, NetworkAccessService.Totp(key, DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30 - 1)));
+        var legacy = f.Network.Authenticate(NetworkAccessService.Totp(key, DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30), DateTimeOffset.UtcNow);
+        Assert.NotNull(legacy);
+        await using var app = await f.StartServer(remote: true);
+        using var client = app.GetTestClient(); client.BaseAddress = new Uri("https://office.kittyclaw.dev");
+        client.DefaultRequestHeaders.Add("Cookie", "__Host-KittyClawAccess=" + legacy);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/")).StatusCode);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, (await client.PostAsync("/access", new FormUrlEncodedContent(new Dictionary<string,string> { ["code"] = "123456" }))).StatusCode);
+        f.Network.EnableAccountAccess(); Assert.Null(f.Network.Authenticate("123456", DateTimeOffset.UtcNow));
+    }
+
     private sealed class Fixture : IAsyncDisposable
     {
         private readonly TempDir _directory = new();
@@ -172,22 +268,23 @@ public sealed class AccountPortalAccessTests
             f.Accounts = new(f._directory.Path, f._protection, f._http, f.Remote);
             await f.Accounts.BeginAssociationAsync(default); await f.Accounts.RefreshAsync(default);
             await f.Accounts.ConfirmAsync(FakeAccounts.Account.Id, default); await f.Accounts.RefreshAsync(default);
-            f.Portal = new(f.Accounts, f.Remote, f._protection);
             f.Network = new(f._directory.Path, f._protection, 5233);
+            f.Portal = new(f.Accounts, f.Remote, f._protection, f.Network);
             return f;
         }
-        public async Task<WebApplication> StartServer(bool remote)
+        public async Task<WebApplication> StartServer(bool remote, bool network = false)
         {
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
-            builder.Configuration["AllowedHosts"] = "office.kittyclaw.dev;localhost";
+            builder.Configuration["AllowedHosts"] = $"office.kittyclaw.dev;localhost;{Environment.MachineName}";
             builder.Logging.ClearProviders(); builder.WebHost.UseTestServer();
             builder.Services.AddSingleton(Accounts); builder.Services.AddSingleton(Portal); builder.Services.AddSingleton(Network);
             builder.Services.AddSingleton(Remote); builder.Services.AddSingleton(new RemoteTunnelOptions(true, 5234, "office.kittyclaw.dev"));
             builder.Services.AddSingleton(new LocalizationService(new AppSettingsService(_directory.Path)));
             builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider(); builder.Services.AddAntiforgery();
             var app = builder.Build();
-            app.Use(async (context, next) => { context.Connection.LocalPort = remote ? 5234 : 5232; context.Connection.RemoteIpAddress = IPAddress.Loopback; await next(context); });
+            app.Use(async (context, next) => { context.Connection.LocalPort = remote ? 5234 : network ? 5233 : 5232; context.Connection.RemoteIpAddress = network ? IPAddress.Parse("192.168.1.70") : IPAddress.Loopback; await next(context); });
             app.UseMiddleware<RemoteTunnelMiddleware>(); app.UseMiddleware<AccountSetupMiddleware>();
+            app.UseMiddleware<AccountNetworkSetupMiddleware>();
             app.UseMiddleware<AccountPortalAccessMiddleware>(); app.UseMiddleware<NetworkAccessMiddleware>();
             app.Run(async context =>
             {
@@ -211,6 +308,8 @@ public sealed class AccountPortalAccessTests
         private bool _linked;
         public bool MfaEnabled = true, Revoked, ProofValid = true;
         public string? Challenge;
+        public string? State;
+        private string? _proofKind, _proofOrigin;
         public int Redemptions;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
@@ -221,11 +320,15 @@ public sealed class AccountPortalAccessTests
                 case "/v1/installations/associate": result = new { authorizationUrl = AccountAssociationService.PortalOrigin + "/associate?request=" + new string('a', 64), expiresAt = DateTimeOffset.UtcNow.AddMinutes(10).ToUnixTimeSeconds() }; break;
                 case "/v1/installations/status": result = new { account = _linked && !Revoked ? Account : null, proposedAccount = !_linked ? Account : null, revoked = Revoked, mfaEnabled = MfaEnabled }; break;
                 case "/v1/installations/confirm": _linked = true; result = new { associated = true }; break;
+                case "/v1/installations/access/start":
+                    Challenge = data.GetProperty("challenge").GetString(); State = data.GetProperty("state").GetString();
+                    result = new { authorizationUrl = AccountAssociationService.PortalOrigin + "/instances/" + data.GetProperty("instanceId").GetString() + "/authorize?request=" + new string('a', 64) }; break;
                 case "/v1/installations/access/redeem":
                     var challenge = WebEncoders.Base64UrlEncode(SHA256.HashData(Encoding.ASCII.GetBytes(data.GetProperty("verifier").GetString()!)));
                     if (data.GetProperty("code").GetString() != Code || challenge != Challenge || Redemptions++ > 0) return new(HttpStatusCode.Unauthorized);
+                    _proofKind = data.GetProperty("kind").GetString(); _proofOrigin = data.GetProperty("origin").GetString();
                     result = new { proof = Proof, expiresAt = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds() }; break;
-                case "/v1/installations/access/check": result = new { valid = ProofValid && MfaEnabled && !Revoked, expiresAt = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds() }; break;
+                case "/v1/installations/access/check": result = new { valid = ProofValid && MfaEnabled && !Revoked && _proofKind == data.GetProperty("kind").GetString() && _proofOrigin == data.GetProperty("origin").GetString(), expiresAt = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds() }; break;
                 case "/v1/installations/access/revoke": ProofValid = false; result = new { revoked = true }; break;
                 default: throw new InvalidOperationException("Unexpected account request");
             }

@@ -11,5 +11,10 @@
   "AccountSecurity": "账户安全与双重验证",
   "AccountAccessFailed": "无法完成登录。请确认此安装已关联到您的账户，且已启用账户双重验证。",
   "AccountAccessRetry": "重新登录",
-  "AccountRemoteAuthentication": "在 my.kittyclaw.dev 上设置一次双重验证，即可保护所有关联的实例。您也可以为此安装配置本地身份验证器。"
+  "AccountRemoteAuthentication": "将此安装关联到你的账户，并在 my.kittyclaw.dev 启用双重身份验证。这是唯一需要设置的验证器。",
+  "AccountNetworkHint": "KittyClaw 账户的双重身份验证同时保护本地网络访问和互联网隧道。无需在此计算机上设置另一个验证器。",
+  "AccountNetworkReady": "账户双重身份验证已启用。网络连接使用同一个账户。",
+  "AccountNetworkRequired": "将此安装关联到你的账户，并在 my.kittyclaw.dev 启用双重身份验证。这是唯一需要设置的验证器。",
+  "AccountNetworkEnable": "启用本地网络访问",
+  "AccountNetworkEnableHint": "允许网络内的设备使用你的 KittyClaw 账户连接到此实例。启用后请重启 KittyClaw 一次以启动 HTTPS 监听。"
 }

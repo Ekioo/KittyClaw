@@ -17,6 +17,7 @@ internal sealed record AssociationStart(string AuthorizationUrl, long ExpiresAt)
 internal sealed record AssociationStatus(AssociatedAccount? Account, AssociatedAccount? ProposedAccount, bool Revoked, bool MfaEnabled = false);
 public sealed record AccountAccessProof(string Proof, long ExpiresAt);
 internal sealed record AccountAccessCheck(bool Valid, long ExpiresAt);
+internal sealed record NetworkAccessStart(string AuthorizationUrl);
 
 /// <summary>Account ownership is independent of tunnel allocation and network authentication.</summary>
 public sealed class AccountAssociationService : BackgroundService
@@ -112,12 +113,27 @@ public sealed class AccountAssociationService : BackgroundService
     }
 
     public async Task<AccountAccessProof> RedeemAccessAsync(string code, string verifier, CancellationToken ct)
+        => await RedeemAccessAsync(code, verifier, "tunnel", null, ct);
+    internal async Task<string> BeginNetworkAccessAsync(string origin, string state, string challenge, CancellationToken ct)
     {
         await _gate.WaitAsync(ct);
         try
         {
             if (_installation?.Account is null || !_snapshot.MfaEnabled) throw new AccountAssociationException();
-            var proof = await SendAsync<AccountAccessProof>("access/redeem", new { instanceId = _installation.InstanceId, code, verifier }, ct);
+            var result = await SendAsync<NetworkAccessStart>("access/start", new { instanceId = _installation.InstanceId, kind = "network", origin, state, challenge }, ct);
+            if (!Regex.IsMatch(result.AuthorizationUrl, $"^{Regex.Escape(PortalOrigin)}/instances/{_installation.InstanceId}/authorize\\?request=[a-f0-9]{{64}}$"))
+                throw new AccountAssociationException();
+            return result.AuthorizationUrl;
+        }
+        finally { _gate.Release(); }
+    }
+    internal async Task<AccountAccessProof> RedeemAccessAsync(string code, string verifier, string kind, string? origin, CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct);
+        try
+        {
+            if (_installation?.Account is null || !_snapshot.MfaEnabled) throw new AccountAssociationException();
+            var proof = await SendAsync<AccountAccessProof>("access/redeem", new { instanceId = _installation.InstanceId, code, verifier, kind, origin }, ct);
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             if (!Regex.IsMatch(proof.Proof, "^[a-f0-9]{64}$") || proof.ExpiresAt <= now || proof.ExpiresAt > now + 43260)
                 throw new AccountAssociationException();
@@ -126,23 +142,27 @@ public sealed class AccountAssociationService : BackgroundService
         finally { _gate.Release(); }
     }
     public async Task<bool> CheckAccessAsync(string proof, CancellationToken ct)
+        => await CheckAccessAsync(proof, "tunnel", null, ct);
+    internal async Task<bool> CheckAccessAsync(string proof, string kind, string? origin, CancellationToken ct)
     {
         await _gate.WaitAsync(ct);
         try
         {
             if (_installation?.Account is null || !_snapshot.MfaEnabled) return false;
-            var check = await SendAsync<AccountAccessCheck>("access/check", new { instanceId = _installation.InstanceId, proof }, ct);
+            var check = await SendAsync<AccountAccessCheck>("access/check", new { instanceId = _installation.InstanceId, proof, kind, origin }, ct);
             return check.Valid && check.ExpiresAt > DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         }
         finally { _gate.Release(); }
     }
     public async Task RevokeAccessAsync(string proof, CancellationToken ct)
+        => await RevokeAccessAsync(proof, "tunnel", null, ct);
+    internal async Task RevokeAccessAsync(string proof, string kind, string? origin, CancellationToken ct)
     {
         await _gate.WaitAsync(ct);
         try
         {
             if (_installation?.Account is not null)
-                await SendAsync<JsonElement>("access/revoke", new { instanceId = _installation.InstanceId, proof }, ct);
+                await SendAsync<JsonElement>("access/revoke", new { instanceId = _installation.InstanceId, proof, kind, origin }, ct);
         }
         finally { _gate.Release(); }
     }

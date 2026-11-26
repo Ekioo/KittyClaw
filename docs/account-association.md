@@ -10,8 +10,9 @@ files and run logs stay on the installation.
 
 Association does not activate a tunnel or open a network listener. Once the owner
 enables account two-factor authentication on the portal, the associated account
-can authenticate a browser to an explicitly enabled managed tunnel. Local/LAN
-authenticator enrollment remains independent. See
+can authenticate a browser to explicitly enabled LAN and managed-tunnel listeners.
+The same account authenticator protects both; installations never enroll a second
+factor. See [local network access](./network-access.md) and
 [public instance access](./public-instance-access.md) for tunnel activation.
 
 ## Local enrollment
@@ -90,17 +91,29 @@ account/MFA changes invalidate the cache generation and abort active requests.
 
 `AccountPortalAccessMiddleware` runs after the dedicated tunnel boundary and local
 setup boundaries, before the ordinary network gate. Its authenticated feature is
-accepted only on that HTTPS tunnel origin. API/MCP/OpenAPI restrictions, upload
+accepted only on the opted-in HTTPS tunnel or exact LAN listener. API/MCP/OpenAPI restrictions, upload
 Origin checks, local-only setup, direct-LAN rules and browser CSRF checks remain
 in force. Local listener requests and forwarded headers cannot issue SSO cookies.
 Signing out from an instance clears and revokes its scoped proof; signing out from
 the account invalidates every proof tied to that account session.
 
-Existing direct-LAN and local authenticator sessions continue to work. A managed
-tunnel may be activated with either an enrolled local authenticator or an
-associated account whose central 2FA is enabled. First allocation can still require
+Legacy local-authenticator cookies cannot bypass the account gate. The local
+network setup page shows the shared account status and an explicit listener opt-in,
+without a second QR code. Activation migrates old network state while preserving
+IP rules, removes the local authenticator and rotates the access generation.
+Both listeners require an associated account whose central 2FA is enabled.
+First allocation can still require
 the existing restart to bind the dedicated listener; no listener is exposed merely
 by enabling central 2FA.
+
+LAN sign-in creates a five-minute, credential-authenticated authorization request
+on the account service. Only HTTPS private IPs, ULA IPv6 addresses and local machine
+names are allowed as destinations; the service never fetches those addresses.
+The callback origin, state, S256 challenge, installation and account are fixed
+before browser navigation. Account login and the existing MFA verification then
+produce a sixty-second grant. LAN grants and sessions have a distinct access kind
+and origin and cannot be redeemed or reused as tunnel sessions. A local access
+generation also binds cookies and challenges so pause/reset cannot resurrect them.
 
 The portal can rename and revoke instances, list and revoke sessions, connect a
 second provider, and delete an account. Equal email addresses never merge accounts.

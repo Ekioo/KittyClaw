@@ -11,5 +11,10 @@
   "AccountSecurity": "アカウントのセキュリティと2要素認証",
   "AccountAccessFailed": "ログインを完了できませんでした。このインストールがアカウントに関連付けられており、アカウントの2要素認証が有効になっていることを確認してください。",
   "AccountAccessRetry": "もう一度ログイン",
-  "AccountRemoteAuthentication": "my.kittyclaw.devで2要素認証を一度設定すると、関連付けられたすべてのインスタンスを保護できます。このインストール専用のローカル認証アプリを設定することもできます。"
+  "AccountRemoteAuthentication": "このインストールをアカウントに関連付け、my.kittyclaw.devで二要素認証を有効にしてください。必要な認証アプリの設定はこれだけです。",
+  "AccountNetworkHint": "KittyClawアカウントの二要素認証で、ローカルネットワークとインターネットトンネルの両方を保護します。この端末で別の認証アプリを設定する必要はありません。",
+  "AccountNetworkReady": "アカウントの二要素認証は有効です。ネットワーク接続にも同じアカウントを使用します。",
+  "AccountNetworkRequired": "このインストールをアカウントに関連付け、my.kittyclaw.devで二要素認証を有効にしてください。必要な認証アプリの設定はこれだけです。",
+  "AccountNetworkEnable": "ローカルネットワークアクセスを有効にする",
+  "AccountNetworkEnableHint": "ネットワーク内の端末がKittyClawアカウントでこのインスタンスに接続できるようにします。有効化後、HTTPSリスナーを起動するためKittyClawを一度再起動してください。"
 }
