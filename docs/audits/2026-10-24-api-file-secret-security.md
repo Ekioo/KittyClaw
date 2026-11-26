@@ -811,3 +811,127 @@ separate functional reproduction before changing its behavior.
 The checks cover existing descendants and do not protect against concurrent path
 replacement. The full suite, interactive browser journeys and native Linux/macOS
 validation were outside this batch. No dependency or template content was changed.
+
+## 2026-11-26 known-version audit: installed provider and Git advisories
+
+This review compared declared and resolved package versions, the installed SDK and
+runtimes, the on-demand browser dependency, and external executables with public
+maintainer advisories. It began at `9d80c8c`; other work advanced `dev` during the
+review. No application source, dependency reference, user project, real secret or
+live web instance was changed by this batch.
+
+### Corrected: installed Claude Code
+
+The PATH-resolved native executable reported **2.1.114**. This is in the affected
+range of [GHSA-5j29-h97v-84ch](https://github.com/anthropics/claude-code/security/advisories/GHSA-5j29-h97v-84ch)
+(fixed in 2.1.129): a workspace writer can win a link-replacement race and redirect
+an otherwise permitted write outside the project. It also falls within
+[GHSA-fg94-h982-f3mm](https://github.com/anthropics/claude-code/security/advisories/GHSA-fg94-h982-f3mm)
+(fixed in 2.1.163): injected context can bypass WebFetch restrictions through an
+attacker-controlled HuggingFace repository path and encode accessible data in
+requests. Both are confirmed upstream vulnerabilities of this installed CLI.
+KittyClaw dispatches workspace and ticket content to the provider, but its Claude
+adapter already passes `--dangerously-skip-permissions` and uses its own hooks in
+`Enforce` mode. The native WebFetch approval bypass alone therefore does not
+establish an additional permission bypass in this adapter. No bypass of
+KittyClaw's hook broker was demonstrated. This finding and remediation concern
+the installed provider version; they do not establish a new KittyClaw API flaw.
+
+The official native `claude update` command upgraded this installation to
+**2.1.332**. `claude --version` confirmed the selected executable afterwards.
+Its Authenticode signature was valid for **Anthropic, PBC**, and SHA-256
+`e6652f9170a07df45f1db3e0520f1df0f7b385181ff74f70f49398a67b5fd320`
+matched the official
+[win32-x64 manifest](https://downloads.claude.ai/claude-code-releases/2.1.332/manifest.json).
+`claude --help` exited successfully and still exposed `--allowedTools`,
+`--settings`, `--strict-mcp-config`, `--permission-mode` and `--output-format`.
+No provider request or model inference was used to verify this update. The
+upstream attacks were not independently reproduced against the CLI.
+
+Existing provider processes were preserved. As documented by
+[Anthropic's update mechanism](https://code.claude.com/docs/en/setup#update-claude-code),
+the new binary applies to subsequent launches; existing sessions may retain the
+old code until their owner finishes and restarts them. Other machines and
+explicit executable overrides were not updated. The macOS-specific Edit and
+Seatbelt advisories were not classified as Windows exploits.
+
+### Confirmed and pending: installed Git for Windows
+
+`C:/Program Files/Git/cmd/git.exe` reported **2.50.1.windows.1**.
+[CVE-2026-111760](https://github.com/git/git/security/advisories/GHSA-vp2w-7xxj-jvxr)
+explicitly includes 2.50.1: a malicious server can supply trees whose combined
+path lengths overflow the cache-entry length field, allowing checkout to replace
+Git metadata and reach attacker-controlled configuration or hooks. The maintainer
+also describes a nonrecursive clone followed by `git status`; omitting recursive
+cloning is not a sufficient workaround. The attacker controls repository data
+and can reach code execution through ordinary Git operations.
+
+The official [Git for Windows 2.56.1 release](https://github.com/git-for-windows/git/releases/tag/v2.56.1.windows.1)
+contains the fix. Its Windows x64 installer was downloaded; SHA-256
+`c330c72e10b408cc39994bfefdb63542b0d93d21699325c3e0bd874af8a5a559`
+matched the release metadata and its Johannes Schindelin Authenticode signature
+was valid. An isolated MinGit 2.56.1 copy also matched its published SHA-256
+`4a92850b6e917da4fd010669b614b55dccf5b0ec333a534cc4be4700dfefdafd`.
+
+Disposable repositories exercised initialization, add/commit, local clone and
+checkout, worktree creation, a ticket commit, fast-forward merge and clean status
+with both versions. An additional reduced-limit check, based on the
+[upstream guard](https://github.com/git/git/commit/29411cf), ran
+`git -c index.maxPathLen=8 add -- attacker-controlled-long-name.txt`.
+2.50.1 accepted the path; 2.56.1 rejected it with exit 128 and left the index
+unchanged. This establishes the guard's presence without creating multi-gigabyte
+paths; it is not a reproduction of the complete metadata-overwrite/RCE exploit.
+
+The system Git replacement remains **pending**. Git/Bash processes belonging to
+other work were active, so the pre-install guard stopped before launching the
+installer. No process was closed. The verified installer, MinGit, fixture script
+and results remain under `%TEMP%/KittyClaw-known-tech-20261126`. Next action: run
+the verified installer when these sessions are finished, preserving application
+state with `/NOCLOSEAPPLICATIONS /NORESTARTAPPLICATIONS /NORESTART`, then rerun
+the fixture against the installed executable. A tested temporary copy does not
+make the system installation patched.
+
+### Other versions checked and limits
+
+- SDK **10.0.404** is selected by `global.json` and is now also installed system-wide.
+  .NET, ASP.NET Core and Windows Desktop **10.0.15** are installed. The Microsoft
+  [November ASP.NET advisories](https://github.com/dotnet/announcements/issues/504)
+  and [runtime advisories](https://github.com/dotnet/announcements/issues/498) were
+  checked by package and version, including separately delivered packages. The
+  [VSTest CLI advisory](https://github.com/dotnet/announcements/issues/517) is fixed
+  by this SDK. No ASP.NET Identity scaffolding or Negotiate authentication was
+  found. Loaded runtimes of live processes and all existing self-contained
+  installations were not inspected or restarted.
+- Public-feed `dotnet package list --project KittyClaw.slnx --no-restore
+  --vulnerable --include-transitive --format json --config <public-only-config>`
+  completed with exit 0 and reported no vulnerable entries in all six resolved
+  project graphs. References include EF Core/ASP.NET OpenAPI **10.0.5**,
+  Microsoft.OpenApi **2.10.0**, Markdig **1.1.2**, YamlDotNet **16.3.0**,
+  SQLitePCLRaw **3.0.3** (SourceGear.sqlite3 **3.50.4.5**) and Velopack **1.2.161**.
+  This is the feed's result, not proof of absence: the maintainer's
+  [MCP advisory](https://github.com/modelcontextprotocol/csharp-sdk/security/advisories/GHSA-x863-g495-4cjc)
+  separately includes **ModelContextProtocol.AspNetCore 2.1.0**. Its required
+  distinct authenticated principals without identifier claims were not present
+  in KittyClaw's transport setup; access gates grant installation-wide access.
+  A cross-user session boundary matching that advisory was not established, so
+  no preventive MCP upgrade was applied.
+- The CDN alias `mermaid@11` resolved and served **11.17.2** during this review,
+  beyond the fixed 11.16.1 release for the listed August maintainer advisories.
+  This does not inventory scripts already cached in existing browser sessions.
+- cloudflared is pinned to **2026.10.3**. Later upstream security-labelled changes
+  were examined, including Access ingress path matching, debug endpoints and
+  Go dependencies. No applicable exploit was established for KittyClaw's
+  loopback metrics listener, environment-carried token and owner-gated origin.
+  This was a source/configuration review, not an exhaustive binary reachability
+  analysis of every transitive Go package; no cloudflared version was changed.
+- Installed WebView2 Runtime **158.0.4370.33** was distinguished from the
+  **1.0.3650.58** SDK reference. Microsoft announced a newer **158.0.4370.45**
+  [security release on November 25](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-relnotes-security),
+  with CVE details still pending in those notes; no specific applicable flaw was
+  established here. Codex CLI **0.171.0-alpha.13** was beyond the range in its
+  published sandbox advisory. Other provider installations, OS patch coverage,
+  a full application test run and Linux/macOS validation remain outside this batch.
+
+The only installed software changed was Claude Code. No application source or
+package versions were modified, no paid agent was called, and no main/debug web
+instance, real credential or user project was used as an attack fixture.
