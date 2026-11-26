@@ -28,6 +28,7 @@ Activate or resume Internet access without restarting KittyClaw. Remote account 
 - Retry tunnel activation after an internal port conflict without restarting the application.
 - Preserve the assigned tunnel hostname and local API boundary during first activation and subsequent pause/resume operations.
 - Clarify that skipping template setup also skips automatic workspace pipeline-kit import.
+- Revalidate active remote sessions every monitoring cycle without delaying revocation through the positive authentication cache.
 
 ---
 

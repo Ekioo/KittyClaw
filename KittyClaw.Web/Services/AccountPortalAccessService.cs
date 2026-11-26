@@ -79,7 +79,7 @@ public sealed class AccountPortalAccessService(AccountAssociationService account
     }
     internal async Task<bool> ValidAsync(string? cookie, CancellationToken ct)
         => await ValidAsync(cookie, "tunnel", null, ct);
-    internal async Task<bool> ValidAsync(string? cookie, string kind, string? origin, CancellationToken ct)
+    internal async Task<bool> ValidAsync(string? cookie, string kind, string? origin, CancellationToken ct, bool revalidate = false)
     {
         var session = ReadSession(cookie, kind, origin, DateTimeOffset.UtcNow);
         if (session is null) return false;
@@ -89,7 +89,8 @@ public sealed class AccountPortalAccessService(AccountAssociationService account
         {
             var now = DateTimeOffset.UtcNow;
             var version = accounts.SecurityVersion;
-            if (_cache.TryGetValue(key, out var cached) && cached.Until > now && cached.Version == version) return cached.Valid;
+            if (_cache.TryGetValue(key, out var cached) && cached.Until > now && cached.Version == version
+                && (!revalidate || !cached.Valid)) return cached.Valid;
             var valid = false;
             try { valid = await accounts.CheckAccessAsync(session.Proof, kind, origin, ct); }
             catch (Exception ex) when (ex is AccountAssociationException or HttpRequestException or TaskCanceledException) { }

@@ -62,6 +62,26 @@ public sealed class AccountPortalAccessTests
     }
 
     [Fact]
+    public async Task Stream_revalidation_bypasses_positive_cache_but_preserves_local_revocation()
+    {
+        await using var f = await Fixture.Create();
+        var challenge = f.Portal.Begin(DateTimeOffset.UtcNow);
+        var query = QueryHelpers.ParseQuery(new Uri(challenge.Url).Query);
+        f.Handler.Challenge = query["challenge"].ToString();
+        var cookie = await f.Portal.CompleteAsync(challenge.Cookie, query["state"].ToString(), FakeAccounts.Code, DateTimeOffset.UtcNow, default);
+        Assert.True(await f.Portal.ValidAsync(cookie, default));
+        f.Handler.ProofValid = false;
+        Assert.True(await f.Portal.ValidAsync(cookie, default));
+        Assert.False(await f.Portal.ValidAsync(cookie, "tunnel", null, default, revalidate: true));
+
+        // A failed central sign-out must not let monitoring resurrect a locally revoked proof.
+        f.Handler.ProofValid = true;
+        f.Handler.RejectRevocation = true;
+        await f.Portal.RevokeAsync(cookie, default);
+        Assert.False(await f.Portal.ValidAsync(cookie, "tunnel", null, default, revalidate: true));
+    }
+
+    [Fact]
     public async Task Challenge_is_browser_bound_and_code_is_redeemed_only_with_its_protected_verifier()
     {
         await using var f = await Fixture.Create();
@@ -368,7 +388,7 @@ public sealed class AccountPortalAccessTests
         public static readonly AssociatedAccount Account = new("f8e66066-4b2e-41d4-8e48-96e3204ee113", "Owner", "owner@example.test");
         public static readonly string Code = new('c', 64), Proof = new('d', 64);
         private bool _linked;
-        public bool MfaEnabled = true, Revoked, ProofValid = true;
+        public bool MfaEnabled = true, Revoked, ProofValid = true, RejectRevocation;
         public string? Challenge;
         public string? State;
         private string? _proofKind, _proofOrigin;
@@ -391,7 +411,9 @@ public sealed class AccountPortalAccessTests
                     _proofKind = data.GetProperty("kind").GetString(); _proofOrigin = data.GetProperty("origin").GetString();
                     result = new { proof = Proof, expiresAt = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds() }; break;
                 case "/v1/installations/access/check": result = new { valid = ProofValid && MfaEnabled && !Revoked && _proofKind == data.GetProperty("kind").GetString() && _proofOrigin == data.GetProperty("origin").GetString(), expiresAt = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds() }; break;
-                case "/v1/installations/access/revoke": ProofValid = false; result = new { revoked = true }; break;
+                case "/v1/installations/access/revoke":
+                    if (RejectRevocation) return new(HttpStatusCode.ServiceUnavailable);
+                    ProofValid = false; result = new { revoked = true }; break;
                 default: throw new InvalidOperationException("Unexpected account request");
             }
             return new(HttpStatusCode.OK) { Content = JsonContent.Create(result) };
