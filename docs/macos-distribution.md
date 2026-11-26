@@ -83,15 +83,30 @@ and keep the existing release-link behavior. Windows excludes prereleases as bef
 The background download, explicit **Update and restart**, dispatch gate and graceful
 host shutdown reuse the [installed update workflow](update-check.md#installed-update-workflow).
 
-CI artifacts are downloads, not an update endpoint. To distribute an experimental
-version after reviewing a successful run, download both architecture artifacts and
-attach their `*-Setup.pkg`, `*-Portable.zip`, `*-full.nupkg`, and `releases.*.json`
-files to a published **prerelease** at `https://github.com/Ekioo/KittyClaw`.
-Use a new, increasing SemVer such as `0.20.0-macos.1` then `0.20.0-macos.2`.
-Publish both feeds with their matching packages; never rename package files referenced
-by the feed. Upload assets to a draft first and publish only after all uploads finish.
-Each architecture has unique asset names. The ordinary Windows publisher is unchanged;
-the macOS workflow has read-only repository permissions and never publishes a release.
+The normal [release process](../RELEASING.md) includes both macOS architectures.
+Pushing a stable `vX.Y.Z` tag starts the native workflow with that exact version.
+`tools/publish-release.ps1`, still run on Windows, calls `Get-MacOSReleaseArtifacts.ps1`
+before creating or changing the release. This helper waits up to 60 minutes for the
+successful tag-push run matching both the tag and commit, downloads both artifacts,
+and verifies the exact package IDs, versions, filenames, sizes and SHA-256 hashes.
+It returns no publishable assets if either architecture fails or any validation fails.
+
+The publisher attaches each `.pkg`, portable ZIP, full `.nupkg` and experimental JSON
+feed to the same release as Windows, along with `KittyClaw-macOS-INSTALL.txt`.
+Experimental channel names and ad-hoc signing remain unchanged on stable releases.
+New releases stay drafts until all uploads finish; existing drafts can be resumed,
+but published releases cannot be overwritten. Retry the publisher if native CI fails
+or times out, after correcting/re-running the failed job. No Apple credentials are needed.
+The native workflow has read-only repository permissions and never publishes a release;
+the existing authenticated publisher remains the only release writer.
+
+Ordinary branch CI artifacts are downloads, not an update endpoint, and cannot pass
+the publisher's tag/version checks. Manual prereleases can still use increasing SemVer
+versions, with matching packages and feeds attached to a draft before publication.
+Never rename a package referenced by a feed. Each architecture has unique asset names.
+`tools/Test-MacOSReleaseArtifacts.ps1` exercises publication gates without a network
+request or a real release, including provenance, pending jobs, corrupt packages,
+wrong versions/architectures and incomplete uploads.
 
 Installing to `~/Applications` avoids requiring system-wide write access during updates.
 Gatekeeper can require approval of a downloaded installer/application, and can prompt
@@ -101,7 +116,8 @@ forbid exceptions. Signature/notarization-free updates without prompts are not p
 
 ## GitHub Actions verification
 
-`.github/workflows/macos-installer.yml` runs on pushes and PRs to `main`/`dev`, or via
+`.github/workflows/macos-installer.yml` runs on pushes and PRs to `main`/`dev`, stable
+version tag pushes, or via
 **Run workflow** with an optional target SemVer. It uses native `macos-26` ARM64 and
 `macos-15-intel` x64 runners and creates two versions per job:
 

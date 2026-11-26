@@ -30,7 +30,18 @@ body is generated from it.
    version matches the tag, creates the GitHub release from the CHANGELOG entry,
    and uploads `KittyClaw-v0.13.0.zip` (substituting the version being released),
    `Ekioo.KittyClaw-win-Setup.exe`, the full `.nupkg`, `releases.win.json`, and `RELEASES`.
-   New releases are created as drafts and published only after all assets upload.
+   Pushing the tag also starts native macOS ARM64 and Intel builds in
+   `macos-installer.yml`, using the exact tag version. The publisher waits for both
+   builds and their real update tests to succeed, downloads artifacts from that
+   exact tag/commit, verifies package versions, identities, sizes and SHA-256 hashes,
+   and uploads each architecture's `.pkg`, portable ZIP, full `.nupkg` and experimental
+   feed to the same release, plus `KittyClaw-macOS-INSTALL.txt`.
+   macOS builds remain experimental, ad-hoc signed and not notarized; no Apple account
+   is required. Their experimental channel names are preserved even on stable releases.
+   A failed/missing build or invalid asset aborts publication. On a timeout, inspect
+   the tag's macOS Actions run and retry the publisher after it succeeds.
+   New releases are created as drafts and published only after all platform assets upload.
+   An existing draft can be resumed; an already public release is never overwritten.
    Pass `-KeepDraft` to retain the uploaded release as a draft while checking the
    installer and delta package. Publish the verified draft with
    `gh release edit vX.Y.Z --draft=false --latest`.
@@ -58,8 +69,10 @@ or hiding genuine update notifications.
 
 ## Local installer build
 
-Experimental macOS packages have a separate, artifact-only GitHub Actions workflow.
-It does not publish a release or require Apple credentials. See
+Experimental macOS packages have a native GitHub Actions workflow. Tag pushes build
+the release version automatically; `publish-release.ps1` retrieves its verified assets
+before publishing the combined release. The workflow itself never publishes a release
+or requires Apple credentials. See
 [experimental macOS distribution](docs/macos-distribution.md) for native builds,
 validation, and the files required to enable updates after publication.
 

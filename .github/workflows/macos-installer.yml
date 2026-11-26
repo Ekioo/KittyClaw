@@ -3,6 +3,7 @@ name: macOS experimental installer
 on:
   push:
     branches: [main, dev]
+    tags: ['v*']
   pull_request:
     branches: [main, dev]
   workflow_dispatch:
@@ -42,13 +43,20 @@ jobs:
         id: versions
         env:
           REQUESTED_VERSION: ${{ inputs.version }}
+          RELEASE_REF: ${{ github.ref }}
         run: |
           $baseline = "0.0.1-ci.${{ github.run_number }}.${{ github.run_attempt }}"
-          $target = if ($env:REQUESTED_VERSION) { $env:REQUESTED_VERSION } else { "0.0.2-ci.${{ github.run_number }}.${{ github.run_attempt }}" }
+          if ($env:RELEASE_REF.StartsWith('refs/tags/')) {
+            if ($env:RELEASE_REF -notmatch '^refs/tags/v(\d+\.\d+\.\d+)$') { throw 'Release tags must use vX.Y.Z.' }
+            $target = $Matches[1]
+          } else {
+            $target = if ($env:REQUESTED_VERSION) { $env:REQUESTED_VERSION } else { "0.0.2-ci.${{ github.run_number }}.${{ github.run_attempt }}" }
+          }
           "baseline=$baseline" >> $env:GITHUB_OUTPUT
           "target=$target" >> $env:GITHUB_OUTPUT
       - name: Test update shutdown and desktop instance ownership
         run: |
+          ./tools/Test-MacOSReleaseArtifacts.ps1
           dotnet test KittyClaw.Core.Tests -c Release --nologo --filter 'FullyQualifiedName~InstalledUpdateServiceTests|FullyQualifiedName~MacDesktopLifetimeTests'
           if ($LASTEXITCODE -ne 0) { throw 'Update/lifetime regression tests failed.' }
       - name: Build baseline and target with embedded runtimes

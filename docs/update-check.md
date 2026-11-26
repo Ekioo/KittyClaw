@@ -143,7 +143,11 @@ project pause still govern execution.
 
 - `tools/publish-release.ps1` builds Windows artifacts before creating a release and
   uploads the installer, `.nupkg`, and feed alongside the existing ZIP. New releases
-  remain drafts until all assets upload. See [RELEASING.md](../RELEASING.md).
+  remain drafts until all assets upload. It also waits for the tag's verified native
+  macOS packages and uploads both experimental architecture feeds to the same release;
+  see [macOS distribution](macos-distribution.md#updates-and-publication).
+  An existing draft can be resumed; already published feeds cannot be overwritten.
+  See [RELEASING.md](../RELEASING.md).
 - `Get-WindowsReleaseBaseline.ps1` seeds staging with the newest older stable Windows
   full package. Packaging explicitly enables deltas, and publication fails if the delta
   is missing despite a baseline. First-time releases use a full package. Only the new

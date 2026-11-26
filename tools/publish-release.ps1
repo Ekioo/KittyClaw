@@ -2,8 +2,8 @@
 # Cuts the GitHub release for the vX.Y.Z tag on HEAD: builds the release zip
 # (same sibling-exe layout as publish-stable.ps1: Web + QaRunner at the root,
 # ClaudeMock in qa-mock/), creates the GitHub release from the matching
-# CHANGELOG.md entry when it doesn't exist yet, and uploads the zip as
-# KittyClaw-vX.Y.Z.zip.
+# CHANGELOG.md entry when it doesn't exist yet, and uploads Windows and verified
+# native macOS installers/update feeds alongside KittyClaw-vX.Y.Z.zip.
 #
 # Full release ritual: see RELEASING.md at the repo root.
 [CmdletBinding()]
@@ -30,6 +30,9 @@ if ($Tag -notmatch '^v(\d+)\.(\d+)\.(\d+)$') { throw "Tag '$Tag' does not match 
 $shortVersion = "v$($Matches[1]).$($Matches[2])"   # fallback for older minor-only changelog headings
 $releaseVersion = $Tag.TrimStart('v')
 if (-not $IsWindows) { throw 'Release packaging requires Windows to build the Velopack installer.' }
+$headCommit = git -C $repo rev-parse HEAD
+$tagCommit = git -C $repo rev-parse "$Tag^{commit}"
+if ($LASTEXITCODE -ne 0 -or $tagCommit -ne $headCommit) { throw 'The release tag must point to HEAD.' }
 
 # Seed a fresh staging directory with the previous full package so vpk can build a delta.
 # This happens before creating/modifying any public release; downloads never publish anything.
@@ -54,8 +57,7 @@ $currentPackagePattern = ' ' + [Regex]::Escape("Ekioo.KittyClaw-$releaseVersion-
     Set-Content -LiteralPath $legacyFeedPath -Encoding utf8
 
 # --- Build the zip ---------------------------------------------------------
-$stage = Join-Path ([System.IO.Path]::GetTempPath()) "kittyclaw-release-$Tag"
-if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+$stage = Join-Path ([System.IO.Path]::GetTempPath()) ("kittyclaw-release-$Tag-" + [Guid]::NewGuid().ToString('N'))
 
 Write-Host "Building release zip for $Tag ..." -ForegroundColor Cyan
 foreach ($proj in 'KittyClaw.Web', 'KittyClaw.QaRunner') {
@@ -77,9 +79,14 @@ if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -CompressionLevel Optimal
 Write-Host ("Zip ready: {0} ({1:N1} MB)" -f $zip, ((Get-Item $zip).Length / 1MB)) -ForegroundColor DarkGray
 
+# The tag push starts native Mac builds in Actions. Do not expose a partial release
+# if either architecture fails, the tag points elsewhere, or an artifact is invalid.
+$macOutput = Join-Path $repo ("publish-macos/release-" + [Guid]::NewGuid().ToString('N'))
+$macAssets = @(& (Join-Path $PSScriptRoot 'Get-MacOSReleaseArtifacts.ps1') `
+    -Tag $Tag -Commit $headCommit -OutputDir $macOutput)
+
 # --- Create the release from the CHANGELOG entry (when missing) ------------
-$createdDraft = $false
-gh release view $Tag *> $null
+$existingRelease = gh release view $Tag --json isDraft 2>$null
 if ($LASTEXITCODE -ne 0) {
     $changelog = Get-Content (Join-Path $repo 'CHANGELOG.md') -Raw
     $entryVersion = $null
@@ -104,9 +111,11 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "Creating GitHub release $Tag ..." -ForegroundColor Cyan
     gh release create $Tag --title $Title --notes-file $notesFile --draft
     if ($LASTEXITCODE -ne 0) { throw 'gh release create failed' }
-    $createdDraft = $true
 }
 else {
+    if (-not (($existingRelease -join "`n") | ConvertFrom-Json).isDraft) {
+        throw 'This release is already published. Use a new tag rather than replacing live update feeds.'
+    }
     Write-Host "Release $Tag already exists; uploading release assets." -ForegroundColor DarkGray
 }
 
@@ -118,9 +127,9 @@ if (-not ($windowsAssets | Where-Object { $_ -like '*Setup.exe' }) -or
     -not (Test-Path -LiteralPath (Join-Path $windowsOutput 'releases.win.json'))) {
     throw 'Installer or update feed is missing.'
 }
-gh release upload $Tag $zip @windowsAssets --clobber
+gh release upload $Tag $zip @windowsAssets @macAssets --clobber
 if ($LASTEXITCODE -ne 0) { throw 'gh release upload failed' }
-if ($createdDraft -and -not $KeepDraft) {
+if (-not $KeepDraft) {
     gh release edit $Tag --draft=false
     if ($LASTEXITCODE -ne 0) { throw 'Could not publish the prepared release.' }
 }
