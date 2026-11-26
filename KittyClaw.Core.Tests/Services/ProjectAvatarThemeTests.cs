@@ -38,11 +38,14 @@ public class ProjectAvatarThemeTests : IDisposable
         Assert.Equal("B", new AppSettingsService(_directory).ProjectAvatarTheme);
     }
 
-    [Fact]
-    public void Initials_theme_is_persisted()
+    [Theory]
+    [InlineData("D")]
+    [InlineData("E")]
+    [InlineData("F")]
+    public void Initials_theme_is_persisted(string theme)
     {
-        var settings = new AppSettingsService(_directory) { ProjectAvatarTheme = "D" };
-        Assert.Equal("D", new AppSettingsService(_directory).ProjectAvatarTheme);
+        var settings = new AppSettingsService(_directory) { ProjectAvatarTheme = theme };
+        Assert.Equal(theme, new AppSettingsService(_directory).ProjectAvatarTheme);
     }
 
     [Theory]
@@ -63,6 +66,9 @@ public class ProjectAvatarThemeTests : IDisposable
     [InlineData("A")]
     [InlineData("B")]
     [InlineData("C")]
+    [InlineData("D")]
+    [InlineData("E")]
+    [InlineData("F")]
     public void Every_palette_keeps_the_cat_and_dots_readable(string theme)
     {
         var palettes = Enumerable.Range(0, 256).Select(seed => ProjectAvatarColors.Select((byte)seed, theme)).Distinct().ToList();

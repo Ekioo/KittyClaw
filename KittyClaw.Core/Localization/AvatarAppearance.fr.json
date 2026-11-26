@@ -5,5 +5,7 @@
   "AvatarThemeA": "Fonds sombres",
   "AvatarThemeB": "Fonds colorés",
   "AvatarThemeC": "Fonds clairs",
-  "AvatarThemeD": "Initiales"
+  "AvatarThemeD": "Initiales — fonds colorés",
+  "AvatarThemeE": "Initiales — fonds sombres",
+  "AvatarThemeF": "Initiales — fonds clairs"
 }

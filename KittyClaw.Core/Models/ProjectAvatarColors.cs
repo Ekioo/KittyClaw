@@ -24,11 +24,11 @@ public sealed record ProjectAvatarColors(string Background, string Cat, string D
         new("#F2DFFF", "#8C4BB2", "#F9ECFF"), new("#FFEDC4", "#A46E20", "#FFF4D7")
     ];
 
-    public static string NormalizeTheme(string? theme) => theme is "A" or "C" or "D" ? theme : "B";
+    public static string NormalizeTheme(string? theme) => theme is "A" or "C" or "D" or "E" or "F" ? theme : "B";
 
     public static ProjectAvatarColors Select(byte paletteSeed, string? theme)
     {
-        var palettes = NormalizeTheme(theme) switch { "A" => Dark, "C" => Light, _ => Colorful };
+        var palettes = NormalizeTheme(theme) switch { "A" or "E" => Dark, "C" or "F" => Light, _ => Colorful };
         return palettes[paletteSeed % palettes.Length];
     }
 }

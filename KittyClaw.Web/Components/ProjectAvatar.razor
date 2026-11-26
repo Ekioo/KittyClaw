@@ -4,7 +4,7 @@
 @implements IDisposable
 <svg class="project-avatar" viewBox="0 0 40 40" width="32" height="32" aria-hidden="true">
     <rect width="40" height="40" rx="10" fill="@Background" />
-    @if ((Theme ?? AppSettings.ProjectAvatarTheme) == "D")
+    @if ((Theme ?? AppSettings.ProjectAvatarTheme) is "D" or "E" or "F")
     {
         <g><text x="20" y="21" text-anchor="middle" dominant-baseline="middle" fill="@Foreground" font-family="inherit" font-size="16" font-weight="700">@ProjectAvatarInitials.FromName(Name ?? Seed)</text></g>
     }

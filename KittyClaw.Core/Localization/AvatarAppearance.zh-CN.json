@@ -5,5 +5,7 @@
   "AvatarThemeA": "深色背景",
   "AvatarThemeB": "彩色背景",
   "AvatarThemeC": "浅色背景",
-  "AvatarThemeD": "首字母"
+  "AvatarThemeD": "首字母 — 彩色背景",
+  "AvatarThemeE": "首字母 — 深色背景",
+  "AvatarThemeF": "首字母 — 浅色背景"
 }
