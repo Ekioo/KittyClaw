@@ -6,7 +6,8 @@ public sealed record RemoteConnectorStatus(string State, string? Error = null);
 
 public sealed class RemoteAccessConnector(RemoteAccessStore store, RemoteAccessBroker broker,
     ICloudflaredRuntime runtime, RemoteTunnelOptions origin, NetworkAccessService access,
-    IHostApplicationLifetime lifetime, AccountAssociationService? accounts = null) : BackgroundService
+    IHostApplicationLifetime lifetime, AccountAssociationService? accounts = null,
+    RemoteOriginListener? listener = null) : BackgroundService
 {
     private readonly SemaphoreSlim _commands = new(1, 1);
     private readonly SemaphoreSlim _wake = new(0, 1);
@@ -14,7 +15,8 @@ public sealed class RemoteAccessConnector(RemoteAccessStore store, RemoteAccessB
     private CancellationTokenSource? _connection;
     private RemoteConnectorStatus _status = new("Disabled");
     public RemoteConnectorStatus Status => Volatile.Read(ref _status);
-    public bool NeedsRestart => store.Snapshot.Registered && (!origin.Enabled || origin.Hostname != new Uri(store.Snapshot.Url!).Host);
+    public bool NeedsRestart => listener is null && store.Snapshot.Registered
+        && (!origin.Enabled || origin.Hostname != new Uri(store.Snapshot.Url!).Host);
     public bool CanAuthenticate => accounts?.Snapshot is { Account: not null, MfaEnabled: true };
     private void SetStatus(string state, string? error = null)
     {
@@ -43,6 +45,17 @@ public sealed class RemoteAccessConnector(RemoteAccessStore store, RemoteAccessB
                 { store.ReleaseNameForRetry(); throw; }
             }
             store.Enable();
+            if (listener is not null)
+            {
+                try { await listener.EnsureReadyAsync(ct); }
+                catch
+                {
+                    store.Pause();
+                    lock (_gate) _connection?.Cancel();
+                    SetStatus("Disabled"); Wake();
+                    throw;
+                }
+            }
             SetStatus(NeedsRestart ? "RestartRequired" : "Connecting");
             Wake();
         }
@@ -93,6 +106,9 @@ public sealed class RemoteAccessConnector(RemoteAccessStore store, RemoteAccessB
                 try
                 {
                     SetStatus("Connecting");
+                    if (listener is not null) await listener.EnsureReadyAsync(connection.Token);
+                    connection.Token.ThrowIfCancellationRequested();
+                    if (!store.Snapshot.Enabled || !CanAuthenticate) continue;
                     var token = await broker.ConnectAsync(store.Identity!, connection.Token);
                     SetStatus("Installing");
                     await runtime.RunAsync(token, ready =>

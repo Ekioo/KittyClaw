@@ -27,6 +27,7 @@
   "RemoteBinaryInvalid": "Il connettore Cloudflare non ha superato il controllo di integrità e non è stato eseguito.",
   "RemoteConnectorUnavailable": "Il connettore non è riuscito a mantenere la connessione. Controlla la connessione Internet di questo PC e riprova.",
   "RemoteStatusError": "L’accesso a Internet richiede attenzione. Consulta il messaggio seguente.",
+  "RemoteOriginUnavailable": "Impossibile avviare l’accesso Internet. Verifica che un’altra applicazione non stia usando la porta interna del tunnel, poi riprova.",
   "RemoteName": "Nome dell’indirizzo pubblico (facoltativo)",
   "RemoteNameHint": "Ad esempio, mio-ufficio produce mio-ufficio.kittyclaw.dev. Usa da 3 a 32 lettere, cifre o trattini. Lascia vuoto per un nome automatico. L’indirizzo riservato viene mantenuto quando interrompi o riprendi l’accesso. Il nome non può essere modificato dopo l’attivazione.",
   "RemoteNameInvalid": "Scegli un nome valido e disponibile con 3–32 lettere, cifre o trattini. I nomi dei servizi e i prefissi kc- e xn-- sono riservati.",

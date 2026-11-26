@@ -27,6 +27,7 @@
   "RemoteBinaryInvalid": "Cloudflare 连接器未通过完整性检查，未被执行。",
   "RemoteConnectorUnavailable": "连接器无法保持连接。请检查此电脑的互联网连接后重试。",
   "RemoteStatusError": "互联网访问需要处理。请查看下方消息。",
+  "RemoteOriginUnavailable": "无法启动互联网访问。请检查是否有其他应用占用了隧道的内部端口，然后重试。",
   "RemoteName": "公开地址名称（可选）",
   "RemoteNameHint": "例如，my-office 对应 my-office.kittyclaw.dev。使用 3–32 个字母、数字或连字符。留空则自动命名。停止或恢复访问时会保留地址。启用后无法更改名称。",
   "RemoteNameInvalid": "请选择可用的有效名称，包含 3–32 个字母、数字或连字符。服务名称及 kc- 和 xn-- 前缀为保留项。",

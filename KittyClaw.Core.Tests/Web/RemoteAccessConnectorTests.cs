@@ -13,12 +13,95 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.HostFiltering;
+using System.Net.Sockets;
 
 namespace KittyClaw.Core.Tests.Web;
 
 public sealed class RemoteAccessConnectorTests
 {
     private const string BrokerOrigin = "https://remote-api.kittyclaw.dev";
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task First_activation_binds_origin_live_and_keeps_existing_local_requests_running(bool occupiedPort)
+    {
+        var reservation = new TcpListener(IPAddress.Loopback, 0);
+        reservation.Start(); var port = ((IPEndPoint)reservation.LocalEndpoint).Port; reservation.Stop();
+        var origin = new RemoteTunnelOptions(false, port);
+        using var listener = new RemoteOriginListener(new ConfigurationBuilder().Build(), "http://127.0.0.1:0", origin, 5233);
+        using var f = new Fixture(originOverride: origin, listener: listener);
+        var builder = WebApplication.CreateBuilder();
+        builder.Configuration["AllowedHosts"] = "localhost;127.0.0.1";
+        builder.WebHost.ConfigureKestrel(options => options.Configure(listener.Configuration, reloadOnChange: true));
+        builder.Services.AddSingleton<IOptionsChangeTokenSource<HostFilteringOptions>>(listener);
+        builder.Services.PostConfigure<HostFilteringOptions>(options =>
+        {
+            if (f.Store.Snapshot.Registered) options.AllowedHosts = options.AllowedHosts
+                .Append(new Uri(f.Store.Snapshot.Url!).Host).ToArray();
+        });
+        await using var app = builder.Build();
+        var streamOpened = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseStream = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new RemoteTunnelMiddleware(async context =>
+        {
+            if (context.Features.Get<RemoteTunnelRequest>() is not null) { context.Response.StatusCode = 401; return; }
+            if (context.Request.Path == "/long")
+            {
+                await context.Response.WriteAsync("before"); await context.Response.Body.FlushAsync(); streamOpened.TrySetResult();
+                await releaseStream.Task.WaitAsync(context.RequestAborted); await context.Response.WriteAsync("after");
+            }
+            else await context.Response.WriteAsync("local");
+        }, origin, f.Store, listener);
+        app.Run(gate.InvokeAsync);
+        await app.StartAsync();
+        using var client = new HttpClient(new HttpClientHandler { UseProxy = false });
+        var primary = app.Urls.Single();
+        using var stream = await client.GetAsync(primary + "/long", HttpCompletionOption.ResponseHeadersRead);
+        await streamOpened.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        if (occupiedPort)
+        {
+            using var collision = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            collision.Bind(new IPEndPoint(IPAddress.Loopback, port)); collision.Listen();
+            using var cancelledAttempt = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => f.Connector.ActivateAsync(cancelledAttempt.Token, "live-office"));
+            Assert.False(f.Store.Snapshot.Enabled); Assert.False(listener.IsReady); Assert.Equal(0, f.Runtime.Starts);
+        }
+        await f.Connector.StartAsync(default);
+        try
+        {
+            Assert.False(listener.IsReady);
+            await f.Connector.ActivateAsync(default, "live-office");
+            Assert.True(listener.IsReady); Assert.False(f.Connector.NeedsRestart);
+            await WaitUntil(() => f.Runtime.Starts == 1);
+            f.Runtime.Readiness!(true); Assert.Equal("Online", f.Connector.Status.State);
+            Assert.Equal("local", await client.GetStringAsync(primary));
+            async Task<HttpStatusCode> Request(int targetPort, string host, string path = "/")
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, $"http://127.0.0.1:{targetPort}{path}");
+                request.Headers.Host = host;
+                using var response = await client.SendAsync(request);
+                return response.StatusCode;
+            }
+            Assert.Equal(HttpStatusCode.Unauthorized, await Request(port, "live-office.kittyclaw.dev"));
+            Assert.Equal(HttpStatusCode.Unauthorized, await Request(port, "live-office.kittyclaw.dev", "/_blazor/negotiate"));
+            Assert.Equal(HttpStatusCode.Forbidden, await Request(port, "live-office.kittyclaw.dev", "/api/projects"));
+            Assert.Equal(HttpStatusCode.BadRequest, await Request(port, "other-office.kittyclaw.dev"));
+            Assert.Equal(HttpStatusCode.Forbidden, await Request(port, "127.0.0.1"));
+            Assert.Equal(HttpStatusCode.Forbidden, await Request(new Uri(primary).Port, "live-office.kittyclaw.dev"));
+            releaseStream.TrySetResult();
+            Assert.Equal("beforeafter", await stream.Content.ReadAsStringAsync());
+            await f.Connector.PauseAsync(default);
+            Assert.Equal(HttpStatusCode.Forbidden, await Request(port, "live-office.kittyclaw.dev"));
+            await f.Connector.ActivateAsync(default);
+            await WaitUntil(() => f.Runtime.Starts == 2);
+            Assert.Equal(1, f.Handler.Registrations);
+        }
+        finally { releaseStream.TrySetResult(); await f.Connector.StopAsync(default); }
+    }
 
     [Fact]
     public void Identity_survives_restart_and_credentials_are_protected()
@@ -421,7 +504,7 @@ public sealed class RemoteAccessConnectorTests
         public AccountAssociationService Accounts { get; }
         private readonly HttpClient _accountHttp;
         private readonly HttpClient _http;
-        public Fixture(bool enrolled = true, bool preconfigured = false)
+        public Fixture(bool enrolled = true, bool preconfigured = false, RemoteTunnelOptions? originOverride = null, RemoteOriginListener? listener = null)
         {
             var protection = new EphemeralDataProtectionProvider();
             Store = new(_dir.Path, protection);
@@ -435,7 +518,7 @@ public sealed class RemoteAccessConnectorTests
                 Assert.True(Access.Enable(enrollment, NetworkAccessService.Totp(key, DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30 - 1)));
             }
             if (preconfigured) { Store.Prepare(BrokerOrigin, 5234); Store.Enable(); }
-            Origin = Store.OriginOptions(new());
+            Origin = originOverride ?? Store.OriginOptions(new());
             Handler = new(Store);
             _http = new HttpClient(Handler) { MaxResponseContentBufferSize = 64 * 1024 };
             _accountHttp = new(AccountHandler);
@@ -445,7 +528,7 @@ public sealed class RemoteAccessConnectorTests
             Accounts.RefreshAsync(default).GetAwaiter().GetResult();
             Accounts.ConfirmAsync(RemoteAccessConnectorTests.AccountHandler.Account.Id, default).GetAwaiter().GetResult();
             Accounts.RefreshAsync(default).GetAwaiter().GetResult();
-            Connector = new(Store, new(_http, new Uri(BrokerOrigin)), Runtime, Origin, Access, new Lifetime(), Accounts);
+            Connector = new(Store, new(_http, new Uri(BrokerOrigin)), Runtime, Origin, Access, new Lifetime(), Accounts, listener);
         }
         public void Dispose() { Connector.Dispose(); Accounts.Dispose(); _accountHttp.Dispose(); _http.Dispose(); _dir.Dispose(); }
     }

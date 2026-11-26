@@ -27,6 +27,7 @@
   "RemoteBinaryInvalid": "The Cloudflare connector did not pass its integrity check. It was not executed.",
   "RemoteConnectorUnavailable": "The connector could not stay connected. Check this PC's Internet connection and try again.",
   "RemoteStatusError": "Internet access needs attention. See the message below.",
+  "RemoteOriginUnavailable": "Internet access could not start. Check that another application is not using the tunnel's internal port, then try again.",
   "RemoteName": "Public address name (optional)",
   "RemoteNameHint": "For example, my-office gives my-office.kittyclaw.dev. Use 3–32 letters, digits or hyphens. Leave blank for an automatic name. The reserved address is kept when you stop or resume access. The name cannot be changed after activation.",
   "RemoteNameInvalid": "Choose a valid, available name with 3–32 letters, digits or hyphens. Service names and prefixes kc- and xn-- are reserved.",

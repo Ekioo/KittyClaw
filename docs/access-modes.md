@@ -33,8 +33,8 @@ Keeping an already-active Internet mode is idempotent and needs no new consent.
 Tunnel provisioning is completed before an existing LAN mode is disabled. If it
 fails, LAN access and its sessions remain in place. Leaving Internet pauses its
 connector and closes the origin gate; its hostname remains reserved for resume.
-LAN activation can require one restart to bind HTTPS, and first tunnel activation
-can require one restart for its dedicated loopback listener. Access closes
+LAN activation can require one restart to bind HTTPS. Tunnel activation adds its
+dedicated loopback listener at runtime without restarting KittyClaw. Access closes
 immediately when disabled even if removing a bound listener itself needs restart.
 
 Internet addresses and DNS are automatic. The provisioning broker reserves a

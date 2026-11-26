@@ -86,7 +86,8 @@ public sealed class RemoteAccessStore
     internal RemoteTunnelOptions OriginOptions(RemoteTunnelOptions configured)
     {
         lock (_gate) return _identity?.Registered == true
-            ? new(true, _identity.Port, RemoteAccessName.Hostname(_identity)) : configured;
+            ? new(true, _identity.Port, RemoteAccessName.Hostname(_identity))
+            : _identity is not null ? configured with { Port = _identity.Port } : configured;
     }
 }
 
