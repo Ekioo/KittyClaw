@@ -98,6 +98,82 @@ public sealed class PipelineExportServiceTests : IDisposable
         return (manifest, pipeline, entries);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Scheduled_tasks_round_trip_with_new_ids_and_remapped_failure_targets(bool approve)
+    {
+        var project = await _projects.CreateProjectAsync("Scheduled export");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Scheduled flow");
+        var source = await _columns.CreateColumnAsync(project.Slug, "Source", pipelineId: pipeline.Id);
+        var failure = await _columns.CreateColumnAsync(project.Slug, "Failure", pipelineId: pipeline.Id);
+        var schedules = new ColumnScheduledTaskService(_projects);
+        await schedules.SaveColumnAsync(project.Slug, source.Id, [new ColumnScheduledTask
+        {
+            Id = "original-task", Name = "Weekly webhook", Cron = "15 8 * * 1", TimeZoneId = "UTC",
+            TicketScope = ScheduledTaskTicketScope.FirstTicket,
+            Actions = [new("hook", new HttpRequestActionSpec { Url = "https://example.com/hook" }, failure.Id)],
+        }]);
+        var kit = (await _export.ExportAsync(project.Slug, pipeline.Id))!;
+        var importer = new PipelineImportService(_projects, _pipelines, _columns, _processors,
+            new ProjectSecretVault(_temp.Path, new TestSecretProtector()));
+        var preview = await importer.AnalyzeAsync(project.Slug, kit.Content);
+        Assert.True(preview!.Installable);
+        Assert.Contains("httpRequest", preview.RequiredApprovals);
+        var before = (await _pipelines.ListAsync(project.Slug)).Count;
+        importer.InstallFaultInjector = step => step == "schedules-installed"
+            ? Task.FromException(new IOException("synthetic schedule failure")) : Task.CompletedTask;
+        await Assert.ThrowsAsync<IOException>(() => importer.InstallAsync(project.Slug, kit.Content,
+            new PipelineImportConfirmation { PipelineName = "Rollback schedules" }));
+        Assert.Equal(before, (await _pipelines.ListAsync(project.Slug)).Count);
+        Assert.Single(await schedules.ListAsync(project.Slug));
+        importer.InstallFaultInjector = null;
+        var result = await importer.InstallAsync(project.Slug, kit.Content, new PipelineImportConfirmation
+        {
+            PipelineName = "Imported schedules", Approvals = approve ? ["httpRequest"] : [],
+        });
+        var importedSource = result!.Columns.Single(column => column.Name == "Source");
+        var importedFailure = result.Columns.Single(column => column.Name == "Failure");
+        var task = Assert.Single(await schedules.ListAsync(project.Slug, importedSource.ColumnId));
+        Assert.NotEqual("original-task", task.Id);
+        Assert.Equal("Weekly webhook", task.Name);
+        Assert.Equal("15 8 * * 1", task.Cron);
+        Assert.Equal("UTC", task.TimeZoneId);
+        Assert.Equal(ScheduledTaskTicketScope.FirstTicket, task.TicketScope);
+        Assert.Equal(approve, task.Enabled);
+        Assert.Equal(importedFailure.ColumnId, Assert.Single(task.Actions).FailureTargetColumnId);
+        Assert.Null(task.LastRunAt);
+    }
+
+    [Fact]
+    public async Task Python_file_is_embedded_and_requires_approval_on_import()
+    {
+        var project = await _projects.CreateProjectAsync("Python kit");
+        var pipeline = await _pipelines.CreateAsync(project.Slug, "Python pipeline");
+        var column = await _columns.CreateColumnAsync(project.Slug, "Scripts", pipelineId: pipeline.Id);
+        await File.WriteAllTextAsync(Path.Combine(_projects.ResolveWorkspacePath(project), "task.py"), "print('portable')");
+        var schedules = new ColumnScheduledTaskService(_projects);
+        await schedules.SaveColumnAsync(project.Slug, column.Id,
+            [new ColumnScheduledTask { Id = "python", Name = "Python", Cron = "0 9 * * *", TimeZoneId = "UTC",
+                Actions = [new("run", new ExecutePythonActionSpec { ScriptFile = "task.py" })] }]);
+        var exported = (await _export.ExportAsync(project.Slug, pipeline.Id))!;
+        var (_, portable, _) = OpenKit(exported.Content);
+        var action = portable["columns"]![0]!["scheduledTasks"]![0]!["actions"]![0]!["action"]!;
+        Assert.Equal("print('portable')", action["script"]!.GetValue<string>());
+        Assert.Equal("", action["scriptFile"]!.GetValue<string>());
+        var importer = new PipelineImportService(_projects, _pipelines, _columns, _processors,
+            new ProjectSecretVault(_temp.Path, new TestSecretProtector()));
+        var preview = await importer.AnalyzeAsync(project.Slug, exported.Content);
+        Assert.True(preview!.Installable);
+        Assert.Contains("executePython", preview.RequiredApprovals);
+        var imported = await importer.InstallAsync(project.Slug, exported.Content,
+            new PipelineImportConfirmation { PipelineName = "Imported Python" });
+        Assert.Contains("approval:executePython", imported!.DisabledReasons);
+        var task = Assert.Single(await schedules.ListAsync(project.Slug, Assert.Single(imported.Columns).ColumnId));
+        Assert.False(task.Enabled);
+        Assert.Equal("print('portable')", Assert.IsType<ExecutePythonActionSpec>(Assert.Single(task.Actions).Action).Script);
+    }
+
     [Fact]
     public async Task Nominal_export_is_a_deterministic_zip_with_v1_manifest_and_verifiable_hashes()
     {

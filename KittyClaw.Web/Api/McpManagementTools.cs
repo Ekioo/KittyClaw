@@ -269,6 +269,26 @@ public sealed class McpManagementTools(IServiceProvider services, ProjectService
         [Description("Fields for this operation.")] UpdatePipelineRequest request) =>
         ExecuteAsync(project, () => Endpoints.HandleUpdatePipeline(project, pipelineId, request, services.GetRequiredService<PipelineService>(), services.GetRequiredService<BoardUpdateNotifier>()));
 
+    [McpServerTool(Name = "list_column_scheduled_tasks", ReadOnly = true, Destructive = false, Idempotent = true)]
+    [Description("List independent scheduled tasks and their next/last execution state. Optionally filter by column. Actions include executePython, executeProgram, executePowerShell, HTTP and ticket actions.")]
+    public Task<JsonElement> ListColumnScheduledTasks(string project, int? columnId = null) =>
+        ExecuteAsync(project, () => Endpoints.HandleListColumnScheduledTasks(project, columnId, projects,
+            services.GetRequiredService<ColumnService>(), services.GetRequiredService<ColumnScheduledTaskService>()));
+
+    [McpServerTool(Name = "save_column_scheduled_tasks", ReadOnly = false, Destructive = true, Idempotent = false)]
+    [Description("Replace ALL independent scheduled tasks of a column. Read first and preserve existing task IDs and every task you want to keep; omitted tasks are deleted. Omit an ID only for a new task. Empty tasks removes all. Configure name, five-field cron, timeZoneId, enabled, ticketScope and ordered actions. FirstTicket scope is required for comments/labels. Enabled tasks can execute programs or HTTP requests when due, without an agent.")]
+    public Task<JsonElement> SaveColumnScheduledTasks(string project, int columnId, SaveColumnScheduledTasksRequest request) =>
+        ExecuteAsync(project, () => Endpoints.HandleSaveColumnScheduledTasks(project, columnId, request, projects,
+            services.GetRequiredService<ColumnService>(), services.GetRequiredService<ColumnScheduledTaskService>(),
+            services.GetRequiredService<BoardUpdateNotifier>()));
+
+    [McpServerTool(Name = "delete_column_scheduled_tasks", ReadOnly = false, Destructive = true, Idempotent = true)]
+    [Description("Delete ALL scheduled task definitions of a column. Does not delete its processor or tickets.")]
+    public Task<JsonElement> DeleteColumnScheduledTasks(string project, int columnId) =>
+        ExecuteAsync(project, () => Endpoints.HandleDeleteColumnScheduledTasks(project, columnId, projects,
+            services.GetRequiredService<ColumnService>(), services.GetRequiredService<ColumnScheduledTaskService>(),
+            services.GetRequiredService<BoardUpdateNotifier>()));
+
     [McpServerTool(Name = "get_column_processor", ReadOnly = true, Destructive = false, Idempotent = true)]
     [Description("Read a column agent processor configuration.")]
     public Task<JsonElement> GetColumnProcessor(

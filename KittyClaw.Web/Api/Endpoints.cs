@@ -22,6 +22,7 @@ public static partial class Endpoints
         MapBrowse(api);
         MapSkills(api);
         MapColumnProcessors(api);
+        MapColumnScheduledTasks(api);
         MapColumnExecutions(api);
         MapTicketQuestions(api);
         MapEngine(api);

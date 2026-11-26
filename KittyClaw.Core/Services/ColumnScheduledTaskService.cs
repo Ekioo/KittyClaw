@@ -89,8 +89,13 @@ public sealed class ColumnScheduledTaskService(
             await EnsureTablesAsync(db);
             if (!await db.BoardColumns.AnyAsync(column => column.Id == columnId))
                 throw new InvalidOperationException($"La colonne #{columnId} n’existe pas.");
+            await SynchronizeLockedAsync(projectSlug, db);
             var definitions = tasks.Select(task => ToDefinition(task, columnId)).ToList();
             ValidateDefinitions(definitions, columnId, await db.BoardColumns.Select(column => column.Id).ToListAsync());
+            var otherIds = (await db.ColumnScheduledTasks.Where(task => task.ColumnId != columnId)
+                .Select(task => task.Id).ToListAsync()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (definitions.Any(task => otherIds.Contains(task.Id)))
+                throw new InvalidOperationException("A scheduled task ID already belongs to another column.");
             await WriteColumnFileAsync(projectSlug, columnId, definitions);
             await SynchronizeLockedAsync(projectSlug, db);
             return await db.ColumnScheduledTasks.AsNoTracking()
@@ -447,6 +452,7 @@ public sealed class ColumnScheduledTaskService(
             if (string.IsNullOrWhiteSpace(task.Id) || !ids.Add(task.Id))
                 throw new InvalidOperationException("Chaque tâche planifiée doit avoir un identifiant stable et unique.");
             if (string.IsNullOrWhiteSpace(task.Name)) throw new InvalidOperationException("Le nom de la tâche planifiée est requis.");
+            if (!Enum.IsDefined(task.TicketScope)) throw new InvalidOperationException("Unknown scheduled ticket scope.");
             _ = ComputeNext(task.Cron, task.TimeZoneId, DateTime.UtcNow);
             if (task.Actions.Count == 0) throw new InvalidOperationException($"La tâche '{task.Name}' ne contient aucune action.");
             var actionIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -456,8 +462,9 @@ public sealed class ColumnScheduledTaskService(
                 if (string.IsNullOrWhiteSpace(action.Id) || !actionIds.Add(action.Id))
                     throw new InvalidOperationException($"Les actions de la tâche '{task.Name}' doivent avoir des identifiants uniques.");
                 if (action.Action is not SetLabelsActionSpec and not AddCommentActionSpec and not CreateTicketActionSpec
-                    and not ExecutePowerShellActionSpec and not HttpRequestActionSpec)
+                    and not ExecutePowerShellActionSpec and not HttpRequestActionSpec and not ExecuteProgramActionSpec)
                     throw new InvalidOperationException($"Type d’action interdit dans une tâche planifiée : {action.Action.GetType().Name}.");
+                if (action.Action is ExecuteProgramActionSpec program) ProgramActionSupport.Validate(program);
                 if (task.TicketScope == ScheduledTaskTicketScope.None
                     && action.Action is SetLabelsActionSpec or AddCommentActionSpec)
                     throw new InvalidOperationException($"L’action {action.Action.UiTypeKey} requiert la cible « premier ticket de la colonne ».");

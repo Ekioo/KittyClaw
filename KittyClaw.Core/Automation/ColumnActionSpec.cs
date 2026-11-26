@@ -7,6 +7,8 @@ namespace KittyClaw.Core.Automation;
 [JsonDerivedType(typeof(SetLabelsActionSpec), "setLabels")]
 [JsonDerivedType(typeof(AddCommentActionSpec), "addComment")]
 [JsonDerivedType(typeof(ExecutePowerShellActionSpec), "executePowerShell")]
+[JsonDerivedType(typeof(ExecutePythonActionSpec), "executePython")]
+[JsonDerivedType(typeof(ExecuteProgramActionSpec), "executeProgram")]
 [JsonDerivedType(typeof(CreateTicketActionSpec), "createTicket")]
 [JsonDerivedType(typeof(HttpRequestActionSpec), "httpRequest")]
 public abstract class ActionSpec
@@ -96,4 +98,26 @@ public sealed class ExecutePowerShellActionSpec : ActionSpec
     public List<string> Arguments { get; set; } = new();
     public int TimeoutSeconds { get; set; } = 60;
     public Dictionary<string, string> Env { get; set; } = new();
+}
+
+/// <summary>Direct process invocation; arguments are passed individually without a shell.</summary>
+public class ExecuteProgramActionSpec : ActionSpec
+{
+    [JsonIgnore]
+    public override string UiTypeKey => "executeProgram";
+    public string Program { get; set; } = "";
+    public List<string> Arguments { get; set; } = [];
+    public string WorkingDirectory { get; set; } = "";
+    public int TimeoutSeconds { get; set; } = 60;
+    public Dictionary<string, string> Env { get; set; } = new();
+}
+
+/// <summary>Python file, module, or embedded source, using a project virtual environment when available.</summary>
+public sealed class ExecutePythonActionSpec : ExecuteProgramActionSpec
+{
+    [JsonIgnore]
+    public override string UiTypeKey => "executePython";
+    public string ScriptFile { get; set; } = "";
+    public string Module { get; set; } = "";
+    public string Script { get; set; } = "";
 }

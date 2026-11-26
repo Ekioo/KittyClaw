@@ -98,3 +98,19 @@ Exposes the project, ticket, comment, member, label, column, and workflow data o
 - [Storage](./storage.md) — reads/writes the per-project SQLite DBs.
 
 Column creation/update requests accept `maxTickets` (0 = unlimited) and `capacityBlocking` (false = warning only). Both default to disabled/non-blocking.
+
+
+## Independent column schedules
+
+- `GET /api/projects/{slug}/scheduled-tasks?columnId=...` lists schedules (filter optional) and their next/last execution state.
+- `GET /api/projects/{slug}/columns/{columnId}/scheduled-tasks` reads one column’s schedules.
+- `PUT /api/projects/{slug}/columns/{columnId}/scheduled-tasks` replaces the complete task list with `{ "tasks": [...] }`.
+- `DELETE /api/projects/{slug}/columns/{columnId}/scheduled-tasks` clears that column's schedules.
+
+Read before replacing: retain existing IDs and all tasks you want to keep. Omitted tasks are removed;
+new tasks without IDs receive server-generated IDs. Set `enabled: false` to pause a task.
+Task fields are `name`, `cron` (five fields), `timeZoneId`, `enabled`, `ticketScope` (`None` or `FirstTicket`),
+and ordered `actions`. Execution state is server-owned. Invalid cron, time zone, action scope, or cross-column
+ID reuse returns 400 without replacing definitions; missing projects/columns return 404.
+Python and direct program actions use the [shared action configuration](column-workflows.md#python-and-direct-program-actions).
+The matching [MCP tools](mcp.md#independent-column-schedules) call the same application handlers.

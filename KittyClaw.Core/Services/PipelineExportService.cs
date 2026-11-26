@@ -69,6 +69,8 @@ public sealed partial class PipelineExportService(
         var processorsByColumn = allProcessors.Where(p => pipelineColumns.Any(c => c.Id == p.ColumnId))
             .ToDictionary(p => p.ColumnId);
 
+        var scheduledTasks = await new ColumnScheduledTaskService(projects).ListAsync(projectSlug);
+
         var findings = new List<PipelineExportFinding>();
         var keys = BuildColumnKeys(pipelineColumns);
         var referencedSkills = new SortedSet<string>(StringComparer.Ordinal);
@@ -76,6 +78,7 @@ public sealed partial class PipelineExportService(
         var models = new SortedSet<string>(StringComparer.Ordinal);
         var riskyActionTypes = new SortedSet<string>(StringComparer.Ordinal);
 
+        var workspace = projects.ResolveWorkspacePath(project);
         var portable = new PortablePipeline { Name = pipeline.Name, Slug = pipeline.Slug };
         foreach (var column in pipelineColumns)
         {
@@ -93,14 +96,26 @@ public sealed partial class PipelineExportService(
             };
             if (processorsByColumn.TryGetValue(column.Id, out var processor))
                 portableColumn.Processor = BuildPortableProcessor(
-                    processor, keys, findings, referencedSkills, referencedAgents, models, riskyActionTypes);
+                    processor, keys, findings, referencedSkills, referencedAgents, models, riskyActionTypes, workspace);
+            foreach (var task in scheduledTasks.Where(task => task.ColumnId == column.Id))
+            {
+                // Reuse action portability checks and requirement collection.
+                var actions = BuildPortableProcessor(new ColumnProcessor
+                {
+                    Name = task.Name, BeforeActions = task.Actions,
+                }, keys, findings, referencedSkills, referencedAgents, models, riskyActionTypes, workspace).BeforeActions;
+                portableColumn.ScheduledTasks.Add(new PortableScheduledTask
+                {
+                    Name = task.Name, Enabled = task.Enabled, Cron = task.Cron,
+                    TimeZoneId = task.TimeZoneId, TicketScope = task.TicketScope, Actions = actions,
+                });
+            }
             portable.Columns.Add(portableColumn);
         }
 
         var pipelineJson = JsonSerializer.Serialize(portable, KitJson) + "\n";
         PipelineKitScanner.ScanText(PipelineKitFormat.PipelineEntryName, pipelineJson, isSkillFile: false, findings);
 
-        var workspace = projects.ResolveWorkspacePath(project);
         var projectSkills = (await skills.ListAsync(projectSlug)).ToDictionary(s => s.Slug, StringComparer.OrdinalIgnoreCase);
         var embeddedFiles = new List<(string ArchivePath, byte[] Content)>();
         var skillRequirements = new List<PipelineKitSkillRequirement>();
@@ -187,7 +202,7 @@ public sealed partial class PipelineExportService(
     private static PortableProcessor BuildPortableProcessor(
         ColumnProcessor processor, Dictionary<int, string> keys, List<PipelineExportFinding> findings,
         SortedSet<string> referencedSkills, SortedSet<string> referencedAgents,
-        SortedSet<string> models, SortedSet<string> riskyActionTypes)
+        SortedSet<string> models, SortedSet<string> riskyActionTypes, string workspace)
     {
         string? MapColumn(int? columnId, string context)
         {
@@ -214,6 +229,33 @@ public sealed partial class PipelineExportService(
                                 "external-reference", PipelineKitFormat.PipelineEntryName, 0,
                                 $"action '{action.Id}' scriptFile: {script.ScriptFile}",
                                 "Un fichier de script externe n’est pas embarqué ; intégrez le script en ligne ou dans une skill projet."));
+                        break;
+                    case ExecutePythonActionSpec python:
+                        riskyActionTypes.Add("executePython");
+                        if (!string.IsNullOrWhiteSpace(python.ScriptFile))
+                        {
+                            var path = Path.GetFullPath(Path.Combine(workspace, python.ScriptFile));
+                            if (!path.StartsWith(Path.GetFullPath(workspace) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                                || !File.Exists(path) || new FileInfo(path).Length > MaxSkillFileBytes
+                                || HasLinkedScriptPath(path, workspace))
+                            {
+                                findings.Add(new PipelineExportFinding("external-reference", PipelineKitFormat.PipelineEntryName, 0,
+                                    $"Python action '{action.Id}'", "Select an ordinary project Python file smaller than 2 MB."));
+                                break;
+                            }
+                            var copy = JsonSerializer.Deserialize<ExecutePythonActionSpec>(JsonSerializer.Serialize(python, KitJson), KitJson)!;
+                            copy.Script = File.ReadAllText(path);
+                            copy.ScriptFile = "";
+                            mapped.Add(new PortableProcessorAction
+                            {
+                                Id = action.Id, Action = copy,
+                                OnFailure = MapColumn(action.FailureTargetColumnId, $"action '{action.Id}'.onFailure"),
+                            });
+                            continue;
+                        }
+                        break;
+                    case ExecuteProgramActionSpec:
+                        riskyActionTypes.Add("executeProgram");
                         break;
                     case HttpRequestActionSpec:
                         riskyActionTypes.Add("httpRequest");
@@ -265,6 +307,15 @@ public sealed partial class PipelineExportService(
                 }).ToList(),
             },
         };
+    }
+
+    private static bool HasLinkedScriptPath(string path, string workspace)
+    {
+        var root = Path.GetFullPath(workspace);
+        for (var current = path; current is not null && !string.Equals(current, root, StringComparison.OrdinalIgnoreCase);
+            current = Path.GetDirectoryName(current))
+            if (ProjectSkillService.IsReparsePoint(current)) return true;
+        return false;
     }
 
     private void CollectSkillFolder(

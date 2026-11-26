@@ -712,10 +712,11 @@ public sealed class ColumnProcessorService(
     private static void ValidateProcessorAction(ActionSpec? action, string id)
     {
         if (action is not SetLabelsActionSpec and not AddCommentActionSpec and not CreateTicketActionSpec
-            and not ExecutePowerShellActionSpec and not HttpRequestActionSpec)
+            and not ExecutePowerShellActionSpec and not HttpRequestActionSpec and not ExecuteProgramActionSpec)
             throw new InvalidOperationException(
                 $"Type d’action non pris en charge dans un processeur ({id}) : {action?.GetType().Name ?? "null"}. " +
                 "L’agent et le routage restent uniques au niveau de la colonne.");
+        if (action is ExecuteProgramActionSpec program) ProgramActionSupport.Validate(program);
         switch (action)
         {
             case ExecutePowerShellActionSpec script when string.IsNullOrWhiteSpace(script.Script) && string.IsNullOrWhiteSpace(script.ScriptFile):

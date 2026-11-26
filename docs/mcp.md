@@ -39,7 +39,7 @@ Exposes project management and supervision over the [Model Context Protocol](htt
 claude mcp add --transport http kittyclaw http://localhost:5230/mcp
 ```
 
-The server exposes 73 tools. Reconnect clients after upgrading so they refresh their cached tool catalogue.
+The server exposes board, management and observability tools. Reconnect clients after upgrading so they refresh their cached tool catalogue.
 
 ## Key components
 - `KittyClaw.Web/Api/McpTools.cs` supplies nine board and acceptance-criteria tools, including search, filters, pipeline-aware child creation and criteria with evidence. The original seven board tools remain available.
@@ -129,3 +129,15 @@ Identical to the REST API: KittyClaw is a self-hosted, single-machine app; both 
 ## External dependencies
 - [REST API](./rest-api.md) — the services the tools proxy; conventions (author, statuses) are shared.
 - [Kanban UI](./kanban-ui.md) — board refreshes on MCP mutations via `BoardUpdateNotifier`.
+
+
+## Independent column schedules
+
+`list_column_scheduled_tasks(project, columnId?)` reads task definitions and next/last execution state.
+`save_column_scheduled_tasks(project, columnId, request)` shares the REST replacement handler:
+read first, preserve returned IDs and all tasks to keep, and submit `{ tasks: [...] }`.
+Omitted tasks are removed; omit an ID only for a new task. `enabled: false` pauses a task without deleting it.
+`delete_column_scheduled_tasks(project, columnId)` removes every task in that column.
+Saving enabled schedules can cause execution at their next due time. Configuration never runs actions immediately.
+Actions use the same polymorphic contracts as processors, including `executePython` and `executeProgram`.
+See [column workflows](column-workflows.md#python-and-direct-program-actions) for execution configuration.

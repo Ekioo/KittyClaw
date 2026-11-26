@@ -150,10 +150,11 @@ public sealed partial class PipelineImportService(
         preview.Columns = kit.Pipeline.Columns.Select(column => new PipelineImportColumn(
             column.Key, column.Name, column.Role,
             column.Processor?.Name, column.Processor?.Model, column.Processor?.Enabled ?? false,
-            column.Processor is null
-                ? []
-                : column.Processor.BeforeActions.Concat(column.Processor.AfterActions)
-                    .Select(action => action.Action.UiTypeKey).Distinct(StringComparer.Ordinal).ToList())).ToList();
+            (column.Processor is null
+                ? Enumerable.Empty<PortableProcessorAction>()
+                : column.Processor.BeforeActions.Concat(column.Processor.AfterActions))
+                .Concat(column.ScheduledTasks.SelectMany(task => task.Actions))
+                .Select(action => action.Action.UiTypeKey).Distinct(StringComparer.Ordinal).ToList())).ToList();
         preview.Parameters = kit.Parameters.Select(p => new PipelineImportPlaceholder(p.Name, p.Occurrences)).ToList();
         preview.Models = kit.Models.Select(model => new PipelineImportRequirement(
             model, ClaudeModelCatalog.Models.Contains(model, StringComparer.OrdinalIgnoreCase))).ToList();
@@ -349,6 +350,15 @@ public sealed partial class PipelineImportService(
             .ToHashSet(StringComparer.Ordinal);
         foreach (var skill in unavailableDeclaredSkills)
             disabledReasons.Add($"skill:{skill}");
+        foreach (var program in kit.Pipeline.Columns.SelectMany(column =>
+            (column.Processor is null ? Enumerable.Empty<PortableProcessorAction>()
+                : column.Processor.BeforeActions.Concat(column.Processor.AfterActions))
+            .Concat(column.ScheduledTasks.SelectMany(task => task.Actions)))
+            .Select(action => action.Action).OfType<ExecuteProgramActionSpec>())
+        {
+            if (!ProgramActionSupport.IsAvailable(program, workspace))
+                disabledReasons.Add($"runtime:{program.UiTypeKey}:{program.Program}");
+        }
         var enabled = disabledReasons.Count == 0;
 
         // --- Placeholder substitution and logical-key remapping, all in memory. ---
@@ -436,6 +446,24 @@ public sealed partial class PipelineImportService(
             }
             await FaultAsync("processors-installed");
 
+            var schedules = new ColumnScheduledTaskService(projects);
+            foreach (var column in portable.Columns.Where(column => column.ScheduledTasks.Count > 0))
+            {
+                var columnId = columnIds[column.Key];
+                journal.ScheduledColumnIds.Add(columnId);
+                await schedules.SaveColumnAsync(projectSlug, columnId, column.ScheduledTasks.Select(task =>
+                    new ColumnScheduledTask
+                    {
+                        Id = Guid.NewGuid().ToString("N"), ColumnId = columnId, Name = task.Name,
+                        Enabled = enabled && task.Enabled, Cron = task.Cron, TimeZoneId = task.TimeZoneId,
+                        TicketScope = task.TicketScope,
+                        Actions = task.Actions.Select(action => new ColumnProcessorAction(
+                            action.Id, action.Action,
+                            action.OnFailure is null ? null : columnIds[action.OnFailure])).ToList(),
+                    }).ToList());
+            }
+            await FaultAsync("schedules-installed");
+
             return new PipelineImportResult
             {
                 PipelineId = pipeline.Id,
@@ -462,6 +490,9 @@ public sealed partial class PipelineImportService(
     /// <summary>Compensating rollback: removes every journaled artifact, newest first.</summary>
     private async Task RollbackAsync(string projectSlug, InstallJournal journal)
     {
+        var schedules = new ColumnScheduledTaskService(projects);
+        foreach (var columnId in journal.ScheduledColumnIds)
+            await schedules.PrepareColumnDeletionAsync(projectSlug, columnId);
         // Definition files first: a file whose column row disappears would poison every later
         // processor synchronization, so it must never survive the rollback.
         foreach (var columnId in journal.ProcessorColumnIds)
@@ -501,6 +532,7 @@ public sealed partial class PipelineImportService(
         public int? PipelineId { get; set; }
         public List<string> SkillDirectories { get; } = [];
         public List<int> ProcessorColumnIds { get; } = [];
+        public List<int> ScheduledColumnIds { get; } = [];
         public required string ProcessorRoot { get; init; }
         public required string ProcessorMarker { get; init; }
         public bool ProcessorRootExisted { get; init; }
@@ -834,7 +866,28 @@ public sealed partial class PipelineImportService(
 
         foreach (var column in pipeline.Columns)
         {
-            if (column.Processor is not { } processor) continue;
+            if (column.Processor is { } processor) ValidateProcessor(column, processor);
+            foreach (var task in column.ScheduledTasks)
+            {
+                if (string.IsNullOrWhiteSpace(task.Name) || task.Actions.Count == 0 || !Enum.IsDefined(task.TicketScope))
+                    Reject("invalid-schedule", $"Invalid scheduled task in column '{column.Key}'.");
+                try { _ = ColumnScheduledTaskService.ComputeNext(task.Cron, task.TimeZoneId, DateTime.UtcNow); }
+                catch (Exception ex) when (ex is ArgumentException or NCrontab.CrontabException or TimeZoneNotFoundException or InvalidTimeZoneException)
+                {
+                    Reject("invalid-schedule", $"Invalid schedule in column '{column.Key}': {ex.Message}");
+                }
+                if (task.TicketScope == ScheduledTaskTicketScope.None && task.Actions.Any(action =>
+                    action.Action is SetLabelsActionSpec or AddCommentActionSpec))
+                    Reject("invalid-schedule", "Scheduled ticket actions require the first-ticket scope.");
+                ValidateProcessor(column, new PortableProcessor
+                {
+                    Name = task.Name, Mission = "Scheduled task", BeforeActions = task.Actions,
+                });
+            }
+        }
+
+        void ValidateProcessor(PortableColumn column, PortableProcessor processor)
+        {
             var context = $"colonne '{column.Key}'";
             if (string.IsNullOrWhiteSpace(processor.Name) || string.IsNullOrWhiteSpace(processor.Mission))
                 Reject("invalid-processor", $"Nom et mission du processeur sont requis ({context}).");
@@ -892,6 +945,13 @@ public sealed partial class PipelineImportService(
                             Reject("external-reference", $"L’action '{action.Id}' référence un fichier de script externe : seuls les scripts en ligne sont importables ({context}).");
                         if (string.IsNullOrWhiteSpace(script.Script) && string.IsNullOrWhiteSpace(script.ScriptFile))
                             Reject("invalid-processor", $"L’action PowerShell '{action.Id}' doit définir un script ({context}).");
+                        break;
+                    case ExecuteProgramActionSpec program:
+                        riskyActionTypes.Add(program.UiTypeKey);
+                        try { ProgramActionSupport.Validate(program); }
+                        catch (InvalidOperationException ex) { Reject("invalid-program", ex.Message); }
+                        if (program is ExecutePythonActionSpec python && !string.IsNullOrWhiteSpace(python.ScriptFile))
+                            Reject("external-reference", "Portable Python actions must embed their source or reference a module.");
                         break;
                     case HttpRequestActionSpec request:
                         riskyActionTypes.Add("httpRequest");

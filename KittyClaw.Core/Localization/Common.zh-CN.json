@@ -67,5 +67,16 @@
   "ProviderDeepSeekConfiguration": "DeepSeek V4 通过 Claude Code 使用兼容 Anthropic 的 API。请将 DEEPSEEK_API_KEY 存储在各项目的机密库中。",
   "ProviderSharedClaudeCli": "共享传输：检测结果仅确认 Claude Code；DeepSeek 密钥仍按项目配置。",
   "AgentProvidersDetectionNote": "检测仅检查 CLI 是否存在，不读取或显示凭据。项目专属机密保留在各自机密库中。",
-  "All": "— 全部 —"
+  "All": "— 全部 —",
+  "ActionExecutePython": "Python",
+  "ActionExecuteProgram": "Run a program",
+  "ProgramExecutable": "Executable / Python interpreter (optional for Python)",
+  "PythonScriptFile": "Python file (choose one target)",
+  "PythonModule": "Python module (alternative to file)",
+  "PythonSource": "Embedded Python source (alternative to file/module)",
+  "ProgramArguments": "Arguments — one per line",
+  "ProgramWorkingDirectory": "Working directory relative to project",
+  "ProgramEnvironment": "Environment — NAME=value, one per line",
+  "PipelineKitPythonApproval": "Allow running Python code on this machine",
+  "PipelineKitProgramApproval": "Allow running custom programs on this machine"
 }

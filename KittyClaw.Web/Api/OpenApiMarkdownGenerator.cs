@@ -214,10 +214,13 @@ public static class OpenApiMarkdownGenerator
         sb.AppendLine("|------|---------|--------|");
         sb.AppendLine("| `setLabels` | Add or remove ticket labels | add, remove |");
         sb.AppendLine("| `addComment` | Post a ticket comment | content, author |");
+        sb.AppendLine("| `executePython` | Run a Python file, module, or embedded source | scriptFile or module or script, program (optional), arguments, workingDirectory, timeoutSeconds, env |");
+        sb.AppendLine("| `executeProgram` | Run an executable without a shell | program, arguments, workingDirectory, timeoutSeconds, env |");
         sb.AppendLine("| `executePowerShell` | Run a script or script file | script or scriptFile, arguments, timeoutSeconds, env |");
         sb.AppendLine("| `createTicket` | Create a ticket | title, description, status, priority, labels, parentId, createdBy, skipIfExists |");
         sb.AppendLine("| `httpRequest` | Send an HTTP request | method, url, headers, body, contentType, timeoutSeconds, allowLocalTargets |");
         sb.AppendLine();
+        sb.AppendLine("Manage independent schedules with GET /api/projects/{slug}/scheduled-tasks (optional columnId filter) and PUT or DELETE /api/projects/{slug}/columns/{columnId}/scheduled-tasks. PUT replaces the complete column task list: read first, preserve IDs and tasks you want to keep; omitted tasks are deleted. Omit id only for new tasks. Supply { tasks: [...] } with name, cron (five fields), timeZoneId, enabled, ticketScope (None/FirstTicket), and actions. Execution timestamps and status are read-only. Enabled tasks may execute as soon as their cron is due. Saving does not execute the action chain immediately.");
         sb.AppendLine("Ticket comments and labels require a ticket target. Use a scheduled task's FirstTicket scope for these actions. Failures stop the chain and follow its configured failure route; completed scheduled actions are checkpointed for restart recovery.");
         sb.AppendLine();
     }

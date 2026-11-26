@@ -7,6 +7,8 @@
             <option value="setLabels">@L["ActionSetLabels"]</option>
             <option value="addComment">@L["ActionEditorAddComment"]</option>
             <option value="executePowerShell">@L["ActionEditorExecutePowerShell"]</option>
+            <option value="executePython">@L["ActionExecutePython"]</option>
+            <option value="executeProgram">@L["ActionExecuteProgram"]</option>
             <option value="createTicket">@L["ActionCreateTicket"]</option>
             <option value="httpRequest">@L["ActionHttpRequest"]</option>
         </select>
@@ -80,6 +82,19 @@
                 <input type="number" @bind="s.TimeoutSeconds" />
             </label>
             break;
+        case ExecuteProgramActionSpec s:
+            <label>@L["ProgramExecutable"]<input @bind="s.Program" placeholder="@(s is ExecutePythonActionSpec ? "Auto (.venv / Python)" : "git / dotnet / executable")" /></label>
+            @if (s is ExecutePythonActionSpec python)
+            {
+                <label>@L["PythonScriptFile"]<input @bind="python.ScriptFile" placeholder="scripts/task.py" /></label>
+                <label>@L["PythonModule"]<input @bind="python.Module" placeholder="package.module" /></label>
+                <label>@L["PythonSource"]<textarea @bind="python.Script" rows="5"></textarea></label>
+            }
+            <label>@L["ProgramArguments"]<textarea value="@string.Join("\n", s.Arguments)" @onchange="e => s.Arguments = ParseArguments((string?)e.Value)" rows="3"></textarea></label>
+            <label>@L["ProgramWorkingDirectory"]<input @bind="s.WorkingDirectory" placeholder="." /></label>
+            <label>@L["PsTimeout"]<input type="number" min="1" @bind="s.TimeoutSeconds" /></label>
+            <label>@L["ProgramEnvironment"]<textarea value="@string.Join("\n", s.Env.Select(pair => pair.Key + "=" + pair.Value))" @onchange="e => s.Env = ParseEnvironment((string?)e.Value)" rows="3"></textarea></label>
+            break;
         case HttpRequestActionSpec s:
             <label><FieldHelp Label="@L["HttpMethod"]" Help="@L["HttpMethodHelp"]" />
                 <select @bind="s.Method">
@@ -126,6 +141,8 @@
         SetLabelsActionSpec => "setLabels",
         AddCommentActionSpec => "addComment",
         ExecutePowerShellActionSpec => "executePowerShell",
+        ExecutePythonActionSpec => "executePython",
+        ExecuteProgramActionSpec => "executeProgram",
         CreateTicketActionSpec => "createTicket",
         HttpRequestActionSpec => "httpRequest",
         _ => throw new NotSupportedException($"No UI mapping for action type {Action.GetType().Name}. Register it in ActionEditor.razor."),
@@ -137,6 +154,14 @@
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToList();
 
+    private static List<string> ParseArguments(string? value) =>
+        (value ?? string.Empty).Replace("\r", string.Empty).Split('\n').Where(line => line.Length > 0).ToList();
+
+    private static Dictionary<string, string> ParseEnvironment(string? value) =>
+        (value ?? "").Replace("\r", "").Split('\n').Where(line => line.IndexOf('=') > 0)
+            .Select(line => line.Split('=', 2)).GroupBy(pair => pair[0].Trim())
+            .ToDictionary(group => group.Key, group => group.Last()[1]);
+
     private async Task OnTypeChanged(ChangeEventArgs e)
     {
         ActionSpec spec = (string?)e.Value switch
@@ -144,6 +169,8 @@
             "setLabels" => new SetLabelsActionSpec(),
             "addComment" => new AddCommentActionSpec(),
             "executePowerShell" => new ExecutePowerShellActionSpec(),
+            "executePython" => new ExecutePythonActionSpec(),
+            "executeProgram" => new ExecuteProgramActionSpec(),
             "createTicket" => new CreateTicketActionSpec(),
             "httpRequest" => new HttpRequestActionSpec(),
             _ => throw new NotSupportedException($"Unknown action type key '{e.Value}'. Register it in ActionEditor.razor."),

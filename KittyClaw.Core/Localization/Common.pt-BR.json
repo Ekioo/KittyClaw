@@ -67,5 +67,16 @@
   "ProviderSharedClaudeCli": "Transporte compartilhado: a detecção confirma o Claude Code; a chave DeepSeek continua específica do projeto.",
   "AgentProvidersDetectionNote": "A detecção verifica a presença da CLI sem ler ou exibir credenciais. Os segredos do projeto permanecem no vault.",
   "RtkGlobalHelp": "Otimizador opcional de saída do shell. Ative o RTK separadamente nas configurações de cada projeto. Executável alternativo: KITTYCLAW_RTK_BIN.",
-  "All": "— todos —"
+  "All": "— todos —",
+  "ActionExecutePython": "Python",
+  "ActionExecuteProgram": "Run a program",
+  "ProgramExecutable": "Executable / Python interpreter (optional for Python)",
+  "PythonScriptFile": "Python file (choose one target)",
+  "PythonModule": "Python module (alternative to file)",
+  "PythonSource": "Embedded Python source (alternative to file/module)",
+  "ProgramArguments": "Arguments — one per line",
+  "ProgramWorkingDirectory": "Working directory relative to project",
+  "ProgramEnvironment": "Environment — NAME=value, one per line",
+  "PipelineKitPythonApproval": "Allow running Python code on this machine",
+  "PipelineKitProgramApproval": "Allow running custom programs on this machine"
 }

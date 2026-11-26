@@ -121,6 +121,11 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         "POST /api/projects/{slug}/project-skills",
         "PATCH /api/projects/{slug}/project-skills/{skillSlug}",
         "DELETE /api/projects/{slug}/project-skills/{skillSlug}",
+        // Independent column schedules
+        "GET /api/projects/{slug}/scheduled-tasks",
+        "GET /api/projects/{slug}/columns/{columnId}/scheduled-tasks",
+        "PUT /api/projects/{slug}/columns/{columnId}/scheduled-tasks",
+        "DELETE /api/projects/{slug}/columns/{columnId}/scheduled-tasks",
         // Column processors
         "GET /api/projects/{slug}/columns/{columnId}/processor",
         "PUT /api/projects/{slug}/columns/{columnId}/processor",
