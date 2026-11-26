@@ -1,4 +1,9 @@
 {
+  "WorkflowHelpQuestion": "Soll ich Ihnen beim Erstellen Ihres ersten Workflows helfen?",
+  "WorkflowHelpIntro": "Beschreiben Sie Ihr Ziel oder überspringen Sie diesen Schritt, um nur den Standardworkflow main zu erstellen.",
+  "WorkflowHelpAccept": "Ja, helfen Sie mir",
+  "SkipOptionalStep": "Überspringen",
+  "SkipCreateEmpty": "Überspringen und leeres Projekt erstellen",
   "Save": "Speichern",
   "Cancel": "Stornieren",
   "Delete": "Löschen",

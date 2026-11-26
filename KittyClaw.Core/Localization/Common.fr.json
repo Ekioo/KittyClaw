@@ -1,4 +1,9 @@
 {
+  "WorkflowHelpQuestion": "Voulez-vous que je vous aide à créer votre premier workflow ?",
+  "WorkflowHelpIntro": "Décrivez votre objectif pour être guidé, ou ignorez cette étape pour créer uniquement le workflow main par défaut.",
+  "WorkflowHelpAccept": "Oui, aidez-moi à démarrer",
+  "SkipOptionalStep": "Ignorer",
+  "SkipCreateEmpty": "Ignorer et créer un projet vide",
   "RtkGlobalHelp": "Optimiseur facultatif des sorties de commandes. Activez RTK dans les paramètres de chaque projet. Binaire personnalisé : KITTYCLAW_RTK_BIN.",
   "Save": "Enregistrer",
   "Cancel": "Annuler",

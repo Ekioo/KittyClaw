@@ -1,4 +1,9 @@
 {
+  "WorkflowHelpQuestion": "¿Quiere que le ayude a crear su primer workflow?",
+  "WorkflowHelpIntro": "Describa su objetivo o salte este paso para crear solo el workflow main predeterminado.",
+  "WorkflowHelpAccept": "Sí, ayúdeme a empezar",
+  "SkipOptionalStep": "Omitir",
+  "SkipCreateEmpty": "Omitir y crear un proyecto vacío",
   "Save": "Ahorrar",
   "Cancel": "Cancelar",
   "Delete": "Borrar",

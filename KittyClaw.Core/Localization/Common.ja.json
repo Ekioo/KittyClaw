@@ -1,4 +1,9 @@
 {
+  "WorkflowHelpQuestion": "最初のワークフローの作成をお手伝いしましょうか？",
+  "WorkflowHelpIntro": "目標を入力するか、スキップして既定の main ワークフローのみを作成します。",
+  "WorkflowHelpAccept": "はい、始めましょう",
+  "SkipOptionalStep": "スキップ",
+  "SkipCreateEmpty": "スキップして空のプロジェクトを作成",
   "Save": "保存",
   "Cancel": "キャンセル",
   "Delete": "削除",

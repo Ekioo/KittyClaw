@@ -45,23 +45,30 @@ public sealed class ProjectCreationJourneyTests
             await page.Locator(".folder-picker-footer .settings-primary").ClickAsync();
             await Expect(page.GetByTestId("create-project-workspace")).ToHaveValueAsync(workspace);
             const string objective = "Deliver the first useful result";
-            await page.Locator("#first-objective").FillAsync(objective);
             var gitOption = page.GetByTestId("create-project-git-init");
             if (existingRepository)
                 await Expect(gitOption).ToHaveCountAsync(0);
             else
                 await Expect(gitOption).ToBeCheckedAsync();
 
+            await Expect(page.Locator("#first-objective")).ToHaveCountAsync(0);
+            await page.GetByTestId("create-project-next").ClickAsync();
+            await page.Locator("#first-objective").FillAsync(objective);
+
             if (retryWithoutGitConsent)
             {
+                await page.GetByText("Back", new() { Exact = true }).ClickAsync();
                 await gitOption.UncheckAsync();
+                await page.GetByTestId("create-project-next").ClickAsync();
                 await page.GetByTestId("create-project-initialize").ClickAsync();
                 await Expect(page.Locator(".project-creation .settings-status-err")).ToContainTextAsync("not a Git repository");
-                await Expect(page.GetByTestId("create-project-name")).ToHaveValueAsync("Creation journey");
+
                 await Expect(page.Locator("#first-objective")).ToHaveValueAsync(objective);
                 Assert.Empty(await http.GetFromJsonAsync<JsonElement[]>("/api/projects") ?? []);
                 Assert.Empty(Directory.EnumerateFileSystemEntries(workspace));
+                await page.GetByText("Back", new() { Exact = true }).ClickAsync();
                 await gitOption.CheckAsync();
+                await page.GetByTestId("create-project-next").ClickAsync();
             }
 
             await page.GetByTestId("create-project-initialize").ClickAsync();
@@ -98,6 +105,47 @@ public sealed class ProjectCreationJourneyTests
                     File.SetAttributes(file, FileAttributes.Normal);
                 Directory.Delete(workspace, recursive: true);
             }
+        }
+    }
+
+    [Fact]
+    public async Task Skip_setup_creates_empty_project_without_git_or_template_files()
+    {
+        var workspace = Path.Combine(Path.GetTempPath(), $"kittyclaw-empty-project-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(workspace);
+        try
+        {
+            await using var instance = await TestInstance.StartAsync(WebExecutable());
+            using var http = new HttpClient { BaseAddress = new Uri(instance.ApiUrl) };
+            using var playwright = await Playwright.CreateAsync();
+            await using var browser = await playwright.Chromium.LaunchAsync(new() { Headless = true });
+            var page = await browser.NewPageAsync();
+            await page.GotoAsync(instance.ApiUrl);
+            await page.GetByTestId("create-project-open").ClickAsync();
+            await page.GetByTestId("create-project-name").FillAsync("Empty project");
+            await page.GetByTestId("create-project-workspace").FillAsync(workspace);
+            await Expect(page.Locator("#first-objective")).ToHaveCountAsync(0);
+            await page.GetByTestId("create-project-next").ClickAsync();
+            await page.GetByTestId("create-project-empty").ClickAsync();
+            await Expect(page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/board/empty-project$"));
+            await Expect(page.Locator(".first-ticket-draft")).ToHaveCountAsync(0);
+            await Expect(page.Locator(".migration-wizard")).ToHaveCountAsync(0);
+            var project = await http.GetFromJsonAsync<JsonElement>("/api/projects/empty-project");
+            Assert.Equal(workspace, project.GetProperty("workspacePath").GetString());
+            Assert.Empty(await http.GetFromJsonAsync<JsonElement[]>("/api/projects/empty-project/tickets") ?? []);
+            var pipelines = await http.GetFromJsonAsync<JsonElement[]>("/api/projects/empty-project/pipelines");
+            var main = Assert.Single(pipelines!);
+            Assert.Equal("main", main.GetProperty("slug").GetString());
+            Assert.True(main.GetProperty("isDefault").GetBoolean());
+            Assert.False(Directory.Exists(Path.Combine(workspace, ".git")));
+            Assert.False(File.Exists(Path.Combine(workspace, "AGENTS.md")));
+            Assert.False(File.Exists(Path.Combine(workspace, "CLAUDE.md")));
+        }
+        finally
+        {
+            // The empty-project flow must never populate the selected workspace.
+            if (Directory.Exists(workspace) && !Directory.EnumerateFileSystemEntries(workspace).Any())
+                Directory.Delete(workspace);
         }
     }
 

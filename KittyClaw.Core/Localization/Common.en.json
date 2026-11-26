@@ -1,4 +1,9 @@
 {
+  "WorkflowHelpQuestion": "Would you like me to help you create your first workflow?",
+  "WorkflowHelpIntro": "Describe your objective to get started with guided setup, or skip to create only the default main workflow.",
+  "WorkflowHelpAccept": "Yes, help me get started",
+  "SkipOptionalStep": "Skip",
+  "SkipCreateEmpty": "Skip and create empty project",
   "RtkGlobalHelp": "Optional shell output optimizer. Enable RTK separately in each project’s settings. Executable override: KITTYCLAW_RTK_BIN.",
   "Save": "Save",
   "Cancel": "Cancel",

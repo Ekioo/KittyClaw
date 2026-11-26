@@ -1,4 +1,9 @@
 {
+  "WorkflowHelpQuestion": "需要我帮助您创建第一个工作流吗？",
+  "WorkflowHelpIntro": "描述您的目标，或跳过此步骤，仅创建默认的 main 工作流。",
+  "WorkflowHelpAccept": "是的，帮助我开始",
+  "SkipOptionalStep": "跳过",
+  "SkipCreateEmpty": "跳过并创建空项目",
   "RtkGlobalHelp": "可选的 Shell 输出优化器。请在各项目设置中单独启用 RTK。可执行文件覆盖变量：KITTYCLAW_RTK_BIN。",
   "Save": "保存",
   "Cancel": "取消",
