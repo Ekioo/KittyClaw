@@ -61,8 +61,9 @@ invalid update. Rules use the real socket peer, normalize IPv4-mapped IPv6, and
 apply before authentication and code redemption; the managed tunnel is excluded.
 Changing rules aborts active sessions whose peers cease to be allowed.
 
-Account checks are cached for at most 15 seconds and long-running requests are
-monitored. Sign-out revokes the scoped proof. Disabling the central factor,
+Account checks are cached for at most 15 seconds. Long-running requests revalidate
+centrally every 15 seconds without reusing positive cache entries; cached local
+revocations remain denied even if central sign-out fails. Sign-out revokes the scoped proof. Disabling the central factor,
 revoking association, or signing out the source portal session invalidates access.
 Local account changes abort requests immediately after refresh. Disabling LAN
 access revokes active transports and rotates the local generation. Re-enabling

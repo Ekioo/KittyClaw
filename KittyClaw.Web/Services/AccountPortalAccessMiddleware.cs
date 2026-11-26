@@ -111,6 +111,6 @@ public sealed class AccountPortalAccessMiddleware(RequestDelegate next)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
         while (await timer.WaitForNextTickAsync(ct))
-            if (!await portal.ValidAsync(cookie, kind, origin, ct)) { context.Abort(); return; }
+            if (!await portal.ValidAsync(cookie, kind, origin, ct, revalidate: true)) { context.Abort(); return; }
     }
 }
