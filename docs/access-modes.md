@@ -1,7 +1,12 @@
 # Instance access modes
 
-Settings has one native radio group: Local only, Local network, Internet. The same
-`AccessSetupView` renders the controls in `/settings` and `/access-setup`.
+The Advanced entry in Settings links to `/access-setup`, the only place with the
+native radio group: Local only, Local network, Internet. `AccessSetupView` renders
+these controls. Selecting Local only or Local network submits immediately;
+Internet first reveals the hostname and consent options, and checking the
+Cloudflare consent submits the change. A no-JavaScript fallback keeps a submit
+button. Pending submissions block duplicate interactions without disabling form
+fields or dropping their antiforgery token.
 `AccessSetupMiddleware` handles local-only antiforgery-protected POSTs; Blazor
 circuit events cannot change access. Old GET bookmarks `/network-setup` and
 `/remote-setup` redirect here. Old POST endpoints return 410 and do not mutate state.
@@ -38,9 +43,16 @@ proxied CNAME to `<tunnel-id>.cfargotunnel.com`. The client requests this throug
 its installation credential and never receives the zone-wide DNS credential.
 The UI shows the public URL and status, while keeping IP rules and certificate
 information in the single setup page. No new DNS resources are created by viewing
-the settings or changing the radio selection before submission.
+the settings or previewing Internet before accepting Cloudflare consent.
+
+Settings shows session sign-out only over a protected remote HTTPS origin, under
+Account. It explicitly ends that remote session while retaining the installation
+association; localhost has no remote session to disconnect.
 
 `AccessModeTests` covers exclusivity, migration, concurrency, consent, missing MFA,
 failure preservation, DNS/address reuse and offline local-only recovery.
 The production middleware tests also cover CSRF, aliases, invalid selections,
 cross-origin requests and unchanged account authentication boundaries.
+`node --test tools/tests/access-mode-form.test.mjs` checks immediate selection,
+single submission, unchanged modes, cancellation and explicit Internet consent
+without creating real listeners or tunnels.

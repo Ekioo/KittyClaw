@@ -29,5 +29,10 @@
   "AccessDnsHint": "トンネルとDNSアドレスは自動的に作成されます。名前を空欄にすると自動生成されます。アドレスはこのインスタンスに予約され、名前の変更はできません。",
   "AccessPublicAddress": "公開アドレス：",
   "AccessCurrent": "現在のモード：",
-  "AccessConsentRequired": "インターネットモードを有効にするには、Cloudflare経由の接続を許可してください。"
+  "AccessConsentRequired": "インターネットモードを有効にするには、Cloudflare経由の接続を許可してください。",
+  "AdvancedSettings": "詳細設定",
+  "AccessModeChoice": "アクセスモード",
+  "AccessInternetConfirm": "必要に応じて名前を指定し、Cloudflare の許可にチェックを入れるとインターネットアクセスが有効になります。",
+  "AccountInstanceSignOut": "このリモートセッションからログアウト",
+  "AccountInstanceSessionHint": "このインスタンスのリモートセッションのみを終了します。アカウントの関連付けは維持されます。"
 }

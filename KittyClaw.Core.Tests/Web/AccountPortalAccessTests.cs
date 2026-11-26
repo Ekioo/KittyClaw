@@ -164,6 +164,12 @@ public sealed class AccountPortalAccessTests
         Assert.Contains("my.kittyclaw.dev/security", html);
         Assert.Contains("name='mode' value='network'", html);
         Assert.Equal(3, System.Text.RegularExpressions.Regex.Matches(html, "type='radio' name='mode'").Count);
+        Assert.Contains("data-current-mode='local'", html);
+        Assert.Contains("<noscript><button>", html);
+        Assert.Contains(AccessSetupView.Script, html);
+        var nonce = System.Text.RegularExpressions.Regex.Match(html, "<script nonce='([^']+)'").Groups[1].Value;
+        Assert.NotEmpty(nonce);
+        Assert.Contains("script-src 'nonce-" + nonce + "'", Assert.Single(page.Headers.GetValues("Content-Security-Policy"), value => value.Contains("default-src")));
         Assert.DoesNotContain("otpauth:", html); Assert.DoesNotContain("name='code'", html); Assert.DoesNotContain("name='enrollment'", html);
         Assert.False(f.Network.Enabled);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsync("/access-setup", new FormUrlEncodedContent(new Dictionary<string,string> { ["action"] = "mode", ["mode"] = "network" }))).StatusCode);

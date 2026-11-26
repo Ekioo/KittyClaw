@@ -29,5 +29,10 @@
   "AccessDnsHint": "Tunnel und DNS-Adresse werden automatisch erstellt. Ohne Namen wird eine Adresse generiert. Sie bleibt für diese Instanz reserviert und kann nicht umbenannt werden.",
   "AccessPublicAddress": "Öffentliche Adresse:",
   "AccessCurrent": "Aktueller Modus:",
-  "AccessConsentRequired": "Erlaube die Verbindung über Cloudflare, um den Internet-Modus zu aktivieren."
+  "AccessConsentRequired": "Erlaube die Verbindung über Cloudflare, um den Internet-Modus zu aktivieren.",
+  "AdvancedSettings": "Erweitert",
+  "AccessModeChoice": "Zugriffsmodus",
+  "AccessInternetConfirm": "Wähle bei Bedarf einen Namen und bestätige die Cloudflare-Erlaubnis, um den Internetzugriff zu aktivieren.",
+  "AccountInstanceSignOut": "Diese Remotesitzung abmelden",
+  "AccountInstanceSessionHint": "Damit wird nur deine Remotesitzung auf dieser Instanz beendet. Die Kontoverknüpfung bleibt bestehen."
 }

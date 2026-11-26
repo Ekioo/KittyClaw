@@ -69,7 +69,7 @@ public sealed class AccessSetupMiddleware(RequestDelegate next)
         content += $"<div class='access-status' role='status'>{E(l["AccessCurrent"])} <strong>{E(l["AccessMode" + modes.Mode])}</strong></div>";
         content += $"<p>{E(l[modes.AccountReady ? "AccountNetworkReady" : "AccountNetworkRequired"])}</p><p><a href='{AccountAssociationService.PortalOrigin}/security'>{E(l["AccountSecurity"])}</a></p>";
         if (accounts.Snapshot.Account is null) content += $"<p><a href='/account-setup'>{E(l["AccountConfigure"])}</a></p>";
-        content += $"<form class='access-settings-form' method='post' action='/access-setup' novalidate>{Token()}<input type='hidden' name='action' value='mode'>{AccessSetupView.Options(selected ?? modes.Mode, remote, l)}<button>{E(l["AccessApply"])}</button></form>";
+        content += $"<form class='access-settings-form' method='post' action='/access-setup' data-current-mode='{modes.Mode.ToString().ToLowerInvariant()}' novalidate>{Token()}<input type='hidden' name='action' value='mode'>{AccessSetupView.Options(selected ?? modes.Mode, remote, l)}<noscript><button>{E(l["AccessApply"])}</button></noscript></form>";
         if (modes.Mode == InstanceAccessMode.Network)
         {
             content += $"<p>{E(l[network.Listening ? "NetworkEnabled" : "NetworkRestart"])}</p>";
@@ -93,6 +93,6 @@ public sealed class AccessSetupMiddleware(RequestDelegate next)
             $"<label class='network-rules-toggle'><input type='checkbox' name='restrict' {(network.RestrictNetwork ? "checked" : "")}><span>{E(l["NetworkRulesRestrict"])}</span></label><label for='allowed-networks'>{E(l["NetworkRulesEntries"])}</label>" +
             $"<textarea id='allowed-networks' name='networks' rows='6' maxlength='16384' spellcheck='false' autocapitalize='off'>{E(string.Join("\n", network.AllowedNetworks))}</textarea><button>{E(l["NetworkRulesSave"])}</button></form></section></details>";
         content += $"<p><a href='/access-setup'>{E(l["RemoteRefresh"])}</a></p><p><a href='/settings'>{E(l["GlobalSettings"])}</a></p>";
-        await NetworkAccessMiddleware.Page(context, l["AccessTitle"], content);
+        await NetworkAccessMiddleware.Page(context, l["AccessTitle"], content, clientScript: AccessSetupView.Script);
     }
 }

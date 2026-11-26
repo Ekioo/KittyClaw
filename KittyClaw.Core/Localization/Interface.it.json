@@ -29,5 +29,10 @@
   "AccessDnsHint": "Il tunnel e l’indirizzo DNS vengono creati automaticamente. Lascia il nome vuoto per generare un indirizzo. L’indirizzo resta riservato a questa istanza e non può essere rinominato.",
   "AccessPublicAddress": "Indirizzo pubblico:",
   "AccessCurrent": "Modalità attuale:",
-  "AccessConsentRequired": "Per attivare la modalità Internet, consenti il passaggio della connessione attraverso Cloudflare."
+  "AccessConsentRequired": "Per attivare la modalità Internet, consenti il passaggio della connessione attraverso Cloudflare.",
+  "AdvancedSettings": "Avanzate",
+  "AccessModeChoice": "Modalità di accesso",
+  "AccessInternetConfirm": "Scegli un nome facoltativo, poi seleziona il consenso a Cloudflare per attivare l’accesso Internet.",
+  "AccountInstanceSignOut": "Disconnetti questa sessione remota",
+  "AccountInstanceSessionHint": "Questa azione termina solo la sessione remota su questa istanza. L’associazione dell’account viene mantenuta."
 }

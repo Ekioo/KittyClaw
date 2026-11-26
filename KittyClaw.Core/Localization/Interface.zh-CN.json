@@ -29,5 +29,10 @@
   "AccessDnsHint": "隧道和 DNS 地址会自动创建。留空名称可生成地址。地址将为此实例保留，且无法重命名。",
   "AccessPublicAddress": "公共地址：",
   "AccessCurrent": "当前模式：",
-  "AccessConsentRequired": "要启用互联网模式，请允许连接经过 Cloudflare。"
+  "AccessConsentRequired": "要启用互联网模式，请允许连接经过 Cloudflare。",
+  "AdvancedSettings": "高级",
+  "AccessModeChoice": "访问模式",
+  "AccessInternetConfirm": "可选择填写名称，然后勾选 Cloudflare 授权以启用互联网访问。",
+  "AccountInstanceSignOut": "退出此远程会话",
+  "AccountInstanceSessionHint": "此操作仅结束您在此实例上的远程会话。账户关联将保留。"
 }

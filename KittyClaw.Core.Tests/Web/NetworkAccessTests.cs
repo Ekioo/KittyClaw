@@ -130,9 +130,11 @@ public sealed class NetworkAccessTests
             var settings = await client.GetAsync("http://localhost/settings");
             Assert.Equal(HttpStatusCode.OK, settings.StatusCode);
             var settingsHtml = await settings.Content.ReadAsStringAsync();
-            Assert.Contains("network-global-settings", settingsHtml);
+            Assert.Contains("advanced-global-settings", settingsHtml);
             // Middleware pages own their document, styles and scripts and require a full navigation.
-            Assert.Contains("action=\"/access-setup\"", settingsHtml);
+            Assert.DoesNotContain("action=\"/access-setup\"", settingsHtml);
+            Assert.DoesNotContain("action=\"/access/logout\"", settingsHtml);
+            Assert.DoesNotContain("name=\"mode\"", settingsHtml);
             Assert.Contains("href=\"/access-setup\" data-enhance-nav=\"false\"", settingsHtml);
             Assert.DoesNotContain("remote-global-settings", settingsHtml);
             Assert.DoesNotContain("otpauth://", setupHtml);

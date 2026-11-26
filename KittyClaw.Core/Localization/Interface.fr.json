@@ -29,5 +29,10 @@
   "AccessDnsHint": "Le tunnel et son adresse DNS sont créés automatiquement. Laisse vide pour un nom généré. L’adresse reste réservée à cette instance et ne peut pas être renommée.",
   "AccessPublicAddress": "Adresse publique :",
   "AccessCurrent": "Mode actuel :",
-  "AccessConsentRequired": "Pour activer le mode Internet, accepte le passage de la connexion par Cloudflare."
+  "AccessConsentRequired": "Pour activer le mode Internet, accepte le passage de la connexion par Cloudflare.",
+  "AdvancedSettings": "Avancé",
+  "AccessModeChoice": "Mode d’accès",
+  "AccessInternetConfirm": "Choisis éventuellement un nom, puis coche l’autorisation Cloudflare pour activer l’accès Internet.",
+  "AccountInstanceSignOut": "Déconnecter cette session distante",
+  "AccountInstanceSessionHint": "Cette action ferme uniquement ta session distante sur cette instance. L’association du compte est conservée."
 }

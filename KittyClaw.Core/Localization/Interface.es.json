@@ -29,5 +29,10 @@
   "AccessDnsHint": "El túnel y la dirección DNS se crean automáticamente. Deja el nombre vacío para generar una dirección. La dirección queda reservada para esta instancia y no se puede renombrar.",
   "AccessPublicAddress": "Dirección pública:",
   "AccessCurrent": "Modo actual:",
-  "AccessConsentRequired": "Para activar el modo Internet, permite que la conexión pase por Cloudflare."
+  "AccessConsentRequired": "Para activar el modo Internet, permite que la conexión pase por Cloudflare.",
+  "AdvancedSettings": "Avanzado",
+  "AccessModeChoice": "Modo de acceso",
+  "AccessInternetConfirm": "Elige un nombre opcional y marca la autorización de Cloudflare para activar el acceso por Internet.",
+  "AccountInstanceSignOut": "Cerrar esta sesión remota",
+  "AccountInstanceSessionHint": "Solo se cierra tu sesión remota en esta instancia. La asociación de tu cuenta se conserva."
 }

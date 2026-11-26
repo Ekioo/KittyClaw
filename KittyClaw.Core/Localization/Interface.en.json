@@ -29,5 +29,10 @@
   "AccessDnsHint": "The tunnel and DNS address are created automatically. Leave the name empty for a generated address. The address stays reserved for this instance and cannot be renamed.",
   "AccessPublicAddress": "Public address:",
   "AccessCurrent": "Current mode:",
-  "AccessConsentRequired": "To enable Internet mode, allow the connection to pass through Cloudflare."
+  "AccessConsentRequired": "To enable Internet mode, allow the connection to pass through Cloudflare.",
+  "AdvancedSettings": "Advanced",
+  "AccessModeChoice": "Access mode",
+  "AccessInternetConfirm": "Choose an optional name, then check the Cloudflare permission to enable Internet access.",
+  "AccountInstanceSignOut": "Sign out of this remote session",
+  "AccountInstanceSessionHint": "This only ends your remote session on this instance. Your account association is kept."
 }
