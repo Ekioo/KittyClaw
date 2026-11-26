@@ -145,6 +145,13 @@ and revokes active remote transports even if a connector continues forwarding.
 Cloudflare terminates public TLS and processes application traffic. This is not
 end-to-end encryption past Cloudflare; the consent text describes Cloudflare transit.
 
+An edge route in the account Worker handles unavailable public instances even when
+the desktop is stopped. Registered instance browser navigations that receive a
+tunnel/origin connection failure redirect to the portal with an unavailable notice
+and manual retry link. The gateway preserves authentication errors, API responses,
+streaming and WebSocket behavior. Its implementation and deployment are documented
+in the front repository's `account-worker/README.md`.
+
 ## Provisioning service and release gates
 
 The front repository's Worker README owns the broker API, D1 schema, quotas and resource lifecycle. Global Cloudflare credentials remain
