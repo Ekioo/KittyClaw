@@ -46,6 +46,7 @@ and API/MCP documentation.
 - [Project template](./project-template.md) — embedded `ProjectTemplate/` files copied into each workspace on Initialize.
 - [REST API](./rest-api.md) — OpenAPI-driven endpoints under `/api`, with auto-generated Markdown docs.
 - [MCP server](./mcp.md) — embedded Streamable-HTTP endpoint at `/mcp`; board, workflow, agent, approval and integration tools for any MCP client.
+- [Claude Code tracking mod](./claude-code-mod.md) — native ticket selection, work prompt and reviewed result publication inside Claude Code.
 - [Storage](./storage.md) — SQLite registry, per-project DBs, run logs, and workspace-side agent state.
 - [Project secrets vault](./project-secrets.md) — per-project write-only secrets, native encryption on Windows/macOS/Linux, subprocess-only injection, fail-closed behavior.
 - [Kanban UI](./kanban-ui.md) — Blazor Server board, ticket panel, agent run drawer.

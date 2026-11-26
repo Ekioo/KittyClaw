@@ -8,6 +8,7 @@ using KittyClaw.Web.Components;
 using Velopack;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HostFiltering;
+using Microsoft.Extensions.Options;
 using KittyClaw.Web.Services;
 
 // Installer hooks must exit before the web host or any data services are created.
@@ -105,18 +106,17 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<AccountAssociation
 builder.Services.AddSingleton(sp => new AccountPortalAccessService(sp.GetRequiredService<AccountAssociationService>(), remoteAccessStore, networkProtection, networkAccess));
 var remoteTunnel = remoteAccessStore.OriginOptions(RemoteTunnelOptions.Read(builder.Configuration));
 builder.Services.AddSingleton(remoteTunnel);
-if (remoteTunnel.Enabled)
+var remoteOrigin = new RemoteOriginListener(builder.Configuration.GetSection("Kestrel"),
+    builder.Configuration["urls"] ?? "http://localhost:5230", remoteTunnel, networkAccess.Port);
+builder.Services.AddSingleton(remoteOrigin);
+builder.Services.AddSingleton<IOptionsChangeTokenSource<HostFilteringOptions>>(remoteOrigin);
+builder.WebHost.ConfigureKestrel(options => options.Configure(remoteOrigin.Configuration, reloadOnChange: true));
+builder.Services.PostConfigure<HostFilteringOptions>(options =>
 {
-    var urls = builder.Configuration["urls"] ?? "http://localhost:5230";
-    if (remoteTunnel.Port == networkAccess.Port || urls.Split(';', StringSplitOptions.RemoveEmptyEntries)
-        .Any(url => Uri.TryCreate(url.Replace("*", "localhost").Replace("+", "localhost"), UriKind.Absolute, out var uri)
-            && uri.Port == remoteTunnel.Port))
-        throw new InvalidOperationException("RemoteTunnel:Port must be distinct from every existing listener.");
-    builder.WebHost.UseUrls($"{urls};http://localhost:{remoteTunnel.Port}");
-    builder.Services.PostConfigure<HostFilteringOptions>(options =>
-        options.AllowedHosts = (options.AllowedHosts ?? Array.Empty<string>())
-            .Append(remoteTunnel.Hostname).Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
-}
+    var current = remoteAccessStore.OriginOptions(remoteTunnel);
+    if (current.Enabled) options.AllowedHosts = (options.AllowedHosts ?? Array.Empty<string>())
+        .Append(current.Hostname).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+});
 builder.Services.AddSingleton(sp => new RemoteAccessBroker(
     new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
     { MaxResponseContentBufferSize = 64 * 1024, Timeout = TimeSpan.FromSeconds(95) },
@@ -324,6 +324,7 @@ app.UseMiddleware<BrowserSecurityHeadersMiddleware>();
 
 // Gate all remote traffic, including uploads, APIs, MCP and Blazor connections.
 app.UseMiddleware<RemoteTunnelMiddleware>();
+app.UseRemoteSetupSummaries();
 app.UseMiddleware<AccountSetupMiddleware>();
 app.UseMiddleware<AccessSetupMiddleware>();
 app.UseMiddleware<AccountPortalAccessMiddleware>();

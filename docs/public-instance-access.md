@@ -16,7 +16,7 @@ isolated installation. Full acceptance results are recorded below.
 
 ## Owner activation
 
-Global settings and `/access-setup` share the [access mode selector](./access-modes.md).
+Advanced in global settings links to the single [access mode selector](./access-modes.md) at `/access-setup`.
 The old `/remote-setup` bookmark redirects there. Its
 mutations require antiforgery validation. Remote callers cannot activate, pause or
 read installation credentials through this page. The owner first enables
@@ -43,9 +43,15 @@ broker origin and dedicated port are bound to this identity; an accidental servi
 change cannot forward the saved credential elsewhere. Registration validates the
 returned instance ID, exact chosen or automatic HTTPS hostname and port.
 
-The first successful activation reserves the address and requests one restart to
-bind the dedicated origin. Later stop/resume operations retain the URL and require
-no restart while that origin is present. Stopping first closes the HTTP origin gate,
+The first successful activation reserves the address and binds the dedicated
+loopback origin at runtime. `RemoteOriginListener` uses Kestrel endpoint reloading;
+unchanged local and LAN endpoints stay bound, including their in-flight requests.
+The exact registered hostname is added to the host allowlist through an options
+change token; no wildcard public host is allowed. Before starting cloudflared, a
+random per-process probe confirms that this application's protected middleware is
+serving the origin port. An occupied or unavailable port leaves the connector off
+and preserves an existing LAN mode. No origin port is opened before registration.
+Later stop/resume operations retain the URL and require no restart. Stopping first closes the HTTP origin gate,
 then cancels the connector and revokes browser sessions. Session revocation preserves
 the authenticator but also signs out existing LAN sessions. Restarting a paused
 installation keeps the dedicated origin bound and closed so resume is immediate.
@@ -54,9 +60,8 @@ cannot start or resume. Disabling LAN access does not disable the account factor
 the separately opted-in tunnel can remain available through account authentication.
 
 The setup page displays the public URL and its QR code, state, error explanation,
-and a refresh link. Global settings also show the public address and a locally
-generated QR code after registration, with phone-camera instructions and the
-required authenticator step. The QR payload contains only the public HTTPS URL;
+and a refresh link. This page also shows a locally generated QR code after
+registration. The QR payload contains only the public HTTPS URL;
 no installation credential or session is embedded. Paused access keeps
 the same QR code and displays the paused state. No external QR service is called.
 The setup page never renders the installation credential or tunnel token.
@@ -66,12 +71,15 @@ The setup page never renders the installation credential or tunnel token.
 - `RemoteAccessStore`: encrypted `remote-access.json` ownership and opt-in state.
 - `RemoteAccessBroker`: bounded HTTPS requests, per-installation bearer identity,
   no redirects, fixed response validation and safe user-facing error codes.
-- `RemoteAccessConnector`: hosted supervisor, activation, pause, restart detection,
+- `RemoteAccessConnector`: hosted supervisor, activation, pause, origin readiness,
   reconnect backoff and permanent-error intervention.
 - `CloudflaredRuntime`: pinned binary download/integrity checks, hidden child
   process, readiness polling, stream draining and shutdown.
 - `RemoteAccessSetupMiddleware`: local antiforgery-protected setup forms.
 - `RemoteTunnelMiddleware`: dedicated origin boundary and browser API exceptions.
+- `RemoteOriginListener`: runtime loopback endpoint configuration, readiness probe
+  and exact-host allowlist refresh. [Kestrel endpoint reloading](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/kestrel/endpoints?view=aspnetcore-10.0#reload-endpoints-from-configuration)
+  preserves endpoints whose configuration has not changed.
 - Named `KittyClawLocal` HTTP client: existing server-side UI API calls use the
   trusted local listener rather than the browser's public origin. Caller cookies
   and installation credentials are never forwarded on these self-calls.
@@ -130,11 +138,19 @@ OpenAPI paths remain denied except these browser requirements:
 Image requests with absent or cross-site Origin are denied even with a cookie.
 The existing gate also validates Origin on Blazor handshakes and other requests.
 Login pages use same-origin referrer policy so browser POSTs carry a usable Origin.
-The local setup path is denied to remote callers. Pausing denies new origin requests
+Remote setup GETs show an account-authenticated read-only summary; configuration
+POSTs remain local-only. Pausing denies new origin requests
 and revokes active remote transports even if a connector continues forwarding.
 
 Cloudflare terminates public TLS and processes application traffic. This is not
 end-to-end encryption past Cloudflare; the consent text describes Cloudflare transit.
+
+An edge route in the account Worker handles unavailable public instances even when
+the desktop is stopped. Registered instance browser navigations that receive a
+tunnel/origin connection failure redirect to the portal with an unavailable notice
+and manual retry link. The gateway preserves authentication errors, API responses,
+streaming and WebSocket behavior. Its implementation and deployment are documented
+in the front repository's `account-worker/README.md`.
 
 ## Provisioning service and release gates
 

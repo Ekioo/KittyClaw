@@ -12,9 +12,9 @@ public sealed record RemoteTunnelOptions(bool Enabled = false, int Port = 5234, 
             configuration.GetValue("RemoteTunnel:Enabled", false),
             configuration.GetValue("RemoteTunnel:Port", 5234),
             configuration["RemoteTunnel:Hostname"] ?? "");
-        if (!options.Enabled) return options;
         if (options.Port is < 1024 or > 65535)
             throw new InvalidOperationException("RemoteTunnel:Port must be between 1024 and 65535.");
+        if (!options.Enabled) return options;
         if (!RemoteAccessName.IsHostname(options.Hostname))
             throw new InvalidOperationException("RemoteTunnel:Hostname must be an assigned instance hostname under kittyclaw.dev.");
         return options;
@@ -24,14 +24,17 @@ public sealed record RemoteTunnelOptions(bool Enabled = false, int Port = 5234, 
 /// <summary>Marks the listener, never a client header, as the remote trust boundary.</summary>
 internal sealed class RemoteTunnelRequest;
 
-public sealed class RemoteTunnelMiddleware(RequestDelegate next, RemoteTunnelOptions options, RemoteAccessStore? store = null)
+public sealed class RemoteTunnelMiddleware(RequestDelegate next, RemoteTunnelOptions options, RemoteAccessStore? store = null,
+    RemoteOriginListener? listener = null)
 {
     public async Task InvokeAsync(HttpContext context)
     {
-        if (!options.Enabled || context.Connection.LocalPort != options.Port)
+        if (listener?.IsProbe(context) == true) { listener.ReplyToProbe(context); return; }
+        var current = store?.OriginOptions(options) ?? options;
+        if (context.Connection.LocalPort != options.Port)
         {
             // An assigned public host must never reach the trusted local listener.
-            if (options.Enabled && context.Request.Host.Host.Equals(options.Hostname, StringComparison.OrdinalIgnoreCase))
+            if (current.Enabled && context.Request.Host.Host.Equals(current.Hostname, StringComparison.OrdinalIgnoreCase))
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
                 return;
@@ -41,14 +44,14 @@ public sealed class RemoteTunnelMiddleware(RequestDelegate next, RemoteTunnelOpt
         }
 
         context.Features.Set(new RemoteTunnelRequest());
-        if (store?.Snapshot.Registered == true && !store.Snapshot.Enabled)
+        if (!current.Enabled || store?.Snapshot.Registered == true && !store.Snapshot.Enabled)
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             return;
         }
         var peer = context.Connection.RemoteIpAddress;
         if (peer is null || !IPAddress.IsLoopback(peer.IsIPv4MappedToIPv6 ? peer.MapToIPv4() : peer)
-            || !context.Request.Host.Host.Equals(options.Hostname, StringComparison.OrdinalIgnoreCase)
+            || !context.Request.Host.Host.Equals(current.Hostname, StringComparison.OrdinalIgnoreCase)
             || context.Request.Host.Port is not (null or 443))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
@@ -68,7 +71,7 @@ public sealed class RemoteTunnelMiddleware(RequestDelegate next, RemoteTunnelOpt
             (context.Request.Path == "/api/engine/health" || Regex.IsMatch(context.Request.Path.Value ?? "",
                 @"^/api/projects/[a-zA-Z0-9_-]+/runs/[a-zA-Z0-9_-]+/stream$"));
         if (HttpMethods.IsPost(context.Request.Method) && context.Request.Path == "/api/images")
-            browserApi = context.Request.Headers.Origin == $"https://{options.Hostname}";
+            browserApi = context.Request.Headers.Origin == $"https://{current.Hostname}";
         if (context.Request.Path.StartsWithSegments("/api") && !browserApi
             || context.Request.Path.StartsWithSegments("/mcp")
             || context.Request.Path.StartsWithSegments("/openapi"))

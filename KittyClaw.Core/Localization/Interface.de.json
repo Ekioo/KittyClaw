@@ -34,5 +34,8 @@
   "AccessModeChoice": "Zugriffsmodus",
   "AccessInternetConfirm": "Wähle bei Bedarf einen Namen und bestätige die Cloudflare-Erlaubnis, um den Internetzugriff zu aktivieren.",
   "AccountInstanceSignOut": "Diese Remotesitzung abmelden",
-  "AccountInstanceSessionHint": "Damit wird nur deine Remotesitzung auf dieser Instanz beendet. Die Kontoverknüpfung bleibt bestehen."
+  "AccountInstanceSessionHint": "Damit wird nur deine Remotesitzung auf dieser Instanz beendet. Die Kontoverknüpfung bleibt bestehen.",
+  "RemoteSetupReadOnly": "Um die Kontoverknüpfung oder den Zugriffsmodus zu ändern, öffne KittyClaw auf dem Computer dieser Instanz und dann die Einstellungen. Hier kannst du den aktuellen Status sehen.",
+  "AccountAssociationStatus": "Status der Kontoverknüpfung",
+  "AccessConnectionStatus": "Verbindungsstatus"
 }

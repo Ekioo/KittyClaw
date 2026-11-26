@@ -4,6 +4,33 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.32] — 2026-11-26
+
+Live tunnel activation and native Claude Code ticket tracking.
+
+### Highlights
+
+Activate or resume Internet access without restarting KittyClaw. Remote account and access links now show authenticated status pages instead of an unexplained forbidden response. An optional Claude Code plugin adds ticket selection, work-prompt preparation, and reviewed result publication inside Claude Code.
+
+### Added
+
+- Native Claude Code ticket-tracking plugin, available from the repository marketplace with Claude Code 2.1.332 or later. Publication remains an explicit user action and preserves the ticket's current column.
+- Account-authenticated, read-only association and connection summaries for LAN and tunnel browsers.
+
+### Changed
+
+- Start the dedicated tunnel origin at runtime while keeping existing local requests and agent work running.
+- Match access-mode radios, public-address fields, and consent controls to the application theme.
+- Use explicit status labels for remote setup links while keeping ownership and access changes local-only.
+
+### Fixed
+
+- Retry tunnel activation after an internal port conflict without restarting the application.
+- Preserve the assigned tunnel hostname and local API boundary during first activation and subsequent pause/resume operations.
+- Clarify that skipping template setup also skips automatic workspace pipeline-kit import.
+
+---
+
 ## [v0.31] — 2026-11-26
 
 Experimental macOS installers, portable scheduled tasks, and unified instance access.

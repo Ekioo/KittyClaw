@@ -114,6 +114,8 @@ public sealed class AccountPortalAccessTests
         await using var f = await Fixture.Create();
         await using var app = await f.StartServer(remote: true);
         using var client = app.GetTestClient(); client.BaseAddress = new Uri("https://office.kittyclaw.dev");
+        foreach (var setup in new[] { "/access-setup", "/account-setup" })
+            Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync(setup)).StatusCode);
         var start = await client.GetAsync("/account-access");
         Assert.Equal(HttpStatusCode.Redirect, start.StatusCode);
         var query = QueryHelpers.ParseQuery(start.Headers.Location!.Query);
@@ -130,13 +132,16 @@ public sealed class AccountPortalAccessTests
         client.DefaultRequestHeaders.Remove("Cookie"); client.DefaultRequestHeaders.Add("Cookie", sessionCookie.Split(';')[0]);
         Assert.Equal("protected", await client.GetStringAsync("/"));
         Assert.False(f.Network.Enabled);
-        foreach (var path in new[] { "/api/projects", "/mcp", "/openapi/v1.json", "/network-setup", "/account-setup" })
+        foreach (var path in new[] { "/api/projects", "/mcp", "/openapi/v1.json", "/network-setup" })
             Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(path)).StatusCode);
+        await AssertRemoteSummaries(client);
         using var crossOrigin = new HttpRequestMessage(HttpMethod.Get, "/"); crossOrigin.Headers.Add("Origin", "https://evil.test");
         Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(crossOrigin)).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsync("/access/logout", new FormUrlEncodedContent([]))).StatusCode);
         f.Handler.MfaEnabled = false; await f.Accounts.RefreshAsync(default);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/")).StatusCode);
+        foreach (var setup in new[] { "/access-setup", "/account-setup" })
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(setup)).StatusCode);
     }
 
     [Fact]
@@ -213,6 +218,7 @@ public sealed class AccountPortalAccessTests
     public async Task LAN_sign_in_requires_the_same_account_MFA_and_cannot_reuse_a_tunnel_or_foreign_host_cookie()
     {
         await using var f = await Fixture.Create();
+        f.Remote.Pause();
         f.Network.EnableAccountAccess(); f.Network.Listening = true;
         var origin = $"https://{Environment.MachineName.ToLowerInvariant()}:5233";
         await using var app = await f.StartServer(remote: false, network: true);
@@ -230,7 +236,7 @@ public sealed class AccountPortalAccessTests
         Assert.Equal("protected", await client.GetStringAsync("/"));
         Assert.Equal("protected", await client.GetStringAsync("/api/projects"));
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/network-setup")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/account-setup")).StatusCode);
+        await AssertRemoteSummaries(client);
         Assert.False(await f.Portal.ValidAsync(sessionCookie.Split(';')[0].Split('=',2)[1], "tunnel", "https://office.kittyclaw.dev", default));
         Assert.False(await f.Portal.ValidAsync(sessionCookie.Split(';')[0].Split('=',2)[1], "network", "https://192.168.1.21:5233", default));
         using var cross = new HttpRequestMessage(HttpMethod.Get, "/"); cross.Headers.Add("Origin", "https://evil.test");
@@ -282,6 +288,25 @@ public sealed class AccountPortalAccessTests
         f.Network.EnableAccountAccess(); Assert.Null(f.Network.Authenticate("123456", DateTimeOffset.UtcNow));
     }
 
+    private static async Task AssertRemoteSummaries(HttpClient client)
+    {
+        foreach (var path in new[] { "/account-setup", "/access-setup" })
+        {
+            using var response = await client.GetAsync(path);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var html = await response.Content.ReadAsStringAsync();
+            Assert.Contains("href='/settings'", html);
+            Assert.Contains("my.kittyclaw.dev/security", html);
+            Assert.DoesNotContain("<form", html); Assert.DoesNotContain("otpauth:", html);
+            Assert.DoesNotContain(FakeAccounts.Proof, html); Assert.DoesNotContain(FakeAccounts.Code, html);
+            Assert.Contains("no-store", response.Headers.CacheControl!.ToString());
+            using var cross = new HttpRequestMessage(HttpMethod.Get, path); cross.Headers.Add("Origin", "https://evil.test");
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(cross)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync(path, new FormUrlEncodedContent(
+                new Dictionary<string,string> { ["action"] = path == "/account-setup" ? "disconnect" : "mode", ["mode"] = "local" }))).StatusCode);
+        }
+    }
+
     private sealed class Fixture : IAsyncDisposable
     {
         private readonly TempDir _directory = new();
@@ -320,7 +345,7 @@ public sealed class AccountPortalAccessTests
             builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider(); builder.Services.AddAntiforgery();
             var app = builder.Build();
             app.Use(async (context, next) => { context.Connection.LocalPort = remote ? 5234 : network ? 5233 : 5232; context.Connection.RemoteIpAddress = network ? IPAddress.Parse("192.168.1.70") : IPAddress.Loopback; await next(context); });
-            app.UseMiddleware<RemoteTunnelMiddleware>(); app.UseMiddleware<AccountSetupMiddleware>();
+            app.UseMiddleware<RemoteTunnelMiddleware>(); app.UseRemoteSetupSummaries(); app.UseMiddleware<AccountSetupMiddleware>();
             app.UseMiddleware<AccessSetupMiddleware>();
             app.UseMiddleware<AccountPortalAccessMiddleware>(); app.UseMiddleware<NetworkAccessMiddleware>();
             app.Run(async context =>

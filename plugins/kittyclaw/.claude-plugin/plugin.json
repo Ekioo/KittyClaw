@@ -1,0 +1,6 @@
+{
+  "name": "kittyclaw",
+  "version": "0.1.2",
+  "description": "Choose a KittyClaw ticket, work in Claude Code, and publish a reviewed result.",
+  "author": { "name": "KittyClaw" }
+}

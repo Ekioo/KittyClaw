@@ -1,0 +1,12 @@
+{
+  "name": "kittyclaw",
+  "description": "KittyClaw integrations for Claude Code.",
+  "owner": { "name": "Ekioo" },
+  "plugins": [
+    {
+      "name": "kittyclaw",
+      "source": "./plugins/kittyclaw",
+      "description": "Track a KittyClaw ticket, prepare its work prompt, and publish a reviewed result."
+    }
+  ]
+}

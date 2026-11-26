@@ -34,5 +34,8 @@
   "AccessModeChoice": "访问模式",
   "AccessInternetConfirm": "可选择填写名称，然后勾选 Cloudflare 授权以启用互联网访问。",
   "AccountInstanceSignOut": "退出此远程会话",
-  "AccountInstanceSessionHint": "此操作仅结束您在此实例上的远程会话。账户关联将保留。"
+  "AccountInstanceSessionHint": "此操作仅结束您在此实例上的远程会话。账户关联将保留。",
+  "RemoteSetupReadOnly": "要修改账户关联或访问模式，请在运行此实例的电脑上打开 KittyClaw 设置。您可以在此查看当前状态。",
+  "AccountAssociationStatus": "账户关联状态",
+  "AccessConnectionStatus": "连接状态"
 }

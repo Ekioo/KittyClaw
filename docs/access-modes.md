@@ -33,8 +33,8 @@ Keeping an already-active Internet mode is idempotent and needs no new consent.
 Tunnel provisioning is completed before an existing LAN mode is disabled. If it
 fails, LAN access and its sessions remain in place. Leaving Internet pauses its
 connector and closes the origin gate; its hostname remains reserved for resume.
-LAN activation can require one restart to bind HTTPS, and first tunnel activation
-can require one restart for its dedicated loopback listener. Access closes
+LAN activation can require one restart to bind HTTPS. Tunnel activation adds its
+dedicated loopback listener at runtime without restarting KittyClaw. Access closes
 immediately when disabled even if removing a bound listener itself needs restart.
 
 Internet addresses and DNS are automatic. The provisioning broker reserves a
@@ -48,6 +48,12 @@ the settings or previewing Internet before accepting Cloudflare consent.
 Settings shows session sign-out only over a protected remote HTTPS origin, under
 Account. It explicitly ends that remote session while retaining the installation
 association; localhost has no remote session to disconnect.
+
+Authenticated LAN and tunnel browsers get a read-only summary at `/access-setup`
+and `/account-setup`, rendered by `RemoteSetupSummaryMiddleware` after the account
+session gate. The links in Settings explicitly say status. Anonymous callers must
+sign in first; remote POSTs and cross-origin requests remain forbidden. These
+pages do not expose local configuration forms or installation credentials.
 
 `AccessModeTests` covers exclusivity, migration, concurrency, consent, missing MFA,
 failure preservation, DNS/address reuse and offline local-only recovery.

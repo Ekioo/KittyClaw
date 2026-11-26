@@ -27,6 +27,7 @@
   "RemoteBinaryInvalid": "Der Cloudflare-Connector hat die Integritätsprüfung nicht bestanden und wurde nicht ausgeführt.",
   "RemoteConnectorUnavailable": "Der Connector konnte die Verbindung nicht aufrechterhalten. Prüfe die Internetverbindung dieses PCs und versuche es erneut.",
   "RemoteStatusError": "Der Internetzugriff erfordert deine Aufmerksamkeit. Siehe die folgende Meldung.",
+  "RemoteOriginUnavailable": "Der Internetzugriff konnte nicht gestartet werden. Prüfe, ob eine andere Anwendung den internen Tunnel-Port verwendet, und versuche es erneut.",
   "RemoteName": "Name der öffentlichen Adresse (optional)",
   "RemoteNameHint": "Beispiel: mein-buero ergibt mein-buero.kittyclaw.dev. Verwende 3–32 Buchstaben, Ziffern oder Bindestriche. Lasse das Feld für einen automatischen Namen leer. Die reservierte Adresse bleibt beim Stoppen und Fortsetzen erhalten. Der Name kann nach der Aktivierung nicht geändert werden.",
   "RemoteNameInvalid": "Wähle einen gültigen, verfügbaren Namen mit 3–32 Buchstaben, Ziffern oder Bindestrichen. Dienstnamen und die Präfixe kc- und xn-- sind reserviert.",

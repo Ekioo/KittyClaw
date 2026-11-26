@@ -34,5 +34,8 @@
   "AccessModeChoice": "Mode d’accès",
   "AccessInternetConfirm": "Choisis éventuellement un nom, puis coche l’autorisation Cloudflare pour activer l’accès Internet.",
   "AccountInstanceSignOut": "Déconnecter cette session distante",
-  "AccountInstanceSessionHint": "Cette action ferme uniquement ta session distante sur cette instance. L’association du compte est conservée."
+  "AccountInstanceSessionHint": "Cette action ferme uniquement ta session distante sur cette instance. L’association du compte est conservée.",
+  "RemoteSetupReadOnly": "Pour modifier l’association ou le mode d’accès, ouvre KittyClaw sur la machine qui héberge cette instance, puis les réglages. Ici, tu peux consulter l’état actuel.",
+  "AccountAssociationStatus": "État de l’association du compte",
+  "AccessConnectionStatus": "État de la connexion"
 }
