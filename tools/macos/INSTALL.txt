@@ -1,0 +1,35 @@
+KittyClaw for macOS - EXPERIMENTAL
+
+Choose osx-arm64 for Apple Silicon or osx-x64 for Intel.
+.NET and ASP.NET Core are included. Git and agent provider CLIs remain external.
+
+This application has a local ad-hoc signature. It has NOT been signed with an
+Apple Developer ID or notarized by Apple. No Apple subscription is required.
+macOS may block the downloaded installer or application. If you trust this
+download, use System Settings > Privacy & Security > Open Anyway for the
+blocked item, then confirm. Managed Macs may prohibit this exception.
+Do not disable Gatekeeper globally. If macOS reports damage or refuses the
+exception, report the exact message rather than changing security settings.
+
+Install the Setup.pkg, preferably for your user only. Alternatively extract the
+Portable.zip and move the .app into ~/Applications before opening it. Do not
+run from inside the ZIP or a read-only volume. Both formats support updates.
+
+Opening KittyClaw Experimental starts the local server and opens the default
+browser at http://localhost:5230. Closing the browser does not stop the server.
+Open the app again to reopen the browser. To stop it, use Activity Monitor,
+select KittyClaw.Web and choose Quit (not Force Quit).
+This experimental version uses the normal KittyClaw data directory and port:
+stop a source installation before starting the bundle. Back up your data first.
+
+Updates download in the background from public Ekioo/KittyClaw GitHub Releases,
+including prereleases, using the installed architecture's experimental feed.
+Choose Update and restart in KittyClaw to apply a prepared update. Databases
+and workspaces are outside the .app bundle. macOS approval may be required again
+after an update; automatic updates without prompts are not guaranteed.
+GitHub Actions build artifacts alone are not an update server: the feed and
+full.nupkg must be attached to a published GitHub release for updates to work.
+
+This is a browser-based application, without the Windows tray/window shell.
+Finder does not load shell profiles: install CLIs in a detectable location or
+launch Contents/MacOS/KittyClaw.Web from a terminal with the required PATH.

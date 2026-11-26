@@ -1,0 +1,84 @@
+name: macOS experimental installer
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Optional target SemVer (for example 0.20.0-macos.1); empty builds a CI version'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Experimental ${{ matrix.runtime }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            runtime: osx-arm64
+          - os: macos-15-intel
+            runtime: osx-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Select test versions
+        id: versions
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          $baseline = "0.0.1-ci.${{ github.run_number }}.${{ github.run_attempt }}"
+          $target = if ($env:REQUESTED_VERSION) { $env:REQUESTED_VERSION } else { "0.0.2-ci.${{ github.run_number }}.${{ github.run_attempt }}" }
+          "baseline=$baseline" >> $env:GITHUB_OUTPUT
+          "target=$target" >> $env:GITHUB_OUTPUT
+      - name: Test update shutdown and desktop instance ownership
+        run: |
+          dotnet test KittyClaw.Core.Tests -c Release --nologo --filter 'FullyQualifiedName~InstalledUpdateServiceTests|FullyQualifiedName~MacDesktopLifetimeTests'
+          if ($LASTEXITCODE -ne 0) { throw 'Update/lifetime regression tests failed.' }
+      - name: Build baseline and target with embedded runtimes
+        env:
+          BASELINE_VERSION: ${{ steps.versions.outputs.baseline }}
+          TARGET_VERSION: ${{ steps.versions.outputs.target }}
+        run: |
+          ./tools/build-macos-installer.ps1 -Version $env:BASELINE_VERSION -Runtime '${{ matrix.runtime }}' -OutputDir publish-macos/baseline
+          ./tools/build-macos-installer.ps1 -Version $env:TARGET_VERSION -Runtime '${{ matrix.runtime }}' -OutputDir publish-macos/target
+      - name: Verify self-contained host and real bundle update in isolation
+        env:
+          BASELINE_VERSION: ${{ steps.versions.outputs.baseline }}
+          TARGET_VERSION: ${{ steps.versions.outputs.target }}
+        run: |
+          ./tools/Test-MacOSInstaller.ps1 -BaselineDir publish-macos/baseline -TargetDir publish-macos/target -BaselineVersion $env:BASELINE_VERSION -TargetVersion $env:TARGET_VERSION -Runtime '${{ matrix.runtime }}'
+      - name: Upload experimental installer and update feed
+        uses: actions/upload-artifact@v4
+        with:
+          name: KittyClaw-macOS-experimental-${{ matrix.runtime }}
+          path: |
+            publish-macos/target/*-Setup.pkg
+            publish-macos/target/*-Portable.zip
+            publish-macos/target/*-full.nupkg
+            publish-macos/target/releases.*.json
+            publish-macos/target/INSTALL.txt
+          if-no-files-found: error
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: KittyClaw-macOS-logs-${{ matrix.runtime }}
+          path: publish-macos/verification-*/*.log
+          if-no-files-found: ignore

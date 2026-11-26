@@ -21,7 +21,7 @@ VelopackApp.Build()
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,
-#if WINDOWS
+#if WINDOWS || MACOS_INSTALLER
     ContentRootPath = AppContext.BaseDirectory,
 #endif
 });
@@ -61,6 +61,15 @@ if (!Directory.Exists(dataDir) && Directory.Exists(legacyDataDir))
 {
     Directory.Move(legacyDataDir, dataDir);
 }
+#if MACOS_INSTALLER
+using var macDesktop = builder.Configuration.GetValue("KITTYCLAW_DESKTOP", true)
+    ? new MacDesktopLifetime(dataDir) : null;
+if (macDesktop is { IsFirstInstance: false })
+{
+    MacDesktopLifetime.OpenBrowser(builder.Configuration["urls"]!, null);
+    return;
+}
+#endif
 var appSettings = new KittyClaw.Core.Services.AppSettingsService(dataDir);
 var webProtection = builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(dataDir, "web-keys")));
@@ -409,6 +418,9 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
+#if MACOS_INSTALLER
+macDesktop?.Attach(app);
+#endif
 #if WINDOWS
 desktop?.Attach(app);
 try { app.Run(); }

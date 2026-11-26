@@ -53,6 +53,11 @@ Afterwards, switch back to `dev` for further work.
 
 ## Local installer build
 
+Experimental macOS packages have a separate, artifact-only GitHub Actions workflow.
+It does not publish a release or require Apple credentials. See
+[experimental macOS distribution](docs/macos-distribution.md) for native builds,
+validation, and the files required to enable updates after publication.
+
 ```powershell
 pwsh tools/build-windows-installer.ps1 -Version 0.19.0-test.1
 ```
