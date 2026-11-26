@@ -6,6 +6,7 @@ Pipeline kits provide a portable `.kittyclaw-pipeline` ZIP format for exporting 
 
 ## Key components
 
+Creating a project from a selected workspace automatically imports root-level `.kittyclaw-pipeline` files. Files are processed in filename order and retained. Duplicate pipeline names receive a numeric suffix; identical skills are reused, while differing skill collisions are reported without overwriting. Invalid archives do not prevent other kits from importing. Missing parameters, prerequisites, secrets or executable approvals retain the existing disabled-install behavior. Import failures and activation blockers are shown before onboarding continues.
 - `KittyClaw.Core/Services/PipelineExportService.cs` builds sanitized kits with a versioned manifest and SHA-256 inventory.
 - `KittyClaw.Core/Services/PipelineKitScanner.cs` identifies content that must not be exported.
 - `KittyClaw.Web/Components/PipelineKitDialog.razor` presents the reviewed export and two-phase import workflow, including collision remapping, masked vault bindings, separate executable-capability approvals, and activation blockers.

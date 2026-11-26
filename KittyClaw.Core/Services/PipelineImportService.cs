@@ -78,6 +78,58 @@ public sealed partial class PipelineImportService(
     /// <summary>Test seam: throws mid-installation to prove the compensating rollback.</summary>
     internal Func<string, Task>? InstallFaultInjector { get; set; }
 
+    /// <summary>Imports root-level workspace kits during project creation, retaining all activation gates.</summary>
+    public async Task<List<string>> ImportWorkspaceAsync(string projectSlug)
+    {
+        var project = await projects.GetProjectAsync(projectSlug)
+            ?? throw new InvalidOperationException("Project not found.");
+        var workspace = projects.ResolveWorkspacePath(project);
+        var notices = new List<string>();
+        string[] files;
+        try
+        {
+            files = Directory.GetFiles(workspace, "*", SearchOption.TopDirectoryOnly)
+                .Where(path => Path.GetExtension(path).Equals(PipelineKitFormat.FileExtension, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(path => path, StringComparer.Ordinal).ToArray();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return [ex.Message];
+        }
+
+        foreach (var file in files)
+        {
+            try
+            {
+                await using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read);
+                if (stream.Length > MaxArchiveBytes)
+                    throw new InvalidOperationException("Pipeline archive exceeds the 8 MiB limit.");
+                var archive = new byte[checked((int)stream.Length)];
+                await stream.ReadExactlyAsync(archive);
+                var preview = await AnalyzeAsync(projectSlug, archive);
+                var confirmation = new PipelineImportConfirmation();
+                if (preview is not null && preview.Installable)
+                {
+                    var names = (await pipelines.ListAsync(projectSlug)).Select(p => p.Name.Trim())
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    var name = preview.PipelineName;
+                    for (var suffix = 2; names.Contains(name); suffix++)
+                        name = $"{preview.PipelineName} ({suffix})";
+                    confirmation.PipelineName = name;
+                }
+                var result = await InstallAsync(projectSlug, archive, confirmation);
+                if (result is not null && !result.Enabled)
+                    notices.Add($"{Path.GetFileName(file)}: {string.Join(", ", result.DisabledReasons)}");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException
+                or PipelineImportRejectedException or PipelineImportConflictException)
+            {
+                notices.Add($"{Path.GetFileName(file)}: {ex.Message}");
+            }
+        }
+        return notices;
+    }
+
     /// <summary>Write-free analysis. Null when the project does not exist. Never throws for kit defects:
     /// they are reported as <see cref="PipelineImportPreview.Blockages"/>.</summary>
     public async Task<PipelineImportPreview?> AnalyzeAsync(string projectSlug, byte[] archive)

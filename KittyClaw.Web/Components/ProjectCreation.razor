@@ -2,6 +2,7 @@
 @using KittyClaw.Core.Services
 @using KittyClaw.Core.Automation
 @inject ProjectService ProjectService
+@inject PipelineImportService PipelineImport
 @inject RepositoryIntakeService RepositoryIntake
 @inject MinimalWorkflowService MinimalWorkflow
 @inject FirstRunProviderService FirstRunProvider
@@ -115,7 +116,18 @@
                         OnCancel="CloseFolderPicker" />
 }
 
-@if (_createdProject is not null && _validatedIntake is not null && !_firstTicketConfirmed)
+@if (_createdProject is not null && _pipelineImportNotices.Count > 0)
+{
+    <div class="modal-backdrop"><div class="modal-dialog" role="alertdialog" aria-modal="true">
+        <h2>@L["PipelineKitImport"]</h2>
+        @foreach (var notice in _pipelineImportNotices)
+        {
+            <div class="settings-status settings-status-err">@notice</div>
+        }
+        <div class="modal-actions"><button class="header-action-btn settings-primary" @onclick="DismissPipelineNotices">@L["Close"]</button></div>
+    </div></div>
+}
+else if (_createdProject is not null && _validatedIntake is not null && !_firstTicketConfirmed)
 {
     <FirstTicketDraft ProjectSlug="@_createdProject.Slug" Intake="@_validatedIntake" OnConfirmed="FirstTicketConfirmed" />
 }
@@ -155,6 +167,7 @@ else if (_createdProject is not null)
     private IDisposable? _escPending;
     private bool _workspaceWasEmpty;
     private Project? _createdProject;
+    private List<string> _pipelineImportNotices = [];
     private AgentsTemplateService.GitWorkspaceInspection? _gitWorkspace;
     private bool _initializeGit = true;
     private int _workspaceInspectionVersion;
@@ -296,6 +309,7 @@ else if (_createdProject is not null)
             await ProjectService.UpdateProjectAsync(project.Slug, _newWorkspacePath.Trim());
             var initializeGit = _gitWorkspace?.CanInitialize == true && _initializeGit;
             await AgentsTemplate.InitializeAsync(_newWorkspacePath.Trim(), overwrite, initializeGit);
+            _pipelineImportNotices = await PipelineImport.ImportWorkspaceAsync(project.Slug);
 
             _newProjectName = "";
             _open = false;
@@ -317,6 +331,8 @@ else if (_createdProject is not null)
         _initConflicts = null;
         _creationStatus = null;
     }
+
+    private void DismissPipelineNotices() => _pipelineImportNotices.Clear();
 
     private Task FinishOnboarding()
     {
