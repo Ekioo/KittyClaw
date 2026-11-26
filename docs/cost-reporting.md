@@ -151,3 +151,9 @@ Added Claude Fable 5.2 alongside Fable 5.1. Standard USD rates per million token
 ## GPT-6.2 verification (2026-11-19)
 
 Added Codex GPT-6.2 Astra and Sol without changing existing selections. Standard USD per million tokens (input / output / cache read / 30-minute write): Astra 8 / 40 / 0.40 / 10; Sol 2 / 10 / 0.10 / 2.50. Source: https://developers.openai.com/api/docs/pricing
+
+## Mistral verification (2026-11-26)
+
+Mistral Large 4 (mistral-large-4 and mistral-large-4-0) uses standard USD rates per million tokens: 0.70 input, 2.10 output and 0.07 cache reads. Separately reported cache writes use the uncached input rate. Source: https://docs.mistral.ai/inference/pricing
+
+Medium 3.5 and Devstral retain historical prices; they are absent from the current rate table. The moving mistral-vibe-cli-latest alias is now unpriced rather than assuming it still resolves to Medium 3.5. Vibe now defaults to Large 4; existing explicitly selected models are preserved.
