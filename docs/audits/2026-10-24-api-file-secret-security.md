@@ -855,7 +855,7 @@ old code until their owner finishes and restarts them. Other machines and
 explicit executable overrides were not updated. The macOS-specific Edit and
 Seatbelt advisories were not classified as Windows exploits.
 
-### Confirmed and pending: installed Git for Windows
+### Corrected in the explicit follow-up: installed Git for Windows
 
 `C:/Program Files/Git/cmd/git.exe` reported **2.50.1.windows.1**.
 [CVE-2026-111760](https://github.com/git/git/security/advisories/GHSA-vp2w-7xxj-jvxr)
@@ -882,14 +882,29 @@ with both versions. An additional reduced-limit check, based on the
 unchanged. This establishes the guard's presence without creating multi-gigabyte
 paths; it is not a reproduction of the complete metadata-overwrite/RCE exploit.
 
-The system Git replacement remains **pending**. Git/Bash processes belonging to
-other work were active, so the pre-install guard stopped before launching the
-installer. No process was closed. The verified installer, MinGit, fixture script
-and results remain under `%TEMP%/KittyClaw-known-tech-20261126`. Next action: run
-the verified installer when these sessions are finished, preserving application
-state with `/NOCLOSEAPPLICATIONS /NORESTARTAPPLICATIONS /NORESTART`, then rerun
-the fixture against the installed executable. A tested temporary copy does not
-make the system installation patched.
+The initial review deferred the system replacement because other Git/Bash work
+was active. Damien then explicitly requested the update without interrupting
+that work. The verified official installer completed with exit 0 using
+`/SKIPIFINUSE=1 /NOCLOSEAPPLICATIONS /NOFORCECLOSEAPPLICATIONS
+/NORESTARTAPPLICATIONS /NORESTART`; the log reported no Windows restart needed.
+The installed Git and PATH lookup now report **2.56.1.windows.1**.
+
+A `git.exe` launch failed with a missing `libiconv-2.dll` alert while the installer
+was replacing files. This was a real transient availability interruption, so this
+update must not be described as having had zero interruption. The completed
+installation uses `ucrt64` instead of the previous `mingw64` layout; the DLL is
+present under `ucrt64/bin`. No manual process termination or DLL replacement was
+performed. After setup finished, the `cmd`, `ucrt64/bin` and
+`ucrt64/libexec/git-core` Git executables all returned exit 0 and version 2.56.1.
+
+The complete disposable fixture was rerun against the system executable:
+initialization, add/commit, local clone/checkout, worktree creation, ticket commit,
+fast-forward merge and clean status passed. The reduced-limit security guard
+returned exit 128 and preserved the index. A new Bash process with user startup
+files disabled also resolved `/ucrt64/bin/git`, reported the correct helper path
+and successfully checked the fixture status. No real project was used for these
+functional tests. Installer logs and fixture results remain under
+`%TEMP%/KittyClaw-known-tech-20261126`.
 
 ### Other versions checked and limits
 
@@ -932,6 +947,7 @@ make the system installation patched.
   published sandbox advisory. Other provider installations, OS patch coverage,
   a full application test run and Linux/macOS validation remain outside this batch.
 
-The only installed software changed was Claude Code. No application source or
-package versions were modified, no paid agent was called, and no main/debug web
-instance, real credential or user project was used as an attack fixture.
+The initial review updated Claude Code; the explicit follow-up also updated
+system Git. No application source or package versions were modified, no paid
+agent was called, and no main/debug web instance, real credential or user project
+was used as an attack fixture.
