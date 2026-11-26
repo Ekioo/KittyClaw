@@ -102,7 +102,7 @@ forbid exceptions. Signature/notarization-free updates without prompts are not p
 ## GitHub Actions verification
 
 `.github/workflows/macos-installer.yml` runs on pushes and PRs to `main`/`dev`, or via
-**Run workflow** with an optional target SemVer. It uses native `macos-15` ARM64 and
+**Run workflow** with an optional target SemVer. It uses native `macos-26` ARM64 and
 `macos-15-intel` x64 runners and creates two versions per job:
 
 1. Run the installed-update shutdown tests and desktop lifetime/URL tests.
