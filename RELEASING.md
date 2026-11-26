@@ -49,7 +49,12 @@ body is generated from it.
    `pwsh tools/publish-stable.ps1`, or unzip the release asset there, then
    start `KittyClaw.Web.exe` (defaults to http://localhost:5230).
 
-Afterwards, switch back to `dev` for further work.
+Afterwards, switch back to `dev` and merge the published release tag before further
+work (`git merge --no-ff vX.Y.Z`, using the actual published tag). Keep the release
+tag in `dev`'s ancestry: otherwise MinVer can keep deriving development versions
+from an older tag and incorrectly trigger the update banner, even when all release
+code is already present. Do not work around this by hard-coding a project version
+or hiding genuine update notifications.
 
 ## Local installer build
 
