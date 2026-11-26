@@ -54,6 +54,30 @@ public sealed class AgentsTemplateService
         return conflicts;
     }
 
+    public void ValidateWriteDestinations(string workspacePath, bool overwriteConflicts)
+    {
+        var root = Path.GetFullPath(workspacePath);
+        foreach (var relative in RelativePaths().Select(path => ".agents/" + path).Concat(RootRelativePaths()))
+        {
+            var destination = Path.GetFullPath(Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar)));
+            // Skipped existing files are never opened for writing, including owner-managed links.
+            if (File.Exists(destination) && !overwriteConflicts) continue;
+            var parts = Path.GetRelativePath(root, destination)
+                .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
+            if (Path.IsPathRooted(Path.GetRelativePath(root, destination)) || parts.Any(part => part is "." or ".."))
+                throw new InvalidOperationException("Template destinations must stay inside the selected workspace.");
+
+            // The selected workspace is trusted; checkout-controlled descendants are not.
+            var current = root;
+            foreach (var part in parts)
+            {
+                current = Path.Combine(current, part);
+                if (ProjectSkillService.IsReparsePoint(current))
+                    throw new InvalidOperationException($"Template destination '{relative}' uses a linked file or directory.");
+            }
+        }
+    }
+
     public async Task<InitializeResult> InitializeAsync(
         string workspacePath,
         bool overwriteConflicts,
@@ -62,6 +86,8 @@ public sealed class AgentsTemplateService
         var written = new List<string>();
         var skipped = new List<string>();
 
+        // Validate the entire write plan before copying the first asset or initializing Git.
+        ValidateWriteDestinations(workspacePath, overwriteConflicts);
         Directory.CreateDirectory(workspacePath);
 
         foreach (var rel in RelativePaths())

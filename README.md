@@ -60,6 +60,16 @@ See [Windows packaging and updates](docs/update-check.md) for build and release 
 
 On first launch, the onboarding popup checks Git and every supported provider CLI using the same resolved executable paths as dispatch: Claude Code (`claude` / `KITTYCLAW_CLAUDE_BIN`), OpenAI Codex (`codex` / `KITTYCLAW_CODEX_BIN`), Grok Build (`grok`, `~/.grok/bin`, or `KITTYCLAW_GROK_BIN`), and Mistral Vibe (`vibe` / `KITTYCLAW_MISTRAL_BIN`). It also reports optional Ollama availability. Any one agent provider is sufficient, failed or timed-out probes remain non-blocking, and Git-dependent features still require Git.
 
+### Experimental macOS package
+
+The **macOS experimental installer** GitHub Actions workflow builds native Apple Silicon
+and Intel packages with .NET included, without an Apple Developer subscription. Successful
+runs provide a `.pkg`, portable `.app` ZIP and Velopack update feed as downloadable artifacts.
+These builds are ad-hoc signed and **not notarized**; macOS may require an explicit
+**Open Anyway** exception. They use the normal KittyClaw data directory and port, so stop
+an existing source instance first. See [macOS distribution](docs/macos-distribution.md)
+for installation, CI verification limits and publishing update feeds.
+
 ### Run
 
 From the repo root:

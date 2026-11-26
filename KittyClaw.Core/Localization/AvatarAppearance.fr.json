@@ -4,5 +4,8 @@
   "AvatarTheme": "Thème des pictogrammes",
   "AvatarThemeA": "Fonds sombres",
   "AvatarThemeB": "Fonds colorés",
-  "AvatarThemeC": "Fonds clairs"
+  "AvatarThemeC": "Fonds clairs",
+  "AvatarThemeD": "Initiales — fonds colorés",
+  "AvatarThemeE": "Initiales — fonds sombres",
+  "AvatarThemeF": "Initiales — fonds clairs"
 }

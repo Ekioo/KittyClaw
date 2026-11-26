@@ -1,0 +1,19 @@
+{
+  "AccountTitle": "KittyClawアカウント",
+  "AccountHint": "このインストールをGitHubまたはGoogleアカウントに関連付けると、my.kittyclaw.devで確認できます。",
+  "AccountConfigure": "アカウントの関連付けを管理",
+  "AccountAssociate": "アカウントを関連付ける",
+  "AccountAssociated": "関連付け先",
+  "AccountPortal": "マイインスタンス",
+  "AccountDisconnect": "このアカウントの関連付けを解除",
+  "AccountConfirmTitle": "このアカウントを確認",
+  "AccountConfirmHint": "このマシンに関連付ける前に、ご自身のアカウントであることを確認してください。",
+  "AccountConfirm": "このマシンを関連付ける",
+  "AccountCancel": "関連付けをキャンセル",
+  "AccountContinue": "GitHubまたはGoogleで続行",
+  "AccountReturnHint": "このウィンドウでログインを続けます。その後、ここに戻ってアカウントを確認します。リクエストは10分で期限切れになります。",
+  "AccountRefresh": "関連付けを確認",
+  "AccountRevoked": "関連付けが解除されました。このインストールを再度関連付けることができます。",
+  "AccountError": "アカウントサービスでリクエストを完了できませんでした。接続を確認して再度お試しください。",
+  "AccountNetworkUnchanged": "アカウントを関連付けてもネットワークアクセスは有効になりません。プロジェクトとファイルはこのマシンに保存されます。"
+}

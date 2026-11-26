@@ -383,3 +383,19 @@ Existing pipelines can be opened with **Edit with assistant** on the Workflows p
 ## Optional column capacity
 
 Each column has an optional `MaxTickets` (0 = unlimited) and `CapacityBlocking` (false = warning only), editable in **Ticket path → Allow entry** and through REST/MCP column requests. The board shows the configured capacity and a warning when reached, counting all tickets regardless of display filters. Warning mode permits new arrivals; blocking mode refuses creation and movement into that column at capacity. Editing, reordering within, and moving out remain available. SQLite triggers enforce blocking limits atomically across all writers. Existing columns have no limit. There is no project-wide blocked-ticket creation limit.
+
+
+## Python and direct program actions
+
+Scheduled tasks and processor actions support `executePython` and `executeProgram` alongside PowerShell.
+Both accept `program`, `arguments` (an array, passed without a shell), `workingDirectory` (relative to the project),
+`timeoutSeconds`, and `env`. Python accepts exactly one of `scriptFile` (relative to the project), `module`,
+or embedded `script`. An empty Python `program` uses `.venv/Scripts/python.exe` on Windows or
+`.venv/bin/python` on Unix, then `python` / `python3` from PATH. An explicit interpreter can override this.
+Dependencies must be installed on the machine running KittyClaw; no packages are installed automatically.
+Ticket/model text is supplied through arguments and KITTYCLAW environment variables, never interpolated into Python source.
+Timeout/cancellation stops the process tree. Nonzero exit codes fail the action; bounded stdout/stderr are logged with vault values redacted.
+In the editor, enter one argument per line and one `NAME=value` environment entry per line.
+Pipeline kits embed a selected Python file as source; auxiliary modules and data remain project prerequisites.
+Direct program actions declare their executable and arguments; they do not package arbitrary binaries or dependencies.
+Import requires separate `executePython` / `executeProgram` approval and disables actions when their executable or working directory is missing.

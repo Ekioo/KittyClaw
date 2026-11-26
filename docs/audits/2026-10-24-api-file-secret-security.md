@@ -724,3 +724,230 @@ isolated audit SDK directory. Running source installations need an updated
 runtime, and existing self-contained installations need a rebuilt package.
 No release was pushed, published or deployed, and the main instance was not
 used for validation.
+
+## 2026-11-23 nightly audit: automatic context and processor memory paths
+
+An untrusted checkout could redirect automatic context reads through links under
+`.agents`. The host read preambles, legacy agent skills, memory indexes and flat
+memory files before passing their contents to a provider. Consolidation also read
+linked topic files and its instruction file. These reads happened outside the
+provider's tool hooks, so `Enforce` did not protect the initial prompt. This could
+disclose an external file readable by the application account without a tool
+request or a boundary approval.
+
+Processor memory migration could import external text through the same layout.
+Native lesson capitalization could also rewrite an external `MEMORY.md` through
+a linked memory directory. The input was the workspace-controlled link; the host
+performed the read or write with its own filesystem permissions.
+
+`AgentContextFiles` now requires paths beneath the configured workspace's `.agents`
+directory and rejects existing reparse points at every descendant component.
+Automatic prompt reads, chat background skills and consolidation instructions use
+this check. Runner preparation failures stay visible on the registered run; chat
+returns `invalid_agent_context`. Processor memory migration and capitalization
+validate their canonical and legacy paths before reading or writing. Ordinary
+optional context and memory migration remain supported.
+
+A disposable Windows fixture against `4b0641e` first demonstrated that a linked
+agent directory placed an external synthetic marker in an `Enforce` prompt.
+Six regression cases were then executed against the three original runner and
+processor-memory classes: all six failed as expected because the original code
+followed the links instead of rejecting them. Capitalization returned `Succeeded`
+through the external memory directory. The corrected source was restored after
+that baseline run.
+
+133 targeted tests passed with the isolated SDK 10.0.404, including 16 new cases.
+The TRX counters recorded 133 executed, 133 passed, zero failures and zero
+unexecuted tests. Coverage included file links and directory junctions, HTTP chat
+rejection, preservation of synthetic external targets, ordinary prompt assembly,
+legacy memory migration, capitalization, simulated dispatch and resume, secret
+injection and native pre-effect hook enforcement. HTTP checks used disposable
+in-process or random-loopback fixture servers. No real provider, main instance,
+user project or real secret was used.
+
+The configured workspace remains the trusted root. These are checks of existing
+paths, not protection against concurrent filesystem replacement or a sandbox for
+provider-owned tool reads. Other workspace configuration and runtime-state paths,
+the full test suite, browser interaction and native Linux/macOS validation were
+outside this batch. No dependency version was changed.
+
+## 2026-11-25 nightly audit: template initialization writes through workspace links
+
+`AgentsTemplateService.InitializeAsync` followed checkout-controlled links while
+copying shared and root guidance. A linked `.agents` directory could create the
+three shared template files outside the selected workspace even without overwrite.
+With overwrite selected, a linked `AGENTS.md` could instead truncate an external
+file and replace it with template content. The owner selected workspace-relative
+conflicts; the checkout-controlled link chose the unrelated target. This was an
+integrity violation by host file I/O, without provider involvement.
+
+Two fixtures against `ccc48e3` reproduced both effects using synthetic external
+files: ordinary initialization wrote all three shared files through a junction,
+and overwrite replaced the external file behind the root guidance link.
+
+`ValidateWriteDestinations` now checks the complete write plan before any asset is
+copied or Git initialized. It rejects linked files and linked parent directories
+for destinations that would be written. Project creation invokes the same
+preflight before adding its registry entry, through its existing error handling.
+Existing files selected for skipping remain untouched, including owner-managed
+links. On Windows, `File.Exists` also recognizes a dangling file link; the existing
+skip behavior is preserved, while a planned overwrite of that link is rejected.
+
+49 targeted tests passed with the isolated SDK 10.0.404: 49 executed, 49 passed,
+zero failures and zero unexecuted tests in the final TRX. The run included 21 new
+regression cases for directory links, all five asset destinations, absent and
+existing external targets, preservation before refusal, and skip behavior. Existing
+tests covered initialization, retained roles/configuration, Git eligibility,
+repository intake and server rendering of project creation. Tests used disposable
+workspaces and an in-process HTTP fixture. No real provider, user project, real
+secret or main instance was used.
+
+A diagnostic copy through a junction explicitly selected as the workspace root
+raised `DirectoryNotFoundException` both with and without the new preflight. This
+pre-existing functional behavior was not changed; the root-link regression checks
+only that preflight trusts the selected root. Copying through such a root needs a
+separate functional reproduction before changing its behavior.
+
+The checks cover existing descendants and do not protect against concurrent path
+replacement. The full suite, interactive browser journeys and native Linux/macOS
+validation were outside this batch. No dependency or template content was changed.
+
+## 2026-11-26 known-version audit: installed provider and Git advisories
+
+This review compared declared and resolved package versions, the installed SDK and
+runtimes, the on-demand browser dependency, and external executables with public
+maintainer advisories. It began at `9d80c8c`; other work advanced `dev` during the
+review. No application source, dependency reference, user project, real secret or
+live web instance was changed by this batch.
+
+### Corrected: installed Claude Code
+
+The PATH-resolved native executable reported **2.1.114**. This is in the affected
+range of [GHSA-5j29-h97v-84ch](https://github.com/anthropics/claude-code/security/advisories/GHSA-5j29-h97v-84ch)
+(fixed in 2.1.129): a workspace writer can win a link-replacement race and redirect
+an otherwise permitted write outside the project. It also falls within
+[GHSA-fg94-h982-f3mm](https://github.com/anthropics/claude-code/security/advisories/GHSA-fg94-h982-f3mm)
+(fixed in 2.1.163): injected context can bypass WebFetch restrictions through an
+attacker-controlled HuggingFace repository path and encode accessible data in
+requests. Both are confirmed upstream vulnerabilities of this installed CLI.
+KittyClaw dispatches workspace and ticket content to the provider, but its Claude
+adapter already passes `--dangerously-skip-permissions` and uses its own hooks in
+`Enforce` mode. The native WebFetch approval bypass alone therefore does not
+establish an additional permission bypass in this adapter. No bypass of
+KittyClaw's hook broker was demonstrated. This finding and remediation concern
+the installed provider version; they do not establish a new KittyClaw API flaw.
+
+The official native `claude update` command upgraded this installation to
+**2.1.332**. `claude --version` confirmed the selected executable afterwards.
+Its Authenticode signature was valid for **Anthropic, PBC**, and SHA-256
+`e6652f9170a07df45f1db3e0520f1df0f7b385181ff74f70f49398a67b5fd320`
+matched the official
+[win32-x64 manifest](https://downloads.claude.ai/claude-code-releases/2.1.332/manifest.json).
+`claude --help` exited successfully and still exposed `--allowedTools`,
+`--settings`, `--strict-mcp-config`, `--permission-mode` and `--output-format`.
+No provider request or model inference was used to verify this update. The
+upstream attacks were not independently reproduced against the CLI.
+
+Existing provider processes were preserved. As documented by
+[Anthropic's update mechanism](https://code.claude.com/docs/en/setup#update-claude-code),
+the new binary applies to subsequent launches; existing sessions may retain the
+old code until their owner finishes and restarts them. Other machines and
+explicit executable overrides were not updated. The macOS-specific Edit and
+Seatbelt advisories were not classified as Windows exploits.
+
+### Corrected in the explicit follow-up: installed Git for Windows
+
+`C:/Program Files/Git/cmd/git.exe` reported **2.50.1.windows.1**.
+[CVE-2026-111760](https://github.com/git/git/security/advisories/GHSA-vp2w-7xxj-jvxr)
+explicitly includes 2.50.1: a malicious server can supply trees whose combined
+path lengths overflow the cache-entry length field, allowing checkout to replace
+Git metadata and reach attacker-controlled configuration or hooks. The maintainer
+also describes a nonrecursive clone followed by `git status`; omitting recursive
+cloning is not a sufficient workaround. The attacker controls repository data
+and can reach code execution through ordinary Git operations.
+
+The official [Git for Windows 2.56.1 release](https://github.com/git-for-windows/git/releases/tag/v2.56.1.windows.1)
+contains the fix. Its Windows x64 installer was downloaded; SHA-256
+`c330c72e10b408cc39994bfefdb63542b0d93d21699325c3e0bd874af8a5a559`
+matched the release metadata and its Johannes Schindelin Authenticode signature
+was valid. An isolated MinGit 2.56.1 copy also matched its published SHA-256
+`4a92850b6e917da4fd010669b614b55dccf5b0ec333a534cc4be4700dfefdafd`.
+
+Disposable repositories exercised initialization, add/commit, local clone and
+checkout, worktree creation, a ticket commit, fast-forward merge and clean status
+with both versions. An additional reduced-limit check, based on the
+[upstream guard](https://github.com/git/git/commit/29411cf), ran
+`git -c index.maxPathLen=8 add -- attacker-controlled-long-name.txt`.
+2.50.1 accepted the path; 2.56.1 rejected it with exit 128 and left the index
+unchanged. This establishes the guard's presence without creating multi-gigabyte
+paths; it is not a reproduction of the complete metadata-overwrite/RCE exploit.
+
+The initial review deferred the system replacement because other Git/Bash work
+was active. Damien then explicitly requested the update without interrupting
+that work. The verified official installer completed with exit 0 using
+`/SKIPIFINUSE=1 /NOCLOSEAPPLICATIONS /NOFORCECLOSEAPPLICATIONS
+/NORESTARTAPPLICATIONS /NORESTART`; the log reported no Windows restart needed.
+The installed Git and PATH lookup now report **2.56.1.windows.1**.
+
+A `git.exe` launch failed with a missing `libiconv-2.dll` alert while the installer
+was replacing files. This was a real transient availability interruption, so this
+update must not be described as having had zero interruption. The completed
+installation uses `ucrt64` instead of the previous `mingw64` layout; the DLL is
+present under `ucrt64/bin`. No manual process termination or DLL replacement was
+performed. After setup finished, the `cmd`, `ucrt64/bin` and
+`ucrt64/libexec/git-core` Git executables all returned exit 0 and version 2.56.1.
+
+The complete disposable fixture was rerun against the system executable:
+initialization, add/commit, local clone/checkout, worktree creation, ticket commit,
+fast-forward merge and clean status passed. The reduced-limit security guard
+returned exit 128 and preserved the index. A new Bash process with user startup
+files disabled also resolved `/ucrt64/bin/git`, reported the correct helper path
+and successfully checked the fixture status. No real project was used for these
+functional tests. Installer logs and fixture results remain under
+`%TEMP%/KittyClaw-known-tech-20261126`.
+
+### Other versions checked and limits
+
+- SDK **10.0.404** is selected by `global.json` and is now also installed system-wide.
+  .NET, ASP.NET Core and Windows Desktop **10.0.15** are installed. The Microsoft
+  [November ASP.NET advisories](https://github.com/dotnet/announcements/issues/504)
+  and [runtime advisories](https://github.com/dotnet/announcements/issues/498) were
+  checked by package and version, including separately delivered packages. The
+  [VSTest CLI advisory](https://github.com/dotnet/announcements/issues/517) is fixed
+  by this SDK. No ASP.NET Identity scaffolding or Negotiate authentication was
+  found. Loaded runtimes of live processes and all existing self-contained
+  installations were not inspected or restarted.
+- Public-feed `dotnet package list --project KittyClaw.slnx --no-restore
+  --vulnerable --include-transitive --format json --config <public-only-config>`
+  completed with exit 0 and reported no vulnerable entries in all six resolved
+  project graphs. References include EF Core/ASP.NET OpenAPI **10.0.5**,
+  Microsoft.OpenApi **2.10.0**, Markdig **1.1.2**, YamlDotNet **16.3.0**,
+  SQLitePCLRaw **3.0.3** (SourceGear.sqlite3 **3.50.4.5**) and Velopack **1.2.161**.
+  This is the feed's result, not proof of absence: the maintainer's
+  [MCP advisory](https://github.com/modelcontextprotocol/csharp-sdk/security/advisories/GHSA-x863-g495-4cjc)
+  separately includes **ModelContextProtocol.AspNetCore 2.1.0**. Its required
+  distinct authenticated principals without identifier claims were not present
+  in KittyClaw's transport setup; access gates grant installation-wide access.
+  A cross-user session boundary matching that advisory was not established, so
+  no preventive MCP upgrade was applied.
+- The CDN alias `mermaid@11` resolved and served **11.17.2** during this review,
+  beyond the fixed 11.16.1 release for the listed August maintainer advisories.
+  This does not inventory scripts already cached in existing browser sessions.
+- cloudflared is pinned to **2026.10.3**. Later upstream security-labelled changes
+  were examined, including Access ingress path matching, debug endpoints and
+  Go dependencies. No applicable exploit was established for KittyClaw's
+  loopback metrics listener, environment-carried token and owner-gated origin.
+  This was a source/configuration review, not an exhaustive binary reachability
+  analysis of every transitive Go package; no cloudflared version was changed.
+- Installed WebView2 Runtime **158.0.4370.33** was distinguished from the
+  **1.0.3650.58** SDK reference. Microsoft announced a newer **158.0.4370.45**
+  [security release on November 25](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-relnotes-security),
+  with CVE details still pending in those notes; no specific applicable flaw was
+  established here. Codex CLI **0.171.0-alpha.13** was beyond the range in its
+  published sandbox advisory. Other provider installations, OS patch coverage,
+  a full application test run and Linux/macOS validation remain outside this batch.
+
+The initial review updated Claude Code; the explicit follow-up also updated
+system Git. No application source or package versions were modified, no paid
+agent was called, and no main/debug web instance, real credential or user project
+was used as an attack fixture.

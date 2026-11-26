@@ -7,6 +7,8 @@
         <h2>@L["FirstTicketDraftTitle"]</h2>
         <p class="settings-hint">@L["FirstTicketDraftIntro"]</p>
 
+        <div class="modal-actions"><button class="header-action-btn" data-testid="skip-first-ticket" @onclick="() => OnSkipped.InvokeAsync()" disabled="@_busy">@L["SkipOptionalStep"]</button></div>
+
         @if (_draft is null)
         {
             <div class="migration-analyzing" aria-live="polite"><span class="migration-spinner"></span></div>
@@ -34,6 +36,7 @@
 @code {
     [Parameter, EditorRequired] public RepositoryIntakeState Intake { get; set; } = default!;
     [Parameter, EditorRequired] public string ProjectSlug { get; set; } = "";
+    [Parameter] public EventCallback OnSkipped { get; set; }
     [Parameter] public EventCallback<int> OnConfirmed { get; set; }
     private FirstTicketDraftModel? _draft;
     private string _title = "", _context = "", _outcome = "", _criteria = "";

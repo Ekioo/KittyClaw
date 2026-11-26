@@ -6,7 +6,7 @@ public sealed record RemoteConnectorStatus(string State, string? Error = null);
 
 public sealed class RemoteAccessConnector(RemoteAccessStore store, RemoteAccessBroker broker,
     ICloudflaredRuntime runtime, RemoteTunnelOptions origin, NetworkAccessService access,
-    IHostApplicationLifetime lifetime) : BackgroundService
+    IHostApplicationLifetime lifetime, AccountAssociationService? accounts = null) : BackgroundService
 {
     private readonly SemaphoreSlim _commands = new(1, 1);
     private readonly SemaphoreSlim _wake = new(0, 1);
@@ -15,7 +15,12 @@ public sealed class RemoteAccessConnector(RemoteAccessStore store, RemoteAccessB
     private RemoteConnectorStatus _status = new("Disabled");
     public RemoteConnectorStatus Status => Volatile.Read(ref _status);
     public bool NeedsRestart => store.Snapshot.Registered && (!origin.Enabled || origin.Hostname != new Uri(store.Snapshot.Url!).Host);
-    private void SetStatus(string state, string? error = null) => Volatile.Write(ref _status, new(state, error));
+    public bool CanAuthenticate => accounts?.Snapshot is { Account: not null, MfaEnabled: true };
+    private void SetStatus(string state, string? error = null)
+    {
+        store.SetConnected(state == "Online");
+        Volatile.Write(ref _status, new(state, error));
+    }
     private void Wake() { if (_wake.CurrentCount == 0) try { _wake.Release(); } catch (SemaphoreFullException) { } }
 
     public async Task ActivateAsync(CancellationToken ct, string? subdomain = null)
@@ -23,7 +28,13 @@ public sealed class RemoteAccessConnector(RemoteAccessStore store, RemoteAccessB
         await _commands.WaitAsync(ct);
         try
         {
-            if (!access.Enabled) throw new RemoteAccessException("RemoteAuthenticationRequired");
+            if (accounts?.Snapshot.Account is not null)
+            {
+                try { await accounts.RefreshAsync(ct); }
+                catch (Exception ex) when (ex is AccountAssociationException or HttpRequestException or TaskCanceledException)
+                { throw new RemoteAccessException("AccountError"); }
+            }
+            if (!CanAuthenticate) throw new RemoteAccessException("RemoteAuthenticationRequired");
             var identity = store.Prepare(broker.Origin, origin.Port, subdomain);
             if (!identity.Registered)
             {
@@ -59,15 +70,17 @@ public sealed class RemoteAccessConnector(RemoteAccessStore store, RemoteAccessB
         await started.Task;
         void Revoke() { lock (_gate) _connection?.Cancel(); Wake(); }
         access.SessionsRevoked += Revoke;
+        void CheckAccount() { if (!CanAuthenticate) Revoke(); else Wake(); }
+        if (accounts is not null) accounts.SecurityChanged += CheckAccount;
         var attempts = 0;
         try
         {
             while (!stoppingToken.IsCancellationRequested)
             {
                 var snapshot = store.Snapshot;
-                if (!snapshot.Enabled || !access.Enabled || NeedsRestart)
+                if (!snapshot.Enabled || !CanAuthenticate || NeedsRestart)
                 {
-                    SetStatus(!snapshot.Enabled ? "Disabled" : !access.Enabled ? "AuthenticationRequired" : "RestartRequired");
+                    SetStatus(!snapshot.Enabled ? "Disabled" : !CanAuthenticate ? "AuthenticationRequired" : "RestartRequired");
                     await _wake.WaitAsync(TimeSpan.FromSeconds(1), stoppingToken);
                     continue;
                 }
@@ -75,7 +88,7 @@ public sealed class RemoteAccessConnector(RemoteAccessStore store, RemoteAccessB
                 lock (_gate)
                 {
                     _connection = connection;
-                    if (!store.Snapshot.Enabled || !access.Enabled) connection.Cancel();
+                    if (!store.Snapshot.Enabled || !CanAuthenticate) connection.Cancel();
                 }
                 try
                 {
@@ -106,11 +119,15 @@ public sealed class RemoteAccessConnector(RemoteAccessStore store, RemoteAccessB
                 catch (Exception) { SetStatus("Retrying", "RemoteConnectorUnavailable"); }
                 finally { lock (_gate) _connection = null; }
                 if (stoppingToken.IsCancellationRequested) break;
-                if (!store.Snapshot.Enabled || !access.Enabled) continue;
+                if (!store.Snapshot.Enabled || !CanAuthenticate) continue;
                 var delay = TimeSpan.FromSeconds(Math.Min(60, Math.Pow(2, Math.Min(++attempts, 6))) + Random.Shared.NextDouble());
                 await _wake.WaitAsync(delay, stoppingToken);
             }
         }
-        finally { access.SessionsRevoked -= Revoke; }
+        finally
+        {
+            access.SessionsRevoked -= Revoke;
+            if (accounts is not null) accounts.SecurityChanged -= CheckAccount;
+        }
     }
 }

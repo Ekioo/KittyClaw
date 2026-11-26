@@ -35,8 +35,8 @@ public class ColumnMemoryCapitalizationService(ProjectService projects, DurableW
             }
             var memoryDir = Path.Combine(root, ".agents", "processors",
                 $"column-{columnId}", "memory");
-            var topicPath = Path.Combine(memoryDir, "pipeline-lessons.md");
-            var indexPath = Path.Combine(memoryDir, "MEMORY.md");
+            var topicPath = AgentContextFiles.RequirePath(root, Path.Combine(memoryDir, "pipeline-lessons.md"));
+            var indexPath = AgentContextFiles.RequirePath(root, Path.Combine(memoryDir, "MEMORY.md"));
             var marker = $"<!-- checkpoint:{checkpointId} -->";
 
             async Task<MemoryCapitalizationResult> PersistAsync(MemoryCapitalizationStatus status, int added)

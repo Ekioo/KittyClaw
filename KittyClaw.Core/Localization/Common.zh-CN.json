@@ -1,4 +1,9 @@
 {
+  "WorkflowHelpQuestion": "需要我帮助您创建第一个工作流吗？",
+  "WorkflowHelpIntro": "描述您的目标，或跳过此步骤，仅创建默认的 main 工作流。",
+  "WorkflowHelpAccept": "是的，帮助我开始",
+  "SkipOptionalStep": "跳过",
+  "SkipCreateEmpty": "跳过并创建空项目",
   "RtkGlobalHelp": "可选的 Shell 输出优化器。请在各项目设置中单独启用 RTK。可执行文件覆盖变量：KITTYCLAW_RTK_BIN。",
   "Save": "保存",
   "Cancel": "取消",
@@ -62,5 +67,16 @@
   "ProviderDeepSeekConfiguration": "DeepSeek V4 通过 Claude Code 使用兼容 Anthropic 的 API。请将 DEEPSEEK_API_KEY 存储在各项目的机密库中。",
   "ProviderSharedClaudeCli": "共享传输：检测结果仅确认 Claude Code；DeepSeek 密钥仍按项目配置。",
   "AgentProvidersDetectionNote": "检测仅检查 CLI 是否存在，不读取或显示凭据。项目专属机密保留在各自机密库中。",
-  "All": "— 全部 —"
+  "All": "— 全部 —",
+  "ActionExecutePython": "Python",
+  "ActionExecuteProgram": "Run a program",
+  "ProgramExecutable": "Executable / Python interpreter (optional for Python)",
+  "PythonScriptFile": "Python file (choose one target)",
+  "PythonModule": "Python module (alternative to file)",
+  "PythonSource": "Embedded Python source (alternative to file/module)",
+  "ProgramArguments": "Arguments — one per line",
+  "ProgramWorkingDirectory": "Working directory relative to project",
+  "ProgramEnvironment": "Environment — NAME=value, one per line",
+  "PipelineKitPythonApproval": "Allow running Python code on this machine",
+  "PipelineKitProgramApproval": "Allow running custom programs on this machine"
 }

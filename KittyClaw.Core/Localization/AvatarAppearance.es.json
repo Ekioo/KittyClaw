@@ -4,5 +4,8 @@
   "AvatarTheme": "Tema de los iconos",
   "AvatarThemeA": "Fondos oscuros",
   "AvatarThemeB": "Fondos de color",
-  "AvatarThemeC": "Fondos claros"
+  "AvatarThemeC": "Fondos claros",
+  "AvatarThemeD": "Iniciales — fondos de color",
+  "AvatarThemeE": "Iniciales — fondos oscuros",
+  "AvatarThemeF": "Iniciales — fondos claros"
 }

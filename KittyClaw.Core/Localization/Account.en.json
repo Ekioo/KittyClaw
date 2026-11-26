@@ -1,0 +1,19 @@
+{
+  "AccountTitle": "KittyClaw account",
+  "AccountHint": "Associate this installation with your GitHub or Google account to find it on my.kittyclaw.dev.",
+  "AccountConfigure": "Manage account association",
+  "AccountAssociate": "Associate my account",
+  "AccountAssociated": "Associated with",
+  "AccountPortal": "My instances",
+  "AccountDisconnect": "Disconnect this account",
+  "AccountConfirmTitle": "Confirm this account",
+  "AccountConfirmHint": "Check that this is your account before associating this machine.",
+  "AccountConfirm": "Associate this machine",
+  "AccountCancel": "Cancel association",
+  "AccountContinue": "Continue with GitHub or Google",
+  "AccountReturnHint": "Sign-in continues in this window. You will return here to confirm the account. The request expires after 10 minutes.",
+  "AccountRefresh": "Check association",
+  "AccountRevoked": "The association was revoked. You can associate this installation again.",
+  "AccountError": "The account service could not complete this request. Check your connection and try again.",
+  "AccountNetworkUnchanged": "Account association does not enable network access. Projects and files remain on this machine."
+}

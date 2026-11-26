@@ -15,8 +15,10 @@ public interface IInstalledUpdateClient
 
 public sealed class VelopackUpdateClient : IInstalledUpdateClient
 {
-    private readonly UpdateManager? _manager = OperatingSystem.IsWindows()
-        ? new UpdateManager(new GithubSource("https://github.com/Ekioo/KittyClaw", null, false))
+    // The installed manifest selects the architecture-specific channel. Experimental
+    // macOS packages may be attached to prereleases; Windows remains stable-only.
+    private readonly UpdateManager? _manager = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+        ? new UpdateManager(new GithubSource("https://github.com/Ekioo/KittyClaw", null, OperatingSystem.IsMacOS()))
         : null;
     private UpdateInfo? _update;
 

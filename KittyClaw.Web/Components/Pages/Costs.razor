@@ -6,7 +6,7 @@
 
 <PageTitle>@L["Costs"]</PageTitle>
 <UtilityPageHeader Title="@L["Costs"]" />
-<main class="costs-page utility-page-container">
+<div class="costs-page utility-page-container">
 
     <section class="cost-filter-card @(_mobileFiltersOpen ? "mobile-filters-open" : "")" aria-label="@L["CostFilters"]">
         <button type="button" class="mobile-filter-toggle" aria-expanded="@(_mobileFiltersOpen ? "true" : "false")"
@@ -167,7 +167,7 @@
             </section>
         }
     }
-</main>
+</div>
 
 @code {
     private bool _mobileFiltersOpen;

@@ -218,14 +218,24 @@
         {
             <button class="migration-secondary" @onclick="Back" disabled="@(_step is WizardStep.Intro or WizardStep.Questions || _busy)">@L["Back"]</button>
             <span></span>
+            @if (IsProjectOnboarding)
+            {
+                <button class="migration-secondary" data-testid="skip-project-workflow" @onclick="Close">@L["SkipOptionalStep"]</button>
+            }
             @if (_step == WizardStep.Questions)
             {
-                <button class="migration-secondary" @onclick="Close">@L["MigrationWizardLater"]</button>
+                @if (!IsProjectOnboarding)
+                {
+                    <button class="migration-secondary" @onclick="Close">@L["MigrationWizardLater"]</button>
+                }
                 <button class="settings-primary" @onclick="AnalyzeAsync" disabled="@string.IsNullOrWhiteSpace(_projectPurpose)">@L["ProjectOnboardingPropose"] →</button>
             }
             else if (_step == WizardStep.Intro)
             {
-                <button class="migration-secondary" @onclick="Close">@L["MigrationWizardLater"]</button>
+                @if (!IsProjectOnboarding)
+                {
+                    <button class="migration-secondary" @onclick="Close">@L["MigrationWizardLater"]</button>
+                }
                 <button class="settings-primary" @onclick="AnalyzeAsync">@L[IsProjectOnboarding ? "ProjectOnboardingAnalyze" : "MigrationWizardAnalyze"] →</button>
             }
             else if (_step == WizardStep.Pipelines)

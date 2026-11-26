@@ -56,7 +56,7 @@
                     <button type="button" class="folder-picker-up" @onclick="GoToParent" disabled="@(_loading || _parentPath is null)">
                         <span aria-hidden="true">↑</span> @L["FolderPickerParent"]
                     </button>
-                    <button type="button" class="header-action-btn" @onclick="BeginCreateFolder" disabled="@(_loading || string.IsNullOrWhiteSpace(_currentPath))">@L["FolderPickerNewFolder"]</button>
+                    <button type="button" class="header-action-btn settings-primary" @onclick="BeginCreateFolder" disabled="@(_loading || string.IsNullOrWhiteSpace(_currentPath))">@L["FolderPickerNewFolder"]</button>
                     <span class="folder-picker-count">@L.Get("FolderPickerFolderCount", _directories.Count)</span>
                 </div>
 

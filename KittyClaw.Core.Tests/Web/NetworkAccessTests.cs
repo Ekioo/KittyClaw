@@ -108,8 +108,7 @@ public sealed class NetworkAccessTests
             if (OperatingSystem.IsWindows()) options.ProtectKeysWithDpapi();
         });
         var access = new NetworkAccessService(dir.Path, protection, 5233);
-        var (enrollment, key) = Enrollment(access);
-        Assert.True(access.Enable(enrollment, Code(key, DateTimeOffset.UtcNow.AddSeconds(-30))));
+        access.EnableAccountAccess();
         var previous = Environment.GetEnvironmentVariable("KITTYCLAW_DATA_DIR");
         var previousDesktop = Environment.GetEnvironmentVariable("KITTYCLAW_DESKTOP");
         try
@@ -119,7 +118,7 @@ public sealed class NetworkAccessTests
             await using var factory = new StartupFactory();
             using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
             Assert.True(factory.Services.GetRequiredService<NetworkAccessService>().Listening);
-            var local = await client.GetAsync("http://localhost/network-setup");
+            var local = await client.GetAsync("http://localhost/access-setup");
             Assert.Equal(HttpStatusCode.OK, local.StatusCode);
             var setupHtml = await local.Content.ReadAsStringAsync();
             Assert.Contains("SHA-256", setupHtml);
@@ -131,18 +130,22 @@ public sealed class NetworkAccessTests
             var settings = await client.GetAsync("http://localhost/settings");
             Assert.Equal(HttpStatusCode.OK, settings.StatusCode);
             var settingsHtml = await settings.Content.ReadAsStringAsync();
-            Assert.Contains("network-global-settings", settingsHtml);
+            Assert.Contains("advanced-global-settings", settingsHtml);
             // Middleware pages own their document, styles and scripts and require a full navigation.
-            Assert.Contains("href=\"/network-setup\" data-enhance-nav=\"false\"", settingsHtml);
-            Assert.Contains("href=\"/remote-setup\" data-enhance-nav=\"false\"", settingsHtml);
-            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"https://{Environment.MachineName}/access")).StatusCode);
-            Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync($"https://{Environment.MachineName}/api/projects")).StatusCode);
+            Assert.DoesNotContain("action=\"/access-setup\"", settingsHtml);
+            Assert.DoesNotContain("action=\"/access/logout\"", settingsHtml);
+            Assert.DoesNotContain("name=\"mode\"", settingsHtml);
+            Assert.Contains("href=\"/access-setup\" data-enhance-nav=\"false\"", settingsHtml);
+            Assert.DoesNotContain("remote-global-settings", settingsHtml);
+            Assert.DoesNotContain("otpauth://", setupHtml);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"https://{Environment.MachineName}/access")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"https://{Environment.MachineName}/api/projects")).StatusCode);
             // Phones use an interface IP and the explicit HTTPS port, not the machine name.
             foreach (var address in factory.Services.GetRequiredService<NetworkAccessService>().Addresses)
             {
                 var origin = new UriBuilder("https", address.ToString(), 5233).Uri;
-                Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(new Uri(origin, "/access"))).StatusCode);
-                Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync(new Uri(origin, "/api/projects"))).StatusCode);
+                Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(new Uri(origin, "/access"))).StatusCode);
+                Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(new Uri(origin, "/api/projects"))).StatusCode);
             }
             Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("https://evil.test/access")).StatusCode);
         }

@@ -99,3 +99,14 @@ public record ChatMessageDto(string Role, string Text, string? ToolName, string?
 public record MoveTileRequest(int X, int Y); // required — pixel coords snapped to 20px grid
 public record ResizeTileRequest(int Width, int Height); // required — pixels snapped to 20px grid
 public record AddDependencyRequest(int BlockedById);
+
+/// <summary>Configuration only; execution state is server-owned. Keep IDs returned by GET when updating.</summary>
+public record ColumnScheduledTaskDefinitionRequest(
+    string Name, string Cron, List<ColumnProcessorAction> Actions,
+    string? Id = null, bool Enabled = true, string? TimeZoneId = null,
+    ScheduledTaskTicketScope TicketScope = ScheduledTaskTicketScope.None);
+public record SaveColumnScheduledTasksRequest(List<ColumnScheduledTaskDefinitionRequest> Tasks);
+public record ColumnScheduledTaskResponse(
+    string Id, int ColumnId, string Name, bool Enabled, string Cron, string TimeZoneId,
+    ScheduledTaskTicketScope TicketScope, List<ColumnProcessorAction> Actions,
+    DateTime NextRunAt, DateTime? LastRunAt, string? LastStatus, string? LastError);

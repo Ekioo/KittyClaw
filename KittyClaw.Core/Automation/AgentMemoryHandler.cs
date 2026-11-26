@@ -183,12 +183,13 @@ public sealed class AgentMemoryHandler(
         CancellationToken ct,
         bool deferCommitToCaller = false)
     {
-        var instructionPath = Path.Combine(workspace, ".agents", "memory-consolidation.md");
+        var instructionPath = AgentContextFiles.RequirePath(workspace,
+            Path.Combine(workspace, ".agents", "memory-consolidation.md"));
         if (!File.Exists(instructionPath))
             throw new InvalidOperationException($"Memory consolidation instructions not found: {instructionPath}");
 
-        var memoryDir = Path.Combine(workspace, ".agents", agent, "memory");
-        var legacyMemory = Path.Combine(workspace, ".agents", agent, "memory.md");
+        var memoryDir = AgentContextFiles.RequirePath(workspace, Path.Combine(workspace, ".agents", agent, "memory"));
+        var legacyMemory = AgentContextFiles.RequirePath(workspace, Path.Combine(workspace, ".agents", agent, "memory.md"));
         if (!Directory.Exists(memoryDir) && !File.Exists(legacyMemory))
             throw new DirectoryNotFoundException($"No persistent memory exists for agent '{agent}'.");
 

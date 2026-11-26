@@ -2,6 +2,8 @@
 @using KittyClaw.Core.Services
 @using KittyClaw.Core.Automation
 @inject ProjectService ProjectService
+@inject PipelineImportService PipelineImport
+@inject PipelineService Pipelines
 @inject RepositoryIntakeService RepositoryIntake
 @inject MinimalWorkflowService MinimalWorkflow
 @inject FirstRunProviderService FirstRunProvider
@@ -22,56 +24,62 @@
     <div class="modal-backdrop">
         <div class="modal-dialog project-creation" role="dialog" aria-modal="true" aria-labelledby="project-creation-title" aria-describedby="project-creation-intro" aria-busy="@_initializing" @onclick:stopPropagation>
             <header class="project-creation-header">
-                <h2 id="project-creation-title">@L["CreateProjectButton"]</h2>
-                <p id="project-creation-intro">@L["RepositoryIntakeIntro"]</p>
+                <h2 id="project-creation-title">@L[_objectiveStep ? "WorkflowHelpQuestion" : "CreateProjectButton"]</h2>
+                <p id="project-creation-intro">@L[_objectiveStep ? "WorkflowHelpIntro" : "CreationWorkspaceHint"]</p>
             </header>
 
-            <div class="project-creation-field">
-            <label for="new-project-name" class="settings-label">@L["ProjectName"] <span aria-hidden="true">*</span></label>
-            <div class="settings-row">
-                <input id="new-project-name" class="settings-input" placeholder="@L["NewProjectPlaceholder"]"
-                       required autocomplete="off" data-testid="create-project-name"
-                       @bind="_newProjectName" @bind:event="oninput" @onkeydown="HandleKeyDown" />
-            </div>
-
-            </div>
-
-            <div class="project-creation-field">
-            <label for="repository-path" class="settings-label">@L["WorkspacePath"] <span aria-hidden="true">*</span></label>
-            <p id="creation-workspace-hint" class="settings-hint">@L["CreationWorkspaceHint"]</p>
-            <div class="settings-row">
-                <input id="repository-path" required aria-describedby="creation-workspace-hint" class="settings-input" data-testid="create-project-workspace" placeholder="@L["WorkspacePlaceholder"]" @bind="_newWorkspacePath" @bind:event="oninput" @bind:after="OnWorkspaceChanged" />
-                <button class="settings-browse" type="button" @onclick="OpenFolderPicker">
-                    <span aria-hidden="true">📁</span> @L["Browse"]
-                </button>
-            </div>
-
-            </div>
-
-            <div class="project-creation-field">
-            <label for="first-objective" class="settings-label">@L["FirstObjective"] <span aria-hidden="true">*</span></label>
-            <textarea id="first-objective" required rows="4" class="settings-input" placeholder="@L["FirstObjectiveHint"]" @bind="_objective" @bind:event="oninput"></textarea>
-            </div>
-
-            @if (!string.IsNullOrWhiteSpace(_newWorkspacePath) && _workspaceExists == false)
+            @if (!_objectiveStep)
             {
-                <div class="settings-status settings-status-err">
-                    <span>@L["WorkspaceMissing"]</span>
-                    <button class="header-action-btn" @onclick="CreateWorkspaceFolder" disabled="@_creatingFolder" style="margin-left:0.75rem">
-                        @(_creatingFolder ? "…" : L["CreateFolder"])
+                <div class="project-creation-field">
+                <label for="new-project-name" class="settings-label">@L["ProjectName"] <span aria-hidden="true">*</span></label>
+                <div class="settings-row">
+                    <input id="new-project-name" class="settings-input" placeholder="@L["NewProjectPlaceholder"]"
+                           required autocomplete="off" data-testid="create-project-name"
+                           @bind="_newProjectName" @bind:event="oninput" @onkeydown="HandleKeyDown" />
+                </div>
+
+                </div>
+
+                <div class="project-creation-field">
+                <label for="repository-path" class="settings-label">@L["WorkspacePath"] <span aria-hidden="true">*</span></label>
+                <p id="creation-workspace-hint" class="settings-hint">@L["CreationWorkspaceHint"]</p>
+                <div class="settings-row">
+                    <input id="repository-path" required aria-describedby="creation-workspace-hint" class="settings-input" data-testid="create-project-workspace" placeholder="@L["WorkspacePlaceholder"]" @bind="_newWorkspacePath" @bind:event="oninput" @bind:after="OnWorkspaceChanged" />
+                    <button class="settings-browse" type="button" @onclick="OpenFolderPicker">
+                        <span aria-hidden="true">📁</span> @L["Browse"]
                     </button>
                 </div>
-            }
 
-            @if (_gitWorkspace?.CanInitialize == true)
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(_newWorkspacePath) && _workspaceExists == false)
+                {
+                    <div class="settings-status settings-status-err">
+                        <span>@L["WorkspaceMissing"]</span>
+                        <button class="header-action-btn" @onclick="CreateWorkspaceFolder" disabled="@_creatingFolder" style="margin-left:0.75rem">
+                            @(_creatingFolder ? "…" : L["CreateFolder"])
+                        </button>
+                    </div>
+                }
+
+                @if (_gitWorkspace?.CanInitialize == true)
+                {
+                    <label class="settings-option creation-git-option" data-testid="create-project-git-option">
+                        <input type="checkbox" data-testid="create-project-git-init" @bind="_initializeGit" />
+                        <span>
+                            <strong>@L["CreateGitRepository"]</strong>
+                            <small>@L["CreateGitRepositoryHint"]</small>
+                        </span>
+                    </label>
+                }
+
+            }
+            else
             {
-                <label class="settings-option creation-git-option" data-testid="create-project-git-option">
-                    <input type="checkbox" data-testid="create-project-git-init" @bind="_initializeGit" />
-                    <span>
-                        <strong>@L["CreateGitRepository"]</strong>
-                        <small>@L["CreateGitRepositoryHint"]</small>
-                    </span>
-                </label>
+                <div class="project-creation-field">
+                    <label for="first-objective" class="settings-label">@L["FirstObjective"]</label>
+                    <textarea id="first-objective" rows="4" class="settings-input" placeholder="@L["FirstObjectiveHint"]" @bind="_objective" @bind:event="oninput"></textarea>
+                </div>
             }
 
             @if (_creationStatus is not null)
@@ -100,9 +108,18 @@
 
             <div class="modal-actions">
                 <button class="header-action-btn" @onclick="CancelCreation" disabled="@_initializing">@L["Cancel"]</button>
-                <button id="validate-repository" class="header-action-btn settings-primary" data-testid="create-project-initialize" @onclick="StartInitialize" disabled="@(_initializing || _initConflicts is not null || string.IsNullOrWhiteSpace(_newProjectName) || string.IsNullOrWhiteSpace(_newWorkspacePath) || string.IsNullOrWhiteSpace(_objective))">
-                    @(_initializing ? "…" : L["ValidateRepository"])
-                </button>
+                @if (!_objectiveStep)
+                {
+                    <button class="header-action-btn settings-primary" data-testid="create-project-next" @onclick="ContinueToObjective" disabled="@(_initializing || string.IsNullOrWhiteSpace(_newProjectName) || string.IsNullOrWhiteSpace(_newWorkspacePath))">@L["Continue"]</button>
+                }
+                else
+                {
+                    <button class="header-action-btn" @onclick="BackToDetails" disabled="@_initializing">@L["Back"]</button>
+                    <button class="header-action-btn" data-testid="create-project-empty" @onclick="() => StartInitialize(true)" disabled="@(_initializing || _initConflicts is not null)">@L["SkipOptionalStep"]</button>
+                    <button id="validate-repository" class="header-action-btn settings-primary" data-testid="create-project-initialize" @onclick="() => StartInitialize()" disabled="@(_initializing || _initConflicts is not null || string.IsNullOrWhiteSpace(_objective))">
+                        @(_initializing ? "…" : L["WorkflowHelpAccept"])
+                    </button>
+                }
             </div>
         </div>
     </div>
@@ -115,9 +132,20 @@
                         OnCancel="CloseFolderPicker" />
 }
 
-@if (_createdProject is not null && _validatedIntake is not null && !_firstTicketConfirmed)
+@if (_createdProject is not null && _pipelineImportNotices.Count > 0)
 {
-    <FirstTicketDraft ProjectSlug="@_createdProject.Slug" Intake="@_validatedIntake" OnConfirmed="FirstTicketConfirmed" />
+    <div class="modal-backdrop"><div class="modal-dialog" role="alertdialog" aria-modal="true">
+        <h2>@L["PipelineKitImport"]</h2>
+        @foreach (var notice in _pipelineImportNotices)
+        {
+            <div class="settings-status settings-status-err">@notice</div>
+        }
+        <div class="modal-actions"><button class="header-action-btn settings-primary" @onclick="DismissPipelineNotices">@L["Close"]</button></div>
+    </div></div>
+}
+else if (_createdProject is not null && _validatedIntake is not null && !_firstTicketConfirmed)
+{
+    <FirstTicketDraft ProjectSlug="@_createdProject.Slug" Intake="@_validatedIntake" OnConfirmed="FirstTicketConfirmed" OnSkipped="SkipFirstTicket" />
 }
 else if (_createdProject is not null)
 {
@@ -133,7 +161,7 @@ else if (_createdProject is not null)
     <div class="modal-backdrop"><div class="modal-dialog" @onclick:stopPropagation>
         <h2>@L["FirstRunProviderTitle"]</h2>
         <div class="settings-status settings-status-err">@_providerGuidance</div>
-        <div class="modal-actions"><button id="retry-first-run-provider" class="header-action-btn settings-primary" @onclick="RetryFirstRunAsync">@L["FirstRunProviderRetry"]</button></div>
+        <div class="modal-actions"><button class="header-action-btn" @onclick="SkipFirstRun">@L["SkipOptionalStep"]</button><button id="retry-first-run-provider" class="header-action-btn settings-primary" @onclick="RetryFirstRunAsync">@L["FirstRunProviderRetry"]</button></div>
     </div></div>
 }
 
@@ -142,6 +170,7 @@ else if (_createdProject is not null)
     [Parameter] public EventCallback<Project> OnCreated { get; set; }
 
     private bool _open;
+    private bool _objectiveStep;
     private string _newProjectName = "";
     private string _newWorkspacePath = "";
     private bool _folderPickerOpen;
@@ -155,11 +184,13 @@ else if (_createdProject is not null)
     private IDisposable? _escPending;
     private bool _workspaceWasEmpty;
     private Project? _createdProject;
+    private List<string> _pipelineImportNotices = [];
     private AgentsTemplateService.GitWorkspaceInspection? _gitWorkspace;
     private bool _initializeGit = true;
     private int _workspaceInspectionVersion;
     private RepositoryIntakeState? _validatedIntake;
     private bool _firstTicketConfirmed;
+    private bool _skipSetup;
     private int? _firstTicketId;
     private string? _providerGuidance;
     private bool _interactive;
@@ -181,6 +212,12 @@ else if (_createdProject is not null)
     private void OpenCreation()
     {
         _open = true;
+        _objectiveStep = false;
+        _validatedIntake = null;
+        _pipelineImportNotices.Clear();
+        _skipSetup = false;
+        _firstTicketId = null;
+        _providerGuidance = null;
         _newProjectName = "";
         _newWorkspacePath = "";
         _objective = "";
@@ -194,7 +231,39 @@ else if (_createdProject is not null)
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
     {
-        if (e.Key == "Enter") await StartInitialize();
+        if (e.Key == "Enter")
+        {
+            if (_objectiveStep) await StartInitialize();
+            else ContinueToObjective();
+        }
+    }
+
+    private void ContinueToObjective()
+    {
+        if (_initializing || string.IsNullOrWhiteSpace(_newProjectName) || string.IsNullOrWhiteSpace(_newWorkspacePath)) return;
+        _creationStatus = null;
+        try
+        {
+            ProjectService.ValidateWorkspacePath(_newWorkspacePath.Trim());
+            if (!Directory.Exists(_newWorkspacePath.Trim()))
+            {
+                _workspaceExists = false;
+                _creationStatus = (L["WorkspaceMissing"], "settings-status-err");
+                return;
+            }
+            _objectiveStep = true;
+        }
+        catch (Exception ex)
+        {
+            _creationStatus = ($"{L["Error"]}: {ex.Message}", "settings-status-err");
+        }
+    }
+
+    private void BackToDetails()
+    {
+        _objectiveStep = false;
+        _initConflicts = null;
+        _creationStatus = null;
     }
 
     private async Task OnWorkspaceChanged()
@@ -244,16 +313,28 @@ else if (_createdProject is not null)
 
     private void CloseFolderPicker() => _folderPickerOpen = false;
 
-    private async Task StartInitialize()
+    private async Task StartInitialize(bool skipSetup = false)
     {
-        if (!_open || _initializing) return;
-        if (string.IsNullOrWhiteSpace(_newProjectName) || string.IsNullOrWhiteSpace(_newWorkspacePath) || string.IsNullOrWhiteSpace(_objective)) return;
+        if (!_open || !_objectiveStep || _initializing) return;
+        if (!skipSetup && string.IsNullOrWhiteSpace(_objective)) return;
+        if (string.IsNullOrWhiteSpace(_newProjectName) || string.IsNullOrWhiteSpace(_newWorkspacePath)) return;
+        _skipSetup = skipSetup;
         _initializing = true;
         _creationStatus = null;
         try
         {
             var workspace = _newWorkspacePath.Trim();
             _workspaceWasEmpty = Directory.Exists(workspace) && !Directory.EnumerateFileSystemEntries(workspace).Any();
+            if (_skipSetup)
+            {
+                if (!Directory.Exists(workspace))
+                {
+                    _creationStatus = (L["WorkspaceMissing"], "settings-status-err");
+                    return;
+                }
+                await CreateAndInitialize(false);
+                return;
+            }
             var intake = await RepositoryIntake.SelectAndValidateAsync(
                 _journeyId, workspace, _objective, initializeGit: _initializeGit);
             _journeyId = intake.JourneyId;
@@ -291,16 +372,22 @@ else if (_createdProject is not null)
             // Validate BEFORE creating: a rejected workspace must not leave a half-created
             // project behind (§2.6 — relative / ".." / drive root / system dirs).
             ProjectService.ValidateWorkspacePath(_newWorkspacePath.Trim());
+            if (!_skipSetup) AgentsTemplate.ValidateWriteDestinations(_newWorkspacePath.Trim(), overwrite);
             var project = await ProjectService.CreateProjectAsync(_newProjectName.Trim());
             await ProjectService.UpdateProjectAsync(project.Slug, _newWorkspacePath.Trim());
             var initializeGit = _gitWorkspace?.CanInitialize == true && _initializeGit;
-            await AgentsTemplate.InitializeAsync(_newWorkspacePath.Trim(), overwrite, initializeGit);
+            if (!_skipSetup) await AgentsTemplate.InitializeAsync(_newWorkspacePath.Trim(), overwrite, initializeGit);
+            if (_skipSetup)
+                await Pipelines.ListAsync(project.Slug);
+            else
+                _pipelineImportNotices = await PipelineImport.ImportWorkspaceAsync(project.Slug);
 
             _newProjectName = "";
             _open = false;
             _createdProject = project;
-            _firstTicketConfirmed = false;
+            _firstTicketConfirmed = string.IsNullOrWhiteSpace(_objective);
             await OnCreated.InvokeAsync(project);
+            if (_skipSetup && _pipelineImportNotices.Count == 0) await FinishOnboarding();
         }
         catch (Exception ex)
         {
@@ -317,6 +404,12 @@ else if (_createdProject is not null)
         _creationStatus = null;
     }
 
+    private async Task DismissPipelineNotices()
+    {
+        _pipelineImportNotices.Clear();
+        if (_skipSetup) await FinishOnboarding();
+    }
+
     private Task FinishOnboarding()
     {
         var project = _createdProject;
@@ -324,6 +417,14 @@ else if (_createdProject is not null)
         if (NavigateToProject && project is not null)
             Nav.NavigateTo($"/board/{project.Slug}");
         return Task.CompletedTask;
+    }
+
+    private void SkipFirstTicket() => _firstTicketConfirmed = true;
+
+    private void SkipFirstRun()
+    {
+        _providerGuidance = null;
+        _firstTicketConfirmed = true;
     }
 
     private async Task FirstTicketConfirmed(int ticketId)

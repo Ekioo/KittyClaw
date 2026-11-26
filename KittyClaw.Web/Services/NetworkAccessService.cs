@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.DataProtection;
 
 namespace KittyClaw.Web.Services;
 
-/// <summary>Opt-in authenticator-only network access. Secrets and sessions are protected at rest.</summary>
+/// <summary>Protected network opt-in, IP rules and legacy state migration. Account MFA owns sign-in.</summary>
 public sealed class NetworkAccessService
 {
     private readonly object _gate = new();
@@ -59,7 +59,19 @@ public sealed class NetworkAccessService
         }
         return System.Net.IPNetwork.TryParse(entry, out network);
     }
-    public bool Enabled { get { lock (_gate) return _state.Secret is not null; } }
+    public bool Enabled { get { lock (_gate) return _state.AccountAccess || _state.Secret is not null; } }
+    public bool AccountAccessEnabled { get { lock (_gate) return _state.AccountAccess; } }
+    internal string AccessGeneration { get { lock (_gate) return _state.Generation; } }
+    public void EnableAccountAccess()
+    {
+        lock (_gate)
+        {
+            var next = _state with { AccountAccess = true, Secret = null, Generation = Guid.NewGuid().ToString("N"), RevokedSessions = [] };
+            Save(next);
+            _state = next;
+        }
+        SessionsRevoked?.Invoke();
+    }
     public bool Listening { get; set; }
     public int Port { get; }
     public IReadOnlyList<IPAddress> Addresses { get; } = GetAddresses();
@@ -270,6 +282,7 @@ public sealed class NetworkAccessService
 
     private sealed record State
     {
+        public bool AccountAccess { get; init; }
         public bool RestrictNetwork { get; init; }
         public string[] AllowedNetworks { get; init; } = [];
         public string? Secret { get; init; }

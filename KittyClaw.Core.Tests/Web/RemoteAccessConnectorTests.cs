@@ -137,7 +137,8 @@ public sealed class RemoteAccessConnectorTests
             await WaitUntil(() => f.Runtime.Starts == 2);
             Assert.Equal(url, f.Store.Snapshot.Url);
             Assert.Equal(0, f.Handler.Registrations);
-            f.Access.Disable();
+            f.AccountHandler.MfaEnabled = false;
+            await f.Accounts.RefreshAsync(default);
             await WaitUntil(() => f.Runtime.Cancellations == 2);
             await WaitUntil(() => f.Connector.Status.State == "AuthenticationRequired");
         }
@@ -149,6 +150,8 @@ public sealed class RemoteAccessConnectorTests
     {
         using var f = new Fixture(preconfigured: true);
         f.Access.Disable();
+        f.AccountHandler.MfaEnabled = false;
+        await f.Accounts.RefreshAsync(default);
         await f.Connector.StartAsync(default);
         try
         {
@@ -414,6 +417,9 @@ public sealed class RemoteAccessConnectorTests
         public Runtime Runtime { get; } = new();
         public RemoteTunnelOptions Origin { get; }
         public RemoteAccessConnector Connector { get; }
+        public AccountHandler AccountHandler { get; } = new();
+        public AccountAssociationService Accounts { get; }
+        private readonly HttpClient _accountHttp;
         private readonly HttpClient _http;
         public Fixture(bool enrolled = true, bool preconfigured = false)
         {
@@ -432,8 +438,32 @@ public sealed class RemoteAccessConnectorTests
             Origin = Store.OriginOptions(new());
             Handler = new(Store);
             _http = new HttpClient(Handler) { MaxResponseContentBufferSize = 64 * 1024 };
-            Connector = new(Store, new(_http, new Uri(BrokerOrigin)), Runtime, Origin, Access, new Lifetime());
+            _accountHttp = new(AccountHandler);
+            Accounts = new(_dir.Path, protection, _accountHttp);
+            AccountHandler.MfaEnabled = enrolled;
+            Accounts.BeginAssociationAsync(default).GetAwaiter().GetResult();
+            Accounts.RefreshAsync(default).GetAwaiter().GetResult();
+            Accounts.ConfirmAsync(RemoteAccessConnectorTests.AccountHandler.Account.Id, default).GetAwaiter().GetResult();
+            Accounts.RefreshAsync(default).GetAwaiter().GetResult();
+            Connector = new(Store, new(_http, new Uri(BrokerOrigin)), Runtime, Origin, Access, new Lifetime(), Accounts);
         }
-        public void Dispose() { Connector.Dispose(); _http.Dispose(); _dir.Dispose(); }
+        public void Dispose() { Connector.Dispose(); Accounts.Dispose(); _accountHttp.Dispose(); _http.Dispose(); _dir.Dispose(); }
+    }
+    private sealed class AccountHandler : HttpMessageHandler
+    {
+        public static readonly AssociatedAccount Account = new("f8e66066-4b2e-41d4-8e48-96e3204ee113", "Owner", null);
+        public bool MfaEnabled = true;
+        private bool _linked;
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            object body = request.RequestUri!.AbsolutePath.Split('/').Last() switch
+            {
+                "associate" => new { authorizationUrl = AccountAssociationService.PortalOrigin + "/associate?request=" + new string('a', 64), expiresAt = DateTimeOffset.UtcNow.AddMinutes(10).ToUnixTimeSeconds() },
+                "status" => new { account = _linked ? Account : null, proposedAccount = _linked ? null : Account, revoked = false, mfaEnabled = MfaEnabled },
+                "confirm" => new { associated = _linked = true },
+                _ => throw new InvalidOperationException()
+            };
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(body) });
+        }
     }
 }

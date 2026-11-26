@@ -54,6 +54,8 @@ public sealed class ModelCostEstimatorTests
     }
 
     [Theory]
+    [InlineData("mistral:mistral-large-4-0", 3.57)]
+    [InlineData("mistral:mistral-large-4", 3.57)]
     [InlineData("mistral:mistral-medium-3.5", 10.65)]
     [InlineData("mistral:devstral-small", 0.51)]
     public void MistralVibeAliases_UseOfficialRateCard(string model, double expected)

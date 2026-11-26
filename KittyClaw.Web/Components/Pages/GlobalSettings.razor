@@ -6,7 +6,8 @@
 @inject AgentCliReadinessService CliReadiness
 @inject RtkIntegrationService RtkIntegration
 @inject LocalizationService L
-@inject RemoteAccessStore RemoteAccess
+@inject KittyClaw.Web.Services.AccountAssociationService Accounts
+@inject NavigationManager Navigation
 @rendermode InteractiveServer
 @implements IDisposable
 
@@ -17,25 +18,38 @@
 <MobileSectionNavigation Sections="@MobileSections" @bind-Active="_mobileSection" />
 
 <div class="settings-container utility-page-container global-settings">
-    <section class="settings-section mobile-section-panel @(_mobileSection == "network" ? "mobile-section-active" : "")" data-testid="network-global-settings">
-        <h2>@L["NetworkTitle"]</h2>
-        <p class="settings-hint">@L["NetworkHint"]</p>
-        <a class="settings-browse" href="/network-setup" data-enhance-nav="false">@L["NetworkConfigure"]</a>
-        <p class="settings-hint">@L["NetworkLocalSetup"]</p>
-        <form method="post" action="/access/logout">
-            <AntiforgeryToken />
-            <button type="submit" class="settings-browse">@L["NetworkLogout"]</button>
-        </form>
-    </section>
-    <section class="settings-section mobile-section-panel @(_mobileSection == "remote" ? "mobile-section-active" : "")" data-testid="remote-global-settings">
-        <h2>@L["RemoteTitle"]</h2>
-        <p class="settings-hint">@L["RemoteHint"]</p>
-        @if (RemoteAccess.Snapshot.Url is { } publicUrl)
+    <section class="settings-section mobile-section-panel @(_mobileSection == "account" ? "mobile-section-active" : "")" data-testid="account-global-settings">
+        <h2>@L["AccountTitle"]</h2>
+        <p class="settings-hint">@L["AccountHint"]</p>
+        @if (Accounts.Snapshot.Account is { } account)
         {
-            <RemoteAccessQr Url="@publicUrl" Enabled="@RemoteAccess.Snapshot.Enabled" />
+            <div class="account-summary settings-status settings-status-ok">
+                <span>@L["AccountAssociated"] <strong>@account.Name</strong></span>
+                @if (!string.IsNullOrWhiteSpace(account.Email))
+                {
+                    <span>@account.Email</span>
+                }
+            </div>
+            <p><a class="settings-browse" href="https://my.kittyclaw.dev">@L["AccountPortal"] ↗</a></p>
         }
-        <a class="settings-browse" href="/remote-setup" data-enhance-nav="false">@L["RemoteConfigure"]</a>
-        <p class="settings-hint">@L["NetworkLocalSetup"]</p>
+        else
+        {
+            <p class="settings-hint">@L[Accounts.Snapshot.AuthorizationUrl is null ? "AccountNotAssociated" : "AccountPending"]</p>
+        }
+        <a class="settings-browse" href="/account-setup" data-enhance-nav="false">@L["AccountConfigure"]</a>
+        <p class="settings-hint">@L["AccountNetworkUnchanged"]</p>
+        @if (HasRemoteSession)
+        {
+            <p class="settings-hint">@L["AccountInstanceSessionHint"]</p>
+            <form method="post" action="/access/logout">
+                <AntiforgeryToken />
+                <button type="submit" class="settings-browse">@L["AccountInstanceSignOut"]</button>
+            </form>
+        }
+    </section>
+    <section class="settings-section mobile-section-panel @(_mobileSection == "advanced" ? "mobile-section-active" : "")" data-testid="advanced-global-settings">
+        <h2>@L["AdvancedSettings"]</h2>
+        <a class="settings-browse" href="/access-setup" data-enhance-nav="false">@L["AccessTitle"] →</a>
     </section>
     <section class="settings-section mobile-section-panel @(_mobileSection == "language" ? "mobile-section-active" : "")" data-testid="language-global-settings">
         <h2>@L["Language"]</h2>
@@ -58,7 +72,7 @@
         <p class="settings-hint">@L["AvatarThemeHint"]</p>
         <fieldset class="avatar-theme-picker">
             <legend class="avatar-theme-legend">@L["AvatarTheme"]</legend>
-            @foreach (var theme in new[] { "A", "B", "C" })
+            @foreach (var theme in new[] { "A", "B", "C", "E", "D", "F" })
             {
                 <label class="avatar-theme-option">
                     <span class="avatar-theme-heading">
@@ -148,18 +162,21 @@
 </div>
 
 @code {
-    private string _mobileSection = "network";
+    private string _mobileSection = "account";
+    // Visibility only: remote rendering already requires a verified account session.
+    private bool HasRemoteSession => Uri.TryCreate(Navigation.Uri, UriKind.Absolute, out var uri)
+        && uri.Scheme == Uri.UriSchemeHttps && !uri.IsLoopback;
     private IReadOnlyList<MobileSectionNavigation.Section> MobileSections =>
     [
-        new("network", L["NetworkTitle"]),
-        new("remote", L["RemoteTitle"]),
+        new("account", L["AccountTitle"]),
+        new("advanced", L["AdvancedSettings"]),
         new("language", L["Language"]),
         new("appearance", L["AvatarAppearance"]),
         new("providers", L["AgentProvidersTitle"]),
         new("mcp", L["McpServerTitle"]),
     ];
 
-    private static readonly string[] AvatarPreviewSeeds = [ "studio", "atlas", "garden", "orbit", "canvas", "lumen" ];
+    private static readonly string[] AvatarPreviewSeeds = [ "Studio Design", "Atlas", "Garden Planner", "Orbit", "Canvas Art", "Lumen" ];
     protected override void OnInitialized()
     {
         L.OnLanguageChanged += OnLanguageChanged;

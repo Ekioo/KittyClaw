@@ -1,4 +1,9 @@
 {
+  "WorkflowHelpQuestion": "Soll ich Ihnen beim Erstellen Ihres ersten Workflows helfen?",
+  "WorkflowHelpIntro": "Beschreiben Sie Ihr Ziel oder überspringen Sie diesen Schritt, um nur den Standardworkflow main zu erstellen.",
+  "WorkflowHelpAccept": "Ja, helfen Sie mir",
+  "SkipOptionalStep": "Überspringen",
+  "SkipCreateEmpty": "Überspringen und leeres Projekt erstellen",
   "Save": "Speichern",
   "Cancel": "Stornieren",
   "Delete": "Löschen",
@@ -58,5 +63,16 @@
   "ProviderSharedClaudeCli": "Gemeinsamer Transport: Die Erkennung bestätigt Claude Code; der DeepSeek-Schlüssel bleibt projektspezifisch.",
   "AgentProvidersDetectionNote": "Die Erkennung prüft das CLI, ohne Zugangsdaten zu lesen oder anzuzeigen. Projektspezifische Geheimnisse bleiben im Vault.",
   "RtkGlobalHelp": "Optionaler Optimierer für Shell-Ausgaben. Aktivieren Sie RTK separat in den Einstellungen jedes Projekts. Programmdatei überschreiben: KITTYCLAW_RTK_BIN.",
-  "All": "- alle -"
+  "All": "- alle -",
+  "ActionExecutePython": "Python",
+  "ActionExecuteProgram": "Run a program",
+  "ProgramExecutable": "Executable / Python interpreter (optional for Python)",
+  "PythonScriptFile": "Python file (choose one target)",
+  "PythonModule": "Python module (alternative to file)",
+  "PythonSource": "Embedded Python source (alternative to file/module)",
+  "ProgramArguments": "Arguments — one per line",
+  "ProgramWorkingDirectory": "Working directory relative to project",
+  "ProgramEnvironment": "Environment — NAME=value, one per line",
+  "PipelineKitPythonApproval": "Allow running Python code on this machine",
+  "PipelineKitProgramApproval": "Allow running custom programs on this machine"
 }

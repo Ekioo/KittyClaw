@@ -30,6 +30,45 @@ public sealed class PipelineImportServiceTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
+    [Fact]
+    public async Task Workspace_import_processes_root_kits_and_continues_after_invalid_archives()
+    {
+        var project = await _projects.CreateProjectAsync("Workspace kits");
+        var workspace = _projects.ResolveWorkspacePath(project);
+        await File.WriteAllBytesAsync(Path.Combine(workspace, "00-invalid.kittyclaw-pipeline"), [1, 2, 3]);
+        await File.WriteAllBytesAsync(Path.Combine(workspace, "01-valid.kittyclaw-pipeline"), BuildKit());
+        await File.WriteAllBytesAsync(Path.Combine(workspace, "02-valid.KITTYCLAW-PIPELINE"), BuildKit());
+        var nested = Directory.CreateDirectory(Path.Combine(workspace, "nested")).FullName;
+        await File.WriteAllBytesAsync(Path.Combine(nested, "ignored.kittyclaw-pipeline"), BuildKit());
+        var before = (await _pipelines.ListAsync(project.Slug)).Count;
+
+        var notices = await _import.ImportWorkspaceAsync(project.Slug);
+
+        Assert.Single(notices);
+        Assert.Contains("00-invalid.kittyclaw-pipeline", notices[0]);
+        var pipelines = await _pipelines.ListAsync(project.Slug);
+        Assert.Equal(before + 2, pipelines.Count);
+        Assert.Contains(pipelines, p => p.Name.EndsWith(" (2)"));
+        Assert.True(File.Exists(Path.Combine(workspace, "01-valid.kittyclaw-pipeline")));
+    }
+
+    [Fact]
+    public async Task Workspace_import_keeps_unapproved_actions_disabled()
+    {
+        var project = await _projects.CreateProjectAsync("Unapproved workspace kit");
+        var workspace = _projects.ResolveWorkspacePath(project);
+        await File.WriteAllBytesAsync(Path.Combine(workspace, "risky.kittyclaw-pipeline"), BuildKit(riskyActions: true));
+
+        var notices = await _import.ImportWorkspaceAsync(project.Slug);
+
+        Assert.Single(notices);
+        Assert.Contains("approval:executePowerShell", notices[0]);
+        Assert.Contains("approval:httpRequest", notices[0]);
+        var processors = await _processors.ListAsync(project.Slug);
+        Assert.NotEmpty(processors);
+        Assert.All(processors, processor => Assert.False(processor.Enabled));
+    }
+
     [Theory]
     [InlineData("../escape.txt", "unsafe-path")]
     [InlineData("/absolute.txt", "unsafe-path")]

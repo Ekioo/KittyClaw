@@ -1,0 +1,19 @@
+{
+  "AccountTitle": "KittyClaw-Konto",
+  "AccountHint": "Ordne diese Installation deinem GitHub- oder Google-Konto zu, um sie auf my.kittyclaw.dev zu finden.",
+  "AccountConfigure": "Kontozuordnung verwalten",
+  "AccountAssociate": "Mein Konto zuordnen",
+  "AccountAssociated": "Zugeordnet zu",
+  "AccountPortal": "Meine Instanzen",
+  "AccountDisconnect": "Dieses Konto trennen",
+  "AccountConfirmTitle": "Dieses Konto bestätigen",
+  "AccountConfirmHint": "Prüfe, ob dies dein Konto ist, bevor du diesen Rechner zuordnest.",
+  "AccountConfirm": "Diesen Rechner zuordnen",
+  "AccountCancel": "Zuordnung abbrechen",
+  "AccountContinue": "Mit GitHub oder Google fortfahren",
+  "AccountReturnHint": "Die Anmeldung wird in diesem Fenster fortgesetzt. Danach kehrst du hierher zurück, um das Konto zu bestätigen. Die Anfrage läuft nach 10 Minuten ab.",
+  "AccountRefresh": "Zuordnung prüfen",
+  "AccountRevoked": "Die Zuordnung wurde widerrufen. Du kannst diese Installation erneut zuordnen.",
+  "AccountError": "Der Kontodienst konnte die Anfrage nicht abschließen. Prüfe deine Verbindung und versuche es erneut.",
+  "AccountNetworkUnchanged": "Die Kontozuordnung aktiviert keinen Netzwerkzugriff. Projekte und Dateien bleiben auf diesem Rechner."
+}

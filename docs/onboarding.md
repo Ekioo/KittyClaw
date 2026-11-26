@@ -12,12 +12,10 @@ You can continue when an optional provider is missing, and the board remains usa
 
 1. On the home page, select **Create a project**.
 2. Enter a project name and choose its workspace. **Browse** opens KittyClaw's integrated folder browser, not an operating-system dialog. It works on Windows, macOS, and Linux and provides home/root shortcuts, mounted drives, breadcrumbs, parent navigation, and direct path entry. **New folder** creates a named child of the displayed folder and opens it for selection; invalid names and existing entries are reported inline. You can still type an absolute path manually; use **Create folder** if it does not exist yet.
-3. Select **Initialize**. KittyClaw then:
-   - creates the project registry entry and its board database;
-   - copies the built-in skills, memory files, and `agent-budget.json` into `<workspace>/.agents/`, plus `CLAUDE.md` into the workspace root;
-   - runs `git init` if the workspace is not already a repository and Git is available;
-   - creates one board member for each built-in agent role; and
-   - opens the project workflow setup wizard.
+3. Select **Continue**. A separate step asks **Would you like me to help you create your first workflow?** Enter an objective and select **Yes, help me get started** for guided setup.
+4. Select **Skip** to bypass all remaining setup and open the board with only the default `main` workflow. No ticket, agent run, workspace pipeline import, template file, or Git initialization is created by this shortcut.
+
+The first-ticket draft offers **Skip** to continue to workflow setup without creating a ticket or starting an agent. Without an objective, the draft is omitted. Provider guidance can also be skipped if the first run is unavailable. Every workflow setup step offers **Skip** until application starts; skipping leaves the proposal unapplied. Configure the project later from its board and settings.
 
 If template files already exist, KittyClaw asks whether to overwrite them or keep the existing versions.
 

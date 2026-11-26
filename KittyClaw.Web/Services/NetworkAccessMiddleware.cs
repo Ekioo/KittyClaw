@@ -74,6 +74,9 @@ public sealed class NetworkAccessMiddleware(RequestDelegate next)
         var directNetwork = context.Features.Get<RemoteTunnelRequest>() is null;
         if (directNetwork && !access.AllowsNetwork(context.Connection.RemoteIpAddress))
         { context.Response.StatusCode = 403; return; }
+        if (context.Request.IsHttps && context.Features.Get<AccountTunnelAuthenticated>() is not null
+            && (!directNetwork || access.AccountAccessEnabled))
+        { await next(context); return; }
         if (!access.Enabled || !context.Request.IsHttps) { context.Response.StatusCode = 403; return; }
 
         if (login || logout)
@@ -274,7 +277,7 @@ public sealed class NetworkAccessMiddleware(RequestDelegate next)
     }
 
     private static string E(string value) => WebUtility.HtmlEncode(value);
-    internal static async Task Page(HttpContext context, string title, string content)
+    internal static async Task Page(HttpContext context, string title, string content, string? formNavigationOrigin = null, string? clientScript = null)
     {
         context.Response.ContentType = "text/html; charset=utf-8";
         var nonce = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
@@ -283,18 +286,20 @@ public sealed class NetworkAccessMiddleware(RequestDelegate next)
         var localAssets = local ? " 'self'" : "";
         var shellStyles = local ? "<link rel='stylesheet' href='/css/windows-desktop.css'>" : "";
         var header = local ? $"<header class='page-header setup-header'><a href='/settings'>← {E(context.RequestServices.GetRequiredService<LocalizationService>()["GlobalSettings"])}</a></header>" : "";
-        context.Response.Headers["Content-Security-Policy"] = $"default-src 'none'; script-src 'nonce-{nonce}'; img-src data:{localAssets}; style-src 'unsafe-inline'{localAssets}; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+        var formOrigins = formNavigationOrigin is null ? "" : $" {formNavigationOrigin}";
+        context.Response.Headers["Content-Security-Policy"] = $"default-src 'none'; script-src 'nonce-{nonce}'; img-src data:{localAssets}; style-src 'unsafe-inline'{localAssets}; form-action 'self'{formOrigins}; frame-ancestors 'none'; base-uri 'none'";
         context.Response.Headers["X-Content-Type-Options"] = "nosniff";
         // Browsers can send Origin: null on form POSTs under no-referrer, which
         // conflicts with our same-origin validation before the code is checked.
         context.Response.Headers["Referrer-Policy"] = "same-origin";
         await context.Response.WriteAsync($$"""
-            <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{E(title)}} — KittyClaw</title>
+            <!doctype html><html lang="{{E(context.RequestServices.GetRequiredService<LocalizationService>().Lang)}}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>{{E(title)}} — KittyClaw</title>
             {{shellStyles}}
             <style>.network-rules{margin-top:32px;padding-top:24px;border-top:1px solid var(--border);line-height:1.5}.network-rules h2{margin:0 0 16px;font-size:1.1rem;font-weight:600}.network-rules .network-rules-toggle{display:flex;align-items:flex-start;gap:12px;min-height:44px;box-sizing:border-box;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;cursor:pointer}.network-rules .network-rules-toggle input{display:block;flex:0 0 20px;width:20px;height:20px;min-height:20px;margin:2px 0 0;padding:0;accent-color:#22c55e}.network-rules textarea{display:block;width:100%;min-height:144px;box-sizing:border-box;padding:12px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:7px;font:16px/1.5 ui-monospace,Consolas,monospace;resize:vertical}.network-rules textarea:focus-visible,.network-rules input:focus-visible,.network-rules button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:3px}</style>
             <style>:root{--surface:#191928;--surface2:#232338;--surface3:#2e2e48;--text:#e4e4f0;--text-dim:#46466a;--border:#2e2e48;--focus-ring:#60a5fa}.setup-header{max-width:648px;margin:0 auto}.windows-desktop .desktop-window-header,.windows-desktop .desktop-window-header *{box-sizing:border-box}.windows-desktop .desktop-window-header{max-width:none}.windows-desktop .desktop-window-header button{margin:0}.windows-desktop .desktop-window-header a{padding-block:0}</style>
             <style>body{background:#05050a;color:#e4e4f0;font:16px system-ui;margin:0;padding:24px}main{max-width:600px;margin:5vh auto;padding:24px;background:#191928;border-radius:12px}a{color:#4ade80;overflow-wrap:anywhere}code{overflow-wrap:anywhere}label,input,button{display:block;margin:16px 0}input,button{font:inherit;padding:12px;border-radius:7px;max-width:100%;box-sizing:border-box}button{background:#22c55e;color:#05050a;border:0;cursor:pointer}h1{font-size:1.4rem}img,svg{max-width:100%;height:auto}@media(max-width:767px){body{padding:0;min-height:100dvh;background:#191928}main{margin:0;padding:24px 16px max(24px,env(safe-area-inset-bottom));border-radius:0;box-sizing:border-box;overflow-wrap:anywhere}input,button{width:100%;min-height:44px}a{display:inline-block;padding-block:10px}h1{font-size:1.3rem} }</style></head><body>{{header}}<main><h1>{{E(title)}}</h1>{{content}}</main>
-            <style>.code-entry{position:relative;width:100%;max-width:320px;margin:20px 0}.code-cells{display:none}.code-entry.enhanced input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:text}.enhanced .code-cells{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;pointer-events:none}.code-cells span{display:flex;align-items:center;justify-content:center;height:56px;background:#232338;border:1px solid #2e2e48;border-radius:7px;font-size:24px;font-variant-numeric:tabular-nums}.code-cells span.active{border-color:#22c55e;box-shadow:0 0 0 2px rgba(34,197,94,.15)}form[aria-busy=true]{opacity:.65}p[role=alert]{color:#f06b6b}</style><script nonce='{{nonce}}'>{{CodeScript}}</script></body></html>
+            <style>body{line-height:1.6}main{border:1px solid var(--border);overflow-wrap:anywhere}h1{line-height:1.25}a:focus-visible,button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--focus-ring);outline-offset:4px}button.secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}button.danger{background:transparent;color:#fca5a5;border:1px solid #854343}.setup-advanced{margin-block:24px;border-top:1px solid var(--border);padding-top:16px}.setup-advanced summary{min-height:44px;padding-block:10px;cursor:pointer}.setup-advanced p{color:var(--text)}.code-entry{position:relative;width:100%;max-width:320px;margin:20px 0}.code-cells{display:none}.code-entry.enhanced input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:text}.enhanced .code-cells{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;pointer-events:none}.code-cells span{display:flex;align-items:center;justify-content:center;height:56px;background:#232338;border:1px solid #2e2e48;border-radius:7px;font-size:24px;font-variant-numeric:tabular-nums}.code-cells span.active{border-color:#22c55e;box-shadow:0 0 0 2px rgba(34,197,94,.15)}form[aria-busy=true]{opacity:.65}p[role=alert]{color:#f06b6b}</style><script nonce='{{nonce}}'>{{CodeScript}}
+            {{clientScript}}</script></body></html>
             """);
     }
 }

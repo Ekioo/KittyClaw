@@ -905,17 +905,9 @@ details[open] .tool-call-summary::before { transform: rotate(90deg); }
     order: 2;
     min-height: 32px;
     padding: 0.3rem 0.55rem;
-    border-color: transparent;
-    background: transparent;
-    color: var(--text-muted);
     font-size: 0.78rem;
 }
 .folder-picker-toolbar > .header-action-btn::before { content: "+"; margin-right: 0.35rem; }
-.folder-picker-toolbar > .header-action-btn:hover:not(:disabled) {
-    background: var(--surface3);
-    border-color: var(--border);
-    color: var(--text);
-}
 .folder-picker-create {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto auto;

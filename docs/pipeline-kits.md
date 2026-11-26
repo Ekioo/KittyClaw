@@ -6,6 +6,7 @@ Pipeline kits provide a portable `.kittyclaw-pipeline` ZIP format for exporting 
 
 ## Key components
 
+Creating a project from a selected workspace automatically imports root-level `.kittyclaw-pipeline` files. Files are processed in filename order and retained. Duplicate pipeline names receive a numeric suffix; identical skills are reused, while differing skill collisions are reported without overwriting. Invalid archives do not prevent other kits from importing. Missing parameters, prerequisites, secrets or executable approvals retain the existing disabled-install behavior. Import failures and activation blockers are shown before onboarding continues.
 - `KittyClaw.Core/Services/PipelineExportService.cs` builds sanitized kits with a versioned manifest and SHA-256 inventory.
 - `KittyClaw.Core/Services/PipelineKitScanner.cs` identifies content that must not be exported.
 - `KittyClaw.Web/Components/PipelineKitDialog.razor` presents the reviewed export and two-phase import workflow, including collision remapping, masked vault bindings, separate executable-capability approvals, and activation blockers.
@@ -37,8 +38,10 @@ The current portable column preserves capacity and both criterion-entry gates. I
 preserves enabled state, mission/prompt/model/skills, agent limits/retries, ordered actions,
 routing, `evaluateAcceptanceCriteria` and `jevFallbackToAgent`. Preserving a policy value does
 not select a JEV mode: `PortableProcessor` currently has no JEV triage/review mode flags,
-execution profiles, review criteria or confidence-threshold fields. It also does not contain
-independent scheduled-task definitions. For an approved workflow using those features, inspect
+execution profiles, review criteria or confidence-threshold fields. Independent scheduled tasks preserve their name, enabled state, cron, time zone, ticket scope
+and ordered actions, with failure destinations remapped to the imported columns. Task IDs are
+regenerated and execution history is excluded. Missing approvals or prerequisites disable
+imported schedules just like processors. Older kits without schedules remain supported. For an approved workflow using unsupported JEV features, inspect
 and configure them through native APIs after import or report the remaining configuration;
 do not claim that an imported agent processor is an equivalent JEV-only lifecycle.
 

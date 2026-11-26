@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.DataProtection;
 
 namespace KittyClaw.Web.Services;
 
-public sealed record RemoteAccessSnapshot(bool Registered, bool Enabled, string? Url, int Port);
+public sealed record RemoteAccessSnapshot(bool Registered, bool Enabled, string? Url, int Port, bool Connected = false);
 internal sealed record RemoteAccessIdentity(string InstanceId, string Credential, string BrokerOrigin,
     int Port, bool Registered = false, bool Enabled = false, string? Subdomain = null, bool NameRetryAllowed = false);
 
@@ -16,6 +16,8 @@ public sealed class RemoteAccessStore
     private readonly string _path;
     private readonly IDataProtector _protector;
     private RemoteAccessIdentity? _identity;
+    private bool _connected;
+    internal void SetConnected(bool connected) => Volatile.Write(ref _connected, connected);
     public string DataDirectory { get; }
 
     public RemoteAccessStore(string dataDirectory, IDataProtectionProvider protection)
@@ -37,7 +39,7 @@ public sealed class RemoteAccessStore
     public RemoteAccessSnapshot Snapshot
     {
         get { lock (_gate) return new(_identity?.Registered == true, _identity?.Enabled == true,
-            _identity?.Registered == true ? $"https://{RemoteAccessName.Hostname(_identity)}" : null, _identity?.Port ?? 5234); }
+            _identity?.Registered == true ? $"https://{RemoteAccessName.Hostname(_identity)}" : null, _identity?.Port ?? 5234, Volatile.Read(ref _connected)); }
     }
     internal RemoteAccessIdentity? Identity { get { lock (_gate) return _identity; } }
     internal RemoteAccessIdentity Prepare(string brokerOrigin, int port, string? subdomain = null)

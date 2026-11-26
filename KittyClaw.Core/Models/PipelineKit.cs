@@ -106,6 +106,17 @@ public sealed class PortableColumn
     public bool RequireValidatedAcceptanceCriteria { get; set; }
     public string UserGuidance { get; set; } = "";
     public PortableProcessor? Processor { get; set; }
+    public List<PortableScheduledTask> ScheduledTasks { get; set; } = [];
+}
+
+public sealed class PortableScheduledTask
+{
+    public string Name { get; set; } = "";
+    public bool Enabled { get; set; } = true;
+    public string Cron { get; set; } = "";
+    public string TimeZoneId { get; set; } = "";
+    public ScheduledTaskTicketScope TicketScope { get; set; }
+    public List<PortableProcessorAction> Actions { get; set; } = [];
 }
 
 public sealed class PortableProcessor

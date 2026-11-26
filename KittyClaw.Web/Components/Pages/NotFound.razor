@@ -2,7 +2,9 @@
 @layout MainLayout
 @inject LocalizationService L
 
-<main class="status-page">
-<h1>Not Found</h1>
-<p>Sorry, the content you are looking for does not exist.</p>
-</main>
+<PageTitle>@L["PageNotFound"] — KittyClaw</PageTitle>
+<div class="status-page">
+    <h1>@L["PageNotFound"]</h1>
+    <p>@L["PageNotFoundHint"]</p>
+    <a class="settings-browse" href="/">@L["BackToProjects"]</a>
+</div>

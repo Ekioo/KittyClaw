@@ -1,4 +1,9 @@
 {
+  "WorkflowHelpQuestion": "Voulez-vous que je vous aide à créer votre premier workflow ?",
+  "WorkflowHelpIntro": "Décrivez votre objectif pour être guidé, ou ignorez cette étape pour créer uniquement le workflow main par défaut.",
+  "WorkflowHelpAccept": "Oui, aidez-moi à démarrer",
+  "SkipOptionalStep": "Ignorer",
+  "SkipCreateEmpty": "Ignorer et créer un projet vide",
   "RtkGlobalHelp": "Optimiseur facultatif des sorties de commandes. Activez RTK dans les paramètres de chaque projet. Binaire personnalisé : KITTYCLAW_RTK_BIN.",
   "Save": "Enregistrer",
   "Cancel": "Annuler",
@@ -58,5 +63,16 @@
   "ProviderDeepSeekConfiguration": "DeepSeek V4 utilise Claude Code avec l’API Anthropic-compatible. Enregistrez DEEPSEEK_API_KEY dans le vault de chaque projet.",
   "ProviderSharedClaudeCli": "Transport partagé : la détection confirme Claude Code ; la clé DeepSeek reste propre à chaque projet.",
   "AgentProvidersDetectionNote": "La détection vérifie la présence du CLI sans lire ni afficher vos identifiants. Les secrets propres aux projets restent dans leur vault.",
-  "All": "— tous —"
+  "All": "— tous —",
+  "ActionExecutePython": "Python",
+  "ActionExecuteProgram": "Exécuter un programme",
+  "ProgramExecutable": "Exécutable / interpréteur Python (facultatif pour Python)",
+  "PythonScriptFile": "Fichier Python (une seule cible)",
+  "PythonModule": "Module Python (alternative au fichier)",
+  "PythonSource": "Code Python intégré (alternative au fichier/module)",
+  "ProgramArguments": "Arguments — un par ligne",
+  "ProgramWorkingDirectory": "Dossier de travail relatif au projet",
+  "ProgramEnvironment": "Environnement — NOM=valeur, une par ligne",
+  "PipelineKitPythonApproval": "Autoriser l’exécution de code Python sur cette machine",
+  "PipelineKitProgramApproval": "Autoriser l’exécution de programmes personnalisés sur cette machine"
 }

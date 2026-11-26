@@ -98,6 +98,10 @@ public sealed class ColumnActionExecutor(
                     return await ExecutePowerShellAsync(
                         projectSlug, execution, ticket, processorAction, script, agentResult, cancellationToken);
 
+                case ExecuteProgramActionSpec program:
+                    return await ExecuteProgramAsync(projectSlug, execution, ticket, processorAction,
+                        program, agentResult, cancellationToken);
+
                 default:
                     return ColumnActionResult.Failure(
                         $"Type d’action interdit dans un processeur : {processorAction.Action.GetType().Name}.");
@@ -298,6 +302,50 @@ public sealed class ColumnActionExecutor(
         }
         return ColumnActionResult.Success();
     }
+
+    private async Task<ColumnActionResult> ExecuteProgramAsync(
+        string projectSlug, ColumnExecution execution, Ticket ticket, ColumnProcessorAction action,
+        ExecuteProgramActionSpec spec, ColumnAgentResult? agentResult, CancellationToken cancellationToken)
+    {
+        ProgramActionSupport.Validate(spec);
+        var project = await projects.GetProjectAsync(projectSlug)
+            ?? throw new InvalidOperationException("Project not found.");
+        var workspace = projects.ResolveWorkspacePath(project);
+        string Resolve(string value) => Render(value, projectSlug, ticket, agentResult);
+        var start = ProgramActionSupport.BuildStartInfo(spec, workspace);
+        foreach (var argument in spec.Arguments) start.ArgumentList.Add(Resolve(argument));
+        var secrets = projectSecrets is null ? new Dictionary<string, string>()
+            : new Dictionary<string, string>(await projectSecrets.ReadForInjectionAsync(projectSlug, cancellationToken));
+        foreach (var (name, value) in spec.Env)
+            start.Environment[name] = System.Text.RegularExpressions.Regex.Replace(Resolve(value),
+                @"\{\{\s*secret\.(?<name>[A-Za-z0-9_][A-Za-z0-9_.-]*)\s*\}\}",
+                match => secrets.TryGetValue(match.Groups["name"].Value, out var secret) ? secret
+                    : throw new InvalidOperationException("An environment secret binding is unavailable."));
+        foreach (var (name, value) in secrets) start.Environment[name] = value;
+        start.Environment["KITTYCLAW_ACTION_EXECUTION_ID"] = $"{execution.Id}:{action.Id}";
+        start.Environment["KITTYCLAW_PROJECT_SLUG"] = projectSlug;
+        start.Environment["KITTYCLAW_TICKET_ID"] = ticket.Id.ToString();
+        start.Environment["KITTYCLAW_TICKET_TITLE"] = ticket.Title;
+        start.Environment["KITTYCLAW_TICKET_STATUS"] = ticket.Status;
+        start.Environment["KITTYCLAW_TICKET_ASSIGNEE"] = ticket.AssignedTo ?? "";
+        start.Environment["KITTYCLAW_ACTION_OUTCOME"] = agentResult?.Outcome ?? "";
+        start.Environment["KITTYCLAW_ACTION_SUMMARY"] = agentResult?.Summary ?? "";
+        var result = await ProcessRunner.RunAsync(start, TimeSpan.FromSeconds(spec.TimeoutSeconds),
+            cancellationToken, maxOutputCharacters: 1024 * 1024);
+        var output = SecretRedactor.Redact(result.Stdout, secrets.Values);
+        var error = SecretRedactor.Redact(result.Stderr, secrets.Values);
+        logger.LogInformation("Program action {ActionId} exit {ExitCode}: {Stdout} {Stderr}",
+            action.Id, result.ExitCode, output.Length > 4000 ? output[..4000] : output,
+            error.Length > 4000 ? error[..4000] : error);
+        if (result.TimedOut) return ColumnActionResult.Failure($"Program exceeded {spec.TimeoutSeconds} seconds.");
+        if (result.ExitCode != 0)
+        {
+            var detail = string.IsNullOrWhiteSpace(error) ? output : error;
+            return ColumnActionResult.Failure($"Program exited with code {result.ExitCode}. {detail[..Math.Min(detail.Length, 600)]}");
+        }
+        return ColumnActionResult.Success();
+    }
+
 
     private static string Render(
         string value,

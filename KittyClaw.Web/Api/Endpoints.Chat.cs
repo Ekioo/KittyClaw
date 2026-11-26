@@ -315,7 +315,13 @@ public static partial class Endpoints
                 var memberName = member?.Name ?? baseAgent;
 
                 var skillPath = Path.Combine(workspacePath, ".agents", baseAgent, "SKILL.md");
-                var hasSkillFile = File.Exists(skillPath);
+                string? skillText;
+                try { skillText = await AgentContextFiles.ReadOptionalTextAsync(workspacePath, skillPath); }
+                catch (InvalidOperationException ex)
+                {
+                    return Results.BadRequest(new { error = "invalid_agent_context", reason = ex.Message });
+                }
+                var hasSkillFile = skillText is not null;
 
                 // Chat mode preamble overrides the automation-style instructions a SKILL.md
                 // typically carries (e.g. "the brief lives in ticket comments"). In a live
@@ -341,7 +347,6 @@ public static partial class Endpoints
                 var skillSection = "";
                 if (hasSkillFile)
                 {
-                    var skillText = await File.ReadAllTextAsync(skillPath);
                     skillSection = "\n## Background — your specialty (from SKILL.md)\n\n" + skillText + "\n";
                 }
                 else

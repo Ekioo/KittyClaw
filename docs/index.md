@@ -13,11 +13,14 @@ and API/MCP documentation.
 
 ## Features
 
+- [Account association](./account-association.md) — GitHub/Google identity, local ownership confirmation and the central installation registry.
+- [Instance access modes](./access-modes.md) — one local-only/LAN/Internet preference, shared account MFA and automatic tunnel DNS.
+
 - [Mobile UX audit](./audits/2026-10-24-mobile-ux-audit.md) — complete view inventory, phone compositions, desktop preservation and verification coverage.
 
 - [Managed public instance access](./public-instance-access.md) — dedicated tunnel origin boundary and Cloudflare delivery milestones.
 
-- [Local network access](./network-access.md) — opt-in HTTPS access from phones, authenticator-only login, local enrollment and session revocation.
+- [Local network access](./network-access.md) — opt-in LAN HTTPS, shared account authentication, IP rules and session revocation.
 
 - [Performance benchmarks](./performance-benchmarks.md) — isolated core, SQLite and API workloads, allocation and timing reports, and PR regression comparison.
 
@@ -55,6 +58,7 @@ and API/MCP documentation.
 - [Cost reporting](./cost-reporting.md) — global agent-cost history with date, project, and pipeline filtering.
 - [Graphic charter](./graphic-charter.md) — palette, typography, spacing, form controls, button variants. Reference before adding any new UI.
 - [Windows installation and updates](./update-check.md) — self-contained Velopack installer, desktop lifetime, package downloads and restart, and source-installation release checks.
+- [Experimental macOS distribution](./macos-distribution.md) — ad-hoc signed Intel/Apple Silicon bundles, unsigned installers, architecture-specific updates and native CI verification.
 - [Telemetry](./telemetry.md) — anonymous daily heartbeat to Umami Cloud (instance id, version, OS); always on outside Development.
 - [Per-ticket worktree workflow](./worktree-workflow.md) — opt-in canonical root-ticket worktrees, isolated agent execution, and linear integration helpers.
 - [Local models (Ollama)](./local-models.md) — dispatching agents to a local Ollama model via the Anthropic-compat endpoint.

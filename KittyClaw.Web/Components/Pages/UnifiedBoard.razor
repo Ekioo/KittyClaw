@@ -22,7 +22,7 @@
     <UtilityPageHeader Title="@L["Projects"]">
         <ProjectCreation OnCreated="OnProjectCreated" />
     </UtilityPageHeader>
-    <main class="project-directory-content">
+    <div class="project-directory-content">
         @if (_projects is null)
         {
             <p class="empty-hint" role="status">@L["UnifiedBoardLoading"]</p>
@@ -35,7 +35,7 @@
         {
             <ProjectCards Projects="_projects" ProjectColumns="_columns" />
         }
-    </main>
+    </div>
 
     <footer class="unified-footer">
         <TipOfTheDay />

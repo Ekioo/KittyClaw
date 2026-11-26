@@ -21,7 +21,7 @@ VelopackApp.Build()
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,
-#if WINDOWS
+#if WINDOWS || MACOS_INSTALLER
     ContentRootPath = AppContext.BaseDirectory,
 #endif
 });
@@ -61,6 +61,15 @@ if (!Directory.Exists(dataDir) && Directory.Exists(legacyDataDir))
 {
     Directory.Move(legacyDataDir, dataDir);
 }
+#if MACOS_INSTALLER
+using var macDesktop = builder.Configuration.GetValue("KITTYCLAW_DESKTOP", true)
+    ? new MacDesktopLifetime(dataDir) : null;
+if (macDesktop is { IsFirstInstance: false })
+{
+    MacDesktopLifetime.OpenBrowser(builder.Configuration["urls"]!, null);
+    return;
+}
+#endif
 var appSettings = new KittyClaw.Core.Services.AppSettingsService(dataDir);
 var webProtection = builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(dataDir, "web-keys")));
@@ -89,6 +98,11 @@ if (networkAccess.Enabled)
 // A tunnel origin has its own loopback port and never inherits local trust.
 var remoteAccessStore = new RemoteAccessStore(dataDir, networkProtection);
 builder.Services.AddSingleton(remoteAccessStore);
+builder.Services.AddSingleton(new AccountAssociationService(dataDir, networkProtection,
+    new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
+    { MaxResponseContentBufferSize = 32 * 1024, Timeout = TimeSpan.FromSeconds(20) }, remoteAccessStore));
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AccountAssociationService>());
+builder.Services.AddSingleton(sp => new AccountPortalAccessService(sp.GetRequiredService<AccountAssociationService>(), remoteAccessStore, networkProtection, networkAccess));
 var remoteTunnel = remoteAccessStore.OriginOptions(RemoteTunnelOptions.Read(builder.Configuration));
 builder.Services.AddSingleton(remoteTunnel);
 if (remoteTunnel.Enabled)
@@ -110,6 +124,7 @@ builder.Services.AddSingleton(sp => new RemoteAccessBroker(
 builder.Services.AddSingleton<ICloudflaredRuntime, CloudflaredRuntime>();
 builder.Services.AddSingleton<RemoteAccessConnector>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<RemoteAccessConnector>());
+builder.Services.AddSingleton<AccessModeService>();
 builder.Services.AddSingleton(appSettings);
 builder.Services.AddSingleton(new KittyClaw.Core.Services.LocalizationService(appSettings));
 var projectSecretVault = new ProjectSecretVault(dataDir);
@@ -301,13 +316,17 @@ builder.Services.AddRazorComponents()
     });
 
 var app = builder.Build();
+// Normalize legacy dual opt-ins before any request can reach either listener.
+_ = app.Services.GetRequiredService<AccessModeService>();
 
 // Apply browser protections even to access-denied and setup responses.
 app.UseMiddleware<BrowserSecurityHeadersMiddleware>();
 
 // Gate all remote traffic, including uploads, APIs, MCP and Blazor connections.
 app.UseMiddleware<RemoteTunnelMiddleware>();
-app.UseMiddleware<RemoteAccessSetupMiddleware>();
+app.UseMiddleware<AccountSetupMiddleware>();
+app.UseMiddleware<AccessSetupMiddleware>();
+app.UseMiddleware<AccountPortalAccessMiddleware>();
 app.UseMiddleware<NetworkAccessMiddleware>();
 
 // Configure the HTTP request pipeline.
@@ -399,6 +418,9 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
+#if MACOS_INSTALLER
+macDesktop?.Attach(app);
+#endif
 #if WINDOWS
 desktop?.Attach(app);
 try { app.Run(); }

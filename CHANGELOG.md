@@ -4,6 +4,35 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.31] — 2026-11-26
+
+Experimental macOS installers, portable scheduled tasks, and unified instance access.
+
+### Highlights
+
+Install KittyClaw on Apple Silicon or Intel Macs with .NET included and Velopack updates. macOS packages remain experimental, ad-hoc signed and not notarized, without requiring an Apple Developer subscription. Release publication now validates and includes Windows and both macOS architectures together.
+
+### Added
+
+- Experimental macOS installers, portable application bundles, and architecture-specific update feeds, verified on native GitHub Actions runners.
+- Portable scheduled tasks and cross-platform workflow actions, with REST API and MCP management.
+- Protected account association with the central portal and account two-factor authentication for LAN and managed tunnel access.
+- Project initials avatars with dark and light color variants.
+- Import workspace pipeline kits when creating a project.
+
+### Changed
+
+- Unify instance access into local, network, and Internet modes, with access controls centralized in Advanced settings.
+- Apply access-mode radio selections directly and improve account navigation and recovery.
+- Make guided workflow onboarding optional when creating a project.
+- Update Mistral estimated token rates.
+
+### Security
+
+- Prevent project templates, automatic context, and processor memory from traversing linked workspace paths.
+
+---
+
 ## [v0.30.1] — 2026-11-21
 
 Audited security hardening and GPT-6.2 token cost estimates.
