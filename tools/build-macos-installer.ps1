@@ -44,10 +44,52 @@ try {
     & /usr/bin/iconutil -c icns $iconset -o $icon
     if ($LASTEXITCODE -ne 0) { throw 'macOS icon generation failed.' }
 
+    $packageId = "Ekioo.KittyClaw.$Runtime.Experimental"
+    $bundleOutput = Join-Path $scratch 'bundle'
+    dotnet vpk bundle --packId $packageId --packVersion $Version --packDir $stage `
+        --mainExe KittyClaw.Web --packTitle 'KittyClaw Experimental' --packAuthors Ekioo `
+        --runtime $Runtime --channel $channel --icon $icon --outputDir $bundleOutput
+    if ($LASTEXITCODE -ne 0) { throw 'Velopack bundle creation failed.' }
+    $bundle = Join-Path $bundleOutput "$packageId.app"
+    $macos = Join-Path $bundle 'Contents/MacOS'
+    $resources = Join-Path $bundle 'Contents/Resources/app'
+    New-Item -ItemType Directory -Path $resources -Force | Out-Null
+
+    # codesign stores signatures of non-Mach-O files in extended attributes when
+    # they live in MacOS/. Those attributes survive ditto/pkg but NOT nupkg updates.
+    # Seal managed assemblies/config/assets as resources instead, keeping relative
+    # symlinks beside the native apphost so .NET's probing/content roots still work.
+    foreach ($entry in Get-ChildItem -LiteralPath $macos -Force) {
+        $native = $false
+        if (-not $entry.PSIsContainer) {
+            $stream = [IO.File]::OpenRead($entry.FullName)
+            try {
+                if ($stream.Length -ge 4) {
+                    $header = [byte[]]::new(4)
+                    $stream.ReadExactly($header, 0, 4)
+                    $native = [Convert]::ToHexString($header) -in @(
+                        'FEEDFACE', 'CEFAEDFE', 'FEEDFACF', 'CFFAEDFE',
+                        'CAFEBABE', 'BEBAFECA', 'CAFEBABF', 'BFBAFECA')
+                }
+            }
+            finally { $stream.Dispose() }
+        }
+        if ($native) {
+            # hostfxr may canonicalize the managed entry assembly into Resources.
+            # Keep native runtime probing valid from that directory as well.
+            [IO.File]::CreateSymbolicLink((Join-Path $resources $entry.Name), "../../MacOS/$($entry.Name)") | Out-Null
+            continue
+        }
+        Move-Item -LiteralPath $entry.FullName -Destination $resources
+        $target = "../Resources/app/$($entry.Name)"
+        if ($entry.PSIsContainer) { [IO.Directory]::CreateSymbolicLink($entry.FullName, $target) | Out-Null }
+        else { [IO.File]::CreateSymbolicLink($entry.FullName, $target) | Out-Null }
+    }
+
     # '-' is a local ad-hoc identity, not Developer ID. Gatekeeper approval is
     # still required for downloaded applications. No notarization is requested.
-    dotnet vpk pack --packId "Ekioo.KittyClaw.$Runtime.Experimental" --packVersion $Version `
-        --packDir $stage --mainExe KittyClaw.Web --packTitle 'KittyClaw Experimental' `
+    dotnet vpk pack --packId $packageId --packVersion $Version `
+        --packDir $bundle --mainExe KittyClaw.Web --packTitle 'KittyClaw Experimental' `
         --packAuthors Ekioo --runtime $Runtime --channel $channel --delta None `
         --icon $icon --signAppIdentity '-' `
         --signEntitlements (Join-Path $repo 'tools/macos/KittyClaw.entitlements') `

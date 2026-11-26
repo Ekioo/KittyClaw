@@ -30,6 +30,14 @@ Posture 07 pictogram using macOS tools, then packs the installer, portable ZIP, 
 Stages are unique and no user-supplied directory is recursively deleted. Packaging
 does not publish externally. Runtime security patches require a new application build.
 
+Before packing, the script creates a bundle and moves managed assemblies, configuration
+and web assets into `Contents/Resources/app`, with relative symlinks from `Contents/MacOS`.
+Only native Mach-O binaries stay directly in `MacOS`, with reverse file symlinks in
+the resources directory to keep .NET native-library probing valid. This is required for updates:
+`codesign` otherwise stores signatures of managed DLLs in extended attributes, which
+portable ZIPs/installers preserve but `.nupkg` replacement does not. Resource sealing
+keeps the signature valid after replacement without re-signing on the user's machine.
+
 The local signature is applied by Velopack after inserting its updater and metadata,
 before creating the archives. `tools/macos/KittyClaw.entitlements` permits .NET JIT execution
 and loading the bundled ad-hoc signed native libraries. No App Sandbox is enabled.

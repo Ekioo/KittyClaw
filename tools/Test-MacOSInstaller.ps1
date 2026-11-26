@@ -33,6 +33,9 @@ if ($bundles.Count -ne 1) { throw 'Expected exactly one extracted .app.' }
 $bundle = $bundles[0].FullName
 $payload = Join-Path $bundle 'Contents/MacOS'
 $exe = Join-Path $payload 'KittyClaw.Web'
+if ((Get-Item -LiteralPath (Join-Path $payload 'KittyClaw.Web.dll')).LinkType -ne 'SymbolicLink') {
+    throw 'Managed assemblies must be resource symlinks so signatures survive nupkg updates.'
+}
 $runtimeConfig = Get-Content (Join-Path $payload 'KittyClaw.Web.runtimeconfig.json') -Raw | ConvertFrom-Json
 foreach ($framework in 'Microsoft.NETCore.App', 'Microsoft.AspNetCore.App') {
     if ($framework -notin $runtimeConfig.runtimeOptions.includedFrameworks.name) { throw "Missing embedded $framework" }
@@ -136,6 +139,9 @@ while (Get-Process -Id $updaterPid -ErrorAction SilentlyContinue) {
 }
 & /usr/bin/codesign --verify --deep --strict $bundle
 if ($LASTEXITCODE -ne 0) { throw 'Updated bundle signature is invalid.' }
+if ((Get-Item -LiteralPath (Join-Path $payload 'KittyClaw.Web.dll')).LinkType -ne 'SymbolicLink') {
+    throw 'Update did not preserve the managed resource symlinks.'
+}
 if ((Get-FileHash -LiteralPath (Join-Path $payload 'KittyClaw.Web.dll') -Algorithm SHA256).Hash -ne $expectedAssemblyHash) {
     throw 'The update payload does not match the target installer.'
 }
