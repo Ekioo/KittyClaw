@@ -16,5 +16,18 @@
   "AccountNetworkReady": "La autenticación de dos factores de la cuenta está activada. Las conexiones de red usan esta misma cuenta.",
   "AccountNetworkRequired": "Asocia esta instalación con tu cuenta y activa la autenticación de dos factores en my.kittyclaw.dev. Es el único autenticador necesario.",
   "AccountNetworkEnable": "Activar el acceso a la red local",
-  "AccountNetworkEnableHint": "Permite que los dispositivos de tu red se conecten a esta instancia con tu cuenta KittyClaw. Reinicia KittyClaw una vez después de activarlo para iniciar el servicio HTTPS."
+  "AccountNetworkEnableHint": "Permite que los dispositivos de tu red se conecten a esta instancia con tu cuenta KittyClaw. Reinicia KittyClaw una vez después de activarlo para iniciar el servicio HTTPS.",
+  "AccessTitle": "Acceso a esta instancia",
+  "AccessModeLocal": "Solo local",
+  "AccessModeNetwork": "Red local",
+  "AccessModeInternet": "Internet",
+  "AccessHintLocal": "En este equipo, mediante localhost.",
+  "AccessHintNetwork": "Desde dispositivos de la misma red, con tu cuenta.",
+  "AccessHintInternet": "Desde cualquier lugar, mediante un túnel HTTPS protegido por tu cuenta.",
+  "AccessApply": "Aplicar modo de acceso",
+  "AccessAdvanced": "Estado de conexión y ajustes avanzados",
+  "AccessDnsHint": "El túnel y la dirección DNS se crean automáticamente. Deja el nombre vacío para generar una dirección. La dirección queda reservada para esta instancia y no se puede renombrar.",
+  "AccessPublicAddress": "Dirección pública:",
+  "AccessCurrent": "Modo actual:",
+  "AccessConsentRequired": "Para activar el modo Internet, permite que la conexión pase por Cloudflare."
 }

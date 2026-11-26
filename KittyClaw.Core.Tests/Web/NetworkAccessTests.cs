@@ -118,7 +118,7 @@ public sealed class NetworkAccessTests
             await using var factory = new StartupFactory();
             using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
             Assert.True(factory.Services.GetRequiredService<NetworkAccessService>().Listening);
-            var local = await client.GetAsync("http://localhost/network-setup");
+            var local = await client.GetAsync("http://localhost/access-setup");
             Assert.Equal(HttpStatusCode.OK, local.StatusCode);
             var setupHtml = await local.Content.ReadAsStringAsync();
             Assert.Contains("SHA-256", setupHtml);
@@ -132,8 +132,9 @@ public sealed class NetworkAccessTests
             var settingsHtml = await settings.Content.ReadAsStringAsync();
             Assert.Contains("network-global-settings", settingsHtml);
             // Middleware pages own their document, styles and scripts and require a full navigation.
-            Assert.Contains("href=\"/network-setup\" data-enhance-nav=\"false\"", settingsHtml);
-            Assert.Contains("href=\"/remote-setup\" data-enhance-nav=\"false\"", settingsHtml);
+            Assert.Contains("action=\"/access-setup\"", settingsHtml);
+            Assert.Contains("href=\"/access-setup\" data-enhance-nav=\"false\"", settingsHtml);
+            Assert.DoesNotContain("remote-global-settings", settingsHtml);
             Assert.DoesNotContain("otpauth://", setupHtml);
             Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"https://{Environment.MachineName}/access")).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"https://{Environment.MachineName}/api/projects")).StatusCode);

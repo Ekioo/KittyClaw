@@ -16,5 +16,18 @@
   "AccountNetworkReady": "账户双重身份验证已启用。网络连接使用同一个账户。",
   "AccountNetworkRequired": "将此安装关联到你的账户，并在 my.kittyclaw.dev 启用双重身份验证。这是唯一需要设置的验证器。",
   "AccountNetworkEnable": "启用本地网络访问",
-  "AccountNetworkEnableHint": "允许网络内的设备使用你的 KittyClaw 账户连接到此实例。启用后请重启 KittyClaw 一次以启动 HTTPS 监听。"
+  "AccountNetworkEnableHint": "允许网络内的设备使用你的 KittyClaw 账户连接到此实例。启用后请重启 KittyClaw 一次以启动 HTTPS 监听。",
+  "AccessTitle": "此实例的访问方式",
+  "AccessModeLocal": "仅本机",
+  "AccessModeNetwork": "本地网络",
+  "AccessModeInternet": "互联网",
+  "AccessHintLocal": "通过此计算机上的 localhost 访问。",
+  "AccessHintNetwork": "同一网络内的设备使用你的账户连接。",
+  "AccessHintInternet": "通过账户保护的 HTTPS 隧道从任何地方连接。",
+  "AccessApply": "应用访问模式",
+  "AccessAdvanced": "连接状态和高级设置",
+  "AccessDnsHint": "隧道和 DNS 地址会自动创建。留空名称可生成地址。地址将为此实例保留，且无法重命名。",
+  "AccessPublicAddress": "公共地址：",
+  "AccessCurrent": "当前模式：",
+  "AccessConsentRequired": "要启用互联网模式，请允许连接经过 Cloudflare。"
 }

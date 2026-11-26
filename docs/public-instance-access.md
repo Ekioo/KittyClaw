@@ -16,7 +16,8 @@ isolated installation. Full acceptance results are recorded below.
 
 ## Owner activation
 
-Global settings links to `/remote-setup`, a server-rendered local-only page. Its
+Global settings and `/access-setup` share the [access mode selector](./access-modes.md).
+The old `/remote-setup` bookmark redirects there. Its
 mutations require antiforgery validation. Remote callers cannot activate, pause or
 read installation credentials through this page. The owner first enables
 [account two-factor authentication](./account-association.md) on `my.kittyclaw.dev`

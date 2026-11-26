@@ -16,5 +16,18 @@
   "AccountNetworkReady": "アカウントの二要素認証は有効です。ネットワーク接続にも同じアカウントを使用します。",
   "AccountNetworkRequired": "このインストールをアカウントに関連付け、my.kittyclaw.devで二要素認証を有効にしてください。必要な認証アプリの設定はこれだけです。",
   "AccountNetworkEnable": "ローカルネットワークアクセスを有効にする",
-  "AccountNetworkEnableHint": "ネットワーク内の端末がKittyClawアカウントでこのインスタンスに接続できるようにします。有効化後、HTTPSリスナーを起動するためKittyClawを一度再起動してください。"
+  "AccountNetworkEnableHint": "ネットワーク内の端末がKittyClawアカウントでこのインスタンスに接続できるようにします。有効化後、HTTPSリスナーを起動するためKittyClawを一度再起動してください。",
+  "AccessTitle": "このインスタンスへのアクセス",
+  "AccessModeLocal": "ローカルのみ",
+  "AccessModeNetwork": "ローカルネットワーク",
+  "AccessModeInternet": "インターネット",
+  "AccessHintLocal": "この端末のlocalhostからアクセスします。",
+  "AccessHintNetwork": "同じネットワーク内の端末からアカウントで接続します。",
+  "AccessHintInternet": "アカウントで保護されたHTTPSトンネル経由でどこからでも接続できます。",
+  "AccessApply": "アクセスモードを適用",
+  "AccessAdvanced": "接続状態と詳細設定",
+  "AccessDnsHint": "トンネルとDNSアドレスは自動的に作成されます。名前を空欄にすると自動生成されます。アドレスはこのインスタンスに予約され、名前の変更はできません。",
+  "AccessPublicAddress": "公開アドレス：",
+  "AccessCurrent": "現在のモード：",
+  "AccessConsentRequired": "インターネットモードを有効にするには、Cloudflare経由の接続を許可してください。"
 }

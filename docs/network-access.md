@@ -8,8 +8,9 @@ documented in [account association](./account-association.md).
 
 ## Owner opt-in
 
-Global settings links to `/network-setup`. `AccountNetworkSetupMiddleware` serves
-this document before the old network middleware. It requires a loopback peer and
+The [access mode selector](./access-modes.md) in global settings and `/access-setup`
+replaces `/network-setup`. `AccessSetupMiddleware` handles its local document before
+the network gate. It requires a loopback peer and
 loopback Host and rejects cross-origin requests. Mutations require antiforgery
 validation. The page refreshes the linked account, shows whether its factor is
 enabled, and links to central security and account association. It never creates

@@ -156,23 +156,51 @@ public sealed class AccountPortalAccessTests
     public async Task Network_setup_uses_account_MFA_without_another_QR_and_requires_CSRF_for_opt_in()
     {
         await using var f = await Fixture.Create();
+        f.Remote.Pause();
         await using var app = await f.StartServer(remote: false);
         using var client = app.GetTestClient(); client.BaseAddress = new Uri("http://localhost");
-        var page = await client.GetAsync("/network-setup");
+        var page = await client.GetAsync("/access-setup");
         var html = await page.Content.ReadAsStringAsync();
         Assert.Contains("my.kittyclaw.dev/security", html);
-        Assert.Contains("name='action' value='enable'", html);
+        Assert.Contains("name='mode' value='network'", html);
+        Assert.Equal(3, System.Text.RegularExpressions.Regex.Matches(html, "type='radio' name='mode'").Count);
         Assert.DoesNotContain("otpauth:", html); Assert.DoesNotContain("name='code'", html); Assert.DoesNotContain("name='enrollment'", html);
         Assert.False(f.Network.Enabled);
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsync("/network-setup", new FormUrlEncodedContent(new Dictionary<string,string> { ["action"] = "enable" }))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsync("/access-setup", new FormUrlEncodedContent(new Dictionary<string,string> { ["action"] = "mode", ["mode"] = "network" }))).StatusCode);
         var token = System.Text.RegularExpressions.Regex.Match(html, "name='__RequestVerificationToken' value='([^']+)'").Groups[1].Value;
         client.DefaultRequestHeaders.Add("Cookie", page.Headers.GetValues("Set-Cookie").Single().Split(';')[0]);
-        var enabled = await client.PostAsync("/network-setup", new FormUrlEncodedContent(new Dictionary<string,string> { ["action"] = "enable", ["__RequestVerificationToken"] = token }));
+        var enabled = await client.PostAsync("/access-setup", new FormUrlEncodedContent(new Dictionary<string,string> { ["action"] = "mode", ["mode"] = "network", ["__RequestVerificationToken"] = token }));
         Assert.Equal(HttpStatusCode.Redirect, enabled.StatusCode);
         Assert.True(f.Network.AccountAccessEnabled);
         f.Handler.MfaEnabled = false;
-        var locked = await (await client.GetAsync("/network-setup")).Content.ReadAsStringAsync();
+        var locked = await (await client.GetAsync("/access-setup")).Content.ReadAsStringAsync();
         Assert.DoesNotContain("otpauth:", locked); Assert.DoesNotContain("name='action' value='enable'", locked);
+    }
+
+    [Fact]
+    public async Task Unified_access_form_replaces_old_pages_and_refuses_unconsented_Internet_or_invalid_modes()
+    {
+        await using var f = await Fixture.Create(); f.Remote.Pause();
+        await using var app = await f.StartServer(remote: false);
+        using var client = app.GetTestClient(); client.BaseAddress = new Uri("http://localhost");
+        foreach (var old in new[] { "/network-setup", "/remote-setup" })
+        {
+            var redirect = await client.GetAsync(old); Assert.Equal(HttpStatusCode.Redirect, redirect.StatusCode);
+            Assert.Equal("/access-setup", redirect.Headers.Location!.ToString());
+            Assert.Equal(HttpStatusCode.Gone, (await client.PostAsync(old, new FormUrlEncodedContent([]))).StatusCode);
+        }
+        var page = await client.GetAsync("/access-setup"); var html = await page.Content.ReadAsStringAsync();
+        var token = System.Text.RegularExpressions.Regex.Match(html, "name='__RequestVerificationToken' value='([^']+)'").Groups[1].Value;
+        client.DefaultRequestHeaders.Add("Cookie", page.Headers.GetValues("Set-Cookie").Single().Split(';')[0]);
+        foreach (var mode in new[] { "internet", "invalid", "Network,Internet" })
+        {
+            var rejected = await client.PostAsync("/access-setup", new FormUrlEncodedContent(new Dictionary<string,string> { ["action"]="mode", ["mode"]=mode, ["__RequestVerificationToken"]=token }));
+            Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode); Assert.False(f.Remote.Snapshot.Enabled); Assert.False(f.Network.Enabled);
+        }
+        var local = await client.PostAsync("/access-setup", new FormUrlEncodedContent(new Dictionary<string,string> { ["action"]="mode", ["mode"]="local", ["subdomain"]="invalid input", ["return"]="https://evil.test", ["__RequestVerificationToken"]=token }));
+        Assert.Equal(HttpStatusCode.Redirect, local.StatusCode); Assert.Equal("/access-setup", local.Headers.Location!.ToString());
+        using var cross = new HttpRequestMessage(HttpMethod.Post, "/access-setup"); cross.Headers.Add("Origin","https://evil.test");
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(cross)).StatusCode);
     }
 
     [Fact]
@@ -279,12 +307,15 @@ public sealed class AccountPortalAccessTests
             builder.Logging.ClearProviders(); builder.WebHost.UseTestServer();
             builder.Services.AddSingleton(Accounts); builder.Services.AddSingleton(Portal); builder.Services.AddSingleton(Network);
             builder.Services.AddSingleton(Remote); builder.Services.AddSingleton(new RemoteTunnelOptions(true, 5234, "office.kittyclaw.dev"));
+            builder.Services.AddSingleton(new RemoteAccessConnector(Remote, new(_http, new Uri("https://remote-api.kittyclaw.dev")),
+                new UnusedRuntime(), new(true,5234,"office.kittyclaw.dev"), Network, new Lifetime(), Accounts));
+            builder.Services.AddSingleton<AccessModeService>();
             builder.Services.AddSingleton(new LocalizationService(new AppSettingsService(_directory.Path)));
             builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider(); builder.Services.AddAntiforgery();
             var app = builder.Build();
             app.Use(async (context, next) => { context.Connection.LocalPort = remote ? 5234 : network ? 5233 : 5232; context.Connection.RemoteIpAddress = network ? IPAddress.Parse("192.168.1.70") : IPAddress.Loopback; await next(context); });
             app.UseMiddleware<RemoteTunnelMiddleware>(); app.UseMiddleware<AccountSetupMiddleware>();
-            app.UseMiddleware<AccountNetworkSetupMiddleware>();
+            app.UseMiddleware<AccessSetupMiddleware>();
             app.UseMiddleware<AccountPortalAccessMiddleware>(); app.UseMiddleware<NetworkAccessMiddleware>();
             app.Run(async context =>
             {

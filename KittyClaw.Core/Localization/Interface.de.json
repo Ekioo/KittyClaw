@@ -16,5 +16,18 @@
   "AccountNetworkReady": "Die Zwei-Faktor-Authentifizierung des Kontos ist aktiviert. Netzwerkverbindungen verwenden dasselbe Konto.",
   "AccountNetworkRequired": "Verknüpfe diese Installation mit deinem Konto und aktiviere die Zwei-Faktor-Authentifizierung auf my.kittyclaw.dev. Du benötigst nur diesen einen Authentifikator.",
   "AccountNetworkEnable": "Zugriff im lokalen Netzwerk aktivieren",
-  "AccountNetworkEnableHint": "Erlaube Geräten in deinem Netzwerk, sich mit deinem KittyClaw-Konto bei dieser Instanz anzumelden. Starte KittyClaw nach der Aktivierung einmal neu, um den HTTPS-Dienst zu starten."
+  "AccountNetworkEnableHint": "Erlaube Geräten in deinem Netzwerk, sich mit deinem KittyClaw-Konto bei dieser Instanz anzumelden. Starte KittyClaw nach der Aktivierung einmal neu, um den HTTPS-Dienst zu starten.",
+  "AccessTitle": "Zugriff auf diese Instanz",
+  "AccessModeLocal": "Nur lokal",
+  "AccessModeNetwork": "Lokales Netzwerk",
+  "AccessModeInternet": "Internet",
+  "AccessHintLocal": "Auf diesem Rechner über localhost.",
+  "AccessHintNetwork": "Von Geräten im selben Netzwerk mit deinem Konto.",
+  "AccessHintInternet": "Von überall über einen durch dein Konto geschützten HTTPS-Tunnel.",
+  "AccessApply": "Zugriffsmodus anwenden",
+  "AccessAdvanced": "Verbindungsstatus und erweiterte Einstellungen",
+  "AccessDnsHint": "Tunnel und DNS-Adresse werden automatisch erstellt. Ohne Namen wird eine Adresse generiert. Sie bleibt für diese Instanz reserviert und kann nicht umbenannt werden.",
+  "AccessPublicAddress": "Öffentliche Adresse:",
+  "AccessCurrent": "Aktueller Modus:",
+  "AccessConsentRequired": "Erlaube die Verbindung über Cloudflare, um den Internet-Modus zu aktivieren."
 }

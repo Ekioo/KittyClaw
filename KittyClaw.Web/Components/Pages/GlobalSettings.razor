@@ -8,6 +8,7 @@
 @inject LocalizationService L
 @inject RemoteAccessStore RemoteAccess
 @inject KittyClaw.Web.Services.AccountAssociationService Accounts
+@inject AccessModeService AccessModes
 @rendermode InteractiveServer
 @implements IDisposable
 
@@ -40,25 +41,24 @@
         <p class="settings-hint">@L["AccountNetworkUnchanged"]</p>
     </section>
     <section class="settings-section mobile-section-panel @(_mobileSection == "network" ? "mobile-section-active" : "")" data-testid="network-global-settings">
-        <h2>@L["NetworkTitle"]</h2>
+        <h2>@L["AccessTitle"]</h2>
         <p class="settings-hint">@L["AccountNetworkHint"]</p>
+        <p class="settings-hint" role="status">@L[AccessModes.StatusKey]</p>
         <p><a class="settings-browse" href="https://my.kittyclaw.dev/security">@L["AccountSecurity"] ↗</a></p>
-        <a class="settings-browse" href="/network-setup" data-enhance-nav="false">@L["NetworkConfigure"]</a>
+        <style>@AccessSetupView.Styles</style>
+        <form class="access-settings-form" method="post" action="/access-setup" data-enhance="false" novalidate>
+            <AntiforgeryToken />
+            <input type="hidden" name="action" value="mode" />
+            <input type="hidden" name="return" value="/settings" />
+            @((MarkupString)AccessSetupView.Options(AccessModes.Mode, RemoteAccess, L))
+            <button type="submit" class="settings-browse">@L["AccessApply"]</button>
+        </form>
+        <p><a class="settings-browse" href="/access-setup" data-enhance-nav="false">@L["AccessAdvanced"]</a></p>
         <p class="settings-hint">@L["NetworkLocalSetup"]</p>
         <form method="post" action="/access/logout">
             <AntiforgeryToken />
             <button type="submit" class="settings-browse">@L["NetworkLogout"]</button>
         </form>
-    </section>
-    <section class="settings-section mobile-section-panel @(_mobileSection == "remote" ? "mobile-section-active" : "")" data-testid="remote-global-settings">
-        <h2>@L["RemoteTitle"]</h2>
-        <p class="settings-hint">@L["RemoteHint"]</p>
-        @if (RemoteAccess.Snapshot.Url is { } publicUrl)
-        {
-            <RemoteAccessQr Url="@publicUrl" Enabled="@RemoteAccess.Snapshot.Enabled" />
-        }
-        <a class="settings-browse" href="/remote-setup" data-enhance-nav="false">@L["RemoteConfigure"]</a>
-        <p class="settings-hint">@L["NetworkLocalSetup"]</p>
     </section>
     <section class="settings-section mobile-section-panel @(_mobileSection == "language" ? "mobile-section-active" : "")" data-testid="language-global-settings">
         <h2>@L["Language"]</h2>
@@ -175,8 +175,7 @@
     private IReadOnlyList<MobileSectionNavigation.Section> MobileSections =>
     [
         new("account", L["AccountTitle"]),
-        new("network", L["NetworkTitle"]),
-        new("remote", L["RemoteTitle"]),
+        new("network", L["AccessTitle"]),
         new("language", L["Language"]),
         new("appearance", L["AvatarAppearance"]),
         new("providers", L["AgentProvidersTitle"]),

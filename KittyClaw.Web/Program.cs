@@ -115,6 +115,7 @@ builder.Services.AddSingleton(sp => new RemoteAccessBroker(
 builder.Services.AddSingleton<ICloudflaredRuntime, CloudflaredRuntime>();
 builder.Services.AddSingleton<RemoteAccessConnector>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<RemoteAccessConnector>());
+builder.Services.AddSingleton<AccessModeService>();
 builder.Services.AddSingleton(appSettings);
 builder.Services.AddSingleton(new KittyClaw.Core.Services.LocalizationService(appSettings));
 var projectSecretVault = new ProjectSecretVault(dataDir);
@@ -306,6 +307,8 @@ builder.Services.AddRazorComponents()
     });
 
 var app = builder.Build();
+// Normalize legacy dual opt-ins before any request can reach either listener.
+_ = app.Services.GetRequiredService<AccessModeService>();
 
 // Apply browser protections even to access-denied and setup responses.
 app.UseMiddleware<BrowserSecurityHeadersMiddleware>();
@@ -313,8 +316,7 @@ app.UseMiddleware<BrowserSecurityHeadersMiddleware>();
 // Gate all remote traffic, including uploads, APIs, MCP and Blazor connections.
 app.UseMiddleware<RemoteTunnelMiddleware>();
 app.UseMiddleware<AccountSetupMiddleware>();
-app.UseMiddleware<RemoteAccessSetupMiddleware>();
-app.UseMiddleware<AccountNetworkSetupMiddleware>();
+app.UseMiddleware<AccessSetupMiddleware>();
 app.UseMiddleware<AccountPortalAccessMiddleware>();
 app.UseMiddleware<NetworkAccessMiddleware>();
 

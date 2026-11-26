@@ -16,5 +16,18 @@
   "AccountNetworkReady": "L’autenticazione a due fattori dell’account è attiva. Le connessioni di rete usano lo stesso account.",
   "AccountNetworkRequired": "Associa questa installazione al tuo account e attiva l’autenticazione a due fattori su my.kittyclaw.dev. È l’unico autenticatore necessario.",
   "AccountNetworkEnable": "Attiva l’accesso alla rete locale",
-  "AccountNetworkEnableHint": "Consenti ai dispositivi della rete di connettersi a questa istanza con il tuo account KittyClaw. Riavvia KittyClaw una volta dopo l’attivazione per avviare il servizio HTTPS."
+  "AccountNetworkEnableHint": "Consenti ai dispositivi della rete di connettersi a questa istanza con il tuo account KittyClaw. Riavvia KittyClaw una volta dopo l’attivazione per avviare il servizio HTTPS.",
+  "AccessTitle": "Accesso a questa istanza",
+  "AccessModeLocal": "Solo locale",
+  "AccessModeNetwork": "Rete locale",
+  "AccessModeInternet": "Internet",
+  "AccessHintLocal": "Su questo computer tramite localhost.",
+  "AccessHintNetwork": "Dai dispositivi della stessa rete con il tuo account.",
+  "AccessHintInternet": "Da qualsiasi luogo tramite un tunnel HTTPS protetto dal tuo account.",
+  "AccessApply": "Applica modalità di accesso",
+  "AccessAdvanced": "Stato della connessione e impostazioni avanzate",
+  "AccessDnsHint": "Il tunnel e l’indirizzo DNS vengono creati automaticamente. Lascia il nome vuoto per generare un indirizzo. L’indirizzo resta riservato a questa istanza e non può essere rinominato.",
+  "AccessPublicAddress": "Indirizzo pubblico:",
+  "AccessCurrent": "Modalità attuale:",
+  "AccessConsentRequired": "Per attivare la modalità Internet, consenti il passaggio della connessione attraverso Cloudflare."
 }
