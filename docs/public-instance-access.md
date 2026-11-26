@@ -138,7 +138,8 @@ OpenAPI paths remain denied except these browser requirements:
 Image requests with absent or cross-site Origin are denied even with a cookie.
 The existing gate also validates Origin on Blazor handshakes and other requests.
 Login pages use same-origin referrer policy so browser POSTs carry a usable Origin.
-The local setup path is denied to remote callers. Pausing denies new origin requests
+Remote setup GETs show an account-authenticated read-only summary; configuration
+POSTs remain local-only. Pausing denies new origin requests
 and revokes active remote transports even if a connector continues forwarding.
 
 Cloudflare terminates public TLS and processes application traffic. This is not

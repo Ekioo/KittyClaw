@@ -34,5 +34,8 @@
   "AccessModeChoice": "アクセスモード",
   "AccessInternetConfirm": "必要に応じて名前を指定し、Cloudflare の許可にチェックを入れるとインターネットアクセスが有効になります。",
   "AccountInstanceSignOut": "このリモートセッションからログアウト",
-  "AccountInstanceSessionHint": "このインスタンスのリモートセッションのみを終了します。アカウントの関連付けは維持されます。"
+  "AccountInstanceSessionHint": "このインスタンスのリモートセッションのみを終了します。アカウントの関連付けは維持されます。",
+  "RemoteSetupReadOnly": "関連付けやアクセスモードを変更するには、このインスタンスを実行しているコンピューターで KittyClaw の設定を開いてください。ここでは現在の状態を確認できます。",
+  "AccountAssociationStatus": "アカウントの関連付け状態",
+  "AccessConnectionStatus": "接続状態"
 }

@@ -34,5 +34,8 @@
   "AccessModeChoice": "Access mode",
   "AccessInternetConfirm": "Choose an optional name, then check the Cloudflare permission to enable Internet access.",
   "AccountInstanceSignOut": "Sign out of this remote session",
-  "AccountInstanceSessionHint": "This only ends your remote session on this instance. Your account association is kept."
+  "AccountInstanceSessionHint": "This only ends your remote session on this instance. Your account association is kept.",
+  "RemoteSetupReadOnly": "To change the association or access mode, open KittyClaw on the computer hosting this instance, then open Settings. Here you can check the current status.",
+  "AccountAssociationStatus": "Account association status",
+  "AccessConnectionStatus": "Connection status"
 }

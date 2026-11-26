@@ -36,7 +36,7 @@
         {
             <p class="settings-hint">@L[Accounts.Snapshot.AuthorizationUrl is null ? "AccountNotAssociated" : "AccountPending"]</p>
         }
-        <a class="settings-browse" href="/account-setup" data-enhance-nav="false">@L["AccountConfigure"]</a>
+        <a class="settings-browse" href="/account-setup" data-enhance-nav="false">@L[HasRemoteSession ? "AccountAssociationStatus" : "AccountConfigure"]</a>
         <p class="settings-hint">@L["AccountNetworkUnchanged"]</p>
         @if (HasRemoteSession)
         {
@@ -49,7 +49,7 @@
     </section>
     <section class="settings-section mobile-section-panel @(_mobileSection == "advanced" ? "mobile-section-active" : "")" data-testid="advanced-global-settings">
         <h2>@L["AdvancedSettings"]</h2>
-        <a class="settings-browse" href="/access-setup" data-enhance-nav="false">@L["AccessTitle"] →</a>
+        <a class="settings-browse" href="/access-setup" data-enhance-nav="false">@L[HasRemoteSession ? "AccessConnectionStatus" : "AccessTitle"] →</a>
     </section>
     <section class="settings-section mobile-section-panel @(_mobileSection == "language" ? "mobile-section-active" : "")" data-testid="language-global-settings">
         <h2>@L["Language"]</h2>

@@ -324,6 +324,7 @@ app.UseMiddleware<BrowserSecurityHeadersMiddleware>();
 
 // Gate all remote traffic, including uploads, APIs, MCP and Blazor connections.
 app.UseMiddleware<RemoteTunnelMiddleware>();
+app.UseRemoteSetupSummaries();
 app.UseMiddleware<AccountSetupMiddleware>();
 app.UseMiddleware<AccessSetupMiddleware>();
 app.UseMiddleware<AccountPortalAccessMiddleware>();

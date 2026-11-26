@@ -49,6 +49,12 @@ Settings shows session sign-out only over a protected remote HTTPS origin, under
 Account. It explicitly ends that remote session while retaining the installation
 association; localhost has no remote session to disconnect.
 
+Authenticated LAN and tunnel browsers get a read-only summary at `/access-setup`
+and `/account-setup`, rendered by `RemoteSetupSummaryMiddleware` after the account
+session gate. The links in Settings explicitly say status. Anonymous callers must
+sign in first; remote POSTs and cross-origin requests remain forbidden. These
+pages do not expose local configuration forms or installation credentials.
+
 `AccessModeTests` covers exclusivity, migration, concurrency, consent, missing MFA,
 failure preservation, DNS/address reuse and offline local-only recovery.
 The production middleware tests also cover CSRF, aliases, invalid selections,
