@@ -30,7 +30,7 @@
             @foreach (var project in _projects)
             {
                 <NavLink @key="project.Slug" href="@($"/board/{Uri.EscapeDataString(project.Slug)}")" title="@project.Name" aria-label="@project.Name">
-                    <ProjectAvatar Seed="@project.Slug" />
+                    <ProjectAvatar Seed="@project.Slug" Name="@project.Name" />
                     <span class="sidebar-label">@project.Name</span>
                 </NavLink>
             }

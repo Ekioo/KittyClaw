@@ -80,7 +80,7 @@
         <p class="settings-hint">@L["AvatarThemeHint"]</p>
         <fieldset class="avatar-theme-picker">
             <legend class="avatar-theme-legend">@L["AvatarTheme"]</legend>
-            @foreach (var theme in new[] { "A", "B", "C" })
+            @foreach (var theme in new[] { "A", "B", "C", "D" })
             {
                 <label class="avatar-theme-option">
                     <span class="avatar-theme-heading">
@@ -182,7 +182,7 @@
         new("mcp", L["McpServerTitle"]),
     ];
 
-    private static readonly string[] AvatarPreviewSeeds = [ "studio", "atlas", "garden", "orbit", "canvas", "lumen" ];
+    private static readonly string[] AvatarPreviewSeeds = [ "Studio Design", "Atlas", "Garden Planner", "Orbit", "Canvas Art", "Lumen" ];
     protected override void OnInitialized()
     {
         L.OnLanguageChanged += OnLanguageChanged;

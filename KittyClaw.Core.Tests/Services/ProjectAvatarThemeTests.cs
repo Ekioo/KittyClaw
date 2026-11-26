@@ -38,6 +38,27 @@ public class ProjectAvatarThemeTests : IDisposable
         Assert.Equal("B", new AppSettingsService(_directory).ProjectAvatarTheme);
     }
 
+    [Fact]
+    public void Initials_theme_is_persisted()
+    {
+        var settings = new AppSettingsService(_directory) { ProjectAvatarTheme = "D" };
+        Assert.Equal("D", new AppSettingsService(_directory).ProjectAvatarTheme);
+    }
+
+    [Theory]
+    [InlineData("KittyClaw", "KI")]
+    [InlineData("Shiny Deal", "SD")]
+    [InlineData("  shiny   deal studio  ", "SD")]
+    [InlineData("École Atelier", "ÉA")]
+    [InlineData("E\u0301cole", "E\u0301C")]
+    [InlineData("A", "A")]
+    [InlineData("", "?")]
+    [InlineData(null, "?")]
+    public void Initials_use_the_first_two_words_or_two_text_elements(string? name, string expected)
+    {
+        Assert.Equal(expected, ProjectAvatarInitials.FromName(name));
+    }
+
     [Theory]
     [InlineData("A")]
     [InlineData("B")]

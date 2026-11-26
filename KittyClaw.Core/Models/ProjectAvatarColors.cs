@@ -24,7 +24,7 @@ public sealed record ProjectAvatarColors(string Background, string Cat, string D
         new("#F2DFFF", "#8C4BB2", "#F9ECFF"), new("#FFEDC4", "#A46E20", "#FFF4D7")
     ];
 
-    public static string NormalizeTheme(string? theme) => theme is "A" or "C" ? theme : "B";
+    public static string NormalizeTheme(string? theme) => theme is "A" or "C" or "D" ? theme : "B";
 
     public static ProjectAvatarColors Select(byte paletteSeed, string? theme)
     {
