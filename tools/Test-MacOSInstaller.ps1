@@ -93,9 +93,9 @@ function Test-PublishedHost([string] $ExpectedVersion) {
         if (-not $ready) { throw 'Published host did not become ready.' }
         $projects = Invoke-RestMethod "http://localhost:$Port/api/projects" -TimeoutSec 10
         if (@($projects).Count -ne 0) { throw 'The isolated registry unexpectedly contains projects.' }
-        $home = Invoke-WebRequest "http://localhost:$Port/" -TimeoutSec 10
+        $homeResponse = Invoke-WebRequest "http://localhost:$Port/" -TimeoutSec 10
         $displayVersion = $ExpectedVersion.Split('-')[0]
-        if ($home.Content -notmatch [regex]::Escape("KittyClaw v$displayVersion")) { throw "Wrong footer version; expected $displayVersion" }
+        if ($homeResponse.Content -notmatch [regex]::Escape("KittyClaw v$displayVersion")) { throw "Wrong footer version; expected $displayVersion" }
         foreach ($path in 'css/base.css', '_framework/blazor.web.js') {
             $response = Invoke-WebRequest "http://localhost:$Port/$path" -TimeoutSec 10
             if ($response.StatusCode -ne 200) { throw "Missing static asset: $path" }
