@@ -7,5 +7,9 @@
   "PageErrorHint": "Réessayez dans un instant. Si le problème persiste, indiquez l’identifiant de requête ci-dessous en le signalant.",
   "AccountNotAssociated": "Cette installation n’est pas encore associée à un compte.",
   "AccountPending": "Association commencée. Poursuivez la connexion pour associer cette installation.",
-  "AccountDisconnectHint": "Retire cette machine de votre compte. Vos projets locaux et les comptes GitHub ou Google liés sont conservés."
+  "AccountDisconnectHint": "Retire cette machine de votre compte. Vos projets locaux et les comptes GitHub ou Google liés sont conservés.",
+  "AccountSecurity": "Sécurité du compte et authentification à deux facteurs",
+  "AccountAccessFailed": "La connexion au compte n’a pas abouti. Vérifiez que cette installation est associée à votre compte et que le 2FA du compte est activé.",
+  "AccountAccessRetry": "Réessayer la connexion",
+  "AccountRemoteAuthentication": "Activez le 2FA une seule fois sur my.kittyclaw.dev pour protéger toutes vos instances associées. Vous pouvez aussi configurer un authentificateur local pour cette installation."
 }

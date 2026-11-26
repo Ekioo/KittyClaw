@@ -34,7 +34,7 @@ public sealed class RemoteAccessSetupMiddleware(RequestDelegate next)
 
         static string E(string text) => WebUtility.HtmlEncode(text);
         var snapshot = store.Snapshot;
-        var status = !snapshot.Enabled ? "Disabled" : !access.Enabled ? "AuthenticationRequired"
+        var status = !snapshot.Enabled ? "Disabled" : !connector.CanAuthenticate ? "AuthenticationRequired"
             : connector.NeedsRestart ? "RestartRequired" : connector.Status.State;
         var content = $"<p>{E(l["RemoteHint"])}</p><p role='status'><strong>{E(l["RemoteStatus" + status])}</strong></p>";
         if (error is not null) content += $"<p role='alert'>{E(error)}</p>";
@@ -45,9 +45,9 @@ public sealed class RemoteAccessSetupMiddleware(RequestDelegate next)
             content += $"<p><a href='{E(url)}' target='_blank' rel='noreferrer'>{E(url)}</a></p>";
             content += $"<figure style='margin:24px 0'><a href='{E(url)}' target='_blank' rel='noopener noreferrer'><img width='256' height='256' style='display:block;max-width:100%;height:auto;background:white;border-radius:8px' src='{RemoteAccessQrCode.DataUrl(url)}' alt='{E(l["RemoteUrlQr"])}' data-testid='remote-url-qr'></a><figcaption><h2 style='font-size:1.1rem'>{E(l["RemoteQrTitle"])}</h2><p>{E(l["RemoteQrInstructions"])}</p><p>{E(l["RemoteQrAuthentication"])}</p></figcaption></figure>";
         }
-        if (!access.Enabled)
-            content += $"<p>{E(l["RemoteAuthenticationRequired"])}</p><p><a href='/network-setup'>{E(l["NetworkConfigure"])}</a></p>";
-        if (snapshot.Enabled || access.Enabled)
+        if (!connector.CanAuthenticate)
+            content += $"<p>{E(l["AccountRemoteAuthentication"])}</p><p><a href='{AccountAssociationService.PortalOrigin}/security'>{E(l["AccountSecurity"])}</a></p><p><a href='/network-setup'>{E(l["NetworkConfigure"])}</a></p>";
+        if (snapshot.Enabled || connector.CanAuthenticate)
         {
             var csrf = antiforgery.GetAndStoreTokens(context).RequestToken!;
             content += $"<form method='post' action='/remote-setup'><input type='hidden' name='__RequestVerificationToken' value='{E(csrf)}'>";

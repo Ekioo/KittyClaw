@@ -7,5 +7,9 @@
   "PageErrorHint": "しばらくしてからもう一度お試しください。問題が続く場合は、下のリクエストIDを添えて報告してください。",
   "AccountNotAssociated": "このインストールはまだアカウントに関連付けられていません。",
   "AccountPending": "関連付けを開始しました。ログインを続けて、このインストールの関連付けを完了してください。",
-  "AccountDisconnectHint": "このマシンをアカウントから削除します。ローカルのプロジェクトと、連携済みのGitHubまたはGoogleアカウントは保持されます。"
+  "AccountDisconnectHint": "このマシンをアカウントから削除します。ローカルのプロジェクトと、連携済みのGitHubまたはGoogleアカウントは保持されます。",
+  "AccountSecurity": "アカウントのセキュリティと2要素認証",
+  "AccountAccessFailed": "ログインを完了できませんでした。このインストールがアカウントに関連付けられており、アカウントの2要素認証が有効になっていることを確認してください。",
+  "AccountAccessRetry": "もう一度ログイン",
+  "AccountRemoteAuthentication": "my.kittyclaw.devで2要素認証を一度設定すると、関連付けられたすべてのインスタンスを保護できます。このインストール専用のローカル認証アプリを設定することもできます。"
 }

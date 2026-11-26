@@ -7,5 +7,9 @@
   "PageErrorHint": "Versuche es gleich noch einmal. Falls das Problem weiterhin besteht, gib beim Melden die unten stehende Anfrage-ID an.",
   "AccountNotAssociated": "Diese Installation ist noch keinem Konto zugeordnet.",
   "AccountPending": "Zuordnung gestartet. Setze die Anmeldung fort, um diese Installation zuzuordnen.",
-  "AccountDisconnectHint": "Entfernt diesen Rechner aus deinem Konto. Lokale Projekte und verknüpfte GitHub- oder Google-Konten bleiben erhalten."
+  "AccountDisconnectHint": "Entfernt diesen Rechner aus deinem Konto. Lokale Projekte und verknüpfte GitHub- oder Google-Konten bleiben erhalten.",
+  "AccountSecurity": "Kontosicherheit und Zwei-Faktor-Authentifizierung",
+  "AccountAccessFailed": "Die Anmeldung konnte nicht abgeschlossen werden. Prüfe die Kontozuordnung und ob die Zwei-Faktor-Authentifizierung für das Konto aktiviert ist.",
+  "AccountAccessRetry": "Anmeldung erneut versuchen",
+  "AccountRemoteAuthentication": "Aktiviere die Zwei-Faktor-Authentifizierung einmal auf my.kittyclaw.dev, um alle zugeordneten Instanzen zu schützen. Alternativ kannst du einen lokalen Authenticator für diese Installation einrichten."
 }

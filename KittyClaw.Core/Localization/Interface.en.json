@@ -7,5 +7,9 @@
   "PageErrorHint": "Try again in a moment. If the problem persists, share the request ID below when reporting it.",
   "AccountNotAssociated": "This installation is not associated with an account yet.",
   "AccountPending": "Association started. Continue sign-in to finish linking this installation.",
-  "AccountDisconnectHint": "Removes this machine from your account. Your local projects and linked GitHub or Google accounts are kept."
+  "AccountDisconnectHint": "Removes this machine from your account. Your local projects and linked GitHub or Google accounts are kept.",
+  "AccountSecurity": "Account security and two-factor authentication",
+  "AccountAccessFailed": "Account sign-in could not be completed. Check that this installation is associated with your account and that account two-factor authentication is enabled.",
+  "AccountAccessRetry": "Try signing in again",
+  "AccountRemoteAuthentication": "Enable two-factor authentication once on my.kittyclaw.dev to protect all your associated instances. Alternatively, configure a local authenticator for this installation."
 }

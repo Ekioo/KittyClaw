@@ -7,5 +7,9 @@
   "PageErrorHint": "请稍后重试。如果问题仍然存在，报告时请附上下面的请求 ID。",
   "AccountNotAssociated": "此安装尚未关联任何账户。",
   "AccountPending": "已开始关联。请继续登录以完成此安装的关联。",
-  "AccountDisconnectHint": "将此计算机从您的账户中移除。本地项目和已绑定的 GitHub 或 Google 账户将保留。"
+  "AccountDisconnectHint": "将此计算机从您的账户中移除。本地项目和已绑定的 GitHub 或 Google 账户将保留。",
+  "AccountSecurity": "账户安全与双重验证",
+  "AccountAccessFailed": "无法完成登录。请确认此安装已关联到您的账户，且已启用账户双重验证。",
+  "AccountAccessRetry": "重新登录",
+  "AccountRemoteAuthentication": "在 my.kittyclaw.dev 上设置一次双重验证，即可保护所有关联的实例。您也可以为此安装配置本地身份验证器。"
 }

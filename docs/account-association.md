@@ -8,10 +8,11 @@ the provider's stable subject, profile name and verified email when supplied.
 It stores installation names, OS, version and last contact; projects, prompts,
 files and run logs stay on the installation.
 
-Association does not activate a tunnel, bypass the existing authenticator or
-authenticate a browser to a local instance. Account sessions and installation
-credentials belong only to this new control plane. See
-[public instance access](./public-instance-access.md) for the separate tunnel system.
+Association does not activate a tunnel or open a network listener. Once the owner
+enables account two-factor authentication on the portal, the associated account
+can authenticate a browser to an explicitly enabled managed tunnel. Local/LAN
+authenticator enrollment remains independent. See
+[public instance access](./public-instance-access.md) for tunnel activation.
 
 ## Local enrollment
 
@@ -57,6 +58,50 @@ requests before enrollment. An unavailable service does not sign an owner out
 locally or interrupt project processing. Central revocation is detected on the
 next successful check and stops heartbeats.
 
+The heartbeat also reports the managed tunnel URL and actual connector readiness.
+The portal displays Open instance only for a recently seen, ready tunnel. Older
+clients do not advertise this capability. The URL is never treated as proof of
+installation ownership: access is bound to the independent account installation
+identity and its protected credential.
+
+## Account-protected tunnel access
+
+Owners enroll one authenticator from `https://my.kittyclaw.dev/security`. GitHub
+and Google remain the first factor; a code or one-use recovery code verifies the
+central account session. Every associated installation uses that same factor.
+The authenticator secret is never distributed to installations. The Front
+repository's account Worker README owns enrollment, encrypted storage and the
+central HTTP contracts.
+
+An Open instance navigation starts at the managed public origin. The local
+`AccountPortalAccessService` creates a five-minute protected, host-only challenge
+cookie and an S256 PKCE challenge. The portal verifies account ownership and MFA,
+then redirects to the installation's registered HTTPS origin with a sixty-second,
+one-use authorization code. Redemption requires the installation credential and
+the cookie's verifier. A code or challenge from another browser, installation or
+account cannot authenticate the recipient.
+
+The installation issues a protected, Secure/HttpOnly host-only session cookie.
+It contains a scoped opaque proof, not a central browser cookie or authenticator
+key. The proof remains bound to the source account session, its MFA state and its
+expiry. Checks are cached for at most fifteen seconds. Long-lived remote requests
+are checked periodically and aborted on revocation or failed verification. Local
+account/MFA changes invalidate the cache generation and abort active requests.
+
+`AccountPortalAccessMiddleware` runs after the dedicated tunnel boundary and local
+setup boundaries, before the ordinary network gate. Its authenticated feature is
+accepted only on that HTTPS tunnel origin. API/MCP/OpenAPI restrictions, upload
+Origin checks, local-only setup, direct-LAN rules and browser CSRF checks remain
+in force. Local listener requests and forwarded headers cannot issue SSO cookies.
+Signing out from an instance clears and revokes its scoped proof; signing out from
+the account invalidates every proof tied to that account session.
+
+Existing direct-LAN and local authenticator sessions continue to work. A managed
+tunnel may be activated with either an enrolled local authenticator or an
+associated account whose central 2FA is enabled. First allocation can still require
+the existing restart to bind the dedicated listener; no listener is exposed merely
+by enabling central 2FA.
+
 The portal can rename and revoke instances, list and revoke sessions, connect a
 second provider, and delete an account. Equal email addresses never merge accounts.
 Adding a second provider requires a current session and rejects identities already
@@ -71,3 +116,9 @@ cross-origin denial and antiforgery validation with an isolated TestServer.
 The Front Worker tests exercise the actual SQL on isolated SQLite and test OAuth
 token validation against synthetic provider responses and signing keys. Production
 provider journeys require configured OAuth clients and explicit owner sign-in.
+
+`AccountPortalAccessTests` exercises the protected browser challenge, PKCE
+redemption, cookie tampering, expiry, account/MFA revocation, live-request abortion,
+activation without local authenticator enrollment, API/setup boundaries and
+forwarded-header denial. The regular suite uses synthetic accounts and fake broker
+responses, without allocating public tunnels or changing a user's authenticator.

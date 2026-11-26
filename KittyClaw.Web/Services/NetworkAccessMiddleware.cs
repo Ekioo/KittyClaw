@@ -74,6 +74,8 @@ public sealed class NetworkAccessMiddleware(RequestDelegate next)
         var directNetwork = context.Features.Get<RemoteTunnelRequest>() is null;
         if (directNetwork && !access.AllowsNetwork(context.Connection.RemoteIpAddress))
         { context.Response.StatusCode = 403; return; }
+        if (!directNetwork && context.Request.IsHttps && context.Features.Get<AccountTunnelAuthenticated>() is not null)
+        { await next(context); return; }
         if (!access.Enabled || !context.Request.IsHttps) { context.Response.StatusCode = 403; return; }
 
         if (login || logout)

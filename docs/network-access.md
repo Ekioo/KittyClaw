@@ -54,12 +54,17 @@ limit referrer disclosure to the same origin. Endpoint-specific content security
 policies remain in force. The generated API documentation fetches its OpenAPI
 specification through the configured trusted local client, with redirects and
 proxies disabled; incoming Host and scheme values never select that destination.
-All non-loopback requests require enabled access, HTTPS and a valid session,
+Direct-LAN requests require enabled access, HTTPS and a valid local session,
 including REST APIs, MCP and Blazor/SignalR handshakes. Only the login form is
 anonymous. APIs receive 401 rather than HTML redirects. Cross-origin browser requests are rejected before local trust is applied, including
 forms and WebSocket handshakes targeting localhost. Browser fetch metadata rejects
 cross-site writes with no Origin; ordinary headerless local agent clients and
 user-initiated local navigation remain supported. Remote HTTP requests are rejected, never used for login.
+
+The dedicated managed-tunnel listener can alternatively accept a centrally verified
+account session, described in [account association](./account-association.md).
+This does not enroll or enable a local network authenticator, expose a LAN listener,
+or relax the tunnel's API and local-setup restrictions.
 
 Login uses RFC 6238 TOTP, accepting a one-step clock drift. Accepted time steps are
 persisted to prevent reuse across restarts. Five failed attempts cause a one-minute cooldown for that source address. Sources
