@@ -7,7 +7,7 @@ namespace KittyClaw.Web.Services;
 
 public sealed record RemoteAccessSnapshot(bool Registered, bool Enabled, string? Url, int Port, bool Connected = false);
 internal sealed record RemoteAccessIdentity(string InstanceId, string Credential, string BrokerOrigin,
-    int Port, bool Registered = false, bool Enabled = false, string? Subdomain = null, bool NameRetryAllowed = false);
+    int Port, bool Registered = false, bool Enabled = false, string? Subdomain = null, bool NameRetryAllowed = false, bool Retired = false);
 
 /// <summary>Installation ownership is persisted before any remote allocation.</summary>
 public sealed class RemoteAccessStore
@@ -47,6 +47,9 @@ public sealed class RemoteAccessStore
         lock (_gate)
         {
             if (port is < 1024 or > 65535) throw new RemoteAccessException("RemotePortInvalid");
+            if (_identity?.Retired == true)
+                return Save(new(Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16)),
+                    Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32)), brokerOrigin, port, Subdomain: RemoteAccessName.Normalize(subdomain)));
             if (_identity is not null)
             {
                 if (_identity.BrokerOrigin != brokerOrigin || _identity.Port != port)
@@ -67,6 +70,14 @@ public sealed class RemoteAccessStore
     {
         lock (_gate) { if (_identity is { Registered: false }) Save(_identity with { NameRetryAllowed = true }); }
     }
+    internal void Retire()
+    {
+        lock (_gate)
+        {
+            if (_identity is not null) Save(_identity with { Registered = false, Enabled = false, Retired = true });
+            SetConnected(false);
+        }
+    }
     internal void Enable()
     {
         lock (_gate) Save((_identity ?? throw new InvalidOperationException()) with { Registered = true, Enabled = true });
@@ -85,7 +96,9 @@ public sealed class RemoteAccessStore
     }
     internal RemoteTunnelOptions OriginOptions(RemoteTunnelOptions configured)
     {
-        lock (_gate) return _identity?.Registered == true
+        lock (_gate) return _identity?.Retired == true
+            ? new(false, _identity.Port, RemoteAccessName.Hostname(_identity))
+            : _identity?.Registered == true
             ? new(true, _identity.Port, RemoteAccessName.Hostname(_identity))
             : _identity is not null ? configured with { Port = _identity.Port } : configured;
     }

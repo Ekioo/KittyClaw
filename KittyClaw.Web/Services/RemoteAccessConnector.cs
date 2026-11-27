@@ -93,7 +93,7 @@ public sealed class RemoteAccessConnector(RemoteAccessStore store, RemoteAccessB
                 var snapshot = store.Snapshot;
                 if (!snapshot.Enabled || !CanAuthenticate || NeedsRestart)
                 {
-                    SetStatus(!snapshot.Enabled ? "Disabled" : !CanAuthenticate ? "AuthenticationRequired" : "RestartRequired");
+                    if (store.Identity?.Retired != true) SetStatus(!snapshot.Enabled ? "Disabled" : !CanAuthenticate ? "AuthenticationRequired" : "RestartRequired");
                     await _wake.WaitAsync(TimeSpan.FromSeconds(1), stoppingToken);
                     continue;
                 }
@@ -124,6 +124,11 @@ public sealed class RemoteAccessConnector(RemoteAccessStore store, RemoteAccessB
                 catch (OperationCanceledException) when (connection.IsCancellationRequested) { }
                 catch (RemoteAccessException error)
                 {
+                    if (error.Code == "RemoteRetired")
+                    {
+                        store.Retire();
+                        access.RevokeSessions();
+                    }
                     if (error.Code is "RemoteRetired" or "RemoteOwnershipInvalid" or "RemoteIdentityMismatch"
                         or "RemotePlatformUnsupported" or "RemoteBrokerInvalid")
                     {

@@ -4,10 +4,21 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.32.1] — 2026-11-27
+
+Recover released public addresses and authenticate managed tunnel ownership.
+
+### Highlights
+
+Released tunnel names can be claimed again after server cleanup. KittyClaw clears a confirmed revoked address and lets the owner explicitly activate Internet access with a fresh tunnel identity.
+
 ### Fixed
 
-- Pipeline kits reject source-project parent ticket references and validate ticket-creation destinations. Creation actions and schedules export stable destination keys, resolved on import even after pipeline or column renames; legacy destinations are checked during analysis.
-- Pipeline kits preserve JEV modes, automatic routing, confidence thresholds, review criteria and execution profiles, with stable column references across pipeline renames. Import analysis previews these settings and links to project secrets when the TypeSafe key is missing. Credentials are never exported; optional fields retain format v1 compatibility.
+- Send server-verifiable account ownership when registering and reconnecting managed tunnels.
+- Clear the public URL and disable remote access when the broker confirms tunnel revocation; keep retired credentials unusable and generate a fresh identity on explicit activation.
+- Preserve pipeline-kit JEV configuration and validate ticket-creation destinations and parent references.
+
+---
 
 ## [v0.32] — 2026-11-26
 

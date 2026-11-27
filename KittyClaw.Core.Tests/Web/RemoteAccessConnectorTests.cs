@@ -373,11 +373,18 @@ public sealed class RemoteAccessConnectorTests
         {
             await WaitUntil(() => f.Connector.Status.State == "Error");
             Assert.Equal("RemoteRetired", f.Connector.Status.Error);
+            Assert.Null(f.Store.Snapshot.Url);
+            Assert.False(f.Store.Snapshot.Enabled);
+            Assert.False(f.Store.Snapshot.Registered);
+            var retiredId = f.Store.Identity!.InstanceId;
+            Assert.False(f.Store.OriginOptions(new(true, 5234, "old.kittyclaw.dev")).Enabled);
             Assert.Equal(0, f.Runtime.Starts);
             await f.Connector.PauseAsync(default);
             f.Handler.Retired = false;
             await f.Connector.ActivateAsync(default);
-            await WaitUntil(() => f.Runtime.Starts == 1);
+            Assert.NotEqual(retiredId, f.Store.Identity!.InstanceId);
+            Assert.True(f.Connector.NeedsRestart);
+            Assert.Equal(1, f.Handler.Registrations);
         }
         finally { await f.Connector.StopAsync(default); }
     }

@@ -33,7 +33,8 @@ handles concurrent claims. The owner can choose another name after a refusal usi
 
 The protected identity persists the chosen name before registration. An ambiguous
 response keeps that name fixed for retries. Once assigned, an address cannot be
-renamed and remains reserved after retirement. Existing automatic addresses and
+renamed. Retirement releases its name after Cloudflare cleanup completes; the old
+identity remains revoked. Existing automatic addresses and
 protected identities without a chosen-name field remain compatible.
 
 `RemoteAccessStore` persists a random installation ID and credential, protected with
@@ -156,7 +157,9 @@ in the front repository's `account-worker/README.md`.
 
 The front repository's Worker README owns the broker API, D1 schema, quotas and resource lifecycle. Global Cloudflare credentials remain
 in Worker secrets; each desktop receives only its own tunnel credential. Registration is open to every installation within the configured fleet quota. Durable state and exact resource lookups handle partial failures.
-Permanent retirement differs from desktop pause and retains a name tombstone.
+Permanent retirement differs from desktop pause and releases the name after cleanup.
+On a confirmed broker retirement response, the desktop closes access, removes the
+saved public URL and requires explicit activation with a fresh tunnel identity.
 
 The service uses D1, rate limits and validated live DNS/HTTPS. Open enrollment without invitations was deployed on 2026-10-24 after explicit owner approval
 (Worker version `eeb7c298-e61f-4076-9a8d-4a1ba3a40924`). Authentication and existing quotas remain unchanged.
