@@ -4,6 +4,26 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.32.3] — 2026-11-27
+
+Import workspace pipelines with a single clear confirmation.
+
+### Highlights
+
+Choose to import a detected pipeline and it installs directly. When the kit declares executable actions such as Python, the same short confirmation describes those capabilities and authorizes them, without opening the detailed kit-review dialog. No script runs during import.
+
+### Changed
+
+- Replace the onboarding import review with one concise import-and-allow confirmation.
+- Show import or activation issues on the board without another modal.
+
+### Fixed
+
+- Apply confirmed Python and other declared action permissions during workspace import.
+- Keep archive validation and missing-credential or prerequisite checks intact.
+
+---
+
 ## [v0.32.2] — 2026-11-27
 
 Review existing workspace pipelines and their execution approvals during project creation.
