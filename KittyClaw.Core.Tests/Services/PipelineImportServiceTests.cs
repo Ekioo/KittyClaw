@@ -354,7 +354,7 @@ public sealed class PipelineImportServiceTests : IDisposable
         Assert.Equal(before, Snapshot(workspace));
     }
 
-    private static byte[] BuildKit(
+    internal static byte[] BuildKit(
         (string Path, byte[] Content)? extra = null,
         int formatVersion = 1,
         bool includeEmbeddedSkill = true,

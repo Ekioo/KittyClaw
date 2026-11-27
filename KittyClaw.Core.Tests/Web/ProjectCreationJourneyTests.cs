@@ -24,6 +24,8 @@ public sealed class ProjectCreationJourneyTests
             {
                 var init = await ProcessRunner.RunAsync("git", "init", workspace, TimeSpan.FromSeconds(10));
                 Assert.True(init.Success, init.Stderr);
+                await File.WriteAllBytesAsync(Path.Combine(workspace, "main.kittyclaw-pipeline"),
+                    Services.PipelineImportServiceTests.BuildKit());
             }
 
             // A fresh server, registry and mock-only provider for each journey. No project
@@ -72,6 +74,12 @@ public sealed class ProjectCreationJourneyTests
             }
 
             await page.GetByTestId("create-project-initialize").ClickAsync();
+            if (existingRepository)
+            {
+                await Expect(page.GetByTestId("workspace-pipeline-confirmation")).ToContainTextAsync("main.kittyclaw-pipeline");
+                Assert.Empty(await http.GetFromJsonAsync<JsonElement[]>("/api/projects") ?? []);
+                await page.GetByTestId("workspace-pipeline-decline").ClickAsync();
+            }
             await Expect(page.Locator("#first-ticket-title")).ToHaveValueAsync(objective, new() { Timeout = 30_000 });
             Assert.True(Directory.Exists(Path.Combine(workspace, ".git")));
             Assert.True(File.Exists(Path.Combine(workspace, "AGENTS.md")));
@@ -108,11 +116,17 @@ public sealed class ProjectCreationJourneyTests
         }
     }
 
-    [Fact]
-    public async Task Skip_setup_creates_empty_project_without_git_or_template_files()
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Skip_setup_asks_before_importing_existing_kits(bool hasKit, bool acceptImport)
     {
         var workspace = Path.Combine(Path.GetTempPath(), $"kittyclaw-empty-project-{Guid.NewGuid():N}");
         Directory.CreateDirectory(workspace);
+        var kitPath = Path.Combine(workspace, "main.kittyclaw-pipeline");
+        if (hasKit)
+            await File.WriteAllBytesAsync(kitPath, Services.PipelineImportServiceTests.BuildKit(riskyActions: true));
         try
         {
             await using var instance = await TestInstance.StartAsync(WebExecutable());
@@ -127,6 +141,19 @@ public sealed class ProjectCreationJourneyTests
             await Expect(page.Locator("#first-objective")).ToHaveCountAsync(0);
             await page.GetByTestId("create-project-next").ClickAsync();
             await page.GetByTestId("create-project-empty").ClickAsync();
+            if (hasKit)
+            {
+                await Expect(page.GetByTestId("workspace-pipeline-confirmation")).ToContainTextAsync("main.kittyclaw-pipeline");
+                Assert.Empty(await http.GetFromJsonAsync<JsonElement[]>("/api/projects") ?? []);
+                await page.GetByTestId(acceptImport ? "workspace-pipeline-accept" : "workspace-pipeline-decline").ClickAsync();
+            }
+            if (acceptImport)
+            {
+                var notices = page.GetByRole(AriaRole.Alertdialog);
+                await Expect(notices).ToContainTextAsync("approval:executePowerShell");
+                await Expect(notices).ToContainTextAsync("approval:httpRequest");
+                await notices.GetByRole(AriaRole.Button).ClickAsync();
+            }
             await Expect(page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/board/empty-project$"));
             await Expect(page.Locator(".first-ticket-draft")).ToHaveCountAsync(0);
             await Expect(page.Locator(".migration-wizard")).ToHaveCountAsync(0);
@@ -134,15 +161,18 @@ public sealed class ProjectCreationJourneyTests
             Assert.Equal(workspace, project.GetProperty("workspacePath").GetString());
             Assert.Empty(await http.GetFromJsonAsync<JsonElement[]>("/api/projects/empty-project/tickets") ?? []);
             var pipelines = await http.GetFromJsonAsync<JsonElement[]>("/api/projects/empty-project/pipelines");
-            var main = Assert.Single(pipelines!);
+            Assert.Equal(acceptImport ? 2 : 1, pipelines!.Length);
+            var main = Assert.Single(pipelines, p => p.GetProperty("isDefault").GetBoolean());
             Assert.Equal("main", main.GetProperty("slug").GetString());
             Assert.True(main.GetProperty("isDefault").GetBoolean());
             Assert.False(Directory.Exists(Path.Combine(workspace, ".git")));
             Assert.False(File.Exists(Path.Combine(workspace, "AGENTS.md")));
             Assert.False(File.Exists(Path.Combine(workspace, "CLAUDE.md")));
+            if (hasKit) Assert.True(File.Exists(kitPath));
         }
         finally
         {
+            if (hasKit && File.Exists(kitPath)) File.Delete(kitPath);
             // The empty-project flow must never populate the selected workspace.
             if (Directory.Exists(workspace) && !Directory.EnumerateFileSystemEntries(workspace).Any())
                 Directory.Delete(workspace);

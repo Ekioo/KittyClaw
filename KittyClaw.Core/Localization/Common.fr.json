@@ -1,6 +1,9 @@
 {
+  "WorkspacePipelineQuestion": "Importer les pipelines trouvés dans ce dossier ?",
+  "WorkspacePipelineImportHint": "Ces fichiers de pipeline ont été trouvés à la racine du dossier de travail. Voulez-vous les importer dans ce projet ? Les actions exécutables nécessitent toujours des approbations séparées. Vous pourrez aussi les importer plus tard depuis Flux de travail.",
+  "WorkspacePipelineDecline": "Continuer sans importer",
   "WorkflowHelpQuestion": "Voulez-vous que je vous aide à créer votre premier workflow ?",
-  "WorkflowHelpIntro": "Décrivez votre objectif pour être guidé, ou ignorez cette étape pour créer uniquement le workflow main par défaut.",
+  "WorkflowHelpIntro": "Décrivez votre objectif pour être guidé, ou ignorez cette aide. Si le dossier contient des kits de pipeline, leur import vous sera proposé.",
   "WorkflowHelpAccept": "Oui, aidez-moi à démarrer",
   "SkipOptionalStep": "Ignorer",
   "SkipCreateEmpty": "Ignorer et créer un projet vide",

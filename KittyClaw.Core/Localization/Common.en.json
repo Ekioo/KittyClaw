@@ -1,6 +1,9 @@
 {
+  "WorkspacePipelineQuestion": "Import the pipelines found in this folder?",
+  "WorkspacePipelineImportHint": "These pipeline files were found at the root of your workspace. Import them into this project? Executable actions still require separate approvals. You can also import them later from Workflows.",
+  "WorkspacePipelineDecline": "Continue without importing",
   "WorkflowHelpQuestion": "Would you like me to help you create your first workflow?",
-  "WorkflowHelpIntro": "Describe your objective to get started with guided setup, or skip to create only the default main workflow.",
+  "WorkflowHelpIntro": "Describe your objective to get started with guided setup, or skip this help. If this folder contains pipeline kits, you will be asked whether to import them.",
   "WorkflowHelpAccept": "Yes, help me get started",
   "SkipOptionalStep": "Skip",
   "SkipCreateEmpty": "Skip and create empty project",

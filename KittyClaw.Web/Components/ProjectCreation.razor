@@ -19,7 +19,7 @@
    cannot diverge. A single button opens the modal; the name lives inside the modal. *@
 <button class="header-action-btn settings-primary" data-testid="create-project-open" aria-label="@L["CreateProjectButton"]" title="@L["CreateProjectButton"]" disabled="@(!_interactive)" @onclick="OpenCreation"><span class="create-project-icon" aria-hidden="true">+</span><span class="create-project-label"> @L["CreateProjectButton"]</span></button>
 
-@if (_open)
+@if (_open && _detectedPipelineFiles is null)
 {
     <div class="modal-backdrop">
         <div class="modal-dialog project-creation" role="dialog" aria-modal="true" aria-labelledby="project-creation-title" aria-describedby="project-creation-intro" aria-busy="@_initializing" @onclick:stopPropagation>
@@ -125,6 +125,31 @@
     </div>
 }
 
+@if (_open && _detectedPipelineFiles is not null)
+{
+    <div class="modal-backdrop">
+        <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="workspace-pipeline-title" data-testid="workspace-pipeline-confirmation" aria-busy="@_initializing">
+            <h2 id="workspace-pipeline-title">@L["WorkspacePipelineQuestion"]</h2>
+            <p>@L["WorkspacePipelineImportHint"]</p>
+            <ul>
+                @foreach (var file in _detectedPipelineFiles)
+                {
+                    <li><code>@file</code></li>
+                }
+            </ul>
+            @if (_creationStatus is not null)
+            {
+                <div class="settings-status @_creationStatus.Value.css">@_creationStatus.Value.text</div>
+            }
+            <div class="modal-actions">
+                <button class="header-action-btn" disabled="@_initializing" @onclick="CancelCreation">@L["Cancel"]</button>
+                <button class="header-action-btn" data-testid="workspace-pipeline-decline" disabled="@_initializing" @onclick="() => ConfirmWorkspaceImport(false)">@L["WorkspacePipelineDecline"]</button>
+                <button class="header-action-btn settings-primary" data-testid="workspace-pipeline-accept" disabled="@_initializing" @onclick="() => ConfirmWorkspaceImport(true)">@L["PipelineKitImport"]</button>
+            </div>
+        </div>
+    </div>
+}
+
 @if (_folderPickerOpen)
 {
     <FolderPickerDialog InitialPath="@_newWorkspacePath"
@@ -185,6 +210,9 @@ else if (_createdProject is not null)
     private bool _workspaceWasEmpty;
     private Project? _createdProject;
     private List<string> _pipelineImportNotices = [];
+    private string[]? _detectedPipelineFiles;
+    private bool? _importWorkspacePipelines;
+    private bool _pendingOverwrite;
     private AgentsTemplateService.GitWorkspaceInspection? _gitWorkspace;
     private bool _initializeGit = true;
     private int _workspaceInspectionVersion;
@@ -215,6 +243,8 @@ else if (_createdProject is not null)
         _objectiveStep = false;
         _validatedIntake = null;
         _pipelineImportNotices.Clear();
+        _detectedPipelineFiles = null;
+        _importWorkspacePipelines = null;
         _skipSetup = false;
         _firstTicketId = null;
         _providerGuidance = null;
@@ -372,15 +402,28 @@ else if (_createdProject is not null)
             // Validate BEFORE creating: a rejected workspace must not leave a half-created
             // project behind (§2.6 — relative / ".." / drive root / system dirs).
             ProjectService.ValidateWorkspacePath(_newWorkspacePath.Trim());
+            if (_importWorkspacePipelines is null)
+            {
+                var files = Directory.EnumerateFiles(_newWorkspacePath.Trim(), "*", SearchOption.TopDirectoryOnly)
+                    .Where(path => Path.GetExtension(path).Equals(PipelineKitFormat.FileExtension, StringComparison.OrdinalIgnoreCase))
+                    .Select(path => Path.GetFileName(path)).OrderBy(name => name, StringComparer.Ordinal).ToArray();
+                if (files.Length > 0)
+                {
+                    _detectedPipelineFiles = files;
+                    _pendingOverwrite = overwrite;
+                    return;
+                }
+            }
             if (!_skipSetup) AgentsTemplate.ValidateWriteDestinations(_newWorkspacePath.Trim(), overwrite);
             var project = await ProjectService.CreateProjectAsync(_newProjectName.Trim());
             await ProjectService.UpdateProjectAsync(project.Slug, _newWorkspacePath.Trim());
             var initializeGit = _gitWorkspace?.CanInitialize == true && _initializeGit;
             if (!_skipSetup) await AgentsTemplate.InitializeAsync(_newWorkspacePath.Trim(), overwrite, initializeGit);
-            if (_skipSetup)
-                await Pipelines.ListAsync(project.Slug);
-            else
+            // Workflow design and importing existing kits are independent owner decisions.
+            if (_importWorkspacePipelines == true)
                 _pipelineImportNotices = await PipelineImport.ImportWorkspaceAsync(project.Slug);
+            else
+                await Pipelines.ListAsync(project.Slug);
 
             _newProjectName = "";
             _open = false;
@@ -402,6 +445,15 @@ else if (_createdProject is not null)
         _folderPickerOpen = false;
         _initConflicts = null;
         _creationStatus = null;
+        _detectedPipelineFiles = null;
+        _importWorkspacePipelines = null;
+    }
+
+    private async Task ConfirmWorkspaceImport(bool import)
+    {
+        if (_initializing) return;
+        _importWorkspacePipelines = import;
+        await CreateAndInitialize(_pendingOverwrite);
     }
 
     private async Task DismissPipelineNotices()
