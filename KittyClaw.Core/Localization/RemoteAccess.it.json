@@ -19,7 +19,7 @@
   "RemoteOwnershipInvalid": "Le credenziali remote di questa installazione sono state rifiutate. Contatta il supporto KittyClaw.",
   "RemoteIdentityMismatch": "L’installazione salvata appartiene a un altro servizio o a un’altra porta. Ripristina la configurazione originale prima di riprovare.",
   "RemotePortInvalid": "La configurazione della porta di accesso remoto non è valida.",
-  "RemoteRetired": "Questo indirizzo è stato ritirato definitivamente. Contatta il supporto KittyClaw.",
+  "RemoteRetired": "Questo tunnel è stato liberato. Riattiva l’accesso Internet e scegli un nome disponibile.",
   "RemoteCapacityExhausted": "Il servizio di accesso Internet ha raggiunto il limite di installazioni. Le nuove attivazioni sono temporaneamente sospese. Riprova più tardi; la tua istanza locale resta accessibile.",
   "RemoteBrokerUnavailable": "Il servizio di accesso remoto non è disponibile o non è ancora stato distribuito. L’istanza locale resta disponibile.",
   "RemoteBrokerInvalid": "Il servizio di accesso remoto ha restituito una risposta imprevista. Il connettore non è stato avviato.",

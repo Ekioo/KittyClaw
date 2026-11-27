@@ -19,7 +19,7 @@
   "RemoteOwnershipInvalid": "此安装的远程凭据被拒绝。请联系 KittyClaw 支持。",
   "RemoteIdentityMismatch": "已保存的安装属于其他服务或端口。请恢复原始配置后重试。",
   "RemotePortInvalid": "远程访问端口配置无效。",
-  "RemoteRetired": "此地址已永久停用。请联系 KittyClaw 支持。",
+  "RemoteRetired": "此隧道已释放。请重新启用互联网访问并选择一个可用名称。",
   "RemoteCapacityExhausted": "互联网访问服务已达到安装数量上限，暂时无法启用新的连接。请稍后重试；您的本地实例仍可正常访问。",
   "RemoteBrokerUnavailable": "远程访问服务不可用或尚未部署。本地实例仍可使用。",
   "RemoteBrokerInvalid": "远程访问服务返回了意外响应。连接器未启动。",

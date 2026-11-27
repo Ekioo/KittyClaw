@@ -141,5 +141,7 @@
   "WorkflowReconfigureReviewHint": "Review the changes to this pipeline before applying. Unspecified configuration will be preserved.",
   "WorkflowReconfigureApplying": "Applying changes",
   "WorkflowReconfigureApplyingHint": "The assistant is applying the approved changes to the existing pipeline.",
-  "WorkflowReconfigureAnalyzingHint": "The assistant is reviewing the existing configuration and your requested changes."
+  "WorkflowReconfigureAnalyzingHint": "The assistant is reviewing the existing configuration and your requested changes.",
+  "PipelineKitJevMissing": "O JEV requer uma chave TypeSafe. Sem ela, o pipeline importado permanece desativado. Analise novamente após adicionar a chave ou ative os processadores após a importação.",
+  "PipelineKitJevAddSecret": "Adicionar TYPESAFE_API_KEY aos segredos do projeto"
 }

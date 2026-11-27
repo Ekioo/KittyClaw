@@ -19,7 +19,7 @@
   "RemoteOwnershipInvalid": "This installation's remote credentials were refused. Contact KittyClaw support.",
   "RemoteIdentityMismatch": "The saved installation belongs to another service or port. Restore its original configuration before retrying.",
   "RemotePortInvalid": "The remote access port configuration is invalid.",
-  "RemoteRetired": "This address has been permanently retired. Contact KittyClaw support.",
+  "RemoteRetired": "This tunnel has been released. Enable Internet access again and choose an available name.",
   "RemoteCapacityExhausted": "The Internet access service has reached its installation limit. New activations are temporarily unavailable. Try again later; your local instance remains accessible.",
   "RemoteBrokerUnavailable": "The remote access service is unavailable or not deployed yet. Your local instance remains available.",
   "RemoteBrokerInvalid": "The remote access service returned an unexpected response. The connector was not started.",

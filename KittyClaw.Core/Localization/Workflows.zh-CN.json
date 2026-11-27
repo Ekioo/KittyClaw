@@ -198,5 +198,7 @@
   "WorkflowReconfigureReviewHint": "应用前请审核此流水线的更改。未指定的配置将保留。",
   "WorkflowReconfigureApplying": "正在应用更改",
   "WorkflowReconfigureApplyingHint": "助手正在将已批准的更改应用到现有流水线。",
-  "WorkflowReconfigureAnalyzingHint": "助手正在审核现有配置及您请求的更改。"
+  "WorkflowReconfigureAnalyzingHint": "助手正在审核现有配置及您请求的更改。",
+  "PipelineKitJevMissing": "JEV 需要 TypeSafe 密钥。没有密钥时，导入的流水线将保持禁用。添加密钥后请重新分析，或在导入后启用处理器。",
+  "PipelineKitJevAddSecret": "将 TYPESAFE_API_KEY 添加到项目密钥中"
 }

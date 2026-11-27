@@ -19,7 +19,7 @@
   "RemoteOwnershipInvalid": "Les identifiants distants de cette installation ont été refusés. Contacte le support KittyClaw.",
   "RemoteIdentityMismatch": "L’installation enregistrée utilise un autre service ou port. Rétablis sa configuration d’origine avant de réessayer.",
   "RemotePortInvalid": "La configuration du port d’accès distant est invalide.",
-  "RemoteRetired": "Cette adresse a été retirée définitivement. Contacte le support KittyClaw.",
+  "RemoteRetired": "Ce tunnel a été libéré. Réactive l’accès Internet et choisis un nom disponible.",
   "RemoteCapacityExhausted": "Le service d’accès Internet a atteint sa capacité maximale. Les nouvelles activations sont temporairement indisponibles. Réessaie plus tard ; ton instance locale reste accessible.",
   "RemoteBrokerUnavailable": "Le service d’accès distant est indisponible ou pas encore déployé. Ton instance locale reste accessible.",
   "RemoteBrokerInvalid": "Le service d’accès distant a renvoyé une réponse inattendue. Le connecteur n’a pas été démarré.",
