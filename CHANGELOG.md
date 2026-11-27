@@ -4,6 +4,26 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.33] — 2026-11-27
+
+Detect existing workspace pipelines and ask before importing them.
+
+### Highlights
+
+Creating a project now detects pipeline kits in the selected folder even when the workflow assistant is skipped. A separate confirmation lists the files and lets the owner import them or continue without importing.
+
+### Changed
+
+- Ask for an explicit import decision before creating the project in both guided and skipped setup.
+- Explain the independent workflow-help and pipeline-import choices in English and French.
+
+### Fixed
+
+- Keep existing workspace pipelines discoverable after skipping workflow help.
+- Preserve executable-action approval and activation requirements when importing detected kits.
+
+---
+
 ## [v0.32.1] — 2026-11-27
 
 Recover released public addresses and authenticate managed tunnel ownership.
