@@ -38,7 +38,11 @@ trust.
    no credentials, query or fragment are permitted. No account or installation
    credential is returned in that URL. The local page displays the proposed profile and verified email, then requires
    a separate antiforgery-protected confirmation. The installation-authenticated
-   confirmation atomically consumes the unexpired proposal.
+   confirmation atomically consumes the unexpired proposal and enforces one active
+   installation per account. Concurrent proposals cannot bypass that limit. The
+   portal refuses further associations with `account_instance_limit` and explains
+   how to revoke the existing installation; local confirmation displays the same
+   localized guidance. Revoked installations do not occupy the account slot.
 
 This first delivery assumes access to the local interface. Integration with a
 bot's authorization popup and enrollment without a local browser are separate work.

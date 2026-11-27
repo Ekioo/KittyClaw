@@ -120,7 +120,8 @@ builder.Services.PostConfigure<HostFilteringOptions>(options =>
 builder.Services.AddSingleton(sp => new RemoteAccessBroker(
     new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
     { MaxResponseContentBufferSize = 64 * 1024, Timeout = TimeSpan.FromSeconds(95) },
-    new Uri(builder.Configuration["RemoteAccess:BrokerUrl"] ?? "https://remote-api.kittyclaw.dev")));
+    new Uri(builder.Configuration["RemoteAccess:BrokerUrl"] ?? "https://remote-api.kittyclaw.dev"),
+    sp.GetRequiredService<AccountAssociationService>()));
 builder.Services.AddSingleton<ICloudflaredRuntime, CloudflaredRuntime>();
 builder.Services.AddSingleton<RemoteAccessConnector>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<RemoteAccessConnector>());

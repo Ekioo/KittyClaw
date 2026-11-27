@@ -19,6 +19,29 @@ namespace KittyClaw.Core.Tests.Web;
 public sealed class AccountAssociationTests
 {
     [Fact]
+    public async Task Broker_authentication_requires_MFA_and_never_sends_account_secrets_to_other_origins()
+    {
+        using var dir = new TempDir();
+        using var handler = new Broker();
+        using var http = new HttpClient(handler);
+        using var service = new AccountAssociationService(dir.Path, new EphemeralDataProtectionProvider(), http);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "https://remote-api.kittyclaw.dev/v1/instances");
+        await Assert.ThrowsAsync<RemoteAccessException>(() => service.AddBrokerAuthenticationAsync(request, default));
+        await service.BeginAssociationAsync(default);
+        await service.RefreshAsync(default);
+        await service.ConfirmAsync(handler.Account.Id, default);
+        await Assert.ThrowsAsync<RemoteAccessException>(() => service.AddBrokerAuthenticationAsync(request, default));
+        handler.MfaEnabled = true;
+        await service.RefreshAsync(default);
+        await service.AddBrokerAuthenticationAsync(request, default);
+        Assert.Equal(service.InstallationId, request.Headers.GetValues("X-KittyClaw-Account-Installation").Single());
+        Assert.Equal(handler.Credentials[0], request.Headers.GetValues("X-KittyClaw-Account-Credential").Single());
+        using var foreign = new HttpRequestMessage(HttpMethod.Post, "https://custom-broker.example/v1/instances");
+        await Assert.ThrowsAsync<RemoteAccessException>(() => service.AddBrokerAuthenticationAsync(foreign, default));
+        Assert.False(foreign.Headers.Contains("X-KittyClaw-Account-Credential"));
+    }
+
+    [Fact]
     public async Task Ownership_is_protected_persisted_and_requires_explicit_confirmation()
     {
         using var dir = new TempDir();
@@ -141,6 +164,7 @@ public sealed class AccountAssociationTests
         public List<string> Credentials { get; } = [];
         public bool UnsafeUrl { get; set; }
         public bool Revoked { get; set; }
+        public bool MfaEnabled { get; set; }
         private bool _confirmed;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -153,7 +177,7 @@ public sealed class AccountAssociationTests
             var action = request.RequestUri.Segments[^1];
             object response = new { ok = true };
             if (action == "associate") response = new { authorizationUrl = (UnsafeUrl ? "https://evil.test" : AccountAssociationService.PortalOrigin) + "/associate?request=" + new string('a', 64), expiresAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 600 };
-            if (action == "status") response = new { account = _confirmed && !Revoked ? Account : null, proposedAccount = !_confirmed && !Revoked ? Account : null, revoked = Revoked };
+            if (action == "status") response = new { account = _confirmed && !Revoked ? Account : null, proposedAccount = !_confirmed && !Revoked ? Account : null, revoked = Revoked, mfaEnabled = MfaEnabled };
             if (action == "confirm") _confirmed = true;
             if (action == "disconnect") { _confirmed = false; Revoked = true; }
             return new(HttpStatusCode.OK) { Content = JsonContent.Create(response) };

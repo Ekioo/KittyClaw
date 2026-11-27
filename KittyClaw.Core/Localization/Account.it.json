@@ -1,4 +1,5 @@
 {
+  "AccountInstanceLimit": "Il tuo account include un’istanza. Revoca l’istanza esistente da Le mie istanze prima di aggiungerne un’altra.",
   "AccountTitle": "Account KittyClaw",
   "AccountHint": "Associa questa installazione al tuo account GitHub o Google per ritrovarla su my.kittyclaw.dev.",
   "AccountConfigure": "Gestisci l’associazione dell’account",

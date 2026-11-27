@@ -1,4 +1,5 @@
 {
+  "AccountInstanceLimit": "你的账户包含一个实例。添加其他实例之前，请在“我的实例”中撤销现有实例。",
   "AccountTitle": "KittyClaw 账户",
   "AccountHint": "将此安装关联到您的 GitHub 或 Google 账户，即可在 my.kittyclaw.dev 上找到它。",
   "AccountConfigure": "管理账户关联",

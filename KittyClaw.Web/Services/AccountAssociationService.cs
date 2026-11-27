@@ -168,6 +168,21 @@ public sealed class AccountAssociationService : BackgroundService
     }
     internal string? InstallationId => _installation?.InstanceId;
 
+    internal async Task AddBrokerAuthenticationAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct);
+        try
+        {
+            // The account credential is sent only to the first-party HTTPS broker.
+            if (request.RequestUri?.GetLeftPart(UriPartial.Authority) != "https://remote-api.kittyclaw.dev"
+                || _installation is not { Account: not null, Revoked: false } || !_snapshot.MfaEnabled)
+                throw new RemoteAccessException("RemoteAuthenticationRequired");
+            request.Headers.Add("X-KittyClaw-Account-Installation", _installation.InstanceId);
+            request.Headers.Add("X-KittyClaw-Account-Credential", _installation.Credential);
+        }
+        finally { _gate.Release(); }
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -207,7 +222,16 @@ public sealed class AccountAssociationService : BackgroundService
         try
         {
             using var response = await _http.SendAsync(request, cancellationToken);
-            if (!response.IsSuccessStatusCode) throw new AccountAssociationException();
+            if (!response.IsSuccessStatusCode)
+            {
+                if (response.StatusCode == HttpStatusCode.Conflict)
+                {
+                    var failure = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+                    if (failure.TryGetProperty("error", out var code) && code.GetString() == "account_instance_limit")
+                        throw new AccountAssociationException("AccountInstanceLimit");
+                }
+                throw new AccountAssociationException();
+            }
             return await response.Content.ReadFromJsonAsync<T>(cancellationToken) ?? throw new AccountAssociationException();
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException or NotSupportedException)
@@ -250,5 +274,6 @@ public sealed class AccountAssociationService : BackgroundService
 
 public sealed class AccountAssociationException : Exception
 {
-    public AccountAssociationException() : base("Account association could not be completed.") { }
+    public string Code { get; }
+    public AccountAssociationException(string code = "AccountError") : base("Account association could not be completed.") { Code = code; }
 }

@@ -1,4 +1,5 @@
 {
+  "AccountInstanceLimit": "Tu cuenta incluye una instancia. Revoca la instancia existente en Mis instancias antes de añadir otra.",
   "AccountTitle": "Cuenta de KittyClaw",
   "AccountHint": "Asocia esta instalación a tu cuenta de GitHub o Google para encontrarla en my.kittyclaw.dev.",
   "AccountConfigure": "Gestionar la asociación de la cuenta",

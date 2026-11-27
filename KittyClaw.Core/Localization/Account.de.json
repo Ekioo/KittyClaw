@@ -1,4 +1,5 @@
 {
+  "AccountInstanceLimit": "Dein Konto umfasst eine Instanz. Widerrufe die vorhandene Instanz unter Meine Instanzen, bevor du eine weitere hinzufügst.",
   "AccountTitle": "KittyClaw-Konto",
   "AccountHint": "Ordne diese Installation deinem GitHub- oder Google-Konto zu, um sie auf my.kittyclaw.dev zu finden.",
   "AccountConfigure": "Kontozuordnung verwalten",

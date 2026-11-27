@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace KittyClaw.Web.Services;
 
-public sealed class RemoteAccessBroker(HttpClient http, Uri endpoint)
+public sealed class RemoteAccessBroker(HttpClient http, Uri endpoint, AccountAssociationService? accounts = null)
 {
     internal string Origin { get; } = ValidateEndpoint(endpoint);
     private static string ValidateEndpoint(Uri uri)
@@ -32,6 +32,7 @@ public sealed class RemoteAccessBroker(HttpClient http, Uri endpoint)
         if (identity.BrokerOrigin != Origin) throw new RemoteAccessException("RemoteIdentityMismatch");
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{Origin}/{path}");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", identity.Credential);
+        if (accounts is not null) await accounts.AddBrokerAuthenticationAsync(request, ct);
         if (body is not null) request.Content = JsonContent.Create(body);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(90));
@@ -55,6 +56,7 @@ public sealed class RemoteAccessBroker(HttpClient http, Uri endpoint)
                     if (failure?.Error == "name_unavailable") throw new RemoteAccessException("RemoteNameUnavailable");
                     if (failure?.Error == "invalid_subdomain") throw new RemoteAccessException("RemoteNameInvalid");
                     if (failure?.Error == "name_locked") throw new RemoteAccessException("RemoteNameLocked");
+                    if (failure?.Error == "account_instance_limit") throw new RemoteAccessException("AccountInstanceLimit");
                 }
                 throw new RemoteAccessException(response.StatusCode switch
                 {

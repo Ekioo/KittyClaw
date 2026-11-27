@@ -16,7 +16,7 @@ public sealed class AccountSetupMiddleware(RequestDelegate next)
         { context.Response.StatusCode = 403; return; }
         if (!HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsPost(context.Request.Method))
         { context.Response.StatusCode = 405; return; }
-        var error = false;
+        string? error = null;
         try
         {
             if (HttpMethods.IsPost(context.Request.Method))
@@ -44,14 +44,14 @@ public sealed class AccountSetupMiddleware(RequestDelegate next)
                 await accounts.RefreshAsync(context.RequestAborted);
         }
         catch (Exception ex) when (ex is AccountAssociationException or HttpRequestException or TaskCanceledException)
-        { error = true; }
+        { error = ex is AccountAssociationException accountError ? accountError.Code : "AccountError"; }
 
         var snapshot = accounts.Snapshot;
         var token = antiforgery.GetAndStoreTokens(context);
         string Form(string action, string label, string fields = "", string buttonClass = "") =>
             $"<form method='post' action='/account-setup'><input type='hidden' name='{E(token.FormFieldName)}' value='{E(token.RequestToken!)}'><input type='hidden' name='action' value='{action}'>{fields}<button class='{buttonClass}'>{E(label)}</button></form>";
         var content = $"<p>{E(l["AccountHint"])}</p>";
-        if (error) content += $"<p role='alert'>{E(l["AccountError"])}</p>";
+        if (error is not null) content += $"<p role='alert'>{E(l[error])}</p>";
         if (snapshot.Account is { } account)
         {
             content += $"<p role='status'>{E(l["AccountAssociated"])} <strong>{E(account.Name)}</strong></p><p>{E(account.Email ?? "")}</p>" +

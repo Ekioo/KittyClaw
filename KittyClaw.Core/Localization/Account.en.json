@@ -1,4 +1,5 @@
 {
+  "AccountInstanceLimit": "Your account includes one instance. Revoke the existing instance from My instances before adding another.",
   "AccountTitle": "KittyClaw account",
   "AccountHint": "Associate this installation with your GitHub or Google account to find it on my.kittyclaw.dev.",
   "AccountConfigure": "Manage account association",

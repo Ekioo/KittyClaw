@@ -218,14 +218,24 @@ No real user project or main-instance data was used.
 
 ## Capacity and reservation alerts
 
-The Worker serves aggregate live capacity at `https://remote-api.kittyclaw.dev/capacity`
-(HTML for browsers, JSON for API clients). No installation identifiers, credentials
-or public addresses are exposed. Pending, active and revoking installations count
-against the quota; pausing access does not free a reservation.
+Pending, active and revoking installations count against the service quota;
+pausing access does not free a reservation. Retired installations do not count.
+
+Accounts include one active associated installation. Local confirmation enforces
+that limit atomically, including simultaneous confirmations. Tunnel registration
+and connection independently verify the associated installation credential against
+the account database, including active association and configured account MFA.
+The first-party desktop restricts credential transmission to its trusted service.
+A partial unique index
+also limits each account to one non-retired tunnel reservation. Unclaimed legacy
+reservations are bound on the first authenticated registration/connect. Disconnecting
+an account prevents new connector tokens; the reconciler retires its tunnel resources.
+Replacing a revoked association retires the old tunnel before reserving a new one.
+Existing binaries need an application update to send server-verifiable ownership.
 
 Every newly reserved URL with ten or fewer slots remaining creates a durable ntfy
 notification. With the current limit of 50, reservations 40 through 50 each notify
-`KittyClaw_Plafond_Tunnels` on ntfy.sh. Notifications contain used/maximum/remaining
+the privately configured notification topic. Notifications contain used/maximum/remaining
 counts, with urgent priority for the final slot. Successful deliveries are deduplicated
 by installation ID; failures remain pending and can retry on later registration
 requests. No periodic capacity monitoring is configured. See the front repository's

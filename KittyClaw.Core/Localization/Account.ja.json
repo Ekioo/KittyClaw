@@ -1,4 +1,5 @@
 {
+  "AccountInstanceLimit": "アカウントに含まれるインスタンスは1つです。別のインスタンスを追加する前に「マイインスタンス」で既存のインスタンスを取り消してください。",
   "AccountTitle": "KittyClawアカウント",
   "AccountHint": "このインストールをGitHubまたはGoogleアカウントに関連付けると、my.kittyclaw.devで確認できます。",
   "AccountConfigure": "アカウントの関連付けを管理",
