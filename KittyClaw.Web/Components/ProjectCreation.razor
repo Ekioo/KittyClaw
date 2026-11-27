@@ -2,6 +2,8 @@
 @using KittyClaw.Core.Services
 @using KittyClaw.Core.Automation
 @inject ProjectService ProjectService
+@inject PipelineImportService PipelineImport
+@inject ILogger<ProjectCreation> Logger
 @inject PipelineService Pipelines
 @inject RepositoryIntakeService RepositoryIntake
 @inject MinimalWorkflowService MinimalWorkflow
@@ -136,6 +138,17 @@
                     <li><code>@file</code></li>
                 }
             </ul>
+            @if (_workspaceApprovals.Count > 0)
+            {
+                <p>@L["WorkspacePipelineAuthorization"]</p>
+                <ul>
+                    @foreach (var approval in _workspaceApprovals)
+                    {
+                        <li>@WorkspaceApprovalLabel(approval)</li>
+                    }
+                </ul>
+                <p class="settings-hint">@L["WorkspacePipelineNoExecution"]</p>
+            }
             @if (_creationStatus is not null)
             {
                 <div class="settings-status @_creationStatus.Value.css">@_creationStatus.Value.text</div>
@@ -143,7 +156,7 @@
             <div class="modal-actions">
                 <button class="header-action-btn" disabled="@_initializing" @onclick="CancelCreation">@L["Cancel"]</button>
                 <button class="header-action-btn" data-testid="workspace-pipeline-decline" disabled="@_initializing" @onclick="() => ConfirmWorkspaceImport(false)">@L["WorkspacePipelineDecline"]</button>
-                <button class="header-action-btn settings-primary" data-testid="workspace-pipeline-accept" disabled="@_initializing" @onclick="() => ConfirmWorkspaceImport(true)">@L["PipelineKitImport"]</button>
+                <button class="header-action-btn settings-primary" data-testid="workspace-pipeline-accept" disabled="@_initializing" @onclick="() => ConfirmWorkspaceImport(true)">@L[_workspaceApprovals.Count > 0 ? "WorkspacePipelineImportAuthorize" : "PipelineKitImport"]</button>
             </div>
         </div>
     </div>
@@ -156,13 +169,7 @@
                         OnCancel="CloseFolderPicker" />
 }
 
-@if (_createdProject is not null && _workspaceImportFiles.Count > 0)
-{
-    <PipelineKitDialog @key="_workspaceImportFiles.Peek()" ProjectSlug="@_createdProject.Slug"
-                       WorkspaceKitFileName="@_workspaceImportFiles.Peek()"
-                       OnImported="WorkspaceKitImported" OnClose="CompleteWorkspaceKit" />
-}
-else if (_createdProject is not null && _validatedIntake is not null && !_firstTicketConfirmed)
+@if (_createdProject is not null && _validatedIntake is not null && !_firstTicketConfirmed)
 {
     <FirstTicketDraft ProjectSlug="@_createdProject.Slug" Intake="@_validatedIntake" OnConfirmed="FirstTicketConfirmed" OnSkipped="SkipFirstTicket" />
 }
@@ -203,7 +210,8 @@ else if (_createdProject is not null)
     private IDisposable? _escPending;
     private bool _workspaceWasEmpty;
     private Project? _createdProject;
-    private readonly Queue<string> _workspaceImportFiles = new();
+    private bool _pipelineImportNeedsAttention;
+    private List<string> _workspaceApprovals = [];
     private string[]? _detectedPipelineFiles;
     private bool? _importWorkspacePipelines;
     private bool _pendingOverwrite;
@@ -236,7 +244,8 @@ else if (_createdProject is not null)
         _open = true;
         _objectiveStep = false;
         _validatedIntake = null;
-        _workspaceImportFiles.Clear();
+        _pipelineImportNeedsAttention = false;
+        _workspaceApprovals.Clear();
         _detectedPipelineFiles = null;
         _importWorkspacePipelines = null;
         _skipSetup = false;
@@ -403,6 +412,7 @@ else if (_createdProject is not null)
                     .Select(path => Path.GetFileName(path)).OrderBy(name => name, StringComparer.Ordinal).ToArray();
                 if (files.Length > 0)
                 {
+                    _workspaceApprovals = await PipelineImport.GetWorkspaceRequiredApprovalsAsync(_newWorkspacePath.Trim());
                     _detectedPipelineFiles = files;
                     _pendingOverwrite = overwrite;
                     return;
@@ -416,14 +426,19 @@ else if (_createdProject is not null)
             // Workflow design and importing existing kits are independent owner decisions.
             await Pipelines.ListAsync(project.Slug);
             if (_importWorkspacePipelines == true && _detectedPipelineFiles is not null)
-                foreach (var file in _detectedPipelineFiles) _workspaceImportFiles.Enqueue(file);
+            {
+                var notices = await PipelineImport.ImportWorkspaceAsync(project.Slug, _workspaceApprovals);
+                _pipelineImportNeedsAttention = notices.Count > 0;
+                foreach (var notice in notices)
+                    Logger.LogWarning("Workspace pipeline import for {Project}: {Notice}", project.Slug, notice);
+            }
 
             _newProjectName = "";
             _open = false;
             _createdProject = project;
             _firstTicketConfirmed = string.IsNullOrWhiteSpace(_objective);
             await OnCreated.InvokeAsync(project);
-            if (_skipSetup && _workspaceImportFiles.Count == 0) await FinishOnboarding();
+            if (_skipSetup) await FinishOnboarding();
         }
         catch (Exception ex)
         {
@@ -449,23 +464,22 @@ else if (_createdProject is not null)
         await CreateAndInitialize(_pendingOverwrite);
     }
 
-    private Task WorkspaceKitImported(PipelineImportResult result)
+    private string WorkspaceApprovalLabel(string approval) => L[approval switch
     {
-        return _createdProject is null ? Task.CompletedTask : OnCreated.InvokeAsync(_createdProject);
-    }
-
-    private async Task CompleteWorkspaceKit()
-    {
-        _workspaceImportFiles.Dequeue();
-        if (_skipSetup && _workspaceImportFiles.Count == 0) await FinishOnboarding();
-    }
+        "executePython" => "WorkspacePipelinePython",
+        "executePowerShell" => "WorkspacePipelinePowerShell",
+        "executeProgram" => "WorkspacePipelinePrograms",
+        "httpRequest" => "WorkspacePipelineNetwork",
+        "embeddedScripts" => "WorkspacePipelineScripts",
+        _ => "PipelineKitGenericApproval",
+    }];
 
     private Task FinishOnboarding()
     {
         var project = _createdProject;
         _createdProject = null;
         if (NavigateToProject && project is not null)
-            Nav.NavigateTo($"/board/{project.Slug}");
+            Nav.NavigateTo($"/board/{project.Slug}" + (_pipelineImportNeedsAttention ? "?pipelineImport=attention" : ""));
         return Task.CompletedTask;
     }
 
