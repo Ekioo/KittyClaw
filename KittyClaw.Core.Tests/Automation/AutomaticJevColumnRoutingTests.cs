@@ -12,6 +12,8 @@ public sealed class AutomaticJevColumnRoutingTests
 {
     [Theory]
     [InlineData("route", true)]
+    [InlineData("imported-route", true)]
+    [InlineData("imported-triage", true)]
     [InlineData("disabled", false)]
     [InlineData("assessments", true)]
     [InlineData("uncertain", false)]
@@ -40,6 +42,32 @@ public sealed class AutomaticJevColumnRoutingTests
             evaluateAcceptanceCriteria: scenario == "assessments", jevAutomaticRouting: scenario != "disabled");
         Assert.Equal(scenario != "disabled", processor.JevAutomaticRouting);
         Assert.Equal(scenario != "disabled", processor.UsesAutomaticJevRouting);
+        if (scenario.StartsWith("imported-", StringComparison.Ordinal))
+        {
+            if (scenario == "imported-triage")
+                processor = await processors.SaveAsync(project.Slug, source.Id, processor.Name, processor.Mission,
+                    null, true, 20, [], [], [], defaultTargetColumnId: original.Id,
+                    routes: [new("alternative", chosen.Id)], jevObservationOnly: true,
+                    jevAutomaticRouting: true, jevConfidenceThreshold: 0.9, jevFallbackToAgent: false);
+            var pipelines = new PipelineService(projects);
+            var skills = new ProjectSkillService(projects);
+            var kit = (await new PipelineExportService(projects, pipelines, columns, processors, skills)
+                .ExportAsync(project.Slug, source.PipelineId))!;
+            var importVault = new ProjectSecretVault(temp.Path, new TestSecretProtector());
+            await importVault.SetAsync(project.Slug, JevQualificationService.SecretName, "fixture-key");
+            var installed = (await new PipelineImportService(projects, pipelines, columns, processors, importVault)
+                .InstallAsync(project.Slug, kit.Content, new PipelineImportConfirmation { PipelineName = "Imported route" }))!;
+            Assert.True(installed.Enabled);
+            source = (await columns.ListColumnsAsync(project.Slug, installed.PipelineId)).Single(c => c.Name == source.Name);
+            chosen = (await columns.ListColumnsAsync(project.Slug, installed.PipelineId)).Single(c => c.Name == chosen.Name);
+            original = (await columns.ListColumnsAsync(project.Slug, installed.PipelineId)).Single(c => c.Name == original.Name);
+            var importedColumns = await columns.ListColumnsAsync(project.Slug, installed.PipelineId);
+            source = importedColumns.Single(c => c.Name == source.Name);
+            original = importedColumns.Single(c => c.Name == original.Name);
+            chosen = importedColumns.Single(c => c.Name == chosen.Name);
+            processor = (await processors.GetAsync(project.Slug, source.Id))!;
+            Assert.Equal(0.9, processor.JevConfidenceThreshold);
+        }
         var ticket = await tickets.CreateTicketAsync(project.Slug, "Choose the right next step", status: source.Name,
             pipelineId: source.PipelineId, columnId: source.Id);
         if (scenario == "assessments") await tickets.SaveAcceptanceCriterionAsync(project.Slug, ticket.Id, null, new("Checks pass"));
@@ -58,11 +86,11 @@ public sealed class AutomaticJevColumnRoutingTests
         using var client = new HttpClient(new Handler(async request =>
         {
             Assert.NotEqual("disabled", scenario);
-            Assert.Equal(1, dispatcher.Calls);
+            Assert.Equal(scenario == "imported-triage" ? 0 : 1, dispatcher.Calls);
             if (scenario == "api-error") return new(HttpStatusCode.ServiceUnavailable);
             Assert.Equal(source.Id, (await tickets.GetTicketAsync(project.Slug, ticket.Id))!.ColumnId);
             var input = JsonNode.Parse(await request.Content!.ReadAsStringAsync())!;
-            Assert.Equal("original", input["state"]!["agentClaims"]!["outcome"]!.GetValue<string>());
+            if (scenario != "imported-triage") Assert.Equal("original", input["state"]!["agentClaims"]!["outcome"]!.GetValue<string>());
             if (scenario == "assessments")
             {
                 var saved = (await tickets.GetTicketAsync(project.Slug, ticket.Id))!;
@@ -91,7 +119,15 @@ public sealed class AutomaticJevColumnRoutingTests
             new ColumnActionExecutor(projects, tickets, NullLogger<ColumnActionExecutor>.Instance),
             new ColumnMemoryCapitalizationService(projects), NullLogger<ColumnProcessingEngine>.Instance,
             jev: qualification, jevConfiguration: configuration);
-        await engine.ProcessAsync(project.Slug, processor, execution, CancellationToken.None);
+        if (scenario == "imported-triage")
+        {
+            await qualification.ObserveAsync(project.Slug, processor, ticket,
+                await columns.ListColumnsAsync(project.Slug, source.PipelineId), CancellationToken.None);
+            var proposal = (await qualification.GetAsync(project.Slug, ticket.Id))!;
+            Assert.NotNull(await new JevProposalDecisionService(projects, tickets, processors, new JevDecisionStore(projects))
+                .TryApplyAutomaticallyAsync(project.Slug, ticket.Id, JevDecisionStore.ProposalId(proposal)));
+        }
+        else await engine.ProcessAsync(project.Slug, processor, execution, CancellationToken.None);
         var updated = (await tickets.GetTicketAsync(project.Slug, ticket.Id))!;
         var fallback = scenario is "uncertain" or "none" or "api-error" or "missing-key" or "disabled";
         Assert.Equal(moves ? chosen.Id : fallback ? original.Id : source.Id, updated.ColumnId);
@@ -101,16 +137,16 @@ public sealed class AutomaticJevColumnRoutingTests
             var decision = Assert.Single(decisions);
             Assert.True(decision.Automatic);
             Assert.Equal(chosen.Id, decision.AppliedTargetColumnId);
-            Assert.Equal(ColumnExecutionStatus.Completed, Assert.Single(await executions.ListAsync(project.Slug, ticket.Id)).Status);
-            Assert.Contains(updated.Comments, c => c.Content == "Action after routing");
+            if (scenario != "imported-triage") Assert.Equal(ColumnExecutionStatus.Completed, Assert.Single(await executions.ListAsync(project.Slug, ticket.Id)).Status);
+            if (scenario != "imported-triage") Assert.Contains(updated.Comments, c => c.Content == "Action after routing");
         }
         else
         {
             Assert.Empty(decisions);
             if (fallback)
             {
-                Assert.Equal(ColumnExecutionStatus.Completed, Assert.Single(await executions.ListAsync(project.Slug, ticket.Id)).Status);
-                Assert.Contains(updated.Comments, c => c.Content == "Action after routing");
+                if (scenario != "imported-triage") Assert.Equal(ColumnExecutionStatus.Completed, Assert.Single(await executions.ListAsync(project.Slug, ticket.Id)).Status);
+                if (scenario != "imported-triage") Assert.Contains(updated.Comments, c => c.Content == "Action after routing");
             }
             else Assert.Empty(updated.Comments);
         }

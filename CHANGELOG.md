@@ -4,6 +4,11 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+### Fixed
+
+- Pipeline kits reject source-project parent ticket references and validate ticket-creation destinations. Creation actions and schedules export stable destination keys, resolved on import even after pipeline or column renames; legacy destinations are checked during analysis.
+- Pipeline kits preserve JEV modes, automatic routing, confidence thresholds, review criteria and execution profiles, with stable column references across pipeline renames. Import analysis previews these settings and links to project secrets when the TypeSafe key is missing. Credentials are never exported; optional fields retain format v1 compatibility.
+
 ## [v0.32] — 2026-11-26
 
 Live tunnel activation and native Claude Code ticket tracking.

@@ -24,7 +24,7 @@ public sealed partial class PipelineImportService(
     PipelineService pipelines,
     ColumnService columns,
     ColumnProcessorService processors,
-    ProjectSecretVault vault)
+    ProjectSecretVault vault, JevConfigurationService? jevConfiguration = null)
 {
     // Documented kit limits, aligned with the export side (PipelineExportService).
     private const long MaxArchiveBytes = 8 * 1024 * 1024;
@@ -141,6 +141,8 @@ public sealed partial class PipelineImportService(
         var preview = new PipelineImportPreview { Blockages = issues };
         if (kit is null) return preview;
 
+        preview.JevRequired = kit.Pipeline.Columns.Any(c => c.Processor?.RequiresJev == true);
+        preview.JevCredentialAvailable = await HasJevCredentialAsync(projectSlug);
         preview.FormatVersion = kit.Manifest.FormatVersion;
         preview.PipelineName = kit.Pipeline.Name.Trim();
         preview.PipelineSlug = kit.Pipeline.Slug;
@@ -359,6 +361,8 @@ public sealed partial class PipelineImportService(
             if (!ProgramActionSupport.IsAvailable(program, workspace))
                 disabledReasons.Add($"runtime:{program.UiTypeKey}:{program.Program}");
         }
+        if (kit.Pipeline.Columns.Any(c => c.Processor?.RequiresJev == true) && !await HasJevCredentialAsync(projectSlug))
+            disabledReasons.Add("secret:" + JevQualificationService.SecretName);
         var enabled = disabledReasons.Count == 0;
 
         // --- Placeholder substitution and logical-key remapping, all in memory. ---
@@ -419,6 +423,17 @@ public sealed partial class PipelineImportService(
             }
             await FaultAsync("skills-installed");
 
+            ActionSpec MapAction(PortableProcessorAction action)
+            {
+                if (action.Action is not CreateTicketActionSpec) return action.Action;
+                var copy = JsonSerializer.Deserialize<CreateTicketActionSpec>(JsonSerializer.Serialize((CreateTicketActionSpec)action.Action, KitJson), KitJson)!;
+                var destination = action.CreateTarget is { } key
+                    ? portable.Columns.Single(c => c.Key == key)
+                    : portable.Columns.Single(c => string.Equals(c.Name.Trim(), copy.Status.Trim(), StringComparison.OrdinalIgnoreCase));
+                copy.Status = destination.Name.Trim();
+                return copy;
+            }
+
             foreach (var column in portable.Columns)
             {
                 if (column.Processor is not { } processor) continue;
@@ -428,7 +443,7 @@ public sealed partial class PipelineImportService(
                 int? MapColumn(string? key) => key is null ? null : columnIds[key];
                 List<ColumnProcessorAction> MapActions(IEnumerable<PortableProcessorAction> actions) =>
                     actions.Select(action => new ColumnProcessorAction(
-                        action.Id, action.Action, MapColumn(action.OnFailure))).ToList();
+                        action.Id, MapAction(action), MapColumn(action.OnFailure))).ToList();
 
                 await processors.SaveAsync(
                     projectSlug, columnId, processor.Name, processor.Mission, processor.Model,
@@ -442,7 +457,15 @@ public sealed partial class PipelineImportService(
                     processor.Prompt,
                     MapActions(processor.BeforeActions), MapActions(processor.AfterActions),
                     evaluateAcceptanceCriteria: processor.EvaluateAcceptanceCriteria,
-                    jevFallbackToAgent: processor.JevFallbackToAgent);
+                    jevFallbackToAgent: processor.JevFallbackToAgent,
+                    jevObservationOnly: processor.JevObservationOnly,
+                    jevAutomaticRouting: processor.JevAutomaticRouting,
+                    jevPostRunObservation: processor.JevPostRunObservation,
+                    jevAcceptanceValidation: processor.JevAcceptanceValidation,
+                    jevExecutionSelection: processor.JevExecutionSelection,
+                    jevConfidenceThreshold: processor.JevConfidenceThreshold,
+                    jevAcceptanceCriteria: processor.JevAcceptanceCriteria,
+                    jevExecutionProfiles: processor.JevExecutionProfiles.Select(p => p with { Skills = MapSkillSlugs(p.Skills) }).ToList());
             }
             await FaultAsync("processors-installed");
 
@@ -458,7 +481,7 @@ public sealed partial class PipelineImportService(
                         Enabled = enabled && task.Enabled, Cron = task.Cron, TimeZoneId = task.TimeZoneId,
                         TicketScope = task.TicketScope,
                         Actions = task.Actions.Select(action => new ColumnProcessorAction(
-                            action.Id, action.Action,
+                            action.Id, MapAction(action),
                             action.OnFailure is null ? null : columnIds[action.OnFailure])).ToList(),
                     }).ToList());
             }
@@ -538,6 +561,10 @@ public sealed partial class PipelineImportService(
         public bool ProcessorRootExisted { get; init; }
         public bool ProcessorMarkerExisted { get; init; }
     }
+
+    private async Task<bool> HasJevCredentialAsync(string projectSlug) => jevConfiguration is not null
+        ? (await jevConfiguration.GetAsync(projectSlug)).Available
+        : (await ListVaultSecretNamesAsync(projectSlug)).Contains(JevQualificationService.SecretName);
 
     private async Task<HashSet<string>> ListVaultSecretNamesAsync(string projectSlug)
     {
@@ -893,10 +920,29 @@ public sealed partial class PipelineImportService(
                 Reject("invalid-processor", $"Nom et mission du processeur sont requis ({context}).");
             if (processor.MaxTurns < 1 || processor.MaxAttempts < 1 || processor.RetryBackoffSeconds < 1)
                 Reject("invalid-processor", $"MaxTurns, MaxAttempts et RetryBackoffSeconds doivent être supérieurs à zéro ({context}).");
+            if (!double.IsFinite(processor.JevConfidenceThreshold) || processor.JevConfidenceThreshold < 0 || processor.JevConfidenceThreshold > 1)
+                Reject("invalid-processor", "JEV confidence threshold must be between 0 and 1.");
+            if (processor.JevAcceptanceCriteria is null || processor.JevExecutionProfiles is null
+                || processor.JevAcceptanceCriteria.Count > 20 || processor.JevAcceptanceCriteria.Any(c => c is null || c.Length > 2000)
+                || processor.JevExecutionProfiles.Count > 10
+                || (processor.JevExecutionSelection && processor.JevExecutionProfiles.Count == 0)
+                || processor.JevExecutionProfiles.Any(p => p is null || string.IsNullOrWhiteSpace(p.Name)
+                    || p.Name.Length > 100 || string.IsNullOrWhiteSpace(p.Model) || p.Model.Length > 200
+                    || p.Description?.Length > 2000 || p.Skills is null)
+                || processor.JevExecutionProfiles.Select(p => p.Name.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() != processor.JevExecutionProfiles.Count)
+            {
+                Reject("invalid-processor", "Invalid JEV review criteria or execution profiles.");
+                return;
+            }
+            if ((processor.JevAcceptanceValidation && (processor.JevObservationOnly || processor.JevPostRunObservation
+                    || processor.JevAutomaticRouting || processor.JevExecutionSelection))
+                || (processor.JevExecutionSelection && processor.JevObservationOnly))
+                Reject("invalid-processor", "Incompatible JEV modes.");
+            foreach (var profile in processor.JevExecutionProfiles) models.Add(profile.Model);
             if (!Enum.IsDefined(processor.SelectionOrder))
                 Reject("invalid-processor", $"Ordre de sélection inconnu ({context}).");
             if (!string.IsNullOrWhiteSpace(processor.Model)) models.Add(processor.Model.Trim());
-            foreach (var slug in processor.AvailableSkills.Concat(processor.RecommendedSkills).Concat(processor.RequiredSkills))
+            foreach (var slug in processor.AvailableSkills.Concat(processor.RecommendedSkills).Concat(processor.RequiredSkills).Concat(processor.JevExecutionProfiles.SelectMany(p => p.Skills)))
             {
                 if (SkillSlugPattern().IsMatch(slug)) referencedSkills.Add(slug);
                 else Reject("invalid-processor", $"Référence de skill invalide '{slug}' ({context}).");
@@ -925,6 +971,8 @@ public sealed partial class PipelineImportService(
             {
                 if (string.IsNullOrWhiteSpace(action.Id) || !actionIds.Add(action.Id.Trim()))
                     Reject("invalid-processor", $"Identifiant d’action vide ou dupliqué ({context}).");
+                if (action.CreateTarget is not null && action.Action is not CreateTicketActionSpec)
+                    Reject("invalid-processor", "createTarget is only valid on createTicket actions.");
                 CheckTarget(action.OnFailure, $"action '{action.Id}'.onFailure");
                 switch (action.Action)
                 {
@@ -935,6 +983,15 @@ public sealed partial class PipelineImportService(
                             Reject("invalid-processor", $"L’action commentaire '{action.Id}' doit définir un contenu ({context}).");
                         break;
                     case CreateTicketActionSpec create:
+                        if (create.ParentId is not null)
+                            Reject("external-reference", "createTicket parentId refers to a source-project ticket and cannot be imported.");
+                        if (action.CreateTarget is { } creationKey)
+                        {
+                            if (!keys.Contains(creationKey))
+                                Reject("invalid-processor", $"Unknown createTicket destination key '{creationKey}'.");
+                        }
+                        else if (!pipeline.Columns.Any(c => string.Equals(c.Name.Trim(), create.Status?.Trim(), StringComparison.OrdinalIgnoreCase)))
+                            Reject("invalid-processor", "createTicket status does not match a column in the imported pipeline.");
                         if (string.IsNullOrWhiteSpace(create.Title))
                             Reject("invalid-processor", $"L’action de création de ticket '{action.Id}' doit définir un titre ({context}).");
                         if (!string.IsNullOrWhiteSpace(create.AssignedTo)) agents.Add(create.AssignedTo.Trim());

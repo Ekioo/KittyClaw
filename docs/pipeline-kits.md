@@ -37,18 +37,53 @@ A successful import does not prove that every source option is represented in th
 
 The current portable column preserves capacity and both criterion-entry gates. Its processor
 preserves enabled state, mission/prompt/model/skills, agent limits/retries, ordered actions,
-routing, `evaluateAcceptanceCriteria` and `jevFallbackToAgent`. Preserving a policy value does
-not select a JEV mode: `PortableProcessor` currently has no JEV triage/review mode flags,
-execution profiles, review criteria or confidence-threshold fields. Independent scheduled tasks preserve their name, enabled state, cron, time zone, ticket scope
-and ordered actions, with failure destinations remapped to the imported columns. Task IDs are
-regenerated and execution history is excluded. Missing approvals or prerequisites disable
-imported schedules just like processors. Older kits without schedules remain supported. For an approved workflow using unsupported JEV features, inspect
-and configure them through native APIs after import or report the remaining configuration;
-do not claim that an imported agent processor is an equivalent JEV-only lifecycle.
+routing, `evaluateAcceptanceCriteria` and all JEV behavior settings:
+
+- `jevObservationOnly` (triage), `jevAutomaticRouting`, `jevPostRunObservation`,
+  `jevAcceptanceValidation`, `jevExecutionSelection` and `jevFallbackToAgent`.
+- `jevConfidenceThreshold` (0–1, default 0.9), `jevAcceptanceCriteria` and
+  `jevExecutionProfiles` (name, model, skills, description). Profile skill references
+  participate in prerequisites, embedded skill export and collision remapping.
+  Profile skills already belong to the configured column skills, so their embedded
+  folders remain recognizable to older readers.
+- Destinations use `routing.default`, `routing.technicalFailure`, `routing.routes[].target`
+  and action `onFailure`, all resolved using column keys within the newly imported
+  pipeline, independently of display names, pipeline renames or an existing main pipeline.
+
+These are additive optional fields in format v1: old kits retain their defaults and old
+readers ignore unknown fields. No version bump is necessary. Pipeline records have no
+separate JEV options. Runtime timestamps/history and credentials are excluded;
+`jevPostRunObservation` restores the mode with a fresh local activation timestamp.
+Import analysis displays the JEV settings and reports missing TypeSafe credentials with a
+link to project secrets. Add `TYPESAFE_API_KEY` and reanalyze before confirmation, or
+explicitly enable processors after adding credentials to an already disabled import.
+Existing global/environment credentials are recognized using the runtime resolver.
+
+Independent scheduled tasks preserve name, enabled state, cron, time zone, ticket scope
+and ordered actions, with failure destinations remapped to imported columns. IDs are
+regenerated and history is excluded. Missing approvals or prerequisites disable imported
+schedules and processors. Older kits without schedules remain supported.
 
 Do not move an all-`PASS` entry requirement into the column that must first evaluate the
 criteria. Do not infer an agent fallback from a missing key or a successful kit installation.
 Read back each supported setting and preserve existing policies during later native updates.
+
+## Ticket creation portability
+
+Each portable `createTicket` action carries `createTarget`, a logical key of a column
+inside the exported pipeline. It applies to preparation/finalization actions and independent
+scheduled tasks. Import validates the key during write-free analysis and resolves it against
+the imported columns; the key takes precedence over the legacy `action.status` display name.
+The installed action receives the resolved column name expected by the native executor,
+which creates tickets within the current ticket's (or scheduled task's) pipeline.
+`action.status` remains in exports so older v1 readers can import ordinary kits.
+Older kits without `createTarget` are accepted only when `status` identifies an existing
+column inside the kit. Unknown creation destinations are rejected before installation;
+self-targeting creation is allowed. These optional fields retain format v1.
+
+An explicit `createTicket.parentId` is a project-local ticket identifier: exports are blocked
+until it is removed, and untrusted imports containing it are rejected before any write.
+Ticket records are not bundled and parent identifiers must never be reused in a new project.
 
 ## External dependencies
 

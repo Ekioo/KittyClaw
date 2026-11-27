@@ -128,6 +128,19 @@ public sealed class PortableProcessor
     public bool Enabled { get; set; } = true;
     public bool EvaluateAcceptanceCriteria { get; set; }
     public bool JevFallbackToAgent { get; set; } = true;
+    public bool JevObservationOnly { get; set; }
+    public bool JevAutomaticRouting { get; set; }
+    public bool JevPostRunObservation { get; set; }
+    public bool JevAcceptanceValidation { get; set; }
+    public bool JevExecutionSelection { get; set; }
+    public double JevConfidenceThreshold { get; set; } = 0.9;
+    public List<string> JevAcceptanceCriteria { get; set; } = [];
+    public List<JevExecutionProfile> JevExecutionProfiles { get; set; } = [];
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool RequiresJev => JevObservationOnly || JevAutomaticRouting || JevPostRunObservation
+        || JevAcceptanceValidation || JevExecutionSelection;
+
     public int MaxTurns { get; set; } = 100;
     public TicketSelectionOrder SelectionOrder { get; set; } = TicketSelectionOrder.Position;
     public int MaxAttempts { get; set; } = 3;
@@ -146,6 +159,8 @@ public sealed class PortableProcessorAction
     public ActionSpec Action { get; set; } = new SetLabelsActionSpec();
     /// <summary>Logical key of the failure destination column, when declared.</summary>
     public string? OnFailure { get; set; }
+    /// <summary>Logical destination key for createTicket; Status remains for legacy readers.</summary>
+    public string? CreateTarget { get; set; }
 }
 
 public sealed class PortableRouting

@@ -63,7 +63,7 @@ public sealed class PipelineExportServiceTests : IDisposable
         routes.AddRange(extraRoutes ?? []);
         var actions = new List<ColumnProcessorAction>
         {
-            new("handoff", new CreateTicketActionSpec { Title = "QA the article", AssignedTo = "programmer" }, review.Id),
+            new("handoff", new CreateTicketActionSpec { Title = "QA the article", Status = review.Name, AssignedTo = "programmer" }, review.Id),
             new("webhook", new HttpRequestActionSpec
             {
                 Url = "https://example.com/hook",

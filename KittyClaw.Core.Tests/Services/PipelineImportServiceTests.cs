@@ -30,6 +30,73 @@ public sealed class PipelineImportServiceTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
+    [Theory]
+    [InlineData(false, "triage")]
+    [InlineData(true, "triage")]
+    [InlineData(true, "review")]
+    [InlineData(true, "execution")]
+    [InlineData(true, "post-run")]
+    public async Task Jev_roundtrip_preserves_policy_and_stable_routes_when_main_exists(bool credentials, string mode)
+    {
+        var source = await _projects.CreateProjectAsync("Jev source");
+        var columns = new ColumnService(_projects, _processors);
+        var main = (await _pipelines.ListAsync(source.Slug)).First();
+        var inbox = await columns.CreateColumnAsync(source.Slug, "Same label", pipelineId: main.Id);
+        var target = await columns.CreateColumnAsync(source.Slug, "Mail destination", pipelineId: main.Id);
+        var skills = new ProjectSkillService(_projects);
+        var profileSkill = await skills.CreateAsync(source.Slug, "Mail profile", "Classify mail safely.");
+        await _processors.SaveAsync(source.Slug, inbox.Id, "Mail triage", "Sort mail", null, true, 20, [], [], mode == "execution" ? [profileSkill.Slug] : [],
+            jevObservationOnly: mode == "triage", jevAutomaticRouting: mode != "review", jevConfidenceThreshold: 0.9,
+            jevAcceptanceValidation: mode == "review", jevExecutionSelection: mode == "execution",
+            jevPostRunObservation: mode == "post-run",
+            jevExecutionProfiles: mode == "execution" ? [new("Mail", ClaudeModelCatalog.DefaultModel, [profileSkill.Slug], "Sort mail")] : [],
+            jevFallbackToAgent: false, defaultTargetColumnId: target.Id,
+            routes: [new ColumnRoute("mail", target.Id)], jevAcceptanceCriteria: ["Classify incoming mail"]);
+        var vault = new ProjectSecretVault(_temp.Path, new TestSecretProtector());
+        const string secret = "private-key-never-export-this-value";
+        await vault.SetAsync(source.Slug, JevQualificationService.SecretName, secret);
+        var exporter = new PipelineExportService(_projects, _pipelines, columns, _processors, skills);
+        var kit = (await exporter.ExportAsync(source.Slug, main.Id))!;
+        using (var zip = new ZipArchive(new MemoryStream(kit.Content)))
+            foreach (var entry in zip.Entries)
+            {
+                using var reader = new StreamReader(entry.Open());
+                Assert.DoesNotContain(secret, await reader.ReadToEndAsync());
+            }
+        var destination = await _projects.CreateProjectAsync("Jev destination");
+        if (credentials) await vault.SetAsync(destination.Slug, JevQualificationService.SecretName, secret);
+        var preview = (await _import.AnalyzeAsync(destination.Slug, kit.Content))!;
+        Assert.True(preview.Installable);
+        Assert.True(preview.JevRequired);
+        Assert.Equal(credentials, preview.JevCredentialAvailable);
+        var result = (await _import.InstallAsync(destination.Slug, kit.Content,
+            new PipelineImportConfirmation { PipelineName = "Renamed mail pipeline" }))!;
+        Assert.Equal(credentials, result.Enabled);
+        var imported = (await _processors.ListAsync(destination.Slug)).Single();
+        Assert.Equal(mode == "triage", imported.JevObservationOnly);
+        Assert.Equal(mode != "review", imported.JevAutomaticRouting);
+        Assert.Equal(mode == "review", imported.JevAcceptanceValidation);
+        Assert.Equal(mode == "execution", imported.JevExecutionSelection);
+        Assert.Equal(mode == "post-run", imported.JevPostRunObservation);
+        if (mode == "execution")
+        {
+            var profile = Assert.Single(imported.JevExecutionProfiles);
+            Assert.Equal("Mail", profile.Name);
+            Assert.Equal(ClaudeModelCatalog.DefaultModel, profile.Model);
+            Assert.Equal("Sort mail", profile.Description);
+            Assert.Equal(new[] { profileSkill.Slug }, profile.Skills);
+            Assert.Empty(imported.AvailableSkills);
+        }
+        Assert.False(imported.JevFallbackToAgent);
+        Assert.Equal(0.9, imported.JevConfidenceThreshold);
+        Assert.Equal(new[] { "Classify incoming mail" }, imported.JevAcceptanceCriteria);
+        Assert.Equal(result.Columns.Single(c => c.ColumnId != imported.ColumnId && c.Name == "Mail destination").ColumnId,
+            imported.Routes.Single().TargetColumnId);
+        Assert.Equal(imported.DefaultTargetColumnId, imported.Routes.Single().TargetColumnId);
+        Assert.Equal("Renamed mail pipeline", result.PipelineName);
+        if (!credentials) Assert.Contains("secret:TYPESAFE_API_KEY", result.DisabledReasons);
+    }
+
     [Fact]
     public async Task Workspace_import_processes_root_kits_and_continues_after_invalid_archives()
     {

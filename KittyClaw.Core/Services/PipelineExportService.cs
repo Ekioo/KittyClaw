@@ -96,14 +96,14 @@ public sealed partial class PipelineExportService(
             };
             if (processorsByColumn.TryGetValue(column.Id, out var processor))
                 portableColumn.Processor = BuildPortableProcessor(
-                    processor, keys, findings, referencedSkills, referencedAgents, models, riskyActionTypes, workspace);
+                    processor, keys, pipelineColumns, findings, referencedSkills, referencedAgents, models, riskyActionTypes, workspace);
             foreach (var task in scheduledTasks.Where(task => task.ColumnId == column.Id))
             {
                 // Reuse action portability checks and requirement collection.
                 var actions = BuildPortableProcessor(new ColumnProcessor
                 {
                     Name = task.Name, BeforeActions = task.Actions,
-                }, keys, findings, referencedSkills, referencedAgents, models, riskyActionTypes, workspace).BeforeActions;
+                }, keys, pipelineColumns, findings, referencedSkills, referencedAgents, models, riskyActionTypes, workspace).BeforeActions;
                 portableColumn.ScheduledTasks.Add(new PortableScheduledTask
                 {
                     Name = task.Name, Enabled = task.Enabled, Cron = task.Cron,
@@ -200,7 +200,7 @@ public sealed partial class PipelineExportService(
     }
 
     private static PortableProcessor BuildPortableProcessor(
-        ColumnProcessor processor, Dictionary<int, string> keys, List<PipelineExportFinding> findings,
+        ColumnProcessor processor, Dictionary<int, string> keys, List<BoardColumn> pipelineColumns, List<PipelineExportFinding> findings,
         SortedSet<string> referencedSkills, SortedSet<string> referencedAgents,
         SortedSet<string> models, SortedSet<string> riskyActionTypes, string workspace)
     {
@@ -220,6 +220,18 @@ public sealed partial class PipelineExportService(
             var mapped = new List<PortableProcessorAction>();
             foreach (var action in actions)
             {
+                string? createTarget = null;
+                if (action.Action is CreateTicketActionSpec createTicket)
+                {
+                    if (createTicket.ParentId is not null)
+                        findings.Add(new PipelineExportFinding("external-reference", PipelineKitFormat.PipelineEntryName, 1,
+                            $"action '{action.Id}' parentId", "Remove the source-project parent ticket reference before exporting."));
+                    var destination = pipelineColumns.FirstOrDefault(c => string.Equals(c.Name, createTicket.Status?.Trim(), StringComparison.OrdinalIgnoreCase));
+                    if (destination is null)
+                        findings.Add(new PipelineExportFinding("external-reference", PipelineKitFormat.PipelineEntryName, 1,
+                            $"action '{action.Id}' status", "Choose a creation destination inside the exported pipeline."));
+                    else createTarget = keys[destination.Id];
+                }
                 switch (action.Action)
                 {
                     case ExecutePowerShellActionSpec script:
@@ -267,16 +279,17 @@ public sealed partial class PipelineExportService(
                 mapped.Add(new PortableProcessorAction
                 {
                     Id = action.Id,
-                    Action = action.Action,
+                    Action = action.Action, CreateTarget = createTarget,
                     OnFailure = MapColumn(action.FailureTargetColumnId, $"action '{action.Id}'.onFailure"),
                 });
             }
             return mapped;
         }
 
-        foreach (var slug in processor.AvailableSkills.Concat(processor.RecommendedSkills).Concat(processor.RequiredSkills))
+        foreach (var slug in processor.AvailableSkills.Concat(processor.RecommendedSkills).Concat(processor.RequiredSkills).Concat(processor.JevExecutionProfiles.SelectMany(p => p.Skills)))
             referencedSkills.Add(slug);
         if (processor.Model is not null) models.Add(processor.Model);
+        foreach (var profile in processor.JevExecutionProfiles) models.Add(profile.Model);
 
         return new PortableProcessor
         {
@@ -287,6 +300,15 @@ public sealed partial class PipelineExportService(
             Enabled = processor.Enabled,
             EvaluateAcceptanceCriteria = processor.EvaluateAcceptanceCriteria,
             JevFallbackToAgent = processor.JevFallbackToAgent,
+            JevObservationOnly = processor.JevObservationOnly,
+            JevAutomaticRouting = processor.JevAutomaticRouting,
+            JevPostRunObservation = processor.JevPostRunObservation,
+            JevAcceptanceValidation = processor.JevAcceptanceValidation,
+            JevExecutionSelection = processor.JevExecutionSelection,
+            JevConfidenceThreshold = processor.JevConfidenceThreshold,
+            JevAcceptanceCriteria = processor.JevAcceptanceCriteria,
+            JevExecutionProfiles = processor.JevExecutionProfiles,
+
             MaxTurns = processor.MaxTurns,
             SelectionOrder = processor.SelectionOrder,
             MaxAttempts = processor.MaxAttempts,

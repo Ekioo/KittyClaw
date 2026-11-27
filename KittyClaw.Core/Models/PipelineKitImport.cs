@@ -17,6 +17,8 @@ public sealed class PipelineImportPreview
     public string PipelineSlug { get; set; } = "";
     /// <summary>An existing pipeline already uses this name: rename at install time or cancel.</summary>
     public bool PipelineNameConflict { get; set; }
+    public bool JevRequired { get; set; }
+    public bool JevCredentialAvailable { get; set; }
     public List<PipelineImportIssue> Blockages { get; set; } = [];
     public List<PipelineImportFile> Files { get; set; } = [];
     public List<PipelineImportColumn> Columns { get; set; } = [];

@@ -481,6 +481,14 @@ else
 
 @code {
     private string _mobileSection = "worktrees";
+    [SupplyParameterFromQuery(Name = "section")]
+    public string? SettingsSection { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (SettingsSection == "secrets") _mobileSection = "secrets";
+    }
+
     private IReadOnlyList<MobileSectionNavigation.Section> MobileSections =>
     [
         new("worktrees", L["WorktreeSettings"]),
