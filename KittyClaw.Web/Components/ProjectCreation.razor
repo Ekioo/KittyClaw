@@ -2,7 +2,6 @@
 @using KittyClaw.Core.Services
 @using KittyClaw.Core.Automation
 @inject ProjectService ProjectService
-@inject PipelineImportService PipelineImport
 @inject PipelineService Pipelines
 @inject RepositoryIntakeService RepositoryIntake
 @inject MinimalWorkflowService MinimalWorkflow
@@ -157,16 +156,11 @@
                         OnCancel="CloseFolderPicker" />
 }
 
-@if (_createdProject is not null && _pipelineImportNotices.Count > 0)
+@if (_createdProject is not null && _workspaceImportFiles.Count > 0)
 {
-    <div class="modal-backdrop"><div class="modal-dialog" role="alertdialog" aria-modal="true">
-        <h2>@L["PipelineKitImport"]</h2>
-        @foreach (var notice in _pipelineImportNotices)
-        {
-            <div class="settings-status settings-status-err">@notice</div>
-        }
-        <div class="modal-actions"><button class="header-action-btn settings-primary" @onclick="DismissPipelineNotices">@L["Close"]</button></div>
-    </div></div>
+    <PipelineKitDialog @key="_workspaceImportFiles.Peek()" ProjectSlug="@_createdProject.Slug"
+                       WorkspaceKitFileName="@_workspaceImportFiles.Peek()"
+                       OnImported="WorkspaceKitImported" OnClose="CompleteWorkspaceKit" />
 }
 else if (_createdProject is not null && _validatedIntake is not null && !_firstTicketConfirmed)
 {
@@ -209,7 +203,7 @@ else if (_createdProject is not null)
     private IDisposable? _escPending;
     private bool _workspaceWasEmpty;
     private Project? _createdProject;
-    private List<string> _pipelineImportNotices = [];
+    private readonly Queue<string> _workspaceImportFiles = new();
     private string[]? _detectedPipelineFiles;
     private bool? _importWorkspacePipelines;
     private bool _pendingOverwrite;
@@ -242,7 +236,7 @@ else if (_createdProject is not null)
         _open = true;
         _objectiveStep = false;
         _validatedIntake = null;
-        _pipelineImportNotices.Clear();
+        _workspaceImportFiles.Clear();
         _detectedPipelineFiles = null;
         _importWorkspacePipelines = null;
         _skipSetup = false;
@@ -420,17 +414,16 @@ else if (_createdProject is not null)
             var initializeGit = _gitWorkspace?.CanInitialize == true && _initializeGit;
             if (!_skipSetup) await AgentsTemplate.InitializeAsync(_newWorkspacePath.Trim(), overwrite, initializeGit);
             // Workflow design and importing existing kits are independent owner decisions.
-            if (_importWorkspacePipelines == true)
-                _pipelineImportNotices = await PipelineImport.ImportWorkspaceAsync(project.Slug);
-            else
-                await Pipelines.ListAsync(project.Slug);
+            await Pipelines.ListAsync(project.Slug);
+            if (_importWorkspacePipelines == true && _detectedPipelineFiles is not null)
+                foreach (var file in _detectedPipelineFiles) _workspaceImportFiles.Enqueue(file);
 
             _newProjectName = "";
             _open = false;
             _createdProject = project;
             _firstTicketConfirmed = string.IsNullOrWhiteSpace(_objective);
             await OnCreated.InvokeAsync(project);
-            if (_skipSetup && _pipelineImportNotices.Count == 0) await FinishOnboarding();
+            if (_skipSetup && _workspaceImportFiles.Count == 0) await FinishOnboarding();
         }
         catch (Exception ex)
         {
@@ -456,10 +449,15 @@ else if (_createdProject is not null)
         await CreateAndInitialize(_pendingOverwrite);
     }
 
-    private async Task DismissPipelineNotices()
+    private Task WorkspaceKitImported(PipelineImportResult result)
     {
-        _pipelineImportNotices.Clear();
-        if (_skipSetup) await FinishOnboarding();
+        return _createdProject is null ? Task.CompletedTask : OnCreated.InvokeAsync(_createdProject);
+    }
+
+    private async Task CompleteWorkspaceKit()
+    {
+        _workspaceImportFiles.Dequeue();
+        if (_skipSetup && _workspaceImportFiles.Count == 0) await FinishOnboarding();
     }
 
     private Task FinishOnboarding()

@@ -361,7 +361,8 @@ public sealed class PipelineImportServiceTests : IDisposable
         bool allSkillCollections = false,
         bool allPrerequisites = false,
         bool riskyActions = false,
-        bool scriptFile = false)
+        bool scriptFile = false,
+        bool pythonScheduledTask = false)
     {
         var actions = riskyActions
             ? new object[]
@@ -379,6 +380,10 @@ public sealed class PipelineImportServiceTests : IDisposable
             columns = new[] { new
             {
                 key = "todo", name = "Todo", color = "#5a6a80", role = "Normal", userGuidance = "",
+                scheduledTasks = pythonScheduledTask ? new object[] { new {
+                    name = "Python ingestion", enabled = false, cron = "* * * * *", timeZoneId = "UTC", ticketScope = "None",
+                    actions = new[] { new { id = "python", action = new { type = "executePython", script = "print('review only')" } } },
+                } } : [],
                 processor = new
                 {
                     name = "Worker", mission = allPrerequisites ? "Work {{input.REGION}} {{secret.TOKEN}}." : "Work.", prompt = "",

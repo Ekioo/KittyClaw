@@ -117,16 +117,17 @@ public sealed class ProjectCreationJourneyTests
     }
 
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(true, true)]
-    public async Task Skip_setup_asks_before_importing_existing_kits(bool hasKit, bool acceptImport)
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(true, true, true)]
+    public async Task Skip_setup_asks_before_importing_existing_kits(bool hasKit, bool acceptImport, bool approveActions)
     {
         var workspace = Path.Combine(Path.GetTempPath(), $"kittyclaw-empty-project-{Guid.NewGuid():N}");
         Directory.CreateDirectory(workspace);
         var kitPath = Path.Combine(workspace, "main.kittyclaw-pipeline");
         if (hasKit)
-            await File.WriteAllBytesAsync(kitPath, Services.PipelineImportServiceTests.BuildKit(riskyActions: true));
+            await File.WriteAllBytesAsync(kitPath, Services.PipelineImportServiceTests.BuildKit(riskyActions: true, pythonScheduledTask: true));
         try
         {
             await using var instance = await TestInstance.StartAsync(WebExecutable());
@@ -149,10 +150,23 @@ public sealed class ProjectCreationJourneyTests
             }
             if (acceptImport)
             {
-                var notices = page.GetByRole(AriaRole.Alertdialog);
-                await Expect(notices).ToContainTextAsync("approval:executePowerShell");
-                await Expect(notices).ToContainTextAsync("approval:httpRequest");
-                await notices.GetByRole(AriaRole.Button).ClickAsync();
+                var review = page.Locator(".pipeline-kit-dialog");
+                var powershell = review.Locator(".pipeline-kit-approval").Filter(new() { HasText = "executePowerShell" }).GetByRole(AriaRole.Checkbox);
+                var network = review.Locator(".pipeline-kit-approval").Filter(new() { HasText = "httpRequest" }).GetByRole(AriaRole.Checkbox);
+                var python = review.Locator(".pipeline-kit-approval").Filter(new() { HasText = "executePython" }).GetByRole(AriaRole.Checkbox);
+                await Expect(powershell).Not.ToBeCheckedAsync();
+                await Expect(network).Not.ToBeCheckedAsync();
+                await Expect(python).Not.ToBeCheckedAsync();
+                await Expect(review).ToContainTextAsync("Python ingestion");
+                Assert.Single(await http.GetFromJsonAsync<JsonElement[]>("/api/projects/empty-project/pipelines") ?? []);
+                if (approveActions) { await powershell.CheckAsync(); await network.CheckAsync(); await python.CheckAsync(); }
+                await review.GetByTestId("confirm-pipeline-import").ClickAsync();
+                await Expect(review).ToContainTextAsync("Pipeline imported");
+                if (approveActions) await Expect(review).Not.ToContainTextAsync("approval:executePowerShell");
+                else await Expect(review).ToContainTextAsync("approval:executePowerShell");
+                if (approveActions) await Expect(review).Not.ToContainTextAsync("approval:executePython");
+                else await Expect(review).ToContainTextAsync("approval:executePython");
+                await review.GetByRole(AriaRole.Button, new() { Name = "Close", Exact = true }).Last.ClickAsync();
             }
             await Expect(page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/board/empty-project$"));
             await Expect(page.Locator(".first-ticket-draft")).ToHaveCountAsync(0);
