@@ -4,23 +4,25 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
-## [v0.33.2] — 2026-11-27
+## [v0.32.2] — 2026-11-27
 
-Detect existing workspace pipelines and ask before importing them.
+Review existing workspace pipelines and their execution approvals during project creation.
 
 ### Highlights
 
-Creating a project now detects pipeline kits in the selected folder even when the workflow assistant is skipped. A separate confirmation lists the files and lets the owner import them or continue without importing.
+Creating a project now detects pipeline kits in the selected folder even when the workflow assistant is skipped. A separate confirmation lists the files, then opens the standard import review so the owner can inspect actions, grant individual approvals such as Python execution, and confirm installation.
 
 ### Changed
 
 - Ask for an explicit import decision before creating the project in both guided and skipped setup.
 - Explain the independent workflow-help and pipeline-import choices in English and French.
+- Review scheduled-task actions alongside processor actions before approving an import.
 
 ### Fixed
 
 - Keep existing workspace pipelines discoverable after skipping workflow help.
 - Preserve executable-action approval and activation requirements when importing detected kits.
+- Replace the raw missing-approval notice with an actionable import review; keep pipelines disabled when approvals are withheld.
 
 ---
 
