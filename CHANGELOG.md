@@ -4,7 +4,7 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
-## [v0.33] — 2026-11-27
+## [v0.33.2] — 2026-11-27
 
 Detect existing workspace pipelines and ask before importing them.
 
