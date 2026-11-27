@@ -137,6 +137,23 @@ public sealed class PipelineImportServiceTests : IDisposable
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Workspace_import_applies_confirmed_python_permission(bool approved)
+    {
+        var project = await _projects.CreateProjectAsync("Python workspace kit");
+        var workspace = _projects.ResolveWorkspacePath(project);
+        await File.WriteAllBytesAsync(Path.Combine(workspace, "python.kittyclaw-pipeline"), BuildKit(pythonScheduledTask: true));
+        var required = await _import.GetWorkspaceRequiredApprovalsAsync(workspace);
+        Assert.Equal(new[] { "executePython" }, required);
+        Assert.Empty(await _processors.ListAsync(project.Slug));
+        var notices = await _import.ImportWorkspaceAsync(project.Slug, approved ? required : []);
+        Assert.Equal(approved, Assert.Single(await _processors.ListAsync(project.Slug)).Enabled);
+        if (approved) Assert.Empty(notices);
+        else Assert.Contains(notices, notice => notice.Contains("approval:executePython"));
+    }
+
+    [Theory]
     [InlineData("../escape.txt", "unsafe-path")]
     [InlineData("/absolute.txt", "unsafe-path")]
     [InlineData("skills/demo/payload.zip", "forbidden-file-type")]

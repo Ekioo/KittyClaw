@@ -79,7 +79,7 @@ public sealed partial class PipelineImportService(
     internal Func<string, Task>? InstallFaultInjector { get; set; }
 
     /// <summary>Imports root-level workspace kits during project creation, retaining all activation gates.</summary>
-    public async Task<List<string>> ImportWorkspaceAsync(string projectSlug)
+    public async Task<List<string>> ImportWorkspaceAsync(string projectSlug, IReadOnlyCollection<string>? approvals = null)
     {
         var project = await projects.GetProjectAsync(projectSlug)
             ?? throw new InvalidOperationException("Project not found.");
@@ -107,7 +107,7 @@ public sealed partial class PipelineImportService(
                 var archive = new byte[checked((int)stream.Length)];
                 await stream.ReadExactlyAsync(archive);
                 var preview = await AnalyzeAsync(projectSlug, archive);
-                var confirmation = new PipelineImportConfirmation();
+                var confirmation = new PipelineImportConfirmation { Approvals = approvals?.ToList() ?? [] };
                 if (preview is not null && preview.Installable)
                 {
                     var names = (await pipelines.ListAsync(projectSlug)).Select(p => p.Name.Trim())
@@ -128,6 +128,28 @@ public sealed partial class PipelineImportService(
             }
         }
         return notices;
+    }
+
+    /// <summary>Reads capability requirements before the owner confirms a workspace import. Executes nothing.</summary>
+    public async Task<List<string>> GetWorkspaceRequiredApprovalsAsync(string workspace)
+    {
+        var approvals = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var file in Directory.EnumerateFiles(workspace, "*", SearchOption.TopDirectoryOnly)
+            .Where(path => Path.GetExtension(path).Equals(PipelineKitFormat.FileExtension, StringComparison.OrdinalIgnoreCase)))
+        {
+            try
+            {
+                await using var stream = File.OpenRead(file);
+                if (stream.Length > MaxArchiveBytes) continue;
+                var archive = new byte[checked((int)stream.Length)];
+                await stream.ReadExactlyAsync(archive);
+                var (kit, issues) = Parse(archive);
+                if (kit is not null && issues.Count == 0)
+                    approvals.UnionWith(ComputeRequiredApprovals(kit));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+        return approvals.Order(StringComparer.Ordinal).ToList();
     }
 
     /// <summary>Write-free analysis. Null when the project does not exist. Never throws for kit defects:

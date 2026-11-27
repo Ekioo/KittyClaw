@@ -36,6 +36,14 @@
 else
 {
     <div class="board-layout">
+    @if (PipelineImportStatus == "attention")
+    {
+        <div class="settings-status" role="status" data-testid="workspace-pipeline-status">
+            <span>@L["WorkspacePipelineAttention"]</span>
+            <a href="@($"/board/{Slug}/workflows")">@L["WorkflowTitle"]</a>
+            <button class="header-action-btn" @onclick="() => PipelineImportStatus = null">@L["Close"]</button>
+        </div>
+    }
     <div class="page-header">
         <h1>@_project.Name</h1>
         @if (_subKanbanParentId is not null && _subKanbanParent is not null)
@@ -487,6 +495,7 @@ else
 
     private bool _mobileActionsOpen;
     [Parameter] public string Slug { get; set; } = "";
+    [SupplyParameterFromQuery(Name = "pipelineImport")] public string? PipelineImportStatus { get; set; }
     [Parameter] public int? TicketId { get; set; }
     [Parameter] public int? ParentId { get; set; }
     [SupplyParameterFromQuery(Name = "pipeline")]
