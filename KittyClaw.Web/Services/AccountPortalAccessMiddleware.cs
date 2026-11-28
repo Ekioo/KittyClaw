@@ -11,6 +11,7 @@ public sealed class AccountPortalAccessMiddleware(RequestDelegate next)
     public async Task InvokeAsync(HttpContext context, AccountPortalAccessService portal, NetworkAccessService network,
         IAntiforgery antiforgery, LocalizationService l)
     {
+        if (context.Features.Get<AgentApiGrant>() is { Valid: true }) { await next(context); return; }
         var callback = context.Request.Path == "/account-access/callback";
         var start = context.Request.Path == "/account-access";
         var remote = context.Features.Get<RemoteTunnelRequest>() is not null;

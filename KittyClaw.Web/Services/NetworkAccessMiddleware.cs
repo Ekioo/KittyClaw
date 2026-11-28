@@ -49,6 +49,8 @@ public sealed class NetworkAccessMiddleware(RequestDelegate next)
         // Local automation remains trusted, but an external browser is not local
         // automation merely because its form or WebSocket targets localhost.
         if (IsCrossOriginBrowserRequest(context)) { context.Response.StatusCode = 403; return; }
+        if (context.Features.Get<RemoteTunnelRequest>() is not null && context.Features.Get<AgentApiGrant>() is { Valid: true })
+        { await next(context); return; }
         var local = IsLocal(context);
         var setup = context.Request.Path.StartsWithSegments("/network-setup");
         var login = context.Request.Path == "/access";

@@ -316,6 +316,7 @@ builder.Services.AddRazorComponents()
         options.MaximumReceiveMessageSize = 10 * 1024 * 1024;
     });
 
+builder.Services.AddSingleton<AgentApiAccessService>();
 var app = builder.Build();
 // Normalize legacy dual opt-ins before any request can reach either listener.
 _ = app.Services.GetRequiredService<AccessModeService>();

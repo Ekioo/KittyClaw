@@ -64,6 +64,8 @@ public sealed class RemoteTunnelMiddleware(RequestDelegate next, RemoteTunnelOpt
         context.Response.Headers.CacheControl = "no-store";
         context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
 
+        if (await AgentApiAccess.HandleAsync(context, next)) return;
+
         // Browser-only API exceptions still pass the session gate below. Image
         // writes additionally require an exact Origin because the upload API
         // deliberately has no antiforgery contract for local automation clients.

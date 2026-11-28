@@ -44,8 +44,10 @@ trust.
    how to revoke the existing installation; local confirmation displays the same
    localized guidance. Revoked installations do not occupy the account slot.
 
-This first delivery assumes access to the local interface. Integration with a
-bot's authorization popup and enrollment without a local browser are separate work.
+Installation association still requires access to the local interface. An agent
+can separately request [API authorization](./agent-api-access.md) for an already
+associated installation without a browser on the agent's machine. This does not
+enroll or transfer ownership of an installation.
 
 ## Runtime
 
@@ -70,6 +72,10 @@ installation ownership: access is bound to the independent account installation
 identity and its protected credential.
 
 ## Account-protected tunnel access
+
+Headless agents use a separate [owner-approved API pairing](./agent-api-access.md)
+flow with the same account MFA, a fixed secret-free portal link and individually
+revocable grants. Browser sessions described below remain separate.
 
 Owners enroll one authenticator from `https://my.kittyclaw.dev/security`. GitHub
 and Google remain the first factor; a code or one-use recovery code verifies the

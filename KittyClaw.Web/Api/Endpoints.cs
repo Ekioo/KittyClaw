@@ -6,6 +6,8 @@ public static partial class Endpoints
     {
         var api = app.MapGroup("/api");
 
+        MapAgentAccess(api);
+
         MapColumns(api);
         MapPipelines(api);
         MapWorkflowMigrations(api);

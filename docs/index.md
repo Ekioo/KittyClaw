@@ -13,6 +13,8 @@ and API/MCP documentation.
 
 ## Features
 
+- [Agent API access](./agent-api-access.md) — headless pairing with owner MFA approval, project permissions and revocable bearer tokens.
+
 - [Account association](./account-association.md) — GitHub/Google identity, local ownership confirmation and the central installation registry.
 - [Instance access modes](./access-modes.md) — one local-only/LAN/Internet preference, shared account MFA and automatic tunnel DNS.
 

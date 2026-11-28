@@ -30,6 +30,9 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
 
     private static readonly HashSet<string> ExpectedRoutes = new(StringComparer.Ordinal)
     {
+        // Headless agent pairing
+        "POST /api/agent-access/start",
+        "POST /api/agent-access/token",
         // Columns
         "POST /api/projects/{slug}/tickets/{id}/improvement/analyze",
         "POST /api/projects/{slug}/tickets/{id}/improvement/apply",
@@ -214,6 +217,8 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
 
     private static readonly Dictionary<string, string> ExpectedTags = new(StringComparer.Ordinal)
     {
+        ["POST /api/agent-access/start"] = "Agent access",
+        ["POST /api/agent-access/token"] = "Agent access",
         ["POST /api/projects/{slug}/pipeline-kits/analyze"] = "Pipelines",
         ["POST /api/projects/{slug}/pipeline-kits/confirm"] = "Pipelines",
         ["GET /api/projects/{slug}/columns"] = "Columns",

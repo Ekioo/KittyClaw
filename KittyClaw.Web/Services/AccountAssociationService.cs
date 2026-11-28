@@ -168,6 +168,21 @@ public sealed class AccountAssociationService : BackgroundService
     }
     internal string? InstallationId => _installation?.InstanceId;
 
+    internal async Task<T> AgentAccessAsync<T>(string action, object payload, CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct);
+        try
+        {
+            if (_installation is not { Account: not null, Revoked: false } || !_snapshot.MfaEnabled)
+                throw new AccountAssociationException();
+            var data = JsonSerializer.SerializeToElement(payload).EnumerateObject()
+                .ToDictionary(p => p.Name, p => p.Value);
+            data["instanceId"] = JsonSerializer.SerializeToElement(_installation.InstanceId);
+            return await SendAsync<T>("agents/" + action, data, ct);
+        }
+        finally { _gate.Release(); }
+    }
+
     internal async Task AddBrokerAuthenticationAsync(HttpRequestMessage request, CancellationToken ct)
     {
         await _gate.WaitAsync(ct);
@@ -224,6 +239,8 @@ public sealed class AccountAssociationService : BackgroundService
             using var response = await _http.SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
+                if (action.StartsWith("agents/", StringComparison.Ordinal) && response.StatusCode == HttpStatusCode.TooManyRequests)
+                    throw new AccountAssociationException("AgentRateLimited");
                 if (response.StatusCode == HttpStatusCode.Conflict)
                 {
                     var failure = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);

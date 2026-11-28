@@ -121,6 +121,11 @@ owner intervention. Shutdown and pause cancel the attempt and kill the child tre
 
 ## Origin and browser protection
 
+Headless clients can separately request [agent API access](./agent-api-access.md).
+Owner-approved bearer grants authorize an explicit set of API routes and selected
+projects; they do not issue browser sessions or grant MCP access. The restrictions
+below continue to apply to browser requests and callers without an agent grant.
+
 The origin listener is loopback-only, with an exact assigned public Host. Its port
 marks requests as remote before the existing network authentication middleware, so
 localhost transport cannot grant local privileges. It represents an explicitly
