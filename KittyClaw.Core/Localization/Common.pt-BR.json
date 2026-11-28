@@ -78,5 +78,17 @@
   "ProgramWorkingDirectory": "Working directory relative to project",
   "ProgramEnvironment": "Environment — NAME=value, one per line",
   "PipelineKitPythonApproval": "Allow running Python code on this machine",
-  "PipelineKitProgramApproval": "Allow running custom programs on this machine"
+  "PipelineKitProgramApproval": "Allow running custom programs on this machine",
+  "WorkspacePipelineAttention": "Alguns fluxos não puderam ser importados ou ativados. Verifique as configurações em Fluxos de trabalho; as ações que exigem aprovação permanecem desativadas.",
+  "WorkspacePipelineAuthorization": "A importação deste fluxo autoriza as seguintes ações:",
+  "WorkspacePipelineDecline": "Continuar sem importar",
+  "WorkspacePipelineImportAuthorize": "Importar e permitir",
+  "WorkspacePipelineImportHint": "Estes fluxos foram encontrados na sua pasta. Deseja importá-los para este projeto?",
+  "WorkspacePipelineNetwork": "Enviar solicitações de rede",
+  "WorkspacePipelineNoExecution": "Nenhum script é executado durante a importação. Estas permissões se aplicam quando o fluxo for executado posteriormente.",
+  "WorkspacePipelinePowerShell": "Executar comandos do PowerShell",
+  "WorkspacePipelinePrograms": "Iniciar programas",
+  "WorkspacePipelinePython": "Executar código Python",
+  "WorkspacePipelineQuestion": "Importar os fluxos encontrados nesta pasta?",
+  "WorkspacePipelineScripts": "Executar scripts incluídos no kit"
 }

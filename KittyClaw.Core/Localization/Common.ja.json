@@ -78,5 +78,17 @@
   "ProgramWorkingDirectory": "Working directory relative to project",
   "ProgramEnvironment": "Environment — NAME=value, one per line",
   "PipelineKitPythonApproval": "Allow running Python code on this machine",
-  "PipelineKitProgramApproval": "Allow running custom programs on this machine"
+  "PipelineKitProgramApproval": "Allow running custom programs on this machine",
+  "WorkspacePipelineAttention": "一部のパイプラインをインポートまたは有効化できませんでした。「ワークフロー」で設定を確認してください。承認が必要なアクションは無効のままです。",
+  "WorkspacePipelineAuthorization": "このパイプラインのインポートにより、次のアクションが許可されます：",
+  "WorkspacePipelineDecline": "インポートせずに続行",
+  "WorkspacePipelineImportAuthorize": "インポートして許可",
+  "WorkspacePipelineImportHint": "フォルダー内にこれらのパイプラインが見つかりました。このプロジェクトにインポートしますか？",
+  "WorkspacePipelineNetwork": "ネットワークリクエストを送信",
+  "WorkspacePipelineNoExecution": "インポート中にスクリプトは実行されません。これらの権限は、その後のパイプライン実行時に適用されます。",
+  "WorkspacePipelinePowerShell": "PowerShell コマンドを実行",
+  "WorkspacePipelinePrograms": "プログラムを起動",
+  "WorkspacePipelinePython": "Python コードを実行",
+  "WorkspacePipelineQuestion": "このフォルダーで見つかったパイプラインをインポートしますか？",
+  "WorkspacePipelineScripts": "キットに含まれるスクリプトを実行"
 }

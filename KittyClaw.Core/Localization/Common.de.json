@@ -74,5 +74,17 @@
   "ProgramWorkingDirectory": "Working directory relative to project",
   "ProgramEnvironment": "Environment — NAME=value, one per line",
   "PipelineKitPythonApproval": "Allow running Python code on this machine",
-  "PipelineKitProgramApproval": "Allow running custom programs on this machine"
+  "PipelineKitProgramApproval": "Allow running custom programs on this machine",
+  "WorkspacePipelineAttention": "Einige Pipelines konnten nicht importiert oder aktiviert werden. Prüfe ihre Einstellungen unter Workflows; genehmigungspflichtige Aktionen bleiben deaktiviert.",
+  "WorkspacePipelineAuthorization": "Der Import dieser Pipeline erlaubt die folgenden Aktionen:",
+  "WorkspacePipelineDecline": "Ohne Import fortfahren",
+  "WorkspacePipelineImportAuthorize": "Importieren und erlauben",
+  "WorkspacePipelineImportHint": "Diese Pipelines wurden in deinem Ordner gefunden. In dieses Projekt importieren?",
+  "WorkspacePipelineNetwork": "Netzwerkanfragen senden",
+  "WorkspacePipelineNoExecution": "Beim Import wird kein Skript ausgeführt. Diese Berechtigungen gelten für spätere Pipeline-Ausführungen.",
+  "WorkspacePipelinePowerShell": "PowerShell-Befehle ausführen",
+  "WorkspacePipelinePrograms": "Programme starten",
+  "WorkspacePipelinePython": "Python-Code ausführen",
+  "WorkspacePipelineQuestion": "Die in diesem Ordner gefundenen Pipelines importieren?",
+  "WorkspacePipelineScripts": "Im Kit enthaltene Skripte ausführen"
 }
