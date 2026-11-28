@@ -78,5 +78,17 @@
   "ProgramWorkingDirectory": "Working directory relative to project",
   "ProgramEnvironment": "Environment — NAME=value, one per line",
   "PipelineKitPythonApproval": "Allow running Python code on this machine",
-  "PipelineKitProgramApproval": "Allow running custom programs on this machine"
+  "PipelineKitProgramApproval": "Allow running custom programs on this machine",
+  "WorkspacePipelineAttention": "部分流水线无法导入或启用。请在“工作流”中检查其设置；需要批准的操作将保持禁用。",
+  "WorkspacePipelineAuthorization": "导入此流水线将授权以下操作：",
+  "WorkspacePipelineDecline": "继续但不导入",
+  "WorkspacePipelineImportAuthorize": "导入并允许",
+  "WorkspacePipelineImportHint": "在你的文件夹中发现了这些流水线。要将它们导入此项目吗？",
+  "WorkspacePipelineNetwork": "发送网络请求",
+  "WorkspacePipelineNoExecution": "导入期间不会执行任何脚本。这些权限将在之后运行流水线时生效。",
+  "WorkspacePipelinePowerShell": "运行 PowerShell 命令",
+  "WorkspacePipelinePrograms": "启动程序",
+  "WorkspacePipelinePython": "运行 Python 代码",
+  "WorkspacePipelineQuestion": "要导入此文件夹中发现的流水线吗？",
+  "WorkspacePipelineScripts": "运行套件中包含的脚本"
 }
