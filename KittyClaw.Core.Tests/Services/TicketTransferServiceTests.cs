@@ -9,6 +9,24 @@ namespace KittyClaw.Core.Tests.Services;
 
 public sealed class TicketTransferServiceTests
 {
+    [Fact]
+    public async Task Transfer_preserves_attachment_bytes_metadata_and_download_links()
+    {
+        using var temp = new TempDir();
+        var (transfers, tickets, projects, source, target) = await BuildSut(temp);
+        var ticket = await tickets.CreateTicketAsync(source, "With attachment", status: "Todo");
+        var files = new TicketAttachmentService(projects);
+        using var input = new MemoryStream("Synthetic attachment"u8.ToArray());
+        var attachment = await files.AddAsync(source, ticket.Id, "notes.txt", "owner", input, default);
+        Assert.NotNull(attachment);
+        await transfers.TransferAsync(source, ticket.Id, target, "owner");
+        Assert.Null(await files.FindAsync(source, ticket.Id, attachment.Id, default));
+        var moved = await files.FindAsync(target, ticket.Id, attachment.Id, default);
+        Assert.NotNull(moved); Assert.Equal(attachment.FileName, moved.FileName);
+        Assert.Equal("Synthetic attachment", await File.ReadAllTextAsync(files.BlobPath(moved.Id)));
+        var result = await tickets.GetTicketAsync(target, ticket.Id);
+        Assert.Contains(result!.Comments, c => c.Content.Contains(TicketAttachmentService.DownloadUrl(target, ticket.Id, moved.Id)));
+    }
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

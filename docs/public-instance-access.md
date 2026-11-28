@@ -121,6 +121,11 @@ owner intervention. Shutdown and pause cancel the attempt and kill the child tre
 
 ## Origin and browser protection
 
+Headless clients can separately request [agent API access](./agent-api-access.md).
+Owner-approved bearer grants authorize an explicit set of API routes and selected
+projects; they do not issue browser sessions or grant MCP access. The restrictions
+below continue to apply to browser requests and callers without an agent grant.
+
 The origin listener is loopback-only, with an exact assigned public Host. Its port
 marks requests as remote before the existing network authentication middleware, so
 localhost transport cannot grant local privileges. It represents an explicitly
@@ -133,6 +138,7 @@ documented in [account association](./account-association.md). API, MCP and
 OpenAPI paths remain denied except these browser requirements:
 
 - `GET /api/engine/health` for reconnect checks;
+- `GET /api/projects/<slug>/tickets/<id>/attachments/<attachment-id>` for authenticated file downloads;
 - `GET /api/projects/<slug>/runs/<run-id>/stream` for authenticated SSE;
 - `POST /api/images` with the exact public Origin for browser uploads.
 

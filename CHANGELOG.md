@@ -4,6 +4,31 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
+## [v0.33] — 2026-11-28
+
+Attach files to tickets and approve remote agents from your own browser.
+
+### Highlights
+
+Keep briefs and deliverables with the ticket, displayed as clickable file rows below its description. The attachment API supports uploads up to 100 MiB, downloads, removal and safe retries without duplicate files. Owners can approve a headless agent through the account portal with 2FA, select project permissions and expiry, and revoke the resulting token. Pairing uses a fixed portal URL and a separate confirmation code; links contain no secret or token.
+
+### Added
+
+- Ticket attachment API, local storage, English/French file rows, and local file-location actions.
+- Attachment deletion, deferred orphan cleanup, idempotent upload retries and attachment-preserving project transfers.
+- Headless agent API pairing and project-scoped bearer access through authenticated remote entry points. Pairing requires the corresponding account portal update.
+
+### Changed
+
+- Document attachment storage, size limits, retry behavior and remote agent authorization.
+- Exclude local verification scratch and attachment staging from repository tracking.
+
+### Fixed
+
+- Preserve remote access boundaries: API tokens do not grant MCP, account management or instance configuration access.
+
+---
+
 ## [v0.32.3] — 2026-11-27
 
 Import workspace pipelines with a single clear confirmation.

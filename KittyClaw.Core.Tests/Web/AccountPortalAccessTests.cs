@@ -21,6 +21,77 @@ namespace KittyClaw.Core.Tests.Web;
 public sealed class AccountPortalAccessTests
 {
     [Fact]
+    public async Task Agent_token_bypasses_only_approved_API_routes_and_is_rechecked_on_every_call()
+    {
+        await using var f = await Fixture.Create();
+        await using var app = await f.StartServer(remote: true);
+        using var client = app.GetTestClient(); client.BaseAddress = new Uri("https://office.kittyclaw.dev");
+        client.DefaultRequestHeaders.Authorization = new("Bearer", "kca_" + new string('e', 64));
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/projects/alpha/tickets")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/projects/alpha/columns")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/projects/alpha/tickets/1/attachments")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/projects/alpha/tickets/1/attachments/" + new string('a', 32))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/projects/alpha/tickets/1/attachments", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.DeleteAsync("/api/projects/alpha/tickets/1/attachments/" + new string('a', 32))).StatusCode);
+        foreach (var path in new[] { "/api/projects/beta/tickets", "/api/projects/alpha/secrets", "/api/browse", "/mcp", "/settings", "/api/projects/alpha/runs/123/stream" })
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(path)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/projects/alpha/tickets", new { })).StatusCode);
+        f.Handler.AgentWrite = true;
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/projects/alpha/tickets/1/attachments/" + new string('a', 32) + "/reveal", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.DeleteAsync("/api/projects/alpha/tickets/1/attachments/" + new string('a', 32))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync("/api/projects/alpha/tickets/1/attachments", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/projects/beta/tickets/1/attachments", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync("/api/projects/alpha/tickets", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/projects/alpha/tickets/1/transfer", new { targetProjectSlug = "beta" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/projects/alpha/chat/start", new { })).StatusCode);
+        f.Handler.ProofValid = false;
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/projects/alpha/tickets")).StatusCode);
+        Assert.True(f.Handler.AgentChecks >= 10);
+        f.Handler.ProofValid = true; f.Handler.AgentUnavailable = true;
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await client.GetAsync("/api/projects/alpha/tickets")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Agent_pairing_returns_only_a_fixed_portal_link_and_validates_projects_and_bodies()
+    {
+        await using var f = await Fixture.Create();
+        await f.Projects.CreateProjectAsync("Alpha"); await f.Projects.CreateProjectAsync("Beta");
+        await using var app = await f.StartServer(remote: true);
+        using var client = app.GetTestClient(); client.BaseAddress = new Uri("https://office.kittyclaw.dev");
+        var start = await client.PostAsJsonAsync("/api/agent-access/start", new { name = "VM agent", projects = new[] { "alpha" }, write = true });
+        Assert.Equal(HttpStatusCode.OK, start.StatusCode);
+        var response = await start.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("https://my.kittyclaw.dev/agents", response.GetProperty("verification_uri").GetString());
+        Assert.Equal("no-store", start.Headers.CacheControl!.ToString());
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/agent-access/start", new { name = "VM", projects = new[] { "missing" } })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/agent-access/token", new { deviceCode = "bad" })).StatusCode);
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, (await client.PostAsync("/api/agent-access/start", new StringContent(new string('x', 5000), Encoding.UTF8, "application/json"))).StatusCode);
+        var pending = await client.PostAsJsonAsync("/api/agent-access/token", new { deviceCode = new string('f', 64) });
+        Assert.Equal(HttpStatusCode.BadRequest, pending.StatusCode);
+        Assert.Equal("authorization_pending", (await pending.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString());
+        client.DefaultRequestHeaders.Authorization = new("Bearer", "kca_" + new string('e', 64));
+        var visible = await client.GetStringAsync("/api/projects");
+        Assert.Contains("alpha", visible); Assert.DoesNotContain("beta", visible);
+    }
+
+    [Theory]
+    [InlineData("Origin", "https://office.kittyclaw.dev")]
+    [InlineData("Origin", "https://evil.test")]
+    [InlineData("Cookie", "anything=1")]
+    [InlineData("Sec-Fetch-Site", "same-origin")]
+    public async Task Agent_tokens_and_pairing_reject_browser_credentials(string header, string value)
+    {
+        await using var f = await Fixture.Create();
+        await using var app = await f.StartServer(remote: true);
+        using var client = app.GetTestClient(); client.BaseAddress = new Uri("https://office.kittyclaw.dev");
+        client.DefaultRequestHeaders.Authorization = new("Bearer", "kca_" + new string('e', 64));
+        client.DefaultRequestHeaders.Add(header, value);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/projects/alpha/tickets")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/agent-access/start", new { name = "VM", projects = new[] { "alpha" } })).StatusCode);
+        Assert.Equal(0, f.Handler.AgentChecks);
+    }
+
+    [Fact]
     public async Task One_account_factor_can_resume_remote_access_without_a_local_authenticator()
     {
         await using var f = await Fixture.Create();
@@ -336,11 +407,13 @@ public sealed class AccountPortalAccessTests
         public AccountPortalAccessService Portal { get; private set; } = null!;
         public NetworkAccessService Network { get; private set; } = null!;
         public RemoteAccessStore Remote { get; private set; } = null!;
+        public ProjectService Projects { get; private set; } = null!;
         public TaskCompletionSource StreamStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private HttpClient _http = null!;
         public static async Task<Fixture> Create()
         {
             var f = new Fixture();
+            f.Projects = new(f._directory.Path);
             f.Remote = new(f._directory.Path, f._protection);
             f.Remote.Prepare("https://remote-api.kittyclaw.dev", 5234, "office"); f.Remote.Enable();
             f._http = new(f.Handler);
@@ -357,6 +430,7 @@ public sealed class AccountPortalAccessTests
             builder.Configuration["AllowedHosts"] = $"office.kittyclaw.dev;localhost;{Environment.MachineName}";
             builder.Logging.ClearProviders(); builder.WebHost.UseTestServer();
             builder.Services.AddSingleton(Accounts); builder.Services.AddSingleton(Portal); builder.Services.AddSingleton(Network);
+            builder.Services.AddSingleton(Projects); builder.Services.AddSingleton<AgentApiAccessService>();
             builder.Services.AddSingleton(Remote); builder.Services.AddSingleton(new RemoteTunnelOptions(true, 5234, "office.kittyclaw.dev"));
             builder.Services.AddSingleton(new RemoteAccessConnector(Remote, new(_http, new Uri("https://remote-api.kittyclaw.dev")),
                 new UnusedRuntime(), new(true,5234,"office.kittyclaw.dev"), Network, new Lifetime(), Accounts));
@@ -393,12 +467,21 @@ public sealed class AccountPortalAccessTests
         public string? State;
         private string? _proofKind, _proofOrigin;
         public int Redemptions;
+        public bool AgentWrite, AgentUnavailable;
+        public int AgentChecks;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             var data = await request.Content!.ReadFromJsonAsync<JsonElement>(ct);
             object result;
             switch (request.RequestUri!.AbsolutePath)
             {
+                case "/v1/installations/agents/start":
+                    result = new { verification_uri = "https://my.kittyclaw.dev/agents", user_code = "ABCD-EFGH-JKLM", device_code = new string('f', 64), expires_in = 600, interval = 5 }; break;
+                case "/v1/installations/agents/token": result = new { error = "authorization_pending" }; break;
+                case "/v1/installations/agents/check":
+                    AgentChecks++;
+                    if (AgentUnavailable) return new(HttpStatusCode.ServiceUnavailable);
+                    result = new { valid = ProofValid, projects = new[] { "alpha" }, write = AgentWrite, expiresAt = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds(), id = "agent-id" }; break;
                 case "/v1/installations/associate": result = new { authorizationUrl = AccountAssociationService.PortalOrigin + "/associate?request=" + new string('a', 64), expiresAt = DateTimeOffset.UtcNow.AddMinutes(10).ToUnixTimeSeconds() }; break;
                 case "/v1/installations/status": result = new { account = _linked && !Revoked ? Account : null, proposedAccount = !_linked ? Account : null, revoked = Revoked, mfaEnabled = MfaEnabled }; break;
                 case "/v1/installations/confirm": _linked = true; result = new { associated = true }; break;

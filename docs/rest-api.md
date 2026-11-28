@@ -1,5 +1,10 @@
 # REST API
 
+[Ticket attachments](./ticket-attachments.md) use multipart
+`POST /api/projects/{slug}/tickets/{id}/attachments` (`file` and `author`).
+The response is HTTP 201 with attachment metadata and a download URL.
+Matching GET routes list and download files up to 100 MiB.
+
 Parent association (`PUT /api/projects/{slug}/tickets/{id}/parent`) accepts
 `{"parentId":123,"focus":true}` to highlight the associated card in that parent's
 sub-kanban. Detachment (`DELETE /api/projects/{slug}/tickets/{id}/parent?focus=true`)

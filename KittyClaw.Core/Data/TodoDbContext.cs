@@ -7,6 +7,7 @@ public class TodoDbContext : DbContext
 {
     public DbSet<Ticket> Tickets => Set<Ticket>();
     public DbSet<Comment> Comments => Set<Comment>();
+    public DbSet<TicketAttachment> TicketAttachments => Set<TicketAttachment>();
     public DbSet<ActivityEntry> ActivityEntries => Set<ActivityEntry>();
     public DbSet<Label> Labels => Set<Label>();
     public DbSet<BoardColumn> BoardColumns => Set<BoardColumn>();
@@ -66,6 +67,13 @@ public class TodoDbContext : DbContext
         modelBuilder.Entity<Comment>(e =>
         {
             e.HasKey(c => c.Id);
+        });
+
+        modelBuilder.Entity<TicketAttachment>(e =>
+        {
+            e.HasKey(a => a.Id);
+            e.HasIndex(a => new { a.TicketId, a.IdempotencyKeyHash }).IsUnique();
+            e.HasOne<Ticket>().WithMany().HasForeignKey(a => a.TicketId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ActivityEntry>(e =>

@@ -1507,3 +1507,12 @@ select:focus-visible,
 .ticket-improvement-draft-body { padding: 0 .85rem .85rem; }
 .ticket-improvement-draft-body p { white-space: pre-wrap; }
 .ticket-improvement-dialog summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+/* Ticket files are compact download rows, never previews. */
+.ticket-attachments { margin: 0 0 1.25rem; display: grid; gap: .35rem; }
+.ticket-attachment-row { display: flex; align-items: center; gap: .55rem; min-height: 36px; padding: .35rem .5rem; border: 1px solid var(--border); border-radius: 7px; color: var(--text); text-decoration: none; }
+.ticket-attachment-row:hover { background: var(--surface2); border-color: var(--border-strong); }
+.ticket-attachment-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ticket-attachment-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ticket-attachment-size { color: var(--text-muted); font-size: .78rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (max-width: 767px) { .ticket-attachment-row { min-height: 44px; } }

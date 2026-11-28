@@ -316,6 +316,10 @@ builder.Services.AddRazorComponents()
         options.MaximumReceiveMessageSize = 10 * 1024 * 1024;
     });
 
+builder.Services.AddSingleton<AgentApiAccessService>();
+builder.Services.AddSingleton<TicketAttachmentService>();
+builder.Services.AddSingleton<TicketAttachmentLocationService>();
+builder.Services.AddHostedService<TicketAttachmentCleanupService>();
 var app = builder.Build();
 // Normalize legacy dual opt-ins before any request can reach either listener.
 _ = app.Services.GetRequiredService<AccessModeService>();
