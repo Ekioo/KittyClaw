@@ -106,10 +106,13 @@ All KittyClaw data is stored locally in `%APPDATA%/KittyClaw/`:
 - `registry.db` — project registry
 - `projects/{slug}.db` — per-project database (tickets, comments, labels, columns, members)
 - `uploads/` — uploaded images
+- `attachments/` — ticket attachment bytes stored under generated IDs; original filenames and ticket associations stay in each project's database
 - `runs/{runId}.json` — agent run snapshots (events, status, exit code)
 - `settings.json` — language + onboarding flag
 
 Per-project agent state lives **in the workspace**: `<workspace>/.agents/{agent}/memory/` (scored `MEMORY.md` index + per-topic lesson files), `<workspace>/.agents/channel/` (session state), etc.
+
+`KITTYCLAW_DATA_DIR` overrides the application data directory, including attachment storage.
 
 ## Project Structure
 
@@ -133,6 +136,16 @@ All endpoints are under `/api`. The documentation is auto-generated from the liv
 
 - Human-readable Markdown: `GET http://localhost:5230/api/docs`
 - Machine-readable JSON: `GET http://localhost:5230/openapi/v1.json`
+
+Remote agents can request [owner-approved API access](docs/agent-api-access.md)
+without a browser on their machine or a secret copied by the owner. Approval uses
+the account portal and 2FA, with selected projects, permissions, expiry and revocation.
+
+[Ticket attachments](docs/ticket-attachments.md) support multipart upload, listing,
+download and deletion, with a 100 MiB per-file limit. Agents use `Idempotency-Key`
+for retries without duplicates. Upload and deletion require `tickets:write` on the
+selected project; listing and download require `project:read`. Orphan cleanup runs
+automatically with a 24-hour safety window.
 
 ## MCP server
 
@@ -175,6 +188,7 @@ This app is designed to be operated by AI agents through its REST API. Here's ho
 - Contextual column editor for structure, role, owner guidance, processor, ordered actions, scheduled tasks, and routing
 - Customizable dashboard view with free-drag tiles (Markdown, KPI, charts, Heatmap, Timeline, …), AI chat-based tile creation, and auto-refresh via LLM prompts
 - Ticket detail panel with comments and activity timeline
+- Ticket attachments shown below the description as one clickable filename/size row per file, without previews; local right-click menu to open the file location
 - Live agent run drawer (SSE stream of provider output, steer + stop controls)
 - New-instruction chat drawer to send an ad-hoc prompt to an agent
 - Markdown rendering with `@mention`, `#id`, and `#{slug}:{id}` cross-project ticket reference support
