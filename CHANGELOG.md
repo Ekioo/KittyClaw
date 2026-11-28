@@ -4,7 +4,7 @@ All notable changes to KittyClaw.
 
 ## [Unreleased]
 
-## [v0.33] — 2026-11-28
+## [v0.33.1] — 2026-11-28
 
 Attach files to tickets and approve remote agents from your own browser.
 
@@ -25,6 +25,7 @@ Keep briefs and deliverables with the ticket, displayed as clickable file rows b
 
 ### Fixed
 
+- Complete attachment translations for all eight supported languages.
 - Preserve remote access boundaries: API tokens do not grant MCP, account management or instance configuration access.
 
 ---
