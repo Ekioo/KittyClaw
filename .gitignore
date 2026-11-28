@@ -59,3 +59,8 @@ evidence/
 
 # Local audit scratch and temporary test runs.
 /.ci-audit/
+
+# Local verification scratch and agent-provided attachments.
+/tmp/
+/.tmp/
+/.codex-remote-attachments/

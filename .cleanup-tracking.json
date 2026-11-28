@@ -233,6 +233,138 @@
         "Consumer trace: resources were copied only through AgentsTemplateService and ProjectCreation member seeding, both retired in this change.",
         "Replacement: ColumnAgentDispatcher uses configured processor missions, project skills and processor memory; role-specific source files prescribe the former fixed pipeline."
       ]
+    },
+    "tmp/desktop-api.md": {
+      "sha256": "1bbf5bb0200f806b19306854c5c71b99acea90c48e0eafc7af4a2e8671281a6f",
+      "last_content_change_at": "2026-10-27T17:53:38.805353+00:00",
+      "last_reviewed_at": "2026-11-28T18:45:41.910932+00:00",
+      "decision": "removed",
+      "reason": "Stale, untracked desktop verification artifact; moved to the OS recycle bin.",
+      "evidence": [
+        "Repository consumer search found no references; tmp is outside source/build inputs and the deployment layout.",
+        "Inspected an obsolete isolated-host log, generated API snapshot, empty stderr, or folder-picker screenshot; unchanged for more than 30 days and no application uses tmp."
+      ]
+    },
+    "tmp/desktop-ui-verified.err": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "last_content_change_at": "2026-10-27T17:54:05.744722+00:00",
+      "last_reviewed_at": "2026-11-28T18:45:41.910932+00:00",
+      "decision": "removed",
+      "reason": "Stale, untracked desktop verification artifact; moved to the OS recycle bin.",
+      "evidence": [
+        "Repository consumer search found no references; tmp is outside source/build inputs and the deployment layout.",
+        "Inspected an obsolete isolated-host log, generated API snapshot, empty stderr, or folder-picker screenshot; unchanged for more than 30 days and no application uses tmp."
+      ]
+    },
+    "tmp/desktop-ui-verified.log": {
+      "sha256": "ae9bc10af8dd5345758a483a205689e07a4f737c21b62d541475daeb91c32fe0",
+      "last_content_change_at": "2026-10-27T17:54:10.523748+00:00",
+      "last_reviewed_at": "2026-11-28T18:45:41.910932+00:00",
+      "decision": "removed",
+      "reason": "Stale, untracked desktop verification artifact; moved to the OS recycle bin.",
+      "evidence": [
+        "Repository consumer search found no references; tmp is outside source/build inputs and the deployment layout.",
+        "Inspected an obsolete isolated-host log, generated API snapshot, empty stderr, or folder-picker screenshot; unchanged for more than 30 days and no application uses tmp."
+      ]
+    },
+    "tmp/desktop-ui.err": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "last_content_change_at": "2026-10-27T17:53:20.821332+00:00",
+      "last_reviewed_at": "2026-11-28T18:45:41.910932+00:00",
+      "decision": "removed",
+      "reason": "Stale, untracked desktop verification artifact; moved to the OS recycle bin.",
+      "evidence": [
+        "Repository consumer search found no references; tmp is outside source/build inputs and the deployment layout.",
+        "Inspected an obsolete isolated-host log, generated API snapshot, empty stderr, or folder-picker screenshot; unchanged for more than 30 days and no application uses tmp."
+      ]
+    },
+    "tmp/desktop-ui.log": {
+      "sha256": "2ca57b8817cdf68a150b56834d15b348e68719dfc93d61d8339019f4e31db85d",
+      "last_content_change_at": "2026-10-28T12:53:22.932890+00:00",
+      "last_reviewed_at": "2026-11-28T18:45:41.910932+00:00",
+      "decision": "removed",
+      "reason": "Stale, untracked desktop verification artifact; moved to the OS recycle bin.",
+      "evidence": [
+        "Repository consumer search found no references; tmp is outside source/build inputs and the deployment layout.",
+        "Inspected an obsolete isolated-host log, generated API snapshot, empty stderr, or folder-picker screenshot; unchanged for more than 30 days and no application uses tmp."
+      ]
+    },
+    "tmp/folder-picker-after.png": {
+      "sha256": "db5f66c50327baad7fe4a90fb268be52e13c675a44a8f14b902adef9f291a2fc",
+      "last_content_change_at": "2026-10-27T09:35:08.600446+00:00",
+      "last_reviewed_at": "2026-11-28T18:45:41.910932+00:00",
+      "decision": "removed",
+      "reason": "Stale, untracked desktop verification artifact; moved to the OS recycle bin.",
+      "evidence": [
+        "Repository consumer search found no references; tmp is outside source/build inputs and the deployment layout.",
+        "Inspected an obsolete isolated-host log, generated API snapshot, empty stderr, or folder-picker screenshot; unchanged for more than 30 days and no application uses tmp."
+      ]
+    },
+    ".agents/tools/worktree-ensure.ps1": {
+      "sha256": "4a4a1eeb83729fcd353095f5edcb66a2a8d3b596bb7ec10b4bb98f7b4576691b",
+      "last_content_change_at": "2026-05-18T18:05:03+00:00",
+      "last_reviewed_at": "2026-11-28T18:46:55.573910+00:00",
+      "decision": "keep",
+      "reason": "Documented manual per-ticket worktree creation helper.",
+      "evidence": [
+        "Referenced by docs/worktree-workflow.md.",
+        "Inspected idempotent creation and recovery logic; manual workflow remains supported."
+      ]
+    },
+    ".agents/tools/worktree-merge.ps1": {
+      "sha256": "9651a498280a55a9b7aac29db1950ba9b124b5ab5e83db332961ac8d154cbd1d",
+      "last_content_change_at": "2026-08-01T23:58:32+00:00",
+      "last_reviewed_at": "2026-11-28T18:46:55.834939+00:00",
+      "decision": "keep",
+      "reason": "Documented manual worktree integration helper.",
+      "evidence": [
+        "Referenced by docs/worktree-workflow.md.",
+        "Inspected rebase and dirty-tree guards; the product queue does not establish that the manual helper is obsolete."
+      ]
+    },
+    "docs/assets/demo.webp": {
+      "sha256": "ab0118fd0cf34fde072654996352c0676a5f9d1a183f4b7efdfaee9d6161860c",
+      "last_content_change_at": "2026-05-15T12:25:27+00:00",
+      "last_reviewed_at": "2026-11-28T18:46:56.242134+00:00",
+      "decision": "keep",
+      "reason": "Maintained README demonstration.",
+      "evidence": [
+        "Referenced by README.md.",
+        "Documentation presentation asset, distinct from disposable execution evidence."
+      ]
+    },
+    "docs/assets/dashboard.png": {
+      "sha256": "eb4488eea4be90975d275922d0888c517249e5056ec858099365290760cf2c52",
+      "last_content_change_at": "2026-05-27T19:58:29+00:00",
+      "last_reviewed_at": "2026-11-28T18:46:56.457458+00:00",
+      "decision": "keep",
+      "reason": "Maintained README dashboard illustration.",
+      "evidence": [
+        "Referenced by README.md.",
+        "Documentation presentation asset, distinct from disposable execution evidence."
+      ]
+    },
+    "docs/assets/costs.png": {
+      "sha256": "fa6ef779559edfd8dab6c98ef24cbedb1a3f1e484b94b4711340af1ead755074",
+      "last_content_change_at": "2026-08-19T00:12:03+00:00",
+      "last_reviewed_at": "2026-11-28T18:46:56.667303+00:00",
+      "decision": "keep",
+      "reason": "Maintained README cost-reporting illustration.",
+      "evidence": [
+        "Referenced by README.md.",
+        "Documentation presentation asset, distinct from disposable execution evidence."
+      ]
+    },
+    "docs/assets/demo.mp4": {
+      "sha256": "31d7761cd8c7ce50513d5e63683f89c096a4ad5cbce1c3b22a5536cf828f1150",
+      "last_content_change_at": "2026-05-02T16:08:48+00:00",
+      "last_reviewed_at": "2026-11-28T18:46:57.128541+00:00",
+      "decision": "uncertain",
+      "reason": "Unreferenced demonstration video; possible authoring or presentation source.",
+      "evidence": [
+        "Repository consumer search found no direct references.",
+        "Original presentation/authoring role cannot be ruled out by call-site search; preserved."
+      ]
     }
   }
 }
