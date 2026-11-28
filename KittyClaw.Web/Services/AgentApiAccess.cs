@@ -32,15 +32,15 @@ internal static class AgentApiPolicy
         if (!match.Success || grant.Projects?.Contains(match.Groups[1].Value, StringComparer.Ordinal) != true) return false;
         var suffix = match.Groups[2].Value;
         if (method == "GET")
-            return Regex.IsMatch(suffix, @"^(|/columns|/labels|/members|/tickets(?:/[0-9]+(?:/(?:activity|evidence|brief))?)?)$");
+            return Regex.IsMatch(suffix, @"^(|/columns|/labels|/members|/tickets(?:/[0-9]+(?:/(?:activity|evidence|brief|attachments(?:/[a-f0-9]{32})?))?)?)$");
         if (!grant.Write) return false;
         // Cross-project transfers, provider execution, secrets and configuration are never implicit ticket rights.
         return method switch
         {
-            "POST" => Regex.IsMatch(suffix, @"^/tickets(?:/[0-9]+/(?:comments|dependencies|acceptance-criteria|focus))?$"),
+            "POST" => Regex.IsMatch(suffix, @"^/tickets(?:/[0-9]+/(?:comments|dependencies|acceptance-criteria|focus|attachments))?$"),
             "PATCH" => Regex.IsMatch(suffix, @"^/tickets/[0-9]+(?:/(?:status|schedule|reorder|comments/[0-9]+))?$"),
             "PUT" => Regex.IsMatch(suffix, @"^/tickets/[0-9]+/(?:parent|acceptance-criteria/[a-zA-Z0-9_-]+)$"),
-            "DELETE" => Regex.IsMatch(suffix, @"^/tickets/[0-9]+(?:/(?:parent|comments/[0-9]+|dependencies/[0-9]+|acceptance-criteria/[a-zA-Z0-9_-]+))?$"),
+            "DELETE" => Regex.IsMatch(suffix, @"^/tickets/[0-9]+(?:/(?:parent|comments/[0-9]+|dependencies/[0-9]+|acceptance-criteria/[a-zA-Z0-9_-]+|attachments/[a-f0-9]{32}))?$"),
             _ => false
         };
     }

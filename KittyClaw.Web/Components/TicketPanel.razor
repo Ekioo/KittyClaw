@@ -353,6 +353,7 @@
                     }
                 </div>
 
+                <TicketAttachments Slug="@Slug" TicketId="@_ticket.Id" @key="@($"{Slug}:{_ticket.Id}")" />
                 <ColumnExecutionRecovery Slug="@Slug" TicketId="@_ticket.Id" OnAnswered="RefreshAsync" Drafts="_questionDrafts" />
                 <TicketAcceptanceCriteria Slug="@Slug" Ticket="@_ticket" OnChanged="@RefreshAsync" />
 

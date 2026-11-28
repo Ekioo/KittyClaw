@@ -1,0 +1,5 @@
+{
+  "TicketAttachments": "Attachments",
+  "TicketAttachmentReveal": "Open file location",
+  "TicketAttachmentRevealFailed": "The file location could not be opened."
+}

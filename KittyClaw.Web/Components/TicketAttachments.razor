@@ -1,0 +1,90 @@
+@using KittyClaw.Core.Models
+@using KittyClaw.Core.Services
+@using KittyClaw.Web.Services
+@inject TicketAttachmentService Attachments
+@inject BoardUpdateNotifier Updates
+@inject NavigationManager Navigation
+@inject LocalizationService L
+@inject IJSRuntime JS
+@inject EscapeKeyStack EscapeStack
+@implements IDisposable
+
+@if (_files.Count > 0)
+{
+    <section class="ticket-attachments" aria-label="@L["TicketAttachments"]" data-testid="ticket-attachments">
+        <span class="section-label">@L["TicketAttachments"]</span>
+        @foreach (var file in _files)
+        {
+            <a class="ticket-attachment-row" href="@TicketAttachmentService.DownloadUrl(Slug, TicketId, file.Id)" download
+               @key="file.Id" @oncontextmenu="e => OpenMenu(file, e)" @oncontextmenu:preventDefault="CanReveal"
+               @oncontextmenu:stopPropagation="CanReveal" title="@file.FileName">
+                <span aria-hidden="true">📎</span><span class="ticket-attachment-name">@file.FileName</span>
+                <span class="ticket-attachment-size">@FormatSize(file.Size)</span>
+            </a>
+        }
+    </section>
+}
+@if (_error is not null)
+{
+    <p class="dep-error" role="alert">@_error</p>
+}
+@if (_selected is not null)
+{
+    <div class="column-context-menu-backdrop" @onclick="CloseMenu" @oncontextmenu="CloseMenu" @oncontextmenu:preventDefault></div>
+    <div class="column-context-menu ticket-attachment-menu" style="left:min(@(_menuX)px,calc(100vw - 240px));top:min(@(_menuY)px,calc(100vh - 64px))" role="menu" aria-label="@_selected.FileName">
+        <button @ref="_revealButton" class="column-context-menu-item" type="button" role="menuitem" @onclick="RevealLocation">@L["TicketAttachmentReveal"]</button>
+    </div>
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+    [Parameter] public int TicketId { get; set; }
+    private List<TicketAttachment> _files = [];
+    private TicketAttachment? _selected;
+    private string? _error;
+    private int _menuX, _menuY;
+    private bool _disposed, _focusMenu;
+    private ElementReference _revealButton;
+    private IDisposable? _escape;
+    private int _loadVersion;
+    private bool CanReveal => Uri.TryCreate(Navigation.BaseUri, UriKind.Absolute, out var uri) && uri.IsLoopback;
+
+    protected override void OnInitialized() => Updates.OnProjectUpdated += ProjectUpdated;
+    protected override async Task OnParametersSetAsync() { CloseMenu(); await Load(); }
+    private async Task Load()
+    {
+        var version = ++_loadVersion;
+        var files = await Attachments.ListAsync(Slug, TicketId, default) ?? [];
+        if (!_disposed && version == _loadVersion) _files = files;
+    }
+    private void ProjectUpdated(string slug)
+    {
+        if (!_disposed && slug == Slug) _ = InvokeAsync(async () => { await Load(); StateHasChanged(); });
+    }
+    private void OpenMenu(TicketAttachment file, MouseEventArgs e)
+    {
+        if (!CanReveal) return;
+        CloseMenu(); _selected = file; _error = null;
+        _menuX = Math.Max(8, (int)e.ClientX); _menuY = Math.Max(8, (int)e.ClientY);
+        _focusMenu = true;
+        _escape = EscapeStack.Push(() => { CloseMenu(); _ = InvokeAsync(StateHasChanged); });
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusMenu) { _focusMenu = false; await _revealButton.FocusAsync(); }
+    }
+    private void CloseMenu() { _selected = null; _escape?.Dispose(); _escape = null; }
+    private async Task RevealLocation()
+    {
+        if (_selected is not { } file || !CanReveal) return;
+        CloseMenu();
+        try
+        {
+            var ok = await JS.InvokeAsync<bool>("kittyclawAttachments.reveal", TicketAttachmentService.DownloadUrl(Slug, TicketId, file.Id) + "/reveal");
+            if (!ok) _error = L["TicketAttachmentRevealFailed"];
+        }
+        catch (JSException) { _error = L["TicketAttachmentRevealFailed"]; }
+    }
+    private static string FormatSize(long bytes) => bytes >= 1024 * 1024 ? $"{bytes / (1024d * 1024):0.#} MiB" : bytes >= 1024 ? $"{bytes / 1024d:0.#} KiB" : $"{bytes} B";
+    public void Dispose() { _disposed = true; _loadVersion++; CloseMenu(); Updates.OnProjectUpdated -= ProjectUpdated; }
+}

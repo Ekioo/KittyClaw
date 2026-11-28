@@ -60,8 +60,8 @@ The owner chooses 1 hour (default), 8 hours, 1 day or 7 days, and these rights:
 
 | Scope | Allowed operations |
 | --- | --- |
-| `project:read` | GET selected project details, tickets and individual ticket activity/evidence/brief, columns, labels and members. GET `/api/projects` returns only granted slugs and names. API docs and OpenAPI schema are readable. |
-| `tickets:write` | Create/update/delete tickets, comments, acceptance criteria, dependencies, parenting, status, schedule, order and focus within selected projects. |
+| `project:read` | GET selected project details, tickets and individual ticket activity/evidence/brief, attachments (list/download), columns, labels and members. GET `/api/projects` returns only granted slugs and names. API docs and OpenAPI schema are readable. |
+| `tickets:write` | Create/update/delete tickets, comments, acceptance criteria, dependencies, parenting, status, schedule, order and focus within selected projects, and upload/remove ticket attachments. |
 
 Ticket writes can trigger configured workflows and agent dispatches. The approval
 page explains this. Cross-project transfers, project creation/configuration/deletion,

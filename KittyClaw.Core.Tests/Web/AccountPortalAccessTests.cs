@@ -29,10 +29,18 @@ public sealed class AccountPortalAccessTests
         client.DefaultRequestHeaders.Authorization = new("Bearer", "kca_" + new string('e', 64));
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/projects/alpha/tickets")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/projects/alpha/columns")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/projects/alpha/tickets/1/attachments")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/projects/alpha/tickets/1/attachments/" + new string('a', 32))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/projects/alpha/tickets/1/attachments", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.DeleteAsync("/api/projects/alpha/tickets/1/attachments/" + new string('a', 32))).StatusCode);
         foreach (var path in new[] { "/api/projects/beta/tickets", "/api/projects/alpha/secrets", "/api/browse", "/mcp", "/settings", "/api/projects/alpha/runs/123/stream" })
             Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(path)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/projects/alpha/tickets", new { })).StatusCode);
         f.Handler.AgentWrite = true;
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/projects/alpha/tickets/1/attachments/" + new string('a', 32) + "/reveal", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.DeleteAsync("/api/projects/alpha/tickets/1/attachments/" + new string('a', 32))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync("/api/projects/alpha/tickets/1/attachments", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/projects/beta/tickets/1/attachments", new { })).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync("/api/projects/alpha/tickets", new { })).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/projects/alpha/tickets/1/transfer", new { targetProjectSlug = "beta" })).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/projects/alpha/chat/start", new { })).StatusCode);

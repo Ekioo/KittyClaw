@@ -138,6 +138,7 @@ documented in [account association](./account-association.md). API, MCP and
 OpenAPI paths remain denied except these browser requirements:
 
 - `GET /api/engine/health` for reconnect checks;
+- `GET /api/projects/<slug>/tickets/<id>/attachments/<attachment-id>` for authenticated file downloads;
 - `GET /api/projects/<slug>/runs/<run-id>/stream` for authenticated SSE;
 - `POST /api/images` with the exact public Origin for browser uploads.
 

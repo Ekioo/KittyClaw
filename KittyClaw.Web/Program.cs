@@ -317,6 +317,9 @@ builder.Services.AddRazorComponents()
     });
 
 builder.Services.AddSingleton<AgentApiAccessService>();
+builder.Services.AddSingleton<TicketAttachmentService>();
+builder.Services.AddSingleton<TicketAttachmentLocationService>();
+builder.Services.AddHostedService<TicketAttachmentCleanupService>();
 var app = builder.Build();
 // Normalize legacy dual opt-ins before any request can reach either listener.
 _ = app.Services.GetRequiredService<AccessModeService>();

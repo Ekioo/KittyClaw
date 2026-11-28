@@ -71,7 +71,8 @@ public sealed class RemoteTunnelMiddleware(RequestDelegate next, RemoteTunnelOpt
         // deliberately has no antiforgery contract for local automation clients.
         var browserApi = HttpMethods.IsGet(context.Request.Method) &&
             (context.Request.Path == "/api/engine/health" || Regex.IsMatch(context.Request.Path.Value ?? "",
-                @"^/api/projects/[a-zA-Z0-9_-]+/runs/[a-zA-Z0-9_-]+/stream$"));
+                @"^/api/projects/[a-zA-Z0-9_-]+/runs/[a-zA-Z0-9_-]+/stream$") || Regex.IsMatch(context.Request.Path.Value ?? "",
+                @"^/api/projects/[a-zA-Z0-9_-]+/tickets/[0-9]+/attachments/[a-f0-9]{32}$"));
         if (HttpMethods.IsPost(context.Request.Method) && context.Request.Path == "/api/images")
             browserApi = context.Request.Headers.Origin == $"https://{current.Hostname}";
         if (context.Request.Path.StartsWithSegments("/api") && !browserApi

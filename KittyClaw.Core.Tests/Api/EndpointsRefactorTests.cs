@@ -33,6 +33,11 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
         // Headless agent pairing
         "POST /api/agent-access/start",
         "POST /api/agent-access/token",
+        "POST /api/projects/{slug}/tickets/{id}/attachments",
+        "GET /api/projects/{slug}/tickets/{id}/attachments",
+        "GET /api/projects/{slug}/tickets/{id}/attachments/{attachmentId}",
+        "DELETE /api/projects/{slug}/tickets/{id}/attachments/{attachmentId}",
+        "POST /api/projects/{slug}/tickets/{id}/attachments/{attachmentId}/reveal",
         // Columns
         "POST /api/projects/{slug}/tickets/{id}/improvement/analyze",
         "POST /api/projects/{slug}/tickets/{id}/improvement/apply",
@@ -219,6 +224,11 @@ public sealed class EndpointsRefactorTests : IClassFixture<EndpointsRefactorTest
     {
         ["POST /api/agent-access/start"] = "Agent access",
         ["POST /api/agent-access/token"] = "Agent access",
+        ["POST /api/projects/{slug}/tickets/{id}/attachments"] = "Attachments",
+        ["GET /api/projects/{slug}/tickets/{id}/attachments"] = "Attachments",
+        ["GET /api/projects/{slug}/tickets/{id}/attachments/{attachmentId}"] = "Attachments",
+        ["DELETE /api/projects/{slug}/tickets/{id}/attachments/{attachmentId}"] = "Attachments",
+        ["POST /api/projects/{slug}/tickets/{id}/attachments/{attachmentId}/reveal"] = "Attachments",
         ["POST /api/projects/{slug}/pipeline-kits/analyze"] = "Pipelines",
         ["POST /api/projects/{slug}/pipeline-kits/confirm"] = "Pipelines",
         ["GET /api/projects/{slug}/columns"] = "Columns",

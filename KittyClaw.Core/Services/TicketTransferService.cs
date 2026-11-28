@@ -18,6 +18,7 @@ public sealed class TicketTransferService(
 {
     public async Task<TicketTransferResult> TransferAsync(string sourceProject, int ticketId, string targetProject, string actor)
     {
+        await using var attachmentLease = await new TicketAttachmentService(projects).AcquireLifecycleAsync(default);
         if (string.IsNullOrWhiteSpace(actor))
             throw new InvalidOperationException("The transfer actor is required.");
         if (string.Equals(sourceProject, targetProject, StringComparison.OrdinalIgnoreCase))
@@ -53,6 +54,8 @@ public sealed class TicketTransferService(
         await using var target = new TodoDbContext(targetPath);
         await TicketService.EnsureTicketDependenciesTableAsync(source);
         await TicketService.EnsureTicketDependenciesTableAsync(target);
+        await TicketAttachmentService.EnsureSchemaAsync(source);
+        await TicketAttachmentService.EnsureSchemaAsync(target);
         var ids = transferIds.ToList();
         var conflictingTicketIds = await target.Tickets.Where(t => ids.Contains(t.Id)).Select(t => t.Id).ToListAsync();
         var commentIds = transferTickets.SelectMany(t => t.Comments).Select(c => c.Id).ToList();
@@ -128,6 +131,17 @@ public sealed class TicketTransferService(
                 foreach (var activity in transferTickets.SelectMany(t => t.Activities))
                     await ExecuteAsync(connection, transaction, "INSERT INTO target.ActivityEntries (Id, TicketId, Author, Text, CreatedAt) VALUES ($id, $ticketId, $author, $text, $createdAt)",
                         ("$id", activity.Id), ("$ticketId", activity.TicketId), ("$author", activity.Author), ("$text", activity.Text), ("$createdAt", activity.CreatedAt));
+                foreach (var ticket in transferTickets)
+                {
+                    await ExecuteAsync(connection, transaction, """
+                        INSERT INTO target.TicketAttachments (Id, TicketId, FileName, Size, Author, CreatedAt, Sha256, IdempotencyKeyHash, CommentId, DeletedAt)
+                        SELECT Id, TicketId, FileName, Size, Author, CreatedAt, Sha256, IdempotencyKeyHash, CommentId, DeletedAt FROM TicketAttachments WHERE TicketId = $id
+                        """, ("$id", ticket.Id));
+                    await ExecuteAsync(connection, transaction, "UPDATE target.Comments SET Content = replace(Content, $before, $after) WHERE TicketId = $id",
+                        ("$id", ticket.Id), ("$before", $"/api/projects/{sourceProject}/tickets/{ticket.Id}/attachments/"),
+                        ("$after", $"/api/projects/{targetProject}/tickets/{ticket.Id}/attachments/"));
+                    await ExecuteAsync(connection, transaction, "DELETE FROM TicketAttachments WHERE TicketId = $id", ("$id", ticket.Id));
+                }
                 foreach (var ticket in transferTickets)
                 foreach (var label in ticket.Labels)
                     await ExecuteAsync(connection, transaction, "INSERT INTO target.TicketLabels (TicketsId, LabelsId) VALUES ($ticketId, $labelId)", ("$ticketId", ticket.Id), ("$labelId", labelMap[label.Id]));
